@@ -281,6 +281,27 @@ MCP is the case where both halves are automatic. An MCP server returns its tool 
 
 Multi-tenant runtime, dashboard, organization onboarding, and per-repository policy: which vendors are watched, and which severities open a pull request automatically versus requiring review.
 
+#### Information architecture
+
+The navigation hierarchy is the API Dependency Graph. Every level of the interface is an entity the system already stores, which means the interface cannot drift from the domain — there are no invented screens and no dead ends.
+
+```
+Codebase (the selected repository)
+   └── API Services              vendors the indexer found in this repository
+         ├── Signals             one panel per attached integration, grouped by role:
+         │                       vendor, signal source, human surface
+         ├── Errors & Incidents  findings for this vendor, from any detector
+         │      └── Finding
+         │            └── Solution Workflow      the remediation run
+         │                  └── Pull Request     with its evidence bundle
+```
+
+A user starts from a repository, not from a vendor list, because the question they actually have is "what is wrong with my code" rather than "what is Stripe doing". Vendors appear underneath because the indexer discovered them, so the list is never something anyone configures.
+
+**The Solution Workflow view renders live graph state, not a progress bar.** Because the remediation graph checkpoints at every node, the interface can show `locate → strategize → patch → static verify → push → await CI → open PR` as it happens, with the evidence attached at each step: which call sites were located, what the patch changed, what `tsc` said, which CI run was watched. Failed attempts stay visible, along with the reason a finding was abandoned.
+
+This is a deliberate product position rather than a debugging convenience. Comparable tools present a black box and a result, which asks a reviewer to trust the output on faith. Showing the state machine and its evidence is what earns the merge — the reviewer can see that the patch passed a real typecheck and a real CI run before it was ever offered to them.
+
 ### M5 — The integration layer
 
 The product's name is its thesis: synchronize signal across the tools a team already uses, so that remediation has complete context rather than one channel's worth.
