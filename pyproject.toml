@@ -1,0 +1,48 @@
+[project]
+name = "sync"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+authors = [
+    { name = "Sebastian Roland", email = "sebastian.roland@janco-electronics.com" }
+]
+requires-python = ">=3.12"
+dependencies = [
+    "pydantic>=2.13.4",
+]
+
+[project.scripts]
+sync = "sync:main"
+
+[build-system]
+requires = ["uv_build>=0.11.19,<0.12.0"]
+build-backend = "uv_build"
+
+[dependency-groups]
+dev = [
+    "import-linter>=2.13",
+    "pytest>=9.1.1",
+    "pytest-asyncio>=1.4.0",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-m 'not e2e'"
+markers = ["e2e: end-to-end test; makes network and model calls"]
+
+[tool.importlinter]
+root_package = "sync"
+
+[[tool.importlinter.contracts]]
+name = "sync.core depends on nothing"
+type = "forbidden"
+source_modules = ["sync.core"]
+forbidden_modules = [
+    "sync.graph",
+    "sync.signals",
+    "sync.index",
+    "sync.detect",
+    "sync.remediate",
+    "sync.forge",
+    "sync.cli",
+]
