@@ -2363,8 +2363,10 @@ git commit -m "feat: add Claude Agent SDK patch remediator"
 - [ ] **Step 1: Add the dependencies**
 
 ```bash
-uv add langgraph langgraph-checkpoint-postgres langchain langchain-anthropic
+uv add langgraph
 ```
+
+Only `langgraph` is used by this task. `langgraph-checkpoint-postgres` belongs to Task 11, where the CLI wires the real checkpointer — this task's tests use `InMemorySaver`, which ships with `langgraph` itself. `langchain` and `langchain-anthropic` are used by no task in M0; the changelog-parsing chain that would need them is not in this milestone. Add a dependency in the task that consumes it, not before.
 
 - [ ] **Step 2: Write the failing graph test**
 
@@ -2432,9 +2434,12 @@ class StubRemediator:
 class StubForge:
     ci_results: list[bool] = field(default_factory=lambda: [True])
     polls: int = 0
+    pushes: int = 0
     pr_url: str | None = None
 
-    def push_branch(self, repo, patch) -> str: return "sync/fix-1"
+    def push_branch(self, repo, patch) -> str:
+        self.pushes += 1
+        return "sync/fix-1"
 
     def await_ci(self, repo, branch) -> tuple[bool, str]:
         green = self.ci_results[min(self.polls, len(self.ci_results) - 1)]
@@ -2496,6 +2501,7 @@ def test_two_red_ci_runs_abandon_and_record_why():
 
 
 def test_diagnostics_from_a_failed_verification_reach_the_next_attempt():
+    @dataclass
     class Recording(StubRemediator):
         seen: list[str] = field(default_factory=list)
 
@@ -2518,6 +2524,37 @@ def test_state_is_checkpointed_at_every_node():
     config = {"configurable": {"thread_id": "t2"}}
     graph.invoke({"finding": FINDING, "repo": REPO}, config=config)
     assert graph.get_state(config).values["outcome"] == "opened"
+
+
+def test_an_agent_run_that_fails_is_abandoned_rather_than_crashing_the_graph():
+    @dataclass
+    class Failing(StubRemediator):
+        def propose(self, finding, change, site, repo, diagnostics=""):
+            self.calls += 1
+            raise RuntimeError("agent run failed (error_max_turns): []")
+
+    remediator = Failing()
+    forge = StubForge()
+    result = _run(StubAdapter(), remediator, forge)
+    assert result["outcome"] == "abandoned"
+    assert forge.pushes == 0
+    assert forge.pr_url is None
+    assert remediator.calls == 3
+    assert "agent run failed" in result["abandon_reason"]
+
+
+def test_a_patch_that_changes_nothing_is_never_pushed():
+    @dataclass
+    class NoChange(StubRemediator):
+        def propose(self, finding, change, site, repo, diagnostics=""):
+            self.calls += 1
+            return Patch(diff="", strategy=self.strategy, rationale="nothing to do")
+
+    forge = StubForge()
+    result = _run(StubAdapter(), NoChange(), forge)
+    assert result["outcome"] == "abandoned"
+    assert forge.pushes == 0
+    assert forge.pr_url is None
 ```
 
 - [ ] **Step 3: Run it to verify it fails**
@@ -2549,7 +2586,9 @@ class RunState(TypedDict, total=False):
     repo: RepoRef
     site: CallSite
     change: VendorChange
-    patch: Patch
+    # None means the patch node produced nothing usable -- either the remediator
+    # raised, or it returned an empty diff. Both must reach `abandon`, never `push_branch`.
+    patch: Patch | None
     diagnostics: str
     static_attempts: int
     ci_attempts: int
@@ -2603,13 +2642,38 @@ def make_locate(store):
 
 def make_patch(remediator):
     def patch(state: RunState) -> RunState:
-        proposed = remediator.propose(
-            state["finding"], state["change"], state["site"], state["repo"],
-            diagnostics=state.get("diagnostics", ""),
-        )
-        return {"patch": proposed, "static_attempts": state.get("static_attempts", 0) + 1}
+        attempts = state.get("static_attempts", 0) + 1
+        try:
+            proposed = remediator.propose(
+                state["finding"], state["change"], state["site"], state["repo"],
+                diagnostics=state.get("diagnostics", ""),
+            )
+        except Exception as exc:
+            return {"patch": None, "static_attempts": attempts, "diagnostics": str(exc)}
+
+        if not proposed.diff.strip():
+            return {
+                "patch": None,
+                "static_attempts": attempts,
+                "diagnostics": "the remediator produced no change",
+            }
+
+        return {"patch": proposed, "static_attempts": attempts, "diagnostics": ""}
 
     return patch
+
+
+def route_after_patch(state: RunState) -> str:
+    """A run that failed and a run that changed nothing leave the same empty diff.
+
+    Neither may reach `push_branch`: a no-op branch passes CI and would open a
+    pull request that claims to fix something and does not.
+    """
+    if state.get("patch") is not None:
+        return "static_verify"
+    if state.get("static_attempts", 0) >= MAX_STATIC_ATTEMPTS:
+        return "abandon"
+    return "patch"
 
 
 def make_static_verify(adapter):
@@ -2715,7 +2779,12 @@ def build_graph(store, adapter, remediator, forge, checkpointer):
 
     builder.add_edge(START, "locate")
     builder.add_edge("locate", "patch")
-    builder.add_edge("patch", "static_verify")
+
+    builder.add_conditional_edges(
+        "patch",
+        nodes.route_after_patch,
+        {"static_verify": "static_verify", "patch": "patch", "abandon": "abandon"},
+    )
 
     builder.add_conditional_edges(
         "static_verify",
@@ -2740,9 +2809,11 @@ def build_graph(store, adapter, remediator, forge, checkpointer):
 - [ ] **Step 7: Run the graph tests to verify they pass**
 
 Run: `uv run pytest tests/test_remediation_graph.py -v`
-Expected: PASS, 7 tests.
+Expected: PASS, 9 tests.
 
 If `test_three_static_failures_abandon_without_pushing` sees four `propose` calls instead of three, `static_attempts` is being incremented in the wrong node — it must increment in `patch`, so the count reflects attempts made, and `route_after_static` compares with `>=`.
+
+`static_attempts` is deliberately not reset when a red CI run sends the flow back to `patch`. It bounds total patch attempts for the whole run, not attempts since the last CI push. Resetting it would let a run alternate between CI failures and static failures indefinitely.
 
 - [ ] **Step 8: Commit**
 
