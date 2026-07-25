@@ -76,8 +76,10 @@ class VendorChangeDetector:
                     if field not in site.response_fields_read:
                         continue
                     detail = f"call site reads `{field}`"
+                elif field is None:
+                    detail = "field could not be determined from the vendor change -- operation match only"
                 else:
-                    detail = "field not determined from the vendor change -- operation match only"
+                    detail = f"kind `{change.kind}` is neither request- nor response-side -- operation match only"
 
                 findings.append(
                     Finding(

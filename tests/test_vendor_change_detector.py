@@ -111,3 +111,53 @@ def test_the_real_oasdiff_pipeline_only_finds_call_sites_that_touch_the_changed_
     assert not matched(miss_id, "request-property-removed")
     assert matched(hit_id, "response-optional-property-removed")
     assert not matched(miss_id, "response-optional-property-removed")
+
+
+def test_a_change_whose_field_cannot_be_determined_still_produces_a_finding(store):
+    """Failing to resolve the field is recoverable; emit rather than drop.
+
+    No structured key and no backticked token in `text` -- there is nothing
+    to extract. The operation still matches, so the finding must still fire,
+    and its rationale must read differently from a field-matched one.
+    """
+    _site(store)
+    store.upsert_vendor_change(
+        VendorChange(
+            vendor_id="stripe", from_version="v1", to_version="v2",
+            kind="response-property-removed", operation_id="PostCharges",
+            path_ptr="/v1/charges", severity="breaking", source="oasdiff",
+            raw={"id": "response-property-removed", "text": "removed a response property"},
+        )
+    )
+    findings = VendorChangeDetector(store).scan()
+    assert len(findings) == 1
+    rationale = findings[0].rationale
+    assert "PostCharges" in rationale
+    assert "operation match only" in rationale
+    assert "call site reads" not in rationale
+    assert "call site passes" not in rationale
+
+
+def test_a_change_whose_kind_is_neither_request_nor_response_still_produces_a_finding(store):
+    """A future oasdiff category we have never seen must not vanish silently.
+
+    The field is determinable here (`Charge` is backticked in `text`), but
+    the kind itself doesn't say which side of the API it touches, so there is
+    no list to check the field against. Emit on the operation match alone.
+    """
+    _site(store)
+    store.upsert_vendor_change(
+        VendorChange(
+            vendor_id="stripe", from_version="v1", to_version="v2",
+            kind="components-schema-removed", operation_id="PostCharges",
+            path_ptr="/components/schemas/Charge", severity="breaking", source="oasdiff",
+            raw={"id": "components-schema-removed", "text": "removed the schema `Charge`"},
+        )
+    )
+    findings = VendorChangeDetector(store).scan()
+    assert len(findings) == 1
+    rationale = findings[0].rationale
+    assert "PostCharges" in rationale
+    assert "operation match only" in rationale
+    assert "call site reads" not in rationale
+    assert "call site passes" not in rationale
