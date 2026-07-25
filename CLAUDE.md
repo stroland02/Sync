@@ -8,6 +8,18 @@ Sync watches the third-party APIs a codebase calls and opens verified pull reque
 
 The load-bearing idea is the **API Dependency Graph**: static call sites joined against vendor changes and runtime telemetry. Detectors query it, and all of them emit one `Finding` type into one remediation pipeline. If you are adding something that does not read from or write to that graph, question whether it belongs.
 
+## Latency is a design constraint, not a later optimisation
+
+`docs/superpowers/specs/2026-07-25-sync-latency-architecture.md` is binding on pipeline design. Read it before changing the shape of any pipeline, adding an agent, or introducing a stage.
+
+The rule it exists to enforce: **every agent must shorten the critical path or improve a result. An agent that does neither is latency and cost with extra steps.**
+
+Three things from it that are easy to get wrong:
+
+- Sync's critical path is dominated by the customer's CI run, which nothing we build makes faster. Parallelism addresses about a fifth of the wall clock. The larger wins are precomputation and staged delivery.
+- Any state key written by parallel branches **must** declare a reducer. Without one, concurrent writes are dropped silently — no error, no warning, missing results.
+- `locate → patch → verify` is a data dependency, not an accident. Parallelising it produces a race, not speed.
+
 ## Non-negotiables
 
 **`sync.core` imports nothing from any sibling package.** Not `sync.graph`, not `sync.signals`, not anything. A third party writing a vendor adapter depends on `sync.core` alone; a single sibling import drags Postgres into their dependency tree. `tests/test_import_boundary.py` enforces this and it is not advisory.
