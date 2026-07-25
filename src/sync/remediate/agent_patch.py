@@ -11,7 +11,7 @@ import asyncio
 import subprocess
 from pathlib import Path
 
-from claude_agent_sdk import ClaudeAgentOptions, query
+from claude_agent_sdk import ClaudeAgentOptions, ResultMessage, query
 
 from sync.core import CallSite, Finding, Patch, RepoRef, VendorChange
 
@@ -124,5 +124,15 @@ class AgentRemediator:
             allowed_tools=ALLOWED_TOOLS,
             disallowed_tools=DISALLOWED_TOOLS,
         )
-        async for _ in query(prompt=prompt, options=options):
-            pass
+        result: ResultMessage | None = None
+        async for message in query(prompt=prompt, options=options):
+            if isinstance(message, ResultMessage):
+                result = message
+
+        # A run that failed or never reported must not be mistaken for one that
+        # completed and correctly found nothing to change: both would otherwise
+        # leave behind the same empty git diff.
+        if result is None:
+            raise RuntimeError("agent run produced no result message")
+        if result.is_error:
+            raise RuntimeError(f"agent run failed ({result.subtype}): {result.errors}")

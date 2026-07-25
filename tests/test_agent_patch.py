@@ -1,4 +1,8 @@
+import pytest
+from claude_agent_sdk import ResultMessage
+
 from sync.core import CallSite, Finding, Remediator, VendorChange
+from sync.remediate import agent_patch
 from sync.remediate.agent_patch import AgentRemediator, build_patch_prompt
 
 SITE = CallSite(
@@ -54,3 +58,54 @@ def test_previous_diagnostics_are_included_on_a_retry():
 
 def test_the_prompt_omits_a_diagnostics_section_on_the_first_attempt():
     assert "previous attempt" not in build_patch_prompt(FINDING, CHANGE, SITE).lower()
+
+
+def _ok_result(**overrides) -> ResultMessage:
+    fields = dict(
+        subtype="success", duration_ms=1, duration_api_ms=1, is_error=False, num_turns=1, session_id="s1"
+    )
+    fields.update(overrides)
+    return ResultMessage(**fields)
+
+
+def test_run_agent_configures_the_repo_cwd_and_the_pinned_model(monkeypatch, tmp_path):
+    captured = {}
+
+    async def fake_query(*, prompt, options):
+        captured["prompt"] = prompt
+        captured["options"] = options
+        yield _ok_result()
+
+    monkeypatch.setattr(agent_patch, "query", fake_query)
+
+    AgentRemediator()._run_agent("do the patch", tmp_path)
+
+    options = captured["options"]
+    assert captured["prompt"] == "do the patch"
+    assert options.cwd == tmp_path
+    assert options.model == agent_patch.MODEL
+    assert options.thinking == {"type": "adaptive"}
+    assert options.effort == "xhigh"
+    assert options.allowed_tools == agent_patch.ALLOWED_TOOLS
+    assert options.disallowed_tools == agent_patch.DISALLOWED_TOOLS
+
+
+def test_run_agent_raises_when_the_sdk_reports_a_failed_run(monkeypatch, tmp_path):
+    async def fake_query(*, prompt, options):
+        yield _ok_result(is_error=True, subtype="error_max_turns", errors=["hit max turns"])
+
+    monkeypatch.setattr(agent_patch, "query", fake_query)
+
+    with pytest.raises(RuntimeError, match="hit max turns"):
+        AgentRemediator()._run_agent("do the patch", tmp_path)
+
+
+def test_run_agent_raises_when_no_result_message_arrives(monkeypatch, tmp_path):
+    async def fake_query(*, prompt, options):
+        return
+        yield  # pragma: no cover - unreachable; makes this an async generator
+
+    monkeypatch.setattr(agent_patch, "query", fake_query)
+
+    with pytest.raises(RuntimeError):
+        AgentRemediator()._run_agent("do the patch", tmp_path)
