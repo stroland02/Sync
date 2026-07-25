@@ -42,7 +42,11 @@ def make_patch(remediator):
                 diagnostics=state.get("diagnostics", ""),
             )
         except Exception as exc:
-            return {"patch": None, "static_attempts": attempts, "diagnostics": str(exc)}
+            return {
+                "patch": None,
+                "static_attempts": attempts,
+                "diagnostics": f"{type(exc).__name__}: {exc}",
+            }
 
         if not proposed.diff.strip():
             return {
@@ -72,13 +76,15 @@ def route_after_patch(state: RunState) -> str:
 def make_static_verify(adapter):
     def static_verify(state: RunState) -> RunState:
         result = adapter.static_verify(state["repo"], state["patch"])
-        return {"diagnostics": result.diagnostics if not result.ok else ""}
+        return {"diagnostics": result.diagnostics, "verify_ok": result.ok}
 
     return static_verify
 
 
 def route_after_static(state: RunState) -> str:
-    if not state.get("diagnostics"):
+    # `ok`, not whether diagnostics happens to be non-empty: a real tsc
+    # failure can exit non-zero with nothing on either stream.
+    if state.get("verify_ok"):
         return "push_branch"
     if state.get("static_attempts", 0) >= MAX_STATIC_ATTEMPTS:
         return "abandon"
@@ -108,6 +114,11 @@ def route_after_ci(state: RunState) -> str:
     if not state.get("diagnostics"):
         return "open_pr"
     if state.get("ci_attempts", 0) >= MAX_CI_ATTEMPTS:
+        return "abandon"
+    # static_attempts bounds total patch attempts for the whole run, not just
+    # attempts since the last push: a red CI run must not spend one more of
+    # them once that budget is already gone.
+    if state.get("static_attempts", 0) >= MAX_STATIC_ATTEMPTS:
         return "abandon"
     return "patch"
 

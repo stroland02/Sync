@@ -21,6 +21,11 @@ class RunState(TypedDict, total=False):
     # raised, or it returned an empty diff. Both must reach `abandon`, never `push_branch`.
     patch: Patch | None
     diagnostics: str
+    # Routing after static_verify trusts this, not whether diagnostics is
+    # non-empty: a real tsc failure can exit non-zero with nothing on either
+    # stream (e.g. a silent npx fetch failure), which would otherwise read as
+    # success.
+    verify_ok: bool
     static_attempts: int
     ci_attempts: int
     branch: str
