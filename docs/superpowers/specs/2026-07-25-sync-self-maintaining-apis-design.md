@@ -236,9 +236,84 @@ Then publish `sync.core` as the open plugin SDK with adapter-authoring documenta
 
 Coverage is the moat, and it is the reason for the open-core decision rather than a consequence of it. A live codebase calls dozens of third-party APIs. We cannot write dozens of adapters ourselves, so the interface has to be good enough that vendors and users write them. That is also why `sync.core` importing no sibling package is a hard rule rather than a stylistic preference.
 
+### Synthesized adapters
+
+Writing adapters by hand does not scale, and third parties writing them is only half an answer. The other half is generating them.
+
+The word "adapter" covers two separable jobs, and conflating them is what makes hand-authoring look mandatory:
+
+| | Answers | Source |
+|---|---|---|
+| **Codebase binding** | Which vendors does this repository call, and which call site maps to which endpoint? | Synthesizable from the index and telemetry |
+| **Vendor knowledge** | What did that vendor change? | Must come from outside |
+
+**Codebase binding is fully synthesizable.** Static parsing enumerates every SDK import and every literal hostname; OTel client spans report `server.address` and `url.full` for every outbound call. Together they produce a vendor inventory with no configuration.
+
+The mapping matters more. In M0, `stripe.charges.create → POST /v1/charges` is *derived* from Stripe's naming conventions — the single most vendor-specific assumption in the system and the risk this document already flags. Telemetry replaces derivation with observation. When a client span carries the code location that produced it, the mapping is read off real traffic:
+
+```
+static index   src/billing.ts:6  ->  stripe.charges.create
+OTel span      POST https://api.stripe.com/v1/charges
+               code.filepath=src/billing.ts, code.lineno=6
+                          |
+                 correlate on call site
+                          |
+            symbol -> endpoint, observed rather than derived
+```
+
+This generalizes to a vendor nobody has written an adapter for, and to a bare `fetch()` with no SDK at all.
+
+**Vendor knowledge cannot be synthesized from our own telemetry.** Traffic is a mirror: it shows what our customer's code does, never what a vendor is about to ship. Learning that a field was removed requires reading something the vendor published. Three things soften that:
+
+- Changelog parsing is vendor-agnostic — prose to structured change is one LLM chain, reused across vendors.
+- SDK releases are a universal signal. A type-signature diff between two published SDK versions indicates a breaking change without any specification.
+- **Two of the three detectors need no vendor knowledge at all.** Efficiency and production-error run entirely off telemetry joined against the graph. A 4xx spike on an endpoint is self-describing.
+
+The resulting coverage model: every vendor gets error and efficiency detection immediately; vendors that publish specifications or changelogs additionally get pre-emptive change detection.
+
+MCP is the case where both halves are automatic. An MCP server returns its tool schemas on request, so vendor knowledge is a snapshot-and-diff rather than a research problem. A fully synthesized adapter, end to end.
+
+**Why this is safe to attempt.** A synthesized mapping will sometimes be wrong, and a wrong mapping yields a wrong finding and a wrong patch. That patch then fails `tsc`, or fails CI, and is abandoned. The verification gate is what makes inference affordable: we can generate adapters aggressively precisely because nothing they produce reaches a human without a green build behind it.
+
+**Sequencing.** This does not change M0, and should not. Stripe stays hand-written, because an adapter synthesizer cannot be built without a known-correct adapter to score it against. Stripe is the ground truth.
+
 ### M4 — Hosted control plane
 
 Multi-tenant runtime, dashboard, organization onboarding, and per-repository policy: which vendors are watched, and which severities open a pull request automatically versus requiring review.
+
+### M5 — The integration layer
+
+The product's name is its thesis: synchronize signal across the tools a team already uses, so that remediation has complete context rather than one channel's worth.
+
+An integration is not one kind of thing. Three roles attach to the graph at different points, and treating them as one bucket is what makes this look unbuildable:
+
+| Role | Examples | Relationship to the graph |
+|---|---|---|
+| **Vendor** | Stripe, Notion API, Linear API, Cloudflare API | A subject. Code calls it; it can break you. |
+| **Signal source** | Sentry, Vercel, Railway, Render, GitHub Actions, CloudWatch | Feeds the graph. Reports that something broke, deployed, or changed. |
+| **Human surface** | Slack, Linear issues, Notion, GitHub pull requests | Consumes. Where a finding is delivered and a human answers. |
+
+Some vendors occupy two roles. Linear's API is something a customer's code may call, and Linear is also where a finding becomes a ticket. Those are unrelated integrations that happen to share a logo.
+
+**Why correlation is worth the work.** Each signal alone is close to noise. A Sentry spike is a mystery, a Vercel deploy is routine, a Stripe changelog entry goes unread. Joined on the graph they are a root cause and a fix:
+
+```
+Vercel    deploy 4f2a shipped                     14:02
+Sentry    TypeError on charge.status, 312 events  14:04
+ADG       src/billing.ts:6 reads `status` off stripe.charges.create
+Stripe    response-property-removed `status` in v2344
+GitHub    4f2a bumped stripe 18.0.0 -> 19.0.0
+                          |
+          one finding, causally complete, with a patch attached
+```
+
+**Sentry is likely the fastest route to M2.** It has already solved grouping, deduplication, and stack-trace capture — the expensive parts of turning raw errors into a finding. A Sentry signal source may reach a working production-error detector well before a raw OTLP pipeline does, and the two are not exclusive.
+
+**Two rules keep this from consuming the product.**
+
+*Everything integrates through the graph, never tool to tool.* Point-to-point wiring across N tools is N² connections and is how this category of product collapses. Graph-mediated is N: each integration learns one schema, the graph's.
+
+*Every integration must answer one question — what finding does it produce, or what patch does it improve?* If neither, it is a dashboard feature and does not belong here. What makes Sync worth paying for is that it changes code. Integrations are inputs to a remediation engine, not the product.
 
 ## Risks
 
