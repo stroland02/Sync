@@ -42,6 +42,26 @@ def test_reading_a_property_that_does_not_exist_fails(project: Path):
     assert "TS2339" in result.diagnostics
 
 
+def test_timeout_is_caught_and_reported_as_a_failed_verification(project: Path):
+    """A hung compiler must come back as a failed verification, not an exception.
+
+    Task 9's graph routes entirely on `VerifyResult.ok`: it feeds `diagnostics`
+    into the next patch attempt and abandons the finding after three. None of
+    that machinery handles an exception escaping the node, so a timeout has to
+    be absorbed as one failed attempt, not left to crash the graph.
+
+    `timeout` is forced absurdly low (1 millisecond) rather than mocked, so
+    this exercises a real `subprocess.TimeoutExpired` from a real `tsc`
+    invocation: spawning node and resolving npx alone takes far longer than
+    that on any machine, so the process is reliably still running when the
+    timeout fires.
+    """
+    (project / "src" / "a.ts").write_text("export const n: number = 1;\n", encoding="utf-8")
+    result = run_tsc(project, timeout=0.001)
+    assert result.ok is False
+    assert "timed out" in result.diagnostics
+
+
 def test_non_ascii_identifier_does_not_crash_the_gate(project: Path):
     """A non-ASCII identifier anywhere in the project must not crash run_tsc.
 

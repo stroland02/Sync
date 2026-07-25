@@ -12,12 +12,16 @@ from sync.core import VerifyResult
 _TSC_TIMEOUT_SECONDS = 300
 
 
-def run_tsc(repo_path: Path) -> VerifyResult:
+def run_tsc(repo_path: Path, timeout: float = _TSC_TIMEOUT_SECONDS) -> VerifyResult:
     """Typecheck a project with `tsc --noEmit`.
 
     Uses the project's own TypeScript when one is installed, and falls back to
     a pinned npx download otherwise. `npx` is resolved through shutil.which
     because on Windows it is `npx.cmd`, which subprocess will not find by bare name.
+
+    `timeout` defaults to `_TSC_TIMEOUT_SECONDS` and is a parameter only so a
+    test can force a real `subprocess.TimeoutExpired` without waiting five
+    minutes; callers verifying a patch should not override it.
     """
     repo_path = Path(repo_path)
     local_tsc = repo_path / "node_modules" / ".bin" / ("tsc.cmd" if _on_windows() else "tsc")
@@ -34,14 +38,17 @@ def run_tsc(repo_path: Path) -> VerifyResult:
         # stray `tsc` positional file argument and makes tsc ignore tsconfig.json.
         command = [npx, "--yes", "--silent", "--package=typescript@latest", "tsc", "--noEmit"]
 
-    result = subprocess.run(
-        command,
-        cwd=repo_path,
-        capture_output=True,
-        text=True,
-        encoding="utf-8",
-        timeout=_TSC_TIMEOUT_SECONDS,
-    )
+    try:
+        result = subprocess.run(
+            command,
+            cwd=repo_path,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            timeout=timeout,
+        )
+    except subprocess.TimeoutExpired:
+        return VerifyResult(ok=False, diagnostics=f"typecheck timed out after {timeout}s")
     if result.returncode == 0:
         return VerifyResult(ok=True)
     return VerifyResult(ok=False, diagnostics=(result.stdout + result.stderr).strip())
