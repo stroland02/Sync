@@ -205,6 +205,16 @@ One vendor, one language, one detector, one repository. The scope is narrow on p
 
 The target repository is our own fork of a real open-source TypeScript project that uses the Stripe SDK. It must be a fork rather than a purpose-built toy, because unfamiliar real-world code is the only honest test of the indexer, and it must be a fork we control so that opening pull requests against it is ours to do.
 
+#### Known limits of the M0 symbol map
+
+Both limits below come from deriving `operation_for_symbol` out of Stripe's URL conventions. Both are measured against Stripe's real specification, not estimated, and both are properly solved by the telemetry-derived mapping described under Synthesized adapters rather than by patching the derivation.
+
+**Coverage is 105 of 414 `/v1/` paths, about 25%.** The remainder are nested sub-resources such as `/v1/customers/{customer}/sources`, which the path pattern does not match. A call site on an unmatched operation produces no symbol mapping, so no finding can be raised against it.
+
+**Singleton resources map to the wrong verb.** A `GET` with no path parameter is treated as a collection listing, which is right for `/v1/charges` and wrong for `/v1/account` and `/v1/balance`, whose real SDK methods are `retrieve` rather than `list`.
+
+The second is a smaller problem than it appears, and the reason is worth stating because it generalises to every synthesized mapping: the failure is a **safe miss, not a wrong answer**. The generated key `stripe.account.list` matches no real call site, so nothing looks it up, and the genuine symbol `stripe.account.retrieve` resolves to `None`. A finding is never raised against the wrong operation. Any mapping heuristic we adopt later should preserve that property — failing to resolve is recoverable, resolving incorrectly is not.
+
 ### M1 — Runtime signals and the efficiency detector
 
 An OTLP ingest endpoint consuming client spans on stable semantic conventions version 1.23.0 or later: `http.request.method`, `url.full`, `server.address`, `http.response.status_code`, `http.request.resend_count`. Correlate spans to call sites by operation and host.
