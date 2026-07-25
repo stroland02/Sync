@@ -25,15 +25,14 @@ def _binary() -> str:
 def run_oasdiff_breaking(base_path: Path, revision_path: Path) -> list[dict[str, Any]]:
     """Return oasdiff's breaking-change records.
 
-    oasdiff exits 0 when there are no breaking changes and 1 when there are,
-    but only once `--fail-on WARN` is passed — without it, oasdiff 1.26.0 always
-    exits 0 and leaves exit-code signalling to the caller. WARN is the lower of
-    oasdiff's two failure levels, so `--fail-on WARN` covers both WARN and ERR
-    findings; everything it reports lands in our own `severity="breaking"`.
-    Exit code 1 is a successful run with findings — only codes above 1 are errors.
+    oasdiff's docs describe exit code 1 as "breaking changes found" versus 0 for
+    "none found" — but that distinction is opt-in via `--fail-on`, which we don't
+    pass, so 1.26.0 exits 0 either way for this invocation. We don't rely on the
+    exit code to tell us whether there are findings; the JSON payload does that.
+    Only codes above 1 signal a real failure (bad args, a crashed process).
     """
     result = subprocess.run(
-        [_binary(), "breaking", str(base_path), str(revision_path), "--format", "json", "--fail-on", "WARN"],
+        [_binary(), "breaking", str(base_path), str(revision_path), "--format", "json"],
         capture_output=True,
         text=True,
     )

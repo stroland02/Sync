@@ -5,9 +5,9 @@ from sync.signals.oasdiff import run_oasdiff_breaking, to_vendor_changes
 FIXTURES = Path(__file__).parent / "fixtures" / "specs"
 
 
-def test_breaking_changes_are_detected_despite_exit_code_one():
+def test_breaking_changes_are_detected_regardless_of_exit_code():
     records = run_oasdiff_breaking(FIXTURES / "charges_base.json", FIXTURES / "charges_revision.json")
-    assert records, "oasdiff reported no breaking changes; exit code 1 was probably treated as failure"
+    assert records, "oasdiff reported no breaking changes for a fixture pair with two hand-labelled ones"
 
 
 def test_identical_specs_produce_no_changes():
