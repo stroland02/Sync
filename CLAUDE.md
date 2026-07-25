@@ -29,6 +29,8 @@ The load-bearing idea is the **API Dependency Graph**: static call sites joined 
 
 Git warns `LF will be replaced by CRLF` on every commit. That is expected. Do not add a `.gitattributes` or rewrite line endings to silence it.
 
+**Always pass `encoding="utf-8"` explicitly** to `read_text`, `write_text`, and `open`. On Windows these default to the locale codepage — cp1252 on this machine — so any non-ASCII byte corrupts or raises, and only here. Every fixture in this repository is ASCII, which means **no test will ever catch this**; it fails first against a real vendor specification. This has already bitten Task 4 twice. When reading bytes that are not text, use `read_bytes`/`write_bytes` and do not decode at all.
+
 ## How we work
 
 **Test first, always.** Write the failing test, run it, watch it fail for the reason you expect, then implement. A test that has never failed has never been shown to test anything.
