@@ -48,7 +48,7 @@ class StripeAdapter:
 
     def __init__(self, spec_dir: Path, symbol_map_path: Path) -> None:
         self._spec_dir = Path(spec_dir)
-        self._symbols: dict[str, dict[str, str]] = json.loads(Path(symbol_map_path).read_text())
+        self._symbols: dict[str, dict[str, str]] = json.loads(Path(symbol_map_path).read_text(encoding="utf-8"))
 
     def fetch_changes(self, from_version: str, to_version: str) -> Iterable[VendorChange]:
         base = self._spec_dir / f"{from_version}.json"
