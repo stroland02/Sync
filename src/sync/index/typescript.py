@@ -286,4 +286,12 @@ class TypeScriptAdapter:
                 )
 
     def static_verify(self, repo: RepoRef, patch: Patch) -> VerifyResult:
-        raise NotImplementedError("implemented in Task 6")
+        """Typecheck the working tree.
+
+        The patch is expected to be applied to `repo.local_path` before this is
+        called — the graph's `patch` node writes to the clone directly, so there
+        is nothing to apply here.
+        """
+        from sync.index.tsc import run_tsc
+
+        return run_tsc(Path(repo.local_path))

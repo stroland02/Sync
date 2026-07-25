@@ -1,0 +1,50 @@
+"""Static verification by typechecking with the TypeScript compiler."""
+
+from __future__ import annotations
+
+import os
+import shutil
+import subprocess
+from pathlib import Path
+
+from sync.core import VerifyResult
+
+_TSC_TIMEOUT_SECONDS = 300
+
+
+def run_tsc(repo_path: Path) -> VerifyResult:
+    """Typecheck a project with `tsc --noEmit`.
+
+    Uses the project's own TypeScript when one is installed, and falls back to
+    a pinned npx download otherwise. `npx` is resolved through shutil.which
+    because on Windows it is `npx.cmd`, which subprocess will not find by bare name.
+    """
+    repo_path = Path(repo_path)
+    local_tsc = repo_path / "node_modules" / ".bin" / ("tsc.cmd" if _on_windows() else "tsc")
+
+    if local_tsc.exists():
+        command = [str(local_tsc), "--noEmit"]
+    else:
+        npx = shutil.which("npx")
+        if npx is None:
+            raise FileNotFoundError("npx not found on PATH")
+        # `--package=` (not a positional `typescript@latest`) is required here:
+        # this npm's npx resolves a positional package followed by a same-named
+        # bin by re-appending the bin name as an argument, which turns into a
+        # stray `tsc` positional file argument and makes tsc ignore tsconfig.json.
+        command = [npx, "--yes", "--package=typescript@latest", "tsc", "--noEmit"]
+
+    result = subprocess.run(
+        command,
+        cwd=repo_path,
+        capture_output=True,
+        text=True,
+        timeout=_TSC_TIMEOUT_SECONDS,
+    )
+    if result.returncode == 0:
+        return VerifyResult(ok=True)
+    return VerifyResult(ok=False, diagnostics=(result.stdout + result.stderr).strip())
+
+
+def _on_windows() -> bool:
+    return os.name == "nt"
