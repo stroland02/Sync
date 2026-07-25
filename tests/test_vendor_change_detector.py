@@ -1,12 +1,15 @@
 import os
+from pathlib import Path
 
 import pytest
 
 from sync.core import CallSite, VendorChange
 from sync.detect.vendor_change import VendorChangeDetector
 from sync.graph.store import GraphStore
+from sync.signals.oasdiff import run_oasdiff_breaking, to_vendor_changes
 
 DSN = os.environ.get("SYNC_DSN", "postgresql://sync:sync@localhost:5433/sync")
+FIXTURES = Path(__file__).parent / "fixtures" / "specs"
 
 
 @pytest.fixture()
@@ -79,3 +82,32 @@ def test_the_rationale_names_the_operation_and_the_field(store):
     rationale = VendorChangeDetector(store).scan()[0].rationale
     assert "PostCharges" in rationale
     assert "status" in rationale
+
+
+def test_the_real_oasdiff_pipeline_only_finds_call_sites_that_touch_the_changed_field(store):
+    """Ground the filter in real oasdiff output, not hand-built `raw` dicts.
+
+    charges_base.json -> charges_revision.json produces two real breaking
+    changes on PostCharges: a removed request property `source`, and a
+    removed (optional) response property `status`. Neither record carries a
+    structured `field` key -- the field name lives only in oasdiff's `text`
+    message. A call site is a genuine hit only if it actually passes `source`
+    or reads `status`; a call site that does neither must not match.
+    """
+    records = run_oasdiff_breaking(FIXTURES / "charges_base.json", FIXTURES / "charges_revision.json")
+    changes = to_vendor_changes(records, vendor_id="stripe", from_version="base", to_version="revision")
+    for change in changes:
+        store.upsert_vendor_change(change)
+
+    hit_id = _site(store, path="src/hit.ts", args=("amount", "source"), reads=("id", "status"))
+    miss_id = _site(store, path="src/miss.ts", args=("amount",), reads=("id",))
+
+    findings = VendorChangeDetector(store).scan()
+
+    def matched(site_id, kind):
+        return any(f.call_site_id == site_id and kind in f.rationale for f in findings)
+
+    assert matched(hit_id, "request-property-removed")
+    assert not matched(miss_id, "request-property-removed")
+    assert matched(hit_id, "response-optional-property-removed")
+    assert not matched(miss_id, "response-optional-property-removed")
