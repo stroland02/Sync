@@ -41,7 +41,9 @@ Three things from it that are easy to get wrong:
 
 Git warns `LF will be replaced by CRLF` on every commit. That is expected. Do not add a `.gitattributes` or rewrite line endings to silence it.
 
-**Always pass `encoding="utf-8"` explicitly** to `read_text`, `write_text`, and `open`. On Windows these default to the locale codepage — cp1252 on this machine — so any non-ASCII byte corrupts or raises, and only here. Every fixture in this repository is ASCII, which means **no test will ever catch this**; it fails first against a real vendor specification. This has already bitten Task 4 twice. When reading bytes that are not text, use `read_bytes`/`write_bytes` and do not decode at all.
+**Always pass `encoding="utf-8"` explicitly** to `read_text`, `write_text`, `open`, **and `subprocess.run(..., text=True)`**. On Windows all of these default to the locale codepage — cp1252 here — so any non-ASCII byte corrupts or raises, and only on this platform. Every fixture in this repository is ASCII, which means **no test will ever catch it**; it fails first against real vendor data or a real customer repository. When handling bytes that are not text, use `read_bytes`/`write_bytes` and do not decode at all.
+
+`subprocess` is the easy one to forget, and it fails worse than the others. A decode error there is raised on the reader thread and never propagates: the call returns with `stdout` set to `None`, and the next line that concatenates it raises `TypeError` somewhere unrelated. Task 6 shipped exactly this — one accented identifier anywhere in a typechecked project crashed the verification gate instead of failing it. Task 4 hit the plain `read_text` form twice.
 
 ## How we work
 
