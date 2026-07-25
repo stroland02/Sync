@@ -79,3 +79,21 @@ def test_content_hash_is_stable_across_runs(tmp_path):
     first = list(_adapter(tmp_path).index(_repo("simple")))[0].content_hash
     second = list(_adapter(tmp_path).index(_repo("simple")))[0].content_hash
     assert first == second
+
+
+def test_destructured_response_fields_record_the_api_key_not_the_renamed_binding(tmp_path):
+    sites = list(_adapter(tmp_path).index(_repo("destructured")))
+    assert len(sites) == 1
+    assert sorted(sites[0].response_fields_read) == ["id", "status"]
+
+
+def test_response_fields_do_not_leak_across_functions_with_the_same_result_name(tmp_path):
+    sites = list(_adapter(tmp_path).index(_repo("scoped")))
+    assert len(sites) == 1
+    assert sorted(sites[0].response_fields_read) == ["status"]
+
+
+def test_argument_keys_do_not_flatten_a_nested_object_literal(tmp_path):
+    sites = list(_adapter(tmp_path).index(_repo("nested_args")))
+    assert len(sites) == 1
+    assert sorted(sites[0].args_keys) == ["amount", "currency", "metadata"]

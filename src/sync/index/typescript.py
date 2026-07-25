@@ -25,6 +25,14 @@ from sync.core import CallSite, Patch, RepoRef, VendorAdapter, VerifyResult
 
 _TS_LANGUAGE = Language(tsts.language_typescript())
 _SDK_PACKAGE = "stripe"
+_FUNCTION_TYPES = {
+    "function_declaration",
+    "function_expression",
+    "generator_function",
+    "generator_function_declaration",
+    "arrow_function",
+    "method_definition",
+}
 
 
 def _parser() -> Parser:
@@ -71,8 +79,24 @@ class TypeScriptAdapter:
     def _client_identifiers(self, repo: RepoRef) -> set[str]:
         """Identifiers bound to a Stripe client anywhere in the repository.
 
-        Two sources: `new <ImportedName>(...)` assigned to a variable, and any
-        name re-exported from a module that itself binds a client.
+        The one rule: `new <ImportedName>(...)` assigned to a variable, where
+        `<ImportedName>` was imported from the `stripe` package in that same
+        file. Names accumulate into a single set across every file in the
+        repository, rather than being scoped per file — that repo-wide set is
+        what lets a client built in one module (`export const stripe = new
+        Stripe(...)`) resolve at its call sites in another (`import { stripe }
+        from './client'`): both files use the identifier `stripe`, so the
+        second file's occurrences land in the set the first file populated.
+        There is no separate re-export rule; it is this name-matching that
+        does it.
+
+        Because it is matching by name and not tracing the import, a
+        *renamed* re-export is missed: `import { stripe as billingClient }
+        from './client'` binds the name `billingClient`, which the file that
+        declared the client never added to the set, so
+        `billingClient.charges.create(...)` is silently not indexed. Closing
+        that gap would need the type inference tree-sitter doesn't give us —
+        accepted as a known limitation for single-vendor M0.
         """
         names: set[str] = set()
         parser = _parser()
@@ -123,25 +147,67 @@ class TypeScriptAdapter:
         return list(reversed(parts))
 
     def _argument_keys(self, call_node: Node, source: bytes) -> list[str]:
+        """Direct keys of the call's first argument, when it is an object literal.
+
+        Only that object's own properties count: Stripe can add, remove, or
+        rename a field at this level, but not one nested inside it, so a
+        nested object's keys — or an object literal buried in a second,
+        callback, argument — never enter the result.
+        """
         args = call_node.child_by_field_name("arguments")
-        if args is None:
+        if args is None or not args.named_children:
+            return []
+        first_arg = args.named_children[0]
+        if first_arg.type != "object":
             return []
         keys: list[str] = []
-        for node in _walk(args):
-            if node.type in ("pair", "shorthand_property_identifier"):
-                if node.type == "shorthand_property_identifier":
-                    keys.append(_text(node, source))
-                else:
-                    key = node.child_by_field_name("key")
-                    if key is not None:
-                        keys.append(_text(key, source).strip("'\""))
+        for node in first_arg.named_children:
+            if node.type == "shorthand_property_identifier":
+                keys.append(_text(node, source))
+            elif node.type == "pair":
+                key = node.child_by_field_name("key")
+                if key is not None:
+                    keys.append(_text(key, source).strip("'\""))
         return sorted(set(keys))
+
+    def _destructured_fields(self, pattern: Node, source: bytes) -> set[str]:
+        """API field names bound by a destructuring pattern.
+
+        `{ id, status: chargeStatus }` reads `id` and `status` — the key is
+        what the vendor returns; a renamed local binding is not.
+        """
+        fields: set[str] = set()
+        for node in pattern.named_children:
+            if node.type == "shorthand_property_identifier_pattern":
+                fields.add(_text(node, source))
+            elif node.type == "pair_pattern":
+                key = node.child_by_field_name("key")
+                if key is not None:
+                    fields.add(_text(key, source).strip("'\""))
+        return fields
+
+    def _enclosing_scope(self, node: Node, root: Node) -> Node:
+        """The nearest function, method, or arrow-function ancestor of `node`.
+
+        Falls back to `root` for a module-level call, which has no such
+        ancestor.
+        """
+        current = node.parent
+        while current is not None:
+            if current.type in _FUNCTION_TYPES:
+                return current
+            current = current.parent
+        return root
 
     def _response_fields(self, call_node: Node, source: bytes, root: Node) -> list[str]:
         """Fields read off the call's result.
 
-        Finds the variable the call is assigned to, then collects every property
-        accessed on that variable elsewhere in the file.
+        Finds the variable — or destructuring pattern — the call is assigned
+        to. For a destructured result, the pattern itself names the fields
+        read. For a plain variable, collects every property accessed on it,
+        searching only the call's enclosing function: two unrelated calls
+        that happen to share a generic result name (`result`, `data`) in
+        different functions must not merge into one dependency set.
         """
         declarator = call_node
         while declarator is not None and declarator.type != "variable_declarator":
@@ -149,12 +215,18 @@ class TypeScriptAdapter:
         if declarator is None:
             return []
         name_node = declarator.child_by_field_name("name")
-        if name_node is None or name_node.type != "identifier":
+        if name_node is None:
+            return []
+
+        if name_node.type == "object_pattern":
+            return sorted(self._destructured_fields(name_node, source))
+        if name_node.type != "identifier":
             return []
         result_name = _text(name_node, source)
+        scope = self._enclosing_scope(call_node, root)
 
         fields: set[str] = set()
-        for node in _walk(root):
+        for node in _walk(scope):
             if node.type != "member_expression":
                 continue
             obj = node.child_by_field_name("object")
