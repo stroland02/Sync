@@ -40,3 +40,22 @@ def test_reading_a_property_that_does_not_exist_fails(project: Path):
     result = run_tsc(project)
     assert result.ok is False
     assert "TS2339" in result.diagnostics
+
+
+def test_non_ascii_identifier_does_not_crash_the_gate(project: Path):
+    """A non-ASCII identifier anywhere in the project must not crash run_tsc.
+
+    tsc emits UTF-8 diagnostics. Decoding subprocess output with the locale
+    encoding (cp1252 on this machine) instead of UTF-8 raises UnicodeDecodeError
+    on a byte like the second one in 'Á'.encode('utf-8'), which is undefined
+    in cp1252 -- this must not turn a real type error into a crashed gate.
+    """
+    (project / "src" / "a.ts").write_text(
+        "type Álias = { id: string };\n"
+        "declare const c: Álias;\n"
+        "export const s = c.status;\n",
+        encoding="utf-8",
+    )
+    result = run_tsc(project)
+    assert result.ok is False
+    assert "TS2339" in result.diagnostics

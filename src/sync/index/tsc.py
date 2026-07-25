@@ -32,13 +32,14 @@ def run_tsc(repo_path: Path) -> VerifyResult:
         # this npm's npx resolves a positional package followed by a same-named
         # bin by re-appending the bin name as an argument, which turns into a
         # stray `tsc` positional file argument and makes tsc ignore tsconfig.json.
-        command = [npx, "--yes", "--package=typescript@latest", "tsc", "--noEmit"]
+        command = [npx, "--yes", "--silent", "--package=typescript@latest", "tsc", "--noEmit"]
 
     result = subprocess.run(
         command,
         cwd=repo_path,
         capture_output=True,
         text=True,
+        encoding="utf-8",
         timeout=_TSC_TIMEOUT_SECONDS,
     )
     if result.returncode == 0:
