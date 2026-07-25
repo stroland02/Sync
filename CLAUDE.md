@@ -57,7 +57,9 @@ Run the focused test while iterating; run the full suite once before committing.
 
 ## Model configuration
 
-Every model call uses:
+Always `claude-opus-5`, always adaptive thinking, always `xhigh` effort. **The two surfaces spell that differently, and they are not interchangeable.**
+
+Messages API — nested, and takes a token ceiling:
 
 ```python
 model="claude-opus-5"
@@ -66,7 +68,24 @@ output_config={"effort": "xhigh"}
 max_tokens=64000
 ```
 
-`temperature`, `top_p`, and `budget_tokens` return HTTP 400 on this model. Steer with prompting instead. Thinking is on by default and `max_tokens` caps thinking plus output together, which is why the ceiling is generous.
+Claude Agent SDK (`ClaudeAgentOptions`) — flat, and has **no** `output_config` and **no** `max_tokens`:
+
+```python
+ClaudeAgentOptions(
+    cwd=...,
+    model="claude-opus-5",
+    thinking={"type": "adaptive"},
+    effort="xhigh",
+    allowed_tools=[...],
+    disallowed_tools=["WebSearch", "WebFetch"],
+)
+```
+
+Verified against the installed package: `ClaudeAgentOptions` exposes `cwd`, `model`, `thinking`, `effort`, `allowed_tools`, `disallowed_tools`, and `permission_mode`. Passing the Messages-API shape to it does not work, and this document previously said otherwise.
+
+Restricting a tool means listing it in `disallowed_tools`. Merely leaving it out of `allowed_tools` is not a block — with no `can_use_tool` callback registered, an out-of-list call has no resolution path in headless mode, which inside an unattended pipeline is a hang rather than a refusal.
+
+`temperature`, `top_p`, and `budget_tokens` return HTTP 400 on this model on either surface. Steer with prompting instead. Thinking is on by default, and on the Messages API `max_tokens` caps thinking plus output together, which is why that ceiling is generous.
 
 ## Code style
 
