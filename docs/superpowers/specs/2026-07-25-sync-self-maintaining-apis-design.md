@@ -315,6 +315,10 @@ GitHub    4f2a bumped stripe 18.0.0 -> 19.0.0
 
 *Every integration must answer one question — what finding does it produce, or what patch does it improve?* If neither, it is a dashboard feature and does not belong here. What makes Sync worth paying for is that it changes code. Integrations are inputs to a remediation engine, not the product.
 
+**Why coverage compounds rather than accumulates.** Each additional signal is another dimension the join can cut on, so the quality of a remediation rises faster than the count of integrations. One source establishes that an error occurred. Four establish which deploy introduced it, which vendor change the deploy carried, which call sites are affected, and who owns them — enough to propose a fix a senior engineer would recognise as correct rather than a mechanical substitution.
+
+This is also why the graph-mediated rule is a competitive property and not only an engineering one. A product that wires tools to each other pairwise can surface each tool's data beside the others, but it cannot reason across them, because no component holds a model of how the customer's code actually uses any of it. Correlation composes only when every signal lands on a shared structure. The graph is that structure, and it is the part that is hard to copy.
+
 ## Risks
 
 | Risk | Mitigation |
