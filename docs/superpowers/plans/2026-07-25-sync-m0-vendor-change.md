@@ -488,8 +488,9 @@ git commit -m "feat: add sync.core contracts and import boundary enforcement"
 
 ```bash
 uv add "psycopg[binary]"
-uv add --dev pytest-postgresql
 ```
+
+Tests connect to the Docker Compose container via `SYNC_DSN`, so no test-harness database package is needed. An earlier revision of this step also installed `pytest-postgresql`; it was never used and was removed.
 
 - [ ] **Step 2: Write `docker-compose.yml`**
 
