@@ -2091,7 +2091,7 @@ Create an empty `src/sync/detect/__init__.py`.
 Run: `uv run pytest tests/test_vendor_change_detector.py -v`
 Expected: PASS, 6 tests.
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 6: Commit**
 
 ```bash
 git add -A
@@ -2841,8 +2841,11 @@ Body rendering and branch naming are deterministic and get real tests. The netwo
 Create `tests/test_github_forge.py`:
 
 ```python
+import json
+
 from sync.core import Evidence, Patch, RepoRef
 from sync.forge.github import GitHubForge, branch_name_for, render_pr_body
+from sync.remediate.nodes import Forge
 
 EVIDENCE = Evidence(
     spec_diff={"id": "response-property-removed", "field": "status"},
@@ -2855,9 +2858,7 @@ REPO = RepoRef(repo_id="r1", url="https://github.com/o/r", local_path="/tmp/r", 
 
 
 def test_forge_satisfies_the_protocol_shape():
-    forge = GitHubForge()
-    for method in ("push_branch", "await_ci", "open_pull_request"):
-        assert callable(getattr(forge, method))
+    assert isinstance(GitHubForge(), Forge)
 
 
 def test_branch_name_is_deterministic_and_git_safe():
@@ -2883,7 +2884,71 @@ def test_pr_body_states_that_ci_verified_the_change():
 
 def test_pr_body_discloses_that_it_was_generated():
     assert "Sync" in render_pr_body(EVIDENCE)
+
+
+HEAD = "a" * 40
+
+
+def _forge_returning(payload: str, timeout_seconds: int = 1) -> GitHubForge:
+    """A forge whose subprocess layer is replaced, so `await_ci`'s decision logic
+    can be tested without git, without `gh`, and without the network."""
+    forge = GitHubForge(poll_interval_seconds=0, timeout_seconds=timeout_seconds)
+
+    def fake_run(args, cwd):
+        if args[:2] == ["git", "rev-parse"]:
+            return HEAD
+        return payload
+
+    forge._run = fake_run
+    return forge
+
+
+def _run(status: str, conclusion: str, sha: str = HEAD, url: str = "https://ci/1") -> dict:
+    return {"status": status, "conclusion": conclusion, "url": url, "headSha": sha}
+
+
+def test_ci_is_green_when_every_run_for_the_commit_succeeded():
+    forge = _forge_returning(json.dumps([_run("completed", "success"), _run("completed", "success")]))
+    green, url = forge.await_ci(REPO, "sync/x")
+    assert green is True
+    assert url == "https://ci/1"
+
+
+def test_one_failing_workflow_makes_the_whole_commit_red():
+    forge = _forge_returning(json.dumps([_run("completed", "success"), _run("completed", "failure")]))
+    green, _ = forge.await_ci(REPO, "sync/x")
+    assert green is False
+
+
+def test_runs_still_in_progress_are_not_treated_as_a_verdict():
+    forge = _forge_returning(json.dumps([_run("completed", "success"), _run("in_progress", None)]))
+    green, detail = forge.await_ci(REPO, "sync/x")
+    assert green is False
+    assert "no completed CI run" in detail
+
+
+def test_a_run_from_an_earlier_push_to_the_same_branch_does_not_count():
+    forge = _forge_returning(json.dumps([_run("completed", "success", sha="b" * 40)]))
+    green, detail = forge.await_ci(REPO, "sync/x")
+    assert green is False
+    assert "no completed CI run" in detail
+
+
+def test_a_branch_with_no_runs_at_all_is_red():
+    forge = _forge_returning("[]")
+    green, detail = forge.await_ci(REPO, "sync/x")
+    assert green is False
+    assert "no completed CI run" in detail
 ```
+
+`await_ci` is the verification gate, and it is the one part of this task where a
+wrong answer ships a broken patch to a customer. Test it as decision logic over
+JSON, which is all it is. The `gh` and `git` invocations themselves are exercised
+in Task 11.
+
+Each negative test spins the poll loop for one second of wall clock, because
+`poll_interval_seconds=0` and `timeout_seconds=1`. That is deliberate: it proves
+the timeout path returns red rather than hanging or raising.
 
 - [ ] **Step 2: Run it to verify it fails**
 
@@ -2958,44 +3023,64 @@ class GitHubForge:
         self._timeout = timeout_seconds
 
     def _run(self, args: list[str], cwd: Path) -> str:
-        result = subprocess.run(args, cwd=cwd, capture_output=True, text=True)
+        result = subprocess.run(
+            args, cwd=cwd, capture_output=True, text=True, encoding="utf-8"
+        )
         if result.returncode != 0:
             raise RuntimeError(f"{' '.join(args)} failed: {result.stderr.strip()}")
         return result.stdout.strip()
 
     def push_branch(self, repo: RepoRef, patch: Patch) -> str:
-        """Commit the working tree and push it. The patch is already applied on disk."""
+        """Commit the tracked changes and push them. The patch is already applied on disk.
+
+        `git add -u` rather than `-A`: the patch came from `git diff`, which sees
+        tracked modifications only, so staging untracked files would commit
+        whatever the agent's tool calls happened to leave behind — a build
+        directory, a log, a stray dependency install — none of which the patch
+        or the review evidence describes.
+
+        The graph guarantees a non-empty diff before this runs, so `git commit`
+        cannot fail here for an empty index.
+        """
         path = Path(repo.local_path)
         branch = branch_name_for(patch, repo)
         self._run(["git", "checkout", "-B", branch], path)
-        self._run(["git", "add", "-A"], path)
+        self._run(["git", "add", "-u"], path)
         self._run(["git", "commit", "-m", f"fix: {patch.rationale}"], path)
-        self._run(["git", "push", "-u", "origin", branch, "--force"], path)
+        self._run(["git", "push", "-u", "origin", branch, "--force-with-lease"], path)
         return branch
 
     def await_ci(self, repo: RepoRef, branch: str) -> tuple[bool, str]:
-        """Poll check runs until they conclude. Returns (green, run_url).
+        """Poll every workflow run for the pushed commit. Returns (green, detail).
 
-        A branch with no configured checks is treated as red, not green — an
+        Green requires that runs exist for this exact commit, that all of them
+        have completed, and that every one concluded successfully. `--limit 1`
+        would report whichever workflow started last, so a repository whose lint
+        job passes and whose test job fails would read as green.
+
+        Filtering on `headSha` matters for the same reason: a run left over from
+        an earlier push to the same branch says nothing about this patch.
+
+        Runs that never appear are red at the timeout, not green — an
         unverifiable patch must never reach a pull request.
         """
         path = Path(repo.local_path)
+        head = self._run(["git", "rev-parse", "HEAD"], path)
         deadline = time.monotonic() + self._timeout
+        gh = _gh()
 
         while time.monotonic() < deadline:
             raw = self._run(
-                [_gh(), "run", "list", "--branch", branch, "--limit", "1",
-                 "--json", "status,conclusion,url"],
+                [gh, "run", "list", "--branch", branch, "--limit", "50",
+                 "--json", "status,conclusion,url,headSha"],
                 path,
             )
-            runs = json.loads(raw or "[]")
-            if runs:
-                run = runs[0]
-                if run["status"] == "completed":
-                    return run["conclusion"] == "success", run["url"]
+            runs = [run for run in json.loads(raw or "[]") if run["headSha"] == head]
+            if runs and all(run["status"] == "completed" for run in runs):
+                return all(run["conclusion"] == "success" for run in runs), runs[0]["url"]
             time.sleep(self._poll)
 
-        return False, f"timed out after {self._timeout}s waiting for CI on {branch}"
+        return False, f"no completed CI run for {head[:12]} within {self._timeout}s"
 
     def open_pull_request(self, repo: RepoRef, branch: str, evidence: Evidence) -> str:
         path = Path(repo.local_path)
@@ -3010,12 +3095,18 @@ class GitHubForge:
 
 Create an empty `src/sync/forge/__init__.py`.
 
-- [ ] **Step 4: Run the test to verify it passes**
+- [ ] **Step 4: Make the `Forge` protocol runtime-checkable**
+
+`src/sync/remediate/nodes.py` declares `class Forge(Protocol)` without the decorator, while all four protocols in `sync/core/protocols.py` carry it. Add `@runtime_checkable` above it and import `runtime_checkable` alongside `Protocol`, so `isinstance(GitHubForge(), Forge)` in the test above actually checks something.
+
+This catches a renamed or missing method. It does not check signatures — a `push_branch` with the wrong parameters still passes. That gap closes at Task 11's end-to-end run.
+
+- [ ] **Step 5: Run the test to verify it passes**
 
 Run: `uv run pytest tests/test_github_forge.py -v`
-Expected: PASS, 5 tests.
+Expected: PASS, 10 tests.
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 6: Commit**
 
 ```bash
 git add -A
