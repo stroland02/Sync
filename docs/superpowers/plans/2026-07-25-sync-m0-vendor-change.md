@@ -3285,7 +3285,270 @@ git commit -m "feat: resolve nested property paths to their leaf and drop enum-a
 
 ---
 
-### Task 12: CLI wiring and the end-to-end acceptance run
+### Task 12: Installing dependencies before the static gate
+
+Measured against the real acceptance target: `npx tsc --noEmit` on an unmodified clone of `stripe-connect-furever-demo` reports **1,264 errors**, essentially all `TS2307: Cannot find module 'react'` and the implicit-`any` cascade those cause. Sync clones fresh and never installs, so the static gate currently fails on every repository for reasons that have nothing to do with any patch. The graph would burn three agent attempts feeding 1,264 unrelated errors back as retry diagnostics, then abandon.
+
+`tsc --noEmit` without `node_modules` is not a weak signal. It is no signal.
+
+**The constraint that shapes the fix.** Sync never executes customer code. A plain `yarn install` runs `postinstall`, `prepare` and `prepublish` scripts from the customer's dependency tree, which is exactly that. Every install in this task therefore passes `--ignore-scripts`. Type declarations resolve; no lifecycle script runs.
+
+**Files:**
+- Create: `src/sync/index/deps.py`
+- Modify: `src/sync/index/typescript.py`
+- Test: `tests/test_deps.py`
+
+**Interfaces:**
+- Consumes: nothing from `sync.core`; this module is a subprocess wrapper over a package manager.
+- Produces: `install_dependencies(repo_path: Path, timeout: float = ...) -> None`, called by `TypeScriptAdapter.static_verify` before `run_tsc`.
+
+- [ ] **Step 1: Write the failing tests**
+
+Create `tests/test_deps.py`. These assert command selection and idempotence, which is where the defects live. No test runs a real package manager.
+
+```python
+from pathlib import Path
+
+import pytest
+
+from sync.index import deps
+
+
+def _record(monkeypatch) -> list[list[str]]:
+    calls: list[list[str]] = []
+
+    def fake_run(args, **kwargs):
+        calls.append(args)
+        class Result:
+            returncode = 0
+            stdout = ""
+            stderr = ""
+        return Result()
+
+    monkeypatch.setattr(deps.subprocess, "run", fake_run)
+    monkeypatch.setattr(deps.shutil, "which", lambda name: f"/usr/bin/{name}")
+    return calls
+
+
+def test_a_yarn_lockfile_selects_yarn(tmp_path, monkeypatch):
+    (tmp_path / "yarn.lock").write_text("", encoding="utf-8")
+    calls = _record(monkeypatch)
+    deps.install_dependencies(tmp_path)
+    assert calls[0][1:] == ["install", "--frozen-lockfile", "--ignore-scripts", "--ignore-engines"]
+
+
+def test_an_npm_lockfile_selects_npm_ci(tmp_path, monkeypatch):
+    (tmp_path / "package-lock.json").write_text("", encoding="utf-8")
+    calls = _record(monkeypatch)
+    deps.install_dependencies(tmp_path)
+    assert calls[0][1:] == ["ci", "--ignore-scripts"]
+
+
+def test_a_pnpm_lockfile_selects_pnpm(tmp_path, monkeypatch):
+    (tmp_path / "pnpm-lock.yaml").write_text("", encoding="utf-8")
+    calls = _record(monkeypatch)
+    deps.install_dependencies(tmp_path)
+    assert calls[0][1:] == ["install", "--frozen-lockfile", "--ignore-scripts"]
+
+
+def test_no_lockfile_falls_back_to_a_plain_npm_install(tmp_path, monkeypatch):
+    (tmp_path / "package.json").write_text("{}", encoding="utf-8")
+    calls = _record(monkeypatch)
+    deps.install_dependencies(tmp_path)
+    assert calls[0][1:] == ["install", "--ignore-scripts", "--no-audit", "--no-fund"]
+
+
+def test_every_install_command_suppresses_lifecycle_scripts(tmp_path, monkeypatch):
+    """The one property that must hold whichever manager is chosen: no
+    postinstall, prepare, or prepublish script from the customer's dependency
+    tree may execute on our machine."""
+    for lockfile in ("yarn.lock", "package-lock.json", "pnpm-lock.yaml"):
+        work = tmp_path / lockfile.replace(".", "_")
+        work.mkdir()
+        (work / lockfile).write_text("", encoding="utf-8")
+        calls = _record(monkeypatch)
+        deps.install_dependencies(work)
+        assert "--ignore-scripts" in calls[0], lockfile
+
+
+def test_a_populated_node_modules_is_not_reinstalled(tmp_path, monkeypatch):
+    (tmp_path / "yarn.lock").write_text("", encoding="utf-8")
+    (tmp_path / "node_modules" / ".bin").mkdir(parents=True)
+    calls = _record(monkeypatch)
+    deps.install_dependencies(tmp_path)
+    assert calls == []
+
+
+def test_a_project_with_no_package_json_installs_nothing(tmp_path, monkeypatch):
+    calls = _record(monkeypatch)
+    deps.install_dependencies(tmp_path)
+    assert calls == []
+
+
+def test_a_failed_install_raises_rather_than_letting_tsc_report_nonsense(tmp_path, monkeypatch):
+    (tmp_path / "package-lock.json").write_text("", encoding="utf-8")
+
+    def failing_run(args, **kwargs):
+        class Result:
+            returncode = 1
+            stdout = ""
+            stderr = "ENOENT: registry unreachable"
+        return Result()
+
+    monkeypatch.setattr(deps.subprocess, "run", failing_run)
+    monkeypatch.setattr(deps.shutil, "which", lambda name: f"/usr/bin/{name}")
+    with pytest.raises(RuntimeError, match="registry unreachable"):
+        deps.install_dependencies(tmp_path)
+```
+
+- [ ] **Step 2: Run them to verify they fail**
+
+Run: `uv run pytest tests/test_deps.py -v`
+
+Expected: FAIL — `ModuleNotFoundError: No module named 'sync.index.deps'`.
+
+- [ ] **Step 3: Write the installer**
+
+Create `src/sync/index/deps.py`:
+
+```python
+"""Install a JavaScript project's dependencies so typechecking means something.
+
+`tsc --noEmit` against a tree with no `node_modules` reports an unresolved
+import for every dependency -- 1,264 of them on the M0 acceptance repository --
+which drowns any diagnostic the patch is responsible for.
+
+Every command here passes `--ignore-scripts`. Sync does not execute customer
+code, and a dependency's `postinstall` is customer code by any reading. Type
+declarations resolve without it; lifecycle scripts are what we are refusing.
+"""
+
+from __future__ import annotations
+
+import shutil
+import subprocess
+from pathlib import Path
+
+_INSTALL_TIMEOUT_SECONDS = 600
+
+# yarn v1 refuses to install when the project's `engines.node` does not match
+# the interpreter it finds. We are resolving type declarations, not running the
+# project, so the constraint does not apply to what we do with the tree.
+_COMMANDS = {
+    "yarn.lock": ("yarn", ["install", "--frozen-lockfile", "--ignore-scripts", "--ignore-engines"]),
+    "package-lock.json": ("npm", ["ci", "--ignore-scripts"]),
+    "pnpm-lock.yaml": ("pnpm", ["install", "--frozen-lockfile", "--ignore-scripts"]),
+}
+_FALLBACK = ("npm", ["install", "--ignore-scripts", "--no-audit", "--no-fund"])
+
+
+def install_dependencies(repo_path: Path, timeout: float = _INSTALL_TIMEOUT_SECONDS) -> None:
+    """Populate `node_modules` for a checked-out project.
+
+    Does nothing for a tree with no `package.json`, or one whose `node_modules`
+    is already populated -- the graph calls `static_verify` up to three times
+    against the same clone, and paying for the install on each is pure latency.
+    """
+    repo_path = Path(repo_path)
+    if not (repo_path / "package.json").exists():
+        return
+    if any((repo_path / "node_modules").glob("*")):
+        return
+
+    manager, args = _FALLBACK
+    for lockfile, command in _COMMANDS.items():
+        if (repo_path / lockfile).exists():
+            manager, args = command
+            break
+
+    executable = shutil.which(manager)
+    if executable is None:
+        raise FileNotFoundError(f"{manager} not found on PATH")
+
+    result = subprocess.run(
+        [executable, *args],
+        cwd=repo_path,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        timeout=timeout,
+    )
+    if result.returncode != 0:
+        raise RuntimeError(f"{manager} install failed: {(result.stdout + result.stderr).strip()[-800:]}")
+```
+
+- [ ] **Step 4: Run the tests to verify they pass**
+
+Run: `uv run pytest tests/test_deps.py -v`
+
+Expected: PASS, 8 tests.
+
+- [ ] **Step 5: Call it from the static gate**
+
+In `src/sync/index/typescript.py`, `static_verify` currently imports and calls `run_tsc` alone. Install first:
+
+```python
+    def static_verify(self, repo: RepoRef, patch: Patch) -> VerifyResult:
+        """Typecheck the working tree.
+
+        The patch is expected to be applied to `repo.local_path` before this is
+        called — the graph's `patch` node writes to the clone directly, so there
+        is nothing to apply here.
+
+        Dependencies are installed first, without lifecycle scripts. Without
+        `node_modules` every import in the project is an unresolved-module
+        error and the typecheck says nothing about the patch.
+        """
+        from sync.index.deps import install_dependencies
+        from sync.index.tsc import run_tsc
+
+        install_dependencies(Path(repo.local_path))
+        return run_tsc(Path(repo.local_path))
+```
+
+- [ ] **Step 6: Add a test that the gate installs before it typechecks**
+
+Order matters and nothing above pins it. Add to `tests/test_tsc_verify.py`:
+
+```python
+def test_static_verify_installs_dependencies_before_typechecking(tmp_path, monkeypatch):
+    from sync.core import Patch, RepoRef
+    from sync.index import typescript
+
+    order: list[str] = []
+    monkeypatch.setattr(
+        "sync.index.deps.install_dependencies", lambda path, **kw: order.append("install")
+    )
+    monkeypatch.setattr(
+        "sync.index.tsc.run_tsc",
+        lambda path, **kw: (order.append("tsc"), VerifyResult(ok=True))[1],
+    )
+
+    repo = RepoRef(repo_id="r", url="u", local_path=str(tmp_path), head_sha="0" * 40)
+    adapter = typescript.TypeScriptAdapter(vendor_adapter=None)
+    adapter.static_verify(repo, Patch(diff="d", strategy="agent", rationale="r"))
+
+    assert order == ["install", "tsc"]
+```
+
+Import `VerifyResult` alongside the others. Prove this test can fail before trusting it: swap the two lines in `static_verify`, watch it go red, restore.
+
+- [ ] **Step 7: Run the full suite**
+
+Run: `uv run pytest -v`, then `uv run lint-imports`
+
+Expected: PASS, and the import contract kept.
+
+- [ ] **Step 8: Commit**
+
+```bash
+git add -A
+git commit -m "feat: install dependencies without lifecycle scripts before typechecking"
+```
+
+---
+
+### Task 13: CLI wiring and the end-to-end acceptance run
 
 This is the milestone. Everything before it is scaffolding for this one command.
 
@@ -3302,7 +3565,7 @@ This is the milestone. Everything before it is scaffolding for this one command.
 `stripe/stripe-connect-furever-demo` is Stripe's own TypeScript demo — real, non-trivial SDK usage, and uncontroversial to fork.
 
 ```bash
-gh repo fork stripe/stripe-connect-furever-demo --clone=false --remote=false
+gh repo fork stripe/stripe-connect-furever-demo --clone=false
 ```
 
 The fork must have a check that runs on push, because a branch with no checks is treated as red by design. Add a minimal typecheck workflow to the fork's default branch:
@@ -3319,7 +3582,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-      - run: npm ci
+      - run: yarn install --frozen-lockfile
       - run: npx tsc --noEmit
 ```
 
