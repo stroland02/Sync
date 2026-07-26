@@ -2,7 +2,7 @@ import json
 from pathlib import Path
 
 from sync.core import VendorAdapter
-from sync.signals.stripe.adapter import StripeAdapter
+from sync.signals.stripe.adapter import NOISE_KINDS, StripeAdapter
 from sync.signals.stripe.symbols import build_symbol_map
 
 FIXTURES = Path(__file__).parent / "fixtures" / "specs"
@@ -76,3 +76,14 @@ def test_fetch_changes_reads_two_local_specs(tmp_path):
     changes = list(adapter.fetch_changes("charges_base", "charges_revision"))
     assert changes
     assert all(c.vendor_id == "stripe" for c in changes)
+
+
+def test_enum_value_additions_are_classified_as_noise():
+    records = [
+        {"id": "response-property-enum-value-added", "text": "added `mastercard_compliance`",
+         "operationId": "PostCharges", "path": "/v1/charges"},
+        {"id": "response-optional-property-removed", "text": "removed the optional property `status`",
+         "operationId": "PostCharges", "path": "/v1/charges"},
+    ]
+    kept = [r for r in records if r["id"] not in NOISE_KINDS]
+    assert [r["id"] for r in kept] == ["response-optional-property-removed"]

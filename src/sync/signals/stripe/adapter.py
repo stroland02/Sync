@@ -13,6 +13,14 @@ from sync.signals.oasdiff import run_oasdiff_breaking, to_vendor_changes
 SPEC_REPO = "stripe/openapi"
 SPEC_PATH_IN_REPO = "openapi/spec3.json"
 
+# A new value in a response enum breaks only an exhaustive switch, and it is
+# four fifths of what oasdiff reports on a Stripe release -- 86,368 of 107,396
+# records between v2320 and v2330. Carrying that volume through the graph to
+# produce findings nobody asked for is the wrong default. It lives here rather
+# than in core because it is a judgement about one vendor's release habits,
+# not a fact about API changes.
+NOISE_KINDS = frozenset({"response-property-enum-value-added"})
+
 
 def fetch_spec(tag: str, dest: Path) -> Path:
     """Download `openapi/spec3.json` at a given tag of stripe/openapi.
@@ -56,7 +64,7 @@ class StripeAdapter:
         for path in (base, revision):
             if not path.exists():
                 raise FileNotFoundError(f"specification not found: {path}")
-        records = run_oasdiff_breaking(base, revision)
+        records = [r for r in run_oasdiff_breaking(base, revision) if r.get("id") not in NOISE_KINDS]
         return to_vendor_changes(records, self.vendor_id, from_version, to_version)
 
     def operation_for_symbol(self, symbol: str) -> OperationRef | None:

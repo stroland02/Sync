@@ -21,6 +21,7 @@ from sync.core import Finding, VendorChange
 from sync.graph.store import GraphStore
 
 _BACKTICKED = re.compile(r"`([^`]+)`")
+_PROPERTY_NAME = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 
 
 def _changed_field(change: VendorChange) -> str | None:
@@ -31,9 +32,13 @@ def _changed_field(change: VendorChange) -> str | None:
     case a future oasdiff version adds a structured one. The field name lives
     in the free-text `text` message instead, as the first backticked token
     (oasdiff backticks the field it names before any incidental value, such
-    as a status code). There is deliberately no path-derived fallback: a path
-    segment is never a field name, and returning one would be confident
-    nonsense -- worse than admitting the field couldn't be determined.
+    as a status code). There is deliberately no path-derived fallback for
+    `path_ptr`, the URL path: a URL segment is never a field name, and
+    returning one would be confident nonsense -- worse than admitting the
+    field couldn't be determined. The backticked token is different: for a
+    nested property it is itself a schema path, and unlike a URL path its
+    segments genuinely are property names, so it is reduced to its leaf
+    rather than returned whole.
     """
     for key in ("field", "property", "parameter", "name"):
         value = change.raw.get(key)
@@ -43,7 +48,25 @@ def _changed_field(change: VendorChange) -> str | None:
     if isinstance(text, str):
         match = _BACKTICKED.search(text)
         if match:
-            return match.group(1)
+            return _leaf_of(match.group(1))
+    return None
+
+
+def _leaf_of(token: str) -> str | None:
+    """The property name at the end of an oasdiff property path.
+
+    oasdiff names a nested property by its full schema path, interposing a
+    segment for every composition it walks through -- `anyOf[subschema #1:
+    Name]` and its `oneOf`/`allOf` siblings. Those segments name a schema, not
+    a property, so the rightmost segment is not always the field.
+
+    The indexer records the bare names a call site reads, so a path matches
+    only once reduced to one. The deepest real name is the property the vendor
+    changed, which is what makes the reduction sound.
+    """
+    for segment in reversed(token.split("/")):
+        if _PROPERTY_NAME.match(segment):
+            return segment
     return None
 
 

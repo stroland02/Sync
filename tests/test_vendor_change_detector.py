@@ -4,7 +4,7 @@ from pathlib import Path
 import pytest
 
 from sync.core import CallSite, VendorChange
-from sync.detect.vendor_change import VendorChangeDetector
+from sync.detect.vendor_change import VendorChangeDetector, _changed_field
 from sync.graph.store import GraphStore
 from sync.signals.oasdiff import run_oasdiff_breaking, to_vendor_changes
 
@@ -136,6 +136,46 @@ def test_a_change_whose_field_cannot_be_determined_still_produces_a_finding(stor
     assert "operation match only" in rationale
     assert "call site reads" not in rationale
     assert "call site passes" not in rationale
+
+
+def _leaf_change(text: str, kind: str = "response-optional-property-removed") -> VendorChange:
+    return VendorChange(
+        vendor_id="stripe", from_version="v2320", to_version="v2330",
+        kind=kind, operation_id="PostCharges", path_ptr="/v1/charges",
+        severity="breaking", source="oasdiff", raw={"text": text},
+    )
+
+
+def test_a_bare_field_name_is_returned_unchanged():
+    assert _changed_field(_leaf_change("removed the optional property `source`")) == "source"
+
+
+def test_a_nested_property_path_resolves_to_its_leaf():
+    change = _leaf_change(
+        "removed the optional property "
+        "`error/payment_method/card/generated_from/setup_attempt/payment_method_details`"
+    )
+    assert _changed_field(change) == "payment_method_details"
+
+
+def test_schema_composition_segments_are_not_mistaken_for_fields():
+    change = _leaf_change(
+        "removed the optional property "
+        "`error/payment_method/card/generated_from/"
+        "anyOf[subschema #1: payment_method_card_generated_card]/setup_attempt`"
+    )
+    assert _changed_field(change) == "setup_attempt"
+
+
+def test_a_path_whose_leaf_is_a_composition_segment_falls_back_to_the_last_real_name():
+    change = _leaf_change(
+        "removed the optional property `error/payment_method/anyOf[subschema #2: Foo]`"
+    )
+    assert _changed_field(change) == "payment_method"
+
+
+def test_a_token_with_no_resolvable_field_returns_none():
+    assert _changed_field(_leaf_change("removed the optional property `anyOf[subschema #1: Foo]`")) is None
 
 
 def test_a_change_whose_kind_is_neither_request_nor_response_still_produces_a_finding(store):
