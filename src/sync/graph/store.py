@@ -24,7 +24,7 @@ class GraphStore:
         return psycopg.connect(self._dsn, row_factory=dict_row, autocommit=True)
 
     def apply_schema(self) -> None:
-        ddl = resources.files("sync.graph").joinpath("schema.sql").read_text()
+        ddl = resources.files("sync.graph").joinpath("schema.sql").read_text(encoding="utf-8")
         with self._connect() as conn:
             conn.execute(ddl)
 
