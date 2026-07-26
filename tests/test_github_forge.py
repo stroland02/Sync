@@ -212,16 +212,12 @@ BLOCKING_CONCLUSIONS = [
 
 @pytest.mark.parametrize("conclusion", BLOCKING_CONCLUSIONS)
 def test_every_blocking_conclusion_makes_the_commit_red(conclusion):
-    """Paired with a run that did succeed, not run alone: a lone non-success
-    run is red either way `await_ci` gets there — through `failing`, or, if
-    it were wrongly classified as non-blocking, through the empty-`succeeded`
-    path polling to the timeout. Both satisfy `green is False` regardless of
-    which set the conclusion actually belongs to, so a run alone cannot tell
-    this test whether `conclusion` was correctly classified as blocking.
-    Pairing it with a run that did succeed forces the only way to reach
-    `green is False` here through `failing`, so an over-inclusive
-    `NON_BLOCKING_CONCLUSIONS` — one that wrongly absorbs `conclusion` — flips
-    this green and gets caught."""
+    """Each case pairs the blocking run with a success, so `failing` is the
+    only route to red. A blocking run on its own reaches red either way — via
+    `failing`, or, if it were wrongly classified as non-blocking, via the
+    empty-`succeeded` path polling to the timeout — which leaves the assertion
+    unable to say which set the conclusion belongs to. Paired, an
+    over-inclusive `NON_BLOCKING_CONCLUSIONS` flips this green."""
     forge = _forge_returning(json.dumps([
         _run("completed", "success", url="https://ci/ok"),
         _run("completed", conclusion, url="https://ci/bad"),
@@ -232,10 +228,9 @@ def test_every_blocking_conclusion_makes_the_commit_red(conclusion):
 
 
 # `skipped` (a job gated by `if:`) and `neutral` neither block a green verdict
-# nor count toward one — matching how GitHub's own branch protection resolves
-# them. A commit whose only runs skip is not verified by anything and must
-# stay red; a commit where a gated workflow skips alongside one that actually
-# ran and succeeded must not be held hostage by the gate.
+# nor count toward one. A commit whose only runs skip is not verified by
+# anything and must stay red; a commit where a gated workflow skips alongside
+# one that actually ran and succeeded must not be held hostage by the gate.
 NON_BLOCKING_CONCLUSIONS = ["skipped", "neutral"]
 
 
