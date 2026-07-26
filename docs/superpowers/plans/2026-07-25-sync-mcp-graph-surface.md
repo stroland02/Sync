@@ -6,7 +6,7 @@
 
 **Architecture:** A `GraphStore` protocol in `sync.core` gains two implementations: the existing Postgres store (hosted) and a new SQLite store (local). A new `sync.mcp` package holds four things — a feed cache, pure tool functions returning Pydantic models, a tool registry whose schemas are our own data, and a thin adapter that binds the registry to the MCP SDK. Tool logic is tested without the SDK, so protocol wiring is the only thing that depends on it.
 
-**Tech Stack:** Python 3.12, `uv`, Pydantic v2, `sqlite3` (standard library), `psycopg` (existing), `mcp` (Python SDK), pytest.
+**Tech Stack:** Python 3.12, `uv`, Pydantic v2, `sqlite3` (standard library), `psycopg` (existing), `mcp` (Python SDK), `cryptography` (Ed25519 feed signing), pytest.
 
 ## Global Constraints
 
@@ -624,11 +624,66 @@ git commit -m "feat: add a SQLite graph store for local mode"
 
 **Interfaces:**
 - Consumes: `VendorChange` from `sync.core`.
-- Produces: `FeedCache(cache_dir: Path)` with `load(vendor_id: str) -> FeedSnapshot` and `store(vendor_id: str, payload: bytes) -> FeedSnapshot`; `FeedSnapshot` with fields `vendor_id: str`, `changes: list[VendorChange]`, `fetched_at: datetime`, `digest: str`.
+- Produces: `sync.core.feed_keys.PUBLISHER_PUBLIC_KEY`, the embedded verification key; `FeedCache(cache_dir: Path, public_key: Ed25519PublicKey | None = None)` — `None` uses the embedded key — with `load(vendor_id: str) -> FeedSnapshot` and `store(vendor_id: str, payload: bytes, signature: bytes) -> FeedSnapshot`; `FeedSnapshot` with fields `vendor_id: str`, `changes: list[VendorChange]`, `fetched_at: datetime`, `digest: str`.
 
-The feed is published elsewhere. This task only consumes a cached copy and verifies its integrity. Nothing here reaches the network — `store()` takes bytes the caller already has.
+The feed is published elsewhere and this task only consumes a cached, signed copy — per
+`2026-07-26-sync-public-change-feed.md`, a forged entry proposes a patch against real code, so every payload
+is verified before it is parsed. Nothing here reaches the network — `store()` takes bytes the caller already
+has, alongside the detached signature that came with them.
 
-- [ ] **Step 1: Write the failing test**
+- [ ] **Step 1: Add the signing dependency**
+
+Run: `uv add cryptography`
+
+- [ ] **Step 2: Generate the publisher keypair**
+
+This key signs the public change feed for as long as Sync exists, so it is generated once, for real, now —
+not as a placeholder. The private key is never committed. Run:
+
+```bash
+uv run python -c "
+from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+from cryptography.hazmat.primitives.serialization import Encoding, PrivateFormat, PublicFormat, NoEncryption
+
+priv = Ed25519PrivateKey.generate()
+pub = priv.public_key()
+
+priv_bytes = priv.private_bytes(Encoding.Raw, PrivateFormat.Raw, NoEncryption())
+pub_bytes = pub.public_bytes(Encoding.Raw, PublicFormat.Raw)
+
+print('PRIVATE KEY (store this now in a password manager or secrets vault; it will not be shown again):')
+print(priv_bytes.hex())
+print()
+print('PUBLIC KEY (this is committed to source):')
+print(pub_bytes.hex())
+"
+```
+
+Stop and store the printed private key somewhere durable outside this repository before continuing — it signs
+every future feed publication and cannot be recovered if lost. Then create:
+
+```python
+# src/sync/core/feed_keys.py
+"""The public key that verifies the published API change feed.
+
+The matching private key signs the feed at publish time and is held outside this
+repository. Losing it means re-keying every consumer's cached trust; rotate only
+through a release, never silently.
+"""
+
+from __future__ import annotations
+
+from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
+
+PUBLISHER_PUBLIC_KEY = Ed25519PublicKey.from_public_bytes(
+    bytes.fromhex("REPLACE_WITH_THE_PUBLIC_KEY_HEX_PRINTED_ABOVE")
+)
+```
+
+Replace the placeholder hex with the real public key printed above — this is the one line in this task that is
+filled in from a value only you hold, not invented.
+
+- [ ] **Step 3: Write the failing test**
 
 ```python
 # tests/test_feed_cache.py
@@ -637,27 +692,31 @@ import json
 from pathlib import Path
 
 import pytest
+from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
 from sync.mcp.feed import FeedCache
 
 FIXTURE = Path(__file__).parent / "fixtures" / "feed" / "stripe.json"
+SIGNATURE = Path(__file__).parent / "fixtures" / "feed" / "stripe.json.sig"
 
 
 @pytest.fixture
 def cache(tmp_path: Path) -> FeedCache:
+    # Uses the real embedded PUBLISHER_PUBLIC_KEY (no override), verifying against
+    # the real signature fixture below — the same path production code takes.
     return FeedCache(tmp_path)
 
 
 def test_stores_and_reloads_a_feed(cache):
     payload = FIXTURE.read_bytes()
-    stored = cache.store("stripe", payload)
+    stored = cache.store("stripe", payload, SIGNATURE.read_bytes())
     reloaded = cache.load("stripe")
     assert [c.path_ptr for c in reloaded.changes] == [c.path_ptr for c in stored.changes]
     assert reloaded.digest == hashlib.sha256(payload).hexdigest()
 
 
 def test_records_when_the_feed_was_fetched(cache):
-    stored = cache.store("stripe", FIXTURE.read_bytes())
+    stored = cache.store("stripe", FIXTURE.read_bytes(), SIGNATURE.read_bytes())
     assert stored.fetched_at is not None
     assert cache.load("stripe").fetched_at == stored.fetched_at
 
@@ -668,18 +727,40 @@ def test_missing_feed_raises_key_error(cache):
 
 
 def test_rejects_a_payload_that_is_not_a_change_list(cache):
+    # Signed correctly, but the signed content itself is not a change list — the
+    # signature check must run before parsing without masking this failure.
+    bad_payload = json.dumps({"not": "a list"}).encode("utf-8")
+    priv = Ed25519PrivateKey.generate()
     with pytest.raises(ValueError):
-        cache.store("stripe", json.dumps({"not": "a list"}).encode("utf-8"))
+        cache.store("stripe", bad_payload, priv.sign(bad_payload), public_key=priv.public_key())
 
 
 def test_detects_a_corrupted_cache_file(cache, tmp_path):
-    cache.store("stripe", FIXTURE.read_bytes())
+    cache.store("stripe", FIXTURE.read_bytes(), SIGNATURE.read_bytes())
     (tmp_path / "stripe.json").write_text("{ truncated", encoding="utf-8")
     with pytest.raises(ValueError):
         cache.load("stripe")
+
+
+def test_rejects_a_tampered_payload_even_with_a_valid_looking_signature(cache):
+    tampered = FIXTURE.read_bytes() + b" "
+    with pytest.raises(ValueError, match="signature"):
+        cache.store("stripe", tampered, SIGNATURE.read_bytes())
+
+
+def test_rejects_a_payload_signed_by_the_wrong_key(cache):
+    payload = FIXTURE.read_bytes()
+    wrong_key = Ed25519PrivateKey.generate()
+    forged_signature = wrong_key.sign(payload)
+    with pytest.raises(ValueError, match="signature"):
+        cache.store("stripe", payload, forged_signature)
 ```
 
-- [ ] **Step 2: Write the fixture**
+`test_rejects_a_payload_that_is_not_a_change_list` takes an explicit `public_key` override because it needs a
+signature that actually verifies over a deliberately invalid payload — the real publisher key's private half
+is not available to sign an arbitrary test payload, and should not be.
+
+- [ ] **Step 4: Write the fixture and its real signature**
 
 ```json
 [
@@ -708,20 +789,38 @@ def test_detects_a_corrupted_cache_file(cache, tmp_path):
 ]
 ```
 
-- [ ] **Step 3: Run test to verify it fails**
+Save that as `tests/fixtures/feed/stripe.json`, then sign it for real with the private key generated in Step 2
+— paste the private key hex you stored, use it once here, and do not write it to any file:
+
+```bash
+uv run python -c "
+from pathlib import Path
+from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+
+priv = Ed25519PrivateKey.generate_from_private_bytes(bytes.fromhex('PASTE_YOUR_PRIVATE_KEY_HEX_HERE'))
+payload = Path('tests/fixtures/feed/stripe.json').read_bytes()
+Path('tests/fixtures/feed/stripe.json.sig').write_bytes(priv.sign(payload))
+"
+```
+
+The resulting `.sig` file is not a secret — it is a signature over public fixture content — and is committed
+alongside the fixture.
+
+- [ ] **Step 5: Run test to verify it fails**
 
 Run: `uv run pytest tests/test_feed_cache.py -v`
 Expected: FAIL — no module `sync.mcp.feed`.
 
-- [ ] **Step 4: Write the implementation**
+- [ ] **Step 6: Write the implementation**
 
 ```python
 # src/sync/mcp/feed.py
-"""Local cache of the published vendor change feed.
+"""Local cache of the published, signed vendor change feed.
 
-The feed is public data published separately from this server. It drives code
-changes, so its integrity is a supply-chain concern: every payload is digested on
-the way in and the digest is stored beside it.
+The feed is public data published separately from this server, but it drives code
+changes — a forged entry proposes a patch against real code — so every payload is
+verified against a detached Ed25519 signature before it is parsed, and digested on
+the way in so a corrupted local cache is detected on read.
 """
 
 from __future__ import annotations
@@ -731,9 +830,12 @@ import json
 from datetime import datetime, timezone
 from pathlib import Path
 
+from cryptography.exceptions import InvalidSignature
+from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
 from pydantic import BaseModel, ValidationError
 
 from sync.core import VendorChange
+from sync.core.feed_keys import PUBLISHER_PUBLIC_KEY
 
 
 class FeedSnapshot(BaseModel):
@@ -744,9 +846,10 @@ class FeedSnapshot(BaseModel):
 
 
 class FeedCache:
-    def __init__(self, cache_dir: Path) -> None:
+    def __init__(self, cache_dir: Path, public_key: Ed25519PublicKey | None = None) -> None:
         self._dir = Path(cache_dir)
         self._dir.mkdir(parents=True, exist_ok=True)
+        self._public_key = public_key or PUBLISHER_PUBLIC_KEY
 
     def _payload_path(self, vendor_id: str) -> Path:
         return self._dir / f"{vendor_id}.json"
@@ -754,7 +857,18 @@ class FeedCache:
     def _meta_path(self, vendor_id: str) -> Path:
         return self._dir / f"{vendor_id}.meta.json"
 
-    def store(self, vendor_id: str, payload: bytes) -> FeedSnapshot:
+    def store(
+        self, vendor_id: str, payload: bytes, signature: bytes, public_key: Ed25519PublicKey | None = None
+    ) -> FeedSnapshot:
+        # Verify authenticity before anything else touches the payload. Parsing a
+        # forged feed first would mean an attacker's JSON shape decides how their
+        # own forgery is rejected.
+        key = public_key or self._public_key
+        try:
+            key.verify(signature, payload)
+        except InvalidSignature as exc:
+            raise ValueError(f"feed signature for {vendor_id} does not verify") from exc
+
         changes = _parse(payload)
         fetched_at = datetime.now(timezone.utc)
         digest = hashlib.sha256(payload).hexdigest()
@@ -770,8 +884,13 @@ class FeedCache:
         if not path.exists():
             raise KeyError(f"no cached feed for {vendor_id}")
         payload = path.read_bytes()
+        # The signature was already verified once, in store(). load() re-reads a
+        # cache this process wrote, so it re-checks corruption via the digest
+        # rather than re-verifying a signature it did not receive again.
         changes = _parse(payload)
         meta = json.loads(self._meta_path(vendor_id).read_text(encoding="utf-8"))
+        if hashlib.sha256(payload).hexdigest() != meta["digest"]:
+            raise ValueError(f"cached feed for {vendor_id} does not match its recorded digest")
         return FeedSnapshot(
             vendor_id=vendor_id,
             changes=changes,
@@ -795,17 +914,20 @@ def _parse(payload: bytes) -> list[VendorChange]:
 
 Create an empty `src/sync/mcp/__init__.py`.
 
-- [ ] **Step 5: Run test to verify it passes**
+- [ ] **Step 7: Run test to verify it passes**
 
 Run: `uv run pytest tests/test_feed_cache.py -v`
-Expected: PASS, 5 tests.
+Expected: PASS, 7 tests.
 
-- [ ] **Step 6: Commit**
+- [ ] **Step 8: Commit**
 
 ```bash
-git add src/sync/mcp/ tests/test_feed_cache.py tests/fixtures/feed/
-git commit -m "feat: cache the vendor change feed with an integrity digest"
+git add src/sync/core/feed_keys.py src/sync/mcp/ tests/test_feed_cache.py tests/fixtures/feed/
+git commit -m "feat: cache the vendor change feed, verified against a signature"
 ```
+
+Do not include the private key printed in Step 2 anywhere in this commit — confirm with `git diff --cached`
+before running it.
 
 ---
 
@@ -983,6 +1105,7 @@ from sync.mcp.feed import FeedCache
 from sync.mcp.tools import ToolContext, explain_call_site, whats_at_risk, whats_changed
 
 FIXTURE = Path(__file__).parent / "fixtures" / "feed" / "stripe.json"
+SIGNATURE = Path(__file__).parent / "fixtures" / "feed" / "stripe.json.sig"
 
 
 @pytest.fixture
@@ -1004,7 +1127,7 @@ def ctx(tmp_path) -> ToolContext:
         severity="breaking", rationale="reads a removed field",
     ))
     feed = FeedCache(tmp_path)
-    feed.store("stripe", FIXTURE.read_bytes())
+    feed.store("stripe", FIXTURE.read_bytes(), SIGNATURE.read_bytes())
     return ToolContext(store=store, feed=feed, indexed_at=datetime.now(timezone.utc))
 
 
@@ -1666,7 +1789,7 @@ git commit -m "feat: serve the graph over MCP on stdio"
 
 - **`sync_propose_patch`.** It depends on the remediation graph, whose interface was still moving when this plan was written. It gets its own plan once M0 has merged and that interface has settled.
 - **The two-phase indexer** that upgrades `binding_source` from `static` to `resolved`. Task 1 adds the field and every consumer honours it; producing `resolved` is the TypeScript compiler pass, which is separate work.
-- **The feed's publication** — schema, hosting, signing, and data licence. Task 4 consumes a cached feed; publishing one needs its own spec first.
+- **The feed's publication** — schema, hosting, and data licence, now specified in `2026-07-26-sync-public-change-feed.md`. Task 4 consumes and verifies a cached, signed feed; it does not fetch one over the network or publish one. The signing keypair Task 4 generates is the real one described in that spec — not a throwaway — and its private half must exist somewhere durable before any feed is ever published.
 - **Telemetry correlation** producing `observed`. Hosted tier, later milestone.
 
 ## Verification
