@@ -209,10 +209,14 @@ lacks is knowledge of what a line depends on, which is the question Sync's exist
 
 ## Sequencing
 
+Every code change below waits on the same gate. `main` carries documentation only; the entire `src/` tree
+lives on `worktree-sync-m0-vendor-change` until M0 merges, so nothing here — including the positioning change
+— can be implemented earlier.
+
 | When | What |
 |---|---|
-| Now, independent of everything | Snippet-based positioning in the `locate` node. No dependency on M0, the MCP server, or OCR. |
-| After M0 merges | The eight-task graph-surface plan, unchanged. This document does not alter it. |
+| First after M0 merges | Snippet-based positioning in the `locate` node (`sync/remediate/nodes.py`). Highest value per unit of effort, and independent of both the MCP server and OCR. |
+| Then | The eight-task graph-surface plan, unchanged. This document does not alter it. |
 | After the MCP server runs | The two configuration artifacts and the rule fragment, then the falsification test above. |
 | Later | Rule matching on `change_kind` in the patch node, and bundling findings by vendor change. |
 
