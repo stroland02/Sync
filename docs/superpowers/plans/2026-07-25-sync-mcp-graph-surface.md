@@ -160,8 +160,8 @@ git commit -m "feat: record how a call-site binding was established"
 - Test: `tests/test_graph_store_protocol.py`
 
 **Interfaces:**
-- Consumes: `CallSite`, `Finding`, `VendorChange`, `FindingStatus` from Task 1's module.
-- Produces: `sync.core.protocols.GraphStore`, a runtime-checkable Protocol; `sync.graph.PostgresGraphStore`, the renamed concrete class.
+- Consumes: `CallSite`, `Finding`, `VendorChange`, `FindingStatus` from Task 1's module. `Severity` and `CallSite.indexed_at` already exist in `sync.core` from M0 — no export work is needed for them.
+- Produces: `sync.core.protocols.GraphStore`, a runtime-checkable Protocol; `sync.graph.PostgresGraphStore`, the renamed concrete class, gaining `call_site_at(path, line) -> CallSite | None` and `all_call_sites() -> list[CallSite]`.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -178,8 +178,8 @@ def test_postgres_store_satisfies_the_protocol():
 def test_protocol_names_every_method_the_store_offers():
     required = {
         "apply_schema", "upsert_call_site", "upsert_vendor_change", "insert_finding",
-        "call_sites_for_operation", "get_call_site", "get_vendor_change",
-        "all_vendor_changes", "open_findings", "set_finding_status",
+        "call_sites_for_operation", "get_call_site", "call_site_at", "all_call_sites",
+        "get_vendor_change", "all_vendor_changes", "open_findings", "set_finding_status",
     }
     assert required <= set(dir(GraphStore))
 ```
@@ -210,6 +210,10 @@ class GraphStore(Protocol):
 
     def get_call_site(self, call_site_id: str) -> CallSite: ...
 
+    def call_site_at(self, path: str, line: int) -> CallSite | None: ...
+
+    def all_call_sites(self) -> list[CallSite]: ...
+
     def get_vendor_change(self, change_id: str) -> VendorChange: ...
 
     def all_vendor_changes(self, vendor_id: str) -> list[VendorChange]: ...
@@ -221,19 +225,39 @@ class GraphStore(Protocol):
 
 Export `GraphStore` from `src/sync/core/__init__.py`.
 
-- [ ] **Step 4: Rename the concrete class**
+- [ ] **Step 4: Implement the two new methods on the Postgres store**
+
+`explain_call_site` must answer for any indexed line, not only lines that already carry a finding, and index
+freshness must come from the call sites themselves. Neither is reachable through the existing methods. Add to
+`src/sync/graph/store.py`:
+
+```python
+    def call_site_at(self, path: str, line: int) -> CallSite | None:
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT * FROM call_site WHERE path = %s AND line = %s", (path, line)
+            ).fetchone()
+        return None if row is None else CallSite(**row)
+
+    def all_call_sites(self) -> list[CallSite]:
+        with self._connect() as conn:
+            rows = conn.execute("SELECT * FROM call_site ORDER BY path, line").fetchall()
+        return [CallSite(**row) for row in rows]
+```
+
+- [ ] **Step 5: Rename the concrete class**
 
 In `src/sync/graph/store.py`, rename `class GraphStore:` to `class PostgresGraphStore:`. Update `src/sync/graph/__init__.py` to export `PostgresGraphStore`. Then find every other use and update it:
 
 Run: `grep -rn "GraphStore" src tests --include=*.py`
 Update each call site to `PostgresGraphStore`, except imports of the protocol from `sync.core`.
 
-- [ ] **Step 5: Run the full suite**
+- [ ] **Step 6: Run the full suite**
 
 Run: `uv run pytest -v`
 Expected: PASS, including `tests/test_import_boundary.py`, which must still pass — the protocol references only `sync.core.models`.
 
-- [ ] **Step 6: Commit**
+- [ ] **Step 7: Commit**
 
 ```bash
 git add src/sync/core/protocols.py src/sync/core/__init__.py src/sync/graph/ tests/
@@ -314,6 +338,26 @@ def test_queries_call_sites_by_operation(store):
 def test_missing_call_site_raises_key_error(store):
     with pytest.raises(KeyError):
         store.get_call_site("nope")
+
+
+def test_finds_a_call_site_by_path_and_line(store):
+    store.upsert_call_site(_site())
+    found = store.call_site_at("src/billing.ts", 6)
+    assert found is not None and found.symbol == "stripe.charges.create"
+
+
+def test_call_site_at_returns_none_for_an_unindexed_line(store):
+    store.upsert_call_site(_site())
+    assert store.call_site_at("src/billing.ts", 999) is None
+    assert store.call_site_at("src/unknown.ts", 6) is None
+
+
+def test_all_call_sites_returns_every_site_with_its_index_time(store):
+    store.upsert_call_site(_site())
+    store.upsert_call_site(_site(path="src/other.ts"))
+    sites = store.all_call_sites()
+    assert {s.path for s in sites} == {"src/billing.ts", "src/other.ts"}
+    assert all(s.indexed_at is not None for s in sites)
 
 
 def test_round_trips_a_vendor_change_with_raw_json(store):
@@ -508,6 +552,16 @@ class SqliteGraphStore:
             raise KeyError(f"no call site {call_site_id}")
         return CallSite(**_decode_site(row))
 
+    def call_site_at(self, path: str, line: int) -> CallSite | None:
+        row = self._conn.execute(
+            "SELECT * FROM call_site WHERE path = ? AND line = ?", (path, line)
+        ).fetchone()
+        return None if row is None else CallSite(**_decode_site(row))
+
+    def all_call_sites(self) -> list[CallSite]:
+        rows = self._conn.execute("SELECT * FROM call_site ORDER BY path, line").fetchall()
+        return [CallSite(**_decode_site(row)) for row in rows]
+
     def get_vendor_change(self, change_id: str) -> VendorChange:
         row = self._conn.execute("SELECT * FROM vendor_change WHERE id = ?", (change_id,)).fetchone()
         if row is None:
@@ -549,7 +603,7 @@ Export `SqliteGraphStore` from `src/sync/graph/__init__.py`.
 - [ ] **Step 5: Run test to verify it passes**
 
 Run: `uv run pytest tests/test_sqlite_store.py -v`
-Expected: PASS, 7 tests.
+Expected: PASS, 10 tests.
 
 - [ ] **Step 6: Commit**
 
@@ -1001,6 +1055,20 @@ def test_explain_call_site_says_not_indexed_rather_than_returning_nothing(ctx):
     assert result.envelope.indexed_at is not None
 
 
+def test_explain_call_site_answers_for_a_site_with_no_finding(ctx):
+    """A healthy call site is indexed, not invisible. Reaching sites through findings
+    would report `not_indexed` for every dependency that happens to be working."""
+    ctx.store.upsert_call_site(CallSite(
+        repo_id="r1", path="src/healthy.ts", line=12, col=4, vendor_id="stripe",
+        operation_id="GET /v1/customers", symbol="stripe.customers.list",
+        sdk_version="18.0.0", content_hash="def", file_bytes=1_000,
+    ))
+    result = explain_call_site(ctx, file="src/healthy.ts", line=12)
+    assert result.status == "indexed"
+    assert result.symbol == "stripe.customers.list"
+    assert result.known_changes == []
+
+
 def test_no_tool_returns_source_text(ctx):
     payload = whats_at_risk(ctx).model_dump_json() + explain_call_site(
         ctx, file="src/billing.ts", line=6
@@ -1118,6 +1186,9 @@ def whats_at_risk(
 ) -> WhatsAtRiskResult:
     items: list[RiskItem] = []
     baseline_bytes = 0
+    # One lookup per finding rather than a join. Findings are bounded by what a vendor
+    # actually changed, so this stays small; revisit if a single release ever produces
+    # enough findings for the round trips to show up in the response budget.
     for finding in ctx.store.open_findings():
         site = ctx.store.get_call_site(finding.call_site_id)
         if path is not None and site.path != path:
@@ -1146,27 +1217,29 @@ def whats_at_risk(
 
 def explain_call_site(ctx: ToolContext, file: str, line: int) -> ExplainResult:
     envelope = Envelope(indexed_at=ctx.indexed_at)
-    for finding in ctx.store.open_findings():
-        site = ctx.store.get_call_site(finding.call_site_id)
-        if site.path == file and site.line == line:
-            known = [
-                ctx.store.get_vendor_change(f.vendor_change_id).kind
-                for f in ctx.store.open_findings()
-                if f.call_site_id == finding.call_site_id and f.vendor_change_id is not None
-            ]
-            result = ExplainResult(
-                status="indexed", file=file, line=line, symbol=site.symbol,
-                operation=site.operation_id, vendor=site.vendor_id, args_keys=site.args_keys,
-                response_fields_read=site.response_fields_read, sdk_version=site.sdk_version,
-                binding_source=site.binding_source, known_changes=known, envelope=envelope,
-            )
-            result.envelope.context_savings = ContextSavings.between(
-                baseline_bytes=site.file_bytes,
-                response_bytes=len(result.model_dump_json().encode("utf-8")),
-            )
-            return result
-    # Never an empty success. An agent reads silence as "no vendor dependency here".
-    return ExplainResult(status="not_indexed", file=file, line=line, envelope=envelope)
+    # Look the site up directly. Reaching it through findings would make a healthy,
+    # fully indexed call site indistinguishable from an unindexed one.
+    site = ctx.store.call_site_at(file, line)
+    if site is None:
+        # Never an empty success. An agent reads silence as "no vendor dependency here".
+        return ExplainResult(status="not_indexed", file=file, line=line, envelope=envelope)
+
+    known = [
+        ctx.store.get_vendor_change(f.vendor_change_id).kind
+        for f in ctx.store.open_findings()
+        if f.call_site_id == site.id and f.vendor_change_id is not None
+    ]
+    result = ExplainResult(
+        status="indexed", file=file, line=line, symbol=site.symbol,
+        operation=site.operation_id, vendor=site.vendor_id, args_keys=site.args_keys,
+        response_fields_read=site.response_fields_read, sdk_version=site.sdk_version,
+        binding_source=site.binding_source, known_changes=known, envelope=envelope,
+    )
+    result.envelope.context_savings = ContextSavings.between(
+        baseline_bytes=site.file_bytes,
+        response_bytes=len(result.model_dump_json().encode("utf-8")),
+    )
+    return result
 
 
 def whats_changed(
@@ -1201,7 +1274,7 @@ def whats_changed(
 - [ ] **Step 4: Run test to verify it passes**
 
 Run: `uv run pytest tests/test_mcp_tools.py -v`
-Expected: PASS, 10 tests.
+Expected: PASS, 11 tests.
 
 - [ ] **Step 5: Run the full suite**
 
@@ -1451,7 +1524,7 @@ def test_tool_definitions_carry_an_input_schema():
         assert definition["inputSchema"]["type"] == "object"
 
 
-def test_build_context_creates_the_database_and_reports_index_time(tmp_path: Path):
+def test_build_context_creates_the_database(tmp_path: Path):
     ctx = build_context(db_path=tmp_path / "graph.db", feed_dir=tmp_path / "feed")
     assert (tmp_path / "graph.db").exists()
     assert ctx.store.open_findings() == []
@@ -1460,6 +1533,24 @@ def test_build_context_creates_the_database_and_reports_index_time(tmp_path: Pat
 def test_build_context_reports_no_index_time_for_a_fresh_database(tmp_path: Path):
     ctx = build_context(db_path=tmp_path / "graph.db", feed_dir=tmp_path / "feed")
     assert ctx.indexed_at is None
+
+
+def test_build_context_reports_index_time_when_the_repo_has_no_findings(tmp_path: Path):
+    """An indexed repository with nothing wrong is still an indexed repository. Deriving
+    freshness from findings would report it as never indexed."""
+    from sync.core import CallSite
+
+    db_path = tmp_path / "graph.db"
+    seed = build_context(db_path=db_path, feed_dir=tmp_path / "feed")
+    seed.store.upsert_call_site(CallSite(
+        repo_id="r1", path="src/billing.ts", line=6, col=2, vendor_id="stripe",
+        operation_id="POST /v1/charges", symbol="stripe.charges.create",
+        sdk_version="18.0.0", content_hash="abc",
+    ))
+
+    ctx = build_context(db_path=db_path, feed_dir=tmp_path / "feed")
+    assert ctx.store.open_findings() == []
+    assert ctx.indexed_at is not None
 ```
 
 - [ ] **Step 4: Run test to verify it fails**
@@ -1504,10 +1595,11 @@ def build_context(db_path: Path = DEFAULT_DB, feed_dir: Path = DEFAULT_FEED) -> 
     db_path.parent.mkdir(parents=True, exist_ok=True)
     store = SqliteGraphStore(db_path)
     store.apply_schema()
-    sites = store.open_findings()
-    indexed_at = None
-    if sites:
-        indexed_at = store.get_call_site(sites[0].call_site_id).indexed_at
+    # Freshness comes from the call sites themselves. Deriving it from findings would
+    # report a healthy indexed repository as never indexed, which is the one lie this
+    # field must not tell.
+    sites = store.all_call_sites()
+    indexed_at = max((s.indexed_at for s in sites), default=None)
     return ToolContext(store=store, feed=FeedCache(Path(feed_dir)), indexed_at=indexed_at)
 
 
@@ -1536,7 +1628,7 @@ def _serve_stdio(ctx: ToolContext) -> None:
 - [ ] **Step 6: Run test to verify it passes**
 
 Run: `uv run pytest tests/test_mcp_server.py -v`
-Expected: PASS, 4 tests. `_serve_stdio` is deliberately untested — it is SDK wiring with no logic.
+Expected: PASS, 5 tests. `_serve_stdio` is deliberately untested — it is SDK wiring with no logic.
 
 - [ ] **Step 7: Replace `_serve_stdio` with the real wiring**
 
