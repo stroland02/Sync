@@ -2,7 +2,8 @@ import json
 from pathlib import Path
 
 from sync.core import VendorAdapter
-from sync.signals.stripe.adapter import NOISE_KINDS, StripeAdapter
+from sync.signals.stripe import adapter as adapter_module
+from sync.signals.stripe.adapter import StripeAdapter
 from sync.signals.stripe.symbols import build_symbol_map
 
 FIXTURES = Path(__file__).parent / "fixtures" / "specs"
@@ -78,12 +79,31 @@ def test_fetch_changes_reads_two_local_specs(tmp_path):
     assert all(c.vendor_id == "stripe" for c in changes)
 
 
-def test_enum_value_additions_are_classified_as_noise():
-    records = [
-        {"id": "response-property-enum-value-added", "text": "added `mastercard_compliance`",
-         "operationId": "PostCharges", "path": "/v1/charges"},
-        {"id": "response-optional-property-removed", "text": "removed the optional property `status`",
-         "operationId": "PostCharges", "path": "/v1/charges"},
-    ]
-    kept = [r for r in records if r["id"] not in NOISE_KINDS]
-    assert [r["id"] for r in kept] == ["response-optional-property-removed"]
+def test_fetch_changes_filters_noise_records_before_they_become_vendor_changes(monkeypatch, tmp_path):
+    """A noise-kind record must never reach a VendorChange, not just an intermediate list.
+
+    Stubs `run_oasdiff_breaking` at module scope -- the same substitution point
+    `test_agent_patch.py` uses for `query` -- so the assertion is on what
+    `StripeAdapter.fetch_changes` actually returns, not on filtering logic
+    exercised in isolation from the method that is supposed to apply it.
+    """
+
+    def fake_run_oasdiff_breaking(base, revision):
+        return [
+            {"id": "response-property-enum-value-added", "text": "added `mastercard_compliance`",
+             "operationId": "PostCharges", "path": "/v1/charges"},
+            {"id": "response-optional-property-removed", "text": "removed the optional property `status`",
+             "operationId": "PostCharges", "path": "/v1/charges"},
+        ]
+
+    monkeypatch.setattr(adapter_module, "run_oasdiff_breaking", fake_run_oasdiff_breaking)
+
+    (tmp_path / "map.json").write_text(json.dumps(build_symbol_map(SPEC)), encoding="utf-8")
+    (tmp_path / "base.json").write_text("{}", encoding="utf-8")
+    (tmp_path / "revision.json").write_text("{}", encoding="utf-8")
+    stripe_adapter = StripeAdapter(spec_dir=tmp_path, symbol_map_path=tmp_path / "map.json")
+
+    changes = list(stripe_adapter.fetch_changes("base", "revision"))
+
+    assert len(changes) == 1
+    assert changes[0].kind == "response-optional-property-removed"
