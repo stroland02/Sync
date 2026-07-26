@@ -36,7 +36,7 @@ def render_pr_body(evidence: Evidence) -> str:
 {evidence.changelog_entry}
 
 ```json
-{json.dumps(evidence.spec_diff, indent=2)}
+{json.dumps(evidence.spec_diff, indent=2, ensure_ascii=False)}
 ```
 
 ## Affected call sites
@@ -92,20 +92,40 @@ class GitHubForge:
         """Poll every workflow run for the pushed commit. Returns (green, detail).
 
         Green requires that runs exist for this exact commit, that all of them
-        have completed, and that every one concluded successfully. `--limit 1`
-        would report whichever workflow started last, so a repository whose lint
-        job passes and whose test job fails would read as green.
+        have completed, that every one concluded successfully, and that the
+        same run set still holds on a second, later poll. `--limit 1` would
+        report whichever workflow started last, so a repository whose lint job
+        passes and whose test job fails would read as green.
 
-        Filtering on `headSha` matters for the same reason: a run left over from
-        an earlier push to the same branch says nothing about this patch.
+        The second poll matters for a chained layout — a workflow triggered by
+        `workflow_run: types: [completed]` gets its run record only after the
+        workflow it depends on finishes. A poll landing in that gap sees one
+        green run and nothing else; without re-confirming, that reads as a
+        verdict on a commit whose second workflow hasn't even started yet.
+        A red verdict is not subject to this: an unsuccessful run is red the
+        moment it is seen, since waiting cannot make a failure not have happened.
 
-        Runs that never appear are red at the timeout, not green — an
-        unverifiable patch must never reach a pull request.
+        Filtering on `headSha` matters for the same reason as the run-set
+        check: a run left over from an earlier push to the same branch says
+        nothing about this patch.
+
+        On red, the returned URL is the first run that did not succeed, not
+        `runs[0]` — `gh run list` orders by run id, which has nothing to do
+        with which workflow is the one worth a human's attention.
+
+        Runs that never appear, and runs that appear but never all finish, are
+        both red at the timeout, not green — an unverifiable patch must never
+        reach a pull request. They are reported as two different messages: a
+        branch with zero runs likely has no workflow that triggers on `push`
+        at all, which is a different fix than a slow or hung one.
         """
         path = Path(repo.local_path)
         head = self._run(["git", "rev-parse", "HEAD"], path)
         deadline = time.monotonic() + self._timeout
         gh = _gh()
+
+        saw_a_run_for_head = False
+        stable_success_urls: frozenset[str] | None = None
 
         while time.monotonic() < deadline:
             raw = self._run(
@@ -113,17 +133,42 @@ class GitHubForge:
                  "--json", "status,conclusion,url,headSha"],
                 path,
             )
-            runs = [run for run in json.loads(raw or "[]") if run["headSha"] == head]
-            if runs and all(run["status"] == "completed" for run in runs):
-                return all(run["conclusion"] == "success" for run in runs), runs[0]["url"]
+            runs = [run for run in json.loads(raw) if run["headSha"] == head]
+
+            if not runs:
+                stable_success_urls = None
+                time.sleep(self._poll)
+                continue
+
+            saw_a_run_for_head = True
+
+            if not all(run["status"] == "completed" for run in runs):
+                stable_success_urls = None
+                time.sleep(self._poll)
+                continue
+
+            failing = [run for run in runs if run["conclusion"] != "success"]
+            if failing:
+                return False, failing[0]["url"]
+
+            current_success_urls = frozenset(run["url"] for run in runs)
+            if current_success_urls == stable_success_urls:
+                return True, runs[0]["url"]
+            stable_success_urls = current_success_urls
             time.sleep(self._poll)
 
+        if saw_a_run_for_head:
+            return False, f"CI runs for {head[:12]} started but never all completed within {self._timeout}s"
         return False, f"no completed CI run for {head[:12]} within {self._timeout}s"
 
     def open_pull_request(self, repo: RepoRef, branch: str, evidence: Evidence) -> str:
+        """Open the PR against `repo.url`, not whatever `gh` would infer from
+        the clone's remotes. On a forked clone that inference resolves to the
+        fork's parent — a repository Sync does not own and must not write to."""
         path = Path(repo.local_path)
         return self._run(
             [_gh(), "pr", "create",
+             "--repo", repo.url,
              "--title", f"fix: {evidence.changelog_entry[:60]}",
              "--body", render_pr_body(evidence),
              "--head", branch],
