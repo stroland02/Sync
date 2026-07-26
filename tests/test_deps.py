@@ -1,3 +1,4 @@
+import os
 from pathlib import Path
 
 import pytest
@@ -164,6 +165,10 @@ def test_yarn_install_disables_the_vendored_yarn_path_override(tmp_path, monkeyp
     calls, kwargs = _record_with_kwargs(monkeypatch)
     deps.install_dependencies(tmp_path)
     assert kwargs[0]["env"]["YARN_IGNORE_PATH"] == "1"
+    # Extended, not replaced. Handing the child a bare one-key environment
+    # strips PATH, so npm's shim cannot resolve node and every install fails
+    # with a message about the install rather than about the environment.
+    assert kwargs[0]["env"]["PATH"] == os.environ["PATH"]
 
 
 def test_a_missing_manager_raises_rather_than_silently_falling_back(tmp_path, monkeypatch):
