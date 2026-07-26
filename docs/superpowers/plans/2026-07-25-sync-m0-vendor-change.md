@@ -3175,7 +3175,15 @@ print(records[0] if records else 'none - widen the tag range')
 
 Expected: a non-zero count. If it is zero, widen the range and try again. Record the chosen pair.
 
-- [ ] **Step 3: Write the CLI**
+- [ ] **Step 3: Add the Postgres checkpointer**
+
+```bash
+uv add langgraph-checkpoint-postgres
+```
+
+Task 9 built the graph against `InMemorySaver`, which ships inside `langgraph`. The durable checkpointer is a separate distribution and this is the first task that wires one.
+
+- [ ] **Step 4: Write the CLI**
 
 Create `src/sync/cli.py`:
 
@@ -3209,7 +3217,8 @@ DEFAULT_DSN = "postgresql://sync:sync@localhost:5433/sync"
 def _clone(url: str, dest: Path) -> RepoRef:
     subprocess.run(["git", "clone", "--depth", "50", url, str(dest)], check=True)
     head = subprocess.run(
-        ["git", "rev-parse", "HEAD"], cwd=dest, capture_output=True, text=True, check=True
+        ["git", "rev-parse", "HEAD"], cwd=dest,
+        capture_output=True, text=True, encoding="utf-8", check=True,
     ).stdout.strip()
     return RepoRef(repo_id=dest.name, url=url, local_path=str(dest), head_sha=head)
 
@@ -3222,7 +3231,10 @@ def run(args: argparse.Namespace) -> int:
     head_spec = fetch_spec(args.to_version, cache / f"{args.to_version}.json")
 
     symbol_map_path = cache / "symbols.json"
-    symbol_map_path.write_text(json.dumps(build_symbol_map(json.loads(head_spec.read_text()))))
+    symbol_map_path.write_text(
+        json.dumps(build_symbol_map(json.loads(head_spec.read_text(encoding="utf-8")))),
+        encoding="utf-8",
+    )
 
     vendor = StripeAdapter(spec_dir=cache, symbol_map_path=symbol_map_path)
     adapter = TypeScriptAdapter(vendor_adapter=vendor)
@@ -3253,16 +3265,26 @@ def run(args: argparse.Namespace) -> int:
         if not findings:
             return 0
 
+        # Each finding costs an agent run, a push, and a full CI wait, in sequence.
+        # A wide version range produces enough of them to run for hours, so the
+        # default processes one. `--limit 0` takes them all.
+        selected = findings if args.limit == 0 else findings[: args.limit]
+        print(f"remediating {len(selected)} of {len(findings)}")
+
         with PostgresSaver.from_conn_string(args.dsn) as checkpointer:
             checkpointer.setup()
             graph = build_graph(
                 store=store, adapter=adapter, remediator=AgentRemediator(),
                 forge=GitHubForge(), checkpointer=checkpointer,
             )
-            for finding in findings:
+            for finding in selected:
+                # Finding ids are stable across runs, so the thread id carries the
+                # commit too. Without it a second run resumes the finished checkpoint
+                # and reports the old outcome without doing any work.
+                thread_id = f"{finding.id}:{args.run_id or repo.head_sha[:12]}"
                 state = graph.invoke(
                     {"finding": finding, "repo": repo},
-                    config={"configurable": {"thread_id": finding.id}},
+                    config={"configurable": {"thread_id": thread_id}},
                 )
                 print(f"{state['outcome']}: {state.get('pr_url') or state.get('abandon_reason')}")
 
@@ -3280,6 +3302,9 @@ def main() -> int:
     run_parser.add_argument("--repo", required=True, help="git URL of the repository to scan")
     run_parser.add_argument("--dsn", default=DEFAULT_DSN)
     run_parser.add_argument("--cache", default=".cache/specs")
+    run_parser.add_argument("--limit", type=int, default=1, help="findings to remediate; 0 for all")
+    run_parser.add_argument("--run-id", dest="run_id", default=None,
+                            help="checkpoint namespace; defaults to the cloned commit")
     run_parser.set_defaults(func=run)
 
     args = parser.parse_args()
@@ -3290,16 +3315,16 @@ if __name__ == "__main__":
     raise SystemExit(main())
 ```
 
-- [ ] **Step 4: Register the console script**
+- [ ] **Step 5: Register the console script**
 
-Add to `pyproject.toml`:
+`pyproject.toml` already has a `[project.scripts]` section pointing at a placeholder. Change the existing entry rather than adding a second section — a duplicate table key makes the file unparseable.
 
 ```toml
 [project.scripts]
 sync = "sync.cli:main"
 ```
 
-- [ ] **Step 5: Write the end-to-end test**
+- [ ] **Step 6: Write the end-to-end test**
 
 Create `tests/test_e2e_stripe.py`. Substitute the fork URL from Step 1 and the version pair from Step 2:
 
@@ -3315,21 +3340,28 @@ import sys
 
 import pytest
 
-FORK_URL = os.environ["SYNC_E2E_REPO"]      # e.g. https://github.com/<you>/stripe-connect-furever-demo
+# Read inside the test, not at import. pytest collects every test module before
+# it applies `-m 'not e2e'`, so a missing variable at module scope would fail
+# collection of the whole suite rather than skipping this one test.
 FROM_VERSION = os.environ.get("SYNC_E2E_FROM", "v2200")
 TO_VERSION = os.environ.get("SYNC_E2E_TO", "v2345")
 
 
 @pytest.mark.e2e
 def test_one_command_produces_one_green_pull_request():
+    fork_url = os.environ.get("SYNC_E2E_REPO")
+    if not fork_url:
+        pytest.skip("set SYNC_E2E_REPO to the fork created in Step 1")
+
     result = subprocess.run(
         [sys.executable, "-m", "sync.cli", "run",
          "--vendor", "stripe",
          "--from-version", FROM_VERSION,
          "--to-version", TO_VERSION,
-         "--repo", FORK_URL],
+         "--repo", fork_url],
         capture_output=True,
         text=True,
+        encoding="utf-8",
         timeout=3600,
     )
     print(result.stdout)
@@ -3342,12 +3374,12 @@ def test_one_command_produces_one_green_pull_request():
     )
 ```
 
-- [ ] **Step 6: Run the full unit suite to confirm nothing regressed**
+- [ ] **Step 7: Run the full unit suite to confirm nothing regressed**
 
 Run: `uv run pytest -v`
 Expected: PASS. The end-to-end test is deselected by the `-m 'not e2e'` default.
 
-- [ ] **Step 7: Run the acceptance test**
+- [ ] **Step 8: Run the acceptance test**
 
 ```bash
 export SYNC_E2E_REPO="https://github.com/<your-account>/stripe-connect-furever-demo"
@@ -3358,7 +3390,7 @@ Expected: a pull request URL printed, and a real pull request on the fork whose 
 
 This is M0 acceptance. If the run abandons, the printed reason says whether it failed at `static_verify` (the patch never typechecked) or at `await_ci` (it typechecked but broke something else). Both are informative failures, not bugs in the harness — the gate working is the point.
 
-- [ ] **Step 8: Commit**
+- [ ] **Step 9: Commit**
 
 ```bash
 git add -A
