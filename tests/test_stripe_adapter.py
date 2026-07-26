@@ -1,4 +1,5 @@
 import json
+import subprocess
 from pathlib import Path
 
 from sync.core import VendorAdapter
@@ -107,3 +108,64 @@ def test_fetch_changes_filters_noise_records_before_they_become_vendor_changes(m
 
     assert len(changes) == 1
     assert changes[0].kind == "response-optional-property-removed"
+
+
+def test_fetch_spec_returns_the_cached_file_without_invoking_gh(tmp_path, monkeypatch):
+    """A tag names an immutable commit, so a populated cache entry is already
+    byte-identical to whatever `gh` would return -- refetching it would only
+    spend 8 MB of network for the same bytes. Asserting on the recorded call
+    list, not just the return value, is the point: the return value would
+    look the same whether `gh` ran or not.
+    """
+    calls = []
+    monkeypatch.setattr(adapter_module.subprocess, "run", lambda *a, **k: calls.append((a, k)))
+
+    dest = tmp_path / "v2330.json"
+    dest.write_bytes(b'{"openapi": "3.0.0"}')
+
+    result = adapter_module.fetch_spec("v2330", dest)
+
+    assert result == dest
+    assert calls == []
+    assert dest.read_bytes() == b'{"openapi": "3.0.0"}'
+
+
+def test_fetch_spec_refetches_when_the_cached_file_is_empty(tmp_path, monkeypatch):
+    """A zero-byte file is what an interrupted or failed previous write
+    leaves behind, not a valid cache hit -- treating it as one would hand a
+    truncated spec to oasdiff instead of a fetch failure.
+    """
+    calls = []
+
+    def fake_run(args, **kwargs):
+        calls.append(args)
+        return subprocess.CompletedProcess(args=args, returncode=0, stdout=b'{"openapi": "3.0.0"}', stderr=b"")
+
+    monkeypatch.setattr(adapter_module.subprocess, "run", fake_run)
+
+    dest = tmp_path / "v2330.json"
+    dest.write_bytes(b"")
+
+    result = adapter_module.fetch_spec("v2330", dest)
+
+    assert result == dest
+    assert len(calls) == 1
+    assert dest.read_bytes() == b'{"openapi": "3.0.0"}'
+
+
+def test_fetch_spec_fetches_when_the_file_is_missing_entirely(tmp_path, monkeypatch):
+    calls = []
+
+    def fake_run(args, **kwargs):
+        calls.append(args)
+        return subprocess.CompletedProcess(args=args, returncode=0, stdout=b'{"openapi": "3.0.0"}', stderr=b"")
+
+    monkeypatch.setattr(adapter_module.subprocess, "run", fake_run)
+
+    dest = tmp_path / "specs" / "v2330.json"
+
+    result = adapter_module.fetch_spec("v2330", dest)
+
+    assert result == dest
+    assert len(calls) == 1
+    assert dest.read_bytes() == b'{"openapi": "3.0.0"}'

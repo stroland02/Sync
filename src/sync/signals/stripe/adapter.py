@@ -32,9 +32,16 @@ def fetch_spec(tag: str, dest: Path) -> Path:
     base64-encoded `.content` field, so the envelope form fails outright for
     this file. Bytes are written unchanged — no `text=True` round trip — so a
     Windows console's non-UTF-8 default encoding can't corrupt the spec's
-    non-ASCII characters. Called only by the end-to-end test and the CLI —
-    never by a unit test.
+    non-ASCII characters.
+
+    A tag names an immutable commit, so a populated `dest` is already
+    byte-identical to what a fresh fetch would produce and is returned as-is
+    without invoking `gh`. A zero-byte `dest` is not treated as cached: that
+    is what an interrupted or failed previous write leaves behind, and
+    reusing it would hand a truncated spec to oasdiff.
     """
+    if dest.exists() and dest.stat().st_size > 0:
+        return dest
     dest.parent.mkdir(parents=True, exist_ok=True)
     result = subprocess.run(
         [
