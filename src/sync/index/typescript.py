@@ -291,7 +291,13 @@ class TypeScriptAdapter:
         The patch is expected to be applied to `repo.local_path` before this is
         called — the graph's `patch` node writes to the clone directly, so there
         is nothing to apply here.
+
+        Dependencies are installed first, without lifecycle scripts. Without
+        `node_modules` every import in the project is an unresolved-module
+        error and the typecheck says nothing about the patch.
         """
+        from sync.index.deps import install_dependencies
         from sync.index.tsc import run_tsc
 
+        install_dependencies(Path(repo.local_path))
         return run_tsc(Path(repo.local_path))

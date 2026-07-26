@@ -2,6 +2,7 @@ from pathlib import Path
 
 import pytest
 
+from sync.core import VerifyResult
 from sync.index.tsc import run_tsc
 
 
@@ -79,3 +80,23 @@ def test_non_ascii_identifier_does_not_crash_the_gate(project: Path):
     result = run_tsc(project)
     assert result.ok is False
     assert "TS2339" in result.diagnostics
+
+
+def test_static_verify_installs_dependencies_before_typechecking(tmp_path, monkeypatch):
+    from sync.core import Patch, RepoRef
+    from sync.index import typescript
+
+    order: list[str] = []
+    monkeypatch.setattr(
+        "sync.index.deps.install_dependencies", lambda path, **kw: order.append("install")
+    )
+    monkeypatch.setattr(
+        "sync.index.tsc.run_tsc",
+        lambda path, **kw: (order.append("tsc"), VerifyResult(ok=True))[1],
+    )
+
+    repo = RepoRef(repo_id="r", url="u", local_path=str(tmp_path), head_sha="0" * 40)
+    adapter = typescript.TypeScriptAdapter(vendor_adapter=None)
+    adapter.static_verify(repo, Patch(diff="d", strategy="agent", rationale="r"))
+
+    assert order == ["install", "tsc"]
