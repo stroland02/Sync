@@ -16,6 +16,11 @@ from pathlib import Path
 
 from sync.core import Evidence, Patch, RepoRef
 
+# `skipped` (an `if:`-gated job) and `neutral` indicate a run verified
+# nothing, not that it failed. They neither block a green verdict nor count
+# toward one, matching how GitHub's own branch protection resolves them.
+NON_BLOCKING_CONCLUSIONS = frozenset({"skipped", "neutral"})
+
 
 def _gh() -> str:
     found = shutil.which("gh")
@@ -91,11 +96,15 @@ class GitHubForge:
     def await_ci(self, repo: RepoRef, branch: str) -> tuple[bool, str]:
         """Poll every workflow run for the pushed commit. Returns (green, detail).
 
-        Green requires that runs exist for this exact commit, that all of them
-        have completed, that every one concluded successfully, and that the
-        same run set still holds on a second, later poll. `--limit 1` would
-        report whichever workflow started last, so a repository whose lint job
-        passes and whose test job fails would read as green.
+        Green requires at least one run concluding `success`, no run
+        concluding in a blocking state (see `NON_BLOCKING_CONCLUSIONS`), and
+        the same set of successful run URLs holding on a second, later poll.
+        `--limit 1` would report whichever workflow started last, so a
+        repository whose lint job passes and whose test job fails would read
+        as green. A commit whose only runs are skipped or neutral has nothing
+        confirming it and stays red at the timeout — the "at least one
+        success" half of the rule, not just "no failures", is what keeps a
+        gated or filtered workflow from reading as verified when nothing ran.
 
         The second poll matters for a chained layout — a workflow triggered by
         `workflow_run: types: [completed]` gets its run record only after the
@@ -109,15 +118,17 @@ class GitHubForge:
         check: a run left over from an earlier push to the same branch says
         nothing about this patch.
 
-        On red, the returned URL is the first run that did not succeed, not
-        `runs[0]` — `gh run list` orders by run id, which has nothing to do
-        with which workflow is the one worth a human's attention.
+        On red, the returned URL points at a run that did not succeed. `gh run
+        list` orders by run id, which carries no relevance to a human
+        reviewer, so the first entry in the list cannot be assumed useful.
 
-        Runs that never appear, and runs that appear but never all finish, are
-        both red at the timeout, not green — an unverifiable patch must never
-        reach a pull request. They are reported as two different messages: a
-        branch with zero runs likely has no workflow that triggers on `push`
-        at all, which is a different fix than a slow or hung one.
+        Three timeout messages, not one, since each implies a different fix:
+        no run ever appeared for this commit (nothing triggers on `push`),
+        runs appeared but some never finished (CI is slow or hung), or every
+        run finished without ever producing a confirmed green verdict (a lone
+        green run one poll short of stable, or a commit where nothing but
+        skips and neutrals ever ran). An unverifiable patch must never reach a
+        pull request regardless of which of the three applies.
         """
         path = Path(repo.local_path)
         head = self._run(["git", "rev-parse", "HEAD"], path)
@@ -125,6 +136,7 @@ class GitHubForge:
         gh = _gh()
 
         saw_a_run_for_head = False
+        saw_all_completed = False
         stable_success_urls: frozenset[str] | None = None
 
         while time.monotonic() < deadline:
@@ -147,19 +159,32 @@ class GitHubForge:
                 time.sleep(self._poll)
                 continue
 
-            failing = [run for run in runs if run["conclusion"] != "success"]
+            saw_all_completed = True
+
+            failing = [
+                run for run in runs
+                if run["conclusion"] not in NON_BLOCKING_CONCLUSIONS and run["conclusion"] != "success"
+            ]
             if failing:
                 return False, failing[0]["url"]
 
-            current_success_urls = frozenset(run["url"] for run in runs)
+            succeeded = [run for run in runs if run["conclusion"] == "success"]
+            if not succeeded:
+                stable_success_urls = None
+                time.sleep(self._poll)
+                continue
+
+            current_success_urls = frozenset(run["url"] for run in succeeded)
             if current_success_urls == stable_success_urls:
-                return True, runs[0]["url"]
+                return True, succeeded[0]["url"]
             stable_success_urls = current_success_urls
             time.sleep(self._poll)
 
-        if saw_a_run_for_head:
+        if not saw_a_run_for_head:
+            return False, f"no completed CI run for {head[:12]} within {self._timeout}s"
+        if not saw_all_completed:
             return False, f"CI runs for {head[:12]} started but never all completed within {self._timeout}s"
-        return False, f"no completed CI run for {head[:12]} within {self._timeout}s"
+        return False, f"CI for {head[:12]} completed without a confirmed green verdict within {self._timeout}s"
 
     def open_pull_request(self, repo: RepoRef, branch: str, evidence: Evidence) -> str:
         """Open the PR against `repo.url`, not whatever `gh` would infer from

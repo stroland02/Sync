@@ -1,9 +1,10 @@
 import json
+from pathlib import Path
 
 import pytest
 
 from sync.core import Evidence, Patch, RepoRef
-from sync.forge.github import GitHubForge, branch_name_for, render_pr_body
+from sync.forge.github import GitHubForge, _gh, branch_name_for, render_pr_body
 from sync.remediate.nodes import Forge
 
 EVIDENCE = Evidence(
@@ -192,15 +193,15 @@ def test_a_branch_with_no_runs_at_all_is_red():
     assert "no completed CI run" in detail
 
 
-# Every conclusion `gh run list --json conclusion` can emit besides "success".
-# `not any(conclusion == "failure")` is the natural way to loosen the gate and
-# would pass every test above it while still reading a cancelled, timed-out,
-# or action-required run as green.
-NON_SUCCESS_CONCLUSIONS = [
+# Every conclusion `gh run list --json conclusion` can emit that indicates
+# something genuinely went wrong. `not any(conclusion == "failure")` is the
+# natural way to loosen the gate and would pass every test above it while
+# still reading a cancelled, timed-out, or action-required run as green.
+# `skipped` and `neutral` are deliberately excluded from this list — see the
+# pair of tests below it, not this one.
+BLOCKING_CONCLUSIONS = [
     "failure",
     "cancelled",
-    "neutral",
-    "skipped",
     "stale",
     "startup_failure",
     "timed_out",
@@ -209,30 +210,79 @@ NON_SUCCESS_CONCLUSIONS = [
 ]
 
 
-@pytest.mark.parametrize("conclusion", NON_SUCCESS_CONCLUSIONS)
-def test_every_non_success_conclusion_makes_the_commit_red(conclusion):
+@pytest.mark.parametrize("conclusion", BLOCKING_CONCLUSIONS)
+def test_every_blocking_conclusion_makes_the_commit_red(conclusion):
     forge = _forge_returning(json.dumps([_run("completed", conclusion)]))
     green, _ = forge.await_ci(REPO, "sync/x")
     assert green is False
 
 
-def _forge_recording() -> tuple[GitHubForge, list[list[str]]]:
-    """A forge whose subprocess layer records every argv it was called with,
-    so `push_branch` and `open_pull_request` — pure argv composition over
+# `skipped` (a job gated by `if:`) and `neutral` neither block a green verdict
+# nor count toward one — matching how GitHub's own branch protection resolves
+# them. A commit whose only runs skip is not verified by anything and must
+# stay red; a commit where a gated workflow skips alongside one that actually
+# ran and succeeded must not be held hostage by the gate.
+NON_BLOCKING_CONCLUSIONS = ["skipped", "neutral"]
+
+
+@pytest.mark.parametrize("conclusion", NON_BLOCKING_CONCLUSIONS)
+def test_a_non_blocking_conclusion_alongside_a_success_is_green(conclusion):
+    forge = _forge_returning(json.dumps([
+        _run("completed", "success", url="https://ci/ci"),
+        _run("completed", conclusion, url="https://ci/gated"),
+    ]))
+    green, url = forge.await_ci(REPO, "sync/x")
+    assert green is True
+    assert url == "https://ci/ci"
+
+
+@pytest.mark.parametrize("conclusion", NON_BLOCKING_CONCLUSIONS)
+def test_a_non_blocking_conclusion_alone_is_red(conclusion):
+    forge = _forge_returning(json.dumps([_run("completed", conclusion)]))
+    green, _ = forge.await_ci(REPO, "sync/x")
+    assert green is False
+
+
+def test_timeout_message_does_not_claim_completed_runs_never_completed():
+    """A commit whose only run goes green on its last poll before the deadline
+    — one confirming poll short of being accepted as stable — is not the same
+    failure mode as a commit whose CI never finished running. The message is
+    fed straight into the next patch attempt's diagnostics and, on
+    abandonment, the operator-facing reason; it must not tell either of them
+    that nothing completed when something did."""
+    forge = GitHubForge(poll_interval_seconds=1, timeout_seconds=1)
+    payload = json.dumps([_run("completed", "success")])
+
+    def fake_run(args, cwd):
+        if args[:2] == ["git", "rev-parse"]:
+            return HEAD
+        return payload
+
+    forge._run = fake_run
+    green, detail = forge.await_ci(REPO, "sync/x")
+    assert green is False
+    assert "never all completed" not in detail
+
+
+def _forge_recording() -> tuple[GitHubForge, list[list[str]], list[Path]]:
+    """A forge whose subprocess layer records every argv and cwd it was called
+    with, so `push_branch` and `open_pull_request` — pure argv composition over
     `self._run` — can be tested without git, `gh`, or the network."""
     forge = GitHubForge()
     calls: list[list[str]] = []
+    cwds: list[Path] = []
 
     def fake_run(args, cwd):
         calls.append(args)
+        cwds.append(cwd)
         return ""
 
     forge._run = fake_run
-    return forge, calls
+    return forge, calls, cwds
 
 
 def test_push_branch_issues_the_expected_git_sequence():
-    forge, calls = _forge_recording()
+    forge, calls, cwds = _forge_recording()
     branch = forge.push_branch(REPO, PATCH)
 
     assert branch == branch_name_for(PATCH, REPO)
@@ -242,18 +292,25 @@ def test_push_branch_issues_the_expected_git_sequence():
         ["git", "commit", "-m", f"fix: {PATCH.rationale}"],
         ["git", "push", "-u", "origin", branch, "--force-with-lease"],
     ]
+    assert cwds == [Path(REPO.local_path)] * 4
 
 
-def test_open_pull_request_targets_the_repo_url_not_the_clones_inferred_remote():
-    """A forked clone's `gh pr create` infers the base repository from the
-    remote unless told otherwise, which for a fork resolves to the fork's
-    parent — not the repository Sync pushed to. `--repo` must be explicit."""
-    forge, calls = _forge_recording()
+def test_open_pull_request_issues_the_expected_gh_invocation():
+    """Exact-argv equality, same standard as `push_branch`: a dropped `--body`
+    would open a pull request carrying none of the evidence `Evidence` exists
+    to deliver — no spec diff, no call sites, no CI run URL, no disclosure —
+    and nothing about the return value would catch it. `--repo` matters
+    because a forked clone's `gh pr create` infers the base repository from
+    the remote unless told otherwise, which for a fork resolves to the fork's
+    parent, not the repository Sync pushed to."""
+    forge, calls, cwds = _forge_recording()
     forge.open_pull_request(REPO, "sync/x", EVIDENCE)
 
-    assert len(calls) == 1
-    args = calls[0]
-    assert "--repo" in args
-    assert args[args.index("--repo") + 1] == REPO.url
-    assert "--head" in args
-    assert args[args.index("--head") + 1] == "sync/x"
+    assert calls == [
+        [_gh(), "pr", "create",
+         "--repo", REPO.url,
+         "--title", f"fix: {EVIDENCE.changelog_entry[:60]}",
+         "--body", render_pr_body(EVIDENCE),
+         "--head", "sync/x"],
+    ]
+    assert cwds == [Path(REPO.local_path)]
