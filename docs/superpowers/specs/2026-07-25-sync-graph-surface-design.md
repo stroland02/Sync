@@ -73,7 +73,9 @@ sync_propose_patch(finding_id)
      evidence: {spec_diff, changelog, call_sites}}
 ```
 
-One resource: `sync://feed/{vendor}`, the normalized change feed.
+One resource: `sync://feed/{vendor}`, the normalized change feed, served from the server's local cache. The feed
+is *published* separately from this server and merely *consumed* by it — see Feed separation below, which is a
+data-boundary decision rather than a packaging one.
 
 Each tool answers a question an agent actually has. A generic query tool was rejected: agents compose arbitrary
 query languages poorly, and publishing the graph schema as the interface would make every internal change a
@@ -118,6 +120,44 @@ distribution argument: a developer installs it in one command and gets an answer
 no push, no forge involvement. The customer's CI remains the merge gate — it simply runs later, on the calling
 agent's own commit. The verification promise is unchanged and Sync holds nothing.
 
+### Indexing: what fills the graph
+
+Not part of this surface, but it determines what the surface can answer, so it is recorded here and scheduled
+alongside.
+
+Tree-sitter is a syntax-level parser and cannot resolve a symbol to its definition. The hard cases the design
+document already lists — aliased imports, a client reached through a helper function, destructured responses —
+are cross-file resolution failures, not symbol-map failures, and no further tree-sitter work resolves them. The
+Language Server Protocol is the obvious remedy and the wrong one: it resolves a single position per request
+with no batch API, which makes indexing a large TypeScript project slow.
+
+The TypeScript Compiler API loads a whole project into one in-process compiler and returns AST, semantic
+information, and module resolution with no RPC. That was too slow to consider until recently. TypeScript 7.0
+went stable on 2026-07-08 with a Go-native compiler roughly ten times faster than its predecessor — VS Code's
+400,000-line repository now typechecks in 8.74 seconds against 89 before.
+
+The efficient shape is therefore two passes, using each tool for what it is good at:
+
+```
+tree-sitter    scan the repository for candidate member-chain call expressions   ~15 ms, ~5 MB
+TS compiler    resolve only those candidates to their declarations               seconds, once per repository
+content_hash   skip unchanged files on reindex                                   already in the schema
+```
+
+Published work puts standard resolution at roughly 80% of calls in well-structured codebases, with cross-module
+references and dynamic dispatch needing fallbacks. Measured against the 25% path coverage the current
+URL-convention derivation achieves, that is the larger of the two available wins, and it is independent of the
+telemetry-observed binding that arrives in the same milestone.
+
+**This does not change M0.** The tree-sitter indexer is committed and M0 exists to prove the spine end to end.
+This is an M1 refinement, scheduled with the telemetry correlator because both address the same weakness.
+
+**LangChain has no role here.** Its code offering is `RecursiveCharacterTextSplitter.from_language()`, which
+chunks source at class and function delimiters for embedding, and which documents brace-delimited languages as
+a weakness. That is retrieval preprocessing; this is symbol resolution. The design document already confines
+LangChain to changelog map/reduce and structured extraction and keeps it out of the patch loop. Keep it out of
+the index loop for the same reason.
+
 ### Packages
 
 | Package | Change |
@@ -152,6 +192,60 @@ read both spellings — emitters migrate on their own schedule, gated by `OTEL_S
 
 The free tier is genuinely useful and the paid tier is strictly better in a way local software cannot
 replicate, because the difference is production telemetry rather than a feature flag.
+
+## Transport and identity
+
+The server speaks stdio in both tiers. In local mode it reads SQLite; in hosted mode the same process is a thin
+client holding a token and calling Sync's API. The tool layer never learns which mode it is in, and the
+transport is swappable behind that boundary.
+
+This looks like a plumbing decision and is an identity decision. stdio inherits the machine's identity —
+whatever token is on disk is who you are, with no callback, session, or per-request principal. HTTP must
+establish identity per request, which is where organization membership, per-repository authorization, and audit
+logs live. An enterprise asking "who queried which repository's dependency map, and when" can only be answered
+over HTTP.
+
+Sync does not need a per-user principal until it has organizations, which is M4. Until then stdio is both
+sufficient and more widely supported by MCP clients than remote transports.
+
+One consequence makes this more than a concession: **the tier difference is the presence of a token, not a
+different installation.** A free user becomes a paying user without reinstalling anything or reconfiguring
+their agent.
+
+## Feed separation and data boundaries
+
+The public change feed and the private dependency graph are published separately and queried together.
+
+```
+feed published   static, signed JSON over HTTPS behind a CDN. No authentication, own data license.
+                          │  fetched and cached locally
+                          ▼
+graph server     holds the private index, consumes the cached feed, serves the join
+```
+
+Three reasons they must not share a process:
+
+- **Trust asymmetry.** One is public data; the other is a customer's complete third-party dependency map — a
+  high-value target on its own, independent of any source code. A single process holding both means one
+  cross-tenant defect leaks the map. The threat model's posture is that there is nothing here worth stealing,
+  and mixing these weakens that for no benefit.
+- **Different scaling shapes.** The feed is byte-identical for every consumer and belongs on a CDN. The graph is
+  per-customer. Serving both from one place gets the worst of each.
+- **Distribution.** An unauthenticated feed is something a developer adds to their agent in seconds with no
+  account. Requiring registration to see what a vendor changed removes the only funnel a solo project has.
+
+The one argument for sharing is that `sync_whats_at_risk` *is* the join — a finding is a vendor change
+intersected with a call site. That is answered by separating publication from query rather than by merging the
+two: the graph server consumes the cached feed locally and computes the join there. In local mode the
+customer's dependency map never leaves their machine, and the feed never needs to know that a particular
+customer exists.
+
+**The feed is a supply-chain surface and must be treated as one.** It drives code changes, so an attacker who
+forges an entry gets a patch proposed against real code. Checksums are the minimum; signing is required before
+the feed is load-bearing for anyone but us. The verification gate limits the damage — a forged change still has
+to produce a patch that typechecks and passes CI — but it does not eliminate it, because a plausible malicious
+patch can do both. This belongs in the feed's own specification and is recorded here so it cannot be forgotten
+when that document is written.
 
 ## Error handling
 
@@ -204,7 +298,5 @@ gives the verification sandbox.
 
 - Whether `sync_whats_at_risk` with no arguments should scan the whole repository or refuse without a path.
   Whole-repository is friendlier and is also how an agent burns its context window on a large codebase.
-- Whether the hosted tier speaks stdio via a local proxy or HTTP directly, which is an authentication question
-  more than a transport one.
-- Whether the feed resource belongs on the same server as the private graph at all, given one is public data
-  and the other is a customer's dependency map.
+
+Transport and feed separation were open when this document was first written and are now decided above.
