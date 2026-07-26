@@ -3115,7 +3115,177 @@ git commit -m "feat: add GitHub forge with CI gate and evidence-bearing PR body"
 
 ---
 
-### Task 11: CLI wiring and the end-to-end acceptance run
+### Task 11: Resolving nested field paths and filtering vendor noise
+
+Measured against real Stripe data, `v2320` to `v2330`: 107,396 breaking-change records across 587 operations. 86,368 are `response-property-enum-value-added`. The remaining 21,028 are `response-optional-property-removed`, and **every one of them names its field as a nested schema path**, never a bare name:
+
+```
+removed the optional property `error/payment_method/card/generated_from/anyOf[subschema #1: payment_method_card_generated_card]/setup_attempt/...`
+```
+
+`_changed_field` returns that whole string. The detector compares it against `response_fields_read`, which holds bare names like `status`. So none of the 21,028 records can ever match a call site, and the only records producing a usable token are the enum additions the milestone is not trying to patch. Left alone, a scan produces no actionable finding.
+
+**Files:**
+- Modify: `src/sync/detect/vendor_change.py`
+- Modify: `src/sync/signals/stripe/adapter.py`
+- Test: `tests/test_vendor_change_detector.py`, `tests/test_stripe_adapter.py`
+
+**Interfaces:**
+- Consumes: `VendorChange` from `sync.core`; `run_oasdiff_breaking` and `to_vendor_changes` from `sync.signals.oasdiff`.
+- Produces: no new public names. `_changed_field` gains leaf resolution; `StripeAdapter.fetch_changes` gains a noise filter; `NOISE_KINDS` becomes importable from the Stripe adapter.
+
+- [ ] **Step 1: Write the failing detector tests**
+
+Add to `tests/test_vendor_change_detector.py`. The nested tokens are real, copied from oasdiff output on the pair above — do not simplify them.
+
+```python
+def _change(text: str, kind: str = "response-optional-property-removed") -> VendorChange:
+    return VendorChange(
+        vendor_id="stripe", from_version="v2320", to_version="v2330",
+        kind=kind, operation_id="PostCharges", path_ptr="/v1/charges",
+        severity="breaking", source="oasdiff", raw={"text": text},
+    )
+
+
+def test_a_bare_field_name_is_returned_unchanged():
+    assert _changed_field(_change("removed the optional property `source`")) == "source"
+
+
+def test_a_nested_property_path_resolves_to_its_leaf():
+    change = _change(
+        "removed the optional property "
+        "`error/payment_method/card/generated_from/setup_attempt/payment_method_details`"
+    )
+    assert _changed_field(change) == "payment_method_details"
+
+
+def test_schema_composition_segments_are_not_mistaken_for_fields():
+    change = _change(
+        "removed the optional property "
+        "`error/payment_method/card/generated_from/"
+        "anyOf[subschema #1: payment_method_card_generated_card]/setup_attempt`"
+    )
+    assert _changed_field(change) == "setup_attempt"
+
+
+def test_a_path_whose_leaf_is_a_composition_segment_falls_back_to_the_last_real_name():
+    change = _change(
+        "removed the optional property `error/payment_method/anyOf[subschema #2: Foo]`"
+    )
+    assert _changed_field(change) == "payment_method"
+
+
+def test_a_token_with_no_resolvable_field_returns_none():
+    assert _changed_field(_change("removed the optional property `anyOf[subschema #1: Foo]`")) is None
+```
+
+- [ ] **Step 2: Run them to verify they fail**
+
+Run: `uv run pytest tests/test_vendor_change_detector.py -v`
+
+Expected: the four nested cases FAIL, each returning the whole path where a leaf was expected. `test_a_bare_field_name_is_returned_unchanged` passes already — that is the behaviour being preserved, and it is here so a regression in it is caught.
+
+- [ ] **Step 3: Resolve the leaf**
+
+In `src/sync/detect/vendor_change.py`, add the segment pattern beside `_BACKTICKED`:
+
+```python
+_BACKTICKED = re.compile(r"`([^`]+)`")
+_PROPERTY_NAME = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
+```
+
+Change the `text` branch of `_changed_field` to reduce the token, and add the helper below it:
+
+```python
+    text = change.raw.get("text")
+    if isinstance(text, str):
+        match = _BACKTICKED.search(text)
+        if match:
+            return _leaf_of(match.group(1))
+    return None
+
+
+def _leaf_of(token: str) -> str | None:
+    """The property name at the end of an oasdiff property path.
+
+    oasdiff names a nested property by its full schema path, interposing a
+    segment for every composition it walks through -- `anyOf[subschema #1:
+    Name]` and its `oneOf`/`allOf` siblings. Those segments name a schema, not
+    a property, so the rightmost segment is not always the field.
+
+    The indexer records the bare names a call site reads, so a path matches
+    only once reduced to one. The deepest real name is the property the vendor
+    changed, which is what makes the reduction sound.
+    """
+    for segment in reversed(token.split("/")):
+        if _PROPERTY_NAME.match(segment):
+            return segment
+    return None
+```
+
+Then update `_changed_field`'s docstring. Its existing paragraph explaining that there is no path-derived fallback refers to `path_ptr`, the URL path, where a segment genuinely is never a field name — that reasoning still holds and must stay. What is new is that the *backticked token* is a property path, whose segments are property names. State both, and do not let the second read as a reversal of the first.
+
+- [ ] **Step 4: Run the detector tests to verify they pass**
+
+Run: `uv run pytest tests/test_vendor_change_detector.py -v`
+
+Expected: PASS.
+
+A leaf can now match a call site reading a same-named field at a different depth — code reading a top-level `id` against a change to some deeply nested `id`. That is a known and accepted cost. The detector's stated principle is that an irrelevant finding costs a reviewer a glance while a dropped breaking change is the failure it exists to prevent. Do not add a depth heuristic to compensate; there is no data yet to set a threshold against.
+
+- [ ] **Step 5: Write the failing adapter test**
+
+Add to `tests/test_stripe_adapter.py`, importing `NOISE_KINDS` from `sync.signals.stripe.adapter`:
+
+```python
+def test_enum_value_additions_are_classified_as_noise():
+    records = [
+        {"id": "response-property-enum-value-added", "text": "added `mastercard_compliance`",
+         "operationId": "PostCharges", "path": "/v1/charges"},
+        {"id": "response-optional-property-removed", "text": "removed the optional property `status`",
+         "operationId": "PostCharges", "path": "/v1/charges"},
+    ]
+    kept = [r for r in records if r["id"] not in NOISE_KINDS]
+    assert [r["id"] for r in kept] == ["response-optional-property-removed"]
+```
+
+- [ ] **Step 6: Filter the noise at the adapter**
+
+In `src/sync/signals/stripe/adapter.py`:
+
+```python
+# A new value in a response enum breaks only an exhaustive switch, and it is
+# four fifths of what oasdiff reports on a Stripe release -- 86,368 of 107,396
+# records between v2320 and v2330. Carrying that volume through the graph to
+# produce findings nobody asked for is the wrong default. It lives here rather
+# than in core because it is a judgement about one vendor's release habits,
+# not a fact about API changes.
+NOISE_KINDS = frozenset({"response-property-enum-value-added"})
+```
+
+and in `fetch_changes`, between the two existing statements:
+
+```python
+        records = [r for r in run_oasdiff_breaking(base, revision) if r.get("id") not in NOISE_KINDS]
+        return to_vendor_changes(records, self.vendor_id, from_version, to_version)
+```
+
+- [ ] **Step 7: Run the full suite**
+
+Run: `uv run pytest -v`, then `uv run lint-imports`
+
+Expected: PASS, and the import contract kept.
+
+- [ ] **Step 8: Commit**
+
+```bash
+git add -A
+git commit -m "feat: resolve nested property paths to their leaf and drop enum-addition noise"
+```
+
+---
+
+### Task 12: CLI wiring and the end-to-end acceptance run
 
 This is the milestone. Everything before it is scaffolding for this one command.
 
@@ -3155,25 +3325,26 @@ jobs:
 
 Commit that to the fork before running anything else. Record the fork's URL — the end-to-end test needs it.
 
-- [ ] **Step 2: Choose a Stripe version pair that actually contains a breaking change**
+- [ ] **Step 2: Fetch the pinned version pair**
 
-Tags on `stripe/openapi` are sequential (`v2345` is current). Find a pair whose diff is non-empty:
+**Use `v2320` and `v2330`. Do not choose your own pair.** Both properties that make a pair usable were measured, and the window between them is narrow:
+
+- Stripe tags every SDK release whether or not `spec3.json` changed. `v2330`, `v2336`, `v2338`, `v2340`, `v2342` and `v2345` are byte-identical to one another, so a pair drawn from that range diffs to nothing at all.
+- oasdiff's cost scales with the size of the diff, not the size of the spec. `v2200` to `v2345` — 145 tags — drove it past 51 GB resident without finishing. A self-diff of two identical 7.9 MB specs returns instantly, so spec size is not the problem.
+
+`v2320` to `v2330` is the narrowest measured window containing a real change: exit 0, roughly 980 MB peak, 107,396 records across 587 operations. Task 11's noise filter removes 86,368 of them.
 
 ```bash
 mkdir -p .cache/specs
 uv run python -c "
 from pathlib import Path
-from sync.signals.stripe.adapter import fetch_spec
-from sync.signals.oasdiff import run_oasdiff_breaking
-base = fetch_spec('v2200', Path('.cache/specs/v2200.json'))
-head = fetch_spec('v2345', Path('.cache/specs/v2345.json'))
-records = run_oasdiff_breaking(base, head)
-print(len(records), 'breaking changes')
-print(records[0] if records else 'none - widen the tag range')
+from sync.signals.stripe.adapter import fetch_spec, StripeAdapter
+for tag in ('v2320', 'v2330'):
+    print(tag, fetch_spec(tag, Path(f'.cache/specs/{tag}.json')).stat().st_size)
 "
 ```
 
-Expected: a non-zero count. If it is zero, widen the range and try again. Record the chosen pair.
+Expected: two files, roughly 7.8 MB each and differing in size. If they are identical, the tags moved — bisect for the next boundary rather than widening the range, which reintroduces the memory blowup.
 
 - [ ] **Step 3: Add the Postgres checkpointer**
 
@@ -3343,8 +3514,8 @@ import pytest
 # Read inside the test, not at import. pytest collects every test module before
 # it applies `-m 'not e2e'`, so a missing variable at module scope would fail
 # collection of the whole suite rather than skipping this one test.
-FROM_VERSION = os.environ.get("SYNC_E2E_FROM", "v2200")
-TO_VERSION = os.environ.get("SYNC_E2E_TO", "v2345")
+FROM_VERSION = os.environ.get("SYNC_E2E_FROM", "v2320")
+TO_VERSION = os.environ.get("SYNC_E2E_TO", "v2330")
 
 
 @pytest.mark.e2e
