@@ -85,9 +85,40 @@ breaking change — for a product whose entire claim is that it catches breaking
 
 Every response carries `indexed_at`, `feed_fetched_at`, and `binding_source`. The first two are ISO-8601
 timestamps of when the index was last built and the feed last fetched — timestamps rather than durations, so a
-cached response cannot report a freshness that has since expired. `binding_source` is `static` when the
-symbol-to-operation mapping was derived from a vendor's conventions and `observed` when it was read off
-telemetry.
+cached response cannot report a freshness that has since expired.
+
+`binding_source` is a three-rung ladder. Each rung is strictly more trustworthy than the one below, costs more
+to produce, and is reported honestly rather than smoothed over:
+
+| Value | How the mapping was established | Cost |
+|---|---|---|
+| `static` | Tree-sitter syntax plus vendor naming conventions. Derived, not confirmed. | Milliseconds |
+| `resolved` | The TypeScript compiler resolved the symbol to its declaration through aliases and wrappers. | Seconds to minutes, once per repository |
+| `observed` | A client span carrying the call site's source location confirmed which endpoint it actually hits. | Requires production telemetry |
+
+An agent weighs a patch differently depending on which rung produced the binding, and it can only do that if the
+rung is in the payload. `observed` appears only in the hosted tier, because a laptop has no production traffic.
+
+### Response shaping
+
+Token efficiency in a graph server comes from what is returned, not from how the index was built. Published
+comparisons of graph-backed exploration against file-by-file reading report roughly an order of magnitude fewer
+tokens and about half the tool calls at comparable answer quality, and the savings come entirely from returning
+structure instead of source.
+
+Four rules, which are also the 2026 consensus on MCP tool design:
+
+- **Never return file contents.** The binding is the answer. A tool that returns source has given back the
+  tokens the graph exists to save.
+- **Shallow by default, with drill-down references.** Return the call site and its operation; return the full
+  change history only when asked for it by identifier.
+- **Pagination is mandatory on every list-returning tool.** An unbounded result on a large repository silently
+  consumes an agent's context before the model has processed anything.
+- **Emit `context_savings` on every response** — an estimate of the tokens an equivalent file-exploration would
+  have cost. It makes the product's value visible inside the payload, and it is the measurement behind the
+  efficiency claim rather than an assertion of it.
+
+Four tools also sits well inside the 10 to 15 tool ceiling above which agents measurably degrade at selection.
 
 This is not diagnostics. An agent acting on a stale or derived binding writes a wrong patch, and it cannot
 weigh that risk against an answer that hides it. Freshness is data.
@@ -149,6 +180,18 @@ references and dynamic dispatch needing fallbacks. Measured against the 25% path
 URL-convention derivation achieves, that is the larger of the two available wins, and it is independent of the
 telemetry-observed binding that arrives in the same milestone.
 
+Neither pass blocks an answer. The tree-sitter pass returns `binding_source: static` immediately; the compiler
+pass runs in the background and upgrades affected rows to `resolved` when it finishes. Published figures put
+that pass at 35 seconds for a 147,000-line project and 705 seconds for 1.23 million lines, which is acceptable
+as background work and unacceptable on a request path — hence the split rather than a choice between them.
+
+Storage follows the same shape as comparable systems that have been measured at this scale: SQLite in
+write-ahead-logging mode, built in memory and written once rather than row by row. A published implementation
+indexes the Linux kernel — 28 million lines, 75,000 files, producing 4.81 million nodes and 7.72 million edges
+— in about three minutes with this arrangement, and answers graph queries in single-digit milliseconds. That is
+the performance envelope to design against; incremental reindex of a few thousand files should complete in
+seconds.
+
 **This does not change M0.** The tree-sitter indexer is committed and M0 exists to prove the spine end to end.
 This is an M1 refinement, scheduled with the telemetry correlator because both address the same weakness.
 
@@ -185,7 +228,7 @@ read both spellings — emitters migrate on their own schedule, gated by `OTEL_S
 | | Local, free | Hosted, paid |
 |---|---|---|
 | `sync_whats_at_risk` | Yes, static binding | Yes |
-| `sync_explain_call_site` | Yes, `binding_source: static` | Yes, `observed` where telemetry covers it |
+| `sync_explain_call_site` | Yes, `static` then `resolved` | Yes, `observed` where telemetry covers it |
 | `sync_whats_changed` | Yes, from the public feed | Yes |
 | `sync_propose_patch` | No | Yes |
 | Store | SQLite | Postgres |
@@ -269,9 +312,14 @@ Test-first, as everywhere in this repository.
 - **Fixture repository with known call sites**, asserting exact tool responses including the true negatives —
   a file with no third-party calls must return `not_indexed`, not an empty list.
 - **Feed committed as a fixture.** No test touches the network.
-- **Provenance assertions.** A response built from a deliberately stale index must report that staleness, and a
-  response with no telemetry must report `binding_source: static`. Both are the kind of field that silently
-  defaults to something plausible and is never noticed again.
+- **Provenance assertions.** A response built from a deliberately stale index must report that staleness; a
+  response with no compiler pass must report `binding_source: static` rather than `resolved`; and one with no
+  telemetry must never report `observed`. These are exactly the fields that silently default to something
+  plausible and are never noticed again — and a falsely confident `observed` would be worse than no field at
+  all, because it is the rung an agent trusts most.
+- **Response size bounds.** Assert that no tool returns file contents, that every list-returning tool paginates,
+  and that a query against a large fixture repository stays under a fixed token ceiling. A token-efficiency
+  claim with no test is a regression waiting to happen, and this one is load-bearing for the product's pitch.
 - **Protocol conformance.** The server answers `tools/list` and `resources/list` correctly, because Sync of all
   products cannot ship a malformed MCP server.
 
@@ -286,6 +334,28 @@ merged. `sync_propose_patch` depends on the remediation graph and therefore on M
 demoted. It remains the right eventual surface for humans, but it is no longer the first surface, and it is not
 what proves the thesis. A solo operator building a dashboard before an agent-queryable graph would be building
 the more expensive half first.
+
+## Prior art, and a correction to the moat estimate
+
+Two open-source projects build tree-sitter code graphs, store them in SQLite, and serve them over MCP:
+`DeusData/codebase-memory-mcp` and `tirth8205/code-review-graph`. Their reported token reductions — roughly 10x
+measured in the accompanying paper, with README figures ranging far higher — are the numbers quoted above.
+Benchmarks published by a project about itself deserve the usual discount, and the paper's own honesty about a
+circular recall metric is a point in its favour rather than against it.
+
+The correction matters more than the corroboration. `codebase-memory-mcp` ships `HTTP_CALLS` edges and an
+`ingest_traces` tool that validates those edges against runtime traces. That is the mechanism
+`2026-07-25-sync-competitive-position.md` ranks as Sync's most defensible asset — correlating a static index
+against runtime telemetry — and a working open-source implementation of it exists today. **The estimate of
+9 to 18 engineer-months to replicate is wrong for the mechanism** and should not be repeated.
+
+What survives is narrower and still unique. Those edges connect services to other services. Sync's connect a
+call site to a **vendor operation**, joined against **vendor change data**, at field granularity. A
+trace-validated internal call graph cannot tell anyone that Stripe removed a response field. The moat is the
+join and the vendor-knowledge half, not the correlation technique.
+
+The practical consequence is that Sync should treat graph construction as solved-adjacent work to be borrowed
+from rather than invented, and spend its scarce solo effort on the half no one else has.
 
 ## Scope boundary
 
