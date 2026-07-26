@@ -287,6 +287,62 @@ MCP is the case where both halves are automatic. An MCP server returns its tool 
 
 **Sequencing.** This does not change M0, and should not. Stripe stays hand-written, because an adapter synthesizer cannot be built without a known-correct adapter to score it against. Stripe is the ground truth.
 
+### Vendor onboarding
+
+The previous section argues that adapters can be generated. This one answers the question underneath it: what does a new vendor actually cost, and what has to be built before that cost is low?
+
+**The scaling unit is the artifact tier, not the vendor.** Looking at the Stripe adapter as built, almost nothing in it is about Stripe. `fetch_changes` is generic given two specification files on disk. `operation_for_symbol` is a dictionary lookup. Only two things are vendor-specific: where the specifications live, and how the symbol map was produced.
+
+So a per-vendor adapter class is the wrong decomposition. What varies is the shape of the artifact a vendor publishes, and there are five shapes.
+
+| Tier | Artifact | Vendors | Differ | Cost of a new vendor |
+|---|---|---|---|---|
+| 0 — self-describing | `tools/list`, JSON Schema 2020-12 per tool | any MCP server | ours, a JSON Schema diff | none; fully generated |
+| 1 — versioned OpenAPI in git | tagged specification file | Stripe, Twilio, GitHub, Azure | `oasdiff` | configuration: repository, path, tag pattern |
+| 2 — machine-readable, not OpenAPI | Discovery Document, `service-2.json` | Google, AWS | converter, then `oasdiff` | one converter per format, then tier 1 |
+| 3 — GraphQL | SDL via introspection | Linear, GitHub v4, Shopify | `graphql-inspector` | a differ and a different symbol model |
+| 4 — prose only | changelog | Notion, the long tail | LLM extraction | per-vendor, low trust, never authoritative |
+
+Tier 1 collapses to a single `GitOpenApiAdapter` parameterised by coordinates. Stripe becomes a configuration row rather than a class, and Twilio and GitHub cost an afternoon each. That collapse is the difference between a plugin catalogue that scales and one that accumulates hand-written code proportional to the vendor count.
+
+Three findings from surveying the tooling change what has to be built.
+
+**Webhook payload changes are already covered.** `oasdiff` supports OpenAPI 3.1, including a webhooks diff that reports added, removed and modified webhooks and applies every operation-level check to the modified ones. A vendor changing a webhook body breaks consumers exactly as hard as changing a response body, and this was expected to require separate AsyncAPI tooling. It does not.
+
+**MCP versions the protocol but not its tools.** Protocol versions are date strings negotiated at `initialize` and carried in an `MCP-Protocol-Version` header, and breaking protocol changes land roughly quarterly. Individual tool schemas carry no version at all. So a tier 0 adapter cannot ask a server what changed; it snapshots `tools/list` and diffs consecutive snapshots itself. This is not a limitation in practice — it needs no vendor cooperation, which is what makes tier 0 free — but it does mean Sync owns the snapshot store and the JSON Schema differ.
+
+**GraphQL needs a different symbol model, not merely a different differ.** `graphql-inspector` supplies the classification, marking each change breaking, dangerous, or safe. The harder problem is that a GraphQL consumer's call site is a query document naming fields, not a method chain like `stripe.charges.create`. `operation_for_symbol` has no meaning there; the equivalent is matching changed field paths against the field sets of parsed query documents. That is real work in both the vendor adapter and the language adapter, and it is why GraphQL is a tier of its own rather than one more entry in tier 1.
+
+#### The symbol map is the part that resists templating
+
+Everything above concerns knowing what a vendor changed. Binding that to a call site remains the weak point: the M0 symbol map covers 105 of 414 Stripe paths, and maps singleton resources to the wrong verb. One derivation strategy will not carry a plugin catalogue.
+
+It should become a cascade, where each strategy records how it produced a mapping:
+
+| Strategy | Source | Confidence |
+|---|---|---|
+| Convention | `operationId` plus the SDK's naming rules | low; wrong on every irregular resource |
+| SDK typings | the vendor's shipped type declarations | high for existence, silent on the endpoint |
+| Runtime observation | an OTel client span joined to the call site that produced it | highest; it is ground truth |
+| Documentation | an LLM reading the vendor's reference | lowest; a last resort |
+
+Runtime observation is the strategy that makes the rest optional. A client span carries `http.request.method` and `url.full`; the static index carries the symbol; correlating them yields the mapping empirically, for a vendor nobody has written an adapter for and for a bare `fetch()` with no SDK at all.
+
+The cascade must record provenance rather than only the answer. A mapping observed at runtime outranks one derived from convention, and a low-confidence mapping degrades to an operation-match-only finding rather than being silently filtered — the same principle the detector already applies to a field it cannot resolve. A wrong mapping is recoverable because the verification gate catches it; a mapping that silently drops a real change is not.
+
+#### What onboarding a vendor requires
+
+For a tier 1 vendor, in full:
+
+1. Specification coordinates: repository, path within it, and the tag pattern that identifies a version.
+2. Two pinned versions checked in as fixtures, with a hand-labelled expected change set.
+3. A symbol map, produced by the cascade above, with its provenance recorded.
+4. A handful of small source files under `tests/fixtures/` exercising that vendor's client-construction idiom.
+
+No forked application, and no network in any test. The one end-to-end acceptance run proves the pipeline once; it is a milestone gate rather than regression coverage, and running one per vendor is not affordable — each costs agent invocations plus a full CI wait. Per-vendor regression instead replays captured artifacts: a clone pinned at a commit, the specification pair, and the expected finding set, with the model call stubbed.
+
+A real repository is needed again per *language*, not per vendor. Fixtures only catch idioms someone already thought of, which is exactly what the M0 acceptance target demonstrated by exposing a gap no fixture would have.
+
 ### M4 — Hosted control plane
 
 Multi-tenant runtime, dashboard, organization onboarding, and per-repository policy: which vendors are watched, and which severities open a pull request automatically versus requiring review.
@@ -360,6 +416,9 @@ This is also why the graph-mediated rule is a competitive property and not only 
 | Changelog parsing hallucinates a change | The `oasdiff` output is authoritative. The changelog enriches and prioritizes; it can never introduce a `VendorChange` on its own. |
 | Codebase access is a hard sell | The open-core plugin SDK and a self-hostable core are the trust answer, which is why openness is settled now rather than later. |
 | The patch node is Claude-only | Contained by design. It sits behind the `Remediator` protocol and inside a single LangGraph node, so an alternative implementation is a new class rather than a rewrite. Accepted deliberately: the alternative is hand-building a file-edit harness, which costs more than the coupling does. |
+| The name collides with an adjacent tool | `oasdiff/sync` is a consumer-side monitor for upstream OpenAPI breaking changes, published under the same word and solving the near half of the same problem. It notifies and stops; it does not index the consumer codebase, locate call sites, patch, or open pull requests. The overlap validates the thesis and confirms the gap, but the name is cheap to change now and expensive after a public repository exists. Unresolved. |
+| Tier 3 (GraphQL) is not one more adapter | A GraphQL call site is a query document, not a method chain, so `operation_for_symbol` has no meaning and field-path matching against parsed documents replaces it. Scoped as its own tier with work in both the vendor and language adapters, rather than assumed to fall out of the plugin protocol. |
+| Symbol mapping has one derivation strategy and 25.4% coverage | Replaced by a provenance-recording cascade — convention, SDK typings, runtime observation, documentation — where a low-confidence mapping degrades to an operation-match-only finding rather than silently filtering a real change. |
 | Agent SDK runs unsupervised against a repository clone | It operates on a throwaway clone, never the customer's working tree, and nothing it produces reaches a pull request without passing `tsc` and then the customer's CI. |
 
 ## Verification
