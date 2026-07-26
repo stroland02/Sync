@@ -52,6 +52,10 @@ class StubAdapter:
     # combination rather than deriving diagnostics from ok.
     verdicts: list[VerifyResult] = field(default_factory=lambda: [_ok()])
     calls: int = 0
+    prepare_calls: int = 0
+
+    def prepare(self, repo) -> None:
+        self.prepare_calls += 1
 
     def static_verify(self, repo, patch) -> VerifyResult:
         result = self.verdicts[min(self.calls, len(self.verdicts) - 1)]
@@ -272,3 +276,77 @@ def test_an_exception_with_no_message_still_produces_a_useful_abandon_reason():
     result = _run(StubAdapter(), remediator, StubForge())
     assert result["outcome"] == "abandoned"
     assert "TimeoutError" in result["abandon_reason"]
+
+
+def test_prepare_runs_before_the_first_patch_attempt():
+    """The patch agent runs with Bash in hand and is told to typecheck as it
+    goes; if it meets an empty `node_modules`, the obvious next command it
+    reaches for has no `--ignore-scripts` guarantee. `prepare` must install
+    before the agent ever starts, not merely before `static_verify`.
+    """
+    order: list[str] = []
+
+    @dataclass
+    class OrderedAdapter(StubAdapter):
+        def prepare(self, repo) -> None:
+            order.append("prepare")
+
+    @dataclass
+    class OrderedRemediator(StubRemediator):
+        def propose(self, finding, change, site, repo, diagnostics=""):
+            order.append("patch")
+            return super().propose(finding, change, site, repo, diagnostics)
+
+    result = _run(OrderedAdapter(), OrderedRemediator(), StubForge())
+    assert order == ["prepare", "patch"]
+    assert result["outcome"] == "opened"
+
+
+def test_a_failed_prepare_abandons_without_attempting_a_patch():
+    """A prepare failure -- a broken registry, a lockfile out of sync with
+    package.json -- is an environment fault no patch can fix. It must abandon
+    immediately rather than reaching the patch node at all.
+    """
+
+    @dataclass
+    class Failing(StubAdapter):
+        def prepare(self, repo) -> None:
+            raise RuntimeError("npm install failed: ENOENT: registry unreachable")
+
+    remediator = StubRemediator()
+    forge = StubForge()
+    store = StubStore()
+    result = _run(Failing(), remediator, forge, store=store)
+    assert result["outcome"] == "abandoned"
+    assert remediator.calls == 0
+    assert forge.pushes == 0
+    assert forge.pr_url is None
+    assert "registry unreachable" in result["abandon_reason"]
+    assert store.status == "abandoned"
+
+
+def test_a_fatal_static_verify_abandons_immediately_without_spending_the_retry_budget():
+    """An exception out of static_verify -- as opposed to a normal
+    VerifyResult(ok=False) -- means verification could not be performed at
+    all: a broken registry, a lockfile out of sync with package.json. None of
+    those causes is something a different patch could fix, so this must
+    abandon on the first occurrence instead of retrying up to
+    MAX_STATIC_ATTEMPTS against the same fault.
+    """
+
+    @dataclass
+    class Fatal(StubAdapter):
+        def static_verify(self, repo, patch) -> VerifyResult:
+            self.calls += 1
+            raise RuntimeError("npm install failed: ENOENT: registry unreachable")
+
+    remediator = StubRemediator()
+    forge = StubForge()
+    store = StubStore()
+    result = _run(Fatal(), remediator, forge, store=store)
+    assert result["outcome"] == "abandoned"
+    assert remediator.calls == 1
+    assert forge.pushes == 0
+    assert forge.pr_url is None
+    assert "registry unreachable" in result["abandon_reason"]
+    assert store.status == "abandoned"

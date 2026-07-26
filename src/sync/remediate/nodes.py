@@ -34,6 +34,28 @@ def make_locate(store):
     return locate
 
 
+def make_prepare(adapter):
+    def prepare(state: RunState) -> RunState:
+        try:
+            adapter.prepare(state["repo"])
+        except Exception as exc:
+            return {"prepare_ok": False, "diagnostics": f"{type(exc).__name__}: {exc}"}
+        return {"prepare_ok": True, "diagnostics": ""}
+
+    return prepare
+
+
+def route_after_prepare(state: RunState) -> str:
+    """A prepare failure is an environment fault -- a broken registry, a
+    lockfile out of sync with package.json -- not something a different
+    patch could fix. Abandon immediately rather than reaching the patch node
+    at all.
+    """
+    if state.get("prepare_ok", True):
+        return "patch"
+    return "abandon"
+
+
 def make_patch(remediator):
     def patch(state: RunState) -> RunState:
         attempts = state.get("static_attempts", 0) + 1
@@ -76,13 +98,26 @@ def route_after_patch(state: RunState) -> str:
 
 def make_static_verify(adapter):
     def static_verify(state: RunState) -> RunState:
-        result = adapter.static_verify(state["repo"], state["patch"])
-        return {"diagnostics": result.diagnostics, "verify_ok": result.ok}
+        try:
+            result = adapter.static_verify(state["repo"], state["patch"])
+        except Exception as exc:
+            return {
+                "static_fatal": True,
+                "verify_ok": False,
+                "diagnostics": f"{type(exc).__name__}: {exc}",
+            }
+        return {"diagnostics": result.diagnostics, "verify_ok": result.ok, "static_fatal": False}
 
     return static_verify
 
 
 def route_after_static(state: RunState) -> str:
+    # An exception out of static_verify means verification could not be
+    # performed at all -- an environment fault, not a patch that failed
+    # typechecking. Abandon on the first occurrence rather than spending the
+    # remaining static-attempt budget retrying against the same fault.
+    if state.get("static_fatal"):
+        return "abandon"
     # `ok`, not whether diagnostics happens to be non-empty: a real tsc
     # failure can exit non-zero with nothing on either stream.
     if state.get("verify_ok"):

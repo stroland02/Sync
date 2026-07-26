@@ -285,6 +285,22 @@ class TypeScriptAdapter:
                     content_hash=content_hash,
                 )
 
+    def prepare(self, repo: RepoRef) -> None:
+        """Make the checkout typecheckable before the patch agent works in it.
+
+        The patch agent runs with `Bash` in hand and is instructed to run its
+        own `npx tsc --noEmit` until it is clean. If `node_modules` is still
+        empty when it starts, its own typecheck reports the same unresolved-
+        import wall this task exists to eliminate, and the only command
+        available to clear that is an install with no `--ignore-scripts`
+        guarantee. Installing here, before the patch node, also takes the
+        multi-minute install off the serial patch -> verify path: it depends
+        on nothing the patch produces.
+        """
+        from sync.index.deps import install_dependencies
+
+        install_dependencies(Path(repo.local_path))
+
     def static_verify(self, repo: RepoRef, patch: Patch) -> VerifyResult:
         """Typecheck the working tree.
 
@@ -292,9 +308,9 @@ class TypeScriptAdapter:
         called — the graph's `patch` node writes to the clone directly, so there
         is nothing to apply here.
 
-        Dependencies are installed first, without lifecycle scripts. Without
-        `node_modules` every import in the project is an unresolved-module
-        error and the typecheck says nothing about the patch.
+        Installing here too is what makes this method safe to call on its own,
+        outside the graph: the call is idempotent, so paying for it again after
+        `prepare` has already run is free.
         """
         from sync.index.deps import install_dependencies
         from sync.index.tsc import run_tsc

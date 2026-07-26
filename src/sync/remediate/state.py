@@ -26,6 +26,12 @@ class RunState(TypedDict, total=False):
     # stream (e.g. a silent npx fetch failure), which would otherwise read as
     # success.
     verify_ok: bool
+    # Set only when prepare or static_verify raises rather than returning a
+    # normal result -- an environment fault (broken registry, lockfile out of
+    # sync with package.json), not something a different patch could fix.
+    # Routes straight to abandon, bypassing the static-attempt retry budget.
+    prepare_ok: bool
+    static_fatal: bool
     static_attempts: int
     ci_attempts: int
     branch: str

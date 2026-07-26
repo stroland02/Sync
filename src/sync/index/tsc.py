@@ -19,6 +19,15 @@ def run_tsc(repo_path: Path, timeout: float = _TSC_TIMEOUT_SECONDS) -> VerifyRes
     a pinned npx download otherwise. `npx` is resolved through shutil.which
     because on Windows it is `npx.cmd`, which subprocess will not find by bare name.
 
+    Deliberate: preferring `node_modules/.bin/tsc` means executing the compiler
+    binary the project's own lockfile resolved, from whatever registry its
+    `.npmrc` names, rather than the version pinned here. Before dependencies
+    were installed (see `sync.index.deps`) this branch was unreachable on a
+    fresh clone and the pinned npx path always ran; now it is the common case.
+    The tradeoff is accepted anyway: a version mismatch between the pinned
+    compiler and the one the project was built against produces diagnostics
+    that do not describe anything the patch can act on.
+
     `timeout` defaults to `_TSC_TIMEOUT_SECONDS` and is a parameter only so a
     test can force a real `subprocess.TimeoutExpired` without waiting five
     minutes; callers verifying a patch should not override it.

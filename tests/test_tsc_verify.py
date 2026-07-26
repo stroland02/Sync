@@ -100,3 +100,19 @@ def test_static_verify_installs_dependencies_before_typechecking(tmp_path, monke
     adapter.static_verify(repo, Patch(diff="d", strategy="agent", rationale="r"))
 
     assert order == ["install", "tsc"]
+
+
+def test_prepare_installs_dependencies(tmp_path, monkeypatch):
+    from sync.core import RepoRef
+    from sync.index import typescript
+
+    calls: list[str] = []
+    monkeypatch.setattr(
+        "sync.index.deps.install_dependencies", lambda path, **kw: calls.append(str(path))
+    )
+
+    repo = RepoRef(repo_id="r", url="u", local_path=str(tmp_path), head_sha="0" * 40)
+    adapter = typescript.TypeScriptAdapter(vendor_adapter=None)
+    adapter.prepare(repo)
+
+    assert calls == [str(tmp_path)]

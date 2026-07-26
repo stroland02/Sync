@@ -17,6 +17,7 @@ def build_graph(store, adapter, remediator, forge, checkpointer):
     builder = StateGraph(RunState)
 
     builder.add_node("locate", nodes.make_locate(store))
+    builder.add_node("prepare", nodes.make_prepare(adapter))
     builder.add_node("patch", nodes.make_patch(remediator))
     builder.add_node("static_verify", nodes.make_static_verify(adapter))
     builder.add_node("push_branch", nodes.make_push_branch(forge))
@@ -25,7 +26,13 @@ def build_graph(store, adapter, remediator, forge, checkpointer):
     builder.add_node("abandon", nodes.make_abandon(store))
 
     builder.add_edge(START, "locate")
-    builder.add_edge("locate", "patch")
+    builder.add_edge("locate", "prepare")
+
+    builder.add_conditional_edges(
+        "prepare",
+        nodes.route_after_prepare,
+        {"patch": "patch", "abandon": "abandon"},
+    )
 
     builder.add_conditional_edges(
         "patch",
