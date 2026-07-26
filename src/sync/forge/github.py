@@ -18,7 +18,7 @@ from sync.core import Evidence, Patch, RepoRef
 
 # `skipped` (an `if:`-gated job) and `neutral` indicate a run verified
 # nothing, not that it failed. They neither block a green verdict nor count
-# toward one, matching how GitHub's own branch protection resolves them.
+# toward one.
 NON_BLOCKING_CONCLUSIONS = frozenset({"skipped", "neutral"})
 
 
@@ -103,8 +103,18 @@ class GitHubForge:
         repository whose lint job passes and whose test job fails would read
         as green. A commit whose only runs are skipped or neutral has nothing
         confirming it and stays red at the timeout — the "at least one
-        success" half of the rule, not just "no failures", is what keeps a
-        gated or filtered workflow from reading as verified when nothing ran.
+        success" half of the rule is what keeps a *fully* gated or filtered
+        repository (every run skipped or neutral) from reading as verified
+        when nothing ran at all.
+
+        This does not require that the workflow which actually tests the
+        patch is the one that succeeded — only that some run did. A
+        repository where an unrelated always-on workflow succeeds (a labeler,
+        a title linter) while the workflow that would catch a bad patch is
+        itself gated off for this push reads green on the unrelated run's
+        say-so. Telling those apart needs Sync to know which workflow is the
+        one that verifies — the branch's required status checks, or a
+        per-repo config naming it — which this function does not have.
 
         The second poll matters for a chained layout — a workflow triggered by
         `workflow_run: types: [completed]` gets its run record only after the

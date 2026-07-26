@@ -212,9 +212,23 @@ BLOCKING_CONCLUSIONS = [
 
 @pytest.mark.parametrize("conclusion", BLOCKING_CONCLUSIONS)
 def test_every_blocking_conclusion_makes_the_commit_red(conclusion):
-    forge = _forge_returning(json.dumps([_run("completed", conclusion)]))
-    green, _ = forge.await_ci(REPO, "sync/x")
+    """Paired with a run that did succeed, not run alone: a lone non-success
+    run is red either way `await_ci` gets there — through `failing`, or, if
+    it were wrongly classified as non-blocking, through the empty-`succeeded`
+    path polling to the timeout. Both satisfy `green is False` regardless of
+    which set the conclusion actually belongs to, so a run alone cannot tell
+    this test whether `conclusion` was correctly classified as blocking.
+    Pairing it with a run that did succeed forces the only way to reach
+    `green is False` here through `failing`, so an over-inclusive
+    `NON_BLOCKING_CONCLUSIONS` — one that wrongly absorbs `conclusion` — flips
+    this green and gets caught."""
+    forge = _forge_returning(json.dumps([
+        _run("completed", "success", url="https://ci/ok"),
+        _run("completed", conclusion, url="https://ci/bad"),
+    ]))
+    green, detail = forge.await_ci(REPO, "sync/x")
     assert green is False
+    assert detail == "https://ci/bad"
 
 
 # `skipped` (a job gated by `if:`) and `neutral` neither block a green verdict
@@ -227,9 +241,15 @@ NON_BLOCKING_CONCLUSIONS = ["skipped", "neutral"]
 
 @pytest.mark.parametrize("conclusion", NON_BLOCKING_CONCLUSIONS)
 def test_a_non_blocking_conclusion_alongside_a_success_is_green(conclusion):
+    """The gated run comes first in the list, `gh`'s ordinary newest-first
+    ordering whenever the gated workflow's run record is created after the
+    one that actually verified the patch. A mutant that returns `runs[0]`
+    instead of `succeeded[0]` would return the gated run's URL here — which
+    would then become `ci_run_url` and render as the verification link a
+    reviewer clicks, pointing at a run that did nothing."""
     forge = _forge_returning(json.dumps([
-        _run("completed", "success", url="https://ci/ci"),
         _run("completed", conclusion, url="https://ci/gated"),
+        _run("completed", "success", url="https://ci/ci"),
     ]))
     green, url = forge.await_ci(REPO, "sync/x")
     assert green is True
@@ -239,8 +259,9 @@ def test_a_non_blocking_conclusion_alongside_a_success_is_green(conclusion):
 @pytest.mark.parametrize("conclusion", NON_BLOCKING_CONCLUSIONS)
 def test_a_non_blocking_conclusion_alone_is_red(conclusion):
     forge = _forge_returning(json.dumps([_run("completed", conclusion)]))
-    green, _ = forge.await_ci(REPO, "sync/x")
+    green, detail = forge.await_ci(REPO, "sync/x")
     assert green is False
+    assert "confirmed green verdict" in detail
 
 
 def test_timeout_message_does_not_claim_completed_runs_never_completed():
@@ -261,7 +282,7 @@ def test_timeout_message_does_not_claim_completed_runs_never_completed():
     forge._run = fake_run
     green, detail = forge.await_ci(REPO, "sync/x")
     assert green is False
-    assert "never all completed" not in detail
+    assert "completed without a confirmed green verdict" in detail
 
 
 def _forge_recording() -> tuple[GitHubForge, list[list[str]], list[Path]]:
