@@ -11,7 +11,7 @@ import sys
 import pytest
 
 from sync.cli import _select, main, run
-from sync.core import RepoRef
+from sync.core import CallSite, RepoRef, VendorChange
 
 
 def test_no_arguments_exits_nonzero_instead_of_crashing(monkeypatch):
@@ -35,7 +35,20 @@ def test_run_missing_any_single_required_argument_exits_nonzero(monkeypatch, omi
     it would stay green even if only one flag's `required=True` were dropped,
     since the other two still trigger the same argparse error. Parametrizing
     over one omission at a time pins each flag on its own.
+
+    `cli.run` is stubbed before `main()` runs. If a future edit drops
+    `required=True` from the omitted flag, argparse would otherwise dispatch
+    to the real `run()`, whose second line fetches a Stripe spec over the
+    network -- exactly the live call CLAUDE.md forbids a unit test from
+    making. The stub makes that path inert regardless of what regresses:
+    argparse still raises `SystemExit` before `func` is ever consulted when
+    the flags are actually required, so the stub changes nothing about what
+    a correctly-required parser does.
     """
+    import sync.cli as cli
+
+    monkeypatch.setattr(cli, "run", lambda args: 0)
+
     argv = ["sync", "run"]
     for flag, value in REQUIRED_RUN_FLAGS.items():
         if flag != omitted_flag:
@@ -97,6 +110,19 @@ class _RecordingDetector:
         return []
 
 
+_STUB_VENDOR_CHANGE = VendorChange(
+    vendor_id="stripe", from_version="v1", to_version="v2",
+    kind="response-property-removed", operation_id="PostCharges",
+    path_ptr="/x/status", severity="breaking", source="oasdiff",
+)
+
+_STUB_CALL_SITE = CallSite(
+    repo_id="repo", path="src/billing.ts", line=1, col=0, vendor_id="stripe",
+    operation_id="PostCharges", symbol="stripe.charges.create",
+    sdk_version="1.0.0", content_hash="hash",
+)
+
+
 class _StubVendor:
     vendor_id = "stripe"
 
@@ -104,7 +130,7 @@ class _StubVendor:
         pass
 
     def fetch_changes(self, from_version, to_version):
-        return []
+        return [_STUB_VENDOR_CHANGE]
 
 
 class _StubAdapter:
@@ -115,7 +141,7 @@ class _StubAdapter:
         return True
 
     def index(self, repo):
-        return []
+        return [_STUB_CALL_SITE]
 
 
 def test_the_graph_is_truncated_after_apply_schema_and_before_the_scan(monkeypatch, tmp_path):
@@ -123,13 +149,24 @@ def test_the_graph_is_truncated_after_apply_schema_and_before_the_scan(monkeypat
     tables have no incremental story yet at M0 -- and a stale row is
     indistinguishable from a real finding to `VendorChangeDetector.scan()`.
     `run()` must wipe the graph tables after `apply_schema()` (schema must
-    exist first) and before anything is scanned, on every invocation.
+    exist first) and *before the indexer writes into it* -- not merely
+    "somewhere before scan()". `_StubAdapter.index` and `_StubVendor.fetch_changes`
+    each yield one real `CallSite`/`VendorChange`, so an upsert actually happens
+    between truncation and the scan; with both stubs returning nothing (as an
+    earlier version of this test had them), truncating right before the
+    findings loop -- after production's real upserts at `cli.py:80-83` have
+    already written rows the detector would read -- passes the assertion just
+    as well as the correct placement does, because no upsert call exists in
+    the recorded order to catch the difference. That placement wipes every
+    call site and vendor change before the detector reads them: every
+    invocation reports "0 finding(s)" and exits 0 as if nothing had changed.
 
     Every collaborator `run()` normally wires up is replaced here: `fetch_spec`
     with a local file write, `StripeAdapter`/`TypeScriptAdapter` with stubs
-    that see no findings, `_clone` with a fake `RepoRef`, `GraphStore` with an
-    in-memory recorder. With zero findings, `run()` returns before ever
-    touching `PostgresSaver` or the remediation graph, so neither needs a stub.
+    that each produce one real call site and vendor change, `_clone` with a
+    fake `RepoRef`, `GraphStore` with an in-memory recorder. `VendorChangeDetector`
+    is stubbed to report no findings regardless, so `run()` returns before ever
+    touching `PostgresSaver` or the remediation graph, and neither needs a stub.
     """
     import sync.cli as cli
 
@@ -158,4 +195,4 @@ def test_the_graph_is_truncated_after_apply_schema_and_before_the_scan(monkeypat
     result = run(args)
 
     assert result == 0
-    assert store.calls == ["apply_schema", "truncate_all", "scan"]
+    assert store.calls == ["apply_schema", "truncate_all", "upsert_call_site", "upsert_vendor_change", "scan"]
