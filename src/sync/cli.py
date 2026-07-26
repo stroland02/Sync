@@ -46,7 +46,7 @@ def run(args: argparse.Namespace) -> int:
     cache = Path(args.cache)
     cache.mkdir(parents=True, exist_ok=True)
 
-    base_spec = fetch_spec(args.from_version, cache / f"{args.from_version}.json")
+    fetch_spec(args.from_version, cache / f"{args.from_version}.json")
     head_spec = fetch_spec(args.to_version, cache / f"{args.to_version}.json")
 
     symbol_map_path = cache / "symbols.json"
@@ -60,6 +60,15 @@ def run(args: argparse.Namespace) -> int:
 
     store = GraphStore(args.dsn)
     store.apply_schema()
+    # M0 has one entry point and no incremental indexing story: a stale row
+    # from a previous invocation is indistinguishable from a real finding to
+    # the detector, so every run starts from an empty graph. M2's incremental
+    # indexing replaces this; a hosted control plane must never do this, since
+    # it would erase other customers' state rather than just this one's.
+    # Finding ids are stable hashes of (detector, call_site_id, vendor_change_id),
+    # so a re-inserted finding gets the same id its checkpoint thread already
+    # used -- checkpoint coordinates survive the truncate.
+    store.truncate_all()
 
     with tempfile.TemporaryDirectory() as workdir:
         repo = _clone(args.repo, Path(workdir) / "repo")
