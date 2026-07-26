@@ -127,7 +127,7 @@ def test_three_static_failures_abandon_without_pushing():
     assert result["outcome"] == "abandoned"
     assert forge.pr_url is None
     assert remediator.calls == 3
-    assert store.status == "abandoned"
+    assert store.status_calls == [("f1", "abandoned")]
 
 
 def test_a_red_ci_run_retries_the_patch_once():
