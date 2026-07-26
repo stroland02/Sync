@@ -83,3 +83,65 @@ def test_findings_round_trip_and_change_status(store):
     assert store.open_findings() == []
     assert store.get_call_site(site_id).symbol == "stripe.charges.create"
     assert store.get_vendor_change(change_id).kind == "response-property-removed"
+
+
+def _change(**kw) -> VendorChange:
+    base = dict(
+        vendor_id="stripe",
+        from_version="v2300",
+        to_version="v2345",
+        kind="response-property-removed",
+        operation_id="GetCharges",
+        path_ptr="/paths/~1v1~1charges",
+        severity="breaking",
+        source="oasdiff",
+        raw={"text": "removed the optional property `error/payment_intent/customer` from the response"},
+    )
+    base.update(kw)
+    return VendorChange(**base)
+
+
+def test_upsert_vendor_change_distinguishes_by_operation_id(store):
+    first = store.upsert_vendor_change(_change(operation_id="GetCharges"))
+    second = store.upsert_vendor_change(_change(operation_id="PostCharges"))
+    assert first != second
+    assert len(store.all_vendor_changes("stripe")) == 2
+
+
+def test_upsert_vendor_change_distinguishes_by_raw_text(store):
+    first = store.upsert_vendor_change(
+        _change(raw={"text": "removed the optional property `customer` from the response"})
+    )
+    second = store.upsert_vendor_change(
+        _change(raw={"text": "removed the optional property `payment_method` from the response"})
+    )
+    assert first != second
+    assert len(store.all_vendor_changes("stripe")) == 2
+
+
+def test_upsert_vendor_change_is_idempotent_on_identical_content(store):
+    first = store.upsert_vendor_change(_change())
+    second = store.upsert_vendor_change(_change())
+    assert first == second
+    assert len(store.all_vendor_changes("stripe")) == 1
+
+
+def test_upsert_vendor_change_does_not_corrupt_raw_across_operations(store):
+    a_id = store.upsert_vendor_change(
+        _change(
+            operation_id="GetCharges",
+            raw={"text": "removed the optional property `customer` from the response"},
+        )
+    )
+    b_id = store.upsert_vendor_change(
+        _change(
+            operation_id="PostCharges",
+            raw={"text": "removed the optional property `payment_method` from the response"},
+        )
+    )
+    a = store.get_vendor_change(a_id)
+    b = store.get_vendor_change(b_id)
+    assert a.operation_id == "GetCharges"
+    assert a.raw["text"] == "removed the optional property `customer` from the response"
+    assert b.operation_id == "PostCharges"
+    assert b.raw["text"] == "removed the optional property `payment_method` from the response"

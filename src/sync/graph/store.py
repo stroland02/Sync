@@ -60,7 +60,8 @@ class GraphStore:
 
     def upsert_vendor_change(self, change: VendorChange) -> str:
         change_id = _stable_id(
-            change.vendor_id, change.from_version, change.to_version, change.kind, change.path_ptr
+            change.vendor_id, change.from_version, change.to_version, change.kind,
+            change.path_ptr, change.operation_id, change.raw.get("text", ""),
         )
         with self._connect() as conn:
             conn.execute(
