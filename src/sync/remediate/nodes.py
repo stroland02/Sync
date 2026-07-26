@@ -6,12 +6,13 @@ them unit-testable and keeps `graph.py` to assembly only.
 
 from __future__ import annotations
 
-from typing import Protocol
+from typing import Protocol, runtime_checkable
 
 from sync.core import Evidence, Patch, RepoRef
 from sync.remediate.state import MAX_CI_ATTEMPTS, MAX_STATIC_ATTEMPTS, RunState
 
 
+@runtime_checkable
 class Forge(Protocol):
     def push_branch(self, repo: RepoRef, patch: Patch) -> str: ...
     def await_ci(self, repo: RepoRef, branch: str) -> tuple[bool, str]: ...
