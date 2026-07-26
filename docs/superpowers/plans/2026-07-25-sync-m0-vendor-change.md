@@ -3568,6 +3568,14 @@ This is the milestone. Everything before it is scaffolding for this one command.
 gh repo fork stripe/stripe-connect-furever-demo --clone=false
 ```
 
+**Already done.** The fork is at `https://github.com/stroland02/stripe-connect-furever-demo`, default branch `master`, and the `typecheck` workflow is committed to it. Verify rather than repeat:
+
+```bash
+gh repo view stroland02/stripe-connect-furever-demo --json url,defaultBranchRef
+```
+
+The repository already carries a `test.yml` that triggers only on `master`, so it does not fire on `sync/api-drift-*` branches and cannot interfere with the gate — which matters, because the gate requires every run at the pushed commit to succeed.
+
 The fork must have a check that runs on push, because a branch with no checks is treated as red by design. Add a minimal typecheck workflow to the fork's default branch:
 
 ```yaml
@@ -3815,14 +3823,25 @@ Expected: PASS. The end-to-end test is deselected by the `-m 'not e2e'` default.
 
 - [ ] **Step 8: Run the acceptance test**
 
+The fork already exists at `https://github.com/stroland02/stripe-connect-furever-demo`, with a `typecheck` workflow on its default branch (`master`) that runs `yarn install --frozen-lockfile` then `npx tsc --noEmit`.
+
+**`tools/shims` must be on `PATH`.** That repository's lockfile is `yarn.lock`, so `deps.py` selects yarn and refuses to substitute another manager — a different manager resolves a different tree. `yarn` is not on `PATH` on this machine and `corepack enable` needs administrator rights, so the shims were installed unelevated into the gitignored `tools/`. Without this the run abandons at `prepare` before any code is read.
+
 ```bash
-export SYNC_E2E_REPO="https://github.com/<your-account>/stripe-connect-furever-demo"
+export PATH="$(pwd)/tools/shims:$PATH"
+export SYNC_E2E_REPO="https://github.com/stroland02/stripe-connect-furever-demo"
 uv run pytest tests/test_e2e_stripe.py -m e2e -v -s
 ```
 
-Expected: a pull request URL printed, and a real pull request on the fork whose checks are green.
+Verify the shim resolves the way Python will, not the way bash does — the extensionless `yarn` shim is a shell script Windows cannot execute, and only the `.CMD` form works:
 
-This is M0 acceptance. If the run abandons, the printed reason says whether it failed at `static_verify` (the patch never typechecked) or at `await_ci` (it typechecked but broke something else). Both are informative failures, not bugs in the harness — the gate working is the point.
+```bash
+uv run python -c "import shutil; print(shutil.which('yarn'))"
+```
+
+Expected: a path ending in `yarn.CMD`, then a pull request URL printed, and a real pull request on the fork whose checks are green.
+
+This is M0 acceptance. If the run abandons, the printed reason says where: `prepare` (dependencies could not be installed), `static_verify` (the patch never typechecked), or `await_ci` (it typechecked but broke something else). All three are informative failures, not bugs in the harness — the gate working is the point.
 
 - [ ] **Step 9: Commit**
 
