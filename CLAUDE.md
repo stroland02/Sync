@@ -36,6 +36,7 @@ Three things from it that are easy to get wrong:
 | Packages | `uv` only (`uv add`, `uv run`). Poetry is not installed; do not introduce it. |
 | Database | Postgres 16 in Docker on **port 5433**, not 5432. `docker compose up -d`. |
 | TypeScript | via `npx`; the repo does not vendor a compiler. |
+| Package managers | Sync installs a customer project's dependencies before typechecking, using whichever manager that project's lockfile names. **That manager must be on `PATH` or the run abandons** — `deps.py` deliberately refuses to substitute one for another, because a different manager resolves a different tree. `npm` and `pnpm` are present here; `yarn` is not, and `corepack enable` needs administrator rights on this machine. The shims are installed unelevated instead: `corepack enable --install-directory "$(pwd)/tools/shims"`, with `tools/shims` prepended to `PATH` for the run. `tools/` is gitignored. `shutil.which` resolves the `.CMD` form, which is the one Windows can execute. |
 | GitHub | the `gh` CLI, already authenticated. |
 | Shell | command snippets are POSIX, written for Git Bash. PowerShell 5.1 here has no `&&` — chain with `; if ($?) { }`. |
 
