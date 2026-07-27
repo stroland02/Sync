@@ -1,0 +1,1 @@
+{ "name": "scoped", "dependencies": { "stripe": "18.0.0" } }

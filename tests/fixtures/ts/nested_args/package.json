@@ -1,0 +1,1 @@
+{ "name": "nested_args", "dependencies": { "stripe": "18.0.0" } }
