@@ -47,6 +47,30 @@ def run_oasdiff_breaking(base_path: Path, revision_path: Path) -> list[dict[str,
     return parsed if isinstance(parsed, list) else []
 
 
+def run_oasdiff_checks() -> list[dict[str, Any]]:
+    """The binary's own catalogue of checker rules, one record per rule.
+
+    Each record carries `id` -- which is what `VendorChange.kind` holds -- alongside the
+    `level`, `direction`, `kind`, and `action` axes the routing matrix keys on. Reading the
+    catalogue from the binary rather than maintaining a copy is what keeps routing honest
+    across an oasdiff upgrade: the rule set grows, and a stale local list would route new
+    kinds silently.
+
+    Note the two surfaces disagree on how `level` is encoded -- a string here, an integer in
+    `breaking` output -- so map between them explicitly rather than comparing directly.
+    """
+    result = subprocess.run(
+        [_binary(), "checks", "--format", "json"],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+    )
+    if result.returncode != 0:
+        raise RuntimeError(f"oasdiff checks failed ({result.returncode}): {result.stderr.strip()}")
+    parsed = json.loads(result.stdout.strip())
+    return parsed if isinstance(parsed, list) else []
+
+
 def to_vendor_changes(
     records: list[dict[str, Any]], vendor_id: str, from_version: str, to_version: str
 ) -> list[VendorChange]:

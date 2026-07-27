@@ -5,7 +5,12 @@ import pytest
 
 from sync.core import VendorChange
 from sync.signals import oasdiff
-from sync.signals.oasdiff import changed_field, run_oasdiff_breaking, to_vendor_changes
+from sync.signals.oasdiff import (
+    changed_field,
+    run_oasdiff_breaking,
+    run_oasdiff_checks,
+    to_vendor_changes,
+)
 
 FIXTURES = Path(__file__).parent / "fixtures" / "specs"
 
@@ -78,6 +83,50 @@ def test_kind_is_the_oasdiff_rule_id():
     assert changes
     for change, record in zip(changes, records, strict=True):
         assert change.kind == record["id"]
+
+
+def test_the_check_catalogue_carries_the_axes_routing_depends_on():
+    """The routing matrix keys on oasdiff's metadata, not on its 506 identifiers.
+
+    `2026-07-27-sync-routing-matrix.md` routes on (kind, action, direction) precisely because a
+    hand-maintained table of every rule ID would rot on each oasdiff release. That trade only
+    holds while the catalogue actually carries those axes, so this asserts the shape the design
+    rests on. If a future oasdiff drops or renames one, the matrix is unimplementable and this
+    test is where that is discovered.
+    """
+    catalogue = run_oasdiff_checks()
+
+    assert len(catalogue) > 100, "catalogue implausibly small; oasdiff output shape likely changed"
+    for entry in catalogue:
+        assert {"id", "level", "direction", "kind", "action"} <= entry.keys()
+
+    levels = {entry["level"] for entry in catalogue}
+    assert "error" in levels and "warning" in levels
+
+    # Tier -1 in the matrix is justified entirely by this category existing: lifecycle rules
+    # describe how the vendor documented a deprecation, so no edit to consumer code resolves
+    # them. If the category disappears, that row loses its reason to exist.
+    assert any(entry["kind"] == "lifecycle" for entry in catalogue)
+
+
+def test_breaking_output_is_not_limited_to_error_level():
+    """`run_oasdiff_breaking` returns a mix of severities, which `to_vendor_changes` flattens.
+
+    The fixture pair's two records are both classified `warning` by the catalogue, yet
+    `to_vendor_changes` stamps every record `severity="breaking"`. Routing wants that
+    distinction, so this pins the discrepancy rather than leaving it to be rediscovered:
+    the day severity is carried through properly, this test is what says so.
+    """
+    catalogue = {entry["id"]: entry for entry in run_oasdiff_checks()}
+    records = run_oasdiff_breaking(FIXTURES / "charges_base.json", FIXTURES / "charges_revision.json")
+
+    assert records
+    reported_levels = {catalogue[r["id"]]["level"] for r in records if r["id"] in catalogue}
+    assert reported_levels, "no fixture record matched the catalogue; the id domain diverged"
+    assert reported_levels != {"error"}, (
+        "fixture records are all error-level; the claim that breaking output mixes severities "
+        "no longer holds and the routing spec needs updating"
+    )
 
 
 def _leaf_change(text: str, kind: str = "response-optional-property-removed") -> VendorChange:
