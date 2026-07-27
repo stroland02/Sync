@@ -21,6 +21,15 @@ from sync.core import Evidence, Patch, RepoRef
 # toward one.
 NON_BLOCKING_CONCLUSIONS = frozenset({"skipped", "neutral"})
 
+# Sync authors this commit inside a clone of a repository it does not own, so
+# the identity is supplied per-invocation via `git -c` and never written into
+# the clone's config or inherited from the host machine's global git config.
+# `git -c <key>=<value>` is a general config-override mechanism and some keys
+# execute commands (`core.pager`, `core.editor`) — safe here only because both
+# values below are module constants, never caller- or vendor-supplied.
+COMMIT_AUTHOR_NAME = "Sync"
+COMMIT_AUTHOR_EMAIL = "sync@users.noreply.github.com"
+
 
 def _gh() -> str:
     found = shutil.which("gh")
@@ -89,7 +98,11 @@ class GitHubForge:
         branch = branch_name_for(patch, repo)
         self._run(["git", "checkout", "-B", branch], path)
         self._run(["git", "add", "-u"], path)
-        self._run(["git", "commit", "-m", f"fix: {patch.rationale}"], path)
+        self._run(
+            ["git", "-c", f"user.name={COMMIT_AUTHOR_NAME}", "-c", f"user.email={COMMIT_AUTHOR_EMAIL}",
+             "commit", "-m", f"fix: {patch.rationale}"],
+            path,
+        )
         self._run(["git", "push", "-u", "origin", branch, "--force-with-lease"], path)
         return branch
 

@@ -1,10 +1,19 @@
 import json
+import os
+import subprocess
 from pathlib import Path
 
 import pytest
 
 from sync.core import Evidence, Patch, RepoRef
-from sync.forge.github import GitHubForge, _gh, branch_name_for, render_pr_body
+from sync.forge.github import (
+    COMMIT_AUTHOR_EMAIL,
+    COMMIT_AUTHOR_NAME,
+    GitHubForge,
+    _gh,
+    branch_name_for,
+    render_pr_body,
+)
 from sync.remediate.nodes import Forge
 
 EVIDENCE = Evidence(
@@ -305,10 +314,70 @@ def test_push_branch_issues_the_expected_git_sequence():
     assert calls == [
         ["git", "checkout", "-B", branch],
         ["git", "add", "-u"],
-        ["git", "commit", "-m", f"fix: {PATCH.rationale}"],
+        ["git", "-c", f"user.name={COMMIT_AUTHOR_NAME}", "-c", f"user.email={COMMIT_AUTHOR_EMAIL}",
+         "commit", "-m", f"fix: {PATCH.rationale}"],
         ["git", "push", "-u", "origin", branch, "--force-with-lease"],
     ]
     assert cwds == [Path(REPO.local_path)] * 4
+
+
+def test_push_branch_commits_under_syncs_identity_with_real_git(tmp_path, monkeypatch):
+    """`test_push_branch_issues_the_expected_git_sequence` stubs `_run` and never
+    executes git, so it cannot catch a commit that fails, or one that silently
+    inherits an identity from the host, under real git. This one runs the real
+    `checkout`/`add`/`commit` sequence against a throwaway repository with the
+    host's global and system git config suppressed, then reads the resulting
+    commit's author back to prove Sync supplied its own identity rather than
+    inheriting one.
+
+    `push` is neutralised by monkeypatching `GitHubForge._run` at the class
+    level to intercept any argv starting with `["git", "push"]` before it
+    reaches `subprocess`, recording it instead; every other argv still goes
+    through the real implementation, so `checkout`/`add`/`commit` run for
+    real. There is no remote on this repository, so an unneutralised push
+    would fail loudly rather than silently reach the network.
+    """
+    # Suppresses any global or system git identity the host machine happens to
+    # have configured, so a pass here proves Sync's own `-c` overrides did the
+    # work rather than the developer machine's config doing it for us.
+    monkeypatch.setenv("GIT_CONFIG_GLOBAL", os.devnull)
+    monkeypatch.setenv("GIT_CONFIG_SYSTEM", os.devnull)
+
+    repo_path = tmp_path / "clone"
+    repo_path.mkdir()
+    subprocess.run(["git", "init"], cwd=repo_path, capture_output=True, text=True, encoding="utf-8", check=True)
+    (repo_path / "file.txt").write_text("original\n", encoding="utf-8")
+    subprocess.run(["git", "add", "file.txt"], cwd=repo_path, capture_output=True, text=True, encoding="utf-8", check=True)
+    subprocess.run(
+        ["git", "-c", "user.name=Seed", "-c", "user.email=seed@example.com", "commit", "-m", "seed"],
+        cwd=repo_path, capture_output=True, text=True, encoding="utf-8", check=True,
+    )
+    (repo_path / "file.txt").write_text("patched\n", encoding="utf-8")
+
+    real_run = GitHubForge._run
+    pushes: list[list[str]] = []
+
+    def run_with_push_neutralised(self, args, cwd):
+        if args[:2] == ["git", "push"]:
+            pushes.append(args)
+            return ""
+        return real_run(self, args, cwd)
+
+    monkeypatch.setattr(GitHubForge, "_run", run_with_push_neutralised)
+
+    repo = RepoRef(repo_id="r1", url="https://github.com/o/r", local_path=str(repo_path), head_sha="0" * 40)
+    forge = GitHubForge()
+    forge.push_branch(repo, PATCH)
+
+    assert len(pushes) == 1
+
+    author = subprocess.run(
+        ["git", "log", "-1", "--format=%an <%ae>"],
+        cwd=repo_path, capture_output=True, text=True, encoding="utf-8", check=True,
+    ).stdout.strip()
+    # Literal, not derived from the imported constants: this must catch a
+    # wrong constant value, not just a wrong wiring of a correct one.
+    assert author == "Sync <sync@users.noreply.github.com>"
 
 
 def test_open_pull_request_issues_the_expected_gh_invocation():
