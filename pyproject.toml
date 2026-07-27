@@ -4,7 +4,7 @@ version = "0.1.0"
 description = "Watches the third-party APIs your code calls and opens verified pull requests when one of them breaks."
 readme = "README.md"
 authors = [
-    { name = "Sebastian Roland", email = "sebastian.roland@janco-electronics.com" }
+    { name = "Sebastian", email = "165098826+stroland02@users.noreply.github.com" }
 ]
 requires-python = ">=3.12"
 dependencies = [
