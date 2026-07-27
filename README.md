@@ -2,6 +2,8 @@
 
 Agentic Codebase Review built on the fundamental Pillars of creating Software
 
+Self-maintaining API integrations.
+
 ---
 
 **Self-maintaining API integrations.** Sync watches the third-party APIs your code calls, and when one of them changes, breaks, or starts costing you money, it opens a pull request that fixes your code — already verified green by your own CI.
