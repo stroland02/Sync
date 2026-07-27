@@ -24,6 +24,7 @@ def test_core_imports_no_sibling_package():
         [lint_imports],
         capture_output=True,
         text=True,
+        encoding="utf-8",
         cwd=REPO_ROOT,
     )
     assert result.returncode == 0, result.stdout + result.stderr

@@ -50,14 +50,14 @@ def test_snake_case_resource_becomes_camel_case_symbol():
 
 
 def test_adapter_satisfies_the_vendor_protocol(tmp_path):
-    (tmp_path / "map.json").write_text(json.dumps(build_symbol_map(SPEC)))
+    (tmp_path / "map.json").write_text(json.dumps(build_symbol_map(SPEC)), encoding="utf-8")
     adapter = StripeAdapter(spec_dir=FIXTURES, symbol_map_path=tmp_path / "map.json")
     assert isinstance(adapter, VendorAdapter)
     assert adapter.vendor_id == "stripe"
 
 
 def test_operation_for_symbol_resolves_a_known_call(tmp_path):
-    (tmp_path / "map.json").write_text(json.dumps(build_symbol_map(SPEC)))
+    (tmp_path / "map.json").write_text(json.dumps(build_symbol_map(SPEC)), encoding="utf-8")
     adapter = StripeAdapter(spec_dir=FIXTURES, symbol_map_path=tmp_path / "map.json")
     ref = adapter.operation_for_symbol("stripe.charges.create")
     assert ref is not None
@@ -67,13 +67,13 @@ def test_operation_for_symbol_resolves_a_known_call(tmp_path):
 
 
 def test_operation_for_symbol_returns_none_for_unknown(tmp_path):
-    (tmp_path / "map.json").write_text(json.dumps(build_symbol_map(SPEC)))
+    (tmp_path / "map.json").write_text(json.dumps(build_symbol_map(SPEC)), encoding="utf-8")
     adapter = StripeAdapter(spec_dir=FIXTURES, symbol_map_path=tmp_path / "map.json")
     assert adapter.operation_for_symbol("stripe.nonexistent.create") is None
 
 
 def test_fetch_changes_reads_two_local_specs(tmp_path):
-    (tmp_path / "map.json").write_text(json.dumps(build_symbol_map(SPEC)))
+    (tmp_path / "map.json").write_text(json.dumps(build_symbol_map(SPEC)), encoding="utf-8")
     adapter = StripeAdapter(spec_dir=FIXTURES, symbol_map_path=tmp_path / "map.json")
     changes = list(adapter.fetch_changes("charges_base", "charges_revision"))
     assert changes

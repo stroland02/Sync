@@ -1,0 +1,69 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: sync
+          POSTGRES_PASSWORD: sync
+          POSTGRES_DB: sync
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U sync"
+          --health-interval 2s
+          --health-timeout 3s
+          --health-retries 15
+
+    env:
+      # docker-compose.yml maps Postgres to 5433 to stay clear of a local server.
+      # A service container has the port to itself, so the default DSN is overridden
+      # rather than the mapping reproduced.
+      SYNC_DSN: postgresql://sync:sync@localhost:5432/sync
+      # Pinned deliberately. oasdiff's rule identifiers are Sync's `VendorChange.kind`
+      # domain, so a floating version would silently change the set of kinds the
+      # pipeline can see.
+      OASDIFF_VERSION: 1.26.1
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Install oasdiff
+        run: |
+          mkdir -p tools
+          curl -fsSL -o /tmp/oasdiff.tar.gz \
+            "https://github.com/oasdiff/oasdiff/releases/download/v${OASDIFF_VERSION}/oasdiff_${OASDIFF_VERSION}_linux_amd64.tar.gz"
+          tar -xzf /tmp/oasdiff.tar.gz -C tools oasdiff
+          tools/oasdiff --version
+
+      - name: Sync dependencies
+        run: uv sync --all-extras --dev
+
+      # Runs before the suite: a failure here is a fact about the source, and needs no
+      # database, no binary, and no test run to establish.
+      - name: Encoding lint
+        run: uv run python scripts/lint_encoding.py src scripts tests
+
+      - name: Import boundary
+        run: uv run lint-imports
+
+      - name: Tests
+        run: uv run pytest

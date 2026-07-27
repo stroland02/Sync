@@ -33,6 +33,9 @@ dev = [
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+# `scripts/` holds build-time tooling that is tested but deliberately not part of the
+# shipped package, so it is importable from tests without being installed.
+pythonpath = ["."]
 addopts = "-m 'not e2e'"
 markers = ["e2e: end-to-end test; makes network and model calls"]
 
