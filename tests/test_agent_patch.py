@@ -12,10 +12,18 @@ SITE = CallSite(
     sdk_version="18.0.0", content_hash="h1",
 )
 CHANGE = VendorChange(
+    # Shaped like a real oasdiff record, not a convenient one: no `field` key
+    # (real records never carry one), `path_ptr` is the URL path oasdiff
+    # reports (not a JSON pointer), and the changed property is named only in
+    # the backticked token inside `text`.
     vendor_id="stripe", from_version="v2300", to_version="v2345",
     kind="response-property-removed", operation_id="PostCharges",
-    path_ptr="/paths/~1v1~1charges/post/responses/200/status",
-    severity="breaking", source="oasdiff", raw={"id": "response-property-removed", "field": "status"},
+    path_ptr="/v1/charges",
+    severity="breaking", source="oasdiff",
+    raw={
+        "id": "response-property-removed",
+        "text": "removed the optional property `payment_method_details/card/checks/cvc_check` from the response",
+    },
 )
 FINDING = Finding(
     detector="vendor_change", call_site_id="cs1", vendor_change_id="vc1",
@@ -49,6 +57,18 @@ def test_the_prompt_constrains_scope_to_the_affected_call():
     lowered = prompt.lower()
     assert "do not" in lowered
     assert "refactor" in lowered
+
+
+def test_the_affected_field_comes_from_the_backticked_text_not_the_url_path():
+    prompt = build_patch_prompt(FINDING, CHANGE, SITE)
+    assert "Affected field: cvc_check" in prompt
+    assert "Affected field: charges" not in prompt
+
+
+def test_the_prompt_says_so_plainly_when_the_field_cannot_be_determined():
+    change = CHANGE.model_copy(update={"raw": {"id": "response-property-removed"}})
+    prompt = build_patch_prompt(FINDING, change, SITE)
+    assert "Affected field: could not be determined from the vendor change" in prompt
 
 
 def test_previous_diagnostics_are_included_on_a_retry():

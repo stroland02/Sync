@@ -14,6 +14,7 @@ from pathlib import Path
 from claude_agent_sdk import ClaudeAgentOptions, ResultMessage, query
 
 from sync.core import CallSite, Finding, Patch, RepoRef, VendorChange
+from sync.signals.oasdiff import changed_field
 
 MODEL = "claude-opus-5"
 
@@ -44,7 +45,8 @@ def build_patch_prompt(
     diagnostics: str = "",
 ) -> str:
     """Everything the agent needs, and nothing it does not."""
-    field = change.raw.get("field") or change.path_ptr.rsplit("/", 1)[-1]
+    field = changed_field(change)
+    field_line = field if field is not None else "could not be determined from the vendor change"
 
     sections = [
         "A third-party API changed and this repository's code no longer matches it.",
@@ -52,7 +54,7 @@ def build_patch_prompt(
         f"Vendor: {change.vendor_id}",
         f"Change: {change.kind}",
         f"Operation: {change.operation_id}  ({change.from_version} -> {change.to_version})",
-        f"Affected field: {field}",
+        f"Affected field: {field_line}",
         "",
         f"Call site: {site.path}, line {site.line}",
         f"SDK call: {site.symbol}",
