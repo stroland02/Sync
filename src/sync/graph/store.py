@@ -33,7 +33,15 @@ class GraphStore:
             conn.execute("TRUNCATE finding, call_site, vendor_change CASCADE")
 
     def upsert_call_site(self, site: CallSite) -> str:
-        site_id = _stable_id(site.repo_id, site.path, site.symbol)
+        # line and col are part of identity, not just data: two distinct call sites
+        # in the same file can share a symbol (the same SDK method called twice), and
+        # without a position component they'd hash to one id and silently collapse.
+        # This means a call site that merely shifts down the file (no other content
+        # change) becomes a new row rather than an update to the old one. That is
+        # safe at M0 only because cli.py truncates the whole graph at the start of
+        # every run, so no stale row ever survives to be orphaned; M2's incremental
+        # indexing will need a different identity scheme that tolerates line drift.
+        site_id = _stable_id(site.repo_id, site.path, site.symbol, str(site.line), str(site.col))
         with self._connect() as conn:
             conn.execute(
                 """

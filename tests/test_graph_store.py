@@ -43,10 +43,24 @@ def test_upsert_call_site_is_idempotent_on_identical_content(store):
 
 def test_changed_content_hash_replaces_the_row(store):
     store.upsert_call_site(_site())
-    store.upsert_call_site(_site(content_hash="hash-2", line=44))
+    store.upsert_call_site(_site(content_hash="hash-2", response_fields_read=["status", "id"]))
     sites = store.call_sites_for_operation("stripe", "PostCharges")
     assert len(sites) == 1
-    assert sites[0].line == 44
+    assert sites[0].response_fields_read == ["status", "id"]
+
+
+def test_two_call_sites_differing_only_in_line_upsert_to_two_rows(store):
+    store.upsert_call_site(
+        _site(line=10, col=4, response_fields_read=["charges_enabled"], content_hash="hash-a")
+    )
+    store.upsert_call_site(
+        _site(line=40, col=4, response_fields_read=["requirements"], content_hash="hash-b")
+    )
+    sites = store.call_sites_for_operation("stripe", "PostCharges")
+    assert len(sites) == 2
+    by_line = {s.line: s for s in sites}
+    assert by_line[10].response_fields_read == ["charges_enabled"]
+    assert by_line[40].response_fields_read == ["requirements"]
 
 
 def test_call_sites_for_operation_filters_by_vendor(store):
