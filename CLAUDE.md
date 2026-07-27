@@ -24,7 +24,14 @@ Three things from it that are easy to get wrong:
 
 **`sync.core` imports nothing from any sibling package.** Not `sync.graph`, not `sync.signals`, not anything. A third party writing a vendor adapter depends on `sync.core` alone; a single sibling import drags Postgres into their dependency tree. `tests/test_import_boundary.py` enforces this and it is not advisory.
 
-**Nothing reaches a pull request unverified.** Every patch passes `tsc` and then the customer's own CI. We never execute customer code ourselves and never hold their secrets. If you find yourself adding a path that skips the gate, you have found a bug in your approach, not a shortcut.
+**Nothing reaches a pull request unverified.** Every patch passes `tsc` and then the customer's own CI. If you find yourself adding a path that skips the gate, you have found a bug in your approach, not a shortcut.
+
+Two honest qualifications on that, both measured rather than theorised, and both open at M0:
+
+- **`tsc` verifies the working tree, not the diff that ships.** `push_branch` stages with `git add -u` — tracked modifications only — while `static_verify` typechecks whatever the agent left behind. The patch agent has `Bash` and is told to run `npx tsc --noEmit` until clean, so it can satisfy the gate with an untracked or gitignored artifact that never reaches the branch. This was observed: the acceptance run's `static_verify` passed on a repository where a clean clone fails, and the customer's CI then failed on exactly those errors. The customer's CI is still authoritative, so nothing merges unverified — but a green local verdict does not yet describe the pushed artifact.
+- **"We never execute customer code" is the intent, not yet the invariant.** `run_tsc` prefers the clone's own `node_modules/.bin/tsc`, resolved through the customer's `.npmrc`, and the patch agent holds `Bash` inside the clone. Dependency installs pass `--ignore-scripts`, so no lifecycle script runs, and Sync never runs the customer's application — but it does execute their toolchain. Say that, rather than the stronger sentence.
+
+We never hold customer secrets. That one is unqualified.
 
 **Vendor-specific knowledge lives in adapters, never in core.** Stripe's URL conventions, its `operationId` scheme, its SDK naming — all of it belongs to `sync.signals.stripe`. The moment core knows a vendor's name, the plugin story is dead.
 

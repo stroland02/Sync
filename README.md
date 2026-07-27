@@ -10,7 +10,13 @@ Existing tools watch the API you *publish* and stop at an alert. Sync watches th
 
 ## Status
 
-Pre-alpha. Milestone M0 is in progress: a real breaking change between two pinned Stripe OpenAPI versions producing a CI-green pull request against a real TypeScript repository, unattended.
+Pre-alpha, and specific about it. Milestone M0 targets one thing: a breaking change between two pinned Stripe OpenAPI versions producing a CI-green pull request against a real TypeScript repository, unattended.
+
+Proven against a real fork and real vendor specifications: specification fetch, `oasdiff`, noise filtering, symbol mapping, clone, dependency installation, indexing, the graph store, detection, the patch agent, and `tsc` passing on the patched clone. Proven separately against real GitHub: branch push under Sync's own commit identity, and the CI gate correctly refusing to open a pull request on a red build.
+
+Not yet proven: one invocation carrying a finding all the way to an opened pull request. The remediation half and the forge half have each run against production, but not yet in the same run.
+
+Known limitations are enumerated in the design document rather than left implicit — including one case where the local typecheck can pass on an artifact that never reaches the branch. The customer's CI remains the authoritative gate.
 
 ## How it works
 

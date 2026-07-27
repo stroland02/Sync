@@ -40,7 +40,7 @@ One distinction is worth holding precisely, because the technologies look simila
 |---|---|---|
 | Market side | Consumer-side, neutral across vendors | Ships without a single vendor partnership |
 | M0 wedge | Vendor-change detector, Stripe, TypeScript | Every input is public; demoable with no customer |
-| Verification gate | The customer's own CI verifies the patch | We never execute customer code and never hold their secrets |
+| Verification gate | The customer's own CI verifies the patch | We never hold their secrets, and never run their application — see the qualifications below |
 | Openness | Open core | Plugin SDK and adapters public; hosted runtime commercial |
 | Orchestration | LangGraph 1.0, Python | Durable checkpointing across long CI waits |
 | Patch harness | Claude Agent SDK, inside one LangGraph node | Inherits a hardened file-edit toolchain instead of rebuilding one |
@@ -420,6 +420,24 @@ This is also why the graph-mediated rule is a competitive property and not only 
 | Tier 3 (GraphQL) is not one more adapter | A GraphQL call site is a query document, not a method chain, so `operation_for_symbol` has no meaning and field-path matching against parsed documents replaces it. Scoped as its own tier with work in both the vendor and language adapters, rather than assumed to fall out of the plugin protocol. |
 | Symbol mapping has one derivation strategy and 25.4% coverage | Replaced by a provenance-recording cascade — convention, SDK typings, runtime observation, documentation — where a low-confidence mapping degrades to an operation-match-only finding rather than silently filtering a real change. |
 | Agent SDK runs unsupervised against a repository clone | It operates on a throwaway clone, never the customer's working tree, and nothing it produces reaches a pull request without passing `tsc` and then the customer's CI. |
+
+## Known limitations at M0
+
+Everything here was measured against real data rather than reasoned about, and each is open. They are recorded because the sections above state the intent, and the intent is ahead of the code in these four places.
+
+**The static gate verifies the working tree, not the diff that ships.** `push_branch` stages with `git add -u` — tracked modifications only — while `static_verify` typechecks the clone as the patch agent left it. The agent holds `Bash` and is instructed to run `npx tsc --noEmit` until clean, so it can satisfy the gate with an untracked or gitignored artifact that never reaches the branch. This is not hypothetical: the M0 acceptance run's `static_verify` passed against a repository where a clean clone fails the same check, and the customer's CI then failed on exactly those errors. The customer's CI remains authoritative, so nothing merges unverified — but a green local verdict does not yet describe the artifact that was pushed. Fixing it means typechecking a pristine copy with only the tracked diff applied.
+
+**Sync executes the customer's toolchain, though not their application.** `run_tsc` prefers the clone's own `node_modules/.bin/tsc`, resolved through the customer's `.npmrc`, and the patch agent runs commands inside the clone. Dependency installs pass `--ignore-scripts`, so no `postinstall` or `prepare` script runs, and the customer's application is never started. The honest statement is that we run their compiler, not that we run nothing.
+
+**The indexer and the detector meet only on depth-1 changes.** The indexer records the field names a call site directly touches; the detector reduces a vendor change's property path to its deepest segment. A nested change therefore cannot match, and measurement says nested is what vendors actually ship: across `v2320→v2330` (2,896 changes), `v2300→v2330` (3,136) and `v2330→v2300` (289,275), every breaking change was nested and none was depth-1. The failure mode is a missed finding rather than a wrong one, which is the right direction — but it is the reason the M0 acceptance needed a constructed vendor change to exercise the remediation path at all.
+
+**A retry never reuses its branch.** `branch_name_for` hashes the patch diff, and on a CI retry the diff is only the incremental change, so the digest always differs. Every retry pushes a new `sync/api-drift-*` branch to the customer's repository and abandons the previous one. Branch cleanup is unimplemented.
+
+### What the M0 acceptance run did and did not prove
+
+Proven end to end against a real fork, with real vendor specifications: specification fetch, `oasdiff`, noise filtering, symbol mapping, clone, dependency installation, indexing, the graph store, detection, the patch agent, and `tsc` passing on the patched clone. Separately proven against real GitHub: branch push under Sync's own commit identity, and the CI gate correctly returning red with the failing run's URL and declining to open a pull request.
+
+Not proven: a complete run reaching an opened pull request. The remediation half and the forge half have each run against production, but never in the same invocation.
 
 ## Verification
 

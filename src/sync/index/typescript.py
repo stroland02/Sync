@@ -149,10 +149,18 @@ class TypeScriptAdapter:
     def _argument_keys(self, call_node: Node, source: bytes) -> list[str]:
         """Direct keys of the call's first argument, when it is an object literal.
 
-        Only that object's own properties count: Stripe can add, remove, or
-        rename a field at this level, but not one nested inside it, so a
-        nested object's keys — or an object literal buried in a second,
-        callback, argument — never enter the result.
+        Only that object's own properties count, so a nested object's keys — or
+        an object literal buried in a second, callback, argument — never enter
+        the result.
+
+        This is a known limitation, not a claim that nested changes do not
+        happen. Measured against real Stripe data, they are the only kind that
+        happens: across v2320→v2330, v2300→v2330 and v2330→v2300, every
+        breaking change was a nested property change and none was depth-1. The
+        detector reduces a change's path to its deepest segment while this
+        records only depth-1 names, so the two meet only for a depth-1 change.
+        The consequence is a missed finding, never a wrong one. Widening this
+        is M1 work and needs the detector's matching rule widened with it.
         """
         args = call_node.child_by_field_name("arguments")
         if args is None or not args.named_children:
