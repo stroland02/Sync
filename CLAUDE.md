@@ -20,6 +20,17 @@ Three things from it that are easy to get wrong:
 - Any state key written by parallel branches **must** declare a reducer. Without one, concurrent writes are dropped silently — no error, no warning, missing results.
 - `locate → patch → verify` is a data dependency, not an accident. Parallelising it produces a race, not speed.
 
+## This is a data pipeline, and it obeys data-pipeline rules
+
+`docs/superpowers/specs/2026-07-27-sync-pipeline-discipline.md` carries the argument and names what deliberately does not apply. Six rules bind every session:
+
+- **Declare a table's grain as a comment in `schema.sql` before adding a column.** One `migration_outcome` row is one *attempt*, not one finding. A query that counts findings by counting rows is wrong, and wrong quietly.
+- **Every stage is idempotent.** Re-running INDEX, SIGNAL, or DETECT on the same input converges on the same rows. Every table gets a natural key and an explicit conflict clause. `efcc19d` was this bug.
+- **Every binding carries the rung it came from** — `static`, `resolved`, or `observed` — and so does every artifact derived from it. A false positive that cannot be attributed to a rung cannot be fixed.
+- **Abandoned runs are data.** `abandon_reason` stays queryable; abandoned attempts are where routing learns which change kinds are not mechanically safe.
+- **Keep the raw vendor record.** `VendorChange.raw` is why `b29795a` could be applied to history instead of re-fetching every spec pair. Store the interpretation *and* the source.
+- **A signature proves origin, not correctness.** A validly signed feed carrying a malformed `VendorChange` fails at parse, before any row is built from it.
+
 ## Non-negotiables
 
 **`sync.core` imports nothing from any sibling package.** Not `sync.graph`, not `sync.signals`, not anything. A third party writing a vendor adapter depends on `sync.core` alone; a single sibling import drags Postgres into their dependency tree. `tests/test_import_boundary.py` enforces this and it is not advisory.

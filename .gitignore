@@ -7,3 +7,7 @@ tools/
 .cache/
 .superpowers/
 .import_linter_cache/
+
+# Agent worktrees live inside .claude/ but are checkouts, not configuration.
+# .claude/rules/ and .claude/skills/ are checked in deliberately.
+.claude/worktrees/
