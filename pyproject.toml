@@ -1,7 +1,7 @@
 [project]
 name = "sync"
 version = "0.1.0"
-description = "Add your description here"
+description = "Watches the third-party APIs your code calls and opens verified pull requests when one of them breaks."
 readme = "README.md"
 authors = [
     { name = "Sebastian Roland", email = "sebastian.roland@janco-electronics.com" }

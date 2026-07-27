@@ -5,3 +5,5 @@ tools/
 .env
 .pytest_cache/
 .cache/
+.superpowers/
+.import_linter_cache/
