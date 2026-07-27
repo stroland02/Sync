@@ -47,6 +47,39 @@ def test_records_convert_to_vendor_changes_with_operation_and_severity():
     assert any(c.operation_id == "PostCharges" for c in changes)
 
 
+def test_path_ptr_holds_the_url_path_not_a_json_pointer():
+    """Pins what `path_ptr` actually contains, because two specs once said otherwise.
+
+    `2026-07-26-sync-public-change-feed.md` illustrated `path_ptr` as `/data/status`, and
+    `2026-07-26-sync-observed-contract-drift.md` built a one-join claim on that reading. Both
+    were wrong: oasdiff reports `path` as the operation's URL, and that is what is stored. A
+    join written against the pointer reading matches nothing, so the contradiction is worth a
+    test rather than a comment -- prose drifts from code silently, an assertion does not.
+    """
+    records = run_oasdiff_breaking(FIXTURES / "charges_base.json", FIXTURES / "charges_revision.json")
+    changes = to_vendor_changes(records, vendor_id="stripe", from_version="base", to_version="revision")
+
+    assert changes, "fixture pair produced no changes; this test cannot check anything"
+    for change in changes:
+        assert change.path_ptr.startswith("/v1/"), (
+            f"path_ptr held {change.path_ptr!r}; it is oasdiff's URL path, not a JSON Pointer"
+        )
+
+
+def test_kind_is_the_oasdiff_rule_id():
+    """`VendorChange.kind` is `record["id"]`, one of the rules `oasdiff checks` enumerates.
+
+    Anything switching on `kind` is switching on that enum, so it needs a default branch and
+    a completeness check against the pinned binary -- never a hand-maintained copy of the list.
+    """
+    records = run_oasdiff_breaking(FIXTURES / "charges_base.json", FIXTURES / "charges_revision.json")
+    changes = to_vendor_changes(records, vendor_id="stripe", from_version="base", to_version="revision")
+
+    assert changes
+    for change, record in zip(changes, records, strict=True):
+        assert change.kind == record["id"]
+
+
 def _leaf_change(text: str, kind: str = "response-optional-property-removed") -> VendorChange:
     return VendorChange(
         vendor_id="stripe", from_version="v2320", to_version="v2330",

@@ -33,14 +33,33 @@ Each entry is a `VendorChange`, the same contract already defined in `sync.core`
     "from_version": "2026-05-01",
     "to_version": "2026-11-01",
     "kind": "response-property-removed",
-    "operation_id": "POST /v1/charges",
-    "path_ptr": "/data/status",
+    "operation_id": "PostCharges",
+    "path_ptr": "/v1/charges",
     "severity": "breaking",
     "source": "oasdiff",
     "raw": {}
   }
 ]
 ```
+
+**`path_ptr` is the operation's URL path, not a JSON Pointer into a response body.** An
+earlier draft of this document showed `"/data/status"` there and was wrong about the field it
+described. `sync/signals/oasdiff.py` sets `path_ptr=record.get("path", "")`, which is what
+oasdiff reports as `path` — the URL. The name is misleading and predates the implementation;
+it is not renamed here because `VendorChange` lives in `sync.core`, which every adapter and
+the MCP graph surface already depend on, and a rename is a breaking change to that contract
+for no gain the feed needs.
+
+`kind` is oasdiff's checker rule identifier — `record["id"]`, drawn from the 200-plus rules
+`oasdiff checks` enumerates for the pinned binary. Consumers must tolerate an identifier they
+do not recognise; the set grows with each oasdiff release.
+
+The **changed field** is not a top-level column at all. It is named inside `raw`, as the first
+backticked token in oasdiff's free-text `text` message, and `sync.signals.oasdiff.changed_field()`
+is the only supported way to extract it — it reduces oasdiff's schema path to its leaf property
+name, stepping over the `anyOf`/`oneOf`/`allOf` segments oasdiff interposes. This is why `raw`
+is carried in the feed rather than dropped as an implementation detail: without it, a consumer
+cannot tell which field moved.
 
 No wrapper object, no pagination envelope, no per-request negotiation. `FeedCache.store()`
 (`2026-07-25-sync-mcp-graph-surface.md`, Task 4) already parses exactly this shape — a bare JSON array of

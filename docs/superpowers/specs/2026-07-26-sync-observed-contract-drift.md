@@ -65,7 +65,7 @@ observed_shape(
     id               bigserial PRIMARY KEY,
     vendor_id        text NOT NULL,
     operation_id     text NOT NULL,
-    field_path       text NOT NULL,      -- '/data/status', JSON-pointer form, matching path_ptr
+    field_path       text NOT NULL,      -- '/data/status', a JSON Pointer into the response body
     json_type        text NOT NULL,      -- 'string'|'number'|'boolean'|'object'|'array'|'null'
     nullable_seen    bool NOT NULL,
     spec_enum_values text[],             -- only values present in the published spec
@@ -77,8 +77,39 @@ observed_shape(
 )
 ```
 
-`field_path` deliberately shares the JSON-pointer form of `vendor_change.path_ptr`, so an observed divergence
-and a published change address the same field the same way — the join stays one join.
+### The join, corrected
+
+An earlier version of this document claimed `field_path` "deliberately shares the JSON-pointer form of
+`vendor_change.path_ptr`, so ... the join stays one join." **That was wrong, and wrong about shipped code.**
+`sync/signals/oasdiff.py` sets `path_ptr` from oasdiff's `path` — the operation's **URL path**, `/v1/charges`.
+It is not a pointer into a response body and never was. A join written against that premise matches nothing.
+
+What the two sides actually hold:
+
+| | Operation address | Field address |
+|---|---|---|
+| `vendor_change` | `operation_id`, plus `path_ptr` as the URL path | a **bare leaf name** — `status` — recovered from `raw` by `changed_field()` |
+| `observed_shape` | `operation_id` | `field_path`, a full JSON Pointer — `/data/status` |
+
+So the join is two predicates, not one:
+
+1. `vendor_change.operation_id = observed_shape.operation_id`, which is exact.
+2. The leaf segment of `observed_shape.field_path` equals `changed_field(change)`.
+
+The second predicate is **not injective**, and the design says so rather than pretending otherwise: a response
+carrying both `/data/status` and `/data/refund/status` matches a change naming `status` twice. When more than
+one observed field matches, the detector emits one finding naming every candidate path and marks it ambiguous.
+It does not guess. Guessing here produces a confident patch against the wrong field, which is the most
+expensive false positive this system can produce.
+
+`changed_field()` returning `None` is common and is not a defect — oasdiff records frequently name no field at
+all. A change with no resolvable field still produces a finding at operation granularity and simply does not
+participate in predicate 2.
+
+**The cheap improvement, when it is worth doing:** retain oasdiff's full backticked token alongside the reduced
+leaf name. That token is itself a schema path, so a later detector could compare more than one segment and cut
+the ambiguity above. It is a SIGNAL-stage change, it is not required for the detector to ship, and it is
+recorded here so the option is not rediscovered from scratch.
 
 ## The fourth detector
 
