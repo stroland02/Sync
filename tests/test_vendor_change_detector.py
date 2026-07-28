@@ -1,3 +1,4 @@
+import json
 import os
 from pathlib import Path
 
@@ -10,6 +11,7 @@ from sync.signals.oasdiff import run_oasdiff_breaking, to_vendor_changes
 
 DSN = os.environ.get("SYNC_DSN", "postgresql://sync:sync@localhost:5433/sync")
 FIXTURES = Path(__file__).parent / "fixtures" / "specs"
+REAL_RECORD = Path(__file__).parent / "fixtures" / "oasdiff" / "stripe_v2320_v2330_postcharges.json"
 
 
 @pytest.fixture()
@@ -161,3 +163,131 @@ def test_a_change_whose_kind_is_neither_request_nor_response_still_produces_a_fi
     assert "operation match only" in rationale
     assert "call site reads" not in rationale
     assert "call site passes" not in rationale
+
+
+def _real_change(store):
+    """One verbatim record from Stripe's real v2320 -> v2330 window.
+
+    Twelve real segments deep, leaf `iin`. No call site in any repository reads
+    `iin`, which is why leaf-only matching found nothing against this window.
+    """
+    record = json.loads(REAL_RECORD.read_text(encoding="utf-8"))
+    return store.upsert_vendor_change(
+        VendorChange(
+            vendor_id="stripe", from_version="v2320", to_version="v2330",
+            kind=record["id"], operation_id=record["operationId"],
+            path_ptr=record["path"], severity="breaking", source="oasdiff", raw=record,
+        )
+    )
+
+
+def test_a_real_nested_change_matches_a_call_site_that_reads_the_path_leading_to_it(store):
+    """The measured defect, stated as a test.
+
+    The change's path starts at `customer`; a call site that reads
+    `result.customer` is reading into the subtree the vendor changed. Leaf-only
+    matching asked whether the call site read `iin`, twelve levels down, and no
+    call site ever does.
+    """
+    _site(store, reads=("customer",))
+    _real_change(store)
+    assert len(VendorChangeDetector(store).scan()) == 1
+
+
+def test_a_real_nested_change_ignores_a_call_site_touching_none_of_its_path(store):
+    """The filter still filters, which is what stops this being operation-match-only.
+
+    `id`, `status` and `amount` appear nowhere in the change's path. Measured
+    across the whole v2320 -> v2330 window, none of them is a first segment of
+    any of the 327,124 records, so this is the common case and not a contrived one.
+    """
+    _site(store, reads=("id", "status"), args=("amount",))
+    _real_change(store)
+    assert VendorChangeDetector(store).scan() == []
+
+
+def test_a_partial_path_match_does_not_claim_the_call_site_read_the_changed_field(store):
+    """Reading toward a change is not reading the changed field, and must not read as if it is.
+
+    This is the low-confidence match: it degrades to an operation-match-only
+    finding rather than being dropped, and its rationale says which field
+    actually changed and which path the call site actually reads.
+    """
+    _site(store, reads=("customer",))
+    _real_change(store)
+    rationale = VendorChangeDetector(store).scan()[0].rationale
+    assert "operation match only" in rationale
+    assert "customer" in rationale
+    assert "iin" in rationale
+    assert "call site reads `iin`" not in rationale
+
+
+def test_a_call_site_that_reads_the_changed_field_itself_is_reported_as_a_field_match(store):
+    """A full-depth read keeps the confident rationale, so the two are distinguishable."""
+    _site(store, reads=("status",))
+    _change(store, field="status")
+    rationale = VendorChangeDetector(store).scan()[0].rationale
+    assert "call site reads `status`" in rationale
+    assert "operation match only" not in rationale
+
+
+def test_a_nested_request_path_matches_the_argument_path_the_call_site_passes(store):
+    """Request-side paths get the same treatment; nothing about this is response-only."""
+    _site(store, args=("metadata", "metadata.order_id"))
+    store.upsert_vendor_change(
+        VendorChange(
+            vendor_id="stripe", from_version="v1", to_version="v2",
+            kind="request-property-removed", operation_id="PostCharges",
+            path_ptr="/v1/charges", severity="breaking", source="oasdiff",
+            raw={"id": "request-property-removed", "text": "removed the property `metadata/order_id`"},
+        )
+    )
+    assert len(VendorChangeDetector(store).scan()) == 1
+
+
+def test_a_call_site_path_deeper_than_the_change_still_matches(store):
+    """The indexer records every prefix, so the comparison only runs one way.
+
+    A change naming `metadata` must reach a call site recorded as
+    `metadata.order_id`, which it does because that call site also recorded
+    `metadata`.
+    """
+    _site(store, args=("metadata", "metadata.order_id"))
+    _change(store, kind="request-property-removed", field="metadata")
+    assert len(VendorChangeDetector(store).scan()) == 1
+
+
+def test_a_structural_segment_in_the_change_path_does_not_break_the_match(store):
+    """oasdiff writes `items` where an array is walked; a call site writes nothing there.
+
+    A call site that reaches past an array -- `result.data[0].customer` written
+    so the chain survives -- records `data.customer`, which must still meet
+    `data/items/customer`. `items` occurs in 327,084 of the window's 327,124
+    records, so a rule that could not step over it would match almost nothing.
+    """
+    _site(store, reads=("data", "data.customer"))
+    store.upsert_vendor_change(
+        VendorChange(
+            vendor_id="stripe", from_version="v1", to_version="v2",
+            kind="response-property-removed", operation_id="PostCharges",
+            path_ptr="/v1/charges", severity="breaking", source="oasdiff",
+            raw={"id": "response-property-removed", "text": "removed the property `data/items/customer/email`"},
+        )
+    )
+    findings = VendorChangeDetector(store).scan()
+    assert len(findings) == 1
+    # `data` matches this change without stepping over anything, so only the
+    # deeper path being quoted proves the step happened.
+    assert "`data.customer`" in findings[0].rationale
+
+
+def test_a_change_path_is_anchored_so_a_shared_name_deeper_down_is_not_a_match(store):
+    """A top-level `card` is not the `card` hanging off an error, and must not match it.
+
+    Without anchoring, `card` appears somewhere in all 327,124 records of the
+    window, so every call site reading a top-level `card` would match every one
+    of them -- operation-match-only wearing a field match's rationale.
+    """
+    _site(store, reads=("card",))
+    _real_change(store)
+    assert VendorChangeDetector(store).scan() == []

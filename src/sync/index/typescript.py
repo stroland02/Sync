@@ -49,23 +49,41 @@ def _walk(node: Node):
         yield from _walk(child)
 
 
+def _path(segments: Iterable[str]) -> str:
+    return ".".join(segments)
+
+
 class TypeScriptAdapter:
     language_id = "typescript"
 
     def __init__(self, vendor_adapter: VendorAdapter) -> None:
         self._vendor = vendor_adapter
 
-    def matches(self, repo: RepoRef) -> bool:
+    def _declared_dependencies(self, repo: RepoRef) -> dict[str, object]:
+        """The SDK versions `package.json` declares, or nothing it can be read from.
+
+        A customer's manifest is untrusted input, so an unparseable one answers
+        "no declared dependency" rather than raising: the caller already has a
+        path for a repository that does not demonstrably depend on the SDK, and
+        a `JSONDecodeError` out of `run()` is a traceback where that answer
+        belongs.
+        """
         manifest = Path(repo.local_path) / "package.json"
         if not manifest.exists():
-            return False
-        data = json.loads(manifest.read_text(encoding="utf-8"))
-        deps = {**data.get("dependencies", {}), **data.get("devDependencies", {})}
-        return _SDK_PACKAGE in deps
+            return {}
+        try:
+            data = json.loads(manifest.read_text(encoding="utf-8"))
+        except json.JSONDecodeError:
+            return {}
+        if not isinstance(data, dict):
+            return {}
+        return {**data.get("dependencies", {}), **data.get("devDependencies", {})}
+
+    def matches(self, repo: RepoRef) -> bool:
+        return _SDK_PACKAGE in self._declared_dependencies(repo)
 
     def _sdk_version(self, repo: RepoRef) -> str:
-        manifest = json.loads((Path(repo.local_path) / "package.json").read_text(encoding="utf-8"))
-        deps = {**manifest.get("dependencies", {}), **manifest.get("devDependencies", {})}
+        deps = self._declared_dependencies(repo)
         return str(deps.get(_SDK_PACKAGE, "unknown")).lstrip("^~")
 
     def _source_files(self, repo: RepoRef) -> list[Path]:
@@ -146,21 +164,39 @@ class TypeScriptAdapter:
         parts.append(_text(current, source))
         return list(reversed(parts))
 
+    def _object_paths(self, obj: Node, source: bytes, prefix: tuple[str, ...] = ()) -> set[str]:
+        """Dotted paths for every key an object literal declares, at any depth.
+
+        Recording each key before descending is what leaves every prefix of a
+        nested path in the result, which is the shape the detector's comparison
+        assumes: it checks whether a call site's path leads into a change's, and
+        needs no second direction as long as `metadata` is recorded alongside
+        `metadata.internal_id`.
+
+        An object literal buried in a second, callback, argument is still out of
+        reach — only the tree under the object handed in is walked.
+        """
+        paths: set[str] = set()
+        for node in obj.named_children:
+            if node.type == "shorthand_property_identifier":
+                paths.add(_path([*prefix, _text(node, source)]))
+            elif node.type == "pair":
+                key = node.child_by_field_name("key")
+                if key is None:
+                    continue
+                here = (*prefix, _text(key, source).strip("'\""))
+                paths.add(_path(here))
+                value = node.child_by_field_name("value")
+                if value is not None and value.type == "object":
+                    paths.update(self._object_paths(value, source, here))
+        return paths
+
     def _argument_keys(self, call_node: Node, source: bytes) -> list[str]:
-        """Direct keys of the call's first argument, when it is an object literal.
+        """Keys of the call's first argument, when it is an object literal.
 
-        Only that object's own properties count, so a nested object's keys — or
-        an object literal buried in a second, callback, argument — never enter
-        the result.
-
-        This is a known limitation, not a claim that nested changes do not
-        happen. Measured against real Stripe data, they are the only kind that
-        happens: across v2320→v2330, v2300→v2330 and v2330→v2300, every
-        breaking change was a nested property change and none was depth-1. The
-        detector reduces a change's path to its deepest segment while this
-        records only depth-1 names, so the two meet only for a depth-1 change.
-        The consequence is a missed finding, never a wrong one. Widening this
-        is M1 work and needs the detector's matching rule widened with it.
+        Nested keys are recorded under their parent rather than dropped: vendor
+        changes are overwhelmingly nested, so a request-side path that stopped
+        at depth 1 could only ever meet a depth-1 change.
         """
         args = call_node.child_by_field_name("arguments")
         if args is None or not args.named_children:
@@ -168,30 +204,29 @@ class TypeScriptAdapter:
         first_arg = args.named_children[0]
         if first_arg.type != "object":
             return []
-        keys: list[str] = []
-        for node in first_arg.named_children:
-            if node.type == "shorthand_property_identifier":
-                keys.append(_text(node, source))
-            elif node.type == "pair":
-                key = node.child_by_field_name("key")
-                if key is not None:
-                    keys.append(_text(key, source).strip("'\""))
-        return sorted(set(keys))
+        return sorted(self._object_paths(first_arg, source))
 
-    def _destructured_fields(self, pattern: Node, source: bytes) -> set[str]:
-        """API field names bound by a destructuring pattern.
+    def _destructured_fields(self, pattern: Node, source: bytes, prefix: tuple[str, ...] = ()) -> set[str]:
+        """API field paths bound by a destructuring pattern.
 
         `{ id, status: chargeStatus }` reads `id` and `status` — the key is
-        what the vendor returns; a renamed local binding is not.
+        what the vendor returns; a renamed local binding is not. A nested
+        pattern binds a nested path, so `{ card: { brand } }` reads
+        `card.brand` and not `brand`.
         """
         fields: set[str] = set()
         for node in pattern.named_children:
             if node.type == "shorthand_property_identifier_pattern":
-                fields.add(_text(node, source))
+                fields.add(_path([*prefix, _text(node, source)]))
             elif node.type == "pair_pattern":
                 key = node.child_by_field_name("key")
-                if key is not None:
-                    fields.add(_text(key, source).strip("'\""))
+                if key is None:
+                    continue
+                here = (*prefix, _text(key, source).strip("'\""))
+                fields.add(_path(here))
+                value = node.child_by_field_name("value")
+                if value is not None and value.type == "object_pattern":
+                    fields.update(self._destructured_fields(value, source, here))
         return fields
 
     def _enclosing_scope(self, node: Node, root: Node) -> Node:
@@ -208,14 +243,24 @@ class TypeScriptAdapter:
         return root
 
     def _response_fields(self, call_node: Node, source: bytes, root: Node) -> list[str]:
-        """Fields read off the call's result.
+        """Field paths read off the call's result.
 
         Finds the variable — or destructuring pattern — the call is assigned
         to. For a destructured result, the pattern itself names the fields
-        read. For a plain variable, collects every property accessed on it,
+        read. For a plain variable, collects every member chain rooted at it,
         searching only the call's enclosing function: two unrelated calls
         that happen to share a generic result name (`result`, `data`) in
         different functions must not merge into one dependency set.
+
+        The whole chain is recorded, not its first hop. `result.a.b` reads a
+        path two deep, and a vendor change two deep can only be matched by a
+        call site that says so. Its prefixes land in the result too, because
+        `result.a` is a node of its own and the walk reaches it independently.
+
+        A chain ends at anything that is not a plain property access — a
+        subscript, a call, a `map` callback — so `result.data[0].customer`
+        contributes `data` and stops. That is a shorter path, never a wrong
+        one, and it stops exactly where oasdiff writes an `items` segment.
         """
         declarator = call_node
         while declarator is not None and declarator.type != "variable_declarator":
@@ -237,12 +282,10 @@ class TypeScriptAdapter:
         for node in _walk(scope):
             if node.type != "member_expression":
                 continue
-            obj = node.child_by_field_name("object")
-            prop = node.child_by_field_name("property")
-            if obj is None or prop is None:
+            chain = self._member_chain(node, source)
+            if chain is None or len(chain) < 2 or chain[0] != result_name:
                 continue
-            if obj.type == "identifier" and _text(obj, source) == result_name:
-                fields.add(_text(prop, source))
+            fields.add(_path(chain[1:]))
         return sorted(fields)
 
     def index(self, repo: RepoRef) -> Iterable[CallSite]:

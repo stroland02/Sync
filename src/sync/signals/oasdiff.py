@@ -116,54 +116,62 @@ def to_vendor_changes(
     return changes
 
 
-def changed_field(change: VendorChange) -> str | None:
-    """The field name a change refers to, when it can be determined.
+def changed_path(change: VendorChange) -> list[str] | None:
+    """The property path a change refers to, outermost segment first.
 
     Real oasdiff records never carry a `field`, `property`, `parameter`, or
     `name` key -- the lookups below cost nothing today and stand ready in
-    case a future oasdiff version adds a structured one. The field name lives
-    in the free-text `text` message instead, as the first backticked token
-    (oasdiff backticks the field it names before any incidental value, such
-    as a status code). There is deliberately no path-derived fallback for
-    `path_ptr`, the URL path: a URL segment is never a field name, and
-    returning one would be confident nonsense -- worse than admitting the
-    field couldn't be determined. The backticked token is different: for a
-    nested property it is itself a schema path, and unlike a URL path its
-    segments genuinely are property names, so it is reduced to its leaf
-    rather than returned whole.
+    case a future oasdiff version adds a structured one. A structured key
+    names a field and not a path, so it answers as a single segment. The path
+    otherwise lives in the free-text `text` message, as the first backticked
+    token (oasdiff backticks the field it names before any incidental value,
+    such as a status code). There is deliberately no fallback to `path_ptr`,
+    the URL path: a URL segment is never a property name, and returning one
+    would be confident nonsense -- worse than admitting the path couldn't be
+    determined.
+
+    `None`, never `[]`, when nothing resolves: an empty path reads as a real
+    answer to a caller that only checks for `None`, and the safe miss is the
+    finding matching on its operation alone.
     """
     for key in ("field", "property", "parameter", "name"):
         value = change.raw.get(key)
         if isinstance(value, str) and value:
-            return value
+            return [value]
     text = change.raw.get("text")
     if isinstance(text, str):
         match = _BACKTICKED.search(text)
         if match:
-            return _leaf_of(match.group(1))
+            return _real_segments(match.group(1))
     return None
 
 
-def _leaf_of(token: str) -> str | None:
-    """The property name at the end of an oasdiff property path.
+def changed_field(change: VendorChange) -> str | None:
+    """The name of the property a change refers to, when it can be determined.
+
+    The deepest real segment of the path is the property the vendor changed.
+    Callers that need to know which call sites are affected want the whole
+    path instead -- a name alone cannot say where in a response it sits.
+    """
+    path = changed_path(change)
+    return path[-1] if path else None
+
+
+def _real_segments(token: str) -> list[str] | None:
+    """An oasdiff property path with its structural segments removed.
 
     oasdiff names a nested property by its full schema path, interposing a
     segment for every composition it walks through -- `anyOf[subschema #1:
     Name]` and its `oneOf`/`allOf` siblings. Those segments name a schema, not
-    a property, so the rightmost segment is not always the field.
+    a property, so they are not part of the path a caller can match against.
 
-    The indexer records the bare names a call site reads, so a path matches
-    only once reduced to one. The deepest real name is the property the vendor
-    changed, which is what makes the reduction sound.
-
-    Composition is the only reason a segment defers to the one above it.
-    Skipping a segment for any other reason answers with the parent's name --
-    a field the vendor did not change, which filters the finding out of
-    existence. `None` is the safe miss: the finding still matches on its
-    operation.
+    Composition is the only reason a segment is dropped. Dropping the deepest
+    segment for any other reason would leave the parent's name standing as the
+    leaf -- a field the vendor did not change, which filters the finding out of
+    existence rather than merely weakening it. A deepest segment that could
+    never name a property answers `None` instead.
     """
-    for segment in reversed(token.split("/")):
-        if _COMPOSITION_SEGMENT.match(segment):
-            continue
-        return segment if _SINGLE_LINE_NAME.match(segment) else None
-    return None
+    segments = [s for s in token.split("/") if not _COMPOSITION_SEGMENT.match(s)]
+    if not segments or not _SINGLE_LINE_NAME.match(segments[-1]):
+        return None
+    return segments

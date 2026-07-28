@@ -93,7 +93,74 @@ def test_response_fields_do_not_leak_across_functions_with_the_same_result_name(
     assert sorted(sites[0].response_fields_read) == ["status"]
 
 
-def test_argument_keys_do_not_flatten_a_nested_object_literal(tmp_path):
+def test_argument_keys_record_a_nested_object_literal_as_a_path(tmp_path):
+    """A nested key is recorded under its parent, and the parent stays.
+
+    Every prefix is recorded, so a change naming only `metadata` still matches
+    a call site that passes `metadata.internal_id` -- the detector's rule
+    compares a call site's path against the change's, and it only has to look
+    in one direction if both sides carry their prefixes.
+    """
     sites = list(_adapter(tmp_path).index(_repo("nested_args")))
     assert len(sites) == 1
-    assert sorted(sites[0].args_keys) == ["amount", "currency", "metadata"]
+    assert sorted(sites[0].args_keys) == [
+        "amount",
+        "currency",
+        "metadata",
+        "metadata.enabled",
+        "metadata.internal_id",
+    ]
+
+
+def test_response_fields_record_the_whole_chain_the_code_reads(tmp_path):
+    """A member chain deeper than one hop is recorded as a dotted path.
+
+    Real vendor changes are nested -- measured across Stripe's own
+    specification, none is depth-1 -- so a call site that records only the
+    first hop can never meet one. Each prefix is recorded alongside the full
+    chain, so the chain matches a change at any depth along it.
+
+    `result.data[0].customer` stops at `data`: the subscript is where syntax
+    alone stops being able to follow the value, and oasdiff spells the same
+    boundary as an `items` segment.
+    """
+    sites = list(_adapter(tmp_path).index(_repo("nested_response")))
+    assert len(sites) == 1
+    assert sorted(sites[0].response_fields_read) == [
+        "data",
+        "error",
+        "error.payment_method",
+        "payment_method_details",
+        "payment_method_details.card",
+        "payment_method_details.card.brand",
+    ]
+
+
+def test_a_nested_destructuring_pattern_records_its_path(tmp_path):
+    """Destructuring reaches nested fields too, and must record them the same way."""
+    sites = list(_adapter(tmp_path).index(_repo("nested_destructured")))
+    assert len(sites) == 1
+    assert sorted(sites[0].response_fields_read) == [
+        "id",
+        "payment_method_details",
+        "payment_method_details.card",
+        "payment_method_details.card.brand",
+    ]
+
+
+def test_does_not_match_a_repo_without_the_stripe_dependency(tmp_path):
+    assert _adapter(tmp_path).matches(_repo("no_stripe")) is False
+
+
+def test_does_not_match_a_repo_with_no_manifest_at_all(tmp_path):
+    assert _adapter(tmp_path).matches(_repo("nonexistent")) is False
+
+
+def test_a_malformed_manifest_is_not_a_match_rather_than_a_traceback(tmp_path):
+    """A customer's manifest is untrusted input, so it is a boundary to validate.
+
+    An unparseable `package.json` used to raise `JSONDecodeError` out of
+    `run()`. The honest answer is the one the CLI already has a path for:
+    this repository does not demonstrably depend on the SDK.
+    """
+    assert _adapter(tmp_path).matches(_repo("malformed_manifest")) is False

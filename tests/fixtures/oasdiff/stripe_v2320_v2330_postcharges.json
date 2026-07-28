@@ -1,0 +1,10 @@
+{
+ "id": "response-optional-property-removed",
+ "text": "removed the optional property `customer/anyOf[subschema #2: Customer]/subscriptions/data/items/latest_invoice/anyOf[subschema #2: Invoice]/payments/data/items/payment/payment_record/anyOf[subschema #2: PaymentRecord]/payment_method_details/anyOf[subschema #1: PaymentsPrimitivesPaymentRecordsResourcePaymentMethodDetails]/card/iin` from the response with the `200` status",
+ "level": 2,
+ "operation": "POST",
+ "operationId": "PostCharges",
+ "path": "/v1/charges",
+ "section": "paths",
+ "fingerprint": "ae0fb25c21e0"
+}
