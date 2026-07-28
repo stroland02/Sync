@@ -1,0 +1,48 @@
+{
+  "type": "object",
+  "required": ["id", "object", "status", "amount", "livemode"],
+  "properties": {
+    "id": { "type": "string" },
+    "object": { "type": "string", "enum": ["payment_intent"] },
+    "status": {
+      "type": "string",
+      "enum": [
+        "requires_payment_method",
+        "requires_confirmation",
+        "processing",
+        "succeeded",
+        "canceled"
+      ]
+    },
+    "amount": { "type": "integer" },
+    "livemode": { "type": "boolean" },
+    "receipt_email": { "type": "string", "nullable": true },
+    "charges": {
+      "type": "object",
+      "properties": {
+        "object": { "type": "string", "enum": ["list"] },
+        "has_more": { "type": "boolean" },
+        "data": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": { "type": "string" },
+              "paid": { "type": "boolean" },
+              "outcome": {
+                "type": "object",
+                "properties": {
+                  "network_status": {
+                    "type": "string",
+                    "enum": ["approved_by_network", "declined_by_network"]
+                  },
+                  "risk_score": { "type": "integer" }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
