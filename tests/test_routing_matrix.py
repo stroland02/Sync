@@ -14,6 +14,7 @@ from __future__ import annotations
 import pytest
 
 from sync.route import AGENT, CODEMOD, NO_PATCH, TEMPLATED, RoutingFacts, catalogue_index, route
+from sync.route.matrix import matching_rows
 from sync.signals.oasdiff import run_oasdiff_checks
 
 UNKNOWN = RoutingFacts()
@@ -102,10 +103,16 @@ def test_an_unknown_kind_falls_through_to_the_agent():
     assert row == "fall-through"
 
 
-def test_no_two_rows_assign_different_tiers_to_the_same_input(catalogue):
-    """First-match-wins makes ordering part of the spec, so a later row must never be the
-    only correct answer for an input an earlier row already claimed. Routing every real rule
-    under every combination of call-site facts asserts the table is a function, not a race."""
+def test_row_overlaps_are_known_and_the_earliest_row_wins(catalogue):
+    """First-match-wins makes ordering part of the specification, so a later row matching too
+    is by design -- what must not happen is a NEW overlap appearing unnoticed and shadowing a
+    row someone still believes fires.
+
+    An earlier version of this test called `route` twice with identical arguments and asserted
+    the results matched. `route` is a pure function over a frozen table and a frozen
+    `RoutingFacts`, so that could not fail. It is replaced rather than deleted because the
+    property it claimed to check is worth checking.
+    """
     fact_space = [
         RoutingFacts(),
         RoutingFacts(field_resolved=True, call_sites_reading_field=1),
@@ -114,10 +121,44 @@ def test_no_two_rows_assign_different_tiers_to_the_same_input(catalogue):
         RoutingFacts(field_resolved=True, value_already_passed=True),
         RoutingFacts(field_resolved=False),
     ]
+
+    overlaps = set()
     for rule in catalogue.values():
         for facts in fact_space:
-            first = route(rule, facts)
-            assert route(rule, facts) == first, "routing is not deterministic"
+            matched = matching_rows(rule, facts)
+            if len(matched) > 1:
+                overlaps.add(tuple(matched))
+                assert route(rule, facts)[1] == matched[0], (
+                    f"{rule['id']} routed to {route(rule, facts)[1]} while {matched[0]} matches earlier"
+                )
+
+    # Pinned. A new pair here means a row was added or widened in a way that shadows another,
+    # which is a decision to make deliberately rather than to discover in production.
+    assert overlaps <= {
+        ("field-unresolved", "type-change"),
+        ("field-unresolved", "structure-change"),
+        ("lifecycle", "field-unresolved"),
+    }, f"unexpected row overlap: {sorted(overlaps)}"
+
+
+def test_the_routing_distribution_is_pinned(catalogue):
+    """The completeness loop it replaces asserted only that a tier was one of four values and
+    a row name was non-empty -- both unfalsifiable, since `route` returns nothing else.
+
+    Pinning which row fires how often is falsifiable: widening any predicate moves a count.
+    """
+    import collections
+
+    counts = collections.Counter(
+        route(rule, RoutingFacts(field_resolved=True, call_sites_reading_field=1,
+                                 field_passed_as_literal=True))[1]
+        for rule in catalogue.values()
+    )
+
+    assert counts["lifecycle"] == 35
+    assert counts["structure-change"] == 142
+    assert counts["type-change"] == 50
+    assert sum(counts.values()) == len(catalogue)
 
 
 # --- tier -1: the row that stops patches against code that was never wrong --------
@@ -211,3 +252,34 @@ def test_type_and_structure_changes_are_never_mechanical(kind):
     facts = RoutingFacts(field_resolved=True, call_sites_reading_field=1)
     tier, _ = route(_rule(kind=kind, action="change"), facts)
     assert tier == AGENT
+
+
+# --- row 6: an optional addition is not a breaking change --------------------------
+
+
+def test_an_optional_addition_does_not_buy_a_model_call(catalogue):
+    """The spec's row 6 reads "the added property is required". The code had no such
+    condition, so five info-level rules -- all of them optional additions -- reached tier 1 and
+    spent a constrained model call on a vendor change that broke nothing.
+    """
+    facts = RoutingFacts(field_resolved=True)
+
+    for rule_id in (
+        "new-optional-request-parameter",
+        "new-optional-request-property",
+        "new-optional-request-default-parameter-to-existing-path",
+        "request-body-added-optional",
+        "request-body-media-type-added",
+    ):
+        rule = catalogue.get(rule_id)
+        assert rule is not None, f"{rule_id} left the catalogue; the exclusion needs rechecking"
+        assert route(rule, facts)[0] != TEMPLATED, f"{rule_id} still buys a model call"
+
+
+def test_a_required_addition_still_reaches_the_templated_tier(catalogue):
+    """The exclusion must not swallow the rows row 6 exists for."""
+    facts = RoutingFacts(field_resolved=True)
+
+    for rule_id in ("new-required-request-property", "new-required-request-parameter",
+                    "request-body-added-required"):
+        assert route(catalogue[rule_id], facts) == (TEMPLATED, "required-request-property-added")

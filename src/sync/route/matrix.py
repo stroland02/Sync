@@ -119,6 +119,12 @@ _ROWS: tuple[_Row, ...] = (
         TEMPLATED,
         lambda r, f: (
             _is(r, kind="existence", action="add", direction="request")
+            # The spec's row 6 always read "the added property is required" and the predicate
+            # did not, so five info-level rules -- every one an OPTIONAL addition -- bought a
+            # constrained model call for a vendor change that broke nothing. `level` is the
+            # discriminator because oasdiff already draws exactly that line: measured against
+            # 1.26.1, every required addition here is `error` and every optional one is `info`.
+            and r.get("level") != "info"
             and f.field_resolved is True
         ),
     ),
@@ -130,6 +136,16 @@ _ROWS: tuple[_Row, ...] = (
 )
 
 _FALL_THROUGH = "fall-through"
+
+
+def matching_rows(rule: dict[str, Any], facts: RoutingFacts) -> list[str]:
+    """Every row whose condition holds, in table order.
+
+    Exposed for the overlap check. `route` returns only the winner, so a test built on it
+    cannot tell "one row matched" from "four did and the first happened to be right" -- and the
+    second is how a widened predicate silently shadows a row someone still believes fires.
+    """
+    return [row.name for row in _ROWS if row.matches(rule, facts)]
 
 
 def route(rule: dict[str, Any], facts: RoutingFacts) -> tuple[Tier, str]:
