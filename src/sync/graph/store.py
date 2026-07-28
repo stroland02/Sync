@@ -12,6 +12,7 @@ import psycopg
 from psycopg.rows import dict_row
 
 from sync.core import CallSite, Finding, FindingStatus, MigrationOutcome, VendorChange
+from sync.core.models import ObservedShape
 
 
 def _stable_id(*parts: str) -> str:
@@ -77,7 +78,7 @@ class GraphStore:
 
     def truncate_all(self) -> None:
         self._connect().execute(
-            "TRUNCATE finding, call_site, vendor_change, migration_outcome CASCADE"
+            "TRUNCATE finding, call_site, vendor_change, migration_outcome, observed_shape CASCADE"
         )
 
     def upsert_call_site(self, site: CallSite) -> str:
@@ -247,3 +248,60 @@ class GraphStore:
             (pr_number, pr_merged, bool(pr_merged), human_edits_before_merge,
              finding_id, attempt_index),
         )
+
+    _SHAPE_COLUMNS = (
+        "vendor_id", "operation_id", "field_path", "json_type", "nullable_seen",
+        "spec_enum_values", "source", "sample_count", "first_seen", "last_seen",
+    )
+
+    def record_observed_shape(self, shape: ObservedShape) -> None:
+        """Fold one observation into the baseline.
+
+        The conflict clause is an update rather than `DO NOTHING`, which is the difference
+        between this table and the migration corpus: the grain is one row per
+        (vendor, operation, field_path, json_type, source) tuple and `sample_count` is a counter
+        on it, so a shape seen again is a count, not a row. `DO NOTHING` here would freeze every
+        count at one and make the sample floor the detector depends on unenforceable.
+
+        Each merged column merges the way its meaning requires. `nullable_seen` is OR because it
+        is evidence and evidence does not expire. `spec_enum_values` is a union because traffic
+        exercises one member at a time, and because this table has no spec-version column --
+        last-write-wins would silently erase what an earlier specification named. The window
+        widens at both ends rather than taking the last write, since sources do not arrive in
+        order: an error-payload batch can be forwarded hours after a replay run observed the
+        same shape.
+        """
+        placeholders = ", ".join(["%s"] * len(self._SHAPE_COLUMNS))
+        self._connect().execute(
+            f"""
+            INSERT INTO observed_shape ({", ".join(self._SHAPE_COLUMNS)})
+            VALUES ({placeholders})
+            ON CONFLICT (vendor_id, operation_id, field_path, json_type, source) DO UPDATE SET
+                sample_count = observed_shape.sample_count + EXCLUDED.sample_count,
+                nullable_seen = observed_shape.nullable_seen OR EXCLUDED.nullable_seen,
+                spec_enum_values = ARRAY(
+                    SELECT DISTINCT unnest(observed_shape.spec_enum_values || EXCLUDED.spec_enum_values)
+                    ORDER BY 1
+                ),
+                first_seen = LEAST(observed_shape.first_seen, EXCLUDED.first_seen),
+                last_seen = GREATEST(observed_shape.last_seen, EXCLUDED.last_seen)
+            """,
+            [getattr(shape, name) for name in self._SHAPE_COLUMNS],
+        )
+
+    def observed_shapes(self, vendor_id: str, operation_id: str) -> list[ObservedShape]:
+        """The baseline for one operation.
+
+        Scoped to one operation because that is what the detector asks about; a baseline that
+        leaked another operation's fields into the answer would produce findings against paths
+        the operation never returns.
+        """
+        rows = self._connect().execute(
+            """
+            SELECT * FROM observed_shape
+             WHERE vendor_id = %s AND operation_id = %s
+             ORDER BY field_path, json_type, source
+            """,
+            (vendor_id, operation_id),
+        ).fetchall()
+        return [ObservedShape(**row) for row in rows]
