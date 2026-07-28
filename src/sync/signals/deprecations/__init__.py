@@ -13,6 +13,10 @@ from sync.signals.deprecations.catalogue import (
     to_vendor_changes,
     urgency,
 )
+from sync.signals.deprecations.parameters import (
+    ParameterDeprecation,
+    parse_parameter_deprecations,
+)
 
 __all__ = [
     "ANTHROPIC",
@@ -20,8 +24,10 @@ __all__ = [
     "DeprecationAdapter",
     "DeprecationSource",
     "ModelDeprecation",
+    "ParameterDeprecation",
     "http_fetch",
     "parse_deprecation_table",
+    "parse_parameter_deprecations",
     "to_vendor_changes",
     "urgency",
 ]
