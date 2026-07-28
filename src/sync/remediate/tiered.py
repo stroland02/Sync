@@ -36,10 +36,12 @@ with no catalogue at all.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any, Callable, Mapping, Sequence
 
 from sync.core import CallSite, Finding, Patch, RepoRef, VendorChange
 from sync.route.matrix import CODEMOD, NO_PATCH, RoutingFacts, Tier, route
+from sync.route.templates import argument_is_literal_at, language_for
 from sync.signals.oasdiff import changed_field
 
 # Strategies whose output is a pure function of their input, so feedback cannot change it.
@@ -116,32 +118,66 @@ class RoutingDecision:
     change_kind: str
 
 
-def routing_facts(change: VendorChange, site: CallSite) -> RoutingFacts:
+def routing_facts(
+    change: VendorChange, site: CallSite, repo: RepoRef | None = None
+) -> RoutingFacts:
     """What this layer can establish about the change and the one call site it was given.
 
-    Two of the four fields stay `None`, and that is the point rather than a shortfall.
     `RoutingFacts` defaults every field to "not established" precisely so a row needing a fact
     declines when the fact is unknown, which is what stops an unpopulated graph routing work to
-    a codemod.
+    a codemod. Three of the four are established here; the fourth is the open one.
 
-    - `field_resolved` is established either way. `changed_field()` reads the change's own
-      text, and a record naming no field is a real answer -- `False`, not unknown -- which is
-      what row 2 reads to keep a codemod away from a field nobody can name.
-    - `value_already_passed` is established from `args_keys`, which is what this call site
-      passes. A field absent from it is genuinely not passed here.
-    - `call_sites_reading_field` cannot be established. It is a count across the whole graph
-      and `propose` is handed one site, with no reader for the rest.
-    - `field_passed_as_literal` cannot be established. The index records which argument keys a
-      call site passes, never whether each was written as a literal or came from a variable.
+    - `field_resolved` comes from the change's own text. A record naming no field is a real
+      answer -- `False`, not unknown -- which is what row 2 reads to keep a codemod away from
+      a field nobody can name.
+    - `value_already_passed` comes from `args_keys`, which is what this call site passes.
+    - `field_passed_as_literal` comes from the clone, when there is one. The index records
+      which keys a call site passes and never how each was written, so this reads the call
+      itself -- see `sync.route.templates.argument_is_literal_at`, which answers `None` for
+      anything it cannot establish. Reading the source is not a second index: it is the same
+      file the codemod is about to edit, parsed by the same scoping, so router and codemod
+      cannot disagree about which call they mean.
+    - `call_sites_reading_field` cannot be established here at all. It is a count across the
+      whole graph -- how many *indexed* sites read the field -- and `propose` is handed one
+      site with no reader for the rest. Row 3, the response-side mechanical row, therefore
+      still declines, and a response-property removal still costs an agent run.
 
-    The consequence is worth stating plainly: rows 3 and 4, the two mechanical response- and
-    request-side rows, cannot fire from here. A caller holding the graph can supply those facts
-    and turn them on; guessing them would be the failure the defaults exist to prevent.
+    `repo` is optional because `nodes.py` previews the route at `locate`, before a clone is
+    necessarily in hand. Without it the literal fact stays unknown, so that preview can only
+    ever name a tier at least as expensive as the one `propose` settles on -- a refinement,
+    never a contradiction.
     """
     field = changed_field(change)
     return RoutingFacts(
         field_resolved=field is not None,
         value_already_passed=(field in set(site.args_keys)) if field is not None else None,
+        field_passed_as_literal=_passed_as_literal(field, site, repo),
+    )
+
+
+def _passed_as_literal(field: str | None, site: CallSite, repo: RepoRef | None) -> bool | None:
+    """The literal fact, or `None` wherever the source cannot settle it.
+
+    Every failure here is `None` rather than `False`. A missing clone, a path the index has
+    outlived, bytes that are not UTF-8, a suffix no grammar covers -- none of them is evidence
+    about how the argument was written, and absent evidence must never read as permission.
+    """
+    if field is None or repo is None:
+        return None
+
+    language = language_for(site.path)
+    if language is None:
+        return None
+
+    try:
+        source = (Path(repo.local_path) / site.path).read_bytes().decode("utf-8")
+    except (OSError, UnicodeDecodeError):
+        return None
+
+    # `CallSite.line` is 1-based off tree-sitter's `start_point` and ast-grep counts from
+    # zero, the same conversion `property_omit` makes before the edit.
+    return argument_is_literal_at(
+        source, field, language=language, line=site.line - 1, col=site.col,
     )
 
 
@@ -216,16 +252,16 @@ class TieredRemediator:
         remediators: Sequence,
         catalogue: Mapping[str, dict[str, Any]] | None = None,
         on_route: Callable[[RoutingDecision], None] | None = None,
-        facts_for: Callable[[VendorChange, CallSite], RoutingFacts] | None = None,
+        facts_for: Callable[[VendorChange, CallSite, RepoRef], RoutingFacts] | None = None,
     ) -> None:
         if not remediators:
             raise ValueError("TieredRemediator needs at least one remediator")
         self._remediators = list(remediators)
         self._catalogue = catalogue or {}
         self._on_route = on_route
-        # A caller holding the graph can establish the two facts this layer cannot -- see
-        # `routing_facts`, whose docstring says which and why. Rows 3 and 4 cannot fire without
-        # them, so tier 0 is unreachable through the default.
+        # A caller holding the graph can establish the one fact this layer cannot -- see
+        # `routing_facts`, whose docstring says which and why. Row 3 cannot fire without it,
+        # so the response side of tier 0 is unreachable through the default.
         self._facts_for = facts_for or routing_facts
 
     def can_handle(self, finding: Finding, change: VendorChange) -> bool:
@@ -240,7 +276,8 @@ class TieredRemediator:
         diagnostics: str = "",
     ) -> Patch:
         declined: list[str] = []
-        for remediator in self._eligible(diagnostics, self._tier_for(change, site)):
+        tier = self._tier_for(change, site, repo)
+        for remediator in self._eligible(finding, change, diagnostics, tier):
             if not remediator.can_handle(finding, change):
                 continue
             try:
@@ -264,7 +301,7 @@ class TieredRemediator:
             f"no remediator can handle {change.kind} for {change.operation_id}{detail}"
         )
 
-    def _tier_for(self, change: VendorChange, site: CallSite) -> Tier | None:
+    def _tier_for(self, change: VendorChange, site: CallSite, repo: RepoRef) -> Tier | None:
         """The tier the table assigns, or `None` where the table has no jurisdiction.
 
         `None` is not a tier and does not mean the fall-through. It means the change is
@@ -279,7 +316,7 @@ class TieredRemediator:
         if rule is None:
             return None
 
-        tier, row = route(rule, self._facts_for(change, site))
+        tier, row = route(rule, self._facts_for(change, site, repo))
         if self._on_route is not None:
             self._on_route(RoutingDecision(tier=tier, row=row, change_kind=change.kind))
         if tier == NO_PATCH:
@@ -300,7 +337,13 @@ class TieredRemediator:
             return is_deterministic(remediator)
         return not is_deterministic(remediator)
 
-    def _eligible(self, diagnostics: str, tier: Tier | None) -> list:
+    def _eligible(
+        self,
+        finding: Finding,
+        change: VendorChange,
+        diagnostics: str,
+        tier: Tier | None,
+    ) -> list:
         """The remediators worth trying for this attempt.
 
         Routing narrows first, then the retry rule narrows again. Both survive: a codemod
@@ -312,10 +355,22 @@ class TieredRemediator:
         composition detail -- the same reasoning the retry rule already carried, where
         repeating a patch beats producing none and the graph's attempt budget ends the loop
         either way.
+
+        `can_handle` is part of the routing filter and not only of the loop below, which is
+        the correction that came with row 4 becoming reachable. A tier-0 route narrows to the
+        codemods, and when every one of them declines the change the narrowed list is not
+        empty -- it is full of remediators that will each decline in turn, leaving the loop
+        to raise `NoTierApplies` with the agent never asked. A routing decision would then
+        have destroyed a repair rather than made one cheaper. Emptiness has to be measured
+        over remediators that would actually take the work.
         """
         candidates = self._remediators
         if tier is not None:
-            candidates = [r for r in candidates if self._serves(r, tier)] or candidates
+            serving = [
+                r for r in candidates
+                if self._serves(r, tier) and r.can_handle(finding, change)
+            ]
+            candidates = serving or candidates
 
         if not diagnostics.strip():
             return candidates

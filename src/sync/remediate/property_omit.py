@@ -42,28 +42,10 @@ from pathlib import Path
 
 from sync.core import CallSite, Finding, Patch, RepoRef, VendorChange
 from sync.remediate.tiered import CannotPatch
-from sync.route.templates import omit_argument_at
+from sync.route.templates import language_for, omit_argument_at
 from sync.signals.oasdiff import changed_field
 
 _KIND = "request-property-removed"
-
-# Extension to ast-grep language. A file type absent here is declined rather than guessed:
-# the parser choice decides what counts as an object literal, and the wrong grammar matches
-# nothing, which would read as "already migrated".
-_LANGUAGES = {
-    ".ts": "typescript",
-    ".tsx": "tsx",
-    ".mts": "typescript",
-    ".cts": "typescript",
-    ".js": "javascript",
-    ".jsx": "javascript",
-    ".mjs": "javascript",
-    ".cjs": "javascript",
-}
-
-
-def _language_for(path: str) -> str | None:
-    return _LANGUAGES.get(Path(path).suffix.lower())
 
 
 class PropertyOmitRemediator:
@@ -94,7 +76,9 @@ class PropertyOmitRemediator:
         agent rather than abandoning the finding -- see the module docstring.
         """
         field = changed_field(change)
-        language = _language_for(site.path)
+        # The same table the router consulted before choosing this tier, so a path judged
+        # parseable there is never declined here.
+        language = language_for(site.path)
         if language is None:
             raise CannotPatch(f"{site.path} is not a language this codemod parses")
 
