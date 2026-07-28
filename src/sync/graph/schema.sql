@@ -42,3 +42,61 @@ CREATE TABLE IF NOT EXISTS finding (
 );
 
 CREATE INDEX IF NOT EXISTS finding_status_idx ON finding (status);
+
+-- Grain: one row per repair ATTEMPT, not per finding. A finding retried three times writes
+-- three rows and attempt_index says which. Counting findings by counting rows is wrong.
+--
+-- Nothing here identifies a customer: the symbol is a shape, argument keys are salted digests,
+-- and neither the diff nor the file path is stored. That is what makes the table safe to
+-- aggregate across customers, which is the only thing that makes it worth keeping.
+--
+-- It cannot be backfilled. Every attempt processed before this table existed is lost.
+CREATE TABLE IF NOT EXISTS migration_outcome (
+    id                            BIGSERIAL PRIMARY KEY,
+    finding_id                    TEXT NOT NULL,
+    attempt_index                 INTEGER NOT NULL,
+
+    vendor_id                     TEXT NOT NULL,
+    from_version                  TEXT NOT NULL,
+    to_version                    TEXT NOT NULL,
+    change_kind                   TEXT NOT NULL,
+    change_severity               TEXT NOT NULL,
+    operation_id                  TEXT,
+    path_ptr                      TEXT,
+
+    language                      TEXT NOT NULL,
+    sdk_version                   TEXT,
+    symbol_shape                  TEXT NOT NULL,
+    arg_arity                     INTEGER NOT NULL,
+    arg_key_hashes                TEXT[] NOT NULL DEFAULT '{}',
+    response_fields_touched_count INTEGER NOT NULL,
+
+    strategy                      TEXT NOT NULL,
+    tier                          INTEGER NOT NULL,
+    edit_script                   JSONB,
+    input_tokens                  INTEGER,
+    output_tokens                 INTEGER,
+    cache_read_input_tokens       INTEGER,
+    wall_ms                       INTEGER NOT NULL,
+
+    static_verify_passed          BOOLEAN,
+    static_verify_error_class     TEXT,
+    ci_result                     TEXT,
+    terminal_status               TEXT,
+    abandon_reason                TEXT,
+
+    pr_number                     INTEGER,
+    pr_merged                     BOOLEAN,
+    pr_merged_at                  TIMESTAMPTZ,
+    human_edits_before_merge      INTEGER,
+
+    created_at                    TIMESTAMPTZ NOT NULL DEFAULT now(),
+
+    -- The natural key. A restarted run re-recording an attempt must converge rather than
+    -- inflate the corpus, and an inflated corpus silently overstates every rate computed
+    -- from it.
+    UNIQUE (finding_id, attempt_index)
+);
+
+CREATE INDEX IF NOT EXISTS migration_outcome_kind_idx
+    ON migration_outcome (vendor_id, change_kind, strategy, tier);

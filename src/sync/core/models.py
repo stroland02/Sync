@@ -108,3 +108,105 @@ class OperationRef(BaseModel):
     operation_id: str
     http_method: str
     path: str
+
+
+class MigrationOutcome(BaseModel):
+    """One repair attempt, recorded as shape rather than as source.
+
+    The grain is one row per *attempt*, not per finding: a finding retried three times writes
+    three rows, and `attempt_index` is what says so. A query counting findings by counting rows
+    is wrong.
+
+    Nothing here identifies a customer. The symbol is a shape, argument keys are salted
+    digests, and neither the diff nor the file path is stored -- a path is customer structure
+    even when the code is not included. That is what makes the table safe to aggregate, which
+    is the only thing that makes it worth keeping.
+    """
+
+    id: int | None = None
+    finding_id: str
+    attempt_index: int
+
+    # The vendor change. Public data; no privacy constraint applies to this block.
+    vendor_id: str
+    from_version: str
+    to_version: str
+    change_kind: str
+    change_severity: Severity
+    operation_id: str | None = None
+    path_ptr: str | None = None
+
+    # The call site, as shape only.
+    language: str
+    sdk_version: str | None = None
+    symbol_shape: str
+    arg_arity: int
+    arg_key_hashes: list[str] = Field(default_factory=list)
+    response_fields_touched_count: int
+
+    # What was attempted.
+    strategy: PatchStrategy
+    tier: int
+    edit_script: dict[str, Any] | None = None
+    input_tokens: int | None = None
+    output_tokens: int | None = None
+    cache_read_input_tokens: int | None = None
+    wall_ms: int
+
+    # What happened.
+    static_verify_passed: bool | None = None
+    static_verify_error_class: str | None = None
+    ci_result: str | None = None
+    terminal_status: str | None = None
+    abandon_reason: str | None = None
+
+    # Outcome, arriving days later by webhook.
+    pr_number: int | None = None
+    pr_merged: bool | None = None
+    pr_merged_at: datetime | None = None
+    human_edits_before_merge: int | None = None
+
+    created_at: datetime = Field(default_factory=_now)
+
+    @classmethod
+    def from_attempt(
+        cls,
+        finding_id: str,
+        attempt_index: int,
+        site: "CallSite",
+        change: "VendorChange",
+        patch: "Patch",
+        tier: int,
+        wall_ms: int,
+        salt: str,
+        language: str = "typescript",
+        **outcome: Any,
+    ) -> "MigrationOutcome":
+        """Build a row from the objects an attempt already has.
+
+        The reduction happens here rather than at the call sites that record outcomes, so there
+        is one place where source could leak and it is the place that is tested.
+        """
+        from sync.core.corpus import hash_arg_keys, symbol_shape
+
+        return cls(
+            finding_id=finding_id,
+            attempt_index=attempt_index,
+            vendor_id=change.vendor_id,
+            from_version=change.from_version,
+            to_version=change.to_version,
+            change_kind=change.kind,
+            change_severity=change.severity,
+            operation_id=change.operation_id,
+            path_ptr=change.path_ptr,
+            language=language,
+            sdk_version=site.sdk_version,
+            symbol_shape=symbol_shape(site.symbol),
+            arg_arity=len(site.args_keys),
+            arg_key_hashes=hash_arg_keys(site.args_keys, salt=salt),
+            response_fields_touched_count=len(site.response_fields_read),
+            strategy=patch.strategy,
+            tier=tier,
+            wall_ms=wall_ms,
+            **outcome,
+        )

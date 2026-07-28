@@ -11,7 +11,7 @@ from importlib import resources
 import psycopg
 from psycopg.rows import dict_row
 
-from sync.core import CallSite, Finding, FindingStatus, VendorChange
+from sync.core import CallSite, Finding, FindingStatus, MigrationOutcome, VendorChange
 
 
 def _stable_id(*parts: str) -> str:
@@ -76,7 +76,9 @@ class GraphStore:
         self._connect().execute(ddl)
 
     def truncate_all(self) -> None:
-        self._connect().execute("TRUNCATE finding, call_site, vendor_change CASCADE")
+        self._connect().execute(
+            "TRUNCATE finding, call_site, vendor_change, migration_outcome CASCADE"
+        )
 
     def upsert_call_site(self, site: CallSite) -> str:
         # line and col are part of identity, not just data: two distinct call sites
@@ -183,3 +185,65 @@ class GraphStore:
 
     def set_finding_status(self, finding_id: str, status: FindingStatus) -> None:
         self._connect().execute("UPDATE finding SET status = %s WHERE id = %s", (status, finding_id))
+
+    _OUTCOME_COLUMNS = (
+        "finding_id", "attempt_index", "vendor_id", "from_version", "to_version",
+        "change_kind", "change_severity", "operation_id", "path_ptr", "language",
+        "sdk_version", "symbol_shape", "arg_arity", "arg_key_hashes",
+        "response_fields_touched_count", "strategy", "tier", "input_tokens",
+        "output_tokens", "cache_read_input_tokens", "wall_ms", "static_verify_passed",
+        "static_verify_error_class", "ci_result", "terminal_status", "abandon_reason",
+        "pr_number", "pr_merged", "pr_merged_at", "human_edits_before_merge",
+    )
+
+    def record_migration_outcome(self, outcome: MigrationOutcome) -> None:
+        """Append one attempt to the corpus.
+
+        `ON CONFLICT DO NOTHING` on `(finding_id, attempt_index)` because the remediation graph
+        retries and a restarted run must converge rather than inflate the corpus. An inflated
+        corpus silently overstates every rate computed from it, which is worse than a missing
+        row because nothing looks wrong.
+        """
+        values = [getattr(outcome, name) for name in self._OUTCOME_COLUMNS]
+        placeholders = ", ".join(["%s"] * len(self._OUTCOME_COLUMNS))
+        self._connect().execute(
+            f"""
+            INSERT INTO migration_outcome ({", ".join(self._OUTCOME_COLUMNS)})
+            VALUES ({placeholders})
+            ON CONFLICT (finding_id, attempt_index) DO NOTHING
+            """,
+            values,
+        )
+
+    def migration_outcomes(self) -> list[MigrationOutcome]:
+        rows = self._connect().execute(
+            "SELECT * FROM migration_outcome ORDER BY finding_id, attempt_index"
+        ).fetchall()
+        return [MigrationOutcome(**row) for row in rows]
+
+    def set_merge_outcome(
+        self,
+        finding_id: str,
+        attempt_index: int,
+        pr_number: int | None = None,
+        pr_merged: bool | None = None,
+        human_edits_before_merge: int | None = None,
+    ) -> None:
+        """Fill in what only arrives days later, by webhook.
+
+        Merge outcome is the one measurement that tests the product claim, and a column that
+        silently stays null destroys it. The update path exists from the first row rather than
+        being added once someone notices the column is empty.
+        """
+        self._connect().execute(
+            """
+            UPDATE migration_outcome
+               SET pr_number = COALESCE(%s, pr_number),
+                   pr_merged = COALESCE(%s, pr_merged),
+                   pr_merged_at = CASE WHEN %s THEN now() ELSE pr_merged_at END,
+                   human_edits_before_merge = COALESCE(%s, human_edits_before_merge)
+             WHERE finding_id = %s AND attempt_index = %s
+            """,
+            (pr_number, pr_merged, bool(pr_merged), human_edits_before_merge,
+             finding_id, attempt_index),
+        )
