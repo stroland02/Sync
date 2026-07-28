@@ -132,7 +132,12 @@ def run_tsc(repo_path: Path, timeout: float = _TSC_TIMEOUT_SECONDS) -> VerifyRes
     local_tsc = repo_path / "node_modules" / ".bin" / ("tsc.cmd" if _on_windows() else "tsc")
 
     if local_tsc.exists():
-        command = [str(local_tsc), "--noEmit"]
+        # `--pretty false` is not cosmetic. `parse_diagnostics` matches tsc's plain form,
+        # `file(line,column): error TSxxxx:`, and left to itself tsc prints the pretty form
+        # wrapped in ANSI colour, which matches nothing. `typescript.py` reads a non-zero
+        # exit that parses to zero diagnostics as a compiler that could not run, so ordinary
+        # type errors surfaced as a broken toolchain and raised.
+        command = [str(local_tsc), "--noEmit", "--pretty", "false"]
     else:
         npx = shutil.which("npx")
         if npx is None:
@@ -141,7 +146,10 @@ def run_tsc(repo_path: Path, timeout: float = _TSC_TIMEOUT_SECONDS) -> VerifyRes
         # this npm's npx resolves a positional package followed by a same-named
         # bin by re-appending the bin name as an argument, which turns into a
         # stray `tsc` positional file argument and makes tsc ignore tsconfig.json.
-        command = [npx, "--yes", "--silent", "--package=typescript@latest", "tsc", "--noEmit"]
+        command = [
+            npx, "--yes", "--silent", "--package=typescript@latest",
+            "tsc", "--noEmit", "--pretty", "false",
+        ]
 
     try:
         result = subprocess.run(

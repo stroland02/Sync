@@ -5,6 +5,7 @@ This is not a style rule. A third party writing a Twilio adapter depends on
 Postgres.
 """
 
+import os
 import shutil
 import subprocess
 from pathlib import Path
@@ -20,11 +21,24 @@ def test_core_imports_no_sibling_package():
     lint_imports = shutil.which("lint-imports")
     assert lint_imports is not None, "lint-imports console script not found on PATH"
 
+    # PYTHONIOENCODING is not optional here. import-linter renders through rich, whose
+    # Windows console path encodes with the locale codepage -- cp1252 on this machine -- and
+    # the spinner it prints is an emoji. Without this the child dies with a UnicodeEncodeError
+    # before it evaluates a single contract, and a dead child looks exactly like a broken one.
     result = subprocess.run(
         [lint_imports],
         capture_output=True,
         text=True,
         encoding="utf-8",
         cwd=REPO_ROOT,
+        env={**os.environ, "PYTHONIOENCODING": "utf-8", "PYTHONUTF8": "1"},
     )
-    assert result.returncode == 0, result.stdout + result.stderr
+    output = result.stdout + result.stderr
+
+    # Checked before the exit code, so the two failure modes report differently. A crashed
+    # linter and a violated contract both exit non-zero, and a test that cannot tell them
+    # apart would let a real breach hide behind an environment fault.
+    assert "Contracts:" in output, (
+        "lint-imports produced no contract report, so the boundary was never checked:\n" + output
+    )
+    assert result.returncode == 0, output
