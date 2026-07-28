@@ -1,0 +1,68 @@
+# Public symbols nothing in `src/` reaches, accepted as of 2026-07-28.
+#
+# This is a list and never a threshold. A count absorbs both a repair and a new defect in
+# silence; a named entry has to be deleted by whoever wires the symbol up, in the commit that
+# wires it, because `lint_dead_links.py` fails on an entry that no longer describes anything.
+# The file only shrinks. Adding a line is a decision, not a formality: it says a component is
+# finished, tested, and reachable from nothing, and that somebody accepted that on purpose.
+#
+# Every entry below was already known and recorded in a spec before this lint existed. That is
+# the evidence the lint works: it independently rediscovers what four separate manual sweeps
+# found, and it is silent on `GraphStore.set_merge_outcome` and `sync.route.matrix.route()`,
+# which were on the same list until they were wired.
+#
+# Format: <path from the repository root>:<qualname>
+
+# The benchmark axes compute and are gated by nothing. `2026-07-27-sync-benchmark-gates.md`
+# says so deliberately: recording early is free, and a gate at an invented threshold either
+# fires constantly or never. These leave when tier B is wired into CI.
+src/sync/benchmark/axes.py:compute_axes
+src/sync/benchmark/binding.py:compute_binding_accuracy
+src/sync/benchmark/binding.py:BindingAccuracy.unlabelled_findings
+
+# The merge webhook receiver. It verifies a signature and updates the corpus, and no process
+# mounts it -- there is no HTTP framework here by design. It leaves when something serves it.
+src/sync/forge/webhook.py:record_merge_outcome
+
+# The efficiency detector's reader, ahead of the detector that will consume it.
+src/sync/graph/store.py:GraphStore.observed_calls
+
+# Adapters and readers that are built and not constructed anywhere. Each leaves when `cli.py`
+# builds it: the deprecation adapter is the model-retirement half of the tier-0 path, and the
+# two shape readers are the only writers the observed-drift baseline has.
+src/sync/index/python_lang.py:PythonAdapter
+src/sync/signals/datadog/shapes.py:DatadogShapeReader
+src/sync/signals/datadog/shapes.py:DatadogShapeReader.ingest
+src/sync/signals/deprecations/adapter.py:DeprecationAdapter
+src/sync/signals/generated/adapter.py:GeneratedSpecAdapter
+src/sync/signals/sentry/shapes.py:SentryShapeReader
+src/sync/signals/sentry/shapes.py:SentryShapeReader.ingest
+src/sync/signals/twilio/adapter.py:TwilioAdapter
+
+# The MCP graph surface. Tool logic over a `GraphReader` with no transport, so nothing in this
+# tree can call it. It leaves when a server exists.
+src/sync/mcp/tools.py:GraphSurface
+src/sync/mcp/tools.py:GraphSurface.whats_at_risk
+src/sync/mcp/tools.py:GraphSurface.explain_call_site
+src/sync/mcp/tools.py:GraphSurface.whats_changed
+
+# The public change feed: built, unpublished, with no keypair and no hosting.
+src/sync/signals/feed/consumer.py:verify_and_parse
+src/sync/signals/feed/publisher.py:render_feed
+src/sync/signals/feed/publisher.py:sign_feed
+src/sync/signals/feed/publisher.py:public_key_bytes
+
+# Converters and helpers with no consumer yet. `parameters_to_vendor_changes` is the one worth
+# reading twice: the parameter-deprecation detector takes `ParameterDeprecation` rows directly,
+# so the `VendorChange` conversion beside it has never run.
+src/sync/signals/deprecations/catalogue.py:urgency
+src/sync/signals/deprecations/parameters.py:parameters_to_vendor_changes
+src/sync/signals/generated/manifest.py:parse_manifest
+src/sync/signals/generated/manifest.py:SpecSource.has_cheap_change_trigger
+src/sync/telemetry/ingest.py:ingest_payload
+
+# Remediators and route primitives reachable only from their tests.
+src/sync/remediate/parameters.py:ParameterOmitRemediator
+src/sync/remediate/parameters.py:ParameterRenameRemediator
+src/sync/route/matrix.py:matching_rows
+src/sync/route/templates.py:omit_property_at

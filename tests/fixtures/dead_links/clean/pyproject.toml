@@ -1,0 +1,8 @@
+[project]
+name = "demo"
+version = "0.0.0"
+
+# The lint reads this table to learn which functions a generated console shim invokes by
+# name. Without it, every CLI entry point in the repository reports as unreachable.
+[project.scripts]
+demo = "sync.cli:main"

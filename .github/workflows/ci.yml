@@ -65,5 +65,12 @@ jobs:
       - name: Import boundary
         run: uv run lint-imports
 
+      # Being tested and being reachable are different properties, and until this step
+      # existed only the first was checked -- four finished components shipped with no
+      # caller anywhere in src/. The baseline lists the ones already accepted and only
+      # shrinks: an entry that no longer violates fails here until it is deleted.
+      - name: Dead links
+        run: uv run python scripts/lint_dead_links.py src --baseline scripts/dead_links_baseline.txt
+
       - name: Tests
         run: uv run pytest
