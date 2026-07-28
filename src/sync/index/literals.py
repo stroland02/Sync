@@ -38,6 +38,36 @@ def _line_of(source: str, line_number: int) -> str:
     return lines[index] if 0 <= index < len(lines) else ""
 
 
+def _sibling_argument_keys(node) -> list[str]:
+    """The keys of the object literal this value sits directly in.
+
+    A parameter deprecation needs two facts about one call site -- the model it targets and the
+    arguments it passes -- because `temperature` is fine on an older model and a 400 on Claude
+    4.7 or later. Capturing both in one pass avoids joining two `CallSite` rows on file and
+    line, which would be fragile exactly where correctness matters.
+
+    Only the immediately enclosing object is read. A key from a nested object is not an
+    argument of this call, and claiming one would make the finding describe a call that was
+    never made.
+    """
+    pair = node.parent()
+    if pair is None or pair.kind() not in ("pair", "property_signature"):
+        return []
+
+    container = pair.parent()
+    if container is None or container.kind() != "object":
+        return []
+
+    keys: list[str] = []
+    for child in container.children():
+        if child.kind() not in ("pair", "property_signature"):
+            continue
+        key = child.child(0)
+        if key is not None:
+            keys.append(key.text().strip(_QUOTES))
+    return keys
+
+
 def _enclosing_key(node) -> str | None:
     """The object key this literal is the value of, when it is one.
 
@@ -109,6 +139,7 @@ def index_operation_literals(
                     vendor_id=vendor_id,
                     operation_id=value,
                     symbol=_enclosing_key(node) or value,
+                    args_keys=_sibling_argument_keys(node),
                     sdk_version=sdk_version,
                     content_hash=digest,
                 )

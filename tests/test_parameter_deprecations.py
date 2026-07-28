@@ -70,6 +70,25 @@ def test_the_model_scope_is_captured():
     assert rows["budget_tokens"].applies_from == "Claude Opus 4.5 and later"
 
 
+def test_markdown_links_in_the_behaviour_are_flattened_to_their_text():
+    """The behaviour cell goes into a pull request body verbatim.
+
+    Anthropic's real text embeds `[Claude Mythos Preview](https://anthropic.com/glasswing)`,
+    and a raw markdown link in a rationale reads as noise where the vendor's authority is the
+    only thing making the finding credible. The words are kept; the URL is not.
+    """
+    page = (
+        "| Parameter | Status     | Behavior                                        | Recommended replacement |\n"
+        "| --------- | ---------- | ----------------------------------------------- | ----------------------- |\n"
+        "| `top_k`   | Deprecated | Returns 400 on [Mythos](https://example.invalid). | Omit it.                |\n"
+    )
+    row = parse_parameter_deprecations("anthropic", page)[0]
+
+    assert "Mythos" in row.behavior
+    assert "http" not in row.behavior
+    assert "[" not in row.behavior
+
+
 def test_the_behaviour_is_kept_for_the_pull_request_body():
     """"Returns a 400 error when set to a non-default value" is what convinces a reviewer.
     Paraphrasing it loses the vendor's authority, which is the only authority here."""

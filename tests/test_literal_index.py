@@ -88,6 +88,51 @@ def test_the_enclosing_key_is_recorded_as_the_symbol():
     assert sites[0].symbol == "model"
 
 
+# --- the sibling keys, which make a two-fact finding possible ----------------------
+
+
+def test_the_sibling_argument_keys_are_recorded():
+    """A parameter deprecation needs two facts about one call site: the model it targets and
+    the arguments it passes. `temperature` is fine on an older model and a 400 on Claude 4.7
+    or later, so neither fact alone decides anything.
+
+    Capturing both in one pass avoids joining two `CallSite` rows on file and line, which
+    would be fragile precisely where correctness matters most.
+    """
+    source = 'client.messages.create({ model: "claude-opus-4-8", max_tokens: 16, temperature: 0.7 });'
+    site = _index(source)[0]
+
+    assert set(site.args_keys) == {"model", "max_tokens", "temperature"}
+
+
+def test_the_keys_come_from_the_object_the_model_sits_in():
+    """A key from an unrelated nested object would make the finding claim an argument the
+    call does not pass."""
+    source = (
+        "client.messages.create({\n"
+        '  model: "claude-opus-4-8",\n'
+        "  metadata: { temperature: 'hot' },\n"
+        "});\n"
+    )
+    site = _index(source)[0]
+
+    assert "model" in site.args_keys
+    assert "metadata" in site.args_keys
+    assert "temperature" not in site.args_keys, "a nested key was read as an argument"
+
+
+def test_a_literal_outside_an_object_has_no_argument_keys():
+    site = _index('const m = "claude-opus-4-8";')[0]
+    assert site.args_keys == []
+
+
+def test_quoted_keys_are_recorded_unquoted():
+    source = 'client.messages.create({ "model": "claude-opus-4-8", "temperature": 1 });'
+    site = _index(source)[0]
+
+    assert set(site.args_keys) == {"model", "temperature"}
+
+
 # --- what it must not find -------------------------------------------------------
 
 

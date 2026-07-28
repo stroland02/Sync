@@ -113,7 +113,10 @@ def parse_parameter_deprecations(vendor_id: str, markdown: str) -> list[Paramete
             continue
 
         remaining = [cell for cell in cells[1:] if cell is not status_cell]
-        behavior = remaining[0] if remaining else ""
+        # The behaviour goes into a pull request body verbatim, and the published text embeds
+        # markdown links. A raw link reads as noise exactly where the vendor's wording is the
+        # only thing making the finding credible, so the words are kept and the URL is not.
+        behavior = _MARKDOWN_LINK.sub(r"\g<text>", remaining[0]) if remaining else ""
         replacement = _replacement_in(remaining[1]) if len(remaining) > 1 else None
         scope = (status.group("scope") or "").strip() or None
 
