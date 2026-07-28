@@ -200,14 +200,26 @@ three-times figure is a 12-core number and should not be quoted for CI.
 The base moved while this was in flight and brought the suite to 916 tests. The ratio held,
 and the absolute saving got larger:
 
-| | 867 tests, `07390fa` | 916 tests, `d8744c8` |
-|---|---|---|
-| serial | 133.6s | 198.7s |
-| `-n auto` | 44.3s | 66.3s |
-| speedup | 3.0× | 3.0× |
+| | 867 tests, `07390fa` | 916 tests, `d8744c8` | 916 tests, on `main`, idle machine |
+|---|---|---|---|
+| serial | 133.6s | 198.7s | 133s |
+| `-n auto` | 44.3s | 66.3s | 61s |
+| speedup | 3.0× | 3.0× | **2.18×** |
 
-Four more parallel runs on the new base, all passing, all three gates green. The serial suite
-has crossed three minutes; parallelism now saves over two.
+Four more parallel runs on the new base, all passing, all three gates green.
+
+**The third column is the number to quote.** The coordinator re-measured on `main` after this
+landed, with no other worker running: 916 tests, the same count as the middle column, and a
+serial baseline of 133s rather than 198.7s. The middle column's serial run was taken while
+other workers were running their own suites against the same machine, which inflated the
+baseline and with it the ratio. Both parallel figures are honest; the serial one is not
+comparable.
+
+So the saving is about 72 seconds a run, not 132, and the speedup is a little over two rather
+than three. That is still worth having. It is recorded this way because a benchmark taken
+under unmeasured load is exactly the kind of number that gets quoted for years — this
+repository has already had two of those, the 105-to-241 coverage estimate and the Postgres
+contention theory, and both were wrong in the direction that flattered the change.
 
 ## Reproducing any of this
 
