@@ -259,3 +259,66 @@ def test_a_rename_onto_an_existing_key_produces_no_patch(tmp_path: Path):
 def test_both_remediators_satisfy_the_protocol():
     assert isinstance(ParameterRenameRemediator(), Remediator)
     assert isinstance(ParameterOmitRemediator(), Remediator)
+
+
+# --- the edit has to land, not just render ----------------------------------------
+
+
+def test_the_omit_edit_reaches_the_clone_and_not_only_the_diff(repo: RepoRef):
+    """Nothing in the pipeline applies `patch.diff`.
+
+    `nodes.make_patch` stores the `Patch`, `static_verify` typechecks the working tree, and
+    `push_branch` stages it with `git add -u`. A remediator that renders a diff without writing
+    it produces a branch with no commit, having reported success.
+
+    Found by another worker in `literal_swap`; these two had the same defect.
+    """
+    ParameterOmitRemediator().propose(_finding(), _change(), _site(), repo)
+
+    on_disk = (Path(repo.local_path) / "src" / "summarise.ts").read_text(encoding="utf-8")
+    assert "temperature: 0.7" not in on_disk
+    assert 'model: "claude-opus-5"' in on_disk
+
+
+def test_the_rename_edit_reaches_the_clone(rename_repo: RepoRef):
+    site = _site().model_copy(update={"args_keys": ["model", "budget_tokens"]})
+    ParameterRenameRemediator().propose(_finding(), _change(RENAME), site, rename_repo)
+
+    on_disk = (Path(rename_repo.local_path) / "src" / "summarise.ts").read_text(encoding="utf-8")
+    assert "max_tokens: 8" in on_disk
+    assert "budget_tokens" not in on_disk
+
+
+def test_declining_writes_nothing(repo: RepoRef):
+    """An empty diff must leave the clone untouched. Writing an unchanged file still updates
+    its mtime, and a tool that touches files it decided not to edit is one nobody trusts near
+    a working tree."""
+    before = (Path(repo.local_path) / "src" / "summarise.ts").read_bytes()
+    mtime = (Path(repo.local_path) / "src" / "summarise.ts").stat().st_mtime_ns
+
+    patch = ParameterOmitRemediator().propose(_finding(), _change(), _site(model="gpt-4o"), repo)
+
+    assert patch.diff == ""
+    assert (Path(repo.local_path) / "src" / "summarise.ts").read_bytes() == before
+    assert (Path(repo.local_path) / "src" / "summarise.ts").stat().st_mtime_ns == mtime
+
+
+def test_line_endings_survive_the_round_trip(tmp_path: Path):
+    """`read_text` folds CRLF to LF and `write_text` expands LF to os.linesep, so a round trip
+    on Windows rewrites every line and the diff claims the whole file changed."""
+    (tmp_path / "src").mkdir()
+    crlf = SOURCE.replace("\n", "\r\n").encode("utf-8")
+    (tmp_path / "src" / "summarise.ts").write_bytes(crlf)
+    repo = RepoRef(repo_id="r", url="u", local_path=str(tmp_path), head_sha="s")
+
+    ParameterOmitRemediator().propose(_finding(), _change(), _site(), repo)
+    after = (tmp_path / "src" / "summarise.ts").read_bytes()
+
+    # Every newline is still a CRLF. Counting is the assertion that catches translation: a
+    # single LF slipping in means the round trip rewrote a line, and a whole-file rewrite would
+    # make the diff claim every line changed.
+    assert after.count(b"\n") == after.count(b"\r\n")
+    assert b"temperature: 0.7" not in after
+    # The nested one is not this call's argument and legitimately survives, so the assertion
+    # above names the pair rather than the word.
+    assert b"metadata: { temperature: 'unrelated' }" in after

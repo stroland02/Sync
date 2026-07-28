@@ -69,12 +69,19 @@ class _ParameterRemediator:
             return self._patch("", change, site)
 
         try:
-            original = target.read_text(encoding="utf-8")
+            # Bytes, decoded here rather than `read_text`, so no newline translation happens in
+            # either direction: `read_text` folds CRLF to LF and `write_text` expands LF to
+            # `os.linesep`, so on Windows a round trip rewrites every line and the diff claims
+            # the whole file changed.
+            original = target.read_bytes().decode("utf-8")
         except (OSError, UnicodeDecodeError):
             return self._patch("", change, site)
 
         updated = self._edit(original, change, site, language)
         if updated == original:
+            # Nothing to do, and nothing is written. Rewriting an identical file still moves
+            # its mtime, and a tool that touches files it decided not to edit is one nobody
+            # trusts near a working tree.
             return self._patch("", change, site)
 
         diff = "".join(
@@ -85,6 +92,11 @@ class _ParameterRemediator:
                 tofile=f"b/{site.path}",
             )
         )
+        # The edit has to land in the clone, not only in the rendered diff. Nothing downstream
+        # applies `patch.diff`: `static_verify` typechecks the working tree and `push_branch`
+        # stages it with `git add -u`, so a diff alone pushes an empty commit having reported
+        # success. Found in `literal_swap` by another worker; these two had it identically.
+        target.write_bytes(updated.encode("utf-8"))
         return self._patch(diff, change, site)
 
     def _edit(self, source: str, change: VendorChange, site: CallSite, language: str) -> str:
