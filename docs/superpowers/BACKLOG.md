@@ -12,40 +12,29 @@ item that cannot say what evidence closes it is not ready to dispatch.
 
 ## Ready
 
-### B5 — The suite is subprocess-bound, and Postgres was never the cause
+### B7 — The M0 acceptance run has not executed since the pipeline changed underneath it
 
-**Measured, and it refutes what both coordinators assumed.** The slowdown is not database
-contention. Numbers from `main` at `9b13cce`, 757 tests, 121s total:
+`tests/test_e2e_stripe.py::test_one_command_produces_one_green_pull_request` is the
+milestone's definition of done and it is `@pytest.mark.e2e`, deselected by default, so
+nothing in CI or in any worker's gates has exercised it. Since it last ran the pipeline
+gained: the tier cascade, the property-omit codemod, a push guard over the discarded-commit
+range, branch deletion on abandonment, checkpoint serialiser registration, the
+dependency-edit guard, staged-new-file support, and dependency-tree discarding. Every one of
+those sits on the acceptance path.
 
-| | tests | time |
-|---|---|---|
-| `test_github_forge.py`, `test_tsc_verify.py`, `test_cli.py` | 121 | **95.5s** |
-| everything else | 636 | 29.6s |
-| `test_graph_store.py` (the Postgres-heaviest file) | 19 | 4.2s |
+Checked cheaply and it is not obviously broken: the test still collects, and the production
+graph compiles with the real `StripeAdapter`, `TypeScriptAdapter`, `TieredRemediator`,
+`GitHubForge` and store, exposing all eight nodes. That establishes the wiring survived. It
+establishes nothing about behaviour.
 
-Three files holding 16% of the tests carry 79% of the wall clock, and every slow test in
-them spawns a real `git` or `tsc` process. Postgres showed 2 connections with 1 active
-while six workers were running; the server is idle. The 77s-to-122s growth tracks tests
-being added — B2 alone added seven bare-remote git tests at roughly 3s each.
+**Run it with `-n0`.** `addopts` now carries `-n auto`, which applies to the e2e test too.
 
-So this is not a regression to fix, it is a cost to decide about. `pytest-xdist` is not
-installed and the machine has 12 cores; subprocess-bound tests parallelise almost
-perfectly, so `-n auto` is the obvious lever and nobody has measured it.
+**This one is not a worker's to run unattended.** It opens a pull request on a real GitHub
+repository and spends `xhigh` model time on the patch agent. It needs a human to decide
+when, which is why it is recorded here rather than dispatched.
 
-Unrelated but found while measuring: 24 `sync*` databases exist on the server. I first
-recorded this as a silent leak in `conftest`. **That was wrong** — 21 of them are the
-per-worker databases our own briefs hand out (`sync_w1`…`sync_w19`, `sync_b2`, `sync_b4`),
-and `pytest_configure` returns early whenever `SYNC_DSN` is set, so it never creates or
-drops those by design. Only three are `sync_test_<pid>` databases from runs killed before
-`pytest_unconfigure`, and `conftest` already drops-before-create on pid reuse, so those are
-self-healing and bounded by the pid space. There is no bug here. What there is: nobody
-drops a worker's database when its task finishes.
-
-**Closes when:** someone measures `-n auto` against the current suite and either adopts it
-with the number stated, or records why it does not work here (the bare-remote and clone
-fixtures may not be parallel-safe — that is the thing to check, not assume). The worker
-databases are housekeeping rather than a fix — a finished task's database can be dropped,
-and the only care needed is not dropping one a live worker is still pointed at.
+**Closes when:** one `sync run` produces a CI-green pull request again, or the failure is
+recorded with which change broke it.
 
 ## In flight
 
