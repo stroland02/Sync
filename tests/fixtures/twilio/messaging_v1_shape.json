@@ -1,0 +1,682 @@
+{
+ "openapi": "3.0.1",
+ "info": {
+  "title": "Twilio - Messaging"
+ },
+ "paths": {
+  "/v1/Services/{ServiceSid}/AlphaSenders": {
+   "x-twilio": {
+    "defaultOutputProperties": [
+     "sid",
+     "alpha_sender"
+    ],
+    "parent": "/Services/{Sid}",
+    "pathType": "list"
+   },
+   "post": {
+    "operationId": "CreateAlphaSender"
+   },
+   "get": {
+    "operationId": "ListAlphaSender"
+   }
+  },
+  "/v1/Services/{ServiceSid}/AlphaSenders/{Sid}": {
+   "x-twilio": {
+    "defaultOutputProperties": [
+     "sid",
+     "alpha_sender"
+    ],
+    "parent": "/Services/{Sid}",
+    "pathType": "instance"
+   },
+   "get": {
+    "operationId": "FetchAlphaSender"
+   },
+   "delete": {
+    "operationId": "DeleteAlphaSender"
+   }
+  },
+  "/v1/a2p/BrandRegistrations/{BrandRegistrationSid}/SmsOtp": {
+   "x-twilio": {
+    "defaultOutputProperties": [
+     "account_sid",
+     "brand_registration_sid"
+    ],
+    "parent": "/a2p/BrandRegistrations/{Sid}",
+    "mountName": "brand_registration_otps",
+    "pathType": "list"
+   },
+   "post": {
+    "operationId": "CreateBrandRegistrationOtp"
+   }
+  },
+  "/v1/a2p/BrandRegistrations/{Sid}": {
+   "x-twilio": {
+    "defaultOutputProperties": [
+     "sid",
+     "date_created"
+    ],
+    "dependentProperties": {
+     "brand_vettings": {
+      "mapping": {
+       "brand_sid": "sid"
+      },
+      "resource_url": "/v1/a2p/BrandRegistrations/{brand_sid}/Vettings"
+     },
+     "brand_registration_otps": {
+      "mapping": {
+       "brand_registration_sid": "sid"
+      },
+      "resource_url": "/v1/a2p/BrandRegistrations/{brand_registration_sid}/SmsOtp"
+     }
+    },
+    "pathType": "instance"
+   },
+   "get": {
+    "operationId": "FetchBrandRegistrations"
+   },
+   "post": {
+    "operationId": "UpdateBrandRegistrations"
+   }
+  },
+  "/v1/a2p/BrandRegistrations": {
+   "x-twilio": {
+    "defaultOutputProperties": [
+     "sid",
+     "date_created"
+    ],
+    "dependentProperties": {
+     "brand_vettings": {
+      "mapping": {
+       "brand_sid": "sid"
+      },
+      "resource_url": "/v1/a2p/BrandRegistrations/{brand_sid}/Vettings"
+     },
+     "brand_registration_otps": {
+      "mapping": {
+       "brand_registration_sid": "sid"
+      },
+      "resource_url": "/v1/a2p/BrandRegistrations/{brand_registration_sid}/SmsOtp"
+     }
+    },
+    "pathType": "list"
+   },
+   "get": {
+    "operationId": "ListBrandRegistrations"
+   },
+   "post": {
+    "operationId": "CreateBrandRegistrations"
+   }
+  },
+  "/v1/a2p/BrandRegistrations/{BrandSid}/Vettings": {
+   "x-twilio": {
+    "defaultOutputProperties": [
+     "account_sid",
+     "brand_sid",
+     "brand_vetting_sid",
+     "date_created",
+     "date_updated",
+     "vetting_status",
+     "vetting_class"
+    ],
+    "parent": "/a2p/BrandRegistrations/{Sid}",
+    "mountName": "brand_vettings",
+    "pathType": "list"
+   },
+   "post": {
+    "operationId": "CreateBrandVetting"
+   },
+   "get": {
+    "operationId": "ListBrandVetting"
+   }
+  },
+  "/v1/a2p/BrandRegistrations/{BrandSid}/Vettings/{BrandVettingSid}": {
+   "x-twilio": {
+    "defaultOutputProperties": [
+     "account_sid",
+     "brand_sid",
+     "brand_vetting_sid",
+     "date_created",
+     "date_updated",
+     "vetting_status",
+     "vetting_class"
+    ],
+    "parent": "/a2p/BrandRegistrations/{Sid}",
+    "mountName": "brand_vettings",
+    "pathType": "instance"
+   },
+   "get": {
+    "operationId": "FetchBrandVetting"
+   }
+  },
+  "/v1/a2p/BrandRegistrations/{BrandRegistrationSid}/2fa": {
+   "x-twilio": {
+    "parent": "/a2p/BrandRegistrations/{Sid}",
+    "mountName": "brand_registration_2fa",
+    "pathType": "instance"
+   }
+  },
+  "/v1/Services/{MessagingServiceSid}/ChannelSenders": {
+   "x-twilio": {
+    "defaultOutputProperties": [
+     "sid",
+     "sender",
+     "sender_type"
+    ],
+    "parent": "/Services/{Sid}",
+    "pathType": "list"
+   },
+   "get": {
+    "operationId": "ListChannelSender"
+   },
+   "post": {
+    "operationId": "CreateChannelSender"
+   }
+  },
+  "/v1/Services/{MessagingServiceSid}/ChannelSenders/{Sid}": {
+   "x-twilio": {
+    "defaultOutputProperties": [
+     "sid",
+     "sender",
+     "sender_type"
+    ],
+    "parent": "/Services/{Sid}",
+    "pathType": "instance"
+   },
+   "get": {
+    "operationId": "FetchChannelSender"
+   },
+   "delete": {
+    "operationId": "DeleteChannelSender"
+   }
+  },
+  "/v1/Deactivations": {
+   "x-twilio": {
+    "defaultOutputProperties": [
+     "redirect_to"
+    ],
+    "className": "deactivations",
+    "pathType": "instance"
+   },
+   "get": {
+    "operationId": "FetchDeactivation"
+   }
+  },
+  "/v1/Services/{ServiceSid}/DestinationAlphaSenders": {
+   "x-twilio": {
+    "defaultOutputProperties": [
+     "sid",
+     "alpha_sender"
+    ],
+    "parent": "/Services/{Sid}",
+    "pathType": "list"
+   },
+   "post": {
+    "operationId": "CreateDestinationAlphaSender"
+   },
+   "get": {
+    "operationId": "ListDestinationAlphaSender"
+   }
+  },
+  "/v1/Services/{ServiceSid}/DestinationAlphaSenders/{Sid}": {
+   "x-twilio": {
+    "defaultOutputProperties": [
+     "sid",
+     "alpha_sender"
+    ],
+    "parent": "/Services/{Sid}",
+    "pathType": "instance"
+   },
+   "get": {
+    "operationId": "FetchDestinationAlphaSender"
+   },
+   "delete": {
+    "operationId": "DeleteDestinationAlphaSender"
+   }
+  },
+  "/v1/LinkShortening/Domains/{DomainSid}/Certificate": {
+   "x-twilio": {
+    "defaultOutputProperties": [
+     "certificate_sid",
+     "domain_name",
+     "domain_sid",
+     "date_expires",
+     "date_created",
+     "date_updated",
+     "url"
+    ],
+    "mountName": "domain_certs",
+    "className": "domain_certs",
+    "pathType": "instance"
+   },
+   "post": {
+    "operationId": "UpdateDomainCertV4"
+   },
+   "get": {
+    "operationId": "FetchDomainCertV4"
+   },
+   "delete": {
+    "operationId": "DeleteDomainCertV4"
+   }
+  },
+  "/v1/LinkShortening/Domains/{DomainSid}/Config": {
+   "x-twilio": {
+    "defaultOutputProperties": [
+     "config_sid",
+     "fallback_url",
+     "callback_url",
+     "continue_on_failure",
+     "date_created",
+     "date_updated",
+     "url",
+     "disable_https"
+    ],
+    "mountName": "domain_config",
+    "pathType": "instance"
+   },
+   "post": {
+    "operationId": "UpdateDomainConfig"
+   },
+   "get": {
+    "operationId": "FetchDomainConfig"
+   }
+  },
+  "/v1/LinkShortening/MessagingService/{MessagingServiceSid}/DomainConfig": {
+   "x-twilio": {
+    "defaultOutputProperties": [
+     "domain_sid",
+     "config_sid",
+     "fallback_url",
+     "callback_url",
+     "continue_on_failure",
+     "date_created",
+     "date_updated",
+     "url",
+     "messaging_service_sid"
+    ],
+    "mountName": "domain_config_messaging_service",
+    "pathType": "instance"
+   },
+   "get": {
+    "operationId": "FetchDomainConfigMessagingService"
+   }
+  },
+  "/v1/LinkShortening/Domains/{DomainSid}/ValidateDns": {
+   "x-twilio": {
+    "defaultOutputProperties": [
+     "is_valid",
+     "reason",
+     "url"
+    ],
+    "mountName": "domain_validate_dns",
+    "pathType": "instance"
+   },
+   "get": {
+    "operationId": "FetchDomainDnsValidation"
+   }
+  },
+  "/v1/Services/PreregisteredUsa2p": {
+   "x-twilio": {
+    "defaultOutputProperties": [
+     "campaign_id",
+     "messaging_service_sid"
+    ],
+    "mountName": "external_campaign",
+    "pathType": "list"
+   },
+   "post": {
+    "operationId": "CreateExternalCampaign"
+   }
+  },
+  "/v1/LinkShortening/Domains/{DomainSid}/MessagingServices/{MessagingServiceSid}": {
+   "x-twilio": {
+    "defaultOutputProperties": [
+     "messaging_service_sid",
+     "domain_sid",
+     "url"
+    ],
+    "mountName": "linkshortening_messaging_service",
+    "pathType": "instance"
+   },
+   "post": {
+    "operationId": "CreateLinkshorteningMessagingService"
+   },
+   "delete": {
+    "operationId": "DeleteLinkshorteningMessagingService"
+   }
+  },
+  "/v1/LinkShortening/MessagingServices/{MessagingServiceSid}/Domain": {
+   "x-twilio": {
+    "defaultOutputProperties": [
+     "domain_sid",
+     "messaging_service_sid",
+     "url"
+    ],
+    "mountName": "linkshortening_messaging_service_domain_association",
+    "pathType": "instance"
+   },
+   "get": {
+    "operationId": "FetchLinkshorteningMessagingServiceDomainAssociation"
+   }
+  },
+  "/v1/Services/{ServiceSid}/PhoneNumbers": {
+   "x-twilio": {
+    "defaultOutputProperties": [
+     "sid",
+     "phone_number",
+     "country_code"
+    ],
+    "parent": "/Services/{Sid}",
+    "pathType": "list"
+   },
+   "post": {
+    "operationId": "CreatePhoneNumber"
+   },
+   "get": {
+    "operationId": "ListPhoneNumber"
+   }
+  },
+  "/v1/Services/{ServiceSid}/PhoneNumbers/{Sid}": {
+   "x-twilio": {
+    "defaultOutputProperties": [
+     "sid",
+     "phone_number",
+     "country_code"
+    ],
+    "parent": "/Services/{Sid}",
+    "pathType": "instance"
+   },
+   "delete": {
+    "operationId": "DeletePhoneNumber"
+   },
+   "get": {
+    "operationId": "FetchPhoneNumber"
+   }
+  },
+  "/v1/LinkShortening/Domains/{DomainSid}/RequestManagedCert": {
+   "x-twilio": {
+    "defaultOutputProperties": [
+     "certificate_sid",
+     "domain_name",
+     "domain_sid",
+     "date_created",
+     "date_updated",
+     "url",
+     "managed",
+     "requesting"
+    ],
+    "pathType": "instance"
+   },
+   "post": {
+    "operationId": "UpdateRequestManagedCert"
+   }
+  },
+  "/v1/Services": {
+   "x-twilio": {
+    "defaultOutputProperties": [
+     "sid",
+     "friendly_name",
+     "date_created"
+    ],
+    "dependentProperties": {
+     "phone_numbers": {
+      "mapping": {
+       "service_sid": "sid"
+      },
+      "resource_url": "/v1/Services/{service_sid}/PhoneNumbers"
+     },
+     "short_codes": {
+      "mapping": {
+       "service_sid": "sid"
+      },
+      "resource_url": "/v1/Services/{service_sid}/ShortCodes"
+     },
+     "alpha_senders": {
+      "mapping": {
+       "service_sid": "sid"
+      },
+      "resource_url": "/v1/Services/{service_sid}/AlphaSenders"
+     },
+     "messages": {
+      "mapping": {
+       "messaging_service_sid": "sid"
+      },
+      "resource_url": "/v1/Services/{messaging_service_sid}/Messages"
+     },
+     "us_app_to_person": {
+      "mapping": {
+       "messaging_service_sid": "sid"
+      },
+      "resource_url": "/v1/Services/{messaging_service_sid}/Compliance/Usa2p"
+     },
+     "us_app_to_person_usecases": {
+      "mapping": {
+       "messaging_service_sid": "sid"
+      },
+      "resource_url": "/v1/Services/{messaging_service_sid}/Compliance/Usa2p/Usecases"
+     },
+     "channel_senders": {
+      "mapping": {
+       "messaging_service_sid": "sid"
+      },
+      "resource_url": "/v1/Services/{messaging_service_sid}/ChannelSenders"
+     },
+     "destination_alpha_senders": {
+      "mapping": {
+       "service_sid": "sid"
+      },
+      "resource_url": "/v1/Services/{service_sid}/DestinationAlphaSenders"
+     }
+    },
+    "pathType": "list"
+   },
+   "post": {
+    "operationId": "CreateService"
+   },
+   "get": {
+    "operationId": "ListService"
+   }
+  },
+  "/v1/Services/{Sid}": {
+   "x-twilio": {
+    "defaultOutputProperties": [
+     "sid",
+     "friendly_name",
+     "date_created"
+    ],
+    "dependentProperties": {
+     "phone_numbers": {
+      "mapping": {
+       "service_sid": "sid"
+      },
+      "resource_url": "/v1/Services/{service_sid}/PhoneNumbers"
+     },
+     "short_codes": {
+      "mapping": {
+       "service_sid": "sid"
+      },
+      "resource_url": "/v1/Services/{service_sid}/ShortCodes"
+     },
+     "alpha_senders": {
+      "mapping": {
+       "service_sid": "sid"
+      },
+      "resource_url": "/v1/Services/{service_sid}/AlphaSenders"
+     },
+     "messages": {
+      "mapping": {
+       "messaging_service_sid": "sid"
+      },
+      "resource_url": "/v1/Services/{messaging_service_sid}/Messages"
+     },
+     "us_app_to_person": {
+      "mapping": {
+       "messaging_service_sid": "sid"
+      },
+      "resource_url": "/v1/Services/{messaging_service_sid}/Compliance/Usa2p"
+     },
+     "us_app_to_person_usecases": {
+      "mapping": {
+       "messaging_service_sid": "sid"
+      },
+      "resource_url": "/v1/Services/{messaging_service_sid}/Compliance/Usa2p/Usecases"
+     },
+     "channel_senders": {
+      "mapping": {
+       "messaging_service_sid": "sid"
+      },
+      "resource_url": "/v1/Services/{messaging_service_sid}/ChannelSenders"
+     },
+     "destination_alpha_senders": {
+      "mapping": {
+       "service_sid": "sid"
+      },
+      "resource_url": "/v1/Services/{service_sid}/DestinationAlphaSenders"
+     }
+    },
+    "pathType": "instance"
+   },
+   "post": {
+    "operationId": "UpdateService"
+   },
+   "get": {
+    "operationId": "FetchService"
+   },
+   "delete": {
+    "operationId": "DeleteService"
+   }
+  },
+  "/v1/Services/{ServiceSid}/ShortCodes": {
+   "x-twilio": {
+    "defaultOutputProperties": [
+     "sid",
+     "short_code",
+     "country_code"
+    ],
+    "parent": "/Services/{Sid}",
+    "pathType": "list"
+   },
+   "post": {
+    "operationId": "CreateShortCode"
+   },
+   "get": {
+    "operationId": "ListShortCode"
+   }
+  },
+  "/v1/Services/{ServiceSid}/ShortCodes/{Sid}": {
+   "x-twilio": {
+    "defaultOutputProperties": [
+     "sid",
+     "short_code",
+     "country_code"
+    ],
+    "parent": "/Services/{Sid}",
+    "pathType": "instance"
+   },
+   "delete": {
+    "operationId": "DeleteShortCode"
+   },
+   "get": {
+    "operationId": "FetchShortCode"
+   }
+  },
+  "/v1/Tollfree/Verifications/{Sid}": {
+   "x-twilio": {
+    "defaultOutputProperties": [
+     "sid",
+     "date_created"
+    ],
+    "mountName": "tollfree_verifications",
+    "pathType": "instance"
+   },
+   "get": {
+    "operationId": "FetchTollfreeVerification"
+   },
+   "post": {
+    "operationId": "UpdateTollfreeVerification"
+   },
+   "delete": {
+    "operationId": "DeleteTollfreeVerification"
+   }
+  },
+  "/v1/Tollfree/Verifications": {
+   "x-twilio": {
+    "defaultOutputProperties": [
+     "sid",
+     "date_created"
+    ],
+    "mountName": "tollfree_verifications",
+    "pathType": "list"
+   },
+   "get": {
+    "operationId": "ListTollfreeVerification"
+   },
+   "post": {
+    "operationId": "CreateTollfreeVerification"
+   }
+  },
+  "/v1/Services/{MessagingServiceSid}/Compliance/Usa2p": {
+   "x-twilio": {
+    "defaultOutputProperties": [
+     "brand_registration_sid",
+     "campaign_status",
+     "date_created"
+    ],
+    "parent": "/Services/{Sid}",
+    "mountName": "us_app_to_person",
+    "pathType": "list"
+   },
+   "post": {
+    "operationId": "CreateUsAppToPerson"
+   },
+   "get": {
+    "operationId": "ListUsAppToPerson"
+   }
+  },
+  "/v1/Services/{MessagingServiceSid}/Compliance/Usa2p/{Sid}": {
+   "x-twilio": {
+    "defaultOutputProperties": [
+     "brand_registration_sid",
+     "campaign_status",
+     "date_created"
+    ],
+    "parent": "/Services/{Sid}",
+    "mountName": "us_app_to_person",
+    "pathType": "instance"
+   },
+   "delete": {
+    "operationId": "DeleteUsAppToPerson"
+   },
+   "get": {
+    "operationId": "FetchUsAppToPerson"
+   },
+   "post": {
+    "operationId": "UpdateUsAppToPerson"
+   }
+  },
+  "/v1/Services/{MessagingServiceSid}/Compliance/Usa2p/Usecases": {
+   "x-twilio": {
+    "defaultOutputProperties": [
+     "us_app_to_person_usecases"
+    ],
+    "parent": "/Services/{Sid}",
+    "mountName": "us_app_to_person_usecases",
+    "pathType": "list"
+   },
+   "get": {
+    "operationId": "FetchUsAppToPersonUsecase"
+   }
+  },
+  "/v1/Services/Usecases": {
+   "x-twilio": {
+    "defaultOutputProperties": [
+     "usecases"
+    ],
+    "pathType": "list"
+   },
+   "get": {
+    "operationId": "FetchUsecase"
+   }
+  }
+ }
+}

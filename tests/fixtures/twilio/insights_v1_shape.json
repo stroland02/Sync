@@ -1,0 +1,282 @@
+{
+ "openapi": "3.0.1",
+ "info": {
+  "title": "Twilio - Insights"
+ },
+ "paths": {
+  "/v1/Voice/Settings": {
+   "x-twilio": {
+    "defaultOutputProperties": [
+     "advanced_features",
+     "voice_trace"
+    ],
+    "pathType": "instance"
+   },
+   "get": {
+    "operationId": "FetchAccountSettings"
+   },
+   "post": {
+    "operationId": "UpdateAccountSettings"
+   }
+  },
+  "/v1/Voice/{CallSid}/Annotation": {
+   "x-twilio": {
+    "defaultOutputProperties": [
+     "call_sid",
+     "account_sid"
+    ],
+    "parent": "/Voice/{Sid}",
+    "pathType": "instance"
+   },
+   "post": {
+    "operationId": "UpdateAnnotation"
+   },
+   "get": {
+    "operationId": "FetchAnnotation"
+   }
+  },
+  "/v1/Voice/{Sid}": {
+   "x-twilio": {
+    "defaultOutputProperties": [],
+    "dependentProperties": {
+     "events": {
+      "mapping": {
+       "call_sid": "sid"
+      },
+      "resource_url": "/v1/Voice/{call_sid}/Events"
+     },
+     "metrics": {
+      "mapping": {
+       "call_sid": "sid"
+      },
+      "resource_url": "/v1/Voice/{call_sid}/Metrics"
+     },
+     "summary": {
+      "mapping": {
+       "call_sid": "sid"
+      },
+      "resource_url": "/v1/Voice/{call_sid}/Summary"
+     },
+     "annotation": {
+      "mapping": {
+       "call_sid": "sid"
+      },
+      "resource_url": "/v1/Voice/{call_sid}/Annotation"
+     }
+    },
+    "mountName": "calls",
+    "pathType": "instance"
+   },
+   "get": {
+    "operationId": "FetchCall"
+   }
+  },
+  "/v1/Voice/Summaries": {
+   "x-twilio": {
+    "defaultOutputProperties": [
+     "account_sid",
+     "call_sid",
+     "create_time",
+     "start_time",
+     "end_time",
+     "duration",
+     "connect_duration",
+     "call_type",
+     "call_state"
+    ],
+    "mountName": "call_summaries",
+    "className": "call_summaries",
+    "pathType": "list"
+   },
+   "get": {
+    "operationId": "ListCallSummaries"
+   }
+  },
+  "/v1/Conferences/{ConferenceSid}": {
+   "x-twilio": {
+    "defaultOutputProperties": [
+     "conference_sid",
+     "account_sid"
+    ],
+    "dependentProperties": {
+     "conference_participants": {
+      "mapping": {
+       "conference_sid": "conference_sid"
+      },
+      "resource_url": "/v1/Conferences/{conference_sid}/Participants"
+     }
+    },
+    "pathType": "instance"
+   },
+   "get": {
+    "operationId": "FetchConference"
+   }
+  },
+  "/v1/Conferences": {
+   "x-twilio": {
+    "defaultOutputProperties": [
+     "conference_sid",
+     "account_sid"
+    ],
+    "dependentProperties": {
+     "conference_participants": {
+      "mapping": {
+       "conference_sid": "conference_sid"
+      },
+      "resource_url": "/v1/Conferences/{conference_sid}/Participants"
+     }
+    },
+    "pathType": "list"
+   },
+   "get": {
+    "operationId": "ListConference"
+   }
+  },
+  "/v1/Conferences/{ConferenceSid}/Participants/{ParticipantSid}": {
+   "x-twilio": {
+    "defaultOutputProperties": [
+     "participant_sid",
+     "conference_sid",
+     "call_sid",
+     "account_sid"
+    ],
+    "parent": "/Conferences/{ConferenceSid}",
+    "mountName": "conference_participants",
+    "pathType": "instance"
+   },
+   "get": {
+    "operationId": "FetchConferenceParticipant"
+   }
+  },
+  "/v1/Conferences/{ConferenceSid}/Participants": {
+   "x-twilio": {
+    "defaultOutputProperties": [
+     "participant_sid",
+     "conference_sid",
+     "call_sid",
+     "account_sid"
+    ],
+    "parent": "/Conferences/{ConferenceSid}",
+    "mountName": "conference_participants",
+    "pathType": "list"
+   },
+   "get": {
+    "operationId": "ListConferenceParticipant"
+   }
+  },
+  "/v1/Voice/{CallSid}/Events": {
+   "x-twilio": {
+    "defaultOutputProperties": [
+     "timestamp",
+     "call_sid",
+     "account_sid",
+     "edge",
+     "name"
+    ],
+    "parent": "/Voice/{Sid}",
+    "pathType": "list"
+   },
+   "get": {
+    "operationId": "ListEvent"
+   }
+  },
+  "/v1/Voice/{CallSid}/Metrics": {
+   "x-twilio": {
+    "defaultOutputProperties": [
+     "timestamp",
+     "call_sid",
+     "account_sid",
+     "edge",
+     "direction"
+    ],
+    "parent": "/Voice/{Sid}",
+    "pathType": "list"
+   },
+   "get": {
+    "operationId": "ListMetric"
+   }
+  },
+  "/v1/Voice/{CallSid}/Summary": {
+   "x-twilio": {
+    "defaultOutputProperties": [
+     "call_type",
+     "call_state",
+     "processing_state",
+     "duration"
+    ],
+    "parent": "/Voice/{Sid}",
+    "className": "call_summary",
+    "pathType": "instance"
+   },
+   "get": {
+    "operationId": "FetchSummary"
+   }
+  },
+  "/v1/Video/Rooms/{RoomSid}/Participants/{ParticipantSid}": {
+   "x-twilio": {
+    "defaultOutputProperties": [
+     "participant_sid"
+    ],
+    "parent": "/Video/Rooms/{RoomSid}",
+    "pathType": "instance"
+   },
+   "get": {
+    "operationId": "FetchVideoParticipantSummary"
+   }
+  },
+  "/v1/Video/Rooms/{RoomSid}/Participants": {
+   "x-twilio": {
+    "defaultOutputProperties": [
+     "participant_sid"
+    ],
+    "parent": "/Video/Rooms/{RoomSid}",
+    "pathType": "list"
+   },
+   "get": {
+    "operationId": "ListVideoParticipantSummary"
+   }
+  },
+  "/v1/Video/Rooms/{RoomSid}": {
+   "x-twilio": {
+    "defaultOutputProperties": [
+     "room_sid",
+     "create_time"
+    ],
+    "dependentProperties": {
+     "participants": {
+      "mapping": {
+       "room_sid": "room_sid"
+      },
+      "resource_url": "/v1/Video/Rooms/{room_sid}/Participants"
+     }
+    },
+    "pathType": "instance"
+   },
+   "get": {
+    "operationId": "FetchVideoRoomSummary"
+   }
+  },
+  "/v1/Video/Rooms": {
+   "x-twilio": {
+    "defaultOutputProperties": [
+     "room_sid",
+     "create_time"
+    ],
+    "dependentProperties": {
+     "participants": {
+      "mapping": {
+       "room_sid": "room_sid"
+      },
+      "resource_url": "/v1/Video/Rooms/{room_sid}/Participants"
+     }
+    },
+    "pathType": "list"
+   },
+   "get": {
+    "operationId": "ListVideoRoomSummary"
+   }
+  },
+  "/v1/InsightsDomains/Flex/Reports/Metadata": {},
+  "/v1/InsightsDomains/Flex/Reports/Query": {}
+ }
+}

@@ -1,0 +1,26 @@
+{
+  "note": "One binder guessing and one binder right, in the same run. The static rung emits five findings of which one is genuine (precision 1/5) and misses three of the four call sites it should have reached (recall 1/4); the observed rung emits three findings, all genuine, and misses nothing. The aggregates -- precision 4/8, recall 4/7 -- sit between the two and name neither, which is the whole argument for reporting the split.",
+  "findings": [
+    {"call_site_id": "cs1", "vendor_change_id": "vc1", "binding_rung": "static"},
+    {"call_site_id": "cs2", "vendor_change_id": "vc1", "binding_rung": "static"},
+    {"call_site_id": "cs3", "vendor_change_id": "vc1", "binding_rung": "static"},
+    {"call_site_id": "cs4", "vendor_change_id": "vc1", "binding_rung": "static"},
+    {"call_site_id": "cs11", "vendor_change_id": "vc1", "binding_rung": "static"},
+    {"call_site_id": "cs5", "vendor_change_id": "vc1", "binding_rung": "observed"},
+    {"call_site_id": "cs6", "vendor_change_id": "vc1", "binding_rung": "observed"},
+    {"call_site_id": "cs7", "vendor_change_id": "vc1", "binding_rung": "observed"}
+  ],
+  "labels": [
+    {"call_site_id": "cs1", "vendor_change_id": "vc1", "affected": true, "rung": "static"},
+    {"call_site_id": "cs2", "vendor_change_id": "vc1", "affected": false},
+    {"call_site_id": "cs3", "vendor_change_id": "vc1", "affected": false},
+    {"call_site_id": "cs4", "vendor_change_id": "vc1", "affected": false},
+    {"call_site_id": "cs11", "vendor_change_id": "vc1", "affected": false},
+    {"call_site_id": "cs5", "vendor_change_id": "vc1", "affected": true, "rung": "observed"},
+    {"call_site_id": "cs6", "vendor_change_id": "vc1", "affected": true, "rung": "observed"},
+    {"call_site_id": "cs7", "vendor_change_id": "vc1", "affected": true, "rung": "observed"},
+    {"call_site_id": "cs8", "vendor_change_id": "vc1", "affected": true, "rung": "static"},
+    {"call_site_id": "cs9", "vendor_change_id": "vc1", "affected": true, "rung": "static"},
+    {"call_site_id": "cs10", "vendor_change_id": "vc1", "affected": true, "rung": "static"}
+  ]
+}
