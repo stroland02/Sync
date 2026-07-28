@@ -1,0 +1,84 @@
+{
+  "data": [
+    {
+      "id": "AQAAAYyLmVvBqNKlEwAAAABBWXlMbVZ2QkFBQkJXWGxNYlZaMlFn",
+      "type": "log",
+      "attributes": {
+        "status": "error",
+        "service": "billing-api",
+        "host": "web-01.prod",
+        "timestamp": "2026-07-20T09:15:30.000Z",
+        "tags": [
+          "env:prod",
+          "service:billing-api",
+          "version:2026.07.19"
+        ],
+        "message": "stripe charge declined",
+        "attributes": {
+          "http": {
+            "method": "POST",
+            "url": "https://api.stripe.com/v1/charges",
+            "status_code": 402,
+            "response": {
+              "body": {
+                "object": "charge",
+                "id": "ch_3NpqR2eZvKYlo2C41gK3TQzr",
+                "amount": 4999,
+                "currency": "usd",
+                "status": "requires_action",
+                "paid": false,
+                "description": "Invoice 2026-07 for Analytical Engine parts",
+                "receipt_email": "ada@example.com",
+                "failure_code": null,
+                "customer": {
+                  "id": "cus_NffrFeUfNV2Hib",
+                  "name": "Ada Lovelace",
+                  "email": "ada@example.com",
+                  "balance": 0
+                },
+                "payment_method_details": {
+                  "card": {
+                    "brand": "visa",
+                    "last4": "4242",
+                    "exp_year": 2031,
+                    "network_token": "tok_1NpqR2eZvKYlo2CsecretXYZ"
+                  }
+                },
+                "refunds": {
+                  "object": "list",
+                  "has_more": false,
+                  "data": [
+                    {
+                      "id": "re_3NpqR2eZvKYlo2C41",
+                      "amount": 1000,
+                      "status": "succeeded",
+                      "reason": "requested_by_customer"
+                    },
+                    {
+                      "id": "re_3NpqR2eZvKYlo2C42",
+                      "amount": 3999,
+                      "status": "pending",
+                      "reason": null
+                    }
+                  ]
+                },
+                "metadata": {}
+              }
+            }
+          }
+        }
+      }
+    }
+  ],
+  "links": {
+    "next": "https://api.datadoghq.com/api/v2/logs/events/search?filter%5Bquery%5D=service%3Abilling-api&page%5Bcursor%5D=eyJzdGFydEF0IjoiQVFBQUFYeUxtVnZC"
+  },
+  "meta": {
+    "elapsed": 132,
+    "request_id": "MWlFUjVaWGZTTTZPYWdKZHZaSFhZdw",
+    "status": "done",
+    "page": {
+      "after": "eyJzdGFydEF0IjoiQVFBQUFYeUxtVnZC"
+    }
+  }
+}
