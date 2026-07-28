@@ -6,7 +6,12 @@ from typing import Literal, TypedDict
 
 from sync.core import CallSite, Evidence, Finding, Patch, RepoRef, VendorChange
 
-Outcome = Literal["running", "opened", "abandoned"]
+# `reported` is not a kind of abandonment and the two must stay apart. Abandonment means
+# Sync tried and could not finish; `reported` means the decision table found there was
+# correctly nothing to try. `abandon_reason` is where routing learns which change kinds are
+# not mechanically safe, and "this kind never needed a patch" written there would corrupt
+# exactly that signal.
+Outcome = Literal["running", "opened", "abandoned", "reported"]
 
 MAX_STATIC_ATTEMPTS = 3
 MAX_CI_ATTEMPTS = 2
@@ -46,6 +51,25 @@ class RunState(TypedDict, total=False):
     # once. `patch` is deliberately not among them -- patch generation can
     # succeed on a second attempt, so it retries rather than setting this.
     fatal: bool
+    # What the decision table assigned, and the row that assigned it. Written once, by
+    # `locate`, from the only two inputs the table reads -- so the branch out of `prepare`
+    # reads a value a node set deliberately rather than recomputing the route, which is the
+    # discipline `route_after_static` already models with `verify_ok`.
+    #
+    # `None` is not a tier. It means the table had no jurisdiction: no catalogue was
+    # supplied, or the change's kind is not an oasdiff rule id. A deprecation's kind is
+    # `deprecation/model-retired`, which no catalogue carries, and treating that as tier -1
+    # would switch off the one signal that costs no tokens.
+    #
+    # These are also the whole of what a tier -1 outcome leaves behind. `migration_outcome`
+    # cannot hold one: `strategy` is `PatchStrategy`, a two-value Literal, and `NOT NULL`,
+    # so no value expresses "no patch was warranted" -- see the report node. Until that is
+    # widened, reading the routing decision out of a finished run means reading it here.
+    tier: int | None
+    routing_row: str | None
+    # One line for an operator on a run that produced no pull request and was not a
+    # failure. Deliberately not `diagnostics`: that one becomes `abandon_reason`.
+    report_reason: str
     static_attempts: int
     ci_attempts: int
     # Corpus bookkeeping, at the grain of one `migration_outcome` row per attempt.

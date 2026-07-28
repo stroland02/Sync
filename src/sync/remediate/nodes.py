@@ -8,9 +8,11 @@ from __future__ import annotations
 
 from typing import Protocol, runtime_checkable
 
-from sync.core import Evidence, Patch, RepoRef
+from sync.core import CallSite, Evidence, Patch, RepoRef, VendorChange
 from sync.remediate import corpus
 from sync.remediate.state import MAX_CI_ATTEMPTS, MAX_STATIC_ATTEMPTS, RunState
+from sync.remediate.tiered import routing_facts
+from sync.route.matrix import NO_PATCH, route
 
 
 @runtime_checkable
@@ -61,7 +63,35 @@ def _ci_feedback(url: str, branch: str, patch: Patch | None) -> str:
     ])
 
 
-def make_locate(store):
+def _decide_tier(
+    change: VendorChange, site: CallSite, catalogue
+) -> tuple[int | None, str | None]:
+    """The tier the decision table assigns, and the row that assigned it.
+
+    This is the one place the route is determined and `RunState` is the one place it is
+    stored, so the branch out of `prepare` reads a value a node set deliberately. It is
+    decided here, at `locate`, because the change and the call site are the table's only
+    two inputs and this is where both are established.
+
+    `TieredRemediator` asks the table again inside `propose`, and the two cannot disagree:
+    both call `sync.route.matrix.route()` over `tiered.routing_facts()`, one pure function
+    on one pair of inputs. Only this call happens before the branch, which is what lets a
+    tier -1 finding reach `END` without the patch node running at all.
+
+    `(None, None)` means the table had no jurisdiction, which is not tier -1 and must not be
+    treated as one. A deprecation's kind is `deprecation/model-retired`, which no oasdiff
+    catalogue carries; routing those to the report node would switch off the one signal that
+    costs no tokens.
+    """
+    if not catalogue:
+        return None, None
+    rule = catalogue.get(change.kind)
+    if rule is None:
+        return None, None
+    return route(rule, routing_facts(change, site))
+
+
+def make_locate(store, catalogue=None):
     def locate(state: RunState) -> RunState:
         finding = state["finding"]
         try:
@@ -69,9 +99,12 @@ def make_locate(store):
             change = store.get_vendor_change(finding.vendor_change_id)
         except Exception as exc:
             return {"fatal": True, "diagnostics": _describe(exc)}
+        tier, row = _decide_tier(change, site, catalogue)
         return {
             "site": site,
             "change": change,
+            "tier": tier,
+            "routing_row": row,
             "static_attempts": 0,
             "ci_attempts": 0,
             "diagnostics": "",
@@ -108,10 +141,22 @@ def route_after_prepare(state: RunState) -> str:
     lockfile out of sync with package.json -- not something a different
     patch could fix. Abandon immediately rather than reaching the patch node
     at all.
+
+    Tier -1 reaches the report node from here, and reading the tier `locate` stored is the
+    whole point: catching `NoPatchWarranted` inside `patch` instead would leave `patch` in
+    the executed node sequence, which is the outcome the routing-matrix spec's Verification
+    section forbids, and would make the corpus record a patch attempt where none was
+    warranted.
+
+    An environment fault outranks a routing decision. A run that could not install its
+    dependencies has not established anything about the change, and reporting on it would
+    claim a verdict Sync did not reach.
     """
-    if state.get("prepare_ok", True):
-        return "patch"
-    return "abandon"
+    if not state.get("prepare_ok", True):
+        return "abandon"
+    if state.get("tier") == NO_PATCH:
+        return "report"
+    return "patch"
 
 
 def _attempted_strategy(exc: Exception, remediator) -> str | None:
@@ -328,6 +373,46 @@ def route_after_open_pr(state: RunState) -> str:
     if state.get("fatal"):
         return "abandon"
     return "end"
+
+
+def make_report():
+    """Tier -1: the table found no patch is warranted, so the run says so and stops.
+
+    Three things it deliberately does not do, and each has a reason worth keeping.
+
+    It does not write `abandon_reason`. Abandonment means Sync tried and could not finish;
+    this means there was correctly nothing to try. That field is where routing learns which
+    change kinds are not mechanically safe, and "this kind never needed a patch" written
+    there would corrupt the signal it exists to carry.
+
+    It does not touch the finding's status. `FindingStatus` is
+    `Literal["open", "patched", "abandoned"]` and none of the three is true here -- the
+    finding is real and unremediated, which is what `open` already says. Marking it
+    `abandoned` would be the same corruption in the store rather than in the state.
+
+    It writes no `migration_outcome` row. One row is one repair *attempt*, and tier -1
+    attempted nothing; a row at that grain would be a fabrication, by the same rule that
+    already gives a run abandoned before any attempt no row at all. The consequence is a
+    real gap rather than a tidy omission: the routing decision reaches `RunState` and stops
+    there, so a tier -1 outcome is invisible to any benchmark computed off the corpus.
+    Recording it needs a `strategy` value that does not exist -- `PatchStrategy` is a
+    two-value Literal and the column is `NOT NULL` -- which is a change to `sync.core` and
+    `remediate.corpus`, not to this node.
+    """
+
+    def report(state: RunState) -> RunState:
+        change = state["change"]
+        row = state.get("routing_row") or "unrouted"
+        return {
+            "outcome": "reported",
+            "report_reason": (
+                f"no patch is warranted for {change.kind} on {change.operation_id}: "
+                f"routed to tier {NO_PATCH} by row '{row}'"
+            ),
+            "pr_url": None,
+        }
+
+    return report
 
 
 def make_abandon(store, forge, record=None):

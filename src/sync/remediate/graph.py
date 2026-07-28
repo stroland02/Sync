@@ -15,7 +15,7 @@ from sync.remediate.serde import with_sync_types
 from sync.remediate.state import RunState
 
 
-def build_graph(store, adapter, remediator, forge, checkpointer):
+def build_graph(store, adapter, remediator, forge, checkpointer, catalogue=None):
     # Built from the store this already receives, so no caller learns a new argument and no
     # run can be configured with the corpus recording silently switched off. The three
     # nodes that take it are the three places an attempt ends.
@@ -23,13 +23,17 @@ def build_graph(store, adapter, remediator, forge, checkpointer):
 
     builder = StateGraph(RunState)
 
-    builder.add_node("locate", nodes.make_locate(store))
+    # The catalogue is passed rather than read off the remediator, which keeps it a
+    # private of a module this one does not own. One object serves both: `locate`
+    # decides the tier from it, and the cascade narrows its tiers with the same table.
+    builder.add_node("locate", nodes.make_locate(store, catalogue))
     builder.add_node("prepare", nodes.make_prepare(adapter))
     builder.add_node("patch", nodes.make_patch(remediator, record))
     builder.add_node("static_verify", nodes.make_static_verify(adapter))
     builder.add_node("push_branch", nodes.make_push_branch(forge))
     builder.add_node("await_ci", nodes.make_await_ci(forge))
     builder.add_node("open_pr", nodes.make_open_pr(forge, record))
+    builder.add_node("report", nodes.make_report())
     builder.add_node("abandon", nodes.make_abandon(store, forge, record))
 
     builder.add_edge(START, "locate")
@@ -43,7 +47,7 @@ def build_graph(store, adapter, remediator, forge, checkpointer):
     builder.add_conditional_edges(
         "prepare",
         nodes.route_after_prepare,
-        {"patch": "patch", "abandon": "abandon"},
+        {"patch": "patch", "report": "report", "abandon": "abandon"},
     )
 
     builder.add_conditional_edges(
@@ -76,6 +80,7 @@ def build_graph(store, adapter, remediator, forge, checkpointer):
         {"end": END, "abandon": "abandon"},
     )
 
+    builder.add_edge("report", END)
     builder.add_edge("abandon", END)
 
     # Callers build the saver, so this is the one place every one of them passes

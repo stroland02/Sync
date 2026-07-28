@@ -27,6 +27,7 @@ from sync.remediate.graph import build_graph
 from sync.remediate.literal_swap import LiteralSwapRemediator
 from sync.remediate.property_omit import PropertyOmitRemediator
 from sync.remediate.tiered import TerminalTier, TieredRemediator
+from sync.route.matrix import catalogue_index
 from sync.signals.deprecations import (
     ANTHROPIC,
     OPENAI,
@@ -66,7 +67,20 @@ def _select(findings: list[Finding], limit: int) -> list[Finding]:
     return findings if limit == 0 else findings[:limit]
 
 
-def build_remediator() -> TieredRemediator:
+def load_catalogue() -> dict[str, dict]:
+    """oasdiff's own checker catalogue, keyed by the rule id `VendorChange.kind` holds.
+
+    Read from the pinned binary rather than kept as a copy here, which is what keeps routing
+    honest across an oasdiff upgrade: the rule set grows and a stale local list would route
+    new kinds silently. Loaded once per run and handed to both the cascade and the graph, so
+    there is one table and not two that can drift apart.
+    """
+    from sync.signals.oasdiff import run_oasdiff_checks
+
+    return catalogue_index(run_oasdiff_checks())
+
+
+def build_remediator(catalogue: dict[str, dict] | None = None) -> TieredRemediator:
     """The tier cascade, cheapest first, with the agent last and unconditional.
 
     Pulled out of `run()` for the same reason `_select` is: the ordering is the whole
@@ -81,11 +95,14 @@ def build_remediator() -> TieredRemediator:
     check live and narrow what the pipeline repairs, as a side effect of a change made for
     another reason entirely.
     """
-    return TieredRemediator([
-        LiteralSwapRemediator(),
-        PropertyOmitRemediator(),
-        TerminalTier(AgentRemediator()),
-    ])
+    return TieredRemediator(
+        [
+            LiteralSwapRemediator(),
+            PropertyOmitRemediator(),
+            TerminalTier(AgentRemediator()),
+        ],
+        catalogue=catalogue,
+    )
 
 
 _SCHEME = re.compile(r"^[A-Za-z][A-Za-z0-9+.-]*://")
@@ -537,9 +554,10 @@ def run(args: argparse.Namespace) -> int:
 
         with PostgresSaver.from_conn_string(args.dsn) as checkpointer:
             checkpointer.setup()
+            catalogue = load_catalogue()
             graph = build_graph(
-                store=store, adapter=adapter, remediator=build_remediator(),
-                forge=GitHubForge(), checkpointer=checkpointer,
+                store=store, adapter=adapter, remediator=build_remediator(catalogue),
+                forge=GitHubForge(), checkpointer=checkpointer, catalogue=catalogue,
             )
             for finding in selected:
                 base = f"{finding.id}:{args.run_id or repo.head_sha[:12]}"
@@ -567,7 +585,15 @@ def run(args: argparse.Namespace) -> int:
                     None if resuming else {"finding": finding, "repo": repo},
                     config=config,
                 )
-                print(f"{state['outcome']}: {state.get('pr_url') or state.get('abandon_reason')}")
+                # `report_reason` is listed because a tier -1 run has neither of the other
+                # two by design, and the spec is explicit that these are real findings
+                # worth surfacing -- they are simply not remediation findings.
+                detail = (
+                    state.get("pr_url")
+                    or state.get("abandon_reason")
+                    or state.get("report_reason")
+                )
+                print(f"{state['outcome']}: {detail}")
 
     return 0
 
