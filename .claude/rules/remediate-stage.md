@@ -42,11 +42,15 @@ attempt this row describes. A finding that took three tries writes three rows.
 
 ## Nothing reaches a pull request unverified
 
-Every patch passes `tsc`, then the customer's own CI. Two qualifications currently hold, both
-recorded in `CLAUDE.md`: `tsc` measures the tree a push would carry but keeps the installed
-dependencies inside it, so an edit under `node_modules` is invisible to it; and the patch
-agent executes the customer's *toolchain* even though it never runs their application. Say the
-qualified version; do not restore the stronger sentence.
+Every patch passes `tsc`, then the customer's own CI. One qualification currently holds,
+recorded in `CLAUDE.md`: the patch agent executes the customer's *toolchain* even though it
+never runs their application. Say the qualified version; do not restore the stronger sentence.
+
+`tsc` keeps the installed dependencies inside the tree it measures and so cannot see an edit
+under `node_modules`. That is answered outside the compiler: `sync.index.dependency_edits`
+compares mtimes against the install and raises before `static_verify` compiles anything, which
+`route_after_static` reads as `static_fatal` and abandons on — the edit stays in the clone, so
+every remaining attempt would meet the same doctored declaration.
 
 ## Route on evidence, not on emptiness
 

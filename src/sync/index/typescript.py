@@ -16,6 +16,7 @@ from __future__ import annotations
 import hashlib
 import json
 import subprocess
+import time
 from pathlib import Path
 from typing import Iterable
 
@@ -65,6 +66,10 @@ class TypeScriptAdapter:
         # only at `await_ci` or `open_pr`, and anything interrupted earlier
         # starts from `locate`, which reaches `prepare` again.
         self._baselines: dict[Path, list] = {}
+        # When each clone's dependencies were last installed. Everything under
+        # `node_modules` was written by that install, so a later mtime is
+        # something else's work -- see `sync.index.dependency_edits`.
+        self._installed_at: dict[Path, int] = {}
 
     def _declared_dependencies(self, repo: RepoRef) -> dict[str, object]:
         """The SDK versions `package.json` declares, or nothing it can be read from.
@@ -370,6 +375,11 @@ class TypeScriptAdapter:
 
         path = Path(repo.local_path).resolve()
         install_dependencies(path)
+        # Marked unconditionally, and after the install rather than before it:
+        # this node is the last thing to touch the clone before the patch agent
+        # does, so everything under `node_modules` older than this instant is
+        # the install's and everything newer is the agent's.
+        self._installed_at[path] = time.time_ns()
         if path not in self._baselines:
             self._baselines[path] = self._baseline(path)
 
@@ -450,7 +460,22 @@ class TypeScriptAdapter:
         would approve a patch on no evidence, and rejecting everything would
         abandon every finding on a repository that does not typecheck clean —
         which is the population this exists for.
+
+        The dependency check runs before the compiler and raises rather than
+        returning a failed result, which are two decisions and not one.
+
+        Before, because a patch that edited an installed declaration cannot be
+        verified at all: the compiler would be resolving a file no checkout of
+        the branch contains, so the tens of seconds it would spend produce a
+        verdict about nothing. Raising, because the edit stays in the clone. It
+        cannot be undone without reinstalling, `_reset_clone` runs `git clean`
+        without `-x` and so leaves it, and a fresh patch agent is handed the
+        diagnostics and no pristine copy to restore from. Every remaining
+        attempt would meet the same doctored declaration, so spending them costs
+        two agent runs to reach the same abandonment with a later timestamp --
+        which is exactly what `route_after_static` reads `static_fatal` for.
         """
+        from sync.index.dependency_edits import describe, unshippable_dependency_edits
         from sync.index.deps import DEPENDENCY_DIRS, install_dependencies
         from sync.index.shipped_tree import shipped_tree
         from sync.index.tsc import introduced_diagnostics, parse_diagnostics, run_tsc
@@ -460,7 +485,15 @@ class TypeScriptAdapter:
         if baseline is None:
             raise RuntimeError(f"no typecheck baseline for {path}; prepare did not run")
 
-        install_dependencies(path)
+        # An install here rewrote every file under `node_modules`, so the mark
+        # `prepare` took would read the whole tree as edited.
+        if install_dependencies(path):
+            self._installed_at[path] = time.time_ns()
+
+        edited = unshippable_dependency_edits(path, DEPENDENCY_DIRS, self._installed_at[path])
+        if edited:
+            raise RuntimeError(describe(edited))
+
         with shipped_tree(path, keep=DEPENDENCY_DIRS):
             result = run_tsc(path)
         if result.ok:
