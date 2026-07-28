@@ -9,6 +9,7 @@ from sync.benchmark.binding import (
     RungRecall,
     compute_binding_accuracy,
 )
+from sync.benchmark.report import axis_rows, render_report
 
 __all__ = [
     "Axis",
@@ -19,6 +20,8 @@ __all__ = [
     "EmittedFinding",
     "RungPrecision",
     "RungRecall",
+    "axis_rows",
     "compute_axes",
     "compute_binding_accuracy",
+    "render_report",
 ]

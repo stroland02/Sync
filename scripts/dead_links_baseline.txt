@@ -13,13 +13,6 @@
 #
 # Format: <path from the repository root>:<qualname>
 
-# The benchmark axes compute and are gated by nothing. `2026-07-27-sync-benchmark-gates.md`
-# says so deliberately: recording early is free, and a gate at an invented threshold either
-# fires constantly or never. These leave when tier B is wired into CI.
-src/sync/benchmark/axes.py:compute_axes
-src/sync/benchmark/binding.py:compute_binding_accuracy
-src/sync/benchmark/binding.py:BindingAccuracy.unlabelled_findings
-
 # The merge webhook receiver. It verifies a signature and updates the corpus, and no process
 # mounts it -- there is no HTTP framework here by design. It leaves when something serves it.
 src/sync/forge/webhook.py:record_merge_outcome
@@ -48,9 +41,7 @@ src/sync/signals/deprecations/parameters.py:parameters_to_vendor_changes
 src/sync/signals/generated/manifest.py:parse_manifest
 src/sync/signals/generated/manifest.py:SpecSource.has_cheap_change_trigger
 
-# Remediators and route primitives reachable only from their tests.
-src/sync/remediate/parameters.py:ParameterOmitRemediator
-src/sync/remediate/parameters.py:ParameterRenameRemediator
+# Route primitives reachable only from their tests.
 src/sync/route/matrix.py:matching_rows
 src/sync/route/templates.py:omit_property_at
 

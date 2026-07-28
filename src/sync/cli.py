@@ -14,6 +14,7 @@ from typing import Any, Callable, Iterator, Sequence
 
 from langgraph.checkpoint.postgres import PostgresSaver
 
+from sync.benchmark.report import render_report
 from sync.core import CallSite, Finding, RepoRef, VendorChange
 from sync.detect.efficiency import EfficiencyDetector
 from sync.detect.observed_drift import DeclaredField, ObservedDriftDetector
@@ -27,6 +28,7 @@ from sync.remediate.agent_patch import AgentRemediator
 from sync.remediate.corpus import corpus_salt
 from sync.remediate.graph import build_graph
 from sync.remediate.literal_swap import LiteralSwapRemediator
+from sync.remediate.parameters import ParameterOmitRemediator, ParameterRenameRemediator
 from sync.remediate.property_omit import PropertyOmitRemediator
 from sync.remediate.tiered import TerminalTier, TieredRemediator
 from sync.route.matrix import catalogue_index
@@ -98,10 +100,24 @@ def build_remediator(catalogue: dict[str, dict] | None = None) -> TieredRemediat
     whatever its severity; a cascade that gated the last tier would make that dormant
     check live and narrow what the pipeline repairs, as a side effect of a change made for
     another reason entirely.
+
+    The deprecation signal's three codemods lead, grouped: `LiteralSwapRemediator` repairs a
+    retired model and the two parameter tiers repair a deprecated argument, which is the same
+    vendor page answered in the two shapes vendors publish guidance in. Then the oasdiff
+    codemod, then the agent.
+
+    Position matters in one direction only and absolutely. Each codemod's `can_handle` keys on
+    a different `change.kind`, so no two ever contend and the order among them is grouping
+    rather than precedence -- but `TerminalTier` answers `can_handle` with `True` for
+    everything, so a remediator placed after it is never reached however correct it is. Both
+    parameter tiers were missing from this list entirely, which sent every parameter
+    deprecation to a model call over a change a codemod resolves deterministically.
     """
     return TieredRemediator(
         [
             LiteralSwapRemediator(),
+            ParameterOmitRemediator(),
+            ParameterRenameRemediator(),
             PropertyOmitRemediator(),
             TerminalTier(AgentRemediator()),
         ],
@@ -742,6 +758,28 @@ def ingest(args: argparse.Namespace) -> int:
     return 0
 
 
+def benchmark(args: argparse.Namespace) -> int:
+    """Print the tier B quality axes for whatever the corpus holds.
+
+    `compute_axes` and `compute_binding_accuracy` were finished, tested, and reached from
+    nothing in `src/`, which left the spec's instruction -- recorded, not gated, reviewed by a
+    human -- with no surface for the reviewing to happen on.
+
+    Reading only. Nothing is written, nothing is compared to a threshold, and the exit code says
+    the report was produced rather than whether the numbers were good: a subcommand that exited
+    non-zero on a low merge rate would be the gate the spec forbids, arriving by the back door.
+
+    The corpus holds no rows today, so the honest output is every axis unmeasured over zero
+    samples. `apply_schema` runs first for that reason -- against a database no run has touched,
+    the alternative to an empty report is an error about a missing table, which tells an
+    operator nothing about the pipeline.
+    """
+    store = GraphStore(args.dsn)
+    store.apply_schema()
+    print(render_report(store.migration_outcomes()), end="")
+    return 0
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(prog="sync")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -770,6 +808,12 @@ def main() -> int:
     ingest_parser.add_argument("--cache", default=".cache/specs",
                                help="where a previous `sync run` left symbols.json")
     ingest_parser.set_defaults(func=ingest)
+
+    benchmark_parser = sub.add_parser(
+        "benchmark", help="print the tier B quality axes with their sample sizes"
+    )
+    benchmark_parser.add_argument("--dsn", default=DEFAULT_DSN)
+    benchmark_parser.set_defaults(func=benchmark)
 
     args = parser.parse_args()
     return args.func(args)
