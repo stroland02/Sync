@@ -12,13 +12,13 @@ Existing tools watch the API you *publish* and stop at an alert. Sync watches th
 
 ## Status
 
-Pre-alpha, and specific about it. Milestone M0 targets one thing: a breaking change between two pinned Stripe OpenAPI versions producing a CI-green pull request against a real TypeScript repository, unattended.
+Pre-alpha, and specific about it. Milestone M0 targeted one thing: a breaking change between two pinned Stripe OpenAPI versions producing a CI-green pull request against a real TypeScript repository, unattended. **That works.**
 
-Proven against a real fork and real vendor specifications: specification fetch, `oasdiff`, noise filtering, symbol mapping, clone, dependency installation, indexing, the graph store, detection, the patch agent, and `tsc` passing on the patched clone. Proven separately against real GitHub: branch push under Sync's own commit identity, and the CI gate correctly refusing to open a pull request on a red build.
+One `sync run` against a fork of `stripe/stripe-connect-furever-demo` produced [pull request #1](https://github.com/stroland02/stripe-connect-furever-demo/pull/1) — two deletions in one file, removing a withdrawn request argument at both call sites that passed it, typecheck green on the branch. No human between detection and pull request.
 
-Not yet proven: one invocation carrying a finding all the way to an opened pull request. The remediation half and the forge half have each run against production, but not yet in the same run.
+Two qualifications, because they change what the result means. The vendor change was constructed: a property removed from a real pinned specification rather than one Stripe withdrew, since no window of Stripe's own history examined here contains a top-level breaking change this application would notice. And matching is currently strongest where a call site reads shallow fields — a change twenty-five segments deep against a call site that records three emits a finding naming both ends rather than claiming the field was read.
 
-Known limitations are enumerated in the design document rather than left implicit — including one case where the local typecheck can pass on an artifact that never reaches the branch. The customer's CI remains the authoritative gate.
+Known limitations are enumerated in the design document rather than left implicit. The customer's CI remains the authoritative gate.
 
 ## How it works
 

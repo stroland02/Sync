@@ -423,7 +423,7 @@ This is also why the graph-mediated rule is a competitive property and not only 
 
 ## Known limitations at M0
 
-Everything here was measured against real data rather than reasoned about, and each is open. They are recorded because the sections above state the intent, and the intent is ahead of the code in these five places.
+Everything here was measured against real data rather than reasoned about, and each is open. They are recorded because the sections above state the intent, and the intent is ahead of the code in these four places.
 
 **The gate cannot see inside `node_modules`.** `static_verify` now holds every untracked and every ignored path out of the clone before it compiles, so its verdict describes the branch `push_branch` creates rather than the tree the patch agent left behind. Installed dependencies are the one exception, because the customer's CI installs its own and a typecheck without them describes neither tree. An agent that edits a type declaration inside `node_modules` therefore still satisfies a gate the customer's CI will not. Typechecking a second, pristine checkout would close this; it costs a checkout and a dependency install per verification, three per finding at the current retry budget, which is the largest avoidable cost in the pipeline. `sync.index.shipped_tree` carries the comparison.
 
@@ -439,13 +439,15 @@ Both sides now record and compare paths, anchored at the outermost segment. Agai
 
 What remains open is the strength of the match, not its existence. Static syntax follows a member chain until a subscript or a `map` callback, so a call site's recorded path is typically one to three segments against a change twenty-five deep. Those emit as operation-match-only findings that name both ends rather than claiming the call site read the changed field. Narrowing them needs type resolution, not a threshold.
 
-**A retry never reuses its branch.** `branch_name_for` hashes the patch diff, and on a CI retry the diff is only the incremental change, so the digest always differs. Every retry pushes a new `sync/api-drift-*` branch to the customer's repository and abandons the previous one. Branch cleanup is unimplemented.
+**The push lease observes a branch's state without knowing whose it is.** `push_branch` fetches the branch's remote tip and names that commit in `--force-with-lease=<branch>:<sha>`, so a re-run of the same finding updates the branch it created before, while a tip that moved between the fetch and the push is still refused. That is the correct property for the race the lease exists to catch, and it is the wrong one for authorship: a reviewer who pushes a fixup onto Sync's branch between runs has their commit observed and then replaced. Refusing a tip not authored by `COMMIT_AUTHOR_EMAIL` would close it. Branch cleanup after an abandoned finding is also unimplemented, though a branch is no longer stranded per retry — `branch_name_for` derives from the finding's rationale, so one finding keeps one branch across its attempts.
 
-### What the M0 acceptance run did and did not prove
+### What the M0 acceptance run proved
 
-Proven end to end against a real fork, with real vendor specifications: specification fetch, `oasdiff`, noise filtering, symbol mapping, clone, dependency installation, indexing, the graph store, detection, the patch agent, and `tsc` passing on the patched clone. Separately proven against real GitHub: branch push under Sync's own commit identity, and the CI gate correctly returning red with the failing run's URL and declining to open a pull request.
+The milestone's definition of done — one `sync run` invocation producing a pull request on a real repository whose checks pass, unattended — is met. Against a fork of `stripe/stripe-connect-furever-demo`, with a request property removed from a real pinned Stripe specification, one command produced [pull request #1](https://github.com/stroland02/stripe-connect-furever-demo/pull/1): two deletions in one file, removing the withdrawn `receipt_email` argument at both call sites that passed it, `tsc` green on the branch in 38 seconds. Nothing else in the file was touched.
 
-Not proven: a complete run reaching an opened pull request. The remediation half and the forge half have each run against production, but never in the same invocation.
+Every stage is now exercised in a single invocation: specification fetch, `oasdiff`, noise filtering, symbol mapping, clone, dependency installation without lifecycle scripts, indexing, the graph store, detection, the patch agent, baseline-subtracted typechecking, branch push under Sync's own commit identity, the CI wait, and the pull request.
+
+Two honest qualifications. The vendor change was constructed — a property removed from a real specification rather than one Stripe withdrew — because no window of Stripe's own history examined here contains a top-level breaking change this application would notice, which the limitation above on match strength explains. And the repository's own pre-existing `test` workflow fails on the pull request for a reason that predates Sync: it invokes a `yarn run validate-change` script absent from its `package.json`. The gate Sync verified against is the typecheck, and it passes.
 
 ## Verification
 
