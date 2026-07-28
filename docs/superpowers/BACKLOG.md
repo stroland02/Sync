@@ -70,14 +70,17 @@ the cause. If it turns out not to be contention, that is a more important answer
 ## In flight
 
 - **B2** — `task_0e6eb23d3ad7`, worktree `m1-forge`.
-- **B4** — `task_a656a9f0e8ab`, worktree `m2-symbols`.
-- **B3** — `task_b233d7d7237d`, brief written and task created, awaiting a free worktree. Its brief
+- **B3** — `task_b233d7d7237d`, dispatched to `m2-symbols`. Its brief
   proposes a cheaper closure than the second checkout and explicitly asks the worker to
   argue with that proposal rather than accept it.
 - **B1** — `task_627dab9b3617`, brief written, blocked on B2 (both own `forge/github.py`). Declared as a
   dependency so it cannot be dispatched early.
 
 ## Done
+
+- Register `sync.core` types with LangGraph's checkpoint serialiser. Landed `05c11f5`.
+  The warning is read-side only and nothing fell back to pickle — the brief was wrong about
+  that and the worker corrected it. Future failure returns a raw dict silently.
 
 - Derive the SDK verb from `spec3.sdk.json`'s `x-stableId` rather than the URL shape.
   Landed `b289a9e`. Coverage unmoved at 105 of 414; one symbol corrected.
