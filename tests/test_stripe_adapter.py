@@ -2,10 +2,12 @@ import json
 import subprocess
 from pathlib import Path
 
+import pytest
+
 from sync.core import VendorAdapter
 from sync.signals.stripe import adapter as adapter_module
 from sync.signals.stripe.adapter import StripeAdapter
-from sync.signals.stripe.symbols import build_symbol_map
+from sync.signals.stripe.symbols import SymbolCollision, build_symbol_map
 
 FIXTURES = Path(__file__).parent / "fixtures" / "specs"
 
@@ -47,6 +49,122 @@ def test_instance_delete_maps_to_del():
 
 def test_snake_case_resource_becomes_camel_case_symbol():
     assert "stripe.paymentIntents.create" in build_symbol_map(SPEC)
+
+
+def test_two_operations_deriving_one_symbol_raise_rather_than_overwrite():
+    """A silent overwrite makes the losing operation permanently unreachable.
+
+    No call site can ever resolve to it, so a breaking change against it can
+    never produce a finding -- the failure is invisible at every later stage.
+    Both operation ids appear in the message because the loser is exactly what
+    a plain overwrite destroys.
+    """
+    colliding = {
+        "paths": {
+            "/v1/charges/{charge}": {"get": {"operationId": "GetChargesCharge"}},
+            "/v1/charges/{id}": {"get": {"operationId": "GetChargesId"}},
+        }
+    }
+
+    with pytest.raises(SymbolCollision) as excinfo:
+        build_symbol_map(colliding)
+
+    message = str(excinfo.value)
+    assert "stripe.charges.retrieve" in message
+    assert "GetChargesCharge" in message
+    assert "GetChargesId" in message
+
+
+# Reduced from stripe/openapi at tag v2330: every path key and every operationId
+# kept intact, and of each GET's 200 response schema only the part that separates
+# a list envelope from a single resource. The path set is therefore the real
+# denominator, which is the whole point of pinning coverage against it.
+SHAPE_FIXTURE = FIXTURES / "stripe_v2330_shape.json"
+
+
+def _shape_spec():
+    return json.loads(SHAPE_FIXTURE.read_text(encoding="utf-8"))
+
+
+def test_coverage_names_the_paths_the_derivation_reaches():
+    """Coverage is pinned as a set of named expectations, not as a threshold.
+
+    A threshold can be lowered in a one-line diff and nobody notices. Naming
+    both what must resolve and what must not means a change to the path pattern
+    has to state which way it moved.
+    """
+    spec = _shape_spec()
+    mapping = build_symbol_map(spec)
+    reached = {entry["path"] for entry in mapping.values()}
+
+    assert len(spec["paths"]) == 414
+    assert len(reached) == 105
+
+    assert mapping["stripe.charges.create"]["path"] == "/v1/charges"
+    assert mapping["stripe.charges.list"]["path"] == "/v1/charges"
+    assert mapping["stripe.charges.retrieve"]["path"] == "/v1/charges/{charge}"
+    assert mapping["stripe.charges.update"]["path"] == "/v1/charges/{charge}"
+    assert mapping["stripe.customers.del"]["path"] == "/v1/customers/{customer}"
+    assert mapping["stripe.paymentIntents.create"]["path"] == "/v1/payment_intents"
+
+
+def test_coverage_names_the_paths_the_derivation_cannot_reach():
+    """Three shapes account for the unreached three quarters.
+
+    A call site on any of them produces no symbol, so no finding can be raised
+    against it however breaking the vendor change is.
+    """
+    spec = _shape_spec()
+    reached = {entry["path"] for entry in build_symbol_map(spec).values()}
+
+    for unreachable in (
+        "/v1/customers/{customer}/sources",           # nested sub-resource collection
+        "/v1/accounts/{account}/persons/{person}",    # nested sub-resource instance
+        "/v1/checkout/sessions",                      # namespaced resource
+    ):
+        assert unreachable in spec["paths"]
+        assert unreachable not in reached
+
+
+def test_a_collection_path_returning_one_resource_uses_the_instance_verbs():
+    """`GET /v1/balance` returns a balance, not a page of balances.
+
+    The specification says so itself: its 200 schema is a bare `$ref`, where a
+    collection's is the `data`/`has_more` envelope. A path that addresses one
+    resource takes the instance verbs, so the SDK exposes `.retrieve` and
+    `.update` -- confirmed against stripe-node's generated `Balance.ts` and
+    `BalanceSettings.ts` rather than inferred from the name.
+    """
+    mapping = build_symbol_map(_shape_spec())
+
+    assert mapping["stripe.balance.retrieve"]["path"] == "/v1/balance"
+    assert "stripe.balance.list" not in mapping
+
+    assert mapping["stripe.balanceSettings.retrieve"]["path"] == "/v1/balance_settings"
+    assert mapping["stripe.balanceSettings.update"]["http_method"] == "post"
+    assert "stripe.balanceSettings.create" not in mapping
+
+
+def test_v1_account_still_derives_a_resource_name_the_sdk_does_not_expose():
+    """Known limitation, pinned rather than guessed at.
+
+    The verb is now right -- `/v1/account` returns one account -- but stripe-node
+    binds that operation under the *plural* namespace: `stripe.accounts.retrieve()`
+    called with no id, and `stripe.accounts.retrieveCurrent()`. Nothing in the
+    specification carries the plural, so deriving it would mean inventing a
+    singular-to-plural rule, which is the vendor-specific assumption the design
+    document names as the top risk.
+
+    Two consequences, both live: no call site on `GET /v1/account` resolves, and
+    `stripe.accounts.retrieve` resolves to `/v1/accounts/{account}` alone even
+    though the SDK dispatches it on argument count across both operations. A
+    path-shaped derivation cannot express that; it needs a source for SDK naming.
+    """
+    mapping = build_symbol_map(_shape_spec())
+
+    assert mapping["stripe.account.retrieve"]["path"] == "/v1/account"
+    assert "stripe.accounts.retrieveCurrent" not in mapping
+    assert mapping["stripe.accounts.retrieve"]["path"] == "/v1/accounts/{account}"
 
 
 def test_adapter_satisfies_the_vendor_protocol(tmp_path):
