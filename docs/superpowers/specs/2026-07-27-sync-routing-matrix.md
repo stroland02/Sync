@@ -8,8 +8,9 @@ that routing stays auditable and provably complete as oasdiff's rule set grows.
 
 ## The problem
 
-*(Written when nothing routed. A tier cascade now exists and the decision table below still
-does not drive it — see "What is built" at the end of this document.)*
+*(Written when nothing routed. A tier cascade now exists and the decision table below now
+selects the tier where it has jurisdiction — see "What is built" at the end of this document
+for how narrow that jurisdiction currently is.)*
 
 Today there is no routing. `src/sync/remediate/graph.py` sends every finding to one
 `remediator`, and `patch` calls a full agent loop regardless of how mechanical the change is.
@@ -228,8 +229,8 @@ table.
 
 ## What is built
 
-The problem statement above describes the state before any tiering existed. Two of its three
-parts have since changed, and the third has not.
+The problem statement above describes the state before any tiering existed. All three of its
+parts have since changed, the third only partly.
 
 **A tier cascade runs.** `src/sync/cli.py:69` builds a `TieredRemediator` over
 `LiteralSwapRemediator`, `PropertyOmitRemediator` and `TerminalTier(AgentRemediator())`, and
@@ -241,10 +242,27 @@ the deterministic tiers are tried first and the agent is reached only when they 
 deterministic strategies, built on the rule and span implementations in
 `src/sync/route/templates.py`.
 
-**The decision table below still does not drive the routing.** `sync.route.matrix.route()` is
-imported by nothing outside `src/sync/route/`; the cascade selects a tier by asking each
-remediator's `can_handle` in order, which is a different mechanism reaching a similar answer. The
-consequence is the one the Verification section names last: `migration_outcome.tier` records
-which tier ran, not which decision-table row selected it, so "tier 0 was wrong for this change
-kind" remains archaeology rather than a query. Wiring `route()` into the cascade is the
-outstanding work this document specifies.
+**The decision table drives the routing, and has jurisdiction over nothing in production.**
+`src/sync/remediate/tiered.py` imports `route()` at line 42 and calls it at line 282: the tier
+the table assigns narrows which remediators are eligible, and a tier −1 route raises
+`NoPatchWarranted` so no remediator is consulted at all. Three qualifications bound what that
+is worth today, and each is a separate piece of work.
+
+`route()` keys on a catalogue record from `run_oasdiff_checks()`, which `TieredRemediator` takes
+as a constructor argument. `build_remediator` in `src/sync/cli.py` passes none, so `_catalogue`
+is empty, `_tier_for` returns `None` for every change, and the cascade falls back to asking each
+remediator's `can_handle` in order — exactly the mechanism that preceded the table. Supplying
+the catalogue there is the outstanding work.
+
+Even with a catalogue, rows 3 and 4 cannot fire from the default facts. `routing_facts` in
+`tiered.py` can establish `field_resolved` and `value_already_passed` from the one call site it
+is handed; `call_sites_reading_field` is a count across the whole graph and
+`field_passed_as_literal` is not recorded by the indexer at all. Both stay unestablished, and
+the rows that need them decline rather than guess. Tier 0 is therefore unreachable through the
+default, and the two mechanical rows are the entire tier-0 surface.
+
+The row that decided is produced and then dropped. `route()` returns it, `TieredRemediator`
+offers it through an `on_route` callback, and nothing in `src/` passes one —
+`migration_outcome` has no column for it either. So the consequence the Verification section
+names last still stands: `migration_outcome.tier` records which tier ran, not which row selected
+it, and "tier 0 was wrong for this change kind" remains archaeology rather than a query.

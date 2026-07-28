@@ -89,14 +89,22 @@ requires. One holds, one does not, and one holds in part:
   `nodes.py:340` writes the abandoned attempt for exactly this reason.
 - **`pr_merged` and `human_edits_before_merge` are populated from a real webhook**, not
   inferred. Merge outcome arrives days after the run. A field that silently stays null for six
-  months destroys the only measurement that tests the product claim. **Does not hold.**
-  `GraphStore.set_merge_outcome` exists as the update path, and nothing calls it: no webhook
-  receiver is built, so both columns stay null and the merge rate has no numerator.
+  months destroys the only measurement that tests the product claim. **Does not hold, and the
+  remaining gap is no longer the receiver.** `src/sync/forge/webhook.py` is built:
+  `record_merge_outcome` verifies GitHub's HMAC-SHA256 signature before parsing, acts only on
+  `pull_request.closed`, and calls `GraphStore.set_merge_outcome`. Two things still stand
+  between that and a numerator. It matches a delivery to a corpus row by `pr_number`, and
+  nothing writes `pr_number` when the pull request opens — `sync.remediate.corpus` records
+  every other column and leaves that one null — so every delivery takes the no-match path and
+  writes nothing. And no process mounts the receiver: it is a function over bytes, deliberately
+  carrying no HTTP framework, so nothing delivers to it either.
 - **The routing decision that fired is recorded**, including the decision-table row. Otherwise
   "tier 0 was wrong for this change kind" is an archaeology project rather than a query.
-  **Holds in part.** `tier` and `strategy` record which tier ran; the decision-table row does
-  not exist to record, because `sync.route.matrix.route()` is not what selects the tier — see
-  `2026-07-27-sync-routing-matrix.md`.
+  **Holds in part.** `tier` and `strategy` record which tier ran. The row now exists to record —
+  `sync.route.matrix.route()` selects the tier in `src/sync/remediate/tiered.py:282` and returns
+  the row that decided — but it has nowhere to land: `migration_outcome` has no column for it,
+  and `TieredRemediator`'s `on_route` callback has no caller anywhere in `src/`. See
+  `2026-07-27-sync-routing-matrix.md` for the jurisdiction the table currently has.
 
 ## Ground truth without customers
 
