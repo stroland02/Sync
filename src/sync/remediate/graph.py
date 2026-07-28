@@ -26,7 +26,12 @@ def build_graph(store, adapter, remediator, forge, checkpointer):
     builder.add_node("abandon", nodes.make_abandon(store))
 
     builder.add_edge(START, "locate")
-    builder.add_edge("locate", "prepare")
+
+    builder.add_conditional_edges(
+        "locate",
+        nodes.route_after_locate,
+        {"prepare": "prepare", "abandon": "abandon"},
+    )
 
     builder.add_conditional_edges(
         "prepare",
@@ -46,7 +51,11 @@ def build_graph(store, adapter, remediator, forge, checkpointer):
         {"patch": "patch", "push_branch": "push_branch", "abandon": "abandon"},
     )
 
-    builder.add_edge("push_branch", "await_ci")
+    builder.add_conditional_edges(
+        "push_branch",
+        nodes.route_after_push,
+        {"await_ci": "await_ci", "abandon": "abandon"},
+    )
 
     builder.add_conditional_edges(
         "await_ci",
@@ -54,7 +63,12 @@ def build_graph(store, adapter, remediator, forge, checkpointer):
         {"patch": "patch", "open_pr": "open_pr", "abandon": "abandon"},
     )
 
-    builder.add_edge("open_pr", END)
+    builder.add_conditional_edges(
+        "open_pr",
+        nodes.route_after_open_pr,
+        {"end": END, "abandon": "abandon"},
+    )
+
     builder.add_edge("abandon", END)
 
     return builder.compile(checkpointer=checkpointer)

@@ -1,7 +1,7 @@
 import pytest
 from claude_agent_sdk import ResultMessage
 
-from sync.core import CallSite, Finding, Remediator, VendorChange
+from sync.core import CallSite, Finding, Remediator, RepoRef, VendorChange
 from sync.remediate import agent_patch
 from sync.remediate.agent_patch import AgentRemediator, build_patch_prompt
 
@@ -28,6 +28,11 @@ CHANGE = VendorChange(
 FINDING = Finding(
     detector="vendor_change", call_site_id="cs1", vendor_change_id="vc1",
     severity="breaking", rationale="status removed from PostCharges",
+)
+SAVED_FINDING = FINDING.model_copy(update={"id": "f-42"})
+REPO = RepoRef(
+    repo_id="acme-billing", url="https://example.invalid/r",
+    local_path="/tmp/r", head_sha="0" * 40,
 )
 
 
@@ -80,6 +85,19 @@ def test_the_prompt_omits_a_diagnostics_section_on_the_first_attempt():
     assert "previous attempt" not in build_patch_prompt(FINDING, CHANGE, SITE).lower()
 
 
+def test_the_retry_heading_does_not_name_a_stage_the_caller_never_reported():
+    """`diagnostics` is a free-form feedback channel: the graph feeds a CI
+    rejection and a failed agent run through it as well as tsc output. A
+    heading that announces every one of them as a typechecking failure
+    misdescribes the input the agent is being asked to act on.
+    """
+    prompt = build_patch_prompt(
+        FINDING, CHANGE, SITE, diagnostics="the repository's own CI rejected this diff",
+    )
+    assert "previous attempt" in prompt.lower()
+    assert "failed typechecking" not in prompt.lower()
+
+
 def _ok_result(**overrides) -> ResultMessage:
     fields = dict(
         subtype="success", duration_ms=1, duration_api_ms=1, is_error=False, num_turns=1, session_id="s1"
@@ -98,7 +116,7 @@ def test_run_agent_configures_the_repo_cwd_and_the_pinned_model(monkeypatch, tmp
 
     monkeypatch.setattr(agent_patch, "query", fake_query)
 
-    AgentRemediator()._run_agent("do the patch", tmp_path)
+    AgentRemediator()._run_agent("do the patch", tmp_path, "finding=f-42 repo=acme-billing")
 
     options = captured["options"]
     assert captured["prompt"] == "do the patch"
@@ -117,7 +135,7 @@ def test_run_agent_raises_when_the_sdk_reports_a_failed_run(monkeypatch, tmp_pat
     monkeypatch.setattr(agent_patch, "query", fake_query)
 
     with pytest.raises(RuntimeError, match="hit max turns"):
-        AgentRemediator()._run_agent("do the patch", tmp_path)
+        AgentRemediator()._run_agent("do the patch", tmp_path, "finding=f-42 repo=acme-billing")
 
 
 def test_run_agent_raises_when_no_result_message_arrives(monkeypatch, tmp_path):
@@ -128,4 +146,52 @@ def test_run_agent_raises_when_no_result_message_arrives(monkeypatch, tmp_path):
     monkeypatch.setattr(agent_patch, "query", fake_query)
 
     with pytest.raises(RuntimeError):
-        AgentRemediator()._run_agent("do the patch", tmp_path)
+        AgentRemediator()._run_agent("do the patch", tmp_path, "finding=f-42 repo=acme-billing")
+
+
+def _failing_query(**_):
+    async def fake_query(*, prompt, options):
+        yield _ok_result(is_error=True, subtype="error_max_turns", errors=["hit max turns"])
+
+    return fake_query
+
+
+def test_a_failed_agent_run_names_the_finding_and_the_repository(monkeypatch, tmp_path):
+    """An operator aggregating failures across findings has the message and
+    nothing else -- a stack trace is not in the aggregate, and every finding in
+    a `--limit 0` run raises through the same two lines.
+    """
+    monkeypatch.setattr(agent_patch, "query", _failing_query())
+    repo = REPO.model_copy(update={"local_path": str(tmp_path)})
+
+    with pytest.raises(RuntimeError) as raised:
+        AgentRemediator().propose(SAVED_FINDING, CHANGE, SITE, repo)
+    assert "f-42" in str(raised.value)
+    assert "acme-billing" in str(raised.value)
+
+
+def test_a_run_with_no_result_message_names_the_finding_and_the_repository(monkeypatch, tmp_path):
+    async def fake_query(*, prompt, options):
+        return
+        yield  # pragma: no cover - unreachable; makes this an async generator
+
+    monkeypatch.setattr(agent_patch, "query", fake_query)
+    repo = REPO.model_copy(update={"local_path": str(tmp_path)})
+
+    with pytest.raises(RuntimeError) as raised:
+        AgentRemediator().propose(SAVED_FINDING, CHANGE, SITE, repo)
+    assert "f-42" in str(raised.value)
+    assert "acme-billing" in str(raised.value)
+
+
+def test_a_finding_with_no_id_yet_does_not_report_its_identity_as_none(monkeypatch, tmp_path):
+    """`Finding.id` is None until the store assigns one. "finding=None" in an
+    aggregated failure list reads as a bug in Sync rather than as a finding
+    that was never persisted.
+    """
+    monkeypatch.setattr(agent_patch, "query", _failing_query())
+    repo = REPO.model_copy(update={"local_path": str(tmp_path)})
+
+    with pytest.raises(RuntimeError) as raised:
+        AgentRemediator().propose(FINDING, CHANGE, SITE, repo)
+    assert "None" not in str(raised.value)

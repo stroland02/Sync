@@ -67,9 +67,12 @@ def build_patch_prompt(
     ]
 
     if diagnostics:
+        # The graph feeds a CI rejection and a failed agent run through this
+        # same argument, so the heading cannot name a stage: only the caller
+        # knows which one produced the text.
         sections += [
             "",
-            "A previous attempt failed typechecking with:",
+            "A previous attempt failed. What went wrong:",
             "",
             diagnostics,
             "",
@@ -77,6 +80,16 @@ def build_patch_prompt(
         ]
 
     return "\n".join(sections)
+
+
+def _identity(finding: Finding, repo: RepoRef) -> str:
+    """A `--limit 0` run raises through the same two lines for every finding it
+    processes, and the operator aggregating those failures has the message and
+    no stack trace. `Finding.id` is None until the store assigns one, which
+    would otherwise read as "finding=None" -- a bug in Sync rather than a
+    finding that was never persisted.
+    """
+    return f"finding={finding.id or 'unsaved'} repo={repo.repo_id}"
 
 
 def _git_diff(repo_path: Path) -> str:
@@ -105,7 +118,7 @@ class AgentRemediator:
         prompt = build_patch_prompt(finding, change, site, diagnostics)
         repo_path = Path(repo.local_path)
 
-        self._run_agent(prompt, repo_path)
+        self._run_agent(prompt, repo_path, _identity(finding, repo))
 
         return Patch(
             diff=_git_diff(repo_path),
@@ -113,11 +126,11 @@ class AgentRemediator:
             rationale=finding.rationale,
         )
 
-    def _run_agent(self, prompt: str, repo_path: Path) -> None:
+    def _run_agent(self, prompt: str, repo_path: Path, identity: str) -> None:
         """Isolated so tests can substitute it without touching `propose`."""
-        asyncio.run(self._drive_agent(prompt, repo_path))
+        asyncio.run(self._drive_agent(prompt, repo_path, identity))
 
-    async def _drive_agent(self, prompt: str, repo_path: Path) -> None:
+    async def _drive_agent(self, prompt: str, repo_path: Path, identity: str) -> None:
         options = ClaudeAgentOptions(
             cwd=repo_path,
             model=MODEL,
@@ -135,6 +148,6 @@ class AgentRemediator:
         # completed and correctly found nothing to change: both would otherwise
         # leave behind the same empty git diff.
         if result is None:
-            raise RuntimeError("agent run produced no result message")
+            raise RuntimeError(f"agent run produced no result message [{identity}]")
         if result.is_error:
-            raise RuntimeError(f"agent run failed ({result.subtype}): {result.errors}")
+            raise RuntimeError(f"agent run failed ({result.subtype}) [{identity}]: {result.errors}")

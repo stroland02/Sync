@@ -32,6 +32,14 @@ class RunState(TypedDict, total=False):
     # Routes straight to abandon, bypassing the static-attempt retry budget.
     prepare_ok: bool
     static_fatal: bool
+    # The same rule for the nodes whose failures are neither an adapter's nor a
+    # remediator's: a store lookup that raised, a rejected push, a CI poll that
+    # never produced a verdict, a pull request that could not be opened. One key
+    # rather than one per node because the treatment is identical and every
+    # writer routes on it immediately, so no two of them are ever in flight at
+    # once. `patch` is deliberately not among them -- patch generation can
+    # succeed on a second attempt, so it retries rather than setting this.
+    fatal: bool
     static_attempts: int
     ci_attempts: int
     branch: str

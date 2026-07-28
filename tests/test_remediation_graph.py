@@ -181,15 +181,16 @@ def test_a_failed_verification_with_empty_diagnostics_never_pushes():
     assert forge.pr_url is None
 
 
+@dataclass
+class Recording(StubRemediator):
+    seen: list[str] = field(default_factory=list)
+
+    def propose(self, finding, change, site, repo, diagnostics=""):
+        self.seen.append(diagnostics)
+        return super().propose(finding, change, site, repo, diagnostics)
+
+
 def test_diagnostics_from_a_failed_verification_reach_the_next_attempt():
-    @dataclass
-    class Recording(StubRemediator):
-        seen: list[str] = field(default_factory=list)
-
-        def propose(self, finding, change, site, repo, diagnostics=""):
-            self.seen.append(diagnostics)
-            return super().propose(finding, change, site, repo, diagnostics)
-
     remediator = Recording()
     _run(StubAdapter(verdicts=[_fail(), _ok()]), remediator, StubForge())
     assert remediator.seen[0] == ""
@@ -350,3 +351,128 @@ def test_a_fatal_static_verify_abandons_immediately_without_spending_the_retry_b
     assert forge.pr_url is None
     assert "registry unreachable" in result["abandon_reason"]
     assert store.status == "abandoned"
+
+
+def test_a_vendor_change_that_cannot_be_looked_up_abandons_before_preparing():
+    """`Finding.vendor_change_id` is optional: a detector that does not join
+    against a vendor change leaves it None, and `get_vendor_change(None)`
+    raises. A lookup that cannot be performed is not something a different
+    patch fixes, and the exception must not escape `graph.invoke` and leave the
+    finding sitting at status 'open'.
+    """
+
+    class MissingChange(StubStore):
+        def get_vendor_change(self, _id):
+            raise KeyError(_id)
+
+    adapter = StubAdapter()
+    remediator = StubRemediator()
+    forge = StubForge()
+    store = MissingChange()
+    result = _run(adapter, remediator, forge, store=store)
+    assert result["outcome"] == "abandoned"
+    assert adapter.prepare_calls == 0
+    assert remediator.calls == 0
+    assert forge.pushes == 0
+    assert forge.pr_url is None
+    assert "KeyError" in result["abandon_reason"]
+    assert store.status == "abandoned"
+
+
+def test_a_rejected_push_abandons_without_spending_the_patch_budget():
+    """`GitHubForge._run` raises on any non-zero exit -- a protected branch, an
+    expired token, a lost network. None of those is something a different patch
+    fixes, so this abandons on the first occurrence rather than repatching.
+    """
+
+    @dataclass
+    class Rejected(StubForge):
+        def push_branch(self, repo, patch) -> str:
+            self.pushes += 1
+            raise RuntimeError("git push failed: protected branch hook declined")
+
+    remediator = StubRemediator()
+    forge = Rejected()
+    store = StubStore()
+    result = _run(StubAdapter(), remediator, forge, store=store)
+    assert result["outcome"] == "abandoned"
+    assert remediator.calls == 1
+    assert forge.polls == 0
+    assert forge.pr_url is None
+    assert "protected branch" in result["abandon_reason"]
+    assert store.status == "abandoned"
+
+
+def test_a_ci_poll_that_raises_abandons_rather_than_retrying_the_patch():
+    """A red CI verdict retries; a poll that produced no verdict at all -- an
+    expired gh token, a lost network -- must not, since the patch is not what
+    failed.
+    """
+
+    @dataclass
+    class Unpollable(StubForge):
+        def await_ci(self, repo, branch):
+            self.polls += 1
+            raise RuntimeError("gh run list failed: HTTP 401: Bad credentials")
+
+    remediator = StubRemediator()
+    forge = Unpollable()
+    store = StubStore()
+    result = _run(StubAdapter(), remediator, forge, store=store)
+    assert result["outcome"] == "abandoned"
+    assert remediator.calls == 1
+    assert forge.polls == 1
+    assert forge.pr_url is None
+    assert "Bad credentials" in result["abandon_reason"]
+    assert store.status == "abandoned"
+
+
+def test_a_pull_request_that_cannot_be_opened_abandons_and_leaves_no_pr_url():
+    """The last node in the graph is no more reliable than the rest: `gh pr
+    create` fails on a rate limit or a repository that already has an open pull
+    request for the branch. `pr_url` must stay unset, exactly as on every other
+    abandon route, so nothing downstream reports a pull request that does not
+    exist.
+    """
+
+    @dataclass
+    class Unopenable(StubForge):
+        def open_pull_request(self, repo, branch, evidence) -> str:
+            raise RuntimeError("gh pr create failed: GraphQL: was submitted too quickly")
+
+    forge = Unopenable()
+    store = StubStore()
+    result = _run(StubAdapter(), StubRemediator(), forge, store=store)
+    assert result["outcome"] == "abandoned"
+    assert result["pr_url"] is None
+    assert forge.pushes == 1
+    assert "too quickly" in result["abandon_reason"]
+    assert store.status == "abandoned"
+
+
+def test_a_static_retry_names_the_typechecker_as_what_rejected_the_attempt():
+    """`diagnostics` reaches the patch agent from two producers with nothing in
+    the value itself to tell them apart. Bare tsc output does not say which
+    stage produced it.
+    """
+    remediator = Recording()
+    _run(StubAdapter(verdicts=[_fail(), _ok()]), remediator, StubForge())
+    feedback = remediator.seen[1]
+    assert "tsc" in feedback
+    assert "TS2339" in feedback
+    assert "CI" not in feedback
+
+
+def test_a_ci_retry_says_ci_failed_and_hands_over_the_diff_ci_rejected():
+    """A CI retry introduced as a typecheck failure is a lie, and a bare run URL
+    is unreadable: WebFetch and WebSearch are both in the patch agent's
+    DISALLOWED_TOOLS. The retry costs a full agent run plus a second CI wait, so
+    it has to carry something the agent can act on without the network.
+    """
+    remediator = Recording()
+    _run(StubAdapter(), remediator, StubForge(ci_results=[False, True]))
+    feedback = remediator.seen[1]
+    assert "CI" in feedback
+    assert "https://github.com/o/r/actions/runs/1" in feedback
+    assert "--- a\n+++ b\n" in feedback
+    assert "tsc" not in feedback
