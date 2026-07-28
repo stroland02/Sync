@@ -42,10 +42,11 @@ attempt this row describes. A finding that took three tries writes three rows.
 
 ## Nothing reaches a pull request unverified
 
-Every patch passes `tsc`, then the customer's own CI. Two qualifications currently hold and
-are open, both recorded in `CLAUDE.md`: `tsc` typechecks the working tree rather than the
-staged diff, and the patch agent executes the customer's *toolchain* even though it never runs
-their application. Say the qualified version; do not restore the stronger sentence.
+Every patch passes `tsc`, then the customer's own CI. Two qualifications currently hold, both
+recorded in `CLAUDE.md`: `tsc` measures the tree a push would carry but keeps the installed
+dependencies inside it, so an edit under `node_modules` is invisible to it; and the patch
+agent executes the customer's *toolchain* even though it never runs their application. Say the
+qualified version; do not restore the stronger sentence.
 
 ## Route on evidence, not on emptiness
 

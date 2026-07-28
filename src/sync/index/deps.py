@@ -28,6 +28,11 @@ _COMMANDS = {
 }
 _FALLBACK = ("npm", ["install", "--ignore-scripts", "--no-audit", "--no-fund"])
 
+# The only thing installing creates, and the only ignored content `static_verify`
+# keeps while it measures the tree a push would carry. Every package manager here
+# writes its own bookkeeping inside this directory rather than beside it.
+DEPENDENCY_DIRS = frozenset({"node_modules"})
+
 
 def _node_modules_populated(repo_path: Path) -> bool:
     """True only when `node_modules` holds a real package, not just npm's own

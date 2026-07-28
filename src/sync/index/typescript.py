@@ -310,18 +310,28 @@ class TypeScriptAdapter:
         install_dependencies(Path(repo.local_path))
 
     def static_verify(self, repo: RepoRef, patch: Patch) -> VerifyResult:
-        """Typecheck the working tree.
+        """Typecheck the tree a push would carry, not the one the agent left.
 
         The patch is expected to be applied to `repo.local_path` before this is
         called — the graph's `patch` node writes to the clone directly, so there
         is nothing to apply here.
 
+        The agent's untracked and ignored files are held out of the way for the
+        duration of the compile, because `push_branch` will not carry them and a
+        verdict that depends on them describes no artifact anyone will review.
+        `sync.index.shipped_tree` carries why this is done in place rather than
+        against a second checkout. Dependencies are exempt: the customer's CI
+        installs its own.
+
         Installing here too is what makes this method safe to call on its own,
         outside the graph: the call is idempotent, so paying for it again after
         `prepare` has already run is free.
         """
-        from sync.index.deps import install_dependencies
+        from sync.index.deps import DEPENDENCY_DIRS, install_dependencies
+        from sync.index.shipped_tree import shipped_tree
         from sync.index.tsc import run_tsc
 
-        install_dependencies(Path(repo.local_path))
-        return run_tsc(Path(repo.local_path))
+        path = Path(repo.local_path)
+        install_dependencies(path)
+        with shipped_tree(path, keep=DEPENDENCY_DIRS):
+            return run_tsc(path)

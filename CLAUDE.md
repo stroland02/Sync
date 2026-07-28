@@ -37,9 +37,9 @@ Three things from it that are easy to get wrong:
 
 **Nothing reaches a pull request unverified.** Every patch passes `tsc` and then the customer's own CI. If you find yourself adding a path that skips the gate, you have found a bug in your approach, not a shortcut.
 
-Two honest qualifications on that, both measured rather than theorised, and both open at M0:
+Two honest qualifications on that, both measured rather than theorised:
 
-- **`tsc` verifies the working tree, not the diff that ships.** `push_branch` stages with `git add -u` — tracked modifications only — while `static_verify` typechecks whatever the agent left behind. The patch agent has `Bash` and is told to run `npx tsc --noEmit` until clean, so it can satisfy the gate with an untracked or gitignored artifact that never reaches the branch. This was observed: the acceptance run's `static_verify` passed on a repository where a clean clone fails, and the customer's CI then failed on exactly those errors. The customer's CI is still authoritative, so nothing merges unverified — but a green local verdict does not yet describe the pushed artifact.
+- **`tsc` verifies the tree a push would carry, with two gaps left.** `static_verify` holds every untracked and every ignored path out of the clone before it compiles, so the verdict describes the branch `push_branch` creates and not whatever the agent left behind — `sync.index.shipped_tree` carries why that is done in place rather than against a second checkout. Installed dependencies are kept, because the customer's CI installs its own, so an edit inside `node_modules` still satisfies a gate their CI will not. And `git add -u` never stages a new file, so a patch that needs one fails verification rather than pushing a branch without it.
 - **"We never execute customer code" is the intent, not yet the invariant.** `run_tsc` prefers the clone's own `node_modules/.bin/tsc`, resolved through the customer's `.npmrc`, and the patch agent holds `Bash` inside the clone. Dependency installs pass `--ignore-scripts`, so no lifecycle script runs, and Sync never runs the customer's application — but it does execute their toolchain. Say that, rather than the stronger sentence.
 
 We never hold customer secrets. That one is unqualified.

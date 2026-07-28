@@ -2,8 +2,9 @@ from pathlib import Path
 
 import pytest
 
-from sync.core import VerifyResult
+from sync.core import Patch, RepoRef, VerifyResult
 from sync.index.tsc import run_tsc
+from sync.index.typescript import TypeScriptAdapter
 
 
 @pytest.fixture()
@@ -82,9 +83,13 @@ def test_non_ascii_identifier_does_not_crash_the_gate(project: Path):
     assert "TS2339" in result.diagnostics
 
 
-def test_static_verify_installs_dependencies_before_typechecking(tmp_path, monkeypatch):
-    from sync.core import Patch, RepoRef
+def test_static_verify_installs_dependencies_before_typechecking(tmp_path, monkeypatch, git):
     from sync.index import typescript
+
+    # A real repository, because `static_verify` now asks git what a push would
+    # carry before it compiles anything. A bare directory is not a case the
+    # pipeline can reach -- every clone it verifies came from `git clone`.
+    git(["init", "-q"], tmp_path)
 
     order: list[str] = []
     monkeypatch.setattr(
@@ -100,6 +105,50 @@ def test_static_verify_installs_dependencies_before_typechecking(tmp_path, monke
     adapter.static_verify(repo, Patch(diff="d", strategy="agent", rationale="r"))
 
     assert order == ["install", "tsc"]
+
+
+def _verify(repo_path: Path) -> VerifyResult:
+    repo = RepoRef(repo_id="r", url="u", local_path=str(repo_path), head_sha="0" * 40)
+    adapter = TypeScriptAdapter(vendor_adapter=None)
+    return adapter.static_verify(repo, Patch(diff="d", strategy="agent", rationale="r"))
+
+
+def test_static_verify_rejects_a_patch_that_only_typechecks_with_untracked_files(patched_clone: Path):
+    """The gate must describe the artifact that ships, not the tree the agent left.
+
+    The working tree here typechecks clean. The branch `push_branch` would
+    create does not, because the declaration `src/a.ts` depends on lives in an
+    untracked, gitignored file. A green verdict here is the M0 acceptance
+    failure: the fast gate approving code the customer's CI then rejected.
+    """
+    result = _verify(patched_clone)
+
+    assert result.ok is False
+    assert "TS2304" in result.diagnostics
+
+
+def test_static_verify_leaves_the_agents_working_tree_as_it_found_it(patched_clone: Path):
+    """The next patch attempt runs in this clone and has to see its own work.
+
+    Reducing the tree to what ships is a measurement, not an edit: everything
+    moved aside for the typecheck comes back, including the file that caused
+    the rejection.
+    """
+    _verify(patched_clone)
+
+    assert (patched_clone / "generated.d.ts").read_text(encoding="utf-8").startswith("declare type Generated")
+    assert "Generated" in (patched_clone / "src" / "a.ts").read_text(encoding="utf-8")
+
+
+def test_static_verify_passes_when_the_tracked_modifications_stand_on_their_own(patched_clone: Path):
+    """The gate must not have become a gate on untracked files existing at all.
+
+    Same clone, same gitignored file present -- but the patch no longer needs
+    what it declares, so the branch typechecks and this must stay green.
+    """
+    (patched_clone / "src" / "a.ts").write_text("export const n: number = 2;\n", encoding="utf-8")
+
+    assert _verify(patched_clone).ok is True
 
 
 def test_prepare_installs_dependencies(tmp_path, monkeypatch):
