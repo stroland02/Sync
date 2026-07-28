@@ -36,6 +36,29 @@ when, which is why it is recorded here rather than dispatched.
 **Closes when:** one `sync run` produces a CI-green pull request again, or the failure is
 recorded with which change broke it.
 
+### B8 — M1 has no span store, so the efficiency detector cannot be built
+
+Surveyed on `main` at `d6538fe`: there is no telemetry package. `src/sync/` holds core,
+graph, index, signals, detect, remediate, forge, route, mcp and cli, and nothing ingests
+runtime spans. `detect/` holds `vendor_change`, `parameter_deprecation` and `observed_drift`.
+The design document's M1 — an OTLP endpoint over client spans, then an efficiency detector
+finding calls in loops, default page sizes, uncached repeats and retry storms — is entirely
+unwritten.
+
+`observed_shape` does not substitute for it, and the distinction matters. That table records
+response *shape* — `field_path`, `json_type`, `nullable_seen`, `spec_enum_values` — which is
+the right evidence for contract drift and the wrong evidence for efficiency, which needs call
+volume, timing, retry counts and repetition. They are different signals from different
+sources and one is not a cheaper version of the other.
+
+Split deliberately: the store and its correlation first, the detector second, and the detector
+should not start until the store has real rows. The hard part of the first slice is the
+table's grain — one row is not one span, and a query that counts calls by counting rows would
+be wrong quietly.
+
+**Closes when:** a captured OTLP payload committed as a fixture produces rows correlated to
+call sites, re-ingesting it changes nothing, and the grain is written in `schema.sql`.
+
 ## In flight
 
 _(none)_
