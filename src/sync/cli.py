@@ -19,6 +19,9 @@ from sync.graph.store import GraphStore
 from sync.index.typescript import TypeScriptAdapter
 from sync.remediate.agent_patch import AgentRemediator
 from sync.remediate.graph import build_graph
+from sync.remediate.literal_swap import LiteralSwapRemediator
+from sync.remediate.property_omit import PropertyOmitRemediator
+from sync.remediate.tiered import TerminalTier, TieredRemediator
 from sync.signals.stripe.adapter import StripeAdapter, fetch_spec
 from sync.signals.stripe.symbols import build_symbol_map
 
@@ -32,6 +35,28 @@ def _select(findings: list[Finding], limit: int) -> list[Finding]:
     never touches Postgres, the network, or the Agent SDK.
     """
     return findings if limit == 0 else findings[:limit]
+
+
+def build_remediator() -> TieredRemediator:
+    """The tier cascade, cheapest first, with the agent last and unconditional.
+
+    Pulled out of `run()` for the same reason `_select` is: the ordering is the whole
+    economic claim and it should be checkable without Postgres, the network, or the Agent
+    SDK. Until this existed nothing in `src/` constructed a `TieredRemediator` at all --
+    `sync.route.matrix` classified changes and `TieredRemediator` composed tiers, and
+    neither ran, because `build_graph` was handed a bare `AgentRemediator`.
+
+    The agent is wrapped rather than listed. `nodes.make_patch` calls `propose()` directly
+    and has never consulted `can_handle`, so the agent handles every finding today
+    whatever its severity; a cascade that gated the last tier would make that dormant
+    check live and narrow what the pipeline repairs, as a side effect of a change made for
+    another reason entirely.
+    """
+    return TieredRemediator([
+        LiteralSwapRemediator(),
+        PropertyOmitRemediator(),
+        TerminalTier(AgentRemediator()),
+    ])
 
 
 _SCHEME = re.compile(r"^[A-Za-z][A-Za-z0-9+.-]*://")
@@ -225,7 +250,7 @@ def run(args: argparse.Namespace) -> int:
         with PostgresSaver.from_conn_string(args.dsn) as checkpointer:
             checkpointer.setup()
             graph = build_graph(
-                store=store, adapter=adapter, remediator=AgentRemediator(),
+                store=store, adapter=adapter, remediator=build_remediator(),
                 forge=GitHubForge(), checkpointer=checkpointer,
             )
             for finding in selected:

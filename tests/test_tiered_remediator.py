@@ -202,3 +202,120 @@ def test_a_spec_change_still_reaches_the_agent(tmp_path):
 
     assert patch.strategy == "agent"
     assert agent.proposed == 1
+
+
+# --- declining mid-propose, which can_handle cannot express ----------------------
+#
+# `can_handle` sees the finding and the change, never the call site. A codemod scoped to a
+# location cannot know until it reads the file whether the property is there, whether the
+# argument is an object literal, or whether a spread makes the property set unknowable.
+# Those are declines, and an empty diff cannot carry them: the tier reads empty as
+# ownership, so a decline spelled that way would abandon a finding the agent could fix.
+
+
+class Declining:
+    """A tier that accepts the change and then finds it cannot act."""
+
+    def __init__(self, strategy: str = "codemod") -> None:
+        self.strategy = strategy
+        self.proposed = 0
+
+    def can_handle(self, finding, change) -> bool:
+        return True
+
+    def propose(self, finding, change, site, repo, diagnostics: str = "") -> Patch:
+        from sync.remediate.tiered import CannotPatch
+
+        self.proposed += 1
+        raise CannotPatch("the argument is not an object literal")
+
+
+def test_a_tier_that_declines_mid_propose_falls_through():
+    from sync.remediate.tiered import CannotPatch  # noqa: F401
+
+    codemod, agent = Declining(), Stub("agent")
+    patch = _tiered(codemod, agent).propose(FINDING, CHANGE, SITE, REPO)
+
+    assert patch.strategy == "agent"
+    assert codemod.proposed == 1, "the declining tier was never given the chance to try"
+
+
+def test_an_empty_diff_still_does_not_fall_through():
+    """The distinction this rests on. Empty means "already correct" and keeps its
+    ownership semantics; declining is a separate signal with a separate spelling."""
+    codemod, agent = Stub("codemod", diff=""), Stub("agent")
+    patch = _tiered(codemod, agent).propose(FINDING, CHANGE, SITE, REPO)
+
+    assert patch.diff == ""
+    assert agent.proposed == 0
+
+
+def test_every_tier_declining_raises_rather_than_returning_nothing():
+    from sync.remediate.tiered import CannotPatch
+
+    with pytest.raises((RuntimeError, CannotPatch)):
+        _tiered(Declining()).propose(FINDING, CHANGE, SITE, REPO)
+
+
+# --- the terminal tier ------------------------------------------------------------
+#
+# `nodes.make_patch` calls propose() directly and never consults can_handle, so today the
+# agent handles every finding whatever its severity. Putting a cascade in front of it would
+# make AgentRemediator's severity gate live for the first time and narrow what the pipeline
+# repairs. Wrapping keeps that gate exactly as unenforced as it is now, without editing a
+# contract other tests pin.
+
+
+def test_a_terminal_tier_is_never_asked_whether_it_can_handle():
+    from sync.remediate.tiered import TerminalTier
+
+    refuses = Stub("agent", handles=False)
+    patch = _tiered(Stub("codemod", handles=False), TerminalTier(refuses)).propose(
+        FINDING, CHANGE, SITE, REPO
+    )
+
+    assert patch.strategy == "agent"
+    assert refuses.proposed == 1
+
+
+def test_a_terminal_tier_keeps_the_strategy_of_what_it_wraps():
+    """`is_deterministic` reads `strategy`, and a wrapper reporting its own label would
+    make a wrapped codemod look adaptive and survive the retry skip."""
+    from sync.remediate.tiered import TerminalTier, is_deterministic
+
+    assert TerminalTier(Stub("agent")).strategy == "agent"
+    assert is_deterministic(TerminalTier(Stub("codemod"))) is True
+
+
+def test_a_terminal_tier_does_not_hide_the_patch_its_delegate_produced():
+    from sync.remediate.tiered import TerminalTier
+
+    patch = _tiered(TerminalTier(Stub("agent", diff="real"))).propose(FINDING, CHANGE, SITE, REPO)
+    assert patch.diff == "real"
+    assert patch.strategy == "agent"
+
+
+def test_the_wired_cascade_sends_an_unroutable_change_to_the_agent():
+    """The property this wiring exists to preserve: adding tiers must not narrow what the
+    pipeline repairs. A change no codemod claims still reaches the agent, and so does one
+    whose severity AgentRemediator.can_handle would refuse."""
+    from sync.remediate.literal_swap import LiteralSwapRemediator
+    from sync.remediate.property_omit import PropertyOmitRemediator
+    from sync.remediate.tiered import TerminalTier
+
+    agent = Stub("agent", handles=False)
+    cascade = TieredRemediator(
+        [LiteralSwapRemediator(), PropertyOmitRemediator(), TerminalTier(agent)]
+    )
+    unroutable = VendorChange(
+        vendor_id="stripe", from_version="a", to_version="b",
+        kind="request-body-media-type-removed", operation_id="PostCharges",
+        path_ptr="/v1/charges", severity="info", source="oasdiff", raw={},
+    )
+
+    patch = cascade.propose(
+        Finding(detector="d", call_site_id="cs", severity="info", rationale="r"),
+        unroutable, SITE, REPO,
+    )
+    assert patch.strategy == "agent"
+    assert agent.proposed == 1

@@ -35,6 +35,61 @@ def is_deterministic(remediator) -> bool:
     return getattr(remediator, "strategy", "") in _DETERMINISTIC
 
 
+class CannotPatch(Exception):
+    """Raised by a tier that accepted the change and then found it could not act.
+
+    `can_handle` sees the finding and the change and never the call site, so a codemod
+    scoped to a location cannot answer there. Whether the property is at that position,
+    whether the argument is an object literal, whether a spread makes the property set
+    unknowable -- all of it is only knowable once the file is read.
+
+    An empty diff cannot carry that answer, because this module gives empty the opposite
+    meaning: a remediator that claimed the change owns the outcome, so empty abandons the
+    run rather than falling through. Spelling a decline that way would abandon findings
+    the agent could repair. So a decline is an exception, the cascade catches it, and the
+    next tier gets the work.
+    """
+
+
+class TerminalTier:
+    """The last tier in a cascade, which is never asked whether it can handle a finding.
+
+    `nodes.make_patch` calls `propose()` directly and has never consulted `can_handle`, so
+    the agent handles every finding today whatever its severity -- `AgentRemediator`'s own
+    severity gate has no caller. Putting a cascade in front of it would make that gate live
+    for the first time, narrowing what the pipeline repairs as a side effect of a change
+    nobody made for that reason.
+
+    Wrapping keeps the gate exactly as unenforced as it already is, and does it without
+    editing a contract other tests pin. Only the terminal position is exempted, so a
+    cascade of nothing but codemods still declines rather than forcing its last tier to
+    guess.
+    """
+
+    def __init__(self, remediator) -> None:
+        self._remediator = remediator
+
+    @property
+    def strategy(self) -> str:
+        """The delegate's own label. `is_deterministic` reads this, and a wrapper
+        reporting its own would make a wrapped codemod look adaptive and survive the
+        retry skip that exists to stop it re-emitting a failed patch."""
+        return getattr(self._remediator, "strategy", "")
+
+    def can_handle(self, finding: Finding, change: VendorChange) -> bool:
+        return True
+
+    def propose(
+        self,
+        finding: Finding,
+        change: VendorChange,
+        site: CallSite,
+        repo: RepoRef,
+        diagnostics: str = "",
+    ) -> Patch:
+        return self._remediator.propose(finding, change, site, repo, diagnostics=diagnostics)
+
+
 class TieredRemediator:
     """Tries each remediator in order and returns the first patch produced.
 
@@ -61,14 +116,25 @@ class TieredRemediator:
         repo: RepoRef,
         diagnostics: str = "",
     ) -> Patch:
+        declined: list[str] = []
         for remediator in self._eligible(diagnostics):
-            if remediator.can_handle(finding, change):
+            if not remediator.can_handle(finding, change):
+                continue
+            try:
                 return remediator.propose(finding, change, site, repo, diagnostics=diagnostics)
+            except CannotPatch as exc:
+                # Accepted the change, then read the call site and found it not mechanical.
+                # The next tier gets the work; only the reason is carried forward, so a
+                # cascade that declines all the way down still says why.
+                declined.append(f"{getattr(remediator, 'strategy', '?')}: {exc}")
 
         # Raising rather than returning an empty patch: `make_patch` catches exceptions and
         # routes to abandon carrying the message, whereas an empty diff is indistinguishable
         # from "already migrated" and would abandon without saying why.
-        raise RuntimeError(f"no remediator can handle {change.kind} for {change.operation_id}")
+        detail = f" ({'; '.join(declined)})" if declined else ""
+        raise RuntimeError(
+            f"no remediator can handle {change.kind} for {change.operation_id}{detail}"
+        )
 
     def _eligible(self, diagnostics: str) -> list:
         """The remediators worth trying for this attempt.

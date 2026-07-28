@@ -669,3 +669,95 @@ def test_two_findings_in_one_run_produce_branches_that_share_no_commits(tmp_path
     commits = [set(_git(origin, "rev-list", f"{base_sha}..{branch}").split()) for branch in branches]
     assert [len(c) for c in commits] == [1, 1]
     assert commits[0].isdisjoint(commits[1])
+
+
+# --- the tier cascade the CLI hands to the graph ----------------------------------
+#
+# `build_graph` took `AgentRemediator()` directly, so nothing in `src/` ever constructed
+# a `TieredRemediator`: the routing table routed, the cascade composed, and neither ran.
+# The construction is pulled out of `run()` for the same reason `_select` is -- so the
+# ordering is reachable without Postgres, the network, or the Agent SDK.
+
+
+def test_the_cascade_puts_every_codemod_ahead_of_the_agent():
+    """Cheapest first is the whole economic claim. An agent tier reached before a codemod
+    that could have handled the finding spends ten minutes proving the codemod right."""
+    from sync.cli import build_remediator
+    from sync.remediate.tiered import TerminalTier
+
+    tiers = build_remediator()._remediators
+    terminal = [i for i, t in enumerate(tiers) if isinstance(t, TerminalTier)]
+
+    assert terminal == [len(tiers) - 1], "the agent is not the last tier"
+    assert all(t.strategy == "codemod" for t in tiers[:-1])
+
+
+def test_the_agent_tier_is_terminal_so_nothing_narrows_what_reaches_it():
+    """`nodes.make_patch` never consults `can_handle`, so today the agent handles every
+    finding whatever its severity. A cascade that gated it would narrow the pipeline as a
+    side effect of a change made for another reason."""
+    from sync.cli import build_remediator
+
+    agent_tier = build_remediator()._remediators[-1]
+    unhandleable = Finding(detector="d", call_site_id="cs", severity="info", rationale="r")
+    change = VendorChange(
+        vendor_id="stripe", from_version="a", to_version="b", kind="whatever-this-is",
+        operation_id="Op", path_ptr="/v1/x", severity="info", source="oasdiff", raw={},
+    )
+
+    assert agent_tier.can_handle(unhandleable, change) is True
+    assert agent_tier.strategy == "agent"
+
+
+def test_the_acceptance_finding_is_patched_without_reaching_the_agent(tmp_path):
+    """The claim this task exists to make good on, through the wiring the CLI builds.
+
+    The M0 acceptance run spent roughly ten minutes of `xhigh` model time on this exact
+    finding. Nothing here constructs an Agent SDK client, so a cascade that fell through
+    would fail rather than quietly cost money.
+    """
+    import shutil
+
+    from sync.cli import build_remediator
+
+    fixture = Path(__file__).parent / "fixtures" / "ts" / "two_payment_intents"
+    clone = tmp_path / "clone"
+    shutil.copytree(fixture, clone)
+
+    change = VendorChange(
+        vendor_id="stripe", from_version="v2300", to_version="v2345",
+        kind="request-property-removed", operation_id="PostPaymentIntents",
+        path_ptr="/v1/payment_intents", severity="breaking", source="oasdiff",
+        raw={"id": "request-property-removed",
+             "text": "removed the request property `receipt_email`"},
+    )
+    site = CallSite(
+        repo_id="r", path="app/api/setup_accounts/route.ts", line=11, col=23,
+        vendor_id="stripe", operation_id="PostPaymentIntents",
+        symbol="stripe.paymentIntents.create",
+        args_keys=["amount", "currency", "customer", "receipt_email"],
+        response_fields_read=["id"], sdk_version="22.4.0-beta.1", content_hash="h",
+    )
+    repo = RepoRef(repo_id="r", url="u", local_path=str(clone), head_sha="s")
+
+    patch = build_remediator().propose(
+        Finding(detector="vendor_change", call_site_id="cs", vendor_change_id="vc",
+                severity="breaking", rationale="receipt_email removed"),
+        change, site, repo,
+    )
+
+    assert patch.strategy == "codemod"
+    assert "onboarding@example.com" in patch.diff
+    assert "topup@example.com" not in patch.diff
+
+
+def test_run_hands_the_graph_the_cascade_and_not_a_bare_agent(monkeypatch):
+    """The wiring itself. `build_remediator` being correct is worth nothing if `run()`
+    still constructs `AgentRemediator()` on its own."""
+    import inspect
+
+    import sync.cli as cli
+
+    source = inspect.getsource(cli.run)
+    assert "build_remediator()" in source
+    assert "AgentRemediator()" not in source

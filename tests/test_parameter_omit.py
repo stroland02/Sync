@@ -15,7 +15,7 @@ from __future__ import annotations
 
 import pytest
 
-from sync.route.templates import omit_parameter
+from sync.route.templates import omit_argument_at, omit_parameter
 
 MODEL = "claude-opus-5"
 
@@ -172,3 +172,119 @@ def test_it_works_across_languages(language: str):
     source = 'create({ model: "claude-opus-5", temperature: 1 });\n'
     result = omit_parameter(source, "temperature", language=language, within_object_naming=MODEL)
     assert result == 'create({ model: "claude-opus-5" });\n'
+
+
+# --- the same deletion, scoped by position instead of by a sibling value -----------
+#
+# `omit_parameter` scopes to an object that names the model, which is right for a
+# deprecation whose finding carries no location. A spec-change finding carries a call
+# site, and two calls in one file can both pass the property -- so that scoping would
+# edit a call the finding never named. Both entry points share `_deletion_span`; only
+# the scoping differs.
+
+
+def _omit_at(source: str, argument: str, line: int, col: int) -> str:
+    return omit_argument_at(source, argument, language="typescript", line=line, col=col)
+
+
+TWO_CALLS = (
+    "const a = await stripe.paymentIntents.create({\n"
+    "  amount: 1000,\n"
+    "  receipt_email: 'first@example.com',\n"
+    "});\n"
+    "\n"
+    "const b = await stripe.paymentIntents.create({\n"
+    "  amount: 2000,\n"
+    "  receipt_email: 'second@example.com',\n"
+    "});\n"
+)
+
+
+def test_it_removes_the_argument_only_from_the_call_the_finding_located():
+    """Two calls in one file, both passing the property. The finding names one; a patch
+    touching the other is wrong even though the other is also affected, because the
+    reviewer is told the diff covers one call site.
+    """
+    result = _omit_at(TWO_CALLS, "receipt_email", line=0, col=16)
+
+    assert "first@example.com" not in result
+    assert "second@example.com" in result
+
+
+def test_the_second_call_is_reachable_by_its_own_position():
+    result = _omit_at(TWO_CALLS, "receipt_email", line=5, col=16)
+
+    assert "first@example.com" in result
+    assert "second@example.com" not in result
+
+
+def test_a_position_matching_no_call_cannot_be_established():
+    """Nothing was located, so nothing is known -- which is not the same as knowing the
+    property is absent."""
+    assert _omit_at(TWO_CALLS, "receipt_email", line=3, col=0) is None
+
+
+def test_a_column_that_does_not_match_cannot_be_established():
+    """Line alone is not identity: two calls can share a line. A near miss must decline
+    rather than fall back to the first call on that line."""
+    assert _omit_at(TWO_CALLS, "receipt_email", line=0, col=99) is None
+
+
+def test_an_argument_the_call_does_not_pass_reads_as_already_correct():
+    """The call and its object were located and the key is simply not among them. That
+    is an answer, and a different one from "cannot tell": the code already agrees with
+    the vendor, so there is nothing for a later tier to do either."""
+    assert _omit_at(TWO_CALLS, "customer", line=0, col=16) == TWO_CALLS
+
+
+def test_an_argument_that_is_not_an_object_literal_cannot_be_established():
+    source = "const a = await stripe.paymentIntents.create(params);\n"
+    assert _omit_at(source, "receipt_email", line=0, col=16) is None
+
+
+def test_a_call_with_no_arguments_cannot_be_established():
+    source = "const a = await stripe.paymentIntents.create();\n"
+    assert _omit_at(source, "receipt_email", line=0, col=16) is None
+
+
+def test_an_object_carrying_a_spread_declines_rather_than_guessing():
+    """`...defaults` may itself supply the property, so deleting the explicit pair does
+    not establish that the request stops sending it. The agent can read `defaults`;
+    this cannot, and a patch that claims a removal it did not achieve is worse than none.
+    """
+    source = (
+        "const a = await stripe.paymentIntents.create({\n"
+        "  ...defaults,\n"
+        "  receipt_email: 'x@example.com',\n"
+        "});\n"
+    )
+    assert _omit_at(source, "receipt_email", line=0, col=16) is None
+
+
+def test_a_matching_name_inside_a_string_or_comment_is_not_touched():
+    """The reason this is a parser and not a regular expression."""
+    source = (
+        "const note = 'receipt_email: keep me';\n"
+        "// receipt_email: keep me too\n"
+        "const a = await stripe.paymentIntents.create({\n"
+        "  amount: 1000,\n"
+        "  receipt_email: 'go@example.com',\n"
+        "});\n"
+    )
+    result = _omit_at(source, "receipt_email", line=2, col=16)
+
+    assert "keep me" in result
+    assert "keep me too" in result
+    assert "go@example.com" not in result
+
+
+def test_it_is_idempotent_at_a_position():
+    once = _omit_at(TWO_CALLS, "receipt_email", line=0, col=16)
+    assert _omit_at(once, "receipt_email", line=0, col=16) == once
+
+
+def test_an_inline_object_keeps_its_spacing():
+    source = "const a = stripe.paymentIntents.create({ amount: 1, receipt_email: 'x' });\n"
+    assert _omit_at(source, "receipt_email", line=0, col=10) == (
+        "const a = stripe.paymentIntents.create({ amount: 1 });\n"
+    )

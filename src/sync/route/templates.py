@@ -295,6 +295,77 @@ def omit_parameter(
     return result
 
 
+def _object_argument_at(root, line: int, col: int):
+    """The object literal passed to the call starting at `line`/`col`, if there is one.
+
+    Both coordinates are matched. A line alone is not an identity -- two calls can share
+    one -- and falling back to the first call on the line would edit whichever the
+    formatter happened to put first.
+
+    `ast-grep` and the tree-sitter positions `CallSite` is built from agree on both
+    values, which was checked rather than assumed. Where they could not, a mismatch
+    declines, and declining costs an agent run rather than a wrong edit.
+    """
+    for call in root.find_all(kind="call_expression"):
+        start = call.range().start
+        if start.line != line or start.column != col:
+            continue
+        arguments = call.field("arguments")
+        if arguments is None:
+            return None
+        return next(
+            (child for child in arguments.children() if child.kind() == "object"), None
+        )
+    return None
+
+
+def omit_argument_at(
+    source: str, argument: str, language: str, line: int, col: int
+) -> str | None:
+    """`source` with `argument` removed from the object passed at one specific call.
+
+    The deletion is `omit_parameter`'s -- same span, same separator handling, same
+    whole-line rule -- and only the scoping differs. A deprecation finding carries no
+    location, so `omit_parameter` scopes by an object that names the model; a spec-change
+    finding carries a call site, and scoping it by a sibling value would edit a second
+    call the finding never named. Two entry points over one span implementation is the
+    shape that keeps the dangling-comma fix in one place.
+
+    Three outcomes, and the caller needs all three kept apart:
+
+    - the edited source, when the property was there and was removed;
+    - `source` unchanged, when the call and its object literal were found and the property
+      simply is not among its keys -- the code already agrees with the vendor;
+    - `None`, when nothing could be established: no call at that position, an argument
+      that is not an object literal, or an object carrying a spread.
+
+    That last distinction is the load-bearing one. "Already correct" and "cannot tell" are
+    different answers, and a caller that collapses them either abandons a finding another
+    tier could repair or claims a repair it never made. A spread is in the third group
+    rather than the second because `...defaults` may itself supply the property, so
+    deleting the explicit pair would not establish that the request stops sending it.
+
+    A shorthand property (`{ receipt_email }`) is not a `pair`, so it reads as absent
+    rather than as a decline. That is a real shape this could remove and currently does
+    not.
+    """
+    root = SgRoot(source, language).root()
+
+    container = _object_argument_at(root, line, col)
+    if container is None:
+        return None
+
+    children = list(container.children())
+    if any(child.kind() == "spread_element" for child in children):
+        return None
+
+    for pair in (child for child in children if child.kind() == "pair"):
+        if _pair_part(pair, "key", 0) == argument:
+            start, end = _deletion_span(source, container, pair)
+            return source[:start] + source[end:]
+    return source
+
+
 def apply_rules(rules: list[dict[str, Any]], source: str, language: str) -> str:
     """`source` with every rule applied, or `source` unchanged when none match.
 
