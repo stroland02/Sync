@@ -165,3 +165,36 @@ def test_prepare_installs_dependencies(tmp_path, monkeypatch):
     adapter.prepare(repo)
 
     assert calls == [str(tmp_path)]
+
+
+def test_static_verify_survives_the_build_artifact_the_typecheck_itself_writes(tmp_path, git):
+    """The M0 acceptance run's abandonment, through the real compiler.
+
+    `incremental` makes `tsc --noEmit` write `tsconfig.tsbuildinfo`, and
+    `.gitignore` keeps it out of the repository -- so the gate holds it aside,
+    the compiler writes a new one at that path while it is away, and the
+    restore has to put the clone back anyway. The run abandoned the finding
+    here, on a `FileExistsError` that says nothing about whether the patch was
+    correct.
+    """
+    repo = tmp_path / "clone"
+    (repo / "src").mkdir(parents=True)
+    (repo / ".gitignore").write_text("tsconfig.tsbuildinfo\nnode_modules\n", encoding="utf-8")
+    (repo / "tsconfig.json").write_text(
+        '{"compilerOptions": {"strict": true, "noEmit": true, "incremental": true,'
+        ' "target": "ES2022", "module": "ESNext", "moduleResolution": "bundler",'
+        ' "skipLibCheck": true}, "include": ["src"]}',
+        encoding="utf-8",
+    )
+    (repo / "src" / "a.ts").write_text("export const n: number = 1;\n", encoding="utf-8")
+
+    git(["init", "-q", "-b", "main"], repo)
+    git(["add", "."], repo)
+    git(["-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qm", "base"], repo)
+
+    (repo / "tsconfig.tsbuildinfo").write_text("from an earlier build\n", encoding="utf-8")
+
+    result = _verify(repo)
+
+    assert result.ok is True
+    assert (repo / "tsconfig.tsbuildinfo").read_text(encoding="utf-8") == "from an earlier build\n"

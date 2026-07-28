@@ -2,6 +2,7 @@ from pathlib import Path
 
 import pytest
 
+from sync.index import shipped_tree as shipped_tree_module
 from sync.index.shipped_tree import shipped_tree, unshipped_paths
 
 
@@ -88,3 +89,66 @@ def test_nothing_is_moved_when_the_tree_is_already_what_ships(repo: Path, git):
         pass
 
     assert set(repo.parent.iterdir()) == before
+
+
+def test_an_artifact_the_block_regenerates_does_not_defeat_the_restore(repo: Path):
+    """The collision that ended the M0 acceptance run.
+
+    `tsc --noEmit` writes `tsconfig.tsbuildinfo` for an `incremental` project
+    and `.gitignore` keeps it out of the repository, so the gate holds it aside
+    and the compiler then writes a new one at the path it was held aside from.
+    The run abandoned a finding on the `FileExistsError` that followed, for a
+    reason unrelated to whether the patch was correct.
+
+    Windows is where the rename refuses. POSIX overwrites silently and reaches
+    the verdict this asserts by accident, so this is red on the platform the
+    pipeline runs on and pins the chosen verdict on both.
+    """
+    with shipped_tree(repo, keep=frozenset({"node_modules"})):
+        (repo / "agent.log").write_text("written while the gate measured\n", encoding="utf-8")
+
+    assert (repo / "agent.log").read_text(encoding="utf-8") == "noise\n"
+
+
+def test_a_directory_the_block_recreates_does_not_defeat_the_restore(repo: Path):
+    """The same collision in the form that refuses on every platform.
+
+    `os.rename` replaces a file and never a populated directory, so a compiler
+    that writes its output directory again while the gate is measuring fails
+    the restore on POSIX as well as on Windows.
+    """
+    with shipped_tree(repo, keep=frozenset({"node_modules"})):
+        (repo / "build").mkdir()
+        (repo / "build" / "fresh.js").write_text("2\n", encoding="utf-8")
+
+    assert (repo / "build" / "out.js").read_text(encoding="utf-8") == "1\n"
+    assert not (repo / "build" / "fresh.js").exists()
+
+
+def test_every_other_path_is_restored_when_one_of_them_cannot_be(repo: Path, monkeypatch):
+    """A half-restored clone poisons every later finding in the same run, which
+    is a larger fault than the one path that could not be moved back.
+
+    There is no portable way to hold a real lock on a file, so the refusal is
+    injected at the seam that would meet one. The held copies stay where they
+    are when this happens: after a failed restore they are the only copies left.
+    """
+    real_clear = shipped_tree_module._clear
+
+    def refuse(path: Path) -> None:
+        if path.name == "agent.log":
+            raise OSError("locked by another process")
+        real_clear(path)
+
+    monkeypatch.setattr(shipped_tree_module, "_clear", refuse)
+
+    with pytest.raises(RuntimeError, match="agent.log"):
+        with shipped_tree(repo, keep=frozenset({"node_modules"})):
+            (repo / "agent.log").write_text("written while the gate measured\n", encoding="utf-8")
+
+    assert (repo / "src" / "untracked.ts").read_text(encoding="utf-8") == "export const b = 3;\n"
+    assert (repo / "build" / "out.js").read_text(encoding="utf-8") == "1\n"
+
+    held = list(repo.parent.glob(".sync-unshipped-*"))
+    assert len(held) == 1
+    assert (held[0] / "agent.log").read_text(encoding="utf-8") == "noise\n"

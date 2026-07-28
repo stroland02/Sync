@@ -31,6 +31,37 @@ Moving those paths aside was chosen over the two alternatives:
 dependencies, so a typecheck run without them describes neither tree.
 Everything under a kept directory stays, which is the hole the pristine
 checkout would have closed.
+
+## When the block writes to a path this held aside
+
+The gate runs a compiler, and a compiler produces build output that is
+gitignored for the same reason it is held aside. `tsc --noEmit` writes
+`tsconfig.tsbuildinfo` for an `incremental` project, so the measurement
+regenerates a file the measurement had just moved out of the way. The M0
+acceptance run abandoned a finding on the `FileExistsError` that follows,
+naming a build artifact rather than anything about the patch.
+
+**The held copy wins and the regenerated one is deleted.** The held copy is the
+clone as the patch agent left it; the new one is a byproduct of a verification
+whose whole result is a `VerifyResult` and which is about to be discarded. The
+next patch attempt and every later finding in the run work in this clone, so
+the state they inherit has to be the state that was there, not one the gate
+wrote. Keeping the byproduct instead would also feed a later `tsc` an
+incremental record describing a tree that only existed inside this block.
+
+Restoring is therefore total in a second sense: one path that refuses to move
+back does not abandon the rest. A clone missing half the agent's work poisons
+every later finding, which is the larger fault -- so every held path is
+attempted, the failures are collected, and the holding directory is left in
+place when there are any, because after a failed restore the copies in it are
+the only ones left.
+
+One thing this does not do: a byproduct at a path that held nothing stays.
+Reverting those as well would mean deleting paths this module never moved, on
+the strength of a second `git status`. They are ignored by construction, so
+they can reach no commit, and the next block holds them aside before the
+compiler runs -- which is also why an incremental record never survives to be
+read.
 """
 
 from __future__ import annotations
@@ -91,6 +122,19 @@ def unshipped_paths(repo_path: Path, keep: frozenset[str] = frozenset()) -> list
     ]
 
 
+def _clear(path: Path) -> None:
+    """Remove whatever the block left standing where a held copy has to return.
+
+    `Path.rename` refuses on Windows and replaces silently on POSIX, so without
+    this the same collision is an abandoned finding on one platform and quiet
+    data loss on the other.
+    """
+    if path.is_dir() and not path.is_symlink():
+        shutil.rmtree(path)
+    elif path.is_symlink() or path.exists():
+        path.unlink()
+
+
 @contextmanager
 def shipped_tree(repo_path: Path, keep: frozenset[str] = frozenset()) -> Iterator[None]:
     """Hold `repo_path` at the content a push would carry, then put it back.
@@ -115,13 +159,28 @@ def shipped_tree(repo_path: Path, keep: frozenset[str] = frozenset()) -> Iterato
     moved: list[tuple[Path, Path]] = []
     try:
         for relative in unshipped:
-            source, destination = repo_path / relative, holding / relative
-            destination.parent.mkdir(parents=True, exist_ok=True)
-            source.rename(destination)
-            moved.append((source, destination))
+            original, held = repo_path / relative, holding / relative
+            held.parent.mkdir(parents=True, exist_ok=True)
+            original.rename(held)
+            moved.append((original, held))
         yield
     finally:
-        for source, destination in reversed(moved):
-            source.parent.mkdir(parents=True, exist_ok=True)
-            destination.rename(source)
+        failures: list[str] = []
+        for original, held in reversed(moved):
+            try:
+                original.parent.mkdir(parents=True, exist_ok=True)
+                _clear(original)
+                held.rename(original)
+            except OSError as exc:
+                failures.append(f"{original.relative_to(repo_path)} ({exc})")
+        if failures:
+            # Raised from `finally`, so this displaces whatever the block was
+            # failing with. That ordering is deliberate: the block's failure
+            # concerns one finding, while a clone left in a state nobody
+            # described concerns every finding that runs after it. The original
+            # is still on `__context__` for anyone reading the traceback.
+            raise RuntimeError(
+                f"could not restore {', '.join(failures)} into {repo_path}; "
+                f"the only copies are in {holding}"
+            )
         shutil.rmtree(holding, ignore_errors=True)
