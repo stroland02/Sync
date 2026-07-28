@@ -94,7 +94,11 @@ recorded with which of the seven changes broke it.
 - **B5** — `task_365c23bf0920`, worktree `m1-forge`. Owns `pyproject.toml`, `tests/conftest.py`
   and test files; forbidden from touching `src/`. A measured "not worth it" is an acceptable
   result and the brief says so.
-- **B6** — `task_63bec222ec75`, worktree `m2-symbols`. Owns `src/sync/index/`. Four routes are
+- **B6** — `task_1ab7fb886da3`, worktree `m2-symbols`. First dispatch (`task_63bec222ec75`)
+  was accepted by Orca but never reached the agent: no heartbeat, no edits, terminal idle
+  while holding an active dispatch context. Marked failed and re-dispatched to a new
+  terminal. Worth knowing that task status alone does not prove a worker is alive —
+  worktree dirtiness and heartbeats are what caught it. Owns `src/sync/index/`. Four routes are
   named with their trade-offs; choosing and defending one is the task.
 
 ## Done
