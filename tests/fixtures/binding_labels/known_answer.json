@@ -1,0 +1,17 @@
+{
+  "note": "Hand-built so precision and recall are different numbers over one input: 2/3 against 2/4. A bug that swaps the two axes changes both values, and a bug that swaps their denominators changes both sample sizes (3 against 4). Every binding is at one rung, so nothing here depends on the split.",
+  "findings": [
+    {"call_site_id": "cs1", "vendor_change_id": "vc1", "binding_rung": "static"},
+    {"call_site_id": "cs2", "vendor_change_id": "vc1", "binding_rung": "static"},
+    {"call_site_id": "cs3", "vendor_change_id": "vc1", "binding_rung": "static"},
+    {"call_site_id": "cs9", "vendor_change_id": "vc1", "binding_rung": "static"}
+  ],
+  "labels": [
+    {"call_site_id": "cs1", "vendor_change_id": "vc1", "affected": true, "rung": "static"},
+    {"call_site_id": "cs2", "vendor_change_id": "vc1", "affected": true, "rung": "static"},
+    {"call_site_id": "cs3", "vendor_change_id": "vc1", "affected": false},
+    {"call_site_id": "cs4", "vendor_change_id": "vc1", "affected": true, "rung": "static"},
+    {"call_site_id": "cs5", "vendor_change_id": "vc1", "affected": true, "rung": "static"},
+    {"call_site_id": "cs6", "vendor_change_id": "vc1", "affected": false}
+  ]
+}

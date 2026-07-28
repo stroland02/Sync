@@ -1,0 +1,13 @@
+{
+  "note": "Two of the three genuinely affected call sites produced nothing. Those two are false negatives -- what recall exists to count -- and not exclusions: they belong in recall's denominator (3) and nowhere in precision's (2). Reading them as unscoreable is what produces a recall of 1.0 on any input, so the numbers are chosen so that mistake is visible: recall 1/3 against precision 1/2, both away from 1.0 and from each other.",
+  "findings": [
+    {"call_site_id": "cs1", "vendor_change_id": "vc1", "binding_rung": "static"},
+    {"call_site_id": "cs2", "vendor_change_id": "vc1", "binding_rung": "static"}
+  ],
+  "labels": [
+    {"call_site_id": "cs1", "vendor_change_id": "vc1", "affected": true, "rung": "static"},
+    {"call_site_id": "cs2", "vendor_change_id": "vc1", "affected": false},
+    {"call_site_id": "cs3", "vendor_change_id": "vc1", "affected": true, "rung": "static"},
+    {"call_site_id": "cs4", "vendor_change_id": "vc1", "affected": true, "rung": "static"}
+  ]
+}
