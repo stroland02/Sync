@@ -35,6 +35,7 @@ dev = [
     "import-linter>=2.13",
     "pytest>=9.1.1",
     "pytest-asyncio>=1.4.0",
+    "pytest-xdist>=3.6",
 ]
 
 [tool.pytest.ini_options]
@@ -42,7 +43,12 @@ testpaths = ["tests"]
 # `scripts/` holds build-time tooling that is tested but deliberately not part of the
 # shipped package, so it is importable from tests without being installed.
 pythonpath = ["."]
-addopts = "-m 'not e2e'"
+# `-n auto` here rather than in the CI workflow, so a developer and CI run the same
+# scheduler. The suite is subprocess-bound -- `git`, `tsc`, `oasdiff` -- and 12 workers
+# take it from 133s to 46s; the default `--dist load` is what those numbers are from,
+# and `--dist loadfile` is 78s because three files hold 79% of the wall clock.
+# Spinning up workers costs about 4s flat, so use `-n0` for a focused run.
+addopts = "-m 'not e2e' -n auto"
 markers = ["e2e: end-to-end test; makes network and model calls"]
 
 [tool.importlinter]

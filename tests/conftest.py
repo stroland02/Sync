@@ -8,16 +8,23 @@ are. Reproduced deliberately: this suite and `test_vendor_change_detector.py`
 run concurrently against one database fail 5 and 3 tests respectively, in
 tests that predate the change being blamed.
 
-`SYNC_DSN` set explicitly always wins. CI pins a database, and an operator
-debugging a specific one needs the same escape hatch; only an unset variable
-gets a per-run database. The name carries the pid, which is unique among the
-processes that could collide, and is dropped WITH (FORCE) because `GraphStore`
-holds its connection open for the life of the store.
+`SYNC_DSN` set explicitly wins for a serial run. CI pins a database, and an
+operator debugging a specific one needs the same escape hatch; only an unset
+variable gets a per-run database. The name carries the pid, which is unique
+among the processes that could collide, and is dropped WITH (FORCE) because
+`GraphStore` holds its connection open for the life of the store.
+
+Under `pytest-xdist` a pin cannot be honoured as given: every worker is a
+separate process, they would all resolve it to the same database, and the
+TRUNCATE two of them issue at once deadlocks. So a worker subdivides whatever
+it was pinned to rather than ignoring it -- `sync_b5` becomes `sync_b5_gw0`,
+and an operator still knows which server and which run to look at.
 
 `pytest_configure` rather than a fixture: test modules resolve `SYNC_DSN` at
-import time, and collection imports them after this hook runs. A
-session-scoped fixture would be too late, and none of those modules has to
-change.
+import time, and collection imports them after this hook runs -- in the worker
+process, under xdist, which is why the per-worker name has to be decided here
+too. A session-scoped fixture would be too late, and none of those modules has
+to change.
 """
 
 from __future__ import annotations
@@ -41,36 +48,54 @@ _created_dbname: str | None = None
 _admin_dsn: str | None = None
 
 
-def _dsn_for(dbname: str) -> str:
-    return make_conninfo(**{**conninfo_to_dict(DEFAULT_DSN), "dbname": dbname})
+def dsn_for(dbname: str, template: str) -> str:
+    return make_conninfo(**{**conninfo_to_dict(template), "dbname": dbname})
+
+
+def database_for(pinned_dsn: str | None, worker: str | None, pid: int) -> str | None:
+    """The database this process has to create for itself, or None to use what
+    it was handed.
+
+    `worker` is xdist's `PYTEST_XDIST_WORKER`, absent in a serial run and in the
+    controller process.
+    """
+    own = f"sync_test_{pid}"
+    if worker is None:
+        return None if pinned_dsn else own
+    # Not `pinned_dsn or DEFAULT_DSN`: an unpinned worker has to stay distinct
+    # from the same worker id in a suite someone else launched at the same time,
+    # and its own pid is the only thing here that separates them.
+    return f"{conninfo_to_dict(pinned_dsn)['dbname'] if pinned_dsn else own}_{worker}"
 
 
 def pytest_configure(config) -> None:
     global _created_dbname, _admin_dsn
 
-    if os.environ.get("SYNC_DSN"):
+    pinned = os.environ.get("SYNC_DSN")
+    dbname = database_for(pinned, os.environ.get("PYTEST_XDIST_WORKER"), os.getpid())
+    if dbname is None:
         return
 
-    dbname = f"sync_test_{os.getpid()}"
-    admin_dsn = _dsn_for(ADMIN_DBNAME)
+    template = pinned or DEFAULT_DSN
+    admin_dsn = dsn_for(ADMIN_DBNAME, template)
     try:
         conn = psycopg.connect(admin_dsn, autocommit=True)
     except psycopg.OperationalError as exc:
         # No server: the tests that need one were going to fail anyway, and the
         # ones that do not still run. Leaving SYNC_DSN unset keeps that exactly
         # as it was before this file existed.
-        warnings.warn(f"no Postgres at {DEFAULT_DSN}, tests run unisolated: {exc}", stacklevel=1)
+        warnings.warn(f"no Postgres at {template}, tests run unisolated: {exc}", stacklevel=1)
         return
 
     with conn:
         # A run killed hard enough to skip the finalizer leaves its database
         # behind, and pids are reused. Dropping first cannot disturb a live run,
-        # since no two live processes share a pid.
+        # since no two live processes share a pid -- nor a pid and a worker id.
         conn.execute(sql.SQL("DROP DATABASE IF EXISTS {} WITH (FORCE)").format(sql.Identifier(dbname)))
         conn.execute(sql.SQL("CREATE DATABASE {}").format(sql.Identifier(dbname)))
 
     _created_dbname, _admin_dsn = dbname, admin_dsn
-    os.environ["SYNC_DSN"] = _dsn_for(dbname)
+    os.environ["SYNC_DSN"] = dsn_for(dbname, template)
 
 
 def pytest_unconfigure(config) -> None:
