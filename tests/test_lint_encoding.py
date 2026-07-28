@@ -119,3 +119,41 @@ def test_repository_is_clean() -> None:
     targets = [REPO_ROOT / "src", REPO_ROOT / "scripts", REPO_ROOT / "tests"]
     found = scan_paths(targets)
     assert not found, "\n".join(f"{v.filename}:{v.line}: {v.message}" for v in found)
+
+
+def test_lint_refuses_a_path_that_does_not_exist(tmp_path: Path) -> None:
+    """A gate pointed at nothing must not report success.
+
+    CI runs `lint_encoding.py src scripts tests`. Skipping a path that is absent means a
+    renamed or mistyped directory silently narrows what is checked while the gate stays
+    green -- the same shape as the import-boundary check that once exited 0 without
+    parsing its own argument.
+    """
+    result = subprocess.run(
+        [sys.executable, str(REPO_ROOT / "scripts" / "lint_encoding.py"),
+         str(tmp_path / "no-such-directory")],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+    )
+    assert result.returncode != 0, "CLI exited 0 for a path that does not exist"
+    assert "no-such-directory" in result.stdout + result.stderr
+
+
+def test_lint_still_checks_the_paths_that_do_exist(tmp_path: Path) -> None:
+    """Refusing an absent path must not stop the present ones being scanned."""
+    good = tmp_path / "pkg"
+    good.mkdir()
+    (good / "offender.py").write_text(
+        "from pathlib import Path\ndef load(p: Path) -> str:\n    return p.read_text()\n",
+        encoding="utf-8",
+    )
+
+    result = subprocess.run(
+        [sys.executable, str(REPO_ROOT / "scripts" / "lint_encoding.py"), str(good)],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+    )
+    assert result.returncode != 0
+    assert "read_text" in result.stdout

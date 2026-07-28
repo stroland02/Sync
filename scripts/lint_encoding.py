@@ -120,7 +120,8 @@ def _python_files(target: Path) -> list[Path]:
 
 
 def scan_paths(targets: list[Path]) -> list[Violation]:
-    """Every violation under `targets`. Missing paths are skipped, not an error."""
+    """Every violation under `targets`. A path that does not exist is skipped here and
+    rejected by `main`, which is the only caller that gates anything."""
     found: list[Violation] = []
     for target in targets:
         if not target.exists():
@@ -134,6 +135,15 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("paths", nargs="+", type=Path)
     args = parser.parse_args()
+
+    # A gate pointed at nothing reports success, which is the failure mode this whole
+    # script exists to prevent elsewhere: CI names `src scripts tests`, and a renamed
+    # directory would narrow the scan in silence.
+    missing = [p for p in args.paths if not p.exists()]
+    if missing:
+        for path in missing:
+            print(f"{path}: no such file or directory")
+        return 2
 
     found = scan_paths(args.paths)
     for violation in found:
