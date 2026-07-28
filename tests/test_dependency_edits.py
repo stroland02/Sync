@@ -8,7 +8,12 @@ narrow and it never fires, too wide and it fires on every run.
 import os
 from pathlib import Path
 
-from sync.index.dependency_edits import describe, mark_installed, unshippable_dependency_edits
+from sync.index.dependency_edits import (
+    describe,
+    discard_dependencies,
+    mark_installed,
+    unshippable_dependency_edits,
+)
 
 DIRS = frozenset({"node_modules"})
 
@@ -173,3 +178,44 @@ def test_the_mark_is_late_enough_that_the_very_next_write_is_visible(tmp_path: P
     assert offender.stat().st_mtime_ns > installed_at, (
         "a write immediately after the mark was not distinguishable from it"
     )
+
+
+def test_a_contaminated_clone_is_discarded_so_the_next_finding_does_not_meet_it(tmp_path: Path, git):
+    """One clone serves every finding in a run, and `_reset_clone` keeps ignored files so
+    `node_modules` survives between them. A finding that abandoned on a dependency edit
+    therefore leaves the doctored declaration in place for the next finding, which is
+    verified against a compiler that has already been lied to.
+
+    Discarding is by directory rather than by restoring the named paths: the package
+    manager's cache is the only thing that knows a package's original bytes, and asking it
+    per path costs more than removing the tree that `prepare` rebuilds anyway.
+    """
+    git(["init", "-q"], tmp_path)
+    installed_at = mark_installed(tmp_path)
+    pkg = tmp_path / "node_modules" / "vendorsdk"
+    pkg.mkdir(parents=True)
+    (pkg / "index.d.ts").write_text("export type C = { doctored: true };\n", encoding="utf-8")
+
+    assert unshippable_dependency_edits(tmp_path, DIRS, installed_at)
+
+    assert discard_dependencies(tmp_path, DIRS) is True
+    assert not (tmp_path / "node_modules").exists()
+
+
+def test_an_uncontaminated_clone_keeps_the_install_the_next_finding_needs(tmp_path: Path):
+    """The negative, and the one that matters for latency. Most abandonments are ordinary --
+    a patch that would not typecheck, a red CI run -- and discarding the install after every
+    one of them would buy a multi-minute reinstall for a case that did not occur.
+    """
+    mark_installed(tmp_path)
+    pkg = tmp_path / "node_modules" / "vendorsdk"
+    pkg.mkdir(parents=True)
+    (pkg / "index.d.ts").write_text("export type C = { ok: true };\n", encoding="utf-8")
+
+    assert discard_dependencies(tmp_path, DIRS, only_if_edited_after=None) is False
+    assert (pkg / "index.d.ts").exists()
+
+
+def test_discarding_a_clone_that_never_installed_anything_is_not_an_error(tmp_path: Path):
+    """A finding can abandon before `prepare` ever ran."""
+    assert discard_dependencies(tmp_path, DIRS) is False

@@ -21,6 +21,8 @@ class LanguageAdapter(Protocol):
 
     def static_verify(self, repo: RepoRef, patch: Patch) -> VerifyResult: ...
 
+    def discard_contaminated_dependencies(self, repo: RepoRef) -> bool: ...
+
 
 @runtime_checkable
 class VendorAdapter(Protocol):

@@ -166,6 +166,9 @@ class _StubVendor:
 
 
 class _StubAdapter:
+    def discard_contaminated_dependencies(self, repo):
+        return False
+
     def __init__(self, vendor_adapter):
         pass
 
@@ -582,6 +585,9 @@ class _EditingRemediator:
 
 
 class _PassingAdapter:
+    def discard_contaminated_dependencies(self, repo):
+        return False
+
     def __init__(self, vendor_adapter=None):
         pass
 

@@ -30,6 +30,7 @@ file contents and it does not run the compiler twice.
 from __future__ import annotations
 
 import os
+import shutil
 import subprocess
 import time
 from pathlib import Path
@@ -155,6 +156,54 @@ def unshippable_dependency_edits(
         return []
     tracked = _tracked_dependency_files(repo_path, dependency_dirs)
     return [path for path in changed if path not in tracked]
+
+
+def discard_dependencies(
+    repo_path: Path,
+    dependency_dirs: frozenset[str],
+    only_if_edited_after: int | None = 0,
+) -> bool:
+    """Remove the installed dependency trees so `prepare` rebuilds them. Returns whether
+    anything was removed.
+
+    One clone serves every finding in a run and `cli._reset_clone` runs `git clean` without
+    `-x`, so ignored files survive it deliberately -- `node_modules` is what `prepare` spent
+    tens of seconds installing, and reinstalling it per finding would cost more than the
+    reset protects. A doctored declaration is ignored too, and survives on the same terms.
+
+    So the tree is discarded only when this finding actually edited it, which the guard has
+    already established. `only_if_edited_after=None` skips the check and removes nothing,
+    which is the ordinary abandonment: a patch that would not typecheck or a red CI run
+    leaves the install exactly as `prepare` wrote it, and paying a reinstall for those would
+    buy minutes per finding against a case that did not occur.
+
+    By directory rather than by restoring the named paths: a package's original bytes live
+    in the package manager's cache and nowhere else in the clone, so there is nothing here
+    to restore from. `prepare` reinstalls on the next finding regardless.
+    """
+    if only_if_edited_after is None:
+        return False
+    if not unshippable_dependency_edits(repo_path, dependency_dirs, only_if_edited_after):
+        return False
+
+    removed = False
+    root = _walkable(repo_path)
+    stack = [root]
+    targets: list[str] = []
+    while stack:
+        directory = stack.pop()
+        with os.scandir(directory) as entries:
+            for entry in entries:
+                if not entry.is_dir(follow_symlinks=False) or entry.name == ".git":
+                    continue
+                if entry.name in dependency_dirs:
+                    targets.append(entry.path)
+                else:
+                    stack.append(entry.path)
+    for target in targets:
+        shutil.rmtree(target, ignore_errors=True)
+        removed = True
+    return removed
 
 
 def describe(edits: list[str]) -> str:

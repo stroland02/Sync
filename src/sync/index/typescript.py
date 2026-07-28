@@ -434,6 +434,32 @@ class TypeScriptAdapter:
             )
         return found
 
+    def discard_contaminated_dependencies(self, repo: RepoRef) -> bool:
+        """Drop this clone's installed dependencies if the last patch edited them.
+
+        One clone serves every finding in a run, and the reset between findings keeps
+        ignored files so the install survives -- which is what makes the second finding
+        cheap and is also what carries a doctored declaration forward into it. The guard
+        that abandoned the first finding does not clean up after itself: the forge cannot
+        see the filesystem and the graph does not know what a dependency directory is.
+
+        Called by the driver between findings rather than from `static_verify`, because a
+        verification that is about to be retried still needs the tree it just measured.
+        Returns whether anything was removed, which is the only signal an operator gets
+        that the next finding will pay for a reinstall.
+
+        Nothing is cleared here afterwards: `prepare` re-marks the install unconditionally
+        on the next finding, and the recorded baseline still describes the tree a reinstall
+        from the same lockfile produces.
+        """
+        from sync.index.dependency_edits import discard_dependencies
+        from sync.index.deps import DEPENDENCY_DIRS
+
+        path = Path(repo.local_path).resolve()
+        return discard_dependencies(
+            path, DEPENDENCY_DIRS, only_if_edited_after=self._installed_at.get(path)
+        )
+
     def static_verify(self, repo: RepoRef, patch: Patch) -> VerifyResult:
         """Fail on the diagnostics the patch introduced, and on no others.
 

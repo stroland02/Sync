@@ -425,6 +425,15 @@ class PythonAdapter:
                     content_hash=content_hash,
                 )
 
+    def discard_contaminated_dependencies(self, repo: RepoRef) -> bool:
+        """Never anything to discard, because `prepare` installs nothing.
+
+        The TypeScript adapter can be handed back a clone whose `node_modules` a patch
+        agent doctored, and has to drop it. This adapter never writes an installed tree
+        into the clone at all, so there is none to be contaminated.
+        """
+        return False
+
     def prepare(self, repo: RepoRef) -> None:
         """Nothing, deliberately.
 

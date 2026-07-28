@@ -555,6 +555,10 @@ def run(args: argparse.Namespace) -> int:
                     graph.update_state(config, {"repo": repo})
                 else:
                     _reset_clone(repo)
+                    # `_reset_clone` keeps ignored files on purpose, so a dependency
+                    # tree the previous finding doctored would survive into this one.
+                    if adapter.discard_contaminated_dependencies(repo):
+                        print("discarded the previous finding's dependency tree")
 
                 # Resuming takes `None`: an interrupted thread handed a payload
                 # re-enters at START and redoes the patch and the push it had
