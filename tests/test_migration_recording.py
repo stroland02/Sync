@@ -353,21 +353,96 @@ def test_a_store_with_no_corpus_method_does_not_fail_the_run():
 # --- the salt, which must never be a published constant ---------------------------
 
 
-def test_no_salt_configured_writes_no_row_and_says_so(monkeypatch, caplog):
-    """This project is open core. A constant fallback in the source is a published
-    constant, and a hash salted with a published constant is reversible by anyone who can
-    read the repository -- so an unconfigured salt omits the row rather than weakening it.
+@pytest.fixture()
+def salt_file(monkeypatch, tmp_path):
+    """A salt file of this test's own, and no in-process fallback carried in from another."""
+    from sync.remediate import corpus
+
+    monkeypatch.delenv("SYNC_CORPUS_SALT", raising=False)
+    path = tmp_path / ".sync-corpus-salt"
+    monkeypatch.setattr(corpus, "SALT_FILE", path)
+    monkeypatch.setattr(corpus, "_fallback", None)
+    return path
+
+
+def test_an_unconfigured_salt_is_generated_and_persisted(salt_file):
+    """No constant, and no missing row either. A constant in the source is public -- an
+    unsalted digest of `amount` is `amount` to anyone willing to hash a wordlist -- so the
+    salt is generated once and kept, which is stable across runs and unique per deployment.
+    """
+    _, store = _run()
+
+    assert len(store.rows) == 1
+    assert salt_file.exists()
+    assert salt_file.read_text(encoding="utf-8").strip()
+
+
+def test_the_persisted_salt_is_reused_rather_than_regenerated(salt_file):
+    """Regenerating per run would make every run's hashes incomparable with every other
+    run's, which is the whole reason the corpus is worth keeping."""
+    salt_file.write_text("a-previously-generated-salt" + chr(10), encoding="utf-8")
+
+    from sync.core.corpus import hash_arg_keys
+
+    _, store = _run()
+
+    assert salt_file.read_text(encoding="utf-8").strip() == "a-previously-generated-salt"
+    assert store.rows[0].arg_key_hashes == hash_arg_keys(
+        ["amount", "currency"], salt="a-previously-generated-salt"
+    )
+
+
+def test_the_environment_variable_wins_over_the_persisted_file(salt_file):
+    """An operator who configures a salt has overridden the generated one, not joined it."""
+    from sync.core.corpus import hash_arg_keys
+
+    salt_file.write_text("generated" + chr(10), encoding="utf-8")
+    import os
+
+    os.environ["SYNC_CORPUS_SALT"] = "configured"
+    try:
+        _, store = _run()
+    finally:
+        del os.environ["SYNC_CORPUS_SALT"]
+
+    assert store.rows[0].arg_key_hashes == hash_arg_keys(["amount", "currency"], salt="configured")
+
+
+def test_a_salt_file_that_cannot_be_written_still_records_the_row(monkeypatch, tmp_path, caplog):
+    """Recording must never fail a run, and that outranks comparability. The row is
+    written with an in-process salt and the log says the comparability was lost, because
+    a row nobody can join is still a row somebody can count.
     """
     import logging
 
+    from sync.remediate import corpus
+
     monkeypatch.delenv("SYNC_CORPUS_SALT", raising=False)
+    monkeypatch.setattr(corpus, "SALT_FILE", tmp_path / "no-such-directory" / "salt")
+    monkeypatch.setattr(corpus, "_fallback", None)
 
     with caplog.at_level(logging.WARNING, logger="sync.remediate.corpus"):
         state, store = _run()
 
     assert state["outcome"] == "opened"
-    assert store.rows == []
-    assert any("SYNC_CORPUS_SALT" in record.getMessage() for record in caplog.records)
+    assert len(store.rows) == 1
+    assert store.rows[0].arg_key_hashes
+    assert any("comparab" in record.getMessage() for record in caplog.records)
+
+
+def test_the_in_process_fallback_salt_is_stable_within_a_run(monkeypatch, tmp_path):
+    """One salt per process, not one per row. A salt regenerated per call would make two
+    attempts of the same finding disagree about the same argument keys."""
+    from sync.remediate import corpus
+
+    monkeypatch.delenv("SYNC_CORPUS_SALT", raising=False)
+    monkeypatch.setattr(corpus, "SALT_FILE", tmp_path / "no-such-directory" / "salt")
+    monkeypatch.setattr(corpus, "_fallback", None)
+
+    _, store = _run(adapter=StubAdapter(verdicts=[_fail(), _ok()]))
+
+    assert len(store.rows) == 2
+    assert store.rows[0].arg_key_hashes == store.rows[1].arg_key_hashes
 
 
 def test_the_salt_reaches_the_hashes_rather_than_being_ignored():
@@ -432,3 +507,47 @@ def test_a_ci_verdict_does_not_leak_into_the_attempt_after_it():
 
     assert store.rows[0].ci_result == "failed"
     assert [row.ci_result for row in store.rows[1:]] == [None] * (len(store.rows) - 1)
+
+
+# --- invariants asserted rather than reasoned about --------------------------------
+
+
+@pytest.mark.parametrize(
+    "adapter,forge",
+    [
+        (StubAdapter(verdicts=[_ok()]), StubForge()),
+        (StubAdapter(verdicts=[_fail(), _fail(), _ok()]), StubForge()),
+        (StubAdapter(verdicts=[_fail()]), StubForge()),
+        (StubAdapter(verdicts=[_ok()]), StubForge(ci_results=[False, True])),
+        (StubAdapter(verdicts=[_ok()]), StubForge(ci_results=[False, False, False])),
+    ],
+)
+def test_no_attempt_is_ever_recorded_twice(adapter, forge):
+    """An attempt ends at one of three mutually exclusive places, and that is the kind of
+    invariant which survives review and then breaks when someone adds a fourth exit. Every
+    route through the graph is walked here rather than argued about.
+    """
+    _, store = _run(adapter=adapter, forge=forge)
+
+    indices = [row.attempt_index for row in store.rows]
+    assert len(indices) == len(set(indices))
+    assert indices == sorted(indices)
+
+
+def test_a_routing_failure_stays_queryable_even_though_it_writes_no_row():
+    """No tier could handle the change, so no repair was attempted and the corpus has
+    nothing at its grain to record. The run still has to say what happened, or the routing
+    failure is lost entirely rather than merely being kept somewhere else.
+    """
+
+    @dataclass
+    class Declines(StubRemediator):
+        def can_handle(self, finding, change) -> bool:
+            return False
+
+    state, store = _run(remediator=TieredRemediator([Declines(strategy="codemod")]))
+
+    assert store.rows == []
+    assert state["outcome"] == "abandoned"
+    assert "no remediator can handle" in state["abandon_reason"]
+    assert CHANGE.kind in state["abandon_reason"]

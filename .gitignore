@@ -5,6 +5,10 @@ tools/
 .env
 .pytest_cache/
 .cache/
+
+# The generated corpus salt. Committing it would publish it, and a published salt is
+# equivalent to no salt: `arg_key_hashes` becomes a wordlist lookup.
+.sync-corpus-salt
 .superpowers/
 .import_linter_cache/
 
