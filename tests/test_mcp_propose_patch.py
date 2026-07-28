@@ -255,3 +255,97 @@ def test_a_change_the_table_says_needs_no_patch_never_reaches_the_patch_node():
     assert state["outcome"] == NO_PATCH_WARRANTED
     assert state["tier"] == -1
     assert remediator.calls == []
+
+
+# -- the tool response, as opposed to the run behind it ------------------------------
+
+
+class FakeGraph(FakeStore):
+    def open_findings(self) -> list[Finding]:
+        return [_finding()]
+
+    def all_vendor_changes(self, vendor_id: str) -> list[VendorChange]:
+        return [_change()] if vendor_id == "stripe" else []
+
+
+def _surface(*, verdicts, diffs, **kwargs):
+    from sync.mcp.tools import GraphSurface
+
+    return GraphSurface(
+        FakeGraph(), repo=REPO, adapter=FakeAdapter(verdicts),
+        remediator=FakeRemediator(diffs), **kwargs,
+    )
+
+
+def test_the_response_carries_the_three_fields_the_spec_names():
+    surface = _surface(verdicts=[VerifyResult(ok=True, diagnostics="")], diffs=["--- a/x\n+++ b/x\n"])
+    response = surface.propose_patch("f-1")
+    assert response["diff"] == "--- a/x\n+++ b/x\n"
+    assert response["static_verify"] == {"passed": True, "diagnostics": ""}
+    assert set(response["evidence"]) == {"spec_diff", "changelog", "call_sites"}
+    assert response["evidence"]["call_sites"] == ["src/pay.ts:12"]
+
+
+def test_the_diff_is_returned_and_the_patched_source_is_not():
+    """The one deliberate exception to "never return file contents", and only that far.
+
+    The diff is the answer, so withholding it would make the tool pointless. Returning the
+    file it applies to would hand back exactly the tokens the graph exists to save, so the
+    response carries no source key beyond the diff itself.
+    """
+    surface = _surface(verdicts=[VerifyResult(ok=True)], diffs=["--- a/x\n+++ b/x\n+const a = 1;\n"])
+    response = surface.propose_patch("f-1")
+    assert response["diff"].startswith("--- a/x")
+    assert set(response) & {"content", "source", "file_contents", "patched_source"} == set()
+
+
+def test_the_evidence_claims_no_ci_run_because_none_happened():
+    """`sync.core.Evidence` carries `ci_run_url`; an empty one here would report a run."""
+    surface = _surface(verdicts=[VerifyResult(ok=True)], diffs=["diff"])
+    assert "ci_run_url" not in surface.propose_patch("f-1")["evidence"]
+
+
+def test_the_response_carries_provenance_and_context_savings_like_every_other_tool():
+    surface = _surface(verdicts=[VerifyResult(ok=True)], diffs=["diff"])
+    response = surface.propose_patch("f-1")
+    assert response["binding_source"] == "static"
+    assert response["indexed_at"] == INDEXED.isoformat()
+    assert response["context_savings"] > 0
+
+
+def test_a_failed_typecheck_reports_the_verdict_rather_than_omitting_it():
+    surface = _surface(verdicts=[VerifyResult(ok=False, diagnostics="TS2339")] * 3,
+                       diffs=["d1", "d2", "d3"])
+    response = surface.propose_patch("f-1")
+    assert response["outcome"] == UNVERIFIED
+    assert response["static_verify"]["passed"] is False
+    assert "TS2339" in response["static_verify"]["diagnostics"]
+
+
+def test_a_finding_the_graph_does_not_hold_answers_none():
+    surface = _surface(verdicts=[], diffs=[])
+    assert surface.propose_patch("f-does-not-exist") is None
+
+
+def test_a_read_only_server_says_so_instead_of_raising():
+    """A deployment with no checkout is a configuration, not a fault.
+
+    The agent still gets the evidence it can have, and an outcome that tells it to stop
+    asking rather than a traceback that tells it nothing.
+    """
+    from sync.mcp.propose import UNAVAILABLE
+    from sync.mcp.tools import GraphSurface
+
+    response = GraphSurface(FakeGraph()).propose_patch("f-1")
+    assert response["outcome"] == UNAVAILABLE
+    assert response["diff"] is None
+    assert response["static_verify"] is None
+    assert response["evidence"]["call_sites"] == ["src/pay.ts:12"]
+
+
+def test_verification_that_never_ran_is_null_rather_than_a_failed_verdict():
+    """`{"passed": false}` claims a typecheck happened and rejected the patch."""
+    surface = _surface(verdicts=[], diffs=["", "", ""])
+    response = surface.propose_patch("f-1")
+    assert response["outcome"] == UNVERIFIED
+    assert response["static_verify"] is None

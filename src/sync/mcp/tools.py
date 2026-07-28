@@ -27,6 +27,7 @@ from datetime import datetime
 from typing import Any, Protocol
 
 from sync.core import CallSite, Finding, VendorChange
+from sync.mcp import propose
 
 DEFAULT_LIMIT = 50
 
@@ -54,11 +55,33 @@ class GraphReader(Protocol):
 
 
 class GraphSurface:
-    """Answers the three read tools against a graph."""
+    """Answers the four tools against a graph.
 
-    def __init__(self, graph: GraphReader, feed_fetched_at: datetime | None = None) -> None:
+    The three read tools need only the graph. `sync_propose_patch` additionally needs the
+    checkout and the pipeline pieces that operate on it, which are supplied at construction
+    rather than as tool arguments: an agent names a finding, and which repository this server
+    serves is the deployment's business rather than the agent's.
+
+    Those pieces are optional, so a read-only deployment is a first-class configuration and
+    not a broken one. `propose_patch` says so rather than raising.
+    """
+
+    def __init__(
+        self,
+        graph: GraphReader,
+        feed_fetched_at: datetime | None = None,
+        *,
+        repo: Any = None,
+        adapter: Any = None,
+        remediator: Any = None,
+        catalogue: Any = None,
+    ) -> None:
         self._graph = graph
         self._feed_fetched_at = feed_fetched_at
+        self._repo = repo
+        self._adapter = adapter
+        self._remediator = remediator
+        self._catalogue = catalogue
 
     # -- tools ---------------------------------------------------------------------
 
@@ -167,7 +190,90 @@ class GraphSurface:
         ]
         return self._page(rows, limit, offset, indexed_at=None)
 
+    def propose_patch(self, finding_id: str) -> dict[str, Any] | None:
+        """A verified patch for one finding, returned as data and never written anywhere.
+
+        The pipeline runs as far as static verification and stops: the node after it is
+        `push_branch`, and this tool exists to hand an agent a diff rather than to open a
+        pull request. `sync.mcp.propose` carries why stopping there is structural.
+
+        The diff is source, and returning it is the one deliberate exception to the spec's
+        "never return file contents" rule -- the diff *is* the answer here, and a tool that
+        withheld it would have run the whole pipeline to say nothing. It is not a licence to
+        return the file the diff applies to: the surrounding context stays out, which is why
+        the response carries the diff alone and not the patched source.
+
+        `None` for a finding the graph does not hold, matching `explain_call_site`: an agent
+        asking about a finding that closed has asked a question whose answer is "nothing
+        here", not one that deserves an exception.
+        """
+        finding = next((f for f in self._graph.open_findings() if f.id == finding_id), None)
+        if finding is None:
+            return None
+
+        if self._repo is None or self._adapter is None or self._remediator is None:
+            return self._envelope(
+                {
+                    "finding_id": finding_id,
+                    "outcome": propose.UNAVAILABLE,
+                    "diff": None,
+                    "static_verify": None,
+                    "evidence": self._evidence_for(finding),
+                    "diagnostics": "this server is configured as a read-only graph surface",
+                },
+                indexed_at=None,
+                savings=0,
+            )
+
+        state = propose.run_to_static_verify(
+            finding,
+            self._repo,
+            store=self._graph,
+            adapter=self._adapter,
+            remediator=self._remediator,
+            catalogue=self._catalogue,
+        )
+        patch = state.get("patch")
+        site = state.get("site")
+        return self._envelope(
+            {
+                "finding_id": finding_id,
+                "outcome": state["outcome"],
+                "diff": patch.diff if patch else None,
+                "strategy": patch.strategy if patch else None,
+                # `passed` rather than `ok`: the spec names this field, and an agent composes
+                # against the spec. A `None` verdict is verification that never ran, which is
+                # not the same claim as a typecheck that failed.
+                "static_verify": (
+                    {"passed": state["verify_ok"], "diagnostics": state.get("diagnostics", "")}
+                    if "verify_ok" in state
+                    else None
+                ),
+                "evidence": self._evidence_for(finding, state.get("change")),
+                "diagnostics": state.get("diagnostics", ""),
+            },
+            indexed_at=site.indexed_at if site else None,
+            savings=_TOKENS_PER_AVOIDED_READ,
+        )
+
     # -- internals -----------------------------------------------------------------
+
+    def _evidence_for(
+        self, finding: Finding, change: VendorChange | None = None
+    ) -> dict[str, Any]:
+        """What a reviewer needs to judge the patch without trusting us.
+
+        `sync.core.Evidence` carries a fourth field, `ci_run_url`, which is deliberately not
+        here: no CI ran, and an empty string in a field named for a run would report one that
+        does not exist.
+        """
+        resolved = change if change is not None else self._change_for(finding)
+        site = self._site_for(finding)
+        return {
+            "spec_diff": resolved.raw if resolved else {},
+            "changelog": finding.rationale,
+            "call_sites": [f"{site.path}:{site.line}"] if site else [],
+        }
 
     def _site_for(self, finding: Finding) -> CallSite | None:
         """The call site a finding names, or `None` when it no longer exists.
