@@ -11,16 +11,18 @@ parameter, and that it targets a model the deprecation applies to. `temperature`
 older model and a 400 on Claude 4.7 or later, so the model scope is parsed rather than
 discarded -- without it every repository that has not upgraded gets a false positive.
 
-This module parses. It deliberately emits no `VendorChange`: the join for a parameter is
-against `CallSite.args_keys`, not `operation_id`, and emitting changes that no detector can
-join would produce findings that point at nothing -- the failure mode this signal exists to
-avoid.
+This module parses, and emits `VendorChange` rows for what it finds. It deliberately did not at
+first: a parameter joins against `CallSite.args_keys` rather than `operation_id`, and a change
+no detector could join would produce findings pointing at nothing. `ParameterDeprecationDetector`
+now performs that join, which retires the objection -- see `parameters_to_vendor_changes`.
 """
 
 from __future__ import annotations
 
 import re
 from dataclasses import dataclass
+
+from sync.core import VendorChange
 
 _ROW = re.compile(r"^\|(?P<cells>.+)\|\s*$")
 _SEPARATOR = re.compile(r"^[\s|:-]+$")
@@ -133,3 +135,45 @@ def parse_parameter_deprecations(vendor_id: str, markdown: str) -> list[Paramete
         )
 
     return rows
+
+
+def parameters_to_vendor_changes(
+    rows: list[ParameterDeprecation], from_version: str, to_version: str
+) -> list[VendorChange]:
+    """`VendorChange` rows for parameter deprecations.
+
+    An earlier version of this module deliberately emitted none, on the grounds that a
+    parameter joins against `CallSite.args_keys` rather than `operation_id`, so a change no
+    detector could join would produce findings pointing at nothing. `ParameterDeprecationDetector`
+    now performs that join, which retires the objection: the change carries the parameter, the
+    remedy and the vendor's own wording through to the remediator, and the whole path uses the
+    protocols and graph that already exist rather than a parallel set.
+
+    `operation_id` holds the parameter name. That is not an operation, and it is the field the
+    rest of the pipeline addresses a change by -- naming it here keeps one addressing scheme
+    rather than adding a second for one signal.
+    """
+    return [
+        VendorChange(
+            vendor_id=row.vendor_id,
+            from_version=from_version,
+            to_version=to_version,
+            # Namespaced so a parameter can never collide with an oasdiff rule id, which is
+            # what `kind` holds everywhere else.
+            kind="deprecation/parameter",
+            operation_id=row.parameter,
+            path_ptr="",
+            # The model scope is unresolved, so the severity does not claim certainty.
+            severity="deprecation",
+            source="vendor-deprecation-table",
+            raw={
+                "parameter": row.parameter,
+                "remedy": row.remedy,
+                "replacement": row.replacement,
+                "applies_from": row.applies_from,
+                "behavior": row.behavior,
+                "status": row.status,
+            },
+        )
+        for row in rows
+    ]

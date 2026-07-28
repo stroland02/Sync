@@ -15,6 +15,7 @@ from sync.signals.deprecations.catalogue import (
 )
 from sync.signals.deprecations.parameters import (
     ParameterDeprecation,
+    parameters_to_vendor_changes,
     parse_parameter_deprecations,
 )
 
@@ -27,6 +28,7 @@ __all__ = [
     "ParameterDeprecation",
     "http_fetch",
     "parse_deprecation_table",
+    "parameters_to_vendor_changes",
     "parse_parameter_deprecations",
     "to_vendor_changes",
     "urgency",
