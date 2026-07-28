@@ -113,11 +113,21 @@ class GitHubForge:
     def push_branch(self, repo: RepoRef, patch: Patch) -> str:
         """Commit the tracked changes and push them. The patch is already applied on disk.
 
-        `git add -u` rather than `-A`: the patch came from `git diff`, which sees
-        tracked modifications only, so staging untracked files would commit
-        whatever the agent's tool calls happened to leave behind — a build
-        directory, a log, a stray dependency install — none of which the patch
-        or the review evidence describes.
+        `git add -u` rather than `-A`: it stages tracked modifications and
+        refreshes what the index already holds, and it never reads the working
+        tree for a path the index does not know. So whatever the agent's tool
+        calls happened to leave behind — a build directory, a log, a stray
+        dependency install, none of which the patch or the review evidence
+        describes — is not in this commit, while a file the agent created and
+        staged itself is.
+
+        That staging is the agent asserting the patch needs the file, and it is
+        the only route by which a new file reaches a branch. Nothing here can
+        tell a module a fix genuinely requires from a byproduct that happens to
+        sit beside it, and a rule keyed on the name or the extension would be
+        wrong on somebody's repository and wrong silently; `-A` would commit the
+        assertion and the debris alike, which is the same failure with the
+        judgement removed.
 
         The graph guarantees a non-empty diff before this runs, so `git commit`
         cannot fail here for an empty index.
