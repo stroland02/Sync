@@ -417,3 +417,139 @@ def test_the_baseline_refuses_a_tree_that_already_carries_a_patch(ambient_clone:
 
     with pytest.raises(RuntimeError, match="uncommitted"):
         adapter.prepare(repo)
+
+
+VENDOR_DECLARATION = "export type Charge = {{\n  id: string;\n{extra}}};\n"
+
+
+@pytest.fixture()
+def vendored_clone(tmp_path: Path, git) -> Path:
+    """A committed project whose SDK types come from an installed dependency.
+
+    `node_modules` is gitignored and populated, which is the tree every
+    verification actually meets: `prepare` installs before the patch agent
+    starts and `shipped_tree` keeps the directory in place so the compiler can
+    resolve the declarations the customer's CI will also install.
+
+    The package is hand-built rather than installed so the test costs no
+    registry round trip. `install_dependencies` sees a populated `node_modules`
+    and returns without running a package manager, which is the same branch it
+    takes on the second and third verification of a real finding.
+    """
+    repo = tmp_path / "clone"
+    (repo / "src").mkdir(parents=True)
+    (repo / "node_modules" / "vendorsdk").mkdir(parents=True)
+    (repo / ".gitignore").write_text("node_modules\n", encoding="utf-8")
+    (repo / "package.json").write_text(
+        '{"name": "clone", "version": "1.0.0", "dependencies": {"vendorsdk": "1.0.0"}}',
+        encoding="utf-8",
+    )
+    (repo / "tsconfig.json").write_text(
+        '{"compilerOptions": {"strict": true, "noEmit": true, "target": "ES2022",'
+        ' "module": "ESNext", "moduleResolution": "bundler", "skipLibCheck": true},'
+        ' "include": ["src"]}',
+        encoding="utf-8",
+    )
+    (repo / "node_modules" / "vendorsdk" / "package.json").write_text(
+        '{"name": "vendorsdk", "version": "1.0.0", "types": "index.d.ts"}', encoding="utf-8"
+    )
+    (repo / "node_modules" / "vendorsdk" / "index.d.ts").write_text(
+        VENDOR_DECLARATION.format(extra=""), encoding="utf-8"
+    )
+    (repo / "src" / "billing.ts").write_text(
+        'import type { Charge } from "vendorsdk";\n'
+        "export const identify = (charge: Charge): string => charge.id;\n",
+        encoding="utf-8",
+    )
+
+    git(["init", "-q", "-b", "main"], repo)
+    git(["add", "."], repo)
+    git(["-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qm", "base"], repo)
+    return repo
+
+
+def _read_a_field_the_sdk_does_not_declare(repo: Path) -> None:
+    (repo / "src" / "billing.ts").write_text(
+        'import type { Charge } from "vendorsdk";\n'
+        "export const notify = (charge: Charge): string => charge.receipt_email;\n",
+        encoding="utf-8",
+    )
+
+
+def _declare_the_field_inside_the_dependency(repo: Path) -> None:
+    (repo / "node_modules" / "vendorsdk" / "index.d.ts").write_text(
+        VENDOR_DECLARATION.format(extra="  receipt_email: string;\n"), encoding="utf-8"
+    )
+
+
+def test_the_doctored_declaration_really_does_satisfy_the_compiler(vendored_clone: Path):
+    """Guards the test below it, and states the defect in one place.
+
+    The source edit alone does not compile. Adding the field to the installed
+    declaration makes it compile, and `tsc` has no opinion about which of the
+    two files it came from -- which is why nothing downstream of the compiler
+    can catch this.
+    """
+    _read_a_field_the_sdk_does_not_declare(vendored_clone)
+    assert [d.code for d in _shipped_diagnostics(vendored_clone)] == ["TS2339"]
+
+    _declare_the_field_inside_the_dependency(vendored_clone)
+    assert _shipped_diagnostics(vendored_clone) == []
+
+
+def test_a_patch_that_edits_an_installed_dependency_fails_verification(vendored_clone: Path):
+    """The gap `shipped_tree` deliberately left open.
+
+    `git add -u` stages tracked modifications, and nothing under a gitignored
+    `node_modules` is tracked -- so the branch carries `src/billing.ts` reading
+    a field, and no declaration for it. The customer's CI installs the real
+    package and fails. The compiler cannot see this: it was handed the doctored
+    declaration and it is satisfied.
+
+    The reason has to name the path. When this fires the run abandons, and
+    `abandon_reason` is the whole of what an operator gets.
+    """
+    adapter, repo = _adapter_for(vendored_clone)
+    adapter.prepare(repo)
+
+    _read_a_field_the_sdk_does_not_declare(vendored_clone)
+    _declare_the_field_inside_the_dependency(vendored_clone)
+
+    with pytest.raises(RuntimeError, match=r"node_modules/vendorsdk/index\.d\.ts"):
+        adapter.static_verify(repo, Patch(diff="d", strategy="agent", rationale="r"))
+
+
+def test_a_patch_that_leaves_the_dependencies_alone_still_verifies(vendored_clone: Path):
+    """The guard must not have become a gate on `node_modules` merely existing.
+
+    Same populated tree, same installed declarations, an edit that stands on
+    its own: this is every ordinary verification and it must stay green.
+    """
+    adapter, repo = _adapter_for(vendored_clone)
+    adapter.prepare(repo)
+
+    (vendored_clone / "src" / "billing.ts").write_text(
+        'import type { Charge } from "vendorsdk";\n'
+        "export const identify = (charge: Charge): string => charge.id.trim();\n",
+        encoding="utf-8",
+    )
+
+    assert adapter.static_verify(repo, Patch(diff="d", strategy="agent", rationale="r")).ok is True
+
+
+def test_an_install_during_verification_is_not_read_as_a_patched_dependency(
+    vendored_clone: Path, monkeypatch
+):
+    """A clone whose `node_modules` went missing gets it back here, and every
+    file in it is then newer than the mark `prepare` took.
+
+    Reading that as the agent's work would abandon the finding for the one
+    action that guarantees the dependencies are exactly what the lockfile says.
+    """
+    adapter, repo = _adapter_for(vendored_clone)
+    adapter.prepare(repo)
+
+    _declare_the_field_inside_the_dependency(vendored_clone)
+    monkeypatch.setattr("sync.index.deps.install_dependencies", lambda path, **kw: True)
+
+    assert adapter.static_verify(repo, Patch(diff="d", strategy="agent", rationale="r")).ok is True

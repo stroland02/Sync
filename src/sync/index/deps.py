@@ -50,18 +50,22 @@ def _node_modules_populated(repo_path: Path) -> bool:
     return any(not entry.name.startswith(".") for entry in node_modules.iterdir())
 
 
-def install_dependencies(repo_path: Path, timeout: float = _INSTALL_TIMEOUT_SECONDS) -> None:
-    """Populate `node_modules` for a checked-out project.
+def install_dependencies(repo_path: Path, timeout: float = _INSTALL_TIMEOUT_SECONDS) -> bool:
+    """Populate `node_modules` for a checked-out project. True if it ran one.
 
     Does nothing for a tree with no `package.json`, or one whose `node_modules`
     is already populated -- the graph calls `static_verify` up to three times
     against the same clone, and paying for the install on each is pure latency.
+
+    The return value is what `sync.index.dependency_edits` compares mtimes
+    against: an install that ran wrote every file under `node_modules` just now,
+    and a caller holding an older mark would read all of them as edits.
     """
     repo_path = Path(repo_path)
     if not (repo_path / "package.json").exists():
-        return
+        return False
     if _node_modules_populated(repo_path):
-        return
+        return False
 
     manager, args = _FALLBACK
     for lockfile, command in _COMMANDS.items():
@@ -95,3 +99,4 @@ def install_dependencies(repo_path: Path, timeout: float = _INSTALL_TIMEOUT_SECO
         raise RuntimeError(f"{manager} install timed out after {timeout}s")
     if result.returncode != 0:
         raise RuntimeError(f"{manager} install failed: {(result.stdout + result.stderr).strip()[-800:]}")
+    return True

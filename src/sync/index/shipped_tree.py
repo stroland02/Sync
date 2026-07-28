@@ -13,15 +13,16 @@ produces.
 
 Moving those paths aside was chosen over the two alternatives:
 
-- *Typecheck a second, pristine checkout.* Identical in what it measures, and
-  it also catches an agent editing declarations inside `node_modules`, which
-  this does not. It costs a checkout and a second dependency install on every
-  verification -- up to three per finding, against an install measured in
-  minutes -- which the latency specification treats as the pipeline's largest
-  avoidable cost. Sharing one `node_modules` between the two trees would need a
-  junction or a symlink, and symlink creation on the primary development
-  machine needs privileges the project already cannot assume (see the corepack
-  note in CLAUDE.md).
+- *Typecheck a second, pristine checkout.* Identical in what it measures. It
+  costs a checkout and a second dependency install on every verification -- up
+  to three per finding, against an install measured in minutes -- which the
+  latency specification treats as the pipeline's largest avoidable cost.
+  Sharing one `node_modules` between the two trees would need a junction or a
+  symlink, and symlink creation on the primary development machine needs
+  privileges the project already cannot assume (see the corepack note in
+  CLAUDE.md). The one thing it caught that this does not -- an agent editing a
+  declaration inside `node_modules` -- turned out to be answerable without a
+  compiler at all; `sync.index.dependency_edits` is that answer.
 - *Fail the gate on finding untracked files the typecheck depends on.* "Depends
   on" is the hard part, and the diagnostic it can produce names Sync's own
   bookkeeping rather than the code. Measuring the shipped tree instead yields
@@ -29,8 +30,9 @@ Moving those paths aside was chosen over the two alternatives:
 
 `keep` is the exception this cannot avoid: the customer's CI installs
 dependencies, so a typecheck run without them describes neither tree.
-Everything under a kept directory stays, which is the hole the pristine
-checkout would have closed.
+Everything under a kept directory stays, which is why `static_verify` asks
+`sync.index.dependency_edits` whether anything under one was written after the
+install before it compiles at all.
 
 ## When the block writes to a path this held aside
 
