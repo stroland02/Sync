@@ -80,14 +80,20 @@ So this is not a regression to fix, it is a cost to decide about. `pytest-xdist`
 installed and the machine has 12 cores; subprocess-bound tests parallelise almost
 perfectly, so `-n auto` is the obvious lever and nobody has measured it.
 
-Unrelated but found while measuring: **24 `sync*` databases have accumulated** on the
-server. `conftest` creates one per run and is meant to drop it, so either the drop is not
-running or it is failing silently. That is a leak, and a silent one.
+Unrelated but found while measuring: 24 `sync*` databases exist on the server. I first
+recorded this as a silent leak in `conftest`. **That was wrong** — 21 of them are the
+per-worker databases our own briefs hand out (`sync_w1`…`sync_w19`, `sync_b2`, `sync_b4`),
+and `pytest_configure` returns early whenever `SYNC_DSN` is set, so it never creates or
+drops those by design. Only three are `sync_test_<pid>` databases from runs killed before
+`pytest_unconfigure`, and `conftest` already drops-before-create on pid reuse, so those are
+self-healing and bounded by the pid space. There is no bug here. What there is: nobody
+drops a worker's database when its task finishes.
 
 **Closes when:** someone measures `-n auto` against the current suite and either adopts it
 with the number stated, or records why it does not work here (the bare-remote and clone
-fixtures may not be parallel-safe — that is the thing to check, not assume). The leaked
-databases are a separate, smaller fix: find out why the drop is not happening.
+fixtures may not be parallel-safe — that is the thing to check, not assume). The worker
+databases are housekeeping rather than a fix — a finished task's database can be dropped,
+and the only care needed is not dropping one a live worker is still pointed at.
 
 ## In flight
 
