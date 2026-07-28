@@ -41,8 +41,11 @@ src/sync/signals/deprecations/parameters.py:parameters_to_vendor_changes
 src/sync/signals/generated/manifest.py:parse_manifest
 src/sync/signals/generated/manifest.py:SpecSource.has_cheap_change_trigger
 
-# Route primitives reachable only from their tests.
-src/sync/route/matrix.py:matching_rows
+# `omit_property_at` stays because it is not the primitive `property_omit` needs: it counts
+# lines from one where `omit_argument_at` counts from zero, it answers two ways where the
+# remediator needs three -- "already correct" and "cannot establish" have opposite
+# consequences -- and it has no spread guard. Wiring it would be an off-by-one and a
+# collapsed distinction, which is worse than a baselined line.
 src/sync/route/templates.py:omit_property_at
 
 # Landed after this baseline was measured, and accepted for the reason the entries above are:

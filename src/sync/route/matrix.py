@@ -138,12 +138,19 @@ _ROWS: tuple[_Row, ...] = (
 _FALL_THROUGH = "fall-through"
 
 
-def matching_rows(rule: dict[str, Any], facts: RoutingFacts) -> list[str]:
+def matching_rows(rule: dict[str, Any], facts: RoutingFacts) -> list[str]:  # lint-dead-links: allow - the overlap check's only instrument; production reads `route`, which returns one winner
     """Every row whose condition holds, in table order.
 
-    Exposed for the overlap check. `route` returns only the winner, so a test built on it
-    cannot tell "one row matched" from "four did and the first happened to be right" -- and the
-    second is how a widened predicate silently shadows a row someone still believes fires.
+    Exposed for the overlap check the routing spec's Verification section requires, and for
+    nothing else. `route` returns only the winner, so a test built on it cannot tell "one row
+    matched" from "four did and the first happened to be right" -- and the second is how a
+    widened predicate silently shadows a row someone still believes fires.
+
+    It is deliberately not wired into the pipeline and never will be. Production wants the
+    decision, not the set of candidates for it, and returning the set would invite a caller to
+    re-derive the FIRST hit policy that lives here. The opt-out above says so where the lint
+    reads it, because a baseline entry would have implied somebody was one day going to
+    connect this, and nobody is.
     """
     return [row.name for row in _ROWS if row.matches(rule, facts)]
 

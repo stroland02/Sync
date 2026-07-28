@@ -19,6 +19,7 @@ string literal becomes another, and the vendor names the replacement.
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any
 
 from ast_grep_py import SgRoot
@@ -26,6 +27,27 @@ from ast_grep_py import SgRoot
 from sync.core import VendorChange
 
 _DEPRECATION_PREFIX = "deprecation/model-"
+
+# Extension to ast-grep language. A suffix absent here is declined rather than guessed: the
+# grammar decides what counts as an object literal, and the wrong one matches nothing, which
+# reads as "the property is not there" rather than as "this was not parsed".
+_LANGUAGES = {
+    ".ts": "typescript",
+    ".tsx": "tsx",
+    ".mts": "typescript",
+    ".cts": "typescript",
+    ".js": "javascript",
+    ".jsx": "javascript",
+    ".mjs": "javascript",
+    ".cjs": "javascript",
+}
+
+# Node kinds whose value is written out in full at the call site, so deleting the pair that
+# holds one removes the whole of it. Everything else -- an identifier, a call, a member
+# expression, a template with a substitution -- reaches somewhere this cannot see, and
+# deleting it would be reasoning about the surrounding code rather than an edit. The set is
+# deliberately tight: the conservative answer costs an agent run, the generous one corrupts.
+_LITERAL_KINDS = frozenset({"string", "number", "true", "false", "null", "regex"})
 
 # Quote styles a rule is emitted for, one rule each. A single rule matching both would have to
 # pick one style for its fix and would rewrite the other, adding diff noise to every review and
@@ -533,6 +555,71 @@ def omit_argument_at(
             start, end = _deletion_span(source, container, pair)
             return source[:start] + source[end:]
     return source
+
+
+def language_for(path: str) -> str | None:
+    """The ast-grep grammar for a source path, or `None` for one this cannot parse.
+
+    Here rather than beside a remediator because the routing decision and the edit have to
+    agree on it: a path the router judged as TypeScript and the codemod declined to parse
+    would route work to a tier that cannot take it.
+    """
+    return _LANGUAGES.get(Path(path).suffix.lower())
+
+
+def argument_is_literal_at(
+    source: str, argument: str, language: str, line: int, col: int
+) -> bool | None:
+    """Whether one named argument at one call is written out as a literal value.
+
+    This is `RoutingFacts.field_passed_as_literal`, answered from the source rather than from
+    the index. The index records which keys a call site passes and never how each was
+    written, and the distinction is what row 4 of the decision table turns on: deleting
+    `receipt_email: 'a@example.com'` removes the whole of what was sent, while deleting
+    `receipt_email: userEmail` drops the only use of a variable and leaves the question of
+    what that variable was for.
+
+    Scoped exactly as `omit_argument_at` is, over the same `_object_argument_at`, because the
+    router and the codemod must read the same call. Three answers, and the caller needs them
+    apart:
+
+    - `True`  -- the pair is there and its value is a literal;
+    - `False` -- the pair is there and its value is not, or the pair is simply absent, which
+      is equally not "passed as a literal";
+    - `None`  -- nothing could be established: no call at that position, no object argument,
+      or a spread, which may supply the property itself and so settles nothing.
+
+    A shorthand property (`{ receipt_email }`) is not a `pair` and so answers `False`. That is
+    right for the wrong reason and right anyway: the value is an identifier, and
+    `omit_argument_at` cannot remove a shorthand either.
+    """
+    root = SgRoot(source, language).root()
+
+    container = _object_argument_at(root, line, col)
+    if container is None:
+        return None
+
+    children = list(container.children())
+    if any(child.kind() == "spread_element" for child in children):
+        return None
+
+    for pair in (child for child in children if child.kind() == "pair"):
+        if _pair_part(pair, "key", 0) != argument:
+            continue
+        value = pair.field("value")
+        if value is None:
+            return False
+        kind = value.kind()
+        if kind == "template_string":
+            # A template with no substitution is a literal spelled differently. One with a
+            # substitution reaches a variable, which is the case this whole function exists
+            # to keep away from a codemod.
+            return not any(
+                child.kind() == "template_substitution" for child in value.children()
+            )
+        return kind in _LITERAL_KINDS
+
+    return False
 
 
 def apply_rules(rules: list[dict[str, Any]], source: str, language: str) -> str:

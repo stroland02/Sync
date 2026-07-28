@@ -501,10 +501,13 @@ def test_a_change_naming_no_field_is_established_as_unresolved():
 
 
 def test_the_facts_this_layer_cannot_establish_stay_unknown():
-    """Absent evidence must never read as permission. A single call site cannot say how many
-    sites across the graph read a field, and the index records which argument keys are passed
-    but not whether each is a literal or a variable. Both stay `None`, which makes the rows
-    needing them decline rather than route work to a codemod on a guess.
+    """Absent evidence must never read as permission.
+
+    A single call site cannot say how many sites across the graph read a field, so
+    `call_sites_reading_field` is unknown however much source is in hand. The literal fact is
+    unknown here for a narrower reason -- no clone was passed, so there is no source to read
+    it off; `tests/test_tier_zero_reach.py` is where it is established from one. Both make
+    the rows needing them decline rather than route work to a codemod on a guess.
     """
     facts = routing_facts(_change("response-property-removed"), SITE)
 
@@ -573,11 +576,10 @@ def test_a_routed_tier_no_remediator_serves_falls_back_to_the_whole_cascade():
 
 
 def test_a_caller_holding_the_graph_can_reach_tier_zero():
-    """The two facts this layer cannot establish are the two that gate the mechanical rows, so
-    tier 0 is unreachable through the default and rows 3 and 4 never fire. That is the
-    defaults working -- absent evidence must not read as permission -- and it is not a dead
-    end: a caller that can count the call sites reading a field supplies them and the codemod
-    tier becomes reachable.
+    """`call_sites_reading_field` is the one fact this layer cannot establish, and it gates the
+    response-side mechanical row. That is the defaults working -- absent evidence must not read
+    as permission -- and it is not a dead end: a caller that can count the call sites reading a
+    field supplies the count and the codemod tier becomes reachable.
     """
     from sync.route.matrix import RoutingFacts
 
@@ -586,7 +588,7 @@ def test_a_caller_holding_the_graph_can_reach_tier_zero():
     remediator = TieredRemediator(
         [codemod, agent],
         catalogue=CATALOGUE,
-        facts_for=lambda change, site: RoutingFacts(
+        facts_for=lambda change, site, repo: RoutingFacts(
             field_resolved=True, call_sites_reading_field=1
         ),
     )
@@ -597,10 +599,11 @@ def test_a_caller_holding_the_graph_can_reach_tier_zero():
     assert agent.proposed == 0
 
 
-def test_the_default_facts_leave_tier_zero_unreachable():
+def test_the_default_facts_leave_the_response_side_of_tier_zero_unreachable():
     """Stated as a test so the limitation is visible rather than folklore. The same change as
-    above, with the facts this layer can actually establish, routes to the agent because no
-    row assigning tier 0 can be satisfied without a call-site count.
+    above, with the facts this layer can actually establish, routes to the agent because the
+    response-side row cannot be satisfied without a call-site count. The request-side row can
+    be, and `tests/test_tier_zero_reach.py` drives it.
     """
     codemod = Stub("codemod")
 
