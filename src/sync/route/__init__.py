@@ -10,6 +10,7 @@ from sync.route.matrix import (
     catalogue_index,
     route,
 )
+from sync.route.templates import apply_rules, model_literal_swap
 
 __all__ = [
     "AGENT",
@@ -18,6 +19,8 @@ __all__ = [
     "TEMPLATED",
     "RoutingFacts",
     "Tier",
+    "apply_rules",
     "catalogue_index",
+    "model_literal_swap",
     "route",
 ]

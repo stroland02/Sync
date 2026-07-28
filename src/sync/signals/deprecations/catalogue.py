@@ -86,6 +86,41 @@ def _state_of(text: str) -> str | None:
     return lowered if lowered in _STATES else None
 
 
+def _strip_code(text: str) -> str:
+    """Announcement tables wrap model ids in backticks; the state table does not.
+
+    Left in, a replacement would be written into source as `` "`claude-opus-4-8`" `` -- a
+    string that compiles, type-checks, and fails at the vendor.
+    """
+    return text.strip().strip("`").strip()
+
+
+def _parse_replacements(markdown: str) -> dict[str, str]:
+    """Deprecated model id to its vendor-recommended replacement.
+
+    These live in per-announcement tables further down the same page, shaped
+    `| Retirement date | Deprecated model | Recommended replacement |` with no state column --
+    which is what keeps them from being mistaken for lifecycle rows.
+    """
+    replacements: dict[str, str] = {}
+
+    for line in markdown.splitlines():
+        cells = _cells(line)
+        if not cells or len(cells) < 3:
+            continue
+        if any(_state_of(cell) for cell in cells):
+            continue
+        if _parse_date(cells[0]) is None:
+            continue
+
+        deprecated = _strip_code(cells[1])
+        replacement = _strip_code(cells[2])
+        if deprecated and replacement and " " not in deprecated and " " not in replacement:
+            replacements[deprecated] = replacement
+
+    return replacements
+
+
 def parse_deprecation_table(vendor_id: str, markdown: str) -> list[ModelDeprecation]:
     """Rows from a vendor's published lifecycle table.
 
@@ -93,6 +128,8 @@ def parse_deprecation_table(vendor_id: str, markdown: str) -> list[ModelDeprecat
     artifacts and column order is not a contract anyone has made.
     """
     rows: list[ModelDeprecation] = []
+    # Both tables live in one document, so the replacements are gathered from the same text.
+    replacements = _parse_replacements(markdown)
 
     for line in markdown.splitlines():
         cells = _cells(line)
@@ -140,6 +177,7 @@ def parse_deprecation_table(vendor_id: str, markdown: str) -> list[ModelDeprecat
                 vendor_id=vendor_id,
                 model_id=model_id,
                 state=state,
+                replacement=replacements.get(model_id),
                 deprecated_date=deprecated_date,
                 retirement_date=retirement_date,
                 not_before=not_before,

@@ -83,6 +83,54 @@ def test_a_malformed_table_yields_nothing_rather_than_raising():
     assert parse_deprecation_table("anthropic", "| a | b |\n| - | - |\n") == []
 
 
+# --- replacements, which live in a different table on the same page ----------------
+
+# The state table names no replacement. Each deprecation announcement carries its own table,
+# with the model ids in backticks. Verbatim shape from the published page.
+ANTHROPIC_HISTORY = """\
+### 2026-06-05: Claude Opus 4.1 model
+
+| Retirement date | Deprecated model           | Recommended replacement |
+| --------------- | -------------------------- | ----------------------- |
+| August 5, 2026  | `claude-opus-4-1-20250805` | `claude-opus-4-8`       |
+
+### 2025-10-28: Claude Sonnet 3.7 model
+
+| Retirement date   | Deprecated model             | Recommended replacement |
+| ----------------- | ---------------------------- | ----------------------- |
+| February 19, 2026 | `claude-3-7-sonnet-20250219` | `claude-sonnet-4-6`     |
+"""
+
+
+def test_replacements_are_read_from_the_announcement_tables():
+    """A migration needs a target. Without this the finding says "this dies" and cannot say
+    what to use instead, which makes it an alert rather than a repair."""
+    rows = _by_id(parse_deprecation_table("anthropic", ANTHROPIC_TABLE + ANTHROPIC_HISTORY))
+
+    assert rows["claude-opus-4-1-20250805"].replacement == "claude-opus-4-8"
+    assert rows["claude-3-7-sonnet-20250219"].replacement == "claude-sonnet-4-6"
+
+
+def test_backticks_are_stripped_from_model_ids():
+    """The announcement tables wrap ids in backticks and the state table does not. A
+    replacement carrying them would be written into source as `\"`claude-opus-4-8`\"`."""
+    rows = _by_id(parse_deprecation_table("anthropic", ANTHROPIC_TABLE + ANTHROPIC_HISTORY))
+    assert "`" not in (rows["claude-opus-4-1-20250805"].replacement or "")
+
+
+def test_a_model_with_no_announcement_table_has_no_replacement():
+    rows = _by_id(parse_deprecation_table("anthropic", ANTHROPIC_TABLE))
+    assert rows["claude-opus-4-20250514"].replacement is None
+
+
+def test_the_state_table_still_parses_when_history_follows_it():
+    """Both tables live in one document, so parsing must not let one corrupt the other --
+    the announcement rows have no state column and must not become models."""
+    rows = _by_id(parse_deprecation_table("anthropic", ANTHROPIC_TABLE + ANTHROPIC_HISTORY))
+    assert rows["claude-opus-4-1-20250805"].retirement_date == date(2026, 8, 5)
+    assert len(rows) == 4
+
+
 # --- urgency, which is what makes these different ---------------------------------
 
 
