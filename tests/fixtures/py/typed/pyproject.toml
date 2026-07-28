@@ -1,0 +1,6 @@
+[project]
+name = "typed"
+dependencies = ["stripe>=12.0.0"]
+
+[tool.mypy]
+strict = true

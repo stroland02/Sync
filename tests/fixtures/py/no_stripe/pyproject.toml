@@ -1,0 +1,3 @@
+[project]
+name = "no-stripe"
+dependencies = ["requests>=2.0"]
