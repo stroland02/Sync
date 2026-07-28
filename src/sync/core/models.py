@@ -121,8 +121,13 @@ class MigrationOutcome(BaseModel):
 
     Nothing here identifies a customer. The symbol is a shape, argument keys are salted
     digests, and neither the diff nor the file path is stored -- a path is customer structure
-    even when the code is not included. That is what makes the table safe to aggregate, which
-    is the only thing that makes it worth keeping.
+    even when the code is not included.
+
+    "Safe to aggregate" is not the same as "comparable in every column", and an earlier version
+    of this docstring ran the two together. The shape columns carry no salt and mean the same
+    thing for every customer; `arg_key_hashes` is salted per deployment and groups into one
+    bucket per customer if aggregated across them. `sync.core.corpus` says which is which, and
+    it is worth reading before writing a query against this table.
     """
 
     id: int | None = None

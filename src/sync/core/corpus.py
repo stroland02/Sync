@@ -5,10 +5,25 @@ having if it can be reasoned across customers, and it can only be reasoned acros
 nothing in it identifies one. So a symbol becomes a shape, argument keys become salted digests,
 and source text never enters at all.
 
-Two properties are in tension and both are required. Rows must be *comparable* -- two companies
-calling the same SDK method have to produce the same shape, or aggregation says nothing. And
-rows must be *opaque* -- a shape that kept `charges` would leak which products a customer
-integrates, and a table of those is a customer list.
+Two properties are in tension, and the resolution is that they apply to different columns
+rather than to every column at once. An earlier version of this docstring claimed rows are
+comparable and the `MigrationOutcome` docstring claimed the table is safe to aggregate; both
+were true of the shape columns and false of the hashed ones, which is a contradiction someone
+would only discover after writing a GROUP BY that silently returns nothing.
+
+Comparable ACROSS deployments: `symbol_shape`, `arg_arity`,
+`response_fields_touched_count`, and everything derived from the vendor change. These carry no
+salt, so two companies calling the same SDK method produce identical values and aggregation
+across them means something. This is the axis the corpus exists to measure -- which change
+kinds are mechanically safe.
+
+Comparable WITHIN one deployment only: `arg_key_hashes`. The salt is per deployment by design,
+so the same key hashes differently for every customer. Grouping on it across deployments
+returns one group per customer and looks like an answer. Within a deployment it does what it is
+for: telling whether two call sites pass the same arguments, without recording which.
+
+Opaque everywhere: a shape that kept `charges` would leak which products a customer integrates,
+and a table of those is a customer list.
 """
 
 from __future__ import annotations
