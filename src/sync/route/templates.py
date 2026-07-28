@@ -62,6 +62,105 @@ def model_literal_swap(change: VendorChange, language: str) -> list[dict[str, An
     ]
 
 
+def _pair_part(pair, field: str, position: int) -> str | None:
+    """A pair's key or value text, by grammar field with a positional fallback.
+
+    `field()` is the robust accessor -- it survives a grammar reordering that positional
+    indices would silently misread -- but the fallback keeps this working if a grammar omits
+    the field name.
+    """
+    node = pair.field(field) or pair.child(position)
+    return node.text().strip("\"'") if node is not None else None
+
+
+def _deletion_span(source: str, container, pair) -> tuple[int, int]:
+    """The byte span covering a pair and the separator that binds it to its neighbours.
+
+    Deleting the pair alone leaves `{ model: "x", , max_tokens: 16 }`. That is the whole
+    difficulty, and re-parsing does not catch it -- tree-sitter recovers silently and reports
+    no error for a dangling comma -- so the separator is removed with the pair rather than
+    cleaned up afterwards.
+
+    A following comma is preferred over a preceding one so the remaining entries keep the
+    separators they already had.
+    """
+    children = list(container.children())
+    target = pair.range().start.index
+    index = next(i for i, child in enumerate(children) if child.range().start.index == target)
+
+    start = pair.range().start.index
+    end = pair.range().end.index
+
+    following = children[index + 1] if index + 1 < len(children) else None
+    if following is not None and following.kind() == ",":
+        end = following.range().end.index
+        # The space that separated this entry from the next one goes too. Left behind it
+        # becomes a double space in an inline object -- a formatting change inside a diff whose
+        # only claimed purpose is removing an argument.
+        while end < len(source) and source[end] in " \t":
+            end += 1
+    else:
+        preceding = children[index - 1] if index > 0 else None
+        if preceding is not None and preceding.kind() == ",":
+            start = preceding.range().start.index
+
+    return _widen_to_whole_line(source, start, end)
+
+
+def _widen_to_whole_line(source: str, start: int, end: int) -> tuple[int, int]:
+    """Take the surrounding line too, when the span is all that is on it.
+
+    Leaving an empty indented line behind would put a whitespace-only change in a diff a human
+    has to approve, for no reason.
+    """
+    line_start = source.rfind("\n", 0, start) + 1
+    line_end = source.find("\n", end)
+    if line_end == -1:
+        return start, end
+
+    if source[line_start:start].strip() or source[end:line_end].strip():
+        return start, end
+    return line_start, line_end + 1
+
+
+def omit_parameter(
+    source: str, parameter: str, language: str, within_object_naming: str
+) -> str:
+    """`source` with `parameter` removed from objects that also name `within_object_naming`.
+
+    The scope matters. A `temperature` nested elsewhere in the file is not this call's
+    argument, and removing it would edit code the finding never described -- worse than leaving
+    a real one in place, because the diff would claim something untrue.
+
+    Returns `source` unchanged when there is nothing to remove, which the caller reads as
+    "no edit" rather than as failure.
+    """
+    root = SgRoot(source, language).root()
+
+    spans: list[tuple[int, int]] = []
+    for container in root.find_all(kind="object"):
+        pairs = [child for child in container.children() if child.kind() == "pair"]
+        names_the_model = any(
+            _pair_part(pair, "value", 2) == within_object_naming
+            for pair in pairs
+        )
+        if not names_the_model:
+            continue
+
+        for pair in pairs:
+            if _pair_part(pair, "key", 0) == parameter:
+                spans.append(_deletion_span(source, container, pair))
+
+    if not spans:
+        return source
+
+    # Right to left, so an earlier span's offsets are still valid after a later one is cut.
+    result = source
+    for start, end in sorted(spans, reverse=True):
+        result = result[:start] + result[end:]
+    return result
+
+
 def apply_rules(rules: list[dict[str, Any]], source: str, language: str) -> str:
     """`source` with every rule applied, or `source` unchanged when none match.
 
