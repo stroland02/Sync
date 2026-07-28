@@ -18,6 +18,11 @@ PatchStrategy = Literal["codemod", "agent"]
 FindingStatus = Literal["open", "patched", "abandoned"]
 JsonType = Literal["string", "number", "boolean", "object", "array", "null"]
 ObservationSource = Literal["error-payload", "replay", "interceptor"]
+# Which rung of evidence produced a binding. 'static' is read out of source, 'resolved' is
+# static plus a resolution step, 'observed' is watched traffic. 'unresolved' is the absence of a
+# binding, which is a state worth naming: an uncorrelated observation that claimed a rung would
+# be a fabricated binding, and one silently dropped would hide how good the correlation is.
+BindingRung = Literal["static", "resolved", "observed", "unresolved"]
 
 
 def _now() -> datetime:
@@ -216,6 +221,169 @@ class MigrationOutcome(BaseModel):
             tier=tier,
             wall_ms=wall_ms,
             **outcome,
+        )
+
+
+class ClientSpan(BaseModel):
+    """One outbound HTTP request the customer's application made to a vendor.
+
+    A *client* span. A server span describes somebody calling the customer, carries identical
+    HTTP attributes, and is a different product. The distinction is not recoverable downstream,
+    so it is made where spans are read and never re-litigated.
+
+    `url` is the one field here holding customer data -- a path carries resource identifiers, a
+    query string carries parameters. It exists for the length of an ingest call and reaches no
+    column: `ObservedCall.from_spans` reduces it to a salted digest, and the operation's own
+    published template replaces it.
+
+    It lives in core rather than in `sync.telemetry` because it is the contract between an
+    ingest and the reduction, and OTLP is not the only thing that could ever produce one.
+    """
+
+    trace_id: str
+    span_id: str
+    http_method: str
+    url: str
+    server_address: str
+    status_code: int | None = None
+    resend_count: int = 0
+    started_at: datetime
+
+    @property
+    def path(self) -> str:
+        from urllib.parse import urlsplit
+
+        return urlsplit(self.url).path
+
+
+class ObservedCall(BaseModel):
+    """What one unit of work did with one vendor operation.
+
+    The grain is one row per `(repo_id, vendor_id, operation_id, server_address, http_method,
+    trace_id)`. A row is not a call: `spans` holds one entry per span and `call_count` is its
+    size, so three calls to one operation inside one request are one row of three. A query
+    counting vendor calls by counting rows undercounts exactly where the efficiency detector is
+    looking.
+
+    The trace is in the grain because three of the four efficiency findings -- a call in a loop,
+    a page walked at the default size, a repeated call with no cache -- ask how many times one
+    unit of work called something. A windowed rollup cannot distinguish one request making two
+    hundred calls from two hundred requests making one, and that distinction is the finding.
+
+    Every aggregate is derived from `spans` rather than stored beside it. That is what makes
+    ingest idempotent under at-least-once delivery: folding a span already in the map is a
+    no-op, where a stored counter would have to be told not to add twice and would be wrong the
+    first time somebody forgot.
+
+    Nothing here identifies a customer. The request URL never survives: a correlated call keeps
+    the vendor's published template, and every call keeps a salted digest of the URL whose only
+    purpose is to say whether two calls went to the same place.
+    """
+
+    id: int | None = None
+    repo_id: str
+    vendor_id: str
+    # Empty when nothing correlated the request, which pairs with binding_rung 'unresolved'.
+    operation_id: str = ""
+    binding_rung: BindingRung
+    server_address: str
+    http_method: str
+    trace_id: str
+    # The vendor's published path template. Never the request path.
+    url_template: str = ""
+    # span_id -> {"target": <salted digest>, "status": <int|null>, "resend": <int>}
+    spans: dict[str, dict[str, Any]] = Field(default_factory=dict)
+    first_seen: datetime = Field(default_factory=_now)
+    last_seen: datetime = Field(default_factory=_now)
+
+    @property
+    def call_count(self) -> int:
+        return len(self.spans)
+
+    @property
+    def distinct_targets(self) -> int:
+        """How many different URLs the calls in this row went to.
+
+        Cardinality of the salted digests. Distinguishes fetching three different charges, which
+        is work, from fetching one charge three times, which is a missing cache -- without the
+        row holding anything that says which charge.
+        """
+        return len({facts.get("target") for facts in self.spans.values()})
+
+    @property
+    def repeated_calls(self) -> int:
+        """Calls that went somewhere an earlier call in the same unit of work already went."""
+        return self.call_count - self.distinct_targets
+
+    @property
+    def max_resend_count(self) -> int:
+        """The worst retry count on any one call here.
+
+        The maximum rather than the sum: each span already counts its own resends, so adding
+        them across spans answers no question anyone asks.
+        """
+        return max((facts.get("resend") or 0 for facts in self.spans.values()), default=0)
+
+    @property
+    def error_count(self) -> int:
+        """Calls that came back 4xx or 5xx.
+
+        A span with no status is not counted as an error and not counted as a success. It is a
+        request that got no response, which is a real outcome and a separate question.
+        """
+        return sum(
+            1 for facts in self.spans.values()
+            if isinstance(facts.get("status"), int) and facts["status"] >= 400
+        )
+
+    @classmethod
+    def from_spans(
+        cls,
+        repo_id: str,
+        vendor_id: str,
+        operation_id: str,
+        url_template: str,
+        spans: list["ClientSpan"],
+        salt: str,
+        binding_rung: BindingRung | None = None,
+    ) -> "ObservedCall":
+        """Reduce a trace's spans against one operation to what is safe to keep.
+
+        The reduction happens here rather than at each ingest that observes traffic, so there is
+        one place where a URL could leak into a column and it is the place that is tested.
+
+        The digest covers the whole URL with query parameters sorted, not just the path. A
+        different `limit` is a different call and the page-size finding is exactly that
+        difference; sorting the parameters keeps two spellings of one request from looking like
+        two calls. Salted per deployment because the URL space is enumerable -- an unsalted
+        digest of `/v1/charges` is `/v1/charges` to anyone willing to hash a wordlist.
+
+        `binding_rung` defaults to what `operation_id` implies, so the two cannot disagree.
+        """
+        from sync.core.corpus import hash_request_target
+
+        first = min(spans, key=lambda s: s.started_at)
+        last = max(spans, key=lambda s: s.started_at)
+
+        return cls(
+            repo_id=repo_id,
+            vendor_id=vendor_id,
+            operation_id=operation_id,
+            binding_rung=binding_rung or ("observed" if operation_id else "unresolved"),
+            server_address=first.server_address,
+            http_method=first.http_method,
+            trace_id=first.trace_id,
+            url_template=url_template,
+            spans={
+                span.span_id: {
+                    "target": hash_request_target(span.url, salt=salt),
+                    "status": span.status_code,
+                    "resend": span.resend_count,
+                }
+                for span in spans
+            },
+            first_seen=first.started_at,
+            last_seen=last.started_at,
         )
 
 

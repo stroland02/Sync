@@ -36,6 +36,26 @@ class VendorAdapter(Protocol):
 
 
 @runtime_checkable
+class RequestCorrelator(Protocol):
+    """Turns an observed HTTP request back into the operation it addressed.
+
+    Separate from `VendorAdapter` rather than a method on it, because the two are wanted at
+    different times by different callers: the indexer needs `operation_for_symbol` and nothing
+    else, and an adapter for a vendor whose traffic nobody instruments has no reason to
+    implement this at all. Folding it into `VendorAdapter` would make every existing adapter
+    fail a `runtime_checkable` test to add a capability none of them was asked for.
+
+    The path is a URL path with real identifiers in it. What comes back addresses the operation
+    with the vendor's own published template, which is public data -- that substitution is the
+    boundary at which a customer's identifiers stop travelling.
+    """
+
+    vendor_id: str
+
+    def operation_for_request(self, http_method: str, path: str) -> OperationRef | None: ...
+
+
+@runtime_checkable
 class Detector(Protocol):
     """Queries the graph and emits findings."""
 

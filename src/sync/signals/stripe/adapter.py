@@ -80,6 +80,38 @@ def fetch_sdk_spec(tag: str, dest: Path) -> Path | None:
         return None
 
 
+def _segments(path: str) -> tuple[str, ...]:
+    return tuple(path.strip("/").split("/")) if path.strip("/") else ()
+
+
+def _build_routes(symbols: dict[str, dict[str, str]]) -> dict[tuple[str, int], list[tuple[tuple[str, ...], dict[str, str]]]]:
+    """The symbol map, indexed for lookup by request rather than by symbol.
+
+    Built from the symbol map and not from the specification, which bounds what correlation can
+    ever resolve to exactly the set of operations the indexer can bind a call site to. That
+    sounds like a limitation and is the opposite: an operation absent from the symbol map has no
+    SDK method, so no call site in the customer's source is ever bound to it, so a span
+    correlated to it would describe traffic that no indexed code produced. There would be
+    nothing to remediate and nothing to attribute the finding to.
+
+    Bucketed by (method, segment count) because a template segment matches exactly one segment,
+    so a path of a different length can never match however it is spelled -- and Stripe's map
+    is several hundred entries that would otherwise be walked per span.
+    """
+    routes: dict[tuple[str, int], list[tuple[tuple[str, ...], dict[str, str]]]] = {}
+    for entry in symbols.values():
+        template = _segments(entry["path"])
+        routes.setdefault((entry["http_method"].lower(), len(template)), []).append((template, entry))
+    return routes
+
+
+def _matches(template: tuple[str, ...], request: tuple[str, ...]) -> bool:
+    return all(
+        (literal.startswith("{") and literal.endswith("}")) or literal == observed
+        for literal, observed in zip(template, request)
+    )
+
+
 class StripeAdapter:
     """Turns two pinned Stripe specification versions into VendorChange rows."""
 
@@ -88,6 +120,7 @@ class StripeAdapter:
     def __init__(self, spec_dir: Path, symbol_map_path: Path) -> None:
         self._spec_dir = Path(spec_dir)
         self._symbols: dict[str, dict[str, str]] = json.loads(Path(symbol_map_path).read_text(encoding="utf-8"))
+        self._routes = _build_routes(self._symbols)
 
     def fetch_changes(self, from_version: str, to_version: str) -> Iterable[VendorChange]:
         base = self._spec_dir / f"{from_version}.json"
@@ -102,6 +135,37 @@ class StripeAdapter:
         entry = self._symbols.get(symbol)
         if entry is None:
             return None
+        return OperationRef(
+            operation_id=entry["operation_id"],
+            http_method=entry["http_method"],
+            path=entry["path"],
+        )
+
+    def operation_for_request(self, http_method: str, path: str) -> OperationRef | None:
+        """The operation an observed request addressed, or None if nothing here can say.
+
+        The inverse of `operation_for_symbol`, and the only thing that makes a span mean
+        anything: a span carries a URL, the graph is keyed by operation.
+
+        A literal template is preferred over one with a placeholder in the same position, so a
+        path such as `/v1/charges/search` resolves to its own operation rather than being read
+        as a charge whose id happens to be `search`. No Stripe release has yet produced that
+        collision through `build_symbol_map`, whose pattern admits at most one placeholder
+        segment -- the ordering is here because the day a literal sub-path does derive a symbol,
+        the alternative is a confident binding to the wrong operation.
+
+        None rather than a guess. A missing binding is visibly unresolved and can be counted; a
+        wrong one produces a finding against code that never made the call.
+        """
+        request = _segments(path)
+        candidates = self._routes.get((http_method.lower(), len(request)), ())
+        if any(not segment for segment in request):
+            return None
+
+        matched = [entry for template, entry in candidates if _matches(template, request)]
+        if not matched:
+            return None
+        entry = min(matched, key=lambda e: e["path"].count("{"))
         return OperationRef(
             operation_id=entry["operation_id"],
             http_method=entry["http_method"],

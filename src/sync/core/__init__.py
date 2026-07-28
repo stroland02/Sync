@@ -1,6 +1,8 @@
 from sync.core.models import (
+    BindingRung,
     CallSite,
     ChangeSource,
+    ClientSpan,
     Evidence,
     Finding,
     FindingStatus,
@@ -9,16 +11,25 @@ from sync.core.models import (
     PatchStrategy,
     RepoRef,
     MigrationOutcome,
+    ObservedCall,
     ObservedShape,
     Severity,
     VendorChange,
     VerifyResult,
 )
-from sync.core.protocols import Detector, LanguageAdapter, Remediator, VendorAdapter
+from sync.core.protocols import (
+    Detector,
+    LanguageAdapter,
+    Remediator,
+    RequestCorrelator,
+    VendorAdapter,
+)
 
 __all__ = [
+    "BindingRung",
     "CallSite",
     "ChangeSource",
+    "ClientSpan",
     "Detector",
     "Evidence",
     "Finding",
@@ -29,7 +40,9 @@ __all__ = [
     "PatchStrategy",
     "Remediator",
     "RepoRef",
+    "RequestCorrelator",
     "MigrationOutcome",
+    "ObservedCall",
     "ObservedShape",
     "Severity",
     "VendorAdapter",

@@ -61,11 +61,14 @@ call sites, re-ingesting it changes nothing, and the grain is written in `schema
 
 ## In flight
 
-- **B8** — `task_4c181a760d91`, worktree `m1-forge`. Owns a new `src/sync/telemetry/`, one new
-  table in `schema.sql`, and its tests. Dispatched without waiting for the other coordinator's
-  answer on M1 ownership; if they come back holding it, the collision is one table in
-  `schema.sql` and the `operation_id` correlation, both named in the brief.
-
+- **B8** — `task_4c181a760d91`, `m1-forge`. New `src/sync/telemetry/`, one new table in
+  `schema.sql`. OTLP parser and correlation green; on schema and ingest now.
+- **B9** — `task_a7a81ab1cfa2`, `m2-parsing`. A second VendorAdapter, to prove the protocol
+  generalizes past Stripe or find precisely where it does not. The design document's
+  first-listed risk. Told to report protocol changes rather than make them.
+- **B10** — `task_33a41222f14e`, `m2-depth`. Loop context on `call_site` — the one efficiency
+  signal that is static and needs no telemetry. Adds a column to `schema.sql`, which is the
+  same file B8 adds a table to; both told to rebase immediately before their final gates.
 
 ## Done
 
