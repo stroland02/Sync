@@ -100,3 +100,49 @@ CREATE TABLE IF NOT EXISTS migration_outcome (
 
 CREATE INDEX IF NOT EXISTS migration_outcome_kind_idx
     ON migration_outcome (vendor_id, change_kind, strategy, tier);
+
+-- Grain: one row per (vendor_id, operation_id, field_path, json_type, source) tuple. A shape
+-- observed again increments sample_count on its row rather than adding one, which is why that
+-- column exists at all: a table that appended would make every presence rate a function of how
+-- often the ingest ran rather than of what the vendor sent.
+--
+-- Values are never stored, only shape -- paths, types, nullability, counts. The single
+-- exception is an enum member the vendor's published specification names, because a vendor enum
+-- is public data. A string the specification does not name is a customer's data and is
+-- discarded before it reaches this table. That is a threat-model commitment, and it is tested
+-- rather than commented.
+--
+-- It cannot be backfilled. Every response seen before this table existed is a baseline sample
+-- permanently lost, which is why the schema is fixed now and the detector that reads it is not
+-- built until M2.
+CREATE TABLE IF NOT EXISTS observed_shape (
+    id               BIGSERIAL PRIMARY KEY,
+    vendor_id        TEXT NOT NULL,
+    operation_id     TEXT NOT NULL,
+    -- A JSON Pointer into the response body, '/data/status'. Not a URL path: vendor_change.path_ptr
+    -- addresses the operation, this addresses a field inside its response, and a join written as
+    -- though they were the same form matches nothing.
+    field_path       TEXT NOT NULL,
+    -- 'string'|'number'|'boolean'|'object'|'array'|'null'
+    json_type        TEXT NOT NULL,
+    -- Evidence, not a current reading: one null response proves the field can be null and a
+    -- thousand non-null ones afterwards do not unprove it.
+    nullable_seen    BOOLEAN NOT NULL DEFAULT FALSE,
+    -- Only members the published specification names, and only those actually observed.
+    spec_enum_values TEXT[] NOT NULL DEFAULT '{}',
+    -- 'error-payload'|'replay'|'interceptor'
+    source           TEXT NOT NULL,
+    sample_count     INTEGER NOT NULL DEFAULT 1,
+    first_seen       TIMESTAMPTZ NOT NULL DEFAULT now(),
+    last_seen        TIMESTAMPTZ NOT NULL DEFAULT now(),
+
+    -- The natural key. json_type is in it because a field that used to arrive as a string and
+    -- now arrives as a number is the unpublished change this table exists to catch, and merging
+    -- those two into one row would erase it. source is in it because the sources have different
+    -- fidelity -- error-payload shapes are biased toward failures -- and merging them would let
+    -- a biased sample masquerade as a baseline.
+    --
+    -- No separate read index: this constraint's btree leads with (vendor_id, operation_id),
+    -- which is how the baseline is read.
+    UNIQUE (vendor_id, operation_id, field_path, json_type, source)
+);

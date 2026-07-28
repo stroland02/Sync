@@ -16,6 +16,8 @@ Severity = Literal["breaking", "deprecation", "addition", "info"]
 ChangeSource = Literal["oasdiff", "changelog", "sdk-release", "vendor-deprecation-table"]
 PatchStrategy = Literal["codemod", "agent"]
 FindingStatus = Literal["open", "patched", "abandoned"]
+JsonType = Literal["string", "number", "boolean", "object", "array", "null"]
+ObservationSource = Literal["error-payload", "replay", "interceptor"]
 
 
 def _now() -> datetime:
@@ -209,4 +211,101 @@ class MigrationOutcome(BaseModel):
             tier=tier,
             wall_ms=wall_ms,
             **outcome,
+        )
+
+
+def _json_type_of(value: Any) -> JsonType:
+    """The JSON type of a decoded value.
+
+    `bool` is checked before `int` because it is a subclass of one in Python. Ordered the other
+    way, every boolean is recorded as a number and the baseline disagrees with the specification
+    about a type that never changed.
+
+    An input JSON cannot produce is a fault at the observation boundary rather than a shape, so
+    it raises -- and the message names the type only. Putting the value in an exception string
+    is how discarded data reaches a log file.
+    """
+    if value is None:
+        return "null"
+    if isinstance(value, bool):
+        return "boolean"
+    if isinstance(value, (int, float)):
+        return "number"
+    if isinstance(value, str):
+        return "string"
+    if isinstance(value, dict):
+        return "object"
+    if isinstance(value, list):
+        return "array"
+    raise ValueError(f"{type(value).__name__} is not a JSON type")
+
+
+class ObservedShape(BaseModel):
+    """What one field of one operation's response was actually seen to be.
+
+    The grain is one row per `(vendor_id, operation_id, field_path, json_type, source)` tuple.
+    `sample_count` is a counter on that row, not a row multiplier: observing a shape a second
+    time increments it, because a table that appended instead would make every presence rate a
+    function of how often the ingest ran rather than of what the vendor sent.
+
+    Values are never recorded, only shape -- paths, types, nullability, counts. The one
+    exception is an enum member the vendor's *published specification* names, which is public
+    data. A string absent from the specification is a customer's data and is discarded at this
+    boundary, which is the last point where it exists at all.
+
+    It cannot be backfilled. Every response seen before this table existed is a baseline sample
+    permanently lost.
+    """
+
+    id: int | None = None
+    vendor_id: str
+    operation_id: str
+    # A JSON Pointer into the response body -- '/data/status'. Not the URL path: that is
+    # `vendor_change.path_ptr`, which addresses the operation, not a field inside its response.
+    field_path: str
+    json_type: JsonType
+    nullable_seen: bool = False
+    # Only members the published specification names, and only those actually observed. The
+    # column says what this operation has been seen to send, so it may not be invented from the
+    # specification alone.
+    spec_enum_values: list[str] = Field(default_factory=list)
+    source: ObservationSource
+    sample_count: int = 1
+    first_seen: datetime = Field(default_factory=_now)
+    last_seen: datetime = Field(default_factory=_now)
+
+    @classmethod
+    def from_observation(
+        cls,
+        vendor_id: str,
+        operation_id: str,
+        field_path: str,
+        value: Any,
+        source: ObservationSource,
+        spec_enum_values: list[str] | None = None,
+        sample_count: int = 1,
+    ) -> "ObservedShape":
+        """Reduce one observed field to what is safe to keep.
+
+        The reduction happens here rather than at each caller that observes traffic, so there is
+        one place where a value could leak and it is the place that is tested.
+
+        `spec_enum_values` is the published enum for this field, supplied by the caller that
+        holds the specification. Membership in it is the whole retention rule: not "short
+        strings", not "strings that look like enums" -- published, or discarded. A non-string is
+        never retained even when it matches a published member, because an amount of 4999 is an
+        amount whether or not some specification's example also says 4999.
+        """
+        published = spec_enum_values or []
+        retained = [value] if isinstance(value, str) and value in published else []
+
+        return cls(
+            vendor_id=vendor_id,
+            operation_id=operation_id,
+            field_path=field_path,
+            json_type=_json_type_of(value),
+            nullable_seen=value is None,
+            spec_enum_values=retained,
+            source=source,
+            sample_count=sample_count,
         )
