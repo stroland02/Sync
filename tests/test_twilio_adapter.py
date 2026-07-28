@@ -97,7 +97,13 @@ def test_a_mount_name_overrides_a_path_segment_naming_the_wrong_resource():
 
 
 def test_a_path_segment_supplies_the_mount_the_specification_leaves_unstated():
-    """`mountName` covers 4 of 15 paths, so it cannot be the only source.
+    """`mountName` is a sparse hint, so it cannot be the only source.
+
+    In `twilio_insights_v1` it covers 4 of the 15 paths that declare operations. That
+    denominator is one product document and is stated because it is easy to quote as
+    Twilio's coverage, which it is not -- measured across five documents at tag 2.6.9 the
+    figure is 28 of 95 paths, 29%, ranging from 9% in `twilio_video_v1` to 47% in
+    `twilio_messaging_v1`. Sparse everywhere, but sparse to different degrees.
 
     `/v1/Video/Rooms` states no mount and the library calls it `rooms`, which is the last
     literal segment of the path. Falling back to the response schema name instead would
@@ -108,6 +114,32 @@ def test_a_path_segment_supplies_the_mount_the_specification_leaves_unstated():
 
     assert mapping["twilio.insights.v1.rooms.list"]["path"] == "/v1/Video/Rooms"
     assert "twilio.insights.v1.video_room_summaries.list" not in mapping
+
+
+def test_class_name_is_not_read_as_a_mount_however_much_it_looks_like_one():
+    """`className` is the generated class, not the attribute the client exposes.
+
+    It is the obvious way to make the sparse hint look denser: `mountName` covers 29% of
+    paths across five documents, and accepting `className` too would raise that to 45%. It
+    would also be wrong. `/v1/Voice/{CallSid}/Summary` states `className: call_summary` and
+    the library exposes `.summary`, so the extra coverage is bought entirely with wrong
+    answers -- and a wrong symbol is worse than a missing one, because it binds a call site
+    to an operation the customer never called instead of leaving it visibly unresolved.
+
+    Checked against `twilio-python` on three products rather than inferred from this one:
+    `video.v1.rooms(sid)` exposes `recordings` where `className` says `room_recording`, and
+    `studio.v2.flows(sid)` exposes `revisions` where it says `flow_revision`. Ten paths
+    across the five documents disagree this way and the library sides with the path segment
+    in every one.
+    """
+    spec = _shape_spec()
+
+    assert spec["paths"]["/v1/Voice/{CallSid}/Summary"]["x-twilio"]["className"] == "call_summary"
+
+    mapping = build_symbol_map(spec, domain="insights", version="v1")
+
+    assert "twilio.insights.v1.calls.summary.fetch" in mapping
+    assert "twilio.insights.v1.calls.call_summary.fetch" not in mapping
 
 
 def test_a_parent_link_nests_a_sub_resource_under_its_owner():

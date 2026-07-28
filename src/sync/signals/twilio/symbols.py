@@ -10,14 +10,19 @@ Three sources, in this order, and each is stated by the vendor rather than infer
 
 - `x-twilio.mountName` names the library's attribute when the URL would get it wrong.
   `/v1/Voice/{Sid}` is `client.insights.v1.calls`, and nothing about "Voice" says "calls".
-- The last literal path segment supplies the name when no mount is stated, which is 11 of
-  the 15 paths in this product.
+- The last literal path segment supplies the name when no mount is stated, which is most of
+  them: across five product documents at tag 2.6.9, `mountName` covers 28 of the 95 paths
+  declaring operations -- 29%, ranging from 9% in `twilio_video_v1` to 47% in
+  `twilio_messaging_v1`.
 - `x-twilio.parent` chains a sub-resource under its owner, so `/v1/Voice/{CallSid}/Events`
   becomes `calls.events` rather than a top-level `events`.
 
-The response schema name is deliberately *not* a source, despite looking like the obvious
-one: `/v1/Video/Rooms` refs `insights.v1.video_room_summary` and the library calls it
-`rooms`. It names the wire resource, not the mount.
+Two fields that look like sources and are not. The response schema name refs the wire
+resource rather than the mount: `/v1/Video/Rooms` refs `insights.v1.video_room_summary`
+where the library says `rooms`. And `x-twilio.className` names the generated class rather
+than the attribute -- reading it would lift stated coverage from 29% to 45% and be wrong on
+every one of the ten paths where it disagrees with the path segment, which is the direction
+that binds call sites to operations nobody called.
 
 This logic is Twilio-specific and belongs to the adapter, never to sync.core.
 """
