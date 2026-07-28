@@ -36,12 +36,6 @@ src/sync/signals/generated/adapter.py:GeneratedSpecAdapter
 src/sync/signals/sentry/shapes.py:SentryShapeReader
 src/sync/signals/twilio/adapter.py:TwilioAdapter
 
-# The MCP graph surface. Tool logic over a `GraphReader` with no transport, so nothing in this
-# tree can call it. It leaves when a server exists.
-src/sync/mcp/tools.py:GraphSurface
-src/sync/mcp/tools.py:GraphSurface.whats_at_risk
-src/sync/mcp/tools.py:GraphSurface.explain_call_site
-src/sync/mcp/tools.py:GraphSurface.whats_changed
 
 # The public change feed: built, unpublished, with no keypair and no hosting.
 src/sync/signals/feed/consumer.py:verify_and_parse
@@ -63,15 +57,10 @@ src/sync/remediate/parameters.py:ParameterRenameRemediator
 src/sync/route/matrix.py:matching_rows
 src/sync/route/templates.py:omit_property_at
 
-# Landed after this baseline was measured, and accepted for the same reason as the entries
-# above: each is one stage of a pipeline whose remaining stages are not built.
+# Landed after this baseline was measured, and accepted for the reason the entries above are:
+# one stage of a pipeline whose remaining stages are not built.
 #
 # `synthesize_mock_response` is step 1 of the replay tier's three steps. Steps 2 and 3 execute
 # customer code in a sandbox and were deliberately out of scope, so nothing consumes the mock
 # yet. It leaves when the execution step exists.
-#
-# `run_to_static_verify` is the graph surface's patch-proposal logic. Same shape as the three
-# read tools directly above it -- logic over a reader with no transport, so nothing in this
-# tree can reach it. It leaves when a server exists.
-src/sync/mcp/propose.py:run_to_static_verify
 src/sync/verify/mock_response.py:synthesize_mock_response
