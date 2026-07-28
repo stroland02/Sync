@@ -321,6 +321,20 @@ Three findings from surveying the tooling change what has to be built.
 
 Everything above concerns knowing what a vendor changed. Binding that to a call site remains the weak point: the M0 symbol map covers 105 of 414 Stripe paths, and maps singleton resources to the wrong verb. One derivation strategy will not carry a plugin catalogue.
 
+**Measured against a second vendor, and the result inverts the assumption above.** A Twilio adapter was built specifically to test whether `VendorAdapter` is a plugin surface or a description of Stripe. The change half is a real surface. The symbol half was not, and the reason is worth stating exactly, because it was the opposite of what was expected.
+
+Before Twilio, `operation_for_symbol` had exactly one implementation. Both other non-Stripe adapters return `None` from it on principled grounds — a model id is not an SDK symbol, and a generated-spec adapter deliberately does not know one vendor's naming scheme. Each is individually correct, and the aggregate effect was that the half of the protocol with a single implementation was also the half nobody had stress-tested. **A protocol with one implementation is a description of that implementation.**
+
+Twilio states in its specification proper both of the things Stripe's machinery exists to recover. The verb is written into `operationId` as a closed vocabulary — `Fetch`, `List`, `Create`, `Update`, `Delete` covers all 155 operations across five product documents, with no exceptions and no fallback rule. Instance-versus-list is stated outright as `x-twilio.pathType`. Stripe publishes neither: `sync.signals.stripe.symbols._addresses_one_resource` exists to infer the second from response shape, and the first is fetched from a separate ten-megabyte `spec3.sdk.json`.
+
+The number that settles it is pinned in Stripe's own committed test rather than asserted here: consulting `x-stableId` across 521 stable ids changes **exactly one symbol out of 179** — `del` to `cancel` on subscriptions — and reaches no operation the path pattern did not already reach. Ten megabytes per version, per fetch, for one corrected name.
+
+So the general mechanism is *read what the vendor states about its own SDK*, and `x-stableId` is one vendor's unusually expensive instance of it. Building the abstraction around that instance is what produced a symbol half that only ever had one implementation.
+
+Two things this does not license. Twilio is not simply better documented: its hint for the resource *name* is the sparse one — `mountName` covers 28 of 95 paths declaring operations, 29%, ranging from 9% in `twilio_video_v1` to 47% in `twilio_messaging_v1` — where Stripe's is dense. And a nearby field, `x-twilio.className`, would lift apparent coverage to 45% while being wrong on all ten paths where it disagrees with the last path segment, because it names the generated class rather than the attribute the client exposes. `twilio-python` sides with the path segment in all ten. A wrong symbol is worse than a missing one: a missing one leaves the call site visibly unresolved and countable, a wrong one binds it to an operation the customer never called. `tests/test_twilio_adapter.py` pins that deliberately.
+
+**The gap is a language axis, not a vendor one.** `twilio-python`'s `call_summaries` and `twilio-node`'s `callSummaries` are the same operation, and `operation_for_symbol` cannot tell them apart. That signature change, and a product axis on `VendorChange`, are recorded and not yet made.
+
 It should become a cascade, where each strategy records how it produced a mapping:
 
 | Strategy | Source | Confidence |
