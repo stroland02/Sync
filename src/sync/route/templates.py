@@ -32,7 +32,13 @@ _DEPRECATION_PREFIX = "deprecation/model-"
 # risking a fight with whatever formatter the customer's CI runs -- the CI this patch must pass.
 _QUOTES = ('"', "'")
 
-# Upper bound on removal passes. A pathological object cannot spin the loop.
+# Upper bound on removal passes, so a span that fails to shrink the source cannot spin the
+# loop. It bounds passes over the whole source rather than over one object, and a pass makes
+# one removal, so a file holding more matching calls than this silently keeps the remainder:
+# measured, 201 calls each passing the key leaves one behind and 250 leaves fifty. No
+# realistic object carries two hundred copies of a key, but a file carrying two hundred calls
+# that each pass it is ordinary. Raising the number moves the cliff rather than removing it;
+# what the caller needs is to be told the pass ran out, which changes this function's contract.
 _MAX_REMOVALS = 200
 
 
@@ -91,6 +97,10 @@ def _deletion_span(source: str, container, pair) -> tuple[int, int]:
     target = pair.range().start.index
     index = next(i for i, child in enumerate(children) if child.range().start.index == target)
 
+    sole = _sole_entry_span(source, children)
+    if sole is not None:
+        return _widen_to_whole_line(source, *sole)
+
     start = pair.range().start.index
     end = pair.range().end.index
 
@@ -108,6 +118,32 @@ def _deletion_span(source: str, container, pair) -> tuple[int, int]:
             start = preceding.range().start.index
 
     return _widen_to_whole_line(source, start, end)
+
+
+def _sole_entry_span(source: str, children: list) -> tuple[int, int] | None:
+    """The whole interior of the braces, when one entry is all they hold.
+
+    Removing the pair alone leaves `create({  })`: both spaces that surrounded it stay, and
+    a diff whose only claimed purpose was removing an argument carries a whitespace change
+    as well. Taking the interior removes them, along with whichever commas a sole entry was
+    written with -- `{ model: "x" }` and `{ model: "x", }` differ by one branch of the
+    separator rule and left two spaces and one respectively.
+
+    Only where the interior is on one line. Across lines the braces are the author's
+    formatting rather than a separator, `_widen_to_whole_line` already removes the entry's
+    own line, and closing them up would reflow code the finding said nothing about.
+
+    Anything that is not a brace or a comma counts as an entry, so an object holding a
+    comment beside its pair is left to the separator rule.
+    """
+    entries = [child for child in children if child.kind() not in ("{", "}", ",")]
+    if len(entries) != 1:
+        return None
+
+    start, end = children[0].range().end.index, children[-1].range().start.index
+    if "\n" in source[start:end]:
+        return None
+    return start, end
 
 
 def _widen_to_whole_line(source: str, start: int, end: int) -> tuple[int, int]:
@@ -166,6 +202,41 @@ def _contains(node, line: int, col: int) -> bool:
     return True
 
 
+def _has_object_argument(call) -> bool:
+    arguments = call.field("arguments")
+    if arguments is None:
+        return False
+    return any(child.kind() == "object" for child in arguments.children())
+
+
+def _preferred(calls: list):
+    """Which of several calls starting at one position an object edit acts on.
+
+    A position is not an identity. `wrap(cfg)({ receipt_email: 'x' })` starts where
+    `wrap(cfg)` starts, and `stripe.p.create({ ... }).then(h)` starts where
+    `stripe.p.create({ ... })` starts, so both shapes offer two calls at the recorded
+    column. Traversal order used to decide, which meant the first shape resolved to
+    `wrap(cfg)` -- no object argument, nothing removed, and the caller reading an unchanged
+    source as "already correct" rather than as a miss.
+
+    Nesting depth cannot be the rule, because the two shapes want opposite ends of the
+    nest: the first wants the outer call and the second the inner. What separates them is
+    whether a call's own argument list holds an object literal. That is not a guess about
+    which call the finding meant; it is a statement of which call this edit can act on at
+    all, since a call passing no object has no property to remove.
+
+    A tie -- `f({ a: 1 })({ receipt_email: 'x' })`, where both qualify -- goes to the widest
+    span: the complete expression beginning at that position rather than a fragment of it.
+    """
+    return max(
+        calls,
+        key=lambda call: (
+            _has_object_argument(call),
+            call.range().end.index - call.range().start.index,
+        ),
+    )
+
+
 def _call_at(root, line: int, col: int):
     """The call expression a finding's position names.
 
@@ -174,21 +245,23 @@ def _call_at(root, line: int, col: int):
     1-based column would otherwise turn a correct patch into a silent no-op, and a no-op reads
     as "nothing to fix" rather than as a miss.
 
-    Where several calls contain the position -- a call inside a call's arguments -- the
-    innermost wins, since that is the one the position most specifically identifies.
+    Several calls can share that start, and `_preferred` states which one is taken.
+
+    Where several calls merely contain the position -- a call inside a call's arguments --
+    the innermost wins, since that is the one the position most specifically identifies.
     """
-    exact = None
+    exact = []
     containing = []
 
     for call in root.find_all(kind="call_expression"):
         span = call.range().start
         if span.line + 1 == line and span.column == col:
-            exact = call
+            exact.append(call)
         if _contains(call, line, col):
             containing.append(call)
 
-    if exact is not None:
-        return exact
+    if exact:
+        return _preferred(exact)
     if not containing:
         return None
     return min(containing, key=lambda c: c.range().end.index - c.range().start.index)
@@ -383,18 +456,27 @@ def _object_argument_at(root, line: int, col: int):
     `ast-grep` and the tree-sitter positions `CallSite` is built from agree on both
     values, which was checked rather than assumed. Where they could not, a mismatch
     declines, and declining costs an agent run rather than a wrong edit.
+
+    Several calls can still share one start, so `_preferred` chooses among them rather than
+    traversal order. Taking the first produced the mirror image of `_call_at`'s defect: on
+    `stripe.p.create({ ... }).then(h)` it took the outer call, found `(h)` where an object
+    should be, and answered `None` -- "cannot establish" for a shape that is entirely
+    establishable, which abandons a finding to a tier that costs an agent run.
     """
-    for call in root.find_all(kind="call_expression"):
-        start = call.range().start
-        if start.line != line or start.column != col:
-            continue
-        arguments = call.field("arguments")
-        if arguments is None:
-            return None
-        return next(
-            (child for child in arguments.children() if child.kind() == "object"), None
-        )
-    return None
+    matches = [
+        call
+        for call in root.find_all(kind="call_expression")
+        if call.range().start.line == line and call.range().start.column == col
+    ]
+    if not matches:
+        return None
+
+    arguments = _preferred(matches).field("arguments")
+    if arguments is None:
+        return None
+    return next(
+        (child for child in arguments.children() if child.kind() == "object"), None
+    )
 
 
 def omit_argument_at(
