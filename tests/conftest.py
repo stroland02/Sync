@@ -23,7 +23,12 @@ change.
 from __future__ import annotations
 
 import os
+import subprocess
 import warnings
+from pathlib import Path
+from typing import Callable
+
+import pytest
 
 import psycopg
 from psycopg import sql
@@ -79,3 +84,49 @@ def pytest_unconfigure(config) -> None:
             sql.SQL("DROP DATABASE IF EXISTS {} WITH (FORCE)").format(sql.Identifier(_created_dbname))
         )
     _created_dbname = None
+
+
+GitRunner = Callable[[list[str], Path], None]
+
+
+@pytest.fixture()
+def git() -> GitRunner:
+    def run(args: list[str], cwd: Path) -> None:
+        subprocess.run(
+            ["git", *args], cwd=cwd, check=True, capture_output=True, text=True, encoding="utf-8"
+        )
+
+    return run
+
+
+@pytest.fixture()
+def patched_clone(tmp_path: Path, git: GitRunner) -> Path:
+    """A committed project, patched, whose typecheck now passes only because of
+    a gitignored file the patch agent left behind.
+
+    This is the shape of the M0 acceptance failure. Next.js writes
+    `next-env.d.ts` during a build, `tsconfig.json` lists it in `include`, and
+    `.gitignore` keeps it out of the repository -- so the declarations it
+    carries exist in the tree the patch agent worked in and in no checkout of
+    the branch that gets pushed.
+
+    `push_branch` stages with `git add -u`, so the modification to `src/a.ts`
+    reaches the branch and `generated.d.ts` does not.
+    """
+    repo = tmp_path / "clone"
+    (repo / "src").mkdir(parents=True)
+    (repo / ".gitignore").write_text("generated.d.ts\nnode_modules\n", encoding="utf-8")
+    (repo / "tsconfig.json").write_text(
+        '{"compilerOptions": {"strict": true, "noEmit": true, "target": "ES2022", "module": "ESNext",'
+        ' "moduleResolution": "bundler", "skipLibCheck": true}, "include": ["src", "generated.d.ts"]}',
+        encoding="utf-8",
+    )
+    (repo / "src" / "a.ts").write_text("export const n: number = 1;\n", encoding="utf-8")
+
+    git(["init", "-q", "-b", "main"], repo)
+    git(["add", "."], repo)
+    git(["-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qm", "base"], repo)
+
+    (repo / "src" / "a.ts").write_text("export const g: Generated = { id: 'x' };\n", encoding="utf-8")
+    (repo / "generated.d.ts").write_text("declare type Generated = { id: string };\n", encoding="utf-8")
+    return repo
