@@ -39,7 +39,20 @@ def _gh() -> str:
 
 
 def branch_name_for(patch: Patch, repo: RepoRef) -> str:
-    digest = hashlib.sha256(f"{repo.repo_id}|{patch.diff}".encode()).hexdigest()[:12]
+    """One branch per finding, stable across that finding's CI retries.
+
+    `patch.rationale` rather than `patch.diff`: a retry's diff is only the
+    increment on top of the attempt already committed on the branch, so a
+    diff-derived name resolves somewhere new on every attempt and each retry
+    strands a pushed branch on a repository Sync does not own. A remediator
+    copies the finding's rationale into every patch it proposes for that
+    finding, which makes it the identity available here — `Patch` carries no
+    finding id and the `Forge` protocol passes no finding. A remediator that
+    regenerates rationale text per attempt would reintroduce the stranded
+    branches, which is what
+    `test_a_patch_carries_its_findings_rationale_verbatim` exists to catch.
+    """
+    digest = hashlib.sha256(f"{repo.repo_id}|{patch.rationale}".encode("utf-8")).hexdigest()[:12]
     return f"sync/api-drift-{digest}"
 
 

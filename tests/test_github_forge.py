@@ -5,7 +5,8 @@ from pathlib import Path
 
 import pytest
 
-from sync.core import Evidence, Patch, RepoRef
+from sync.core import CallSite, Evidence, Finding, Patch, RepoRef, VendorChange
+from sync.remediate.agent_patch import AgentRemediator
 from sync.forge.github import (
     COMMIT_AUTHOR_EMAIL,
     COMMIT_AUTHOR_NAME,
@@ -43,6 +44,70 @@ def test_branch_name_differs_for_a_different_patch():
     rewrite the first finding's already-opened pull request."""
     other = Patch(diff="--- a\n+++ b\n@@ -1 +1 @@\n-old\n+new\n", strategy="agent", rationale="a different fix")
     assert branch_name_for(other, REPO) != branch_name_for(PATCH, REPO)
+
+
+def test_two_successive_patches_for_one_finding_resolve_to_the_same_branch():
+    """A CI retry re-runs the patch node against the same finding, and the diff
+    it produces is only the increment on top of the attempt already committed
+    on the branch. If branch identity followed the diff, every retry would push
+    a second `sync/api-drift-*` branch to the customer's repository and abandon
+    the first — having already spent their Actions minutes on it."""
+    first = Patch(diff="--- a\n+++ b\n@@ -1 +1 @@\n-old\n+new\n", strategy="agent", rationale="status removed")
+    retry = Patch(diff="--- a\n+++ b\n@@ -9 +9 @@\n-still_broken\n+fixed\n", strategy="agent", rationale="status removed")
+    assert branch_name_for(retry, REPO) == branch_name_for(first, REPO)
+
+
+def test_a_patch_carries_its_findings_rationale_verbatim(tmp_path, monkeypatch):
+    """`branch_name_for` treats `patch.rationale` as the finding's identity, which
+    holds only while a remediator copies the finding's rationale into every patch
+    it proposes for it. Were that to stop — a remediator writing its own text, a
+    detector changing the format per attempt — branch identity would start
+    varying between one finding's CI attempts again, stranding a pushed branch
+    per retry, and every test in this file would still pass. This is where that
+    assumption is supposed to break.
+
+    The agent itself is stubbed out: what is under test is the contract between
+    `Finding` and `Patch`, not the model call that fills the working tree.
+    """
+    repo_path = tmp_path / "clone"
+    repo_path.mkdir()
+    subprocess.run(["git", "init"], cwd=repo_path, capture_output=True, text=True,
+                   encoding="utf-8", check=True)
+    monkeypatch.setattr(AgentRemediator, "_run_agent", lambda self, prompt, path: None)
+
+    finding = Finding(
+        detector="vendor_change",
+        call_site_id="cs1",
+        vendor_change_id="vc1",
+        severity="breaking",
+        rationale="response-property-removed on GetCharges: call site reads `status` (src/billing.ts:6)",
+    )
+    change = VendorChange(
+        vendor_id="stripe", from_version="2024-01-01", to_version="2024-06-01",
+        kind="response-property-removed", operation_id="GetCharges",
+        path_ptr="/v1/charges", severity="breaking", source="oasdiff",
+    )
+    site = CallSite(
+        repo_id="r1", path="src/billing.ts", line=6, col=2, vendor_id="stripe",
+        operation_id="GetCharges", symbol="stripe.charges.retrieve",
+        response_fields_read=["status"], sdk_version="14.0.0", content_hash="h",
+    )
+    repo = RepoRef(repo_id="r1", url=REPO.url, local_path=str(repo_path), head_sha="0" * 40)
+
+    remediator = AgentRemediator()
+    first = remediator.propose(finding, change, site, repo)
+    retry = remediator.propose(finding, change, site, repo, diagnostics="tsc: error TS2339")
+
+    assert first.rationale == finding.rationale
+    assert branch_name_for(retry, repo) == branch_name_for(first, repo)
+
+
+def test_two_findings_that_happen_to_produce_the_same_diff_do_not_share_a_branch():
+    """The counterweight to the test above: stability across attempts must not
+    be bought by making the name a function of the repository alone."""
+    one = Patch(diff=PATCH.diff, strategy="agent", rationale="response-property-removed on GetCharges")
+    two = Patch(diff=PATCH.diff, strategy="agent", rationale="request-parameter-removed on PostRefunds")
+    assert branch_name_for(one, REPO) != branch_name_for(two, REPO)
 
 
 def test_branch_name_is_git_safe_even_when_rationale_contains_illegal_characters():
