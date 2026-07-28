@@ -599,10 +599,19 @@ def test_timeout_message_does_not_claim_completed_runs_never_completed():
     assert "completed without a confirmed green verdict" in detail
 
 
-def _forge_recording() -> tuple[GitHubForge, list[list[str]], list[Path]]:
+REMOTE_TIP = "b" * 40
+
+
+def _forge_recording(remote_tip: str | None = None) -> tuple[GitHubForge, list[list[str]], list[Path]]:
     """A forge whose subprocess layer records every argv and cwd it was called
     with, so `push_branch` and `open_pull_request` — pure argv composition over
-    `self._run` — can be tested without git, `gh`, or the network."""
+    `self._run` — can be tested without git, `gh`, or the network.
+
+    `remote_tip` is what the remote holds for the branch. None makes the fetch
+    fail the way git does when the ref is not there; a stub that answered every
+    argv with the empty string would instead have `push_branch` lease against a
+    commit named by nothing.
+    """
     forge = GitHubForge()
     calls: list[list[str]] = []
     cwds: list[Path] = []
@@ -610,13 +619,17 @@ def _forge_recording() -> tuple[GitHubForge, list[list[str]], list[Path]]:
     def fake_run(args, cwd):
         calls.append(args)
         cwds.append(cwd)
+        if args[:2] == ["git", "fetch"] and remote_tip is None:
+            raise RuntimeError("fatal: couldn't find remote ref")
+        if args[:2] == ["git", "rev-parse"]:
+            return remote_tip
         return ""
 
     forge._run = fake_run
     return forge, calls, cwds
 
 
-def test_push_branch_issues_the_expected_git_sequence():
+def test_push_branch_issues_the_expected_git_sequence_for_a_new_branch():
     forge, calls, cwds = _forge_recording()
     branch = forge.push_branch(REPO, PATCH)
 
@@ -626,9 +639,26 @@ def test_push_branch_issues_the_expected_git_sequence():
         ["git", "add", "-u"],
         ["git", "-c", f"user.name={COMMIT_AUTHOR_NAME}", "-c", f"user.email={COMMIT_AUTHOR_EMAIL}",
          "commit", "-m", f"fix: {PATCH.rationale}"],
-        ["git", "push", "-u", "origin", branch, "--force-with-lease"],
+        ["git", "fetch", "--depth", "1", "origin",
+         f"+refs/heads/{branch}:refs/remotes/origin/{branch}"],
+        ["git", "push", "-u", "origin", branch],
     ]
-    assert cwds == [Path(REPO.local_path)] * 4
+    assert cwds == [Path(REPO.local_path)] * 5
+
+
+def test_push_branch_leases_against_the_commit_it_fetched():
+    """Exact argv, because the difference between leasing against the fetched
+    commit and leasing against whatever `refs/remotes/origin/<branch>` currently
+    says is invisible in behaviour until something else in the clone fetches —
+    and the patch agent holds `Bash` in this clone."""
+    forge, calls, cwds = _forge_recording(remote_tip=REMOTE_TIP)
+    branch = forge.push_branch(REPO, PATCH)
+
+    assert calls[-2:] == [
+        ["git", "rev-parse", f"refs/remotes/origin/{branch}"],
+        ["git", "push", "-u", "origin", branch, f"--force-with-lease={branch}:{REMOTE_TIP}"],
+    ]
+    assert cwds == [Path(REPO.local_path)] * 6
 
 
 def test_push_branch_commits_under_syncs_identity_with_real_git(tmp_path, monkeypatch):
@@ -688,6 +718,129 @@ def test_push_branch_commits_under_syncs_identity_with_real_git(tmp_path, monkey
     # Literal, not derived from the imported constants: this must catch a
     # wrong constant value, not just a wrong wiring of a correct one.
     assert author == "Sync <sync@users.noreply.github.com>"
+
+
+def _git(*args: str, cwd: Path) -> str:
+    """Real git, failing loudly. The push tests below are worth nothing unless
+    every step of their setup actually happened."""
+    return subprocess.run(
+        ["git", *args], cwd=cwd, capture_output=True, text=True, encoding="utf-8", check=True
+    ).stdout.strip()
+
+
+@pytest.fixture
+def remote(tmp_path, monkeypatch):
+    """A bare repository standing in for the customer's GitHub repository.
+
+    The host's global and system git config is suppressed for the whole test, so
+    nothing here can pass on the developer machine's identity or push settings.
+    """
+    monkeypatch.setenv("GIT_CONFIG_GLOBAL", os.devnull)
+    monkeypatch.setenv("GIT_CONFIG_SYSTEM", os.devnull)
+
+    seed = tmp_path / "seed"
+    seed.mkdir()
+    _git("init", "--initial-branch=main", cwd=seed)
+    (seed / "file.txt").write_text("original\n", encoding="utf-8")
+    _git("add", "file.txt", cwd=seed)
+    _git("-c", "user.name=Seed", "-c", "user.email=seed@example.com", "commit", "-m", "seed", cwd=seed)
+
+    bare = tmp_path / "remote.git"
+    _git("clone", "--bare", str(seed), str(bare), cwd=tmp_path)
+    return bare
+
+
+def _sync_clone(remote: Path, dest: Path) -> RepoRef:
+    """A clone shaped like the one `cli.py` makes, with the patch already applied.
+
+    `--depth` implies `--single-branch`, so the clone carries no
+    `refs/remotes/origin/*` for any branch but the default one. That absence is
+    the whole mechanism these tests exist for, and a full clone would hide it: it
+    would fetch a branch an earlier run had left behind and hand the lease the
+    state this clone is supposed not to have. `as_uri` because git ignores
+    `--depth` for a plain local path.
+    """
+    _git("clone", "--depth", "1", remote.as_uri(), str(dest), cwd=dest.parent)
+    (dest / "file.txt").write_text("patched\n", encoding="utf-8")
+    return RepoRef(
+        repo_id="r1", url=remote.as_uri(), local_path=str(dest),
+        head_sha=_git("rev-parse", "HEAD", cwd=dest),
+    )
+
+
+def _push_from_another_writer(remote: Path, workdir: Path, branch: str, content: str) -> str:
+    """Whoever else has written to this branch — an earlier Sync run, or a human
+    — pushing from a clone of their own. Returns the sha the remote ends up at."""
+    _git("clone", remote.as_uri(), str(workdir), cwd=workdir.parent)
+    if _git("ls-remote", "--heads", "origin", branch, cwd=workdir):
+        _git("checkout", branch, cwd=workdir)
+    else:
+        _git("checkout", "-b", branch, cwd=workdir)
+    (workdir / "file.txt").write_text(content, encoding="utf-8")
+    _git("add", "-u", cwd=workdir)
+    _git("-c", "user.name=Other", "-c", "user.email=other@example.com",
+         "commit", "-m", "someone else's commit", cwd=workdir)
+    _git("push", "origin", branch, cwd=workdir)
+    return _git("rev-parse", "HEAD", cwd=workdir)
+
+
+def test_push_branch_creates_a_branch_the_remote_does_not_have(tmp_path, remote):
+    """The ordinary case, and the one that must not regress while the re-run case
+    is being fixed: nothing exists to lease against, and the push has to create
+    the branch."""
+    repo = _sync_clone(remote, tmp_path / "clone")
+
+    branch = GitHubForge().push_branch(repo, PATCH)
+
+    assert _git("rev-parse", branch, cwd=remote) == _git("rev-parse", "HEAD", cwd=Path(repo.local_path))
+
+
+def test_push_branch_updates_a_branch_an_earlier_run_left_on_the_remote(tmp_path, remote):
+    """Re-running a finding is ordinary — after fixing an environment fault or an
+    earlier bug — and branch identity is derived from the finding, so the branch
+    this run targets is the one the earlier run already pushed. The clone has
+    never seen that ref, and a lease with nothing recorded means "this ref must
+    not exist", so Sync refuses its own branch and the run abandons. That is what
+    the M0 acceptance run died of."""
+    repo = _sync_clone(remote, tmp_path / "clone")
+    branch = branch_name_for(PATCH, repo)
+    _push_from_another_writer(remote, tmp_path / "earlier", branch, "an earlier attempt\n")
+
+    assert GitHubForge().push_branch(repo, PATCH) == branch
+    assert _git("rev-parse", branch, cwd=remote) == _git("rev-parse", "HEAD", cwd=Path(repo.local_path))
+
+
+def test_push_branch_refuses_a_branch_that_moved_after_it_was_fetched(tmp_path, remote, monkeypatch):
+    """The race the lease exists for, and the only test here that separates a
+    lease against observed state from a plain `--force`: every other test in this
+    file passes either way.
+
+    A second writer moves the branch between Sync's fetch and Sync's push, so the
+    state Sync observed is no longer the state it would overwrite. The push must
+    be refused and their commit must survive.
+    """
+    repo = _sync_clone(remote, tmp_path / "clone")
+    branch = branch_name_for(PATCH, repo)
+    _push_from_another_writer(remote, tmp_path / "earlier", branch, "an earlier attempt\n")
+
+    real_run = GitHubForge._run
+    interloper: list[str] = []
+
+    def run_with_a_writer_between_fetch_and_push(self, args, cwd):
+        if args[:2] == ["git", "push"] and not interloper:
+            interloper.append(
+                _push_from_another_writer(remote, tmp_path / "interloper", branch, "work Sync never saw\n")
+            )
+        return real_run(self, args, cwd)
+
+    monkeypatch.setattr(GitHubForge, "_run", run_with_a_writer_between_fetch_and_push)
+
+    with pytest.raises(RuntimeError):
+        GitHubForge().push_branch(repo, PATCH)
+
+    # The property, not the wording git happens to reject with: what the other
+    # writer pushed is still what the branch points at.
+    assert _git("rev-parse", branch, cwd=remote) == interloper[0]
 
 
 def test_open_pull_request_issues_the_expected_gh_invocation():

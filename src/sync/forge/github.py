@@ -121,6 +121,23 @@ class GitHubForge:
 
         The graph guarantees a non-empty diff before this runs, so `git commit`
         cannot fail here for an empty index.
+
+        The push distinguishes three cases, and the lease is what tells them
+        apart:
+
+        - The remote has no such branch. Nothing to overwrite, so the push
+          carries no lease at all. If another writer creates the branch in the
+          meantime, git rejects the push as a non-fast-forward, which is the
+          answer we want.
+        - The remote has the branch at the commit `_fetch_remote_tip` just
+          observed. This is a re-run of a finding — ordinary after an
+          environment fault or an earlier bug — and branch identity is derived
+          from the finding, so it resolves to the branch the previous run
+          pushed. The lease names that commit and the update goes through.
+        - The remote has the branch at some other commit, because it moved
+          between the fetch and the push. The lease names a commit that is no
+          longer there and git refuses. This is the race the lease exists for,
+          and it is the only thing separating this from `--force`.
         """
         path = Path(repo.local_path)
         branch = branch_name_for(patch, repo)
@@ -131,8 +148,46 @@ class GitHubForge:
              "commit", "-m", f"fix: {patch.rationale}"],
             path,
         )
-        self._run(["git", "push", "-u", "origin", branch, "--force-with-lease"], path)
+
+        remote_tip = self._fetch_remote_tip(path, branch)
+        push = ["git", "push", "-u", "origin", branch]
+        if remote_tip is not None:
+            push.append(f"--force-with-lease={branch}:{remote_tip}")
+        self._run(push, path)
         return branch
+
+    def _fetch_remote_tip(self, path: Path, branch: str) -> str | None:
+        """The commit the remote has for `branch` right now, or None if it has none.
+
+        Sync works in a shallow clone, and `--depth` implies `--single-branch`,
+        so `refs/remotes/origin/<branch>` does not exist for any branch but the
+        default one. A bare `--force-with-lease` reads that absence as "expect
+        this ref not to exist" and rejects a branch a previous run of the same
+        finding pushed. Against a ref never fetched, the lease is not a safety
+        check; it is an artifact of how the clone was made.
+
+        The expected commit is passed to the lease explicitly rather than left to
+        the remote-tracking ref, because the patch agent holds `Bash` inside this
+        same clone: any `git fetch` it happens to run would move that ref and
+        silently turn the lease into a `--force`.
+
+        `--depth 1` because only the tip is wanted. Fetching a customer's branch
+        without it deepens the clone, which is history downloaded to answer a
+        question about one commit.
+
+        A fetch that fails for any other reason — no network, no permission —
+        also lands here and yields a push with no lease, which git then rejects
+        as a non-fast-forward rather than overwriting anything.
+        """
+        try:
+            self._run(
+                ["git", "fetch", "--depth", "1", "origin",
+                 f"+refs/heads/{branch}:refs/remotes/origin/{branch}"],
+                path,
+            )
+        except RuntimeError:
+            return None
+        return self._run(["git", "rev-parse", f"refs/remotes/origin/{branch}"], path)
 
     def _default_branch(self, path: Path) -> str | None:
         """`origin/HEAD` records the default branch as of the clone, which costs
