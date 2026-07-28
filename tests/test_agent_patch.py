@@ -1,3 +1,7 @@
+import os
+import subprocess
+from pathlib import Path
+
 import pytest
 from claude_agent_sdk import ResultMessage
 
@@ -60,6 +64,20 @@ def _line(prompt: str, prefix: str) -> str:
         if line.startswith(prefix):
             return line
     raise AssertionError(f"no line starting with {prefix!r} in:\n{prompt}")
+
+
+def _rule(prompt: str, needle: str) -> str:
+    """The one scope rule mentioning `needle`, lowercased.
+
+    A rule runs across several lines, so a test that wants to know what a
+    particular instruction says has to read the whole bullet: asserting against
+    the prompt as a whole would pass on the word appearing under some other rule.
+    """
+    rules = prompt[prompt.index("Rules:"):].split("\n- ")[1:]
+    matched = [rule for rule in rules if needle in rule]
+    if len(matched) != 1:
+        raise AssertionError(f"expected exactly one rule mentioning {needle!r}, found {len(matched)}")
+    return matched[0].lower()
 SAVED_FINDING = FINDING.model_copy(update={"id": "f-42"})
 REPO = RepoRef(
     repo_id="acme-billing", url="https://example.invalid/r",
@@ -192,6 +210,41 @@ def test_the_scope_rules_that_stop_the_agent_wandering_survive():
     assert "rather than inventing a placeholder" in lowered
 
 
+def test_the_prompt_tells_the_agent_how_to_make_a_new_file_part_of_the_patch():
+    """Some fixes need a file that is not there yet -- an extracted helper, a type
+    declaration, a shim. Nothing in the pipeline can tell such a file apart from
+    the build output the agent's own tool calls leave behind, so the agent is the
+    only party that can say which it is, and staging is how it says so. An agent
+    that is never told this creates the file, leaves it untracked, and the gate
+    typechecks a tree with an unresolved import in it.
+    """
+    lowered = build_patch_prompt(FINDING, RECEIPT_CHANGE, RECEIPT_SITE).lower()
+    assert "git add" in lowered
+    assert "unstaged" in lowered
+
+
+def test_the_prompt_does_not_let_the_agent_stage_everything():
+    """The instruction above is only safe while staging stays a per-file
+    assertion. `git add -A` in the clone would sweep in whatever the agent's
+    tool calls left there -- a build directory, a log, a stray dependency
+    install -- and `push_branch` would commit all of it, which is worse than
+    the abandon this change exists to remove.
+    """
+    lowered = build_patch_prompt(FINDING, RECEIPT_CHANGE, RECEIPT_SITE).lower()
+    assert "git add -a" in lowered
+    assert "git add ." in lowered
+
+
+def test_the_typecheck_instruction_names_the_tree_the_verification_gate_measures():
+    """The agent is told to run its own `npx tsc --noEmit`. Left unqualified that
+    command measures the working tree, while the gate measures the tree the push
+    would carry -- so an agent that created a file and did not stage it gets a
+    clean run from its own command and a failure from the gate, over the same
+    edit. The instruction has to name the staging that makes the two agree.
+    """
+    assert "stag" in _rule(build_patch_prompt(FINDING, RECEIPT_CHANGE, RECEIPT_SITE), "npx tsc --noEmit")
+
+
 def test_the_diagnostics_section_stays_last():
     """Everything ahead of the diagnostics block is byte-identical across retries,
     which is what makes it a cacheable prefix. Anything appended after diagnostics is
@@ -322,3 +375,143 @@ def test_a_finding_with_no_id_yet_does_not_report_its_identity_as_none(monkeypat
     with pytest.raises(RuntimeError) as raised:
         AgentRemediator().propose(FINDING, CHANGE, SITE, repo)
     assert "None" not in str(raised.value)
+
+
+def _git(*args: str, cwd: Path) -> str:
+    """Real git, failing loudly. A stub agent whose staging quietly did not happen
+    would leave the tests below asserting the absence of something that was never
+    there.
+    """
+    return subprocess.run(
+        ["git", *args], cwd=cwd, capture_output=True, text=True, encoding="utf-8", check=True,
+    ).stdout.strip()
+
+
+@pytest.fixture
+def clone(tmp_path, monkeypatch):
+    """A repository shaped like the clone the patch agent is handed: one tracked
+    source file, committed, and the host's git identity suppressed so nothing
+    here depends on the developer machine's config.
+    """
+    monkeypatch.setenv("GIT_CONFIG_GLOBAL", os.devnull)
+    monkeypatch.setenv("GIT_CONFIG_SYSTEM", os.devnull)
+
+    path = tmp_path / "clone"
+    (path / "src").mkdir(parents=True)
+    _git("init", cwd=path)
+    (path / "src" / "billing.ts").write_text("export const charge = () => {};\n", encoding="utf-8")
+    _git("add", "src/billing.ts", cwd=path)
+    _git("-c", "user.name=Seed", "-c", "user.email=seed@example.com", "commit", "-m", "seed", cwd=path)
+    return path
+
+
+def _agent_doing(work) -> object:
+    """Replace the model call with `work`, which stands for what the agent leaves
+    in the clone. Only the working tree and the index the agent leaves behind
+    decide what `propose` reports, so nothing here needs the SDK.
+    """
+    def run_agent(self, prompt, repo_path, identity):
+        work(Path(repo_path))
+
+    return run_agent
+
+
+def _propose_after(clone: Path, monkeypatch, work) -> object:
+    monkeypatch.setattr(AgentRemediator, "_run_agent", _agent_doing(work))
+    return AgentRemediator().propose(
+        SAVED_FINDING, CHANGE, SITE, REPO.model_copy(update={"local_path": str(clone)}),
+    )
+
+
+def test_the_patch_carries_a_new_file_the_agent_staged(clone, monkeypatch):
+    """The case this whole change exists for: the correct fix needs a module that
+    is not there yet, and the agent creates it and stages it to say the patch
+    depends on it. A patch read from `git diff` alone -- the working tree against
+    the index -- cannot see a staged addition at all, so the new module is absent
+    from the diff the corpus records and from the diff a CI retry is shown.
+    """
+    def work(path: Path) -> None:
+        (path / "src" / "money.ts").write_text("export const toCents = (n: number) => n * 100;\n", encoding="utf-8")
+        _git("add", "src/money.ts", cwd=path)
+        (path / "src" / "billing.ts").write_text(
+            "import { toCents } from './money';\nexport const charge = () => toCents(1);\n",
+            encoding="utf-8",
+        )
+
+    patch = _propose_after(clone, monkeypatch, work)
+
+    assert "src/money.ts" in patch.diff
+    assert "toCents" in patch.diff
+    # The tracked edit has to survive the widening: a diff that reported only the
+    # staged addition would satisfy the assertions above and describe half a patch.
+    assert "src/billing.ts" in patch.diff
+
+
+def test_a_patch_that_is_only_a_new_file_is_not_read_as_a_remediator_that_changed_nothing(clone, monkeypatch):
+    """`route_after_patch` sends an empty diff back for another attempt and then
+    abandons, on the reasoning that a run which failed and a run which changed
+    nothing leave the same empty diff. A patch whose entire content is a staged
+    new file leaves that same empty diff under `git diff`, and is neither.
+    """
+    def work(path: Path) -> None:
+        (path / "src" / "money.ts").write_text("export const toCents = (n: number) => n * 100;\n", encoding="utf-8")
+        _git("add", "src/money.ts", cwd=path)
+
+    patch = _propose_after(clone, monkeypatch, work)
+
+    assert patch.diff.strip()
+    assert "src/money.ts" in patch.diff
+
+
+def test_the_patch_omits_a_file_the_agent_left_unstaged(clone, monkeypatch):
+    """The guard the widening must not drop. The agent holds `Bash` and its tool
+    calls leave things in the clone that no part of the patch describes -- a build
+    directory, a log, a stray dependency install. Those stay out of the patch for
+    exactly the reason a staged file is in it: staging is the assertion, and the
+    agent never made one about these.
+    """
+    def work(path: Path) -> None:
+        (path / "src" / "billing.ts").write_text("export const charge = () => 1;\n", encoding="utf-8")
+        (path / "build").mkdir()
+        (path / "build" / "bundle.js").write_text("// generated\n", encoding="utf-8")
+        (path / "npm-debug.log").write_text("noise\n", encoding="utf-8")
+
+    patch = _propose_after(clone, monkeypatch, work)
+
+    assert "src/billing.ts" in patch.diff
+    assert "bundle.js" not in patch.diff
+    assert "npm-debug.log" not in patch.diff
+
+
+def test_an_agent_that_created_files_and_staged_none_is_told_that_rather_than_reported_as_no_change(
+    clone, monkeypatch,
+):
+    """The abandon reason has to name the cause. An agent that writes the new
+    module and forgets to stage it leaves an empty diff, which reads as "the
+    remediator produced no change" -- a report of the wrong thing entirely, sending
+    an operator after a model that did nothing when it did the work and failed to
+    assert it. The message goes back to the next attempt as feedback, so it is also
+    the only chance the run has to correct itself.
+    """
+    def work(path: Path) -> None:
+        (path / "src" / "money.ts").write_text("export const toCents = (n: number) => n * 100;\n", encoding="utf-8")
+
+    with pytest.raises(RuntimeError) as raised:
+        _propose_after(clone, monkeypatch, work)
+
+    reason = str(raised.value)
+    assert "src/money.ts" in reason
+    assert "stage" in reason or "staged" in reason
+    assert "f-42" in reason
+
+
+def test_an_agent_that_changed_nothing_at_all_is_still_reported_as_changing_nothing(clone, monkeypatch):
+    """The counterweight. A remediator that correctly found nothing to do must
+    keep reaching `route_after_patch` with an empty diff rather than raising: the
+    empty-diff path records the tier that produced the nothing, and an exception
+    would relabel every genuine no-op as a fault.
+    """
+    patch = _propose_after(clone, monkeypatch, lambda path: None)
+
+    assert patch.diff.strip() == ""
+    assert patch.strategy == "agent"

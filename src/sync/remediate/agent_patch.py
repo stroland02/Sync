@@ -28,6 +28,14 @@ keys tier decisions on the catalogue's own `direction`/`action` axes. When the f
 to neither position, the prompt says so rather than asserting a location the index never
 recorded.
 
+**A new file is part of the patch only if the agent stages it.** Some correct fixes need a
+module that is not there yet, and nothing downstream can tell one from the build output,
+logs and stray installs the agent's `Bash` calls leave in the same clone. Classifying by
+name or extension would be wrong on somebody's repository and wrong silently, so the
+question is not answered here at all: it is put to the only party that knows, and `git add`
+is how the answer is recorded. Everything else the agent leaves behind stays untracked,
+which is what `push_branch` and `sync.index.shipped_tree` both already exclude.
+
 Section order is load-bearing. Everything stable sits ahead of the diagnostics block, the
 only part that changes between retries, so the prefix stays byte-identical and cacheable
 across attempts; anything appended after diagnostics is invalidated every round. See the
@@ -63,8 +71,17 @@ Rules:
 - Do not reformat lines you did not otherwise need to touch.
 - If the removed value is still needed, derive it from what the API does return; if it
   cannot be derived, remove the usage rather than inventing a placeholder.
-- Run `npx tsc --noEmit` once you have made the edit and confirm you introduced no new
-  errors. That is the whole of what it establishes. It cannot tell you whether the edit
+- If the edit genuinely needs a file that does not exist yet, create it and then stage it
+  with `git add <path>`. Only what git already tracks and what you have staged is
+  typechecked and pushed; a new file left unstaged is in neither, and the branch would
+  carry an import of a module that is not there. Stage the files you added for this change
+  by path and nothing else -- never `git add -A` or `git add .`, which would sweep in
+  whatever your commands happened to leave in this clone. Staging a file is you asserting
+  the patch needs it, and it is the only thing that distinguishes a file the fix requires
+  from a build artifact or a log.
+- Run `npx tsc --noEmit` once you have made the edit -- after staging anything you added,
+  so that it measures the same tree the branch will carry -- and confirm you introduced no
+  new errors. That is the whole of what it establishes. It cannot tell you whether the edit
   was needed: the installed SDK's type declarations are generated from an older version
   of this specification and still describe the old shape, so a change like this one
   typechecks identically before and after the correct fix. A clean run is never a reason
@@ -158,10 +175,39 @@ def _identity(finding: Finding, repo: RepoRef) -> str:
 
 
 def _git_diff(repo_path: Path) -> str:
+    """Everything the working tree and the index hold over HEAD.
+
+    Against HEAD rather than the bare `git diff`, which compares the working tree
+    to the index and so cannot see a file the agent staged. A fix that needs a
+    module which does not exist yet is exactly such a file, and read the narrow
+    way its patch is either missing that module or -- where the new module is the
+    whole of the fix -- empty, which `route_after_patch` treats as a remediator
+    that changed nothing.
+
+    This does not widen what a branch can carry. An untracked path is invisible
+    to `git diff HEAD` for the same reason it is invisible to `push_branch`'s
+    `git add -u`: neither reads the working tree for paths the index does not
+    know. Staging remains a deliberate act, and it is still the only way in.
+    """
     result = subprocess.run(
-        ["git", "diff"], cwd=repo_path, capture_output=True, text=True, encoding="utf-8", check=True
+        ["git", "diff", "HEAD"], cwd=repo_path, capture_output=True, text=True,
+        encoding="utf-8", check=True,
     )
     return result.stdout
+
+
+def _unstaged_additions(repo_path: Path) -> list[str]:
+    """Files the agent created and did not stage, ignored ones excluded.
+
+    `--exclude-standard` because a path the repository's own `.gitignore` covers
+    is a byproduct by the customer's declaration, and naming it would send the
+    next attempt after something no patch was ever going to carry.
+    """
+    result = subprocess.run(
+        ["git", "ls-files", "--others", "--exclude-standard"], cwd=repo_path,
+        capture_output=True, text=True, encoding="utf-8", check=True,
+    )
+    return result.stdout.split()
 
 
 class AgentRemediator:
@@ -183,10 +229,25 @@ class AgentRemediator:
         prompt = build_patch_prompt(finding, change, site, diagnostics)
         repo_path = Path(repo.local_path)
 
-        self._run_agent(prompt, repo_path, _identity(finding, repo))
+        identity = _identity(finding, repo)
+        self._run_agent(prompt, repo_path, identity)
+
+        diff = _git_diff(repo_path)
+        # An empty diff beside files the agent created is not a remediator that
+        # changed nothing, and reporting it as one names the wrong cause: the work
+        # was done and never asserted. This is also the run's own correction, since
+        # the graph hands the message to the next attempt as feedback.
+        if not diff.strip():
+            unstaged = _unstaged_additions(repo_path)
+            if unstaged:
+                raise RuntimeError(
+                    f"the agent created {', '.join(unstaged)} and staged none of them, so the "
+                    f"patch is empty; a new file has to be staged with `git add <path>` to be "
+                    f"typechecked or pushed [{identity}]"
+                )
 
         return Patch(
-            diff=_git_diff(repo_path),
+            diff=diff,
             strategy=self.strategy,
             rationale=finding.rationale,
         )

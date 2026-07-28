@@ -75,6 +75,16 @@ def test_a_patch_carries_its_findings_rationale_verbatim(tmp_path, monkeypatch):
     repo_path.mkdir()
     subprocess.run(["git", "init"], cwd=repo_path, capture_output=True, text=True,
                    encoding="utf-8", check=True)
+    # A commit, because the patch is read as `git diff HEAD` and an unborn HEAD
+    # names nothing. Every clone Sync works in has one; a repository with no
+    # commit is a shape of this fixture, not of anything the pipeline sees.
+    (repo_path / "file.txt").write_text("original\n", encoding="utf-8")
+    subprocess.run(["git", "add", "file.txt"], cwd=repo_path, capture_output=True, text=True,
+                   encoding="utf-8", check=True)
+    subprocess.run(
+        ["git", "-c", "user.name=Seed", "-c", "user.email=seed@example.com", "commit", "-m", "seed"],
+        cwd=repo_path, capture_output=True, text=True, encoding="utf-8", check=True,
+    )
     monkeypatch.setattr(AgentRemediator, "_run_agent", lambda self, prompt, path, identity: None)
 
     finding = Finding(
@@ -852,6 +862,66 @@ def test_push_branch_creates_a_branch_the_remote_does_not_have(tmp_path, remote)
     branch = GitHubForge().push_branch(repo, PATCH)
 
     assert _git("rev-parse", branch, cwd=remote) == _git("rev-parse", "HEAD", cwd=Path(repo.local_path))
+
+
+def _shipped(remote: Path, branch: str) -> list[str]:
+    """Every path the branch actually carries on the remote. Read from the bare
+    repository rather than from the clone, because what the clone holds and what
+    the push delivered are the two things these tests exist to tell apart."""
+    return _git("ls-tree", "-r", "--name-only", branch, cwd=remote).splitlines()
+
+
+def test_push_branch_carries_a_new_file_the_patch_needed(tmp_path, remote):
+    """Some correct fixes need a module that is not there yet -- an extracted
+    helper, a type declaration, a shim -- and `git add -u` never stages an
+    untracked path. Before staging became the agent's assertion, such a patch
+    could not ship: the file was held out of the typecheck as untracked, the gate
+    failed on the unresolved import, and the finding abandoned naming a compile
+    error rather than the reason, which was that Sync structurally could not
+    carry a new file.
+
+    A file the agent staged itself is not untracked. It is in the index, `git add
+    -u` refreshes rather than drops it, and the commit carries it.
+    """
+    repo = _sync_clone(remote, tmp_path / "clone")
+    clone = Path(repo.local_path)
+    (clone / "money.ts").write_text("export const toCents = (n: number) => n * 100;\n", encoding="utf-8")
+    _git("add", "money.ts", cwd=clone)
+
+    branch = GitHubForge().push_branch(repo, PATCH)
+
+    assert "money.ts" in _shipped(remote, branch)
+    assert "toCents" in _git("show", f"{branch}:money.ts", cwd=remote)
+    # The tracked modification still ships alongside it: a commit carrying only
+    # the new file would satisfy both assertions above and be half a patch.
+    assert "patched" in _git("show", f"{branch}:file.txt", cwd=remote)
+
+
+def test_push_branch_leaves_behind_a_file_the_agent_never_staged(tmp_path, remote):
+    """The guard, and the test that would silently pass if it were dropped -- the
+    case above says nothing about debris. The patch agent holds `Bash` inside this
+    clone and its tool calls leave things behind that no part of the patch or the
+    review evidence describes: a build directory, a log, a stray dependency
+    install. A branch carrying that is worse than one that never opened, and
+    `git add -A` here would commit all of it.
+
+    Neither of these is gitignored, deliberately. Ignored paths are excluded by
+    git itself, so an assertion resting on them would hold with the staging
+    widened to `-A` and prove nothing.
+    """
+    repo = _sync_clone(remote, tmp_path / "clone")
+    clone = Path(repo.local_path)
+    (clone / "build").mkdir()
+    (clone / "build" / "bundle.js").write_text("// generated\n", encoding="utf-8")
+    (clone / "npm-debug.log").write_text("noise\n", encoding="utf-8")
+
+    branch = GitHubForge().push_branch(repo, PATCH)
+
+    shipped = _shipped(remote, branch)
+    assert "build/bundle.js" not in shipped
+    assert "npm-debug.log" not in shipped
+    # An empty commit would satisfy both assertions above for the wrong reason.
+    assert "patched" in _git("show", f"{branch}:file.txt", cwd=remote)
 
 
 def test_push_branch_updates_a_branch_an_earlier_run_left_on_the_remote(tmp_path, remote):
