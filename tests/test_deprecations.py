@@ -131,6 +131,112 @@ def test_the_state_table_still_parses_when_history_follows_it():
     assert len(rows) == 4
 
 
+# --- a second vendor, which is what proved the first parser was vendor-shaped -------
+
+# OpenAI publishes no lifecycle column at all -- only a shutdown date, the model, and the
+# replacement. Verbatim shape from the page, including the abbreviated month.
+OPENAI_TABLE = """\
+| Shutdown date | Model family / snapshot | Recommended replacement |
+| ------------- | ----------------------- | ----------------------- |
+| Jan 20, 2027  | `gpt-realtime`          | `gpt-realtime-2.1`      |
+| Mar 14, 2026  | `gpt-4o-audio`          | `gpt-audio-1.5`         |
+"""
+
+
+def test_a_vendor_with_no_state_column_still_yields_rows():
+    """The first parser required a state cell and found nothing here.
+
+    Requiring one made the abstraction Anthropic-shaped: they publish lifecycle explicitly,
+    OpenAI publishes only a date and lets you infer it.
+    """
+    rows = _by_id(parse_deprecation_table("openai", OPENAI_TABLE, today=date(2026, 7, 28)))
+
+    assert set(rows) == {"gpt-realtime", "gpt-4o-audio"}
+    assert rows["gpt-realtime"].replacement == "gpt-realtime-2.1"
+
+
+def test_an_abbreviated_month_parses():
+    rows = _by_id(parse_deprecation_table("openai", OPENAI_TABLE, today=date(2026, 7, 28)))
+    assert rows["gpt-realtime"].retirement_date == date(2027, 1, 20)
+
+
+def test_state_is_derived_from_the_date_when_the_vendor_publishes_none():
+    """A model past its shutdown date is retired whatever a table says, and one with a future
+    date is deprecated. Deriving it is both more general and more truthful than reading it."""
+    rows = _by_id(parse_deprecation_table("openai", OPENAI_TABLE, today=date(2026, 7, 28)))
+
+    assert rows["gpt-4o-audio"].state == "retired"      # shutdown was 2026-03-14
+    assert rows["gpt-realtime"].state == "deprecated"   # shutdown is 2027-01-20
+
+
+def test_the_derived_state_moves_with_the_date():
+    before = _by_id(parse_deprecation_table("openai", OPENAI_TABLE, today=date(2026, 1, 1)))
+    after = _by_id(parse_deprecation_table("openai", OPENAI_TABLE, today=date(2027, 6, 1)))
+
+    assert before["gpt-4o-audio"].state == "deprecated"
+    assert after["gpt-4o-audio"].state == "retired"
+
+
+def test_an_explicit_state_column_still_wins():
+    """Where a vendor does publish lifecycle, it is authoritative -- it can mark a model
+    deprecated well before any date, which no date arithmetic could infer."""
+    rows = _by_id(parse_deprecation_table("anthropic", ANTHROPIC_TABLE, today=date(2026, 7, 28)))
+    assert rows["claude-opus-5"].state == "active"
+
+
+def test_the_second_vendor_produces_usable_changes():
+    rows = parse_deprecation_table("openai", OPENAI_TABLE, today=date(2026, 7, 28))
+    changes = {c.operation_id: c for c in to_vendor_changes(rows, "a", "b")}
+
+    assert changes["gpt-4o-audio"].severity == "breaking"
+    assert changes["gpt-realtime"].severity == "deprecation"
+    assert changes["gpt-realtime"].raw["replacement"] == "gpt-realtime-2.1"
+
+
+# --- placeholders, found only by running against the real page ---------------------
+
+# Five real rows on OpenAI's page use `---` to mean "there is no replacement". Nothing in the
+# hand-written fixtures contained one, and the parser read it as a model name.
+OPENAI_NO_REPLACEMENT = """\
+| Shutdown date | Model / system  | Recommended replacement |
+| ------------- | --------------- | ----------------------- |
+| 2026-09-24    | `sora-2`        | ---                     |
+| 2026-09-24    | `sora-2-pro`    | N/A                     |
+| 2026-09-24    | `some-model`    | —                       |
+"""
+
+
+@pytest.mark.parametrize("model", ["sora-2", "sora-2-pro", "some-model"])
+def test_a_placeholder_is_not_a_replacement(model: str):
+    """The failure this guards is not a crash, it is a confident patch.
+
+    Read as a name, `---` becomes the target of a literal swap: the model string is rewritten
+    to `"---"`, which compiles, type-checks, passes review if nobody reads the diff closely,
+    and fails at the vendor. A retirement with no replacement must stay a report.
+    """
+    rows = _by_id(parse_deprecation_table("openai", OPENAI_NO_REPLACEMENT, today=date(2026, 7, 28)))
+    assert rows[model].replacement is None
+
+
+def test_those_rows_are_still_findings():
+    """No replacement does not mean no problem. The model still stops working on the date;
+    the pipeline simply cannot repair it automatically, so it reports and stops."""
+    rows = parse_deprecation_table("openai", OPENAI_NO_REPLACEMENT, today=date(2026, 7, 28))
+    changes = to_vendor_changes(rows, "a", "b")
+
+    assert len(changes) == 3
+    assert all(c.raw["replacement"] is None for c in changes)
+
+
+def test_a_placeholder_never_reaches_a_migration_rule():
+    """Belt and braces at the boundary that would do the damage."""
+    from sync.route import model_literal_swap
+
+    rows = parse_deprecation_table("openai", OPENAI_NO_REPLACEMENT, today=date(2026, 7, 28))
+    for change in to_vendor_changes(rows, "a", "b"):
+        assert model_literal_swap(change, language="typescript") == []
+
+
 # --- urgency, which is what makes these different ---------------------------------
 
 

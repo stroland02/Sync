@@ -38,7 +38,7 @@ _STATES = ("active", "legacy", "deprecated", "retired")
 
 # Vendors write dates for humans. Only formats actually observed are accepted; an unrecognised
 # one yields None rather than a guess, because a wrong deadline is worse than no deadline.
-_DATE_FORMATS = ("%B %d, %Y", "%Y-%m-%d")
+_DATE_FORMATS = ("%B %d, %Y", "%b %d, %Y", "%Y-%m-%d")
 
 
 @dataclass(frozen=True)
@@ -86,6 +86,22 @@ def _state_of(text: str) -> str | None:
     return lowered if lowered in _STATES else None
 
 
+def _is_placeholder(text: str) -> bool:
+    """Whether a cell means "nothing here" rather than naming something.
+
+    Vendors write this several ways -- OpenAI uses `---` for five real rows, and `N/A` and an
+    em dash both appear. Read as a name, any of them becomes the target of a literal swap: the
+    model string is rewritten to `"---"`, which compiles, type-checks, and fails at the vendor.
+    A retirement with no replacement has to stay a report.
+    """
+    cleaned = text.strip()
+    if not cleaned:
+        return True
+    if set(cleaned) <= set("-–—"):
+        return True
+    return cleaned.lower() in ("n/a", "na", "none", "tbd", "-")
+
+
 def _strip_code(text: str) -> str:
     """Announcement tables wrap model ids in backticks; the state table does not.
 
@@ -95,14 +111,14 @@ def _strip_code(text: str) -> str:
     return text.strip().strip("`").strip()
 
 
-def _parse_replacements(markdown: str) -> dict[str, str]:
-    """Deprecated model id to its vendor-recommended replacement.
+def _parse_announcements(markdown: str) -> dict[str, tuple[str | None, date | None]]:
+    """Model id to its replacement and shutdown date, from announcement tables.
 
-    These live in per-announcement tables further down the same page, shaped
-    `| Retirement date | Deprecated model | Recommended replacement |` with no state column --
-    which is what keeps them from being mistaken for lifecycle rows.
+    Shaped `| date | deprecated model | recommended replacement |`, with no state column --
+    which is what keeps them from being read as lifecycle rows. For Anthropic these sit below
+    a lifecycle table and only supply the replacement; for OpenAI they are the whole page.
     """
-    replacements: dict[str, str] = {}
+    announcements: dict[str, tuple[str | None, date | None]] = {}
 
     for line in markdown.splitlines():
         cells = _cells(line)
@@ -110,26 +126,69 @@ def _parse_replacements(markdown: str) -> dict[str, str]:
             continue
         if any(_state_of(cell) for cell in cells):
             continue
-        if _parse_date(cells[0]) is None:
+
+        shutdown = _parse_date(cells[0])
+        if shutdown is None:
             continue
 
         deprecated = _strip_code(cells[1])
+        if not deprecated or " " in deprecated or _is_placeholder(deprecated):
+            continue
+
+        # A row with no replacement is still a row: the model stops working on the date, and
+        # the finding is worth reporting even though nothing can repair it automatically.
         replacement = _strip_code(cells[2])
-        if deprecated and replacement and " " not in deprecated and " " not in replacement:
-            replacements[deprecated] = replacement
+        if _is_placeholder(replacement) or " " in replacement:
+            replacement = None
 
-    return replacements
+        announcements[deprecated] = (replacement, shutdown)
+
+    return announcements
 
 
-def parse_deprecation_table(vendor_id: str, markdown: str) -> list[ModelDeprecation]:
-    """Rows from a vendor's published lifecycle table.
+def _parse_replacements(markdown: str) -> dict[str, str]:
+    """Just the replacement half, for rows whose lifecycle a vendor states itself."""
+    return {
+        model_id: replacement
+        for model_id, (replacement, _) in _parse_announcements(markdown).items()
+        if replacement
+    }
 
-    Columns are located by content rather than by position, because the tables are prose
-    artifacts and column order is not a contract anyone has made.
+
+def _derived_state(retirement: date | None, today: date) -> str:
+    """Lifecycle state for a vendor that publishes only a shutdown date.
+
+    A model past its shutdown date is retired whatever any table says, and one with a future
+    date is on the way out. Deriving this is both more general than reading a column and more
+    truthful than trusting one, since the date is the thing the API actually enforces.
     """
+    if retirement is None:
+        return "deprecated"
+    return "retired" if retirement <= today else "deprecated"
+
+
+def parse_deprecation_table(
+    vendor_id: str, markdown: str, today: date | None = None
+) -> list[ModelDeprecation]:
+    """Rows from a vendor's published deprecation page.
+
+    Two shapes are handled, because vendors do not agree on one. Anthropic publishes a
+    lifecycle table with an explicit state column; OpenAI publishes only shutdown dates and
+    leaves state to be inferred. Requiring a state column made the first version of this
+    parser silently return nothing for the second vendor.
+
+    Where a vendor does publish state it wins, because it carries information a date cannot:
+    a model can be marked deprecated long before any date is set.
+
+    Columns are located by content rather than by position -- these are prose artifacts and
+    column order is not a contract anyone has made.
+    """
+    today = today or date.today()
     rows: list[ModelDeprecation] = []
-    # Both tables live in one document, so the replacements are gathered from the same text.
+    # Announcement tables live in the same document as any lifecycle table, and for a vendor
+    # without one they are the only source of rows.
     replacements = _parse_replacements(markdown)
+    stated: set[str] = set()
 
     for line in markdown.splitlines():
         cells = _cells(line)
@@ -181,6 +240,25 @@ def parse_deprecation_table(vendor_id: str, markdown: str) -> list[ModelDeprecat
                 deprecated_date=deprecated_date,
                 retirement_date=retirement_date,
                 not_before=not_before,
+            )
+        )
+        stated.add(model_id)
+
+    # Vendors that publish no lifecycle table are described entirely by their announcements.
+    # Anything already carrying a stated lifecycle is left alone: an explicit column knows
+    # things a date cannot, such as a model deprecated before any retirement date exists.
+    for model_id, (replacement, shutdown) in _parse_announcements(markdown).items():
+        if model_id in stated:
+            continue
+        rows.append(
+            ModelDeprecation(
+                vendor_id=vendor_id,
+                model_id=model_id,
+                state=_derived_state(shutdown, today),
+                replacement=replacement,
+                deprecated_date=None,
+                retirement_date=shutdown,
+                not_before=None,
             )
         )
 
