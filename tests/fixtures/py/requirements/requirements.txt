@@ -1,0 +1,3 @@
+# billing deps
+requests>=2.0
+stripe==11.4.0  # pinned
