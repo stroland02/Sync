@@ -57,7 +57,8 @@ checkpoints and resumes across a process restart.
 
 ## In flight
 
-_(none)_
+- **B2** — `task_0e6eb23d3ad7`, worktree `m1-forge`.
+- **B4** — `task_a656a9f0e8ab`, worktree `m2-symbols`.
 
 ## Done
 
