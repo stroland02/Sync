@@ -13,6 +13,9 @@ dependencies = [
     "langgraph-checkpoint-postgres>=3.1.0",
     "psycopg[binary]>=3.3.4",
     "pydantic>=2.13.4",
+    # Generated-SDK manifests are YAML. Present transitively via langchain-core today; declared
+    # here because sync.signals imports it directly and a transitive dep can vanish in a bump.
+    "pyyaml>=6.0.3",
     "tree-sitter>=0.26.0",
     "tree-sitter-typescript>=0.23.2",
 ]

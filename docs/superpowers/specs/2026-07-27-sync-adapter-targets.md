@@ -107,9 +107,15 @@ that yields every vendor using it; supporting a new *vendor* under a known gener
 configuration line. Adapter coverage stops scaling with vendor count and starts scaling with
 generator count, and there are not many generators.
 
-Two caveats recorded rather than smoothed over. The hash is absent from several `.stats.yml`
-files (Cloudflare, Orb), so the cheap trigger is not universal and the adapter must fall back to
-fetching. And `openapi_spec_url` points at Stainless-hosted storage rather than the vendor, which
+Two caveats recorded rather than smoothed over, the first corrected after running the parser
+against live manifests. **Cloudflare's and Orb's `.stats.yml` contain only
+`configured_endpoints`** — no hash *and no URL*. An earlier draft of this section said the hash
+was missing and the adapter could fall back to fetching; that was wrong, because there is
+nothing to fetch. Those vendors yield a coverage denominator and still need a hand-written
+adapter, so cohort A is smaller than its row suggests. Measured on 2026-07-27: five of seven
+sampled manifests are fetchable, four of seven carry the cheap hash trigger.
+
+And `openapi_spec_url` points at Stainless-hosted storage rather than the vendor, which
 is a third-party dependency in the SIGNAL path — acceptable for a change *hint*, not acceptable
 as the authoritative artifact. Prefer a vendor-published spec where one exists; use this to know
 *when* to look.
