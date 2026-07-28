@@ -17,6 +17,7 @@ class Forge(Protocol):
     def push_branch(self, repo: RepoRef, patch: Patch) -> str: ...
     def await_ci(self, repo: RepoRef, branch: str) -> tuple[bool, str]: ...
     def open_pull_request(self, repo: RepoRef, branch: str, evidence: Evidence) -> str: ...
+    def delete_branch(self, repo: RepoRef, branch: str) -> tuple[bool, str]: ...
 
 
 def _describe(exc: Exception) -> str:
@@ -273,12 +274,25 @@ def route_after_open_pr(state: RunState) -> str:
     return "end"
 
 
-def make_abandon(store):
+def make_abandon(store, forge):
     def abandon(state: RunState) -> RunState:
         reason = state.get("diagnostics") or "unknown"
         finding_id = state["finding"].id
         if finding_id:
             store.set_finding_status(finding_id, "abandoned")
+
+        # `branch` is set only by a push that succeeded, which is the one signal the
+        # forge cannot derive for itself: it cannot tell a finding that abandoned
+        # after pushing from one whose pull request has not been opened yet.
+        branch = state.get("branch")
+        if branch:
+            try:
+                forge.delete_branch(state["repo"], branch)
+            except Exception:
+                # The finding has already failed and `reason` is what the operator
+                # needs. A cleanup that failed on top of it must not displace that.
+                pass
+
         return {"outcome": "abandoned", "abandon_reason": reason, "pr_url": None}
 
     return abandon

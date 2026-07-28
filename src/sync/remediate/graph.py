@@ -23,7 +23,7 @@ def build_graph(store, adapter, remediator, forge, checkpointer):
     builder.add_node("push_branch", nodes.make_push_branch(forge))
     builder.add_node("await_ci", nodes.make_await_ci(forge))
     builder.add_node("open_pr", nodes.make_open_pr(forge))
-    builder.add_node("abandon", nodes.make_abandon(store))
+    builder.add_node("abandon", nodes.make_abandon(store, forge))
 
     builder.add_edge(START, "locate")
 

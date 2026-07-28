@@ -538,3 +538,58 @@ def test_a_patch_that_only_typechecks_with_untracked_files_never_reaches_push_br
     assert forge.pushes == 0
     assert result["outcome"] == "abandoned"
     assert "TS2304" in result["abandon_reason"]
+
+
+class DeletingForge(StubForge):
+    """A forge that records what abandonment asked it to clean up."""
+
+    def __init__(self, **kw):
+        super().__init__(**kw)
+        self.deleted: list[str] = []
+
+    def delete_branch(self, repo, branch) -> tuple[bool, str]:
+        self.deleted.append(branch)
+        return True, f"deleted {branch}"
+
+
+def test_abandoning_after_a_push_deletes_the_branch_it_left_behind():
+    """A finding that abandons after pushing strands a branch with no pull request.
+
+    Nothing ever comes back for it, and it sits on a repository Sync does not own.
+    """
+    forge = DeletingForge(ci_results=[False, False])
+    result = _run(StubAdapter(), StubRemediator(), forge)
+
+    assert result["outcome"] == "abandoned"
+    assert forge.deleted == ["sync/fix-1"]
+
+
+def test_abandoning_before_a_push_deletes_nothing():
+    """Most abandonments never reach the forge. Asking it to delete a branch that
+    was never pushed would turn every failed patch into a spurious remote call."""
+    @dataclass
+    class Failing(StubRemediator):
+        def propose(self, finding, change, site, repo, diagnostics=""):
+            raise RuntimeError("agent run failed (error_max_turns): []")
+
+    forge = DeletingForge()
+    result = _run(StubAdapter(), Failing(), forge)
+
+    assert result["outcome"] == "abandoned"
+    assert forge.deleted == []
+
+
+def test_a_failed_cleanup_does_not_replace_the_reason_the_finding_abandoned():
+    """The operator's useful signal is why the finding failed, not why the tidying
+    afterwards failed. A cleanup that raises must not become the abandon reason."""
+
+    class Unclean(DeletingForge):
+        def delete_branch(self, repo, branch):
+            raise RuntimeError("the remote hung up")
+
+    forge = Unclean(ci_results=[False, False])
+    result = _run(StubAdapter(), StubRemediator(), forge)
+
+    assert result["outcome"] == "abandoned"
+    assert "CI" in result["abandon_reason"]
+    assert "hung up" not in result["abandon_reason"]
