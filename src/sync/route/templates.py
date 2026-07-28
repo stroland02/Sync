@@ -123,6 +123,88 @@ def _widen_to_whole_line(source: str, start: int, end: int) -> tuple[int, int]:
     return line_start, line_end + 1
 
 
+def _contains(node, line: int, col: int) -> bool:
+    """Whether a node's range covers a 1-based line and 0-based column.
+
+    That is the convention `sync/index/typescript.py` records on a `CallSite`
+    (`start_point[0] + 1` and `start_point[1]`), so positions round-trip without conversion.
+    """
+    span = node.range()
+    start, end = span.start, span.end
+    if not (start.line + 1 <= line <= end.line + 1):
+        return False
+    if line == start.line + 1 and col < start.column:
+        return False
+    if line == end.line + 1 and col > end.column:
+        return False
+    return True
+
+
+def _call_at(root, line: int, col: int):
+    """The call expression a finding's position names.
+
+    An exact start match is preferred, because that is what the indexer recorded. A position
+    merely inside the call is accepted as a fallback: an off-by-one between a 0-based and a
+    1-based column would otherwise turn a correct patch into a silent no-op, and a no-op reads
+    as "nothing to fix" rather than as a miss.
+
+    Where several calls contain the position -- a call inside a call's arguments -- the
+    innermost wins, since that is the one the position most specifically identifies.
+    """
+    exact = None
+    containing = []
+
+    for call in root.find_all(kind="call_expression"):
+        span = call.range().start
+        if span.line + 1 == line and span.column == col:
+            exact = call
+        if _contains(call, line, col):
+            containing.append(call)
+
+    if exact is not None:
+        return exact
+    if not containing:
+        return None
+    return min(containing, key=lambda c: c.range().end.index - c.range().start.index)
+
+
+def omit_property_at(source: str, prop: str, language: str, line: int, col: int) -> str:
+    """`source` with `prop` removed from the object argument of the call at that position.
+
+    `omit_parameter` scopes by a value in the same object, which is the wrong scope for a
+    finding that names a location: a file can hold two identical calls, and removing the
+    property from both is wrong even when both pass it, because the finding named one and the
+    reviewer was told it named one.
+
+    Only the call's own argument object is searched. A property nested deeper is not an
+    argument of this call, and removing it would produce a diff the finding does not justify.
+
+    Returns `source` unchanged whenever the target cannot be identified exactly -- no call at
+    that position, no object argument, or the property absent. Producing nothing lets the tier
+    fall through; producing the wrong edit does not.
+    """
+    root = SgRoot(source, language).root()
+
+    call = _call_at(root, line, col)
+    if call is None:
+        return source
+
+    arguments = call.field("arguments")
+    if arguments is None:
+        return source
+
+    for container in arguments.children():
+        if container.kind() != "object":
+            continue
+        for pair in [child for child in container.children() if child.kind() == "pair"]:
+            if _pair_part(pair, "key", 0) != prop:
+                continue
+            start, end = _deletion_span(source, container, pair)
+            return source[:start] + source[end:]
+
+    return source
+
+
 def _objects_naming(root, model: str):
     """Object literals that carry `model` as one of their values.
 
