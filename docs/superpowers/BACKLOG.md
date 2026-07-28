@@ -62,6 +62,8 @@ checkpoints and resumes across a process restart.
 - **B3** — `task_b233d7d7237d`, brief written and task created, awaiting a free worktree. Its brief
   proposes a cheaper closure than the second checkout and explicitly asks the worker to
   argue with that proposal rather than accept it.
+- **B1** — `task_627dab9b3617`, brief written, blocked on B2 (both own `forge/github.py`). Declared as a
+  dependency so it cannot be dispatched early.
 
 ## Done
 
