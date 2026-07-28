@@ -211,9 +211,13 @@ Both limits below come from deriving `operation_for_symbol` out of Stripe's URL 
 
 **Coverage is 105 of 414 `/v1/` paths, about 25%.** The remainder are nested sub-resources such as `/v1/customers/{customer}/sources`, which the path pattern does not match. A call site on an unmatched operation produces no symbol mapping, so no finding can be raised against it.
 
-**Singleton resources map to the wrong verb.** A `GET` with no path parameter is treated as a collection listing, which is right for `/v1/charges` and wrong for `/v1/account` and `/v1/balance`, whose real SDK methods are `retrieve` rather than `list`.
+**The verb is no longer guessed — and fixing it moved coverage by nothing.** Stripe publishes `openapi/spec3.sdk.json` beside `spec3.json` at the same tags, and its `x-stableId` extension names the SDK method outright: `/v1/account` GET is `retrieve_connect_account`, `/v1/accounts` GET is `list_connect_accounts`. `build_symbol_map` now takes the verb from there where one exists and keeps the URL heuristic where none does, so the singleton verbs come from the vendor rather than from a rule we invented.
 
-The second is a smaller problem than it appears, and the reason is worth stating because it generalises to every synthesized mapping: the failure is a **safe miss, not a wrong answer**. The generated key `stripe.account.list` matches no real call site, so nothing looks it up, and the genuine symbol `stripe.account.retrieve` resolves to `None`. A finding is never raised against the wrong operation. Any mapping heuristic we adopt later should preserve that property — failing to resolve is recoverable, resolving incorrectly is not.
+The measured effect is worth more than the fix. Against the real cached `v2330`: 179 symbols over 105 of 414 paths **before and after**, no operation newly resolved, and exactly one symbol corrected — `stripe.subscriptions.del` became `stripe.subscriptions.cancel`. That one matters, because `Subscriptions.ts` exposes no `del` at all, so the old map named a method that does not exist. Everything else the heuristic had already guessed right.
+
+An estimate had circulated that widening the path pattern would take coverage from 105 to 241. The arithmetic is correct and the conclusion is not: widening produces symbols like `stripe.apps/secrets/delete.del`, which no call site can ever match. Coverage counted that way measures the generator, not the binding.
+
+Two properties of this to preserve. The document is optional — `v1900`'s carries zero extensions of any kind, so the degradation path is exercised by real data rather than by a fixture, and a version without it must fall back rather than raise. And the original failure was a **safe miss, not a wrong answer**: `stripe.account.list` matched no real call site, so nothing looked it up and no finding was ever raised against the wrong operation. Any mapping strategy adopted later should keep that property — failing to resolve is recoverable, resolving incorrectly is not.
 
 ### M1 — Runtime signals and the efficiency detector
 
