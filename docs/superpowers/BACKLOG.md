@@ -55,6 +55,18 @@ justified choosing LangGraph.
 **Closes when:** the types are registered explicitly, the warning is gone, and a run
 checkpoints and resumes across a process restart.
 
+### B5 — The test suite slowed from ~77s to ~122s and nobody owns why
+Two coordinators are running six workers against one Postgres on port 5433. Separate
+databases do not separate the server's shared buffers, WAL, or background checkpointer,
+and every fixture calls `truncate_all()`. Contention is the likely cause but it is
+unmeasured, and "probably contention" is how a real regression hides. Both coordinators
+observed the slowdown independently on checkouts that changed nothing touching the
+database, which rules out a single worker's change.
+**Closes when:** the cause is measured rather than assumed — run the suite against an
+idle server and a loaded one and compare, and if it is contention, say what the fix is
+(a per-worker server, a tmpfs data directory, or accepting it) rather than only naming
+the cause. If it turns out not to be contention, that is a more important answer.
+
 ## In flight
 
 - **B2** — `task_0e6eb23d3ad7`, worktree `m1-forge`.
