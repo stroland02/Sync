@@ -195,6 +195,20 @@ For a long model-driven test that loses live feedback for no gain. **Run it as
 resolves to 4 there. By the sweep above that is 56s from 133s — still worth having, but the
 three-times figure is a 12-core number and should not be quoted for CI.
 
+## Re-measured after the branch was rebased mid-task
+
+The base moved while this was in flight and brought the suite to 916 tests. The ratio held,
+and the absolute saving got larger:
+
+| | 867 tests, `07390fa` | 916 tests, `d8744c8` |
+|---|---|---|
+| serial | 133.6s | 198.7s |
+| `-n auto` | 44.3s | 66.3s |
+| speedup | 3.0× | 3.0× |
+
+Four more parallel runs on the new base, all passing, all three gates green. The serial suite
+has crossed three minutes; parallelism now saves over two.
+
 ## Reproducing any of this
 
 ```sh
