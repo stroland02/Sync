@@ -1,0 +1,12 @@
+{
+  "total_count": 4991,
+  "incomplete_results": true,
+  "items": [
+    {
+      "name": "stripe.ts",
+      "path": "src/lib/stripe.ts",
+      "sha": "0000000000000000000000000000000000000004",
+      "repository": { "full_name": "example-org/storefront", "private": false, "fork": false }
+    }
+  ]
+}
