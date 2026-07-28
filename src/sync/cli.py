@@ -15,6 +15,7 @@ from typing import Any, Callable, Iterator, Sequence
 from langgraph.checkpoint.postgres import PostgresSaver
 
 from sync.core import CallSite, Finding, RepoRef
+from sync.detect.efficiency import EfficiencyDetector
 from sync.detect.observed_drift import DeclaredField, ObservedDriftDetector
 from sync.detect.parameter_deprecation import ParameterDeprecationDetector
 from sync.detect.vendor_change import VendorChangeDetector
@@ -411,20 +412,27 @@ def _detector_suite(
     call_sites: Sequence[CallSite],
     deprecations: Sequence[ParameterDeprecation],
     vendor_id: str,
+    repo_id: str,
 ) -> list[tuple[str, object]]:
     """Every detector a scan runs, named, in the order it runs them.
 
-    Three detectors satisfy the protocol and exactly one was ever constructed. The other two
-    were finished, tested work that could not produce a single finding, which is the same as not
-    having built them.
+    This list is the difference between a detector existing and a detector running. Three
+    satisfied the protocol and exactly one was ever constructed; the other two were finished,
+    tested work that could not produce a single finding, which is the same as not having built
+    them. `scripts/lint_dead_links.py` is what now catches that case, and it caught `efficiency`
+    before this line existed.
 
     Assembled here rather than inline in `run()` so the set is checkable without Postgres, the
     network or the Agent SDK -- the same reason `_select` and `build_remediator` were pulled out.
+
+    `efficiency` runs last because it is the only one that answers a question about cost rather
+    than about breakage, and a scan's first output should be what is about to break.
     """
     return [
         ("vendor_change", VendorChangeDetector(store)),
         ("parameter-deprecation", ParameterDeprecationDetector(deprecations, call_sites)),
         ("observed-drift", ObservedDriftDetector(store, _declared_response_fields(spec_document), vendor_id)),
+        ("efficiency", EfficiencyDetector(store, repo_id=repo_id, vendor_id=vendor_id)),
     ]
 
 
@@ -538,6 +546,7 @@ def run(args: argparse.Namespace) -> int:
                     call_sites=call_sites,
                     deprecations=deprecations,
                     vendor_id=args.vendor,
+                    repo_id=repo.repo_id,
                 ),
                 store,
             )

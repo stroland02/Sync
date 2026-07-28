@@ -24,9 +24,6 @@ src/sync/benchmark/binding.py:BindingAccuracy.unlabelled_findings
 # mounts it -- there is no HTTP framework here by design. It leaves when something serves it.
 src/sync/forge/webhook.py:record_merge_outcome
 
-# The efficiency detector's reader, ahead of the detector that will consume it.
-src/sync/graph/store.py:GraphStore.observed_calls
-
 # Adapters and readers that are built and not constructed anywhere. Each leaves when `cli.py`
 # builds it: the deprecation adapter is the model-retirement half of the tier-0 path, and the
 # two shape readers are the only writers the observed-drift baseline has.
