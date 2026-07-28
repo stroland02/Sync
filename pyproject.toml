@@ -53,5 +53,6 @@ forbidden_modules = [
     "sync.detect",
     "sync.remediate",
     "sync.forge",
+    "sync.route",
     "sync.cli",
 ]
