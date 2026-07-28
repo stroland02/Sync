@@ -622,9 +622,9 @@ def _forge_recording(remote_tip: str | None = None) -> tuple[GitHubForge, list[l
         if args[:2] == ["git", "fetch"] and remote_tip is None:
             raise RuntimeError("fatal: couldn't find remote ref")
         if args[:2] == ["git", "rev-parse"]:
-            return remote_tip
-        # The tip a stub places on the remote is one an earlier run of the same
-        # finding pushed; a stub answering the authorship query with anything
+            return "origin/main" if args[-1] == "origin/HEAD" else remote_tip
+        # The commits a stub places on the remote are ones an earlier run of the
+        # same finding pushed; a stub answering the authorship walk with anything
         # else would have `push_branch` refuse its own branch here.
         if args[:2] == ["git", "log"]:
             return COMMIT_AUTHOR_EMAIL
@@ -644,27 +644,30 @@ def test_push_branch_issues_the_expected_git_sequence_for_a_new_branch():
         ["git", "add", "-u"],
         ["git", "-c", f"user.name={COMMIT_AUTHOR_NAME}", "-c", f"user.email={COMMIT_AUTHOR_EMAIL}",
          "commit", "-m", f"fix: {PATCH.rationale}"],
-        ["git", "fetch", "--depth", "1", "origin",
+        ["git", "rev-parse", "--abbrev-ref", "origin/HEAD"],
+        ["git", "fetch", "--shallow-exclude=main", "origin",
          f"+refs/heads/{branch}:refs/remotes/origin/{branch}"],
         ["git", "push", "-u", "origin", branch],
     ]
-    assert cwds == [Path(REPO.local_path)] * 5
+    assert cwds == [Path(REPO.local_path)] * 6
 
 
 def test_push_branch_leases_against_the_commit_it_fetched():
     """Exact argv, because the difference between leasing against the fetched
     commit and leasing against whatever `refs/remotes/origin/<branch>` currently
     says is invisible in behaviour until something else in the clone fetches —
-    and the patch agent holds `Bash` in this clone."""
+    and the patch agent holds `Bash` in this clone. The authorship walk names the
+    same fetched commit for the same reason, and ends at `HEAD`: what the push
+    destroys is what the commit it is about to push does not carry forward."""
     forge, calls, cwds = _forge_recording(remote_tip=REMOTE_TIP)
     branch = forge.push_branch(REPO, PATCH)
 
     assert calls[-3:] == [
         ["git", "rev-parse", f"refs/remotes/origin/{branch}"],
-        ["git", "log", "-1", "--format=%ae", REMOTE_TIP],
+        ["git", "log", "--format=%ae", REMOTE_TIP, "^HEAD"],
         ["git", "push", "-u", "origin", branch, f"--force-with-lease={branch}:{REMOTE_TIP}"],
     ]
-    assert cwds == [Path(REPO.local_path)] * 7
+    assert cwds == [Path(REPO.local_path)] * 8
 
 
 def test_push_branch_commits_under_syncs_identity_with_real_git(tmp_path, monkeypatch):
@@ -816,6 +819,30 @@ def _push_to_branch(
     return _git("rev-parse", "HEAD", cwd=workdir)
 
 
+def _advance_default_branch(remote: Path, workdir: Path) -> None:
+    """Move the customer's default branch on, which is what a repository anyone
+    else commits to does between a finding's first attempt and its retry."""
+    _git("clone", remote.as_uri(), str(workdir), cwd=workdir.parent)
+    (workdir / "unrelated.txt").write_text("somebody else's work\n", encoding="utf-8")
+    _git("add", "-A", cwd=workdir)
+    _git("-c", "user.name=Seed", "-c", "user.email=seed@example.com",
+         "commit", "-m", "unrelated work", cwd=workdir)
+    _git("push", "origin", "main", cwd=workdir)
+
+
+def _resume_on_branch(clone: Path, branch: str) -> None:
+    """Put the clone on a branch an earlier process pushed, the way `cli.py`'s
+    `_checkout_branch` does when a checkpointed run resumes into a fresh clone.
+
+    The fetch carries no `--depth`, which matters here: it leaves the branch's
+    history deep in a clone that is otherwise shallow, and anything downstream
+    that expects to walk only the commits the branch adds has to cope with that.
+    """
+    _git("fetch", "origin", f"+{branch}:refs/remotes/origin/{branch}", cwd=clone)
+    _git("checkout", "-f", "-B", branch, f"origin/{branch}", cwd=clone)
+    (clone / "file.txt").write_text("patched\n", encoding="utf-8")
+
+
 def test_push_branch_creates_a_branch_the_remote_does_not_have(tmp_path, remote):
     """The ordinary case, and the one that must not regress while the re-run case
     is being fixed: nothing exists to lease against, and the push has to create
@@ -873,6 +900,94 @@ def test_push_branch_refuses_a_branch_whose_tip_somebody_else_wrote(tmp_path, re
         GitHubForge().push_branch(repo, PATCH)
 
     assert _git("rev-parse", branch, cwd=remote) == theirs
+
+
+def test_push_branch_refuses_a_branch_hiding_a_stranger_commit_under_a_sync_tip(tmp_path, remote):
+    """The tip is not the question; what the push would destroy is.
+
+    A reviewer pushes a fixup onto Sync's branch and a Sync-authored commit then
+    lands above it — a rebase, a cherry-pick, an amend that reorders. The branch
+    now points at a commit Sync wrote, sitting on one it did not, and a check
+    that reads only the tip sees nothing wrong. The force-push then discards the
+    reviewer's commit, silently, on a repository Sync does not own.
+
+    Every other push test in this file passes with the check reading only the
+    tip. This is the one that does not.
+    """
+    repo = _sync_clone(remote, tmp_path / "clone")
+    branch = branch_name_for(PATCH, repo)
+    _push_to_branch(remote, tmp_path / "earlier", branch, "an earlier attempt\n", SYNC_WRITER)
+    theirs = _push_to_branch(remote, tmp_path / "reviewer", branch, "a reviewer's fixup\n", HUMAN_WRITER)
+    tip = _push_to_branch(remote, tmp_path / "later", branch, "a later Sync attempt\n", SYNC_WRITER)
+
+    with pytest.raises(RuntimeError, match="reviewer@example.com"):
+        GitHubForge().push_branch(repo, PATCH)
+
+    assert _git("rev-parse", branch, cwd=remote) == tip
+    # The tip surviving is not the property that matters — the commit underneath
+    # it is what a tip-only check would have thrown away.
+    assert theirs in _git("rev-list", branch, cwd=remote).splitlines()
+
+
+def test_push_branch_updates_a_branch_of_its_own_that_has_several_commits(tmp_path, remote):
+    """Widening the check from one commit to a range must not turn the ordinary
+    retry into a refusal. A finding that has already retried once leaves two
+    commits behind, both Sync's, and the next attempt has to replace them."""
+    repo = _sync_clone(remote, tmp_path / "clone")
+    branch = branch_name_for(PATCH, repo)
+    _push_to_branch(remote, tmp_path / "first", branch, "the first attempt\n", SYNC_WRITER)
+    _push_to_branch(remote, tmp_path / "second", branch, "the second attempt\n", SYNC_WRITER)
+
+    assert GitHubForge().push_branch(repo, PATCH) == branch
+    assert _git("rev-parse", branch, cwd=remote) == _git("rev-parse", "HEAD", cwd=Path(repo.local_path))
+
+
+def test_push_branch_updates_a_branch_created_before_the_default_branch_moved(tmp_path, remote):
+    """The retry that arrives days later, against a repository that did not stand
+    still: the branch forks from a default branch commit the new clone cannot
+    see, because `--depth` cut the history above it. There is no merge base to
+    compute, so a range anchored on the clone's own HEAD sweeps in the customer's
+    default branch commits along with Sync's — and refuses a push that would
+    discard nothing but Sync's own work.
+
+    Nothing about this is exotic. Every retry against a repository anyone else
+    commits to lands here, which makes it the failure mode that would take the
+    whole retry path down rather than one branch.
+    """
+    # The branch name is a function of the repository id and the patch's
+    # rationale alone, so it is known before the clone that will push to it
+    # exists — which it has to be, because the default branch has to move
+    # between the branch being created and the clone being made.
+    branch = branch_name_for(PATCH, RepoRef(
+        repo_id="r1", url=remote.as_uri(), local_path=str(tmp_path), head_sha="0" * 40))
+    _push_to_branch(remote, tmp_path / "earlier", branch, "an earlier attempt\n", SYNC_WRITER)
+    _advance_default_branch(remote, tmp_path / "moved")
+
+    repo = _sync_clone(remote, tmp_path / "clone")
+    assert branch == branch_name_for(PATCH, repo)
+
+    assert GitHubForge().push_branch(repo, PATCH) == branch
+    assert _git("rev-parse", branch, cwd=remote) == _git("rev-parse", "HEAD", cwd=Path(repo.local_path))
+
+
+def test_push_branch_carries_a_stranger_commit_forward_rather_than_refusing(tmp_path, remote):
+    """A resumed run checks the clone out onto the branch it pushed and commits on
+    top of it, so a reviewer's fixup already on that branch is a parent of what
+    Sync is about to push — carried forward, not discarded. The check is about
+    what the push destroys, and this push destroys nothing.
+
+    Refusing here instead would make any branch unusable to Sync the moment
+    anyone touched it, which is a different bug from the one the check exists
+    for.
+    """
+    repo = _sync_clone(remote, tmp_path / "clone")
+    branch = branch_name_for(PATCH, repo)
+    _push_to_branch(remote, tmp_path / "earlier", branch, "an earlier attempt\n", SYNC_WRITER)
+    theirs = _push_to_branch(remote, tmp_path / "reviewer", branch, "a reviewer's fixup\n", HUMAN_WRITER)
+    _resume_on_branch(Path(repo.local_path), branch)
+
+    assert GitHubForge().push_branch(repo, PATCH) == branch
+    assert theirs in _git("rev-list", branch, cwd=remote).splitlines()
 
 
 def test_push_branch_refuses_a_branch_that_moved_after_it_was_fetched(tmp_path, remote, monkeypatch):
@@ -981,6 +1096,68 @@ def test_delete_branch_keeps_a_branch_whose_tip_somebody_else_wrote(tmp_path, re
     assert deleted is False
     assert _git("rev-parse", branch, cwd=remote) == theirs
     assert "reviewer@example.com" in detail
+
+
+def test_delete_branch_keeps_a_branch_hiding_a_stranger_commit_under_a_sync_tip(tmp_path, remote, monkeypatch):
+    """Deleting a branch destroys every commit it adds, not only the one it points
+    at, so a tip Sync authored says nothing about what the deletion costs. Same
+    rule as the push and the same reason, over a range the deletion makes wider:
+    the push at least leaves behind whatever it carries forward."""
+    repo = _sync_clone(remote, tmp_path / "clone")
+    branch = branch_name_for(PATCH, repo)
+    _push_to_branch(remote, tmp_path / "earlier", branch, "an earlier attempt\n", SYNC_WRITER)
+    theirs = _push_to_branch(remote, tmp_path / "reviewer", branch, "a reviewer's fixup\n", HUMAN_WRITER)
+    _push_to_branch(remote, tmp_path / "later", branch, "a later Sync attempt\n", SYNC_WRITER)
+    forge = _forge_with_pull_requests(monkeypatch, "[]")
+
+    deleted, detail = forge.delete_branch(repo, branch)
+
+    assert deleted is False
+    assert theirs in _git("rev-list", branch, cwd=remote).splitlines()
+    assert "reviewer@example.com" in detail
+
+
+def test_delete_branch_keeps_a_stranger_commit_the_clone_is_itself_sitting_on(tmp_path, remote, monkeypatch):
+    """The push and the deletion ask different questions, and this is where the
+    difference shows. A resumed run leaves the clone checked out on the branch, so
+    a reviewer's fixup on it is part of the clone's own history — which makes it
+    something the push carries forward and nothing at all to the deletion, since
+    no ref on the remote would keep it reachable afterwards.
+
+    A deletion that reused the push's range, excluding what the clone already
+    has, would find nothing to object to here and remove their commit.
+    """
+    repo = _sync_clone(remote, tmp_path / "clone")
+    branch = branch_name_for(PATCH, repo)
+    _push_to_branch(remote, tmp_path / "earlier", branch, "an earlier attempt\n", SYNC_WRITER)
+    theirs = _push_to_branch(remote, tmp_path / "reviewer", branch, "a reviewer's fixup\n", HUMAN_WRITER)
+    _push_to_branch(remote, tmp_path / "later", branch, "a later Sync attempt\n", SYNC_WRITER)
+    _resume_on_branch(Path(repo.local_path), branch)
+    forge = _forge_with_pull_requests(monkeypatch, "[]")
+
+    deleted, detail = forge.delete_branch(repo, branch)
+
+    assert deleted is False
+    assert _remote_has(remote, branch)
+    assert theirs in _git("rev-list", branch, cwd=remote).splitlines()
+    assert "reviewer@example.com" in detail
+
+
+def test_delete_branch_removes_a_branch_of_its_own_that_has_several_commits(tmp_path, remote, monkeypatch):
+    """The counterweight: widening what the deletion inspects must not leave
+    every retried finding's branch behind. Two attempts, both Sync's, is what a
+    finding that retried once and then abandoned leaves on the remote."""
+    repo = _sync_clone(remote, tmp_path / "clone")
+    branch = branch_name_for(PATCH, repo)
+    _push_to_branch(remote, tmp_path / "first", branch, "the first attempt\n", SYNC_WRITER)
+    _push_to_branch(remote, tmp_path / "second", branch, "the second attempt\n", SYNC_WRITER)
+    forge = _forge_with_pull_requests(monkeypatch, "[]")
+
+    deleted, detail = forge.delete_branch(repo, branch)
+
+    assert deleted is True
+    assert not _remote_has(remote, branch)
+    assert branch in detail
 
 
 def test_delete_branch_does_nothing_when_the_remote_has_no_such_branch(tmp_path, remote, monkeypatch):

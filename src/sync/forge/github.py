@@ -142,10 +142,10 @@ class GitHubForge:
         The lease settles what was observed, never whose it was, and those are
         different questions. A reviewer who pushes a fixup onto Sync's branch
         between runs has their commit fetched, observed, leased against and
-        replaced. So a tip Sync did not author refuses the push outright: the
-        finding abandons with a reason naming the author, which a human can act
-        on, rather than Sync discarding their work on a repository it does not
-        own.
+        replaced. So a commit written by anyone but Sync anywhere in what this
+        push would discard refuses the push outright: the finding abandons with a
+        reason naming the author, which a human can act on, rather than Sync
+        discarding their work on a repository it does not own.
         """
         path = Path(repo.local_path)
         branch = branch_name_for(patch, repo)
@@ -160,33 +160,54 @@ class GitHubForge:
         remote_tip = self._fetch_remote_tip(path, branch)
         push = ["git", "push", "-u", "origin", branch]
         if remote_tip is not None:
-            author = self._tip_author(path, remote_tip)
-            if author != COMMIT_AUTHOR_EMAIL:
+            # What the push would destroy: every commit the remote branch holds
+            # that the commit replacing it does not carry forward. HEAD is that
+            # commit, `checkout -B` and the commit above having put it there, and
+            # a fixup already in HEAD's history survives the push as its parent.
+            # The other end of the range is the fork from the default branch,
+            # which `_fetch_remote_tip` cut rather than expressed: commits below
+            # it stay reachable on the default branch whatever this push does.
+            author = self._foreign_author(path, [remote_tip, "^HEAD"])
+            if author is not None:
                 raise RuntimeError(
-                    f"{branch} was last written by {author}, not Sync; refusing to replace it. "
+                    f"{branch} carries a commit by {author}, not Sync; refusing to replace it. "
                     f"Merge or move that commit, or delete the branch, then re-run the finding."
                 )
             push.append(f"--force-with-lease={branch}:{remote_tip}")
         self._run(push, path)
         return branch
 
-    def _tip_author(self, path: Path, commit: str) -> str:
-        """Who wrote `commit`, not who committed it.
+    def _foreign_author(self, path: Path, discarded: list[str]) -> str | None:
+        """The author of a commit in `discarded` that Sync did not write, or None
+        when Sync wrote every one of them. `discarded` is a `git log` revision
+        range naming the commits an operation would destroy.
 
-        Author and committer differ routinely, and in ways that would go against
-        Sync: GitHub rewrites the committer on a squash and on any edit made
-        through the web UI, and a rebase rewrites it while leaving the author
-        alone. Reading the committer would call Sync's own commit a stranger's
-        after any of those and abandon a finding whose branch Sync wrote every
-        line of. The author survives all three, and a reviewer pushing a fixup
-        authors it themselves.
+        Who wrote each commit, not who committed it. Author and committer differ
+        routinely, and in ways that would go against Sync: GitHub rewrites the
+        committer on a squash and on any edit made through the web UI, and a
+        rebase rewrites it while leaving the author alone. Reading the committer
+        would call Sync's own commit a stranger's after any of those and abandon
+        a finding whose branch Sync wrote every line of. The author survives all
+        three, and a reviewer pushing a fixup authors it themselves.
+
+        The range rather than the tip, because the tip is not where a stranger's
+        work has to sit. A reviewer's fixup with any Sync-authored commit above
+        it — a rebase, a cherry-pick, an amend that reordered — leaves a branch
+        whose tip is Sync's and whose history is not, and every check shaped
+        around the tip reports that the branch is Sync's to replace.
+
+        An empty range is not a refusal. A branch Sync pushed and is updating
+        with nothing else on it is the ordinary retry, and it has to keep
+        working; a range expression that reports the whole branch there would
+        abandon every one of them.
 
         This guards against clobbering human work; it is not a security control.
         `git commit --author` sets the field to anything, so anyone who can push
         to the branch can present as Sync. What stands against that is the lease
         and the customer's own branch protection, not this.
         """
-        return self._run(["git", "log", "-1", "--format=%ae", commit], path)
+        authors = self._run(["git", "log", "--format=%ae", *discarded], path).splitlines()
+        return next((author for author in authors if author != COMMIT_AUTHOR_EMAIL), None)
 
     def delete_branch(self, repo: RepoRef, branch: str) -> tuple[bool, str]:
         """Remove a branch a finding abandoned after pushing. Returns (deleted, detail).
@@ -198,10 +219,11 @@ class GitHubForge:
 
         Three things stop a deletion, and each means the branch is not Sync's to
         remove: an open pull request, because a human may be reading it right
-        now; a tip Sync did not author, for the reason `_tip_author` gives; and a
-        remote with no such branch, which is every finding that abandoned before
-        it ever pushed. The deletion carries the same lease as the push against
-        the same observed tip, so a branch that moved in between is left alone.
+        now; a commit on it Sync did not author, for the reason `_foreign_author`
+        gives; and a remote with no such branch, which is every finding that
+        abandoned before it ever pushed. The deletion carries the same lease as
+        the push against the same observed tip, so a branch that moved in between
+        is left alone.
 
         Nothing here raises, and the breadth of that is deliberate rather than
         careless: this runs after a finding has already failed, and the
@@ -227,9 +249,14 @@ class GitHubForge:
             if tip is None:
                 return False, f"the remote has no {branch}"
 
-            author = self._tip_author(path, tip)
-            if author != COMMIT_AUTHOR_EMAIL:
-                return False, f"{branch} was last written by {author}, not Sync"
+            # Everything the branch adds over the default branch, with nothing
+            # excluded — unlike the push, which subtracts what it carries
+            # forward. A deletion carries nothing forward, and a commit the clone
+            # happens to hold is destroyed with the rest of them: what the clone
+            # has does not keep anything reachable on the remote.
+            author = self._foreign_author(path, [tip])
+            if author is not None:
+                return False, f"{branch} carries a commit by {author}, not Sync"
 
             self._run(
                 ["git", "push", "origin", "--delete", branch,
@@ -255,17 +282,34 @@ class GitHubForge:
         same clone: any `git fetch` it happens to run would move that ref and
         silently turn the lease into a `--force`.
 
-        `--depth 1` because only the tip is wanted. Fetching a customer's branch
-        without it deepens the clone, which is history downloaded to answer a
-        question about one commit.
+        `--shallow-exclude` asks the server for the commits this branch adds over
+        the default branch and nothing else, which is both the cheapest fetch
+        that answers the authorship question and the only one that answers it
+        correctly. `--depth 1` brings the tip and grafts its parents away, so a
+        walk of the branch stops there and cannot see whose work is underneath.
+        An unbounded fetch has the opposite fault: `--depth` cut the default
+        branch above the commit an older branch forks from, leaving no merge base
+        to subtract, so the walk runs on into the customer's own history and
+        reads their commits as ones this push would discard — which refuses every
+        retry against a repository anyone else commits to. The exclusion is
+        computed on the server, where the whole graph is, and it shortens a
+        history as readily as it deepens one, so it holds even where something
+        else in the clone has already fetched this branch in full.
 
-        A fetch that fails for any other reason — no network, no permission —
-        also lands here and yields a push with no lease, which git then rejects
-        as a non-fast-forward rather than overwriting anything.
+        Four things land on None, and each is safe because each yields a push
+        with no lease, which git accepts only as a fast-forward and otherwise
+        rejects as a non-fast-forward rather than overwriting anything: the
+        remote has no such branch; the branch adds nothing over the default
+        branch, so the exclusion selects no commit and the server refuses the
+        request; the clone records no default branch to exclude; and a fetch that
+        fails for any other reason — no network, no permission.
         """
+        base = self._default_branch(path)
+        if base is None:
+            return None
         try:
             self._run(
-                ["git", "fetch", "--depth", "1", "origin",
+                ["git", "fetch", f"--shallow-exclude={base}", "origin",
                  f"+refs/heads/{branch}:refs/remotes/origin/{branch}"],
                 path,
             )
