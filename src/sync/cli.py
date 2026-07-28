@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import subprocess
 import sys
 import tempfile
@@ -33,13 +34,73 @@ def _select(findings: list[Finding], limit: int) -> list[Finding]:
     return findings if limit == 0 else findings[:limit]
 
 
+_SCHEME = re.compile(r"^[A-Za-z][A-Za-z0-9+.-]*://")
+_PORT = re.compile(r":\d+/")
+
+
+def _repo_id(url: str) -> str:
+    """A repository's identity, derived from its remote rather than its checkout.
+
+    Call site ids hash `repo_id`, so this value decides whether two customers
+    whose `src/billing.ts` both call `stripe.charges.create` occupy one row or
+    two. Every spelling of one remote has to reduce to one string: scheme,
+    trailing `.git`, scp-style `git@host:owner/name`, a port, an embedded
+    credential. The credential in particular must not survive, because the
+    result is written to every `call_site` row and hashed into the branch name
+    the forge pushes.
+
+    Path case is preserved. GitHub is case-insensitive there, but not every
+    host is, and splitting one repository in two is a cheaper mistake than
+    merging two distinct ones.
+    """
+    remote = _SCHEME.sub("", url.strip().rstrip("/"))
+    userinfo, at, rest = remote.partition("@")
+    if at and "/" not in userinfo:
+        remote = rest
+    remote = _PORT.sub("/", remote, count=1)
+    remote = remote.replace(":", "/", 1)
+    host, _, path = remote.removesuffix(".git").partition("/")
+    return f"{host.lower()}/{path}"
+
+
 def _clone(url: str, dest: Path) -> RepoRef:
     subprocess.run(["git", "clone", "--depth", "50", url, str(dest)], check=True)
     head = subprocess.run(
         ["git", "rev-parse", "HEAD"], cwd=dest,
         capture_output=True, text=True, encoding="utf-8", check=True,
     ).stdout.strip()
-    return RepoRef(repo_id=dest.name, url=url, local_path=str(dest), head_sha=head)
+    return RepoRef(repo_id=_repo_id(url), url=url, local_path=str(dest), head_sha=head)
+
+
+def _thread_to_invoke(graph, base: str) -> tuple[str, bool]:
+    """Pick the checkpoint thread for one finding, and say whether to resume it.
+
+    Two different situations otherwise share one thread id. A run that died
+    mid-flight -- the worker restarted during the CI wait -- has to resume:
+    re-entering it with input instead replays every node from the start, which
+    here means a second agent run and a second pushed branch. A run that
+    *finished* must not be re-entered at all: `finding.id` is a stable hash and
+    `head_sha` is unchanged on a re-run against the same commit, so the operator
+    who fixes a broken environment and runs again presents byte-identical
+    coordinates, and that finished run's state -- `patch`, `verify_ok`,
+    `static_fatal`, all of them read by routing functions -- would be merged
+    into the new run as though it had produced them.
+
+    The generation suffix separates the two: finished generations are stepped
+    over, and the first unused or unfinished one is invoked. `snapshot.next`
+    holds the tasks LangGraph still owes on a thread, so it distinguishes an
+    interrupted run from a finished one; `created_at` distinguishes a thread
+    that has never run from either.
+    """
+    generation = 0
+    while True:
+        thread_id = f"{base}:{generation}"
+        snapshot = graph.get_state({"configurable": {"thread_id": thread_id}})
+        if snapshot.created_at is None:
+            return thread_id, False
+        if snapshot.next:
+            return thread_id, True
+        generation += 1
 
 
 def run(args: argparse.Namespace) -> int:
@@ -60,15 +121,6 @@ def run(args: argparse.Namespace) -> int:
 
     store = GraphStore(args.dsn)
     store.apply_schema()
-    # M0 has one entry point and no incremental indexing story: a stale row
-    # from a previous invocation is indistinguishable from a real finding to
-    # the detector, so every run starts from an empty graph. M2's incremental
-    # indexing replaces this; a hosted control plane must never do this, since
-    # it would erase other customers' state rather than just this one's.
-    # Finding ids are stable hashes of (detector, call_site_id, vendor_change_id),
-    # so a re-inserted finding gets the same id its checkpoint thread already
-    # used -- checkpoint coordinates survive the truncate.
-    store.truncate_all()
 
     with tempfile.TemporaryDirectory() as workdir:
         repo = _clone(args.repo, Path(workdir) / "repo")
@@ -77,17 +129,35 @@ def run(args: argparse.Namespace) -> int:
             print(f"{args.repo} does not depend on the Stripe SDK", file=sys.stderr)
             return 2
 
-        for site in adapter.index(repo):
-            store.upsert_call_site(site)
-        for change in vendor.fetch_changes(args.from_version, args.to_version):
-            store.upsert_vendor_change(change)
+        # One transaction for the whole ingest. It holds an ACCESS EXCLUSIVE
+        # lock on the graph tables from the TRUNCATE until it commits, which is
+        # acceptable only because M0 runs one scan at a time; the alternative is
+        # worse, since a run that dies part-way through would otherwise leave a
+        # graph that is neither the old one nor the new one, and the detector
+        # cannot tell a missing row from an absent call site.
+        #
+        # M0 has one entry point and no incremental indexing story: a stale row
+        # from a previous invocation is indistinguishable from a real finding to
+        # the detector, so every run starts from an empty graph. M2's incremental
+        # indexing replaces this; a hosted control plane must never do this, since
+        # it would erase other customers' state rather than just this one's.
+        # Finding ids are stable hashes of (detector, call_site_id, vendor_change_id),
+        # so a re-inserted finding gets the same id its checkpoint thread already
+        # used -- checkpoint coordinates survive the truncate.
+        with store.transaction():
+            store.truncate_all()
 
-        # Persist findings before running the graph: `scan()` returns unsaved
-        # findings with no id, and the checkpointer needs a stable thread_id.
-        findings = []
-        for finding in VendorChangeDetector(store).scan():
-            finding.id = store.insert_finding(finding)
-            findings.append(finding)
+            for site in adapter.index(repo):
+                store.upsert_call_site(site)
+            for change in vendor.fetch_changes(args.from_version, args.to_version):
+                store.upsert_vendor_change(change)
+
+            # Persist findings before running the graph: `scan()` returns unsaved
+            # findings with no id, and the checkpointer needs a stable thread_id.
+            findings = []
+            for finding in VendorChangeDetector(store).scan():
+                finding.id = store.insert_finding(finding)
+                findings.append(finding)
 
         print(f"{len(findings)} finding(s)")
         if not findings:
@@ -106,12 +176,13 @@ def run(args: argparse.Namespace) -> int:
                 forge=GitHubForge(), checkpointer=checkpointer,
             )
             for finding in selected:
-                # Finding ids are stable across runs, so the thread id carries the
-                # commit too. Without it a second run resumes the finished checkpoint
-                # and reports the old outcome without doing any work.
-                thread_id = f"{finding.id}:{args.run_id or repo.head_sha[:12]}"
+                base = f"{finding.id}:{args.run_id or repo.head_sha[:12]}"
+                thread_id, resuming = _thread_to_invoke(graph, base)
+                # Resuming takes `None`: an interrupted thread handed a payload
+                # re-enters at START and redoes the patch and the push it had
+                # already paid for.
                 state = graph.invoke(
-                    {"finding": finding, "repo": repo},
+                    None if resuming else {"finding": finding, "repo": repo},
                     config={"configurable": {"thread_id": thread_id}},
                 )
                 print(f"{state['outcome']}: {state.get('pr_url') or state.get('abandon_reason')}")

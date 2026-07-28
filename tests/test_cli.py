@@ -6,11 +6,16 @@ collaborators with an in-memory stub that never leaves this process.
 """
 
 import argparse
+import subprocess
 import sys
+from contextlib import contextmanager
+from typing import TypedDict
 
 import pytest
+from langgraph.checkpoint.memory import InMemorySaver
+from langgraph.graph import END, START, StateGraph
 
-from sync.cli import _select, main, run
+from sync.cli import _clone, _repo_id, _select, _thread_to_invoke, main, run
 from sync.core import CallSite, RepoRef, VendorChange
 
 
@@ -80,6 +85,12 @@ class _RecordingStore:
 
     def __init__(self):
         self.calls: list[str] = []
+
+    @contextmanager
+    def transaction(self):
+        self.calls.append("begin")
+        yield
+        self.calls.append("commit")
 
     def apply_schema(self):
         self.calls.append("apply_schema")
@@ -195,4 +206,173 @@ def test_the_graph_is_truncated_after_apply_schema_and_before_the_scan(monkeypat
     result = run(args)
 
     assert result == 0
-    assert store.calls == ["apply_schema", "truncate_all", "upsert_call_site", "upsert_vendor_change", "scan"]
+    assert store.calls == [
+        "apply_schema", "begin", "truncate_all",
+        "upsert_call_site", "upsert_vendor_change", "scan", "commit",
+    ]
+
+
+EQUIVALENT_URLS = [
+    "https://github.com/acme/billing.git",
+    "https://github.com/acme/billing",
+    "https://github.com/acme/billing/",
+    "http://GitHub.com/acme/billing.git",
+    "git@github.com:acme/billing.git",
+    "ssh://git@github.com/acme/billing.git",
+    "ssh://git@github.com:2222/acme/billing.git",
+    "https://x-access-token:ghs_secret@github.com/acme/billing.git",
+]
+
+
+@pytest.mark.parametrize("url", EQUIVALENT_URLS)
+def test_every_spelling_of_one_remote_gets_one_repo_id(url):
+    assert _repo_id(url) == "github.com/acme/billing"
+
+
+def test_a_credential_in_the_url_never_reaches_the_repo_id():
+    """`repo_id` is written to every `call_site` row and hashed into the branch
+    name `GitHubForge` pushes. A token embedded in a clone URL must not travel
+    with it."""
+    assert "ghs_secret" not in _repo_id("https://x-access-token:ghs_secret@github.com/acme/billing.git")
+
+
+@pytest.mark.parametrize(
+    "left, right",
+    [
+        ("https://github.com/acme/billing", "https://github.com/other/billing"),
+        ("https://github.com/acme/billing", "https://gitlab.com/acme/billing"),
+        ("https://github.com/acme/billing", "https://github.com/acme/billing-web"),
+    ],
+)
+def test_distinct_repositories_get_distinct_repo_ids(left, right):
+    assert _repo_id(left) != _repo_id(right)
+
+
+def test_clone_takes_repo_id_from_the_url_not_the_destination_directory(tmp_path):
+    """Every clone lands in a directory named `repo`, so `dest.name` made
+    `repo_id` the constant "repo" for every customer. Call site ids hash
+    `repo_id`, which meant two repositories with a file at the same path
+    calling the same symbol collapsed onto one row.
+
+    Cloning a local repository keeps this off the network; `git` is local
+    toolchain, which CLAUDE.md allows a test to use.
+    """
+    origin = tmp_path / "origin"
+    origin.mkdir()
+    git = ["git", "-c", "user.email=t@example.invalid", "-c", "user.name=t"]
+    subprocess.run(["git", "init", "-q", str(origin)], check=True)
+    subprocess.run(git + ["commit", "-q", "--allow-empty", "-m", "root"], cwd=origin, check=True)
+
+    ref = _clone(str(origin), tmp_path / "workdir" / "repo")
+
+    assert ref.repo_id != "repo"
+    assert ref.repo_id == _repo_id(str(origin))
+    assert len(ref.head_sha) == 40
+
+
+class _ToyState(TypedDict, total=False):
+    explode: bool
+    outcome: str
+
+
+def _toy_graph(ran: list[str]):
+    """A stand-in for the remediation graph, compiled against the same
+    checkpointer contract. The point of testing `_thread_to_invoke` against a
+    real compiled graph rather than a fake `get_state` is that the whole
+    question is what LangGraph itself does with a finished versus an
+    interrupted thread -- a fake would only assert what this file believes.
+    """
+
+    def locate(state: _ToyState) -> _ToyState:
+        ran.append("locate")
+        return {"outcome": "running"}
+
+    def await_ci(state: _ToyState) -> _ToyState:
+        ran.append("await_ci")
+        if state.get("explode"):
+            raise RuntimeError("the worker died waiting on CI")
+        return {"outcome": "opened"}
+
+    builder = StateGraph(_ToyState)
+    builder.add_node("locate", locate)
+    builder.add_node("await_ci", await_ci)
+    builder.add_edge(START, "locate")
+    builder.add_edge("locate", "await_ci")
+    builder.add_edge("await_ci", END)
+    return builder.compile(checkpointer=InMemorySaver())
+
+
+def _invoke(graph, base, payload):
+    thread_id, resuming = _thread_to_invoke(graph, base)
+    return graph.invoke(
+        None if resuming else payload,
+        config={"configurable": {"thread_id": thread_id}},
+    )
+
+
+def test_a_finding_never_remediated_starts_a_fresh_first_generation():
+    graph = _toy_graph([])
+    assert _thread_to_invoke(graph, "f1:abc123") == ("f1:abc123:0", False)
+
+
+def test_a_run_that_died_mid_flight_resumes_its_own_thread():
+    ran: list[str] = []
+    graph = _toy_graph(ran)
+    with pytest.raises(RuntimeError):
+        _invoke(graph, "f1:abc123", {"explode": True})
+
+    assert _thread_to_invoke(graph, "f1:abc123") == ("f1:abc123:0", True)
+
+
+def test_resuming_replays_only_the_node_that_did_not_finish():
+    """The durability the checkpointer exists for. `graph.invoke(payload, ...)`
+    on an interrupted thread re-enters at START and redoes every node -- for
+    the real graph that is a second agent run and a second pushed branch.
+    Only `invoke(None, ...)` resumes the pending node, so the resume decision
+    has to reach the invocation, not just the thread id.
+    """
+    ran: list[str] = []
+    graph = _toy_graph(ran)
+    with pytest.raises(RuntimeError):
+        _invoke(graph, "f1:abc123", {"explode": True})
+    assert ran == ["locate", "await_ci"]
+
+    ran.clear()
+    graph.update_state({"configurable": {"thread_id": "f1:abc123:0"}}, {"explode": False})
+    state = _invoke(graph, "f1:abc123", {"explode": False})
+
+    assert ran == ["await_ci"]
+    assert state["outcome"] == "opened"
+
+
+def test_a_re_run_after_a_finished_run_does_the_work_again():
+    """Finding ids are stable hashes and `head_sha` is unchanged on a re-run
+    against the same customer commit, so the operator who fixes a broken
+    environment and re-runs presents byte-identical coordinates. That must
+    execute the graph, not replay the old verdict.
+    """
+    ran: list[str] = []
+    graph = _toy_graph(ran)
+    _invoke(graph, "f1:abc123", {"explode": False})
+    assert ran == ["locate", "await_ci"]
+
+    ran.clear()
+    thread_id, resuming = _thread_to_invoke(graph, "f1:abc123")
+
+    assert (thread_id, resuming) == ("f1:abc123:1", False)
+    _invoke(graph, "f1:abc123", {"explode": False})
+    assert ran == ["locate", "await_ci"]
+
+
+def test_a_new_generation_starts_from_an_empty_state():
+    """A finished thread is left alone rather than re-entered, so the second
+    run cannot inherit the first run's keys. `patch`, `verify_ok` and
+    `static_fatal` are all read by routing functions, and every one of them
+    would otherwise arrive pre-set from a run that already ended.
+    """
+    ran: list[str] = []
+    graph = _toy_graph(ran)
+    _invoke(graph, "f1:abc123", {"explode": False})
+
+    thread_id, _ = _thread_to_invoke(graph, "f1:abc123")
+    assert graph.get_state({"configurable": {"thread_id": thread_id}}).values == {}
