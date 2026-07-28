@@ -121,7 +121,8 @@ def test_a_retired_model_reaches_the_tier_zero_remediator_end_to_end(tmp_path):
         findings = _scan(
             _detector_suite(
                 store, spec_document={}, call_sites=[site], deprecations=[],
-                vendor_id="stripe", deprecation_vendors=("anthropic", "openai"),
+                vendor_id="stripe", repo_id=site.repo_id,
+                deprecation_vendors=("anthropic", "openai"),
             ),
             store,
         )
@@ -167,7 +168,8 @@ def test_the_scan_joins_retirements_for_every_deprecation_vendor(tmp_path):
     """
     suite = _detector_suite(
         store=GraphStore(DSN), spec_document={}, call_sites=[], deprecations=[],
-        vendor_id="stripe", deprecation_vendors=("anthropic", "openai"),
+        vendor_id="stripe", repo_id="repo-under-test",
+        deprecation_vendors=("anthropic", "openai"),
     )
 
     names = [name for name, _ in suite]

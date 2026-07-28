@@ -24,9 +24,6 @@ src/sync/benchmark/binding.py:BindingAccuracy.unlabelled_findings
 # mounts it -- there is no HTTP framework here by design. It leaves when something serves it.
 src/sync/forge/webhook.py:record_merge_outcome
 
-# The efficiency detector's reader, ahead of the detector that will consume it.
-src/sync/graph/store.py:GraphStore.observed_calls
-
 # Adapters and readers that are built and not constructed anywhere. Each leaves when `cli.py`
 # builds it. The deprecation adapter and both shape readers' `ingest` left this way; the
 # reader classes stay because `cli.py` reaches their methods without naming the class.

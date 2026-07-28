@@ -983,17 +983,19 @@ def test_every_finding_reaches_the_store_through_one_path():
     assert {f.detector for f in store.inserted} == {"a", "b"}
 
 
-def test_the_suite_runs_all_three_detectors(tmp_path):
+def test_the_suite_runs_every_detector(tmp_path):
     """The whole point. Three detectors exist, all satisfying the protocol, and exactly one was
     ever called -- the other two were finished work that could not produce a single finding."""
     store = GraphStore(DSN)
     store.apply_schema()
 
     suite = _detector_suite(
-        store, spec_document={}, call_sites=[], deprecations=[], vendor_id="stripe",
+        store, spec_document={}, call_sites=[], deprecations=[], vendor_id="stripe", repo_id="r",
     )
 
-    assert [name for name, _ in suite] == ["vendor_change", "parameter-deprecation", "observed-drift"]
+    assert [name for name, _ in suite] == [
+        "vendor_change", "parameter-deprecation", "observed-drift", "efficiency",
+    ]
     assert all(isinstance(detector, Detector) for _, detector in suite)
 
 
@@ -1006,6 +1008,7 @@ def test_an_empty_drift_baseline_produces_no_findings_and_does_not_error(tmp_pat
 
     suite = _detector_suite(
         store, spec_document=_DRIFT_SPEC, call_sites=[], deprecations=[], vendor_id="stripe",
+        repo_id="r",
     )
     drift = dict(suite)["observed-drift"]
 
