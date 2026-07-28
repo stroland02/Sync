@@ -15,18 +15,20 @@ whole budget without ever reaching CI.
 because bookkeeping failed is worse. Every path out of `record` is caught and logged, and
 the caller gets no exception and no way to accidentally depend on one.
 
-**Three cases deliberately write nothing**, and each is a case where a row would be a
-fabrication rather than a measurement:
+**Two cases deliberately write nothing**, and both are cases where a row would be a
+fabrication rather than a measurement. Neither is a schema problem; both are the grain:
 
 - A run abandoned before any attempt -- at `locate` or `prepare`. Zero attempts is zero
   rows. The finding's status and `abandon_reason` already record that it was abandoned,
   and conflating "abandoned before attempting" with "attempted and failed" makes every
   rate computed off this table wrong.
-- No tier applying at all. `strategy` is `NOT NULL` and the column is what the corpus
-  splits merge rate by, so an attempt with no strategy to name is not a row -- and "no
-  tier ran" is a different fact from "the agent tier ran and failed", which
-  `tiered.TierFailed` keeps separate.
-- No configured salt. See `corpus_salt`.
+- No tier applying at all. If no remediator could handle the change then no repair was
+  attempted; what happened is a routing failure, which is a different grain and would be a
+  different table. It stays queryable through the run's own `abandon_reason`. That is a
+  different fact from "the agent tier ran and failed", which `tiered.TierFailed` carries a
+  strategy for and which does write a row.
+
+An unconfigured salt is deliberately **not** on that list -- see `corpus_salt`.
 """
 
 from __future__ import annotations
@@ -34,7 +36,9 @@ from __future__ import annotations
 import logging
 import os
 import re
+import secrets
 import time
+from pathlib import Path
 
 from sync.core import MigrationOutcome, Patch
 from sync.route import AGENT, CODEMOD
@@ -42,6 +46,15 @@ from sync.route import AGENT, CODEMOD
 log = logging.getLogger(__name__)
 
 SALT_VARIABLE = "SYNC_CORPUS_SALT"
+# Gitignored, and that is the point: a salt committed to git is a public salt. Kept at the
+# repository root rather than under `.cache/` so it is visible to anyone wondering what
+# Sync wrote, and so deleting the caches does not silently orphan every row already stored.
+SALT_FILE = Path(__file__).resolve().parents[3] / ".sync-corpus-salt"
+
+# The salt used when the file cannot be written. Held for the life of the process rather
+# than generated per call: two attempts on one finding that disagreed about the digest of
+# `amount` would be unjoinable to each other as well as to every other run.
+_fallback: str | None = None
 
 # `PatchStrategy` is a two-value Literal in `sync.core`, and `tier` is the axis the corpus
 # index is built on. Deriving one from the other is not a guess: which tier ran *is* which
@@ -52,10 +65,6 @@ _TIERS = {"codemod": CODEMOD, "agent": AGENT}
 # tsc writes `error TS2339: ...`. The code alone classifies the failure without carrying a
 # message that quotes the customer's own identifiers.
 _TS_ERROR = re.compile(r"\bTS(\d+)\b")
-
-
-class MissingCorpusSalt(RuntimeError):
-    """Raised when `SYNC_CORPUS_SALT` is unset at the point a row would be built."""
 
 
 def now() -> float:
@@ -71,28 +80,61 @@ def now() -> float:
 
 
 def corpus_salt() -> str:
-    """The per-deployment salt for `hash_arg_keys`, or a failure that says what to set.
+    """The per-deployment salt for `hash_arg_keys`.
 
-    There is deliberately no fallback. This project is open core, so a constant in the
-    source is a published constant, and a digest salted with a published constant is
-    reversible by anyone who can read the repository -- `hash_arg_keys` exists precisely
-    because an unsalted digest of `amount` is `amount` to anyone willing to hash a
-    wordlist. A default here would be a privacy hole with a comment beside it explaining
-    why it was fine.
+    Three constraints have to hold together, and only one arrangement satisfies all three.
+    The salt must be **stable across runs**, or two runs hash `amount` differently and the
+    corpus cannot be joined to itself. It must be **unique per deployment**, or it is a
+    dictionary lookup -- an unsalted digest of `amount` is `amount` to anyone willing to
+    hash a wordlist, which is the whole reason `hash_arg_keys` takes one. And it must
+    **never fail a run**.
 
-    A caller that has a human present should invoke this at configuration load, where the
-    message can be acted on. `record_attempt` calls it far from one, so there it omits the
-    row and logs: a missing row is recoverable, a reversible hash published in a public
-    repository is not.
+    A constant in the source satisfies the first and third and fails the second, which is
+    the failure that matters: this project is open core, so a constant that ships is a
+    published constant, and every deployment that had not set the variable would silently
+    be storing plaintext.
+
+    So: an operator's `SYNC_CORPUS_SALT` wins if set; otherwise one is generated once and
+    kept in a gitignored file beside the repository. `secrets`, not `random`: this is a
+    value whose guessability is the entire question.
     """
-    salt = os.environ.get(SALT_VARIABLE)
-    if not salt:
-        raise MissingCorpusSalt(
-            f"{SALT_VARIABLE} is not set, so argument keys cannot be salted; set it to a "
-            f"stable per-deployment secret (a random one per run would make rows from "
-            f"different runs incomparable)"
+    configured = os.environ.get(SALT_VARIABLE)
+    if configured:
+        return configured
+    return _persisted_salt()
+
+
+def _persisted_salt() -> str:
+    """The generated salt, read from disk or written there on first use.
+
+    A file that cannot be read or written falls back to a salt held for the life of the
+    process. That trades cross-run comparability -- these rows join to each other and to
+    nothing else -- for still having the rows at all, which is the right way round:
+    recording must never fail a run, and a row nobody can join is still a row somebody can
+    count.
+    """
+    global _fallback
+    if _fallback is not None:
+        return _fallback
+
+    try:
+        if SALT_FILE.exists():
+            existing = SALT_FILE.read_text(encoding="utf-8").strip()
+            if existing:
+                return existing
+        generated = secrets.token_hex(32)
+        SALT_FILE.write_text(f"{generated}\n", encoding="utf-8")
+        log.info("generated a corpus salt and stored it at %s", SALT_FILE)
+        return generated
+    except OSError as exc:
+        _fallback = secrets.token_hex(32)
+        log.warning(
+            "could not read or write %s (%s), so this process is using a salt of its own: "
+            "its migration_outcome rows are comparable with each other and with no other "
+            "run's",
+            SALT_FILE, exc,
         )
-    return salt
+        return _fallback
 
 
 def tier_for(strategy: str | None) -> int | None:
@@ -174,12 +216,6 @@ def _record(store, state, terminal_status: str, abandon_reason: str | None) -> b
         )
         return False
 
-    try:
-        salt = corpus_salt()
-    except MissingCorpusSalt as exc:
-        log.warning("migration_outcome row omitted: %s", exc)
-        return False
-
     started = state.get("attempt_started_at")
     wall_ms = max(0, round((now() - started) * 1000)) if started else 0
 
@@ -196,7 +232,7 @@ def _record(store, state, terminal_status: str, abandon_reason: str | None) -> b
             patch=Patch(diff="", strategy=strategy, rationale=""),
             tier=tier,
             wall_ms=wall_ms,
-            salt=salt,
+            salt=corpus_salt(),
             static_verify_passed=static_passed,
             static_verify_error_class=(
                 static_error_class(state.get("diagnostics")) if static_passed is False else None
