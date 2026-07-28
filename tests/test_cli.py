@@ -7,6 +7,7 @@ collaborators with an in-memory stub that never leaves this process.
 
 import argparse
 import json
+import os
 import subprocess
 import sys
 from contextlib import contextmanager
@@ -19,6 +20,10 @@ from langgraph.graph import END, START, StateGraph
 
 from sync.cli import (
     _checkout_branch,
+    _declared_response_fields,
+    _detector_suite,
+    _parameter_deprecations,
+    _scan,
     _clone,
     _repo_id,
     _reset_clone,
@@ -28,7 +33,11 @@ from sync.cli import (
     run,
 )
 from sync.core import CallSite, Finding, Patch, RepoRef, VendorChange, VerifyResult
+from sync.core.protocols import Detector
 from sync.forge.github import GitHubForge
+from sync.graph.store import GraphStore
+
+DSN = os.environ.get("SYNC_DSN", "postgresql://sync:sync@localhost:5433/sync")
 
 
 def test_no_arguments_exits_nonzero_instead_of_crashing(monkeypatch):
@@ -211,8 +220,9 @@ def test_the_graph_is_truncated_after_apply_schema_and_before_the_scan(monkeypat
     monkeypatch.setattr(cli, "_clone", fake_clone)
 
     args = argparse.Namespace(
-        from_version="v2320", to_version="v2330", repo="https://example.invalid/r",
-        dsn="postgresql://unused", cache=str(tmp_path / "cache"), limit=1, run_id=None,
+        vendor="stripe", from_version="v2320", to_version="v2330",
+        repo="https://example.invalid/r", dsn="postgresql://unused",
+        cache=str(tmp_path / "cache"), limit=1, run_id=None,
     )
 
     result = run(args)
@@ -657,7 +667,7 @@ def test_two_findings_in_one_run_produce_branches_that_share_no_commits(tmp_path
     monkeypatch.setattr(cli, "PostgresSaver", _MemoryCheckpointer)
 
     args = argparse.Namespace(
-        from_version="v2320", to_version="v2330", repo=str(origin),
+        vendor="stripe", from_version="v2320", to_version="v2330", repo=str(origin),
         dsn="postgresql://unused", cache=str(tmp_path / "cache"), limit=0, run_id=None,
     )
 
@@ -783,6 +793,7 @@ def _stub_run_collaborators(monkeypatch, cli, store):
     monkeypatch.setattr(cli, "VendorChangeDetector", _RecordingDetector)
     monkeypatch.setattr(cli, "StripeAdapter", _StubVendor)
     monkeypatch.setattr(cli, "TypeScriptAdapter", _StubAdapter)
+    monkeypatch.setattr(cli, "http_fetch", lambda url, **kw: "")
     monkeypatch.setattr(
         cli, "_clone",
         lambda url, dest: RepoRef(repo_id="repo", url=url, local_path=str(dest), head_sha="0" * 40),
@@ -790,9 +801,13 @@ def _stub_run_collaborators(monkeypatch, cli, store):
 
 
 def _run_args(tmp_path):
+    """The namespace argparse actually builds, `--vendor` default included. A helper that
+    omitted a flag the parser always sets would let `run()` read one that is never absent in a
+    real invocation and fail only here."""
     return argparse.Namespace(
-        from_version="v2320", to_version="v2330", repo="https://example.invalid/r",
-        dsn="postgresql://unused", cache=str(tmp_path / "cache"), limit=1, run_id=None,
+        vendor="stripe", from_version="v2320", to_version="v2330",
+        repo="https://example.invalid/r", dsn="postgresql://unused",
+        cache=str(tmp_path / "cache"), limit=1, run_id=None,
     )
 
 
@@ -856,3 +871,277 @@ def test_the_run_completes_on_a_version_that_publishes_no_sdk_document(monkeypat
     symbols = json.loads((tmp_path / "cache" / "symbols.json").read_text(encoding="utf-8"))
     assert "stripe.subscriptions.del" in symbols
     assert "stripe.subscriptions.cancel" not in symbols
+
+
+# --- every detector runs, and says how much it found ------------------------------
+
+
+class _Silent:
+    detector_id = "silent"
+
+    def scan(self):
+        return []
+
+
+class _Broken:
+    detector_id = "broken"
+
+    def scan(self):
+        raise RuntimeError("the vendor page could not be fetched")
+
+
+class _Yields:
+    def __init__(self, count: int, detector: str = "yields"):
+        self._count = count
+        self.detector_id = detector
+
+    def scan(self):
+        return [
+            Finding(detector=self.detector_id, call_site_id=f"cs-{i}", severity="breaking",
+                    rationale=f"finding {i}")
+            for i in range(self._count)
+        ]
+
+
+class _InsertCountingStore:
+    def __init__(self):
+        self.inserted: list[Finding] = []
+
+    def insert_finding(self, finding):
+        self.inserted.append(finding)
+        return f"id-{len(self.inserted)}"
+
+
+def test_every_detector_reports_its_own_count(capsys):
+    """A detector that silently produces nothing forever is indistinguishable from one that is
+    broken, and that is the failure this wiring exists to end. The count is per detector, and a
+    zero is printed rather than omitted -- an operator has to be able to see which one is quiet.
+    """
+    _scan([("vendor_change", _Yields(2)), ("parameter-deprecation", _Silent())], _InsertCountingStore())
+
+    printed = capsys.readouterr().out
+    assert "vendor_change: 2 finding(s)" in printed
+    assert "parameter-deprecation: 0 finding(s)" in printed
+
+
+def test_a_detector_that_raises_does_not_stop_the_others(capsys):
+    """Losing one detector's findings is bad; losing the whole run because one input was missing
+    is worse. A vendor page that cannot be fetched must cost its own findings and nothing else.
+    """
+    store = _InsertCountingStore()
+
+    findings = _scan(
+        [("broken", _Broken()), ("vendor_change", _Yields(3))], store
+    )
+
+    assert len(findings) == 3
+    assert len(store.inserted) == 3
+    assert "broken" in capsys.readouterr().err
+
+
+def test_a_failed_detector_is_reported_rather_than_passed_over(capsys):
+    """Swallowing the failure would make a broken detector look like a quiet one, which is the
+    same confusion from the other direction."""
+    _scan([("broken", _Broken())], _InsertCountingStore())
+
+    assert "unavailable" in capsys.readouterr().err
+
+
+def test_every_finding_reaches_the_store_through_one_path():
+    """One `Finding` type, one insert, one remediation pipeline. A second write path is how two
+    detectors end up with two different notions of what a finding is."""
+    store = _InsertCountingStore()
+
+    findings = _scan([("a", _Yields(2, "a")), ("b", _Yields(3, "b"))], store)
+
+    assert len(store.inserted) == 5
+    assert [f.id for f in findings] == ["id-1", "id-2", "id-3", "id-4", "id-5"]
+    assert {f.detector for f in store.inserted} == {"a", "b"}
+
+
+def test_the_suite_runs_all_three_detectors(tmp_path):
+    """The whole point. Three detectors exist, all satisfying the protocol, and exactly one was
+    ever called -- the other two were finished work that could not produce a single finding."""
+    store = GraphStore(DSN)
+    store.apply_schema()
+
+    suite = _detector_suite(
+        store, spec_document={}, call_sites=[], deprecations=[], vendor_id="stripe",
+    )
+
+    assert [name for name, _ in suite] == ["vendor_change", "parameter-deprecation", "observed-drift"]
+    assert all(isinstance(detector, Detector) for _, detector in suite)
+
+
+def test_an_empty_drift_baseline_produces_no_findings_and_does_not_error(tmp_path):
+    """The normal case today: nothing has fed Sentry payloads in, so `observed_shape` is empty.
+    That is not a fault, and a detector that raised on it would take the whole scan with it."""
+    store = GraphStore(DSN)
+    store.apply_schema()
+    store.truncate_all()
+
+    suite = _detector_suite(
+        store, spec_document=_DRIFT_SPEC, call_sites=[], deprecations=[], vendor_id="stripe",
+    )
+    drift = dict(suite)["observed-drift"]
+
+    assert list(drift.scan()) == []
+
+
+# --- what each detector needed that the CLI did not already have ------------------
+
+
+_DRIFT_SPEC = {
+    "paths": {
+        "/v1/charges": {
+            "post": {
+                "operationId": "PostCharges",
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "required": ["status"],
+                                    "properties": {
+                                        "status": {"type": "string"},
+                                        "amount": {"type": "integer", "nullable": True},
+                                        "card": {
+                                            "type": "object",
+                                            "properties": {"brand": {"type": "string"}},
+                                        },
+                                    },
+                                }
+                            }
+                        }
+                    }
+                },
+            }
+        }
+    }
+}
+
+
+def test_declared_fields_are_derived_from_the_published_specification():
+    """`ObservedDriftDetector` compares the baseline against what the vendor declares, and
+    nothing in the repository turned a specification into declared fields -- the detector shipped
+    with no way to be given its own input."""
+    declared = _declared_response_fields(_DRIFT_SPEC)
+
+    by_path = {field.field_path: field for field in declared["PostCharges"]}
+    assert by_path["/status"].json_types == frozenset({"string"})
+    assert by_path["/status"].required is True
+    assert by_path["/amount"].nullable is True
+
+
+def test_declared_fields_reach_into_nested_objects():
+    """A vendor change is overwhelmingly nested, so a walker that stopped at the top level could
+    only ever describe the shallowest fields the baseline records."""
+    paths = {field.field_path for field in _declared_response_fields(_DRIFT_SPEC)["PostCharges"]}
+
+    assert "/card/brand" in paths
+
+
+def test_a_recursive_schema_terminates():
+    """Stripe's specification refers to itself -- a charge carries a refund carrying a charge.
+    An unbounded walk does not return, and a run that hangs before the detector even starts is
+    worse than one that describes fields shallowly."""
+    document = {
+        "paths": {
+            "/v1/self": {
+                "get": {
+                    "operationId": "GetSelf",
+                    "responses": {
+                        "200": {
+                            "content": {
+                                "application/json": {"schema": {"$ref": "#/components/schemas/Node"}}
+                            }
+                        }
+                    },
+                }
+            }
+        },
+        "components": {
+            "schemas": {
+                "Node": {
+                    "type": "object",
+                    "properties": {
+                        "name": {"type": "string"},
+                        "child": {"$ref": "#/components/schemas/Node"},
+                    },
+                }
+            }
+        },
+    }
+
+    paths = {field.field_path for field in _declared_response_fields(document)["GetSelf"]}
+
+    assert "/name" in paths
+    # Descended through the cycle rather than refusing it. `MAX_SCHEMA_DEPTH` is what makes the
+    # walk terminate, and a `seen` set would terminate too while pruning this -- a field the
+    # vendor really does return.
+    assert "/child/name" in paths
+
+
+def test_an_operation_with_no_response_schema_is_skipped():
+    """A specification that describes no response body says nothing the baseline can be compared
+    against, and inventing an empty declaration would report every observed field as undeclared.
+    """
+    document = {"paths": {"/v1/ping": {"get": {"operationId": "Ping", "responses": {"204": {}}}}}}
+
+    assert _declared_response_fields(document) == {}
+
+
+class _CountingFetch:
+    def __init__(self, page: str = "", failing: bool = False):
+        self.page = page
+        self.failing = failing
+        self.calls: list[str] = []
+
+    def __call__(self, url: str) -> str:
+        self.calls.append(url)
+        if self.failing:
+            raise RuntimeError("the vendor page is unreachable")
+        return self.page
+
+
+_PARAMETER_PAGE = """
+| Parameter | Status | Replacement |
+| --- | --- | --- |
+| `max_tokens` | Deprecated (Claude Opus 4.7 and later) | `max_completion_tokens` |
+"""
+
+
+def test_parameter_deprecations_are_parsed_from_an_injected_fetch(tmp_path):
+    """The adapter takes an injected fetch precisely so tests need no network. Nothing in this
+    suite may reach a vendor's page."""
+    fetch = _CountingFetch(page=_PARAMETER_PAGE)
+
+    deprecations = _parameter_deprecations(tmp_path / "cache", fetch=fetch)
+
+    assert fetch.calls
+    assert any(item.parameter == "max_tokens" for item in deprecations)
+
+
+def test_a_vendor_page_that_cannot_be_fetched_yields_no_deprecations_rather_than_raising(tmp_path, capsys):
+    """The deprecation adapter raises on an unreachable page, because for that signal an empty
+    answer is indistinguishable from a healthy vendor. Here the caller is a scan that also runs
+    two other detectors, so the failure costs this detector's findings and nothing else -- and it
+    is printed, because a silent zero is the confusion this task exists to end.
+    """
+    deprecations = _parameter_deprecations(tmp_path / "cache", fetch=_CountingFetch(failing=True))
+
+    assert deprecations == []
+    assert capsys.readouterr().err != ""
+
+
+def test_a_cached_page_is_reused_rather_than_refetched(tmp_path):
+    """A scan is not the only thing running against these pages, and a run that refetched two
+    vendor pages every time would be rate-limited into the failure path above."""
+    cache = tmp_path / "cache"
+    _parameter_deprecations(cache, fetch=_CountingFetch(page=_PARAMETER_PAGE))
+
+    second = _CountingFetch(page=_PARAMETER_PAGE)
+    _parameter_deprecations(cache, fetch=second)
+
+    assert second.calls == []

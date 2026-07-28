@@ -8,24 +8,53 @@ import re
 import subprocess
 import sys
 import tempfile
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from typing import Any, Callable, Iterator, Sequence
 
 from langgraph.checkpoint.postgres import PostgresSaver
 
-from sync.core import Finding, RepoRef
+from sync.core import CallSite, Finding, RepoRef
+from sync.detect.observed_drift import DeclaredField, ObservedDriftDetector
+from sync.detect.parameter_deprecation import ParameterDeprecationDetector
 from sync.detect.vendor_change import VendorChangeDetector
 from sync.forge.github import GitHubForge
 from sync.graph.store import GraphStore
+from sync.index.literals import index_operation_literals
 from sync.index.typescript import TypeScriptAdapter
 from sync.remediate.agent_patch import AgentRemediator
 from sync.remediate.graph import build_graph
 from sync.remediate.literal_swap import LiteralSwapRemediator
 from sync.remediate.property_omit import PropertyOmitRemediator
 from sync.remediate.tiered import TerminalTier, TieredRemediator
+from sync.signals.deprecations import (
+    ANTHROPIC,
+    OPENAI,
+    DeprecationSource,
+    ParameterDeprecation,
+    http_fetch,
+    parse_parameter_deprecations,
+)
 from sync.signals.stripe.adapter import StripeAdapter, fetch_sdk_spec, fetch_spec
 from sync.signals.stripe.symbols import build_symbol_map
 
 DEFAULT_DSN = "postgresql://sync:sync@localhost:5433/sync"
+
+# Vendors whose parameter deprecations a scan reads. Both publish one page carrying both a model
+# lifecycle table and a parameter table; `parse_parameter_deprecations` tells them apart.
+DEPRECATION_SOURCES: tuple[DeprecationSource, ...] = (ANTHROPIC, OPENAI)
+
+# How long a downloaded vendor page is reused. The same twelve hours `DeprecationAdapter` uses,
+# for the same reason: these pages change on a human's schedule, and refetching two of them on
+# every scan is how a run earns a rate limit and lands in the failure path below.
+DEPRECATION_MAX_AGE = timedelta(hours=12)
+
+# How deep a response schema is walked. Stripe's specification refers to itself -- a charge
+# carries a refund carrying a charge -- so an unbounded walk does not return, and a run that
+# hangs before the first detector starts is worse than one that describes fields shallowly. A
+# field deeper than this is also one the observed baseline is least likely to carry, since the
+# code that would have to read it stops long before.
+MAX_SCHEMA_DEPTH = 4
 
 
 def _select(findings: list[Finding], limit: int) -> list[Finding]:
@@ -179,6 +208,241 @@ def _thread_to_invoke(graph, base: str) -> tuple[str, bool]:
         generation += 1
 
 
+def _resolve(schema: Any, schemas: dict) -> dict | None:
+    """A schema with its `$ref` followed, or `None` where there is nothing to follow it to.
+
+    Termination is `MAX_SCHEMA_DEPTH`'s job, not this function's. Tracking which references have
+    already been seen on the branch would terminate too, and would also prune `/child/name` on a
+    self-referential schema -- a field the vendor really does return. One bound that costs depth
+    beats two where the second quietly costs reach.
+    """
+    if not isinstance(schema, dict):
+        return None
+    reference = schema.get("$ref")
+    if not isinstance(reference, str):
+        return schema
+    name = reference.rsplit("/", 1)[-1]
+    if name not in schemas:
+        return None
+    return _resolve(schemas[name], schemas)
+
+
+def _json_types(schema: dict) -> frozenset[str]:
+    """The JSON types a schema permits, in the vocabulary `ObservedShape` records.
+
+    `integer` collapses to `number` because JSON has one numeric type and the observation side
+    cannot tell them apart -- keeping the distinction would report every integer field as
+    drifting on its first observation.
+    """
+    declared = schema.get("type")
+    names = declared if isinstance(declared, list) else [declared]
+    mapped = {
+        "number" if name == "integer" else name
+        for name in names
+        if isinstance(name, str) and name != "null"
+    }
+    return frozenset(mapped)
+
+
+def _nullable(schema: dict) -> bool:
+    """Both spellings. OpenAPI 3.0 writes `nullable: true`; 3.1 puts `null` in the type list."""
+    declared = schema.get("type")
+    if isinstance(declared, list) and "null" in declared:
+        return True
+    return schema.get("nullable") is True
+
+
+def _walk_schema(schema: dict, schemas: dict, prefix: str, depth: int) -> Iterator[DeclaredField]:
+    if depth >= MAX_SCHEMA_DEPTH:
+        return
+    required = set(schema.get("required") or [])
+    properties = schema.get("properties")
+    if not isinstance(properties, dict):
+        return
+
+    for name, child in properties.items():
+        resolved = _resolve(child, schemas)
+        if resolved is None:
+            continue
+        field_path = f"{prefix}/{name}"
+        yield DeclaredField(
+            field_path=field_path,
+            json_types=_json_types(resolved),
+            required=name in required,
+            nullable=_nullable(resolved),
+        )
+        yield from _walk_schema(resolved, schemas, field_path, depth + 1)
+
+
+def _declared_response_fields(document: dict) -> dict[str, list[DeclaredField]]:
+    """What the published specification says each operation's response contains.
+
+    `ObservedDriftDetector` compares the observed baseline against this, and nothing in the
+    repository turned a specification into declared fields -- the detector shipped able to run
+    and with no way to be given its own input.
+
+    An operation describing no JSON response body is omitted rather than recorded as declaring
+    nothing. An empty declaration would report every observed field as undeclared, which is the
+    detector's loudest finding raised from an absence of information.
+    """
+    schemas = (document.get("components") or {}).get("schemas") or {}
+    declared: dict[str, list[DeclaredField]] = {}
+
+    for methods in (document.get("paths") or {}).values():
+        if not isinstance(methods, dict):
+            continue
+        for operation in methods.values():
+            if not isinstance(operation, dict):
+                continue
+            operation_id = operation.get("operationId")
+            if not isinstance(operation_id, str):
+                continue
+
+            body = (
+                ((operation.get("responses") or {}).get("200") or {}).get("content") or {}
+            ).get("application/json") or {}
+            root = _resolve(body.get("schema"), schemas)
+            if root is None:
+                continue
+
+            fields = list(_walk_schema(root, schemas, "", 0))
+            if fields:
+                declared[operation_id] = fields
+
+    return declared
+
+
+def _page(url: str, destination: Path, fetch: Callable[[str], str]) -> str:
+    """A vendor page, from cache when it is recent enough and from the network otherwise."""
+    if destination.exists() and destination.stat().st_size > 0:
+        stamp = datetime.fromtimestamp(destination.stat().st_mtime, tz=timezone.utc)
+        if max(datetime.now(timezone.utc) - stamp, timedelta(0)) < DEPRECATION_MAX_AGE:
+            return destination.read_text(encoding="utf-8")
+
+    body = fetch(url)
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    destination.write_text(body, encoding="utf-8")
+    return body
+
+
+def _parameter_deprecations(
+    cache_dir: Path, fetch: Callable[[str], str] = http_fetch
+) -> list[ParameterDeprecation]:
+    """Every vendor's deprecated request parameters, skipping any vendor that cannot be reached.
+
+    `DeprecationAdapter` raises when a page cannot be retrieved, and is right to: for the model
+    signal an empty answer is indistinguishable from a healthy vendor with nothing deprecated.
+    The caller here is a scan that runs two other detectors, so the same failure must cost this
+    detector's findings and nothing else. It is printed rather than swallowed, because a silent
+    zero is exactly the confusion this wiring exists to end.
+
+    The fetch is injected so a test needs no network.
+    """
+    deprecations: list[ParameterDeprecation] = []
+
+    for source in DEPRECATION_SOURCES:
+        destination = cache_dir / f"{source.vendor_id}-deprecations.md"
+        try:
+            body = _page(source.url, destination, fetch)
+        except Exception as exc:
+            print(
+                f"parameter-deprecation: {source.vendor_id} page unavailable "
+                f"({type(exc).__name__}: {exc})",
+                file=sys.stderr,
+            )
+            continue
+        deprecations.extend(parse_parameter_deprecations(source.vendor_id, body))
+
+    return deprecations
+
+
+def _literal_call_sites(repo: RepoRef) -> list[CallSite]:
+    """Call sites for the model ids named as string literals in the repository.
+
+    `typescript.py` finds SDK member chains, which is the right shape for `stripe.charges.create`
+    and the wrong one for a model id: no member chain leads to a string in an options object.
+    `index.literals` exists for that and nothing called it, so the parameter-deprecation detector
+    had no rows to match against however many deprecations it was handed.
+
+    The prefixes come from each vendor's own `DeprecationSource`, keeping vendor naming out of
+    the index stage. `sdk_version` is unknown here and says so -- a model literal is named by the
+    customer's code, not by a package the manifest pins.
+    """
+    root = Path(repo.local_path)
+    sites: list[CallSite] = []
+
+    for file_path in root.rglob("*.ts"):
+        if "node_modules" in file_path.parts or file_path.name.endswith(".d.ts"):
+            continue
+        source = file_path.read_text(encoding="utf-8", errors="replace")
+        relative = file_path.relative_to(root).as_posix()
+        for vendor in DEPRECATION_SOURCES:
+            sites.extend(
+                index_operation_literals(
+                    source, path=relative, repo_id=repo.repo_id, vendor_id=vendor.vendor_id,
+                    sdk_version="unknown", prefixes=vendor.prefixes,
+                )
+            )
+
+    return sites
+
+
+def _detector_suite(
+    store: GraphStore,
+    *,
+    spec_document: dict,
+    call_sites: Sequence[CallSite],
+    deprecations: Sequence[ParameterDeprecation],
+    vendor_id: str,
+) -> list[tuple[str, object]]:
+    """Every detector a scan runs, named, in the order it runs them.
+
+    Three detectors satisfy the protocol and exactly one was ever constructed. The other two
+    were finished, tested work that could not produce a single finding, which is the same as not
+    having built them.
+
+    Assembled here rather than inline in `run()` so the set is checkable without Postgres, the
+    network or the Agent SDK -- the same reason `_select` and `build_remediator` were pulled out.
+    """
+    return [
+        ("vendor_change", VendorChangeDetector(store)),
+        ("parameter-deprecation", ParameterDeprecationDetector(deprecations, call_sites)),
+        ("observed-drift", ObservedDriftDetector(store, _declared_response_fields(spec_document), vendor_id)),
+    ]
+
+
+def _scan(detectors: Sequence[tuple[str, object]], store: GraphStore) -> list[Finding]:
+    """Run every detector, persist what they found, and say what each one produced.
+
+    One detector failing must not cost the others. A vendor page that cannot be fetched or a
+    baseline that is not there loses that detector's findings, and losing the whole run because
+    one input was missing is the worse trade.
+
+    The count is printed per detector, including zero. A detector that silently produces nothing
+    forever is indistinguishable from one that is broken, and that confusion is what this exists
+    to end -- so a failure prints too, rather than being reported as a quiet zero.
+
+    Every finding is inserted here, through the one path. Two detectors writing findings two ways
+    is how they end up with two notions of what a finding is, and the architecture rests on one
+    `Finding` type reaching one remediation pipeline.
+    """
+    findings: list[Finding] = []
+
+    for name, detector in detectors:
+        try:
+            produced = list(detector.scan())
+        except Exception as exc:
+            print(f"{name}: unavailable ({type(exc).__name__}: {exc})", file=sys.stderr)
+            continue
+
+        for finding in produced:
+            finding.id = store.insert_finding(finding)
+        findings.extend(produced)
+        print(f"{name}: {len(produced)} finding(s)")
+
+    return findings
+
+
 def run(args: argparse.Namespace) -> int:
     cache = Path(args.cache)
     cache.mkdir(parents=True, exist_ok=True)
@@ -229,20 +493,37 @@ def run(args: argparse.Namespace) -> int:
         # Finding ids are stable hashes of (detector, call_site_id, vendor_change_id),
         # so a re-inserted finding gets the same id its checkpoint thread already
         # used -- checkpoint coordinates survive the truncate.
+        # Fetched before the transaction opens. The ingest holds an ACCESS EXCLUSIVE lock on the
+        # graph tables, and two vendor pages behind a slow network would hold it for the length
+        # of the download rather than the length of the write.
+        deprecations = _parameter_deprecations(cache)
+
         with store.transaction():
             store.truncate_all()
 
-            for site in adapter.index(repo):
-                store.upsert_call_site(site)
+            # Kept as well as stored: `ParameterDeprecationDetector` takes call sites directly,
+            # and the store answers `call_sites_for_operation` rather than "all of them". The id
+            # comes back from the upsert, and a finding addresses its call site by id.
+            call_sites = []
+            for site in list(adapter.index(repo)) + _literal_call_sites(repo):
+                site.id = store.upsert_call_site(site)
+                call_sites.append(site)
+
             for change in vendor.fetch_changes(args.from_version, args.to_version):
                 store.upsert_vendor_change(change)
 
             # Persist findings before running the graph: `scan()` returns unsaved
             # findings with no id, and the checkpointer needs a stable thread_id.
-            findings = []
-            for finding in VendorChangeDetector(store).scan():
-                finding.id = store.insert_finding(finding)
-                findings.append(finding)
+            findings = _scan(
+                _detector_suite(
+                    store,
+                    spec_document=json.loads(head_spec.read_text(encoding="utf-8")),
+                    call_sites=call_sites,
+                    deprecations=deprecations,
+                    vendor_id=args.vendor,
+                ),
+                store,
+            )
 
         print(f"{len(findings)} finding(s)")
         if not findings:
