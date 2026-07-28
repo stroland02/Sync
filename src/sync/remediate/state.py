@@ -20,7 +20,13 @@ class RunState(TypedDict, total=False):
     # None means the patch node produced nothing usable -- either the remediator
     # raised, or it returned an empty diff. Both must reach `abandon`, never `push_branch`.
     patch: Patch | None
+    # Two audiences, two keys. `diagnostics` is one line for an operator: it is
+    # what `make_abandon` records and what the CLI prints for a run that opened
+    # no pull request. `feedback` is what the next patch attempt is told, which
+    # for a CI rejection runs to several paragraphs and a diff. Serving both
+    # from one key means one of them gets the other's format.
     diagnostics: str
+    feedback: str
     # Routing after static_verify trusts this, not whether diagnostics is
     # non-empty: a real tsc failure can exit non-zero with nothing on either
     # stream (e.g. a silent npx fetch failure), which would otherwise read as

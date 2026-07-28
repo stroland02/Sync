@@ -476,3 +476,21 @@ def test_a_ci_retry_says_ci_failed_and_hands_over_the_diff_ci_rejected():
     assert "https://github.com/o/r/actions/runs/1" in feedback
     assert "--- a\n+++ b\n" in feedback
     assert "tsc" not in feedback
+
+
+def test_what_the_patch_agent_is_told_is_not_what_the_operator_is_told():
+    """The abandon reason is what `cli.py` prints for a run that produced no
+    pull request, and what an operator scans a batch of runs by. Feeding a
+    whole rejected diff into it to satisfy the patch agent trades one
+    audience's needs for the other's; the two are separate channels.
+    """
+    remediator = Recording()
+    forge = StubForge(ci_results=[False, False, False])
+    result = _run(StubAdapter(), remediator, forge, store=StubStore())
+    reason = result["abandon_reason"]
+    assert result["outcome"] == "abandoned"
+    assert "https://github.com/o/r/actions/runs/1" in reason
+    assert "--- a\n+++ b\n" not in reason
+    assert len(reason.splitlines()) == 1
+    # ...while the agent still got the long form on the retry.
+    assert "--- a\n+++ b\n" in remediator.seen[1]

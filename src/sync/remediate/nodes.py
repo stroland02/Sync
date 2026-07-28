@@ -28,9 +28,9 @@ def _describe(exc: Exception) -> str:
 
 
 def _static_feedback(diagnostics: str) -> str:
-    """`diagnostics` is one channel with several producers, and the patch agent
-    is given no way to tell them apart. Bare tsc output does not name the stage
-    that emitted it.
+    """The patch agent is handed feedback from more than one stage with nothing
+    in the value itself to tell them apart. Bare tsc output does not name the
+    stage that emitted it.
     """
     if not diagnostics:
         return "`tsc --noEmit` rejected the previous attempt without writing to either stream."
@@ -38,7 +38,7 @@ def _static_feedback(diagnostics: str) -> str:
 
 
 def _ci_feedback(url: str, branch: str, patch: Patch | None) -> str:
-    """The run URL is for the abandon record and for a human; the patch agent
+    """The run URL is all the operator's abandon record needs; the patch agent
     has WebFetch and WebSearch in its DISALLOWED_TOOLS and cannot read it. The
     diff is the part it can act on, and it cannot recover that from the clone
     either: `push_branch` has already committed it, so `git diff` there is empty.
@@ -73,6 +73,7 @@ def make_locate(store):
             "static_attempts": 0,
             "ci_attempts": 0,
             "diagnostics": "",
+            "feedback": "",
             "outcome": "running",
             "fatal": False,
         }
@@ -117,13 +118,14 @@ def make_patch(remediator):
         try:
             proposed = remediator.propose(
                 state["finding"], state["change"], state["site"], state["repo"],
-                diagnostics=state.get("diagnostics", ""),
+                diagnostics=state.get("feedback", ""),
             )
         except Exception as exc:
             return {
                 "patch": None,
                 "static_attempts": attempts,
                 "diagnostics": _describe(exc),
+                "feedback": _describe(exc),
             }
 
         if not proposed.diff.strip():
@@ -131,9 +133,10 @@ def make_patch(remediator):
                 "patch": None,
                 "static_attempts": attempts,
                 "diagnostics": "the remediator produced no change",
+                "feedback": "the remediator produced no change",
             }
 
-        return {"patch": proposed, "static_attempts": attempts, "diagnostics": ""}
+        return {"patch": proposed, "static_attempts": attempts, "diagnostics": "", "feedback": ""}
 
     return patch
 
@@ -162,7 +165,8 @@ def make_static_verify(adapter):
                 "diagnostics": _describe(exc),
             }
         return {
-            "diagnostics": "" if result.ok else _static_feedback(result.diagnostics),
+            "diagnostics": result.diagnostics,
+            "feedback": "" if result.ok else _static_feedback(result.diagnostics),
             "verify_ok": result.ok,
             "static_fatal": False,
         }
@@ -215,7 +219,8 @@ def make_await_ci(forge: Forge):
         return {
             "ci_url": url,
             "ci_attempts": state.get("ci_attempts", 0) + 1,
-            "diagnostics": "" if green else _ci_feedback(url, state["branch"], state.get("patch")),
+            "diagnostics": "" if green else f"CI failed: {url}",
+            "feedback": "" if green else _ci_feedback(url, state["branch"], state.get("patch")),
             "fatal": False,
         }
 
