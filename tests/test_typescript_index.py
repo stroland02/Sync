@@ -164,3 +164,37 @@ def test_a_malformed_manifest_is_not_a_match_rather_than_a_traceback(tmp_path):
     this repository does not demonstrably depend on the SDK.
     """
     assert _adapter(tmp_path).matches(_repo("malformed_manifest")) is False
+
+
+def _by_line(sites) -> dict[int, object]:
+    return {s.line: s for s in sites}
+
+
+def test_a_call_outside_a_loop_has_no_loop_depth(tmp_path):
+    """The ordinary case, and the one that must stay zero: a call made once per request is
+    not an efficiency finding and a detector must be able to say so cheaply."""
+    sites = _by_line(_adapter(tmp_path).index(_repo("in_loop")))
+    assert sites[6].loop_depth == 0
+
+
+def test_a_call_inside_a_loop_records_depth_one(tmp_path):
+    """One page of results becoming N vendor calls is the first efficiency signal the design
+    document names, and it is visible in the syntax tree rather than needing telemetry."""
+    sites = _by_line(_adapter(tmp_path).index(_repo("in_loop")))
+    assert sites[11].loop_depth == 1
+
+
+def test_nesting_is_counted_rather_than_flagged(tmp_path):
+    """A boolean cannot distinguish linear from quadratic. Two loops deep is the difference
+    between N calls and N*M, and that is the whole reason the column is a depth."""
+    sites = _by_line(_adapter(tmp_path).index(_repo("in_loop")))
+    assert sites[18].loop_depth == 2
+
+
+def test_a_call_in_a_map_callback_counts_as_a_loop(tmp_path):
+    """`.map` is not a loop node, and it is the shape a real N+1 usually takes -- an array of
+    ids turned into one vendor call each. Counting only `for` would miss the common case and
+    report zero with confidence.
+    """
+    sites = _by_line(_adapter(tmp_path).index(_repo("in_loop")))
+    assert sites[24].loop_depth == 1

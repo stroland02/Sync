@@ -95,8 +95,9 @@ class GraphStore:
         self._connect().execute(
             """
             INSERT INTO call_site (id, repo_id, path, line, col, vendor_id, operation_id,
-                                   symbol, args_keys, response_fields_read, sdk_version, content_hash)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                                   symbol, args_keys, response_fields_read, sdk_version, content_hash,
+                                   loop_depth)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             ON CONFLICT (id) DO UPDATE SET
                 line = EXCLUDED.line,
                 col = EXCLUDED.col,
@@ -105,12 +106,13 @@ class GraphStore:
                 response_fields_read = EXCLUDED.response_fields_read,
                 sdk_version = EXCLUDED.sdk_version,
                 content_hash = EXCLUDED.content_hash,
+                loop_depth = EXCLUDED.loop_depth,
                 indexed_at = now()
             """,
             (
                 site_id, site.repo_id, site.path, site.line, site.col, site.vendor_id,
                 site.operation_id, site.symbol, site.args_keys, site.response_fields_read,
-                site.sdk_version, site.content_hash,
+                site.sdk_version, site.content_hash, site.loop_depth,
             ),
         )
         return site_id
