@@ -32,6 +32,9 @@ _DEPRECATION_PREFIX = "deprecation/model-"
 # risking a fight with whatever formatter the customer's CI runs -- the CI this patch must pass.
 _QUOTES = ('"', "'")
 
+# Upper bound on removal passes. A pathological object cannot spin the loop.
+_MAX_REMOVALS = 200
+
 
 def model_literal_swap(change: VendorChange, language: str) -> list[dict[str, Any]]:
     """`ast-grep` rules rewriting a retired model id to its replacement.
@@ -123,11 +126,34 @@ def _widen_to_whole_line(source: str, start: int, end: int) -> tuple[int, int]:
     return line_start, line_end + 1
 
 
-def _contains(node, line: int, col: int) -> bool:
-    """Whether a node's range covers a 1-based line and 0-based column.
+def _to_character_column(source: str, line: int, byte_col: int) -> int:
+    """A tree-sitter byte column, as the character column ast-grep reports.
 
-    That is the convention `sync/index/typescript.py` records on a `CallSite`
-    (`start_point[0] + 1` and `start_point[1]`), so positions round-trip without conversion.
+    The two are not the same unit and an earlier version of this module claimed they were.
+    `sync/index/typescript.py` parses `read_bytes()`, so `start_point[1]` counts bytes; ast-grep
+    reports characters. On a line holding one multi-byte character they differ by one, and on a
+    line holding many they differ by enough to land inside a different call -- which the exact
+    match below would then accept as the right one.
+
+    Every fixture in this repository is ASCII, so no existing test could have caught this.
+    """
+    lines = source.splitlines()
+    if not (1 <= line <= len(lines)):
+        return byte_col
+
+    encoded = lines[line - 1].encode("utf-8")
+    if byte_col >= len(encoded):
+        return len(lines[line - 1])
+    # Truncating mid-character is possible when a caller passes a column this line never had;
+    # decoding leniently keeps that a wrong answer rather than an exception.
+    return len(encoded[:byte_col].decode("utf-8", errors="ignore"))
+
+
+def _contains(node, line: int, col: int) -> bool:
+    """Whether a node's range covers a 1-based line and a 0-based *character* column.
+
+    Ranges are half-open at the end, so a column equal to `end.column` is one past the node and
+    is not inside it.
     """
     span = node.range()
     start, end = span.start, span.end
@@ -135,7 +161,7 @@ def _contains(node, line: int, col: int) -> bool:
         return False
     if line == start.line + 1 and col < start.column:
         return False
-    if line == end.line + 1 and col > end.column:
+    if line == end.line + 1 and col >= end.column:
         return False
     return True
 
@@ -185,7 +211,8 @@ def omit_property_at(source: str, prop: str, language: str, line: int, col: int)
     """
     root = SgRoot(source, language).root()
 
-    call = _call_at(root, line, col)
+    # The caller passes what `CallSite` recorded, which tree-sitter measured in bytes.
+    call = _call_at(root, line, _to_character_column(source, line, col))
     if call is None:
         return source
 
@@ -221,6 +248,43 @@ def _key_node(pair):
     return pair.field("key") or pair.child(0)
 
 
+def _declared_keys(container) -> set[str]:
+    """Every key an object literal declares, in whatever form it declares it.
+
+    A duplicate key does not fail -- JavaScript takes the last one -- so a guard that misses a
+    form produces exactly the silent overwrite it exists to prevent. Three forms carry a name
+    and the first version of this guard saw only one:
+
+    - `max_tokens: 8` is a pair.
+    - `{ max_tokens }` is shorthand for `max_tokens: max_tokens`, and is not a pair at all.
+    - `{ ["max_tokens"]: 8 }` is a pair whose key is a computed name wrapping a literal.
+
+    A computed key that is not a literal -- `{ [k]: 8 }` -- names nothing knowable here and is
+    not collected. That direction is safe: an unknown key cannot be proven absent, so a rename
+    that might collide with it is declined by the caller only when a known key matches.
+    """
+    keys: set[str] = set()
+
+    for child in container.children():
+        if child.kind() == "shorthand_property_identifier":
+            keys.add(child.text())
+            continue
+        if child.kind() not in ("pair", "property_signature"):
+            continue
+
+        node = _key_node(child)
+        if node is None:
+            continue
+        if node.kind() == "computed_property_name":
+            inner = node.text().strip("[]").strip()
+            if inner[:1] in ("\"", "'"):
+                keys.add(inner.strip("\"'"))
+            continue
+        keys.add(node.text().strip("\"'"))
+
+    return keys
+
+
 def rename_parameter(
     source: str, old: str, new: str, language: str, within_object_naming: str
 ) -> str:
@@ -239,9 +303,8 @@ def rename_parameter(
     root = SgRoot(source, language).root()
     edits: list[tuple[int, int, str]] = []
 
-    for _container, pairs in _objects_naming(root, within_object_naming):
-        keys = {_pair_part(pair, "key", 0) for pair in pairs}
-        if new in keys:
+    for container, pairs in _objects_naming(root, within_object_naming):
+        if new in _declared_keys(container):
             continue
 
         for pair in pairs:
@@ -274,24 +337,39 @@ def omit_parameter(
     argument, and removing it would edit code the finding never described -- worse than leaving
     a real one in place, because the diff would claim something untrue.
 
+    One removal per pass, re-parsing between them. Batching spans computed against a single
+    tree corrupts an object holding the key twice: the second pair takes the comma that the
+    first pair's span already claimed, and applying both leaves output that does not parse.
+    Re-parsing is the cheap way to make every span current rather than to reason about which
+    overlaps are safe.
+
     Returns `source` unchanged when there is nothing to remove, which the caller reads as
     "no edit" rather than as failure.
     """
-    root = SgRoot(source, language).root()
-
-    spans: list[tuple[int, int]] = []
-    for container, pairs in _objects_naming(root, within_object_naming):
-        for pair in pairs:
-            if _pair_part(pair, "key", 0) == parameter:
-                spans.append(_deletion_span(source, container, pair))
-
-    if not spans:
-        return source
-
-    # Right to left, so an earlier span's offsets are still valid after a later one is cut.
     result = source
-    for start, end in sorted(spans, reverse=True):
+
+    # Bounded by the number of pairs that could match, so a span that somehow fails to shrink
+    # the source ends the loop rather than spinning.
+    for _ in range(_MAX_REMOVALS):
+        root = SgRoot(result, language).root()
+        span = None
+
+        for container, pairs in _objects_naming(root, within_object_naming):
+            for pair in pairs:
+                if _pair_part(pair, "key", 0) == parameter:
+                    span = _deletion_span(result, container, pair)
+                    break
+            if span is not None:
+                break
+
+        if span is None:
+            return result
+
+        start, end = span
+        if end <= start:
+            return result
         result = result[:start] + result[end:]
+
     return result
 
 
