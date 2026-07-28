@@ -237,6 +237,63 @@ def test_a_placeholder_never_reaches_a_migration_rule():
         assert model_literal_swap(change, language="typescript") == []
 
 
+# --- rows that are not models at all, found by checking prefix coverage -------------
+
+# All real, from OpenAI's published page. Endpoints are deprecated on the same page and in the
+# same table shape as models, and one replacement cell carries a markdown link.
+OPENAI_NOT_MODELS = """\
+| Shutdown date | Deprecated              | Recommended replacement                                            |
+| ------------- | ----------------------- | ------------------------------------------------------------------ |
+| 2026-01-04    | `/v1/edits`             | `/v1/chat/completions`                                             |
+| 2026-01-04    | `/v1/engines`           | [/v1/models](https://platform.openai.com/docs/api-reference/models) |
+| 2026-01-04    | `code-davinci-002`      | `gpt-4o`                                                           |
+"""
+
+
+def test_an_endpoint_is_not_a_model():
+    """OpenAI deprecates endpoints on the same page, in the same table shape.
+
+    An endpoint deprecation is real and is not this signal's business: you cannot repair
+    `/v1/edits` by rewriting a string literal, and the literal indexer would never match one,
+    so emitting it produces a finding that can never bind to a call site.
+    """
+    rows = _by_id(parse_deprecation_table("openai", OPENAI_NOT_MODELS, today=date(2026, 7, 28)))
+
+    assert "/v1/edits" not in rows
+    assert "/v1/engines" not in rows
+
+
+def test_a_real_model_on_the_same_page_still_parses():
+    """The exclusion must be narrow. Dropping the whole table would lose the models too."""
+    rows = _by_id(parse_deprecation_table("openai", OPENAI_NOT_MODELS, today=date(2026, 7, 28)))
+
+    assert "code-davinci-002" in rows
+    assert rows["code-davinci-002"].replacement == "gpt-4o"
+
+
+def test_a_markdown_link_is_never_a_replacement():
+    """Same class as the `---` bug and worse in kind.
+
+    Written into source, `[/v1/models](https://...)` is not merely a wrong model name -- it is
+    a bracketed URL inside a string, which no vendor would ever accept. A replacement must
+    look like an identifier or it is not one.
+    """
+    rows = parse_deprecation_table("openai", OPENAI_NOT_MODELS, today=date(2026, 7, 28))
+
+    for row in rows:
+        assert row.replacement is None or "(" not in row.replacement
+        assert row.replacement is None or "http" not in row.replacement
+
+
+def test_the_openai_prefixes_cover_the_families_the_vendor_names():
+    """A prefix that misses a family means the model is never indexed, so the finding exists
+    and points at nothing. These three were absent until the coverage was actually checked."""
+    from sync.signals.deprecations import OPENAI
+
+    for model in ("code-davinci-002", "codex-mini-latest", "ft-gpt-4"):
+        assert model.startswith(OPENAI.prefixes), f"{model} would never be indexed"
+
+
 # --- urgency, which is what makes these different ---------------------------------
 
 

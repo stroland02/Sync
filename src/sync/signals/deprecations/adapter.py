@@ -48,9 +48,13 @@ OPENAI = DeprecationSource(
     url="https://developers.openai.com/api/docs/deprecations.md",
     # Broader than one prefix because OpenAI's naming is not one family. Taken from the model
     # names their own page lists rather than guessed.
+    # Checked against every model id their page actually names rather than guessed. `code-`,
+    # `codex-` and `ft-` were absent until that check ran, which would have left 16 real
+    # deprecated models unindexed -- the finding raised, and no call site to attach it to.
     prefixes=(
         "gpt-", "chatgpt-", "o1", "o3", "o4",
         "text-", "davinci", "babbage", "curie", "ada",
+        "code-", "codex-", "ft-",
         "dall-e", "whisper", "tts-", "sora-", "omni-",
     ),
 )

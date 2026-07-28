@@ -86,6 +86,26 @@ def _state_of(text: str) -> str | None:
     return lowered if lowered in _STATES else None
 
 
+def _looks_like_a_model_id(text: str) -> bool:
+    """Whether a cell names a model rather than something else on the same page.
+
+    Vendors deprecate endpoints in tables shaped exactly like their model tables -- OpenAI
+    lists `/v1/edits` and `/v1/engines` beside `code-davinci-002` -- and one replacement cell
+    carries a markdown link. Neither is a model:
+
+    An endpoint deprecation is real and is not this signal's business. It cannot be repaired by
+    rewriting a string literal, and the literal indexer would never match one, so emitting it
+    produces a finding that can never bind to a call site.
+
+    A markdown link written into source is worse than a wrong model name: it is a bracketed URL
+    inside a string, which no vendor would accept. A model id is identifier-shaped, so anything
+    carrying a path separator, brackets, or whitespace is something else.
+    """
+    if not text:
+        return False
+    return not any(character in text for character in "/()[] \t")
+
+
 def _is_placeholder(text: str) -> bool:
     """Whether a cell means "nothing here" rather than naming something.
 
@@ -132,13 +152,13 @@ def _parse_announcements(markdown: str) -> dict[str, tuple[str | None, date | No
             continue
 
         deprecated = _strip_code(cells[1])
-        if not deprecated or " " in deprecated or _is_placeholder(deprecated):
+        if _is_placeholder(deprecated) or not _looks_like_a_model_id(deprecated):
             continue
 
         # A row with no replacement is still a row: the model stops working on the date, and
         # the finding is worth reporting even though nothing can repair it automatically.
         replacement = _strip_code(cells[2])
-        if _is_placeholder(replacement) or " " in replacement:
+        if _is_placeholder(replacement) or not _looks_like_a_model_id(replacement):
             replacement = None
 
         announcements[deprecated] = (replacement, shutdown)
