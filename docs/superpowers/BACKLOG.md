@@ -67,6 +67,28 @@ whichever route is chosen is measured and stated rather than estimated. Note the
 finding is the one that matters — a test proving the first finding abandons proves nothing
 about the contamination surviving it.
 
+### B7 — The M0 acceptance run has not executed since six pipeline changes landed
+
+`tests/test_e2e_stripe.py::test_one_command_produces_one_green_pull_request` is the
+milestone's definition of done and it is `@pytest.mark.e2e`, deselected by default, so
+nothing in CI or in any worker's gates has exercised it. Since it last ran, the pipeline
+gained: the tier cascade, the property-omit codemod, a push guard over the discarded-commit
+range, branch deletion on abandonment, checkpoint serialiser registration, the
+dependency-edit guard, and staged-new-file support. Every one of those sits on the
+acceptance path.
+
+Checked cheaply and it is not obviously broken: the test still collects, and the production
+graph compiles with the real `StripeAdapter`, `TypeScriptAdapter`, `TieredRemediator`,
+`GitHubForge` and store, exposing all eight nodes. That establishes the wiring survived. It
+establishes nothing about behaviour.
+
+**This one is not a worker's to run unattended.** It opens a pull request on a real GitHub
+repository and spends `xhigh` model time on the patch agent. It needs a human to decide
+when, which is why it is recorded here rather than dispatched.
+
+**Closes when:** one `sync run` produces a CI-green pull request again, or the failure is
+recorded with which of the seven changes broke it.
+
 ## In flight
 
 - **B5** — `task_365c23bf0920`, worktree `m1-forge`. Owns `pyproject.toml`, `tests/conftest.py`
