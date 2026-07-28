@@ -47,61 +47,19 @@ fixtures may not be parallel-safe — that is the thing to check, not assume). T
 databases are housekeeping rather than a fix — a finished task's database can be dropped,
 and the only care needed is not dropping one a live worker is still pointed at.
 
-### B6 — A clone contaminated by a dependency edit outlives the finding that abandoned
-
-`static_verify` now refuses a patch that edited an installed dependency, and the finding
-abandons. The edit stays in the clone: `_reset_clone` returns the tree to the commit it was
-cloned at but keeps ignored files, and `node_modules` is ignored. So the doctored
-declaration is still there for the next finding processed against that clone, which either
-meets a compiler lying in the same direction or abandons on an edit it did not make.
-
-Raised by B3's worker, which deliberately did not close it because the fix is a policy
-choice rather than a mechanism: quarantine the clone and re-clone for the next finding, or
-force a dependency reinstall measured in minutes, or narrow `_reset_clone` to restore only
-the dependency directories. Each trades correctness against the pipeline's largest cost,
-which is why it is not a worker's call to make alone.
-
-**Closes when:** a run that abandons on a dependency edit leaves no clone that a later
-finding can be verified against in its contaminated state, and the wall-clock cost of
-whichever route is chosen is measured and stated rather than estimated. Note the second
-finding is the one that matters — a test proving the first finding abandons proves nothing
-about the contamination surviving it.
-
-### B7 — The M0 acceptance run has not executed since six pipeline changes landed
-
-`tests/test_e2e_stripe.py::test_one_command_produces_one_green_pull_request` is the
-milestone's definition of done and it is `@pytest.mark.e2e`, deselected by default, so
-nothing in CI or in any worker's gates has exercised it. Since it last ran, the pipeline
-gained: the tier cascade, the property-omit codemod, a push guard over the discarded-commit
-range, branch deletion on abandonment, checkpoint serialiser registration, the
-dependency-edit guard, and staged-new-file support. Every one of those sits on the
-acceptance path.
-
-Checked cheaply and it is not obviously broken: the test still collects, and the production
-graph compiles with the real `StripeAdapter`, `TypeScriptAdapter`, `TieredRemediator`,
-`GitHubForge` and store, exposing all eight nodes. That establishes the wiring survived. It
-establishes nothing about behaviour.
-
-**This one is not a worker's to run unattended.** It opens a pull request on a real GitHub
-repository and spends `xhigh` model time on the patch agent. It needs a human to decide
-when, which is why it is recorded here rather than dispatched.
-
-**Closes when:** one `sync run` produces a CI-green pull request again, or the failure is
-recorded with which of the seven changes broke it.
-
 ## In flight
 
-- **B5** — `task_365c23bf0920`, worktree `m1-forge`. Owns `pyproject.toml`, `tests/conftest.py`
-  and test files; forbidden from touching `src/`. A measured "not worth it" is an acceptable
-  result and the brief says so.
-- **B6** — `task_1ab7fb886da3`, worktree `m2-symbols`. First dispatch (`task_63bec222ec75`)
-  was accepted by Orca but never reached the agent: no heartbeat, no edits, terminal idle
-  while holding an active dispatch context. Marked failed and re-dispatched to a new
-  terminal. Worth knowing that task status alone does not prove a worker is alive —
-  worktree dirtiness and heartbeats are what caught it. Owns `src/sync/index/`. Four routes are
-  named with their trade-offs; choosing and defending one is the task.
+_(none)_
+
 
 ## Done
+
+- Run the suite in parallel, one database per worker. Landed `b590a5e`. Measured **2.18x** on
+  an idle 12-core machine, not the 3.0x first reported — that baseline was taken while other
+  workers were running. The load-bearing find was `conftest` returning early on a set
+  `SYNC_DSN`, which put all twelve workers on one database and deadlocked them on `TRUNCATE`.
+- Discard a dependency tree the previous finding doctored. Landed `0fd1623`. Written by the
+  coordinator after three dispatches to a worker failed to start.
 
 - Let a patch ship a file it had to create. Landed `aeecde4`, with the install-mark fix at
   `12f9dc9`. Staging is the agent's assertion that the patch needs the file; untracked
