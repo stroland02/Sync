@@ -134,17 +134,18 @@ sign — and the fifth is a gap.
 | 2 | Spend the resources saved by dropping general-purpose features | Sync deliberately does not understand the codebase. It indexes call sites that bind to vendor operations and ignores everything else, spending what it saves on binding confidence — the `static` → `resolved` → `observed` ladder. | **Done** |
 | 3 | Use the easiest parallelism that fits the domain | Findings are independent, so parallelism is per-finding and embarrassingly so. `locate → patch → verify` is explicitly *not* parallelized: it is a data dependency, and the latency spec says so. | **Done** |
 | 4 | Reduce data size and type to the simplest the domain needs | Shapes, never values. Abstract edit scripts, not textual diffs. Salted hashes, not keys. Arrived at for privacy and threat-model reasons; it is also guideline 4 exactly. | **Done** |
-| 5 | **Use a domain-specific language** | **Sync has none.** Tier-0 codemods would be ad-hoc Python; the agent edits files directly. | **Gap** |
+| 5 | **Use a domain-specific language** | `ast-grep` rules, emitted by `src/sync/route/templates.py` and applied by the deterministic remediators. Adopted rather than invented — see below for why, and for the half of the claim that has not followed. | **Built** |
 
-Guideline 5 is the finding.
+Guideline 5 was the finding, and the section below is the argument that closed it.
 
 ## The consequence: a migration language
 
 Coccinelle's central artifact is not the engine, it is **SmPL** — the language that makes a
 transformation a reviewable, reusable, checkable object rather than a diff.
 
-Sync currently has no such object. The agent edits files, `tsc` checks the result, and what
-ships is a diff. That has four costs, and they compound:
+Sync had no such object when this was written. The agent edited files, `tsc` checked the result,
+and what shipped was a diff. That had four costs, and they compound — the last two still do,
+which is what "What this changes about priorities" records at the end:
 
 - **Review does not amortize.** A reviewer reads a diff per repository. A semantic patch is read
   once and trusted everywhere it applies.

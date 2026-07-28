@@ -2,9 +2,10 @@
 
 **Date:** 2026-07-26
 **Status:** Partly built. The shape store (`observed_shape`, `src/sync/graph/schema.sql:118`),
-the `error-payload` source (`src/sync/signals/sentry/`) and the detector
-(`src/sync/detect/observed_drift.py`, wired in `src/sync/cli.py:18`) all exist. The replay tier
-and the interceptor SDK do not — see Sequencing.
+two `error-payload` readers (`src/sync/signals/sentry/` and `src/sync/signals/datadog/`, which
+writes the same `source` value deliberately) and the detector (`src/sync/detect/observed_drift.py`,
+wired in `src/sync/cli.py:18`) all exist. Neither reader is constructed anywhere in `src/`, so
+nothing feeds the store. The replay tier and the interceptor SDK do not exist — see Sequencing.
 **Scope:** Detecting vendor changes no one published, and verifying patches against behavior rather than types
 alone. The design transposes Meticulous's record-replay-diff mechanism into the API-consumption domain.
 
@@ -190,11 +191,18 @@ number remains in engineering docs; the volume number is the one a customer sees
 |---|---|---|
 | Now | This document. The `observed_shape` schema is binding on anything that later records shapes. | Built — `src/sync/graph/schema.sql:118`, `ObservedShape` in `src/sync/core/models.py` |
 | M1 (with the sandbox the threat model gates on) | The replay tier, feeding the shape store as `source='replay'`. | Not built |
-| M2 (signal sources) | Error-payload shapes from Sentry-class sources, `source='error-payload'`. The detector ships here, running on whatever baseline exists, with the sample floor keeping it silent where data is thin. | Built — `src/sync/signals/sentry/shapes.py` and `src/sync/detect/observed_drift.py`, whose `MIN_SAMPLES` is the sample floor |
+| M2 (signal sources) | Error-payload shapes from Sentry-class sources, `source='error-payload'`. The detector ships here, running on whatever baseline exists, with the sample floor keeping it silent where data is thin. | Built — `src/sync/signals/sentry/shapes.py`, `src/sync/signals/datadog/shapes.py`, and `src/sync/detect/observed_drift.py`, whose `MIN_SAMPLES` is the sample floor |
 | Post-M2, opt-in | The interceptor SDK, only for customers who want unpublished-change detection on live traffic. A separate adoption decision with its own trust conversation. | Not built |
 
-The baseline is empty in practice: nothing has fed Sentry payloads in, so the detector runs and
-correctly finds nothing. That is the sample floor doing its job rather than a defect.
+The baseline is empty in practice: `record_observed_shape` has no caller outside the two
+readers, and neither reader is constructed in `src/`, so the detector runs and correctly finds
+nothing. That is the sample floor doing its job rather than a defect.
+
+Both readers write `source='error-payload'`, which merges their rows rather than sitting them
+side by side. That is the correct key — both samples are drawn from failures and neither corrects
+the other's bias — and it has a consequence worth reading twice: `sample_count` clearing the
+floor faster because two sources reported is not corroboration, and once merged a row cannot say
+which source contributed.
 
 Nothing here touches M0, the eight-task graph-surface plan, or the frozen tool schemas. The detector emits the
 existing `Finding` type; the graph surface exposes its findings through the existing tools with no schema

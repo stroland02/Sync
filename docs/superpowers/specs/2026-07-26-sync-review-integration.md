@@ -209,9 +209,10 @@ lacks is knowledge of what a line depends on, which is the question Sync's exist
 
 ## Sequencing
 
-Every code change below waits on the same gate. `main` carries documentation only; the entire `src/` tree
-lives on `worktree-sync-m0-vendor-change` until M0 merges, so nothing here — including the positioning change
-— can be implemented earlier.
+That gate has passed. M0 merged and `main` carries the whole `src/` tree, so nothing below is
+blocked on the branch it was written against. What still blocks the last two rows is the MCP
+server: `src/sync/mcp/tools.py` is tool logic over a `GraphReader` with no transport, so there is
+no `sync-mcp` process for OCR to start.
 
 | When | What |
 |---|---|

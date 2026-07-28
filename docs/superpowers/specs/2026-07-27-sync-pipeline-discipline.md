@@ -175,11 +175,15 @@ documents per day.
 **A feature store.** It solves multi-model feature reuse across teams. There is one model
 consumer, one team, and no reuse problem to solve.
 
-**Raw OTLP ingestion, and anything downstream of it.** Already refused on strategic grounds in
-`2026-07-25-sync-competitive-position.md`: competing on ingestion infrastructure against
-Datadog is a losing position, while joining against the graph is not. The consequence for this
-document is that Sync never owns a high-volume ingest path, which is why most of the streaming
-canon stays out.
+**An OTLP ingest endpoint, and the streaming machinery under one.** Competing on ingestion
+infrastructure against Datadog was refused on strategic grounds in
+`2026-07-25-sync-competitive-position.md`, and joining against the graph was not. What was built
+sits on the joining side of that line: `sync.telemetry.otlp` decodes an OTLP/JSON export payload
+and `sync.telemetry.ingest` folds the client spans into `observed_call`. Both are library
+functions over a decoded payload — no port, no server, no collector protocol — and
+`ingest.py` says so in its own docstring. So Sync reads OTLP and still owns no high-volume
+ingest path, which is why most of the streaming canon stays out. Note that `observed_call`'s
+`spans` map is idempotence by natural key under rule 2, not exactly-once delivery.
 
 ## Verification
 

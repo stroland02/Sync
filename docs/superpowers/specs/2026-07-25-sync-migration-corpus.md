@@ -4,8 +4,10 @@
 **Status:** Built, empty. The table is `src/sync/graph/schema.sql:54`, the model is
 `MigrationOutcome` in `src/sync/core/models.py`, and the remediation graph writes through
 `src/sync/remediate/corpus.py` — including the abandoned attempts, which are the negative class.
-The merge webhook is still M1: `GraphStore.set_merge_outcome` is the update path and nothing
-calls it, so `pr_merged` stays null. No real pipeline run has produced a row yet.
+The merge webhook receiver is built — `record_merge_outcome` in `src/sync/forge/webhook.py`
+verifies GitHub's signature, then calls `GraphStore.set_merge_outcome` — and `pr_merged` still
+stays null, because it matches a delivery to a row by `pr_number` and nothing writes that column
+when the pull request opens. No real pipeline run has produced a row yet.
 **Scope:** What Sync records about every remediation attempt, where each field is captured, and why the record
 is safe to aggregate across customers.
 
@@ -90,6 +92,14 @@ CREATE TABLE migration_outcome (
 CREATE INDEX ON migration_outcome (vendor_id, change_kind, strategy, tier);
 CREATE INDEX ON migration_outcome (finding_id, attempt_index);
 ```
+
+Four columns above are specified and not built. `src/sync/graph/schema.sql:54` carries neither
+`call_site_depth` nor `is_wrapped` from the call-site block, neither `ci_wall_ms` nor
+`pr_closed_unmerged` from the outcome block; `finding_id` is `text` there rather than `uuid`, and
+`terminal_status` is nullable. The second index is absorbed by the natural key
+`UNIQUE (finding_id, attempt_index)`, which leads with the same columns. None of the four is
+load-bearing for an axis `src/sync/benchmark/axes.py` computes today, which is why they were
+skipped rather than missed — but a query written from this block will not run against the table.
 
 `change_kind` is the routing key. Every question the corpus is meant to answer — *is this class of change safely
 mechanical, which tier should it start at, does it merge* — is a group-by on `(vendor_id, change_kind,

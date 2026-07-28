@@ -1,10 +1,14 @@
 # Sync — The Deprecation Signal
 
 **Date:** 2026-07-28
-**Status:** Built and wired. Every component below exists with tests, and `src/sync/cli.py`
-runs the detector: it fetches both vendor pages (`DEPRECATION_SOURCES`, line 45), parses the
+**Status:** Built. Every component below exists with tests, and the parameter half runs:
+`src/sync/cli.py` fetches both vendor pages (`DEPRECATION_SOURCES`, line 45), parses the
 parameter table, indexes model literals via `index_operation_literals`, and constructs
-`ParameterDeprecationDetector` in its detector suite (line 409).
+`ParameterDeprecationDetector` in its detector suite (line 409). The model-retirement half does
+not run. `DeprecationAdapter` is the only caller of `parse_deprecation_table` and
+`to_vendor_changes`, and nothing in `src/` constructs a `DeprecationAdapter` — so no
+`ModelDeprecation` becomes a `VendorChange`, and `LiteralSwapRemediator` sits in the cascade
+with nothing to act on. That wiring is the outstanding work.
 **Scope:** Vendor deprecation tables as a signal source, and the tier-0 path that repairs them
 without a model call. The first end-to-end feature Sync has that costs nothing per finding.
 
@@ -118,17 +122,22 @@ rewrite safely, and a rule that edited one could change what the interpolation m
 Fabricating an `OperationRef` would mean inventing an HTTP method and path a model does not have.
 The binding comes from the literal indexer, which produces `operation_id` directly.
 
-**Parameter deprecations are not detected**, only model ids. Anthropic's `temperature` / `top_p` /
-`top_k` table is the highest-value remaining item here: it is the case that most clearly defeats
-a type checker, and it needs argument-position matching rather than literal matching.
+**Parameter deprecations are no longer among these.** They were named here as the
+highest-value remaining item — the case that most clearly defeats a type checker — and they are
+built. `sync.signals.deprecations.parameters` parses the vendor's parameter table and emits
+`VendorChange` rows through `parameters_to_vendor_changes`, and
+`ParameterDeprecationDetector` in `src/sync/detect/parameter_deprecation.py` joins them against
+`CallSite.args_keys` rather than `operation_id`. It fires only where a call site both passes the
+parameter and targets the vendor whose parameter it is. The model scope stays unresolved and
+says so in the severity: vendors write it as prose, and ordering model families is a guess this
+system refuses to make.
 
 ## Sequencing
 
 | When | What |
 |---|---|
-| Done | Catalogue, adapter with cache, literal index, migration rules, tier-0 remediator, tiering |
-| Next | Wire the adapter and `TieredRemediator` into the CLI. Blocked only by ownership while `cli.py` is another worker's file. |
-| Then | Parameter deprecations, which need argument matching |
+| Done | Catalogue, adapter with cache, literal index, migration rules, tier-0 remediator, tiering, `TieredRemediator` in the CLI, parameter deprecations end to end |
+| Next | Construct `DeprecationAdapter` in the CLI, which is what turns a retired model into a `VendorChange` the tier-0 swap can repair |
 | Later | A third vendor, as the next test of whether the parser is still shaped by its first two |
 
 ## Verification
