@@ -59,6 +59,9 @@ checkpoints and resumes across a process restart.
 
 - **B2** — `task_0e6eb23d3ad7`, worktree `m1-forge`.
 - **B4** — `task_a656a9f0e8ab`, worktree `m2-symbols`.
+- **B3** — `task_b233d7d7237d`, brief written and task created, awaiting a free worktree. Its brief
+  proposes a cheaper closure than the second checkout and explicitly asks the worker to
+  argue with that proposal rather than accept it.
 
 ## Done
 
