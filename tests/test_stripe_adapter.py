@@ -75,15 +75,172 @@ def test_two_operations_deriving_one_symbol_raise_rather_than_overwrite():
     assert "GetChargesId" in message
 
 
+def test_a_stable_id_supplies_the_method_name_the_http_verb_gets_wrong():
+    """`DELETE /v1/subscriptions/{id}` is `.cancel` in the SDK, not `.del`.
+
+    stripe-node's generated `Subscriptions.ts` exposes `cancel` and no `del` at
+    all, so the HTTP-verb rule is not merely unidiomatic here, it names a method
+    that does not exist. The stable id says `cancel_billing_subscription`, and
+    the vendor is the authority on its own SDK.
+    """
+    spec = {"paths": {"/v1/subscriptions/{subscription_exposed_id}": {"delete": {"operationId": "DeleteSubscription"}}}}
+    sdk = {"paths": {"/v1/subscriptions/{subscription_exposed_id}": {"delete": {"x-stableId": "cancel_billing_subscription"}}}}
+
+    mapping = build_symbol_map(spec, sdk)
+
+    assert mapping["stripe.subscriptions.cancel"]["operation_id"] == "DeleteSubscription"
+    assert "stripe.subscriptions.del" not in mapping
+
+
+def test_a_stable_id_that_qualifies_its_verb_still_yields_the_verb():
+    """The verb is not always the leading token.
+
+    `top_level_retrieve_invoice_payment` and `unified_list_tax_ids` both put a
+    qualifier in front of it. Reading token zero would find no verb and fall
+    silently back to the HTTP rule, which for a collection path answers `list`.
+    The path here carries the real stable id on a collection GET so the two
+    readings disagree and the test can tell them apart.
+    """
+    spec = {"paths": {"/v1/invoice_payments": {"get": {"operationId": "GetInvoicePayments"}}}}
+    sdk = {"paths": {"/v1/invoice_payments": {"get": {"x-stableId": "top_level_retrieve_invoice_payment"}}}}
+
+    mapping = build_symbol_map(spec, sdk)
+
+    assert mapping["stripe.invoicePayments.retrieve"]["operation_id"] == "GetInvoicePayments"
+    assert "stripe.invoicePayments.list" not in mapping
+
+
+def test_a_stable_id_holding_several_ids_is_read_from_its_first_entry_only():
+    """`x-stableId` is sometimes a comma-separated list, not one id.
+
+    Eight operations in v2330 carry one; `/v1/tokens` POST carries six. Reading
+    the raw string lets a later entry speak for the operation -- scanning
+    `create_bank_account_token,...,create_cvc_update_token` for a verb finds an
+    `update` sitting inside the last entry's resource name.
+
+    The value below is constructed, and deliberately so. Every list in v2330
+    agrees on its leading verb and every one of those verbs sits at token zero,
+    so no real value tells the two readings apart -- the split is defensive
+    rather than load-bearing today, and a test using a real value would pass
+    whichever reading it exercised. This one puts the first entry's verb out of
+    the table's reach and a sibling's within it, on an instance path so the
+    HTTP fallback answers `retrieve` where the borrowed verb would answer `list`.
+    """
+    spec = {"paths": {"/v1/charges/{charge}": {"get": {"operationId": "GetChargesCharge"}}}}
+    sdk = {"paths": {"/v1/charges/{charge}": {"get": {"x-stableId": "expire_charge,top_level_list_charges"}}}}
+
+    mapping = build_symbol_map(spec, sdk)
+
+    assert mapping["stripe.charges.retrieve"]["operation_id"] == "GetChargesCharge"
+    assert "stripe.charges.list" not in mapping
+
+
+def test_delete_becomes_the_method_name_javascript_left_room_for():
+    """The stable id says `delete`; every SDK resource spells the method `del`.
+
+    Checked in stripe-node's generated `Customers.ts`, `TaxIds.ts`, `Coupons.ts`,
+    `InvoiceItems.ts` and `Accounts.ts` -- five resources, all `del`, none
+    `delete`. It is the one entry in the table that is not its own method name.
+    """
+    spec = {"paths": {"/v1/coupons/{coupon}": {"delete": {"operationId": "DeleteCoupon"}}}}
+    sdk = {"paths": {"/v1/coupons/{coupon}": {"delete": {"x-stableId": "delete_coupon"}}}}
+
+    mapping = build_symbol_map(spec, sdk)
+
+    assert mapping["stripe.coupons.del"]["operation_id"] == "DeleteCoupon"
+    assert "stripe.coupons.delete" not in mapping
+
+
+def test_a_verb_the_table_does_not_name_leaves_the_operation_on_the_http_rule():
+    """Sixty-odd leading tokens appear across the document; six are checked.
+
+    Accepting an unchecked one would invent a method name from a word nobody
+    verified, which is the failure this whole change exists to stop. Falling
+    back is the conservative direction: it yields the answer the map already
+    gave rather than a new and unverified one.
+    """
+    spec = {"paths": {"/v1/charges": {"get": {"operationId": "GetCharges"}}}}
+    sdk = {"paths": {"/v1/charges": {"get": {"x-stableId": "search_charges"}}}}
+
+    mapping = build_symbol_map(spec, sdk)
+
+    assert mapping["stripe.charges.list"]["operation_id"] == "GetCharges"
+    assert "stripe.charges.search" not in mapping
+
+
+def test_without_an_sdk_document_the_map_is_what_it_always_was():
+    """`spec3.sdk.json` carried no `x-stableId` at all before roughly v2320.
+
+    Measured, not assumed: the file exists at v1900 -- 8.8 MB, 366 paths -- and
+    holds zero extensions of any kind. A version like that has to degrade to the
+    HTTP rule, so absence is a supported input rather than an error.
+    """
+    assert build_symbol_map(SPEC, None) == build_symbol_map(SPEC)
+    assert build_symbol_map(SPEC, {"paths": {}}) == build_symbol_map(SPEC)
+
+
+def test_the_collision_guard_fires_when_the_stable_id_is_what_causes_the_clash():
+    """A new verb source is a new way for two operations to claim one symbol.
+
+    The guard has to cover the verb wherever it came from, or this change
+    reintroduces exactly the silent overwrite it was added to stop.
+    """
+    spec = {
+        "paths": {
+            "/v1/charges": {"get": {"operationId": "GetCharges"}},
+            "/v1/charges/{charge}": {"get": {"operationId": "GetChargesCharge"}},
+        }
+    }
+    sdk = {
+        "paths": {
+            "/v1/charges": {"get": {"x-stableId": "top_level_retrieve_charge"}},
+            "/v1/charges/{charge}": {"get": {"x-stableId": "retrieve_charge"}},
+        }
+    }
+
+    with pytest.raises(SymbolCollision) as excinfo:
+        build_symbol_map(spec, sdk)
+
+    assert "stripe.charges.retrieve" in str(excinfo.value)
+
+
 # Reduced from stripe/openapi at tag v2330: every path key and every operationId
 # kept intact, and of each GET's 200 response schema only the part that separates
 # a list envelope from a single resource. The path set is therefore the real
 # denominator, which is the whole point of pinning coverage against it.
 SHAPE_FIXTURE = FIXTURES / "stripe_v2330_shape.json"
 
+# The same release's `spec3.sdk.json`, reduced to the one extension that is read
+# from it. It describes what the SDK surfaces, so it is a subset of the paths
+# above rather than a superset.
+SDK_SHAPE_FIXTURE = FIXTURES / "stripe_v2330_sdk_shape.json"
+
 
 def _shape_spec():
     return json.loads(SHAPE_FIXTURE.read_text(encoding="utf-8"))
+
+
+def _sdk_shape_spec():
+    return json.loads(SDK_SHAPE_FIXTURE.read_text(encoding="utf-8"))
+
+
+def test_the_sdk_document_changes_exactly_one_symbol_across_a_whole_release():
+    """The measured effect of this change, pinned so it cannot drift unnoticed.
+
+    Consulting the vendor for 521 verbs corrects one symbol out of 179 and moves
+    coverage by nothing: the path pattern decides which operations resolve, and
+    the stable id only decides what the resolved one is called. Pinning the delta
+    as a set rather than a count means a future release that corrects a second
+    symbol has to say so here.
+    """
+    spec, sdk = _shape_spec(), _sdk_shape_spec()
+    before, after = build_symbol_map(spec), build_symbol_map(spec, sdk)
+
+    assert len(sdk["paths"]) == 381
+    assert set(after) - set(before) == {"stripe.subscriptions.cancel"}
+    assert set(before) - set(after) == {"stripe.subscriptions.del"}
+    assert len(after) == len(before) == 179
+    assert {e["path"] for e in after.values()} == {e["path"] for e in before.values()}
 
 
 def test_coverage_names_the_paths_the_derivation_reaches():
@@ -92,9 +249,14 @@ def test_coverage_names_the_paths_the_derivation_reaches():
     A threshold can be lowered in a one-line diff and nobody notices. Naming
     both what must resolve and what must not means a change to the path pattern
     has to state which way it moved.
+
+    Both documents are passed, because both are what the pipeline builds from.
+    Consulting the sdk document leaves these numbers untouched: it renames one
+    symbol and reaches no new operation, since the path pattern alone decides
+    what resolves.
     """
     spec = _shape_spec()
-    mapping = build_symbol_map(spec)
+    mapping = build_symbol_map(spec, _sdk_shape_spec())
     reached = {entry["path"] for entry in mapping.values()}
 
     assert len(spec["paths"]) == 414
@@ -115,7 +277,7 @@ def test_coverage_names_the_paths_the_derivation_cannot_reach():
     against it however breaking the vendor change is.
     """
     spec = _shape_spec()
-    reached = {entry["path"] for entry in build_symbol_map(spec).values()}
+    reached = {entry["path"] for entry in build_symbol_map(spec, _sdk_shape_spec()).values()}
 
     for unreachable in (
         "/v1/customers/{customer}/sources",           # nested sub-resource collection
@@ -134,6 +296,12 @@ def test_a_collection_path_returning_one_resource_uses_the_instance_verbs():
     resource takes the instance verbs, so the SDK exposes `.retrieve` and
     `.update` -- confirmed against stripe-node's generated `Balance.ts` and
     `BalanceSettings.ts` rather than inferred from the name.
+
+    Deliberately built without the sdk document. That document names the verb
+    for these three paths and would carry the assertion on its own, leaving the
+    heuristic untested — and the heuristic still decides every operation the
+    document does not cover. The two agree here, which is corroboration rather
+    than a reason to stop testing one of them.
     """
     mapping = build_symbol_map(_shape_spec())
 
@@ -159,8 +327,13 @@ def test_v1_account_still_derives_a_resource_name_the_sdk_does_not_expose():
     `stripe.accounts.retrieve` resolves to `/v1/accounts/{account}` alone even
     though the SDK dispatches it on argument count across both operations. A
     path-shaped derivation cannot express that; it needs a source for SDK naming.
+
+    Asserted with the sdk document in hand, which is what makes it worth keeping:
+    Stripe's own generator input names the verb for `GET /v1/account`
+    (`retrieve_connect_account`) and still says nothing about the namespace, so
+    the limitation survives the change that was meant to be its answer.
     """
-    mapping = build_symbol_map(_shape_spec())
+    mapping = build_symbol_map(_shape_spec(), _sdk_shape_spec())
 
     assert mapping["stripe.account.retrieve"]["path"] == "/v1/account"
     assert "stripe.accounts.retrieveCurrent" not in mapping
@@ -287,3 +460,61 @@ def test_fetch_spec_fetches_when_the_file_is_missing_entirely(tmp_path, monkeypa
     assert result == dest
     assert len(calls) == 1
     assert dest.read_bytes() == b'{"openapi": "3.0.0"}'
+
+
+def test_fetch_sdk_spec_asks_github_for_the_sdk_document(tmp_path, monkeypatch):
+    """Asserting on the argv, not the return value, is the point.
+
+    Both documents live in the same repository at the same tags and both would
+    write bytes to `dest`, so a call that fetched the wrong one would return a
+    result indistinguishable from a correct run.
+    """
+    calls = []
+
+    def fake_run(args, **kwargs):
+        calls.append(args)
+        return subprocess.CompletedProcess(args=args, returncode=0, stdout=b'{"openapi": "3.0.0"}', stderr=b"")
+
+    monkeypatch.setattr(adapter_module.subprocess, "run", fake_run)
+
+    result = adapter_module.fetch_sdk_spec("v2330", tmp_path / "v2330.sdk.json")
+
+    assert result == tmp_path / "v2330.sdk.json"
+    assert len(calls) == 1
+    assert "openapi/spec3.sdk.json" in calls[0][2]
+    assert "openapi/spec3.json?" not in calls[0][2]
+
+
+def test_fetch_sdk_spec_returns_none_when_the_tag_has_no_sdk_document():
+    """The sdk document is an enhancement, so its absence must not end a run.
+
+    A tag that predates it, or a fork that never published it, has to degrade to
+    the HTTP-verb derivation. This swallows every `gh` failure rather than only
+    a 404, which is affordable because the base specification is fetched first
+    and still raises — a real outage surfaces there, not here.
+    """
+    def fake_run(args, **kwargs):
+        return subprocess.CompletedProcess(args=args, returncode=1, stdout=b"", stderr=b"gh: Not Found (HTTP 404)")
+
+    original = adapter_module.subprocess.run
+    adapter_module.subprocess.run = fake_run
+    try:
+        assert adapter_module.fetch_sdk_spec("v0001", Path("does-not-exist") / "v0001.sdk.json") is None
+    finally:
+        adapter_module.subprocess.run = original
+
+
+def test_fetch_sdk_spec_returns_the_cached_file_without_invoking_gh(tmp_path, monkeypatch):
+    """The sdk document is 10 MB, larger than the specification it accompanies.
+
+    Fetching a second document per version doubles the download, so the cache
+    has to hold for it exactly as it does for the first.
+    """
+    calls = []
+    monkeypatch.setattr(adapter_module.subprocess, "run", lambda *a, **k: calls.append((a, k)))
+
+    dest = tmp_path / "v2330.sdk.json"
+    dest.write_bytes(b'{"openapi": "3.0.0"}')
+
+    assert adapter_module.fetch_sdk_spec("v2330", dest) == dest
+    assert calls == []

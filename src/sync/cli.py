@@ -22,7 +22,7 @@ from sync.remediate.graph import build_graph
 from sync.remediate.literal_swap import LiteralSwapRemediator
 from sync.remediate.property_omit import PropertyOmitRemediator
 from sync.remediate.tiered import TerminalTier, TieredRemediator
-from sync.signals.stripe.adapter import StripeAdapter, fetch_spec
+from sync.signals.stripe.adapter import StripeAdapter, fetch_sdk_spec, fetch_spec
 from sync.signals.stripe.symbols import build_symbol_map
 
 DEFAULT_DSN = "postgresql://sync:sync@localhost:5433/sync"
@@ -186,9 +186,16 @@ def run(args: argparse.Namespace) -> int:
     fetch_spec(args.from_version, cache / f"{args.from_version}.json")
     head_spec = fetch_spec(args.to_version, cache / f"{args.to_version}.json")
 
+    # Stripe's generator input names the SDK method for each operation, which is
+    # where the symbol map's verbs come from when it is available. A tag that
+    # publishes none degrades to the HTTP-verb derivation rather than abandoning
+    # the run, so `sdk_spec` stays None here instead of raising.
+    sdk_spec_path = fetch_sdk_spec(args.to_version, cache / f"{args.to_version}.sdk.json")
+    sdk_spec = json.loads(sdk_spec_path.read_text(encoding="utf-8")) if sdk_spec_path else None
+
     symbol_map_path = cache / "symbols.json"
     symbol_map_path.write_text(
-        json.dumps(build_symbol_map(json.loads(head_spec.read_text(encoding="utf-8")))),
+        json.dumps(build_symbol_map(json.loads(head_spec.read_text(encoding="utf-8")), sdk_spec)),
         encoding="utf-8",
     )
 

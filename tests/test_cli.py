@@ -6,6 +6,7 @@ collaborators with an in-memory stub that never leaves this process.
 """
 
 import argparse
+import json
 import subprocess
 import sys
 from contextlib import contextmanager
@@ -761,3 +762,97 @@ def test_run_hands_the_graph_the_cascade_and_not_a_bare_agent(monkeypatch):
     source = inspect.getsource(cli.run)
     assert "build_remediator()" in source
     assert "AgentRemediator()" not in source
+
+
+# --- the sdk document the symbol map's verbs come from ----------------------------
+#
+# `build_symbol_map` takes it as a second argument, so a `run()` that keeps calling
+# with one argument leaves the whole derivation unreached while every unit test
+# around it stays green -- the shape of the bug the cascade comment above records.
+
+_SUBSCRIPTION_SPEC = {
+    "paths": {"/v1/subscriptions/{subscription_exposed_id}": {"delete": {"operationId": "DeleteSubscription"}}}
+}
+_SUBSCRIPTION_SDK = {
+    "paths": {"/v1/subscriptions/{subscription_exposed_id}": {"delete": {"x-stableId": "cancel_billing_subscription"}}}
+}
+
+
+def _stub_run_collaborators(monkeypatch, cli, store):
+    monkeypatch.setattr(cli, "GraphStore", lambda dsn: store)
+    monkeypatch.setattr(cli, "VendorChangeDetector", _RecordingDetector)
+    monkeypatch.setattr(cli, "StripeAdapter", _StubVendor)
+    monkeypatch.setattr(cli, "TypeScriptAdapter", _StubAdapter)
+    monkeypatch.setattr(
+        cli, "_clone",
+        lambda url, dest: RepoRef(repo_id="repo", url=url, local_path=str(dest), head_sha="0" * 40),
+    )
+
+
+def _run_args(tmp_path):
+    return argparse.Namespace(
+        from_version="v2320", to_version="v2330", repo="https://example.invalid/r",
+        dsn="postgresql://unused", cache=str(tmp_path / "cache"), limit=1, run_id=None,
+    )
+
+
+def test_the_run_builds_its_symbol_map_from_the_sdk_document(monkeypatch, tmp_path):
+    """Asserted on the written map, not on whether `fetch_sdk_spec` was called.
+
+    A run that fetched the document and then dropped it would record the call
+    just as a correct one does. `DELETE /v1/subscriptions/{id}` is the operation
+    the two derivations disagree about, so the map itself says which one ran.
+    """
+    import sync.cli as cli
+
+    store = _RecordingStore()
+
+    def fake_fetch_spec(tag, dest):
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        dest.write_text(json.dumps(_SUBSCRIPTION_SPEC), encoding="utf-8")
+        return dest
+
+    def fake_fetch_sdk_spec(tag, dest):
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        dest.write_text(json.dumps(_SUBSCRIPTION_SDK), encoding="utf-8")
+        return dest
+
+    monkeypatch.setattr(cli, "fetch_spec", fake_fetch_spec)
+    monkeypatch.setattr(cli, "fetch_sdk_spec", fake_fetch_sdk_spec)
+    _stub_run_collaborators(monkeypatch, cli, store)
+
+    assert run(_run_args(tmp_path)) == 0
+
+    symbols = json.loads((tmp_path / "cache" / "symbols.json").read_text(encoding="utf-8"))
+    assert "stripe.subscriptions.cancel" in symbols
+    assert "stripe.subscriptions.del" not in symbols
+
+
+def test_the_run_completes_on_a_version_that_publishes_no_sdk_document(monkeypatch, tmp_path):
+    """The path a stub will not exercise by accident.
+
+    Stripe published `spec3.sdk.json` without a single `x-stableId` as recently
+    as v1900, and `fetch_sdk_spec` answers None for a tag that has no document at
+    all. Either way the run has to finish on the HTTP-verb derivation rather than
+    abandon, so this asserts both that it returned and what it wrote -- a run
+    that completed while silently writing an empty map would pass on the exit
+    code alone.
+    """
+    import sync.cli as cli
+
+    store = _RecordingStore()
+
+    def fake_fetch_spec(tag, dest):
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        dest.write_text(json.dumps(_SUBSCRIPTION_SPEC), encoding="utf-8")
+        return dest
+
+    monkeypatch.setattr(cli, "fetch_spec", fake_fetch_spec)
+    monkeypatch.setattr(cli, "fetch_sdk_spec", lambda tag, dest: None)
+    _stub_run_collaborators(monkeypatch, cli, store)
+
+    assert run(_run_args(tmp_path)) == 0
+
+    symbols = json.loads((tmp_path / "cache" / "symbols.json").read_text(encoding="utf-8"))
+    assert "stripe.subscriptions.del" in symbols
+    assert "stripe.subscriptions.cancel" not in symbols

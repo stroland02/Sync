@@ -13,6 +13,11 @@ from sync.signals.oasdiff import run_oasdiff_breaking, to_vendor_changes
 SPEC_REPO = "stripe/openapi"
 SPEC_PATH_IN_REPO = "openapi/spec3.json"
 
+# The generator input for Stripe's own SDKs, published beside the specification
+# at the same tags. Its `x-stableId` names the SDK method for an operation, which
+# is what `build_symbol_map` reads instead of guessing one from the HTTP verb.
+SDK_SPEC_PATH_IN_REPO = "openapi/spec3.sdk.json"
+
 # A new value in a response enum breaks only an exhaustive switch, and it is
 # four fifths of what oasdiff reports on a Stripe release -- 86,368 of 107,396
 # records between v2320 and v2330. Carrying that volume through the graph to
@@ -22,8 +27,8 @@ SPEC_PATH_IN_REPO = "openapi/spec3.json"
 NOISE_KINDS = frozenset({"response-property-enum-value-added"})
 
 
-def fetch_spec(tag: str, dest: Path) -> Path:
-    """Download `openapi/spec3.json` at a given tag of stripe/openapi.
+def fetch_spec(tag: str, dest: Path, path_in_repo: str = SPEC_PATH_IN_REPO) -> Path:
+    """Download a document at a given tag of stripe/openapi.
 
     Tags are sequential (`v2345`). Uses the authenticated `gh` CLI so it works
     without a separate token. Requests the raw file bytes via the
@@ -45,7 +50,7 @@ def fetch_spec(tag: str, dest: Path) -> Path:
     dest.parent.mkdir(parents=True, exist_ok=True)
     result = subprocess.run(
         [
-            "gh", "api", f"repos/{SPEC_REPO}/contents/{SPEC_PATH_IN_REPO}?ref={tag}",
+            "gh", "api", f"repos/{SPEC_REPO}/contents/{path_in_repo}?ref={tag}",
             "--header", "Accept: application/vnd.github.raw",
         ],
         capture_output=True,
@@ -54,6 +59,25 @@ def fetch_spec(tag: str, dest: Path) -> Path:
         raise RuntimeError(f"failed to fetch stripe spec at {tag}: {result.stderr.decode(errors='replace').strip()}")
     dest.write_bytes(result.stdout)
     return dest
+
+
+def fetch_sdk_spec(tag: str, dest: Path) -> Path | None:
+    """Download `openapi/spec3.sdk.json`, or return None if the tag has none.
+
+    The document is an enhancement to the symbol map rather than a requirement
+    for it: a tag predating `x-stableId` degrades to the HTTP-verb derivation, so
+    a failed fetch is a supported outcome and must not end the run. That swallows
+    every `gh` failure and not only a 404, which is affordable because the
+    specification itself is fetched first and still raises — a real outage
+    surfaces there rather than being mistaken for an absent document here.
+
+    It is 10 MB, larger than the specification it accompanies, so it relies on
+    the same cache-by-destination that `fetch_spec` already applies.
+    """
+    try:
+        return fetch_spec(tag, dest, SDK_SPEC_PATH_IN_REPO)
+    except RuntimeError:
+        return None
 
 
 class StripeAdapter:
