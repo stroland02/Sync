@@ -776,7 +776,10 @@ def test_run_hands_the_graph_the_cascade_and_not_a_bare_agent(monkeypatch):
     import sync.cli as cli
 
     source = inspect.getsource(cli.run)
-    assert "build_remediator()" in source
+    # `build_remediator(` and not `build_remediator()`: the property is that `run()` does
+    # not construct a remediator itself, and pinning the empty parentheses failed every
+    # correct call that later needed an argument. A bare `AgentRemediator()` still fails.
+    assert "build_remediator(" in source
     assert "AgentRemediator()" not in source
 
 
