@@ -14,7 +14,7 @@ from typing import Any, Callable, Iterator, Sequence
 
 from langgraph.checkpoint.postgres import PostgresSaver
 
-from sync.core import CallSite, Finding, RepoRef
+from sync.core import CallSite, Finding, RepoRef, VendorChange
 from sync.detect.observed_drift import DeclaredField, ObservedDriftDetector
 from sync.detect.parameter_deprecation import ParameterDeprecationDetector
 from sync.detect.vendor_change import VendorChangeDetector
@@ -23,6 +23,7 @@ from sync.graph.store import GraphStore
 from sync.index.literals import index_operation_literals
 from sync.index.typescript import TypeScriptAdapter
 from sync.remediate.agent_patch import AgentRemediator
+from sync.remediate.corpus import corpus_salt
 from sync.remediate.graph import build_graph
 from sync.remediate.literal_swap import LiteralSwapRemediator
 from sync.remediate.property_omit import PropertyOmitRemediator
@@ -31,6 +32,7 @@ from sync.route.matrix import catalogue_index
 from sync.signals.deprecations import (
     ANTHROPIC,
     OPENAI,
+    DeprecationAdapter,
     DeprecationSource,
     ParameterDeprecation,
     http_fetch,
@@ -38,6 +40,7 @@ from sync.signals.deprecations import (
 )
 from sync.signals.stripe.adapter import StripeAdapter, fetch_sdk_spec, fetch_spec
 from sync.signals.stripe.symbols import build_symbol_map
+from sync.telemetry import ingest_payload
 
 DEFAULT_DSN = "postgresql://sync:sync@localhost:5433/sync"
 
@@ -343,7 +346,7 @@ def _page(url: str, destination: Path, fetch: Callable[[str], str]) -> str:
 
 
 def _parameter_deprecations(
-    cache_dir: Path, fetch: Callable[[str], str] = http_fetch
+    cache_dir: Path, fetch: Callable[[str], str] | None = None
 ) -> list[ParameterDeprecation]:
     """Every vendor's deprecated request parameters, skipping any vendor that cannot be reached.
 
@@ -353,8 +356,13 @@ def _parameter_deprecations(
     detector's findings and nothing else. It is printed rather than swallowed, because a silent
     zero is exactly the confusion this wiring exists to end.
 
-    The fetch is injected so a test needs no network.
+    The fetch is injected so a test needs no network, and it resolves to the module's own
+    `http_fetch` at call time rather than in the signature's default. A default binds the
+    function object when this module is imported, so a test replacing `cli.http_fetch` replaced
+    something this call had already captured -- and every `run()` test that believed it had
+    stubbed the network was downloading both vendor pages for real.
     """
+    fetch = fetch or http_fetch
     deprecations: list[ParameterDeprecation] = []
 
     for source in DEPRECATION_SOURCES:
@@ -371,6 +379,60 @@ def _parameter_deprecations(
         deprecations.extend(parse_parameter_deprecations(source.vendor_id, body))
 
     return deprecations
+
+
+def _model_deprecations(
+    cache_dir: Path,
+    from_version: str,
+    to_version: str,
+    fetch: Callable[[str], str] | None = None,
+) -> list[VendorChange]:
+    """Every vendor's retired models as `VendorChange` rows, skipping a vendor that is unreachable.
+
+    `DeprecationAdapter` was finished, tested, and constructed nowhere in `src/`, so no
+    `ModelDeprecation` ever became a `VendorChange` and `LiteralSwapRemediator` sat in the
+    cascade with nothing to act on. This is that call site.
+
+    The cache path is the one `_page` writes for the parameter half, deliberately: both halves
+    read the same page from the same vendor, and the adapter's own freshness window is the same
+    twelve hours. `_parameter_deprecations` runs first and leaves the page there, so the adapter
+    finds it fresh and the run downloads each vendor once rather than twice. That is the shared
+    input, and the sharing is the file rather than a variable because the adapter fetches for
+    itself and its signature is not this module's to change.
+
+    The version range is Stripe's and means nothing to a model retirement -- a model dies on the
+    vendor's calendar, not across an API version boundary. It is carried because `fetch_changes`
+    is the `VendorAdapter` protocol and every `VendorChange` records the window it was found in.
+
+    One vendor failing costs that vendor's changes and no more, and is printed rather than
+    swallowed. The adapter is right to raise on an unparseable page: an empty answer is
+    indistinguishable from a healthy vendor with nothing deprecated. The scan around it runs
+    other detectors, so it is here that the failure stops being fatal.
+
+    `fetch` resolves at call time for the reason `_parameter_deprecations` records: a signature
+    default captures the function object at import and is unreachable by a test that replaces
+    the module's.
+    """
+    fetch = fetch or http_fetch
+    changes: list[VendorChange] = []
+
+    for source in DEPRECATION_SOURCES:
+        adapter = DeprecationAdapter(
+            source,
+            fetch=fetch,
+            cache_path=cache_dir / f"{source.vendor_id}-deprecations.md",
+            max_age=DEPRECATION_MAX_AGE,
+        )
+        try:
+            changes.extend(adapter.fetch_changes(from_version, to_version))
+        except Exception as exc:
+            print(
+                f"model-deprecation: {source.vendor_id} unavailable "
+                f"({type(exc).__name__}: {exc})",
+                file=sys.stderr,
+            )
+
+    return changes
 
 
 def _literal_call_sites(repo: RepoRef) -> list[CallSite]:
@@ -411,12 +473,19 @@ def _detector_suite(
     call_sites: Sequence[CallSite],
     deprecations: Sequence[ParameterDeprecation],
     vendor_id: str,
+    deprecation_vendors: Sequence[str] = (),
 ) -> list[tuple[str, object]]:
     """Every detector a scan runs, named, in the order it runs them.
 
     Three detectors satisfy the protocol and exactly one was ever constructed. The other two
     were finished, tested work that could not produce a single finding, which is the same as not
     having built them.
+
+    `VendorChangeDetector` is scoped to one vendor, so a retired Anthropic model upserted into
+    the graph is invisible to the Stripe instance however correctly it was written. One detector
+    per deprecation vendor is what turns those rows into findings; without them the model half
+    of the deprecation signal would look wired and produce nothing, which is the failure this
+    whole assembly exists to make impossible to ship again.
 
     Assembled here rather than inline in `run()` so the set is checkable without Postgres, the
     network or the Agent SDK -- the same reason `_select` and `build_remediator` were pulled out.
@@ -425,6 +494,10 @@ def _detector_suite(
         ("vendor_change", VendorChangeDetector(store)),
         ("parameter-deprecation", ParameterDeprecationDetector(deprecations, call_sites)),
         ("observed-drift", ObservedDriftDetector(store, _declared_response_fields(spec_document), vendor_id)),
+        *[
+            (f"model-deprecation:{vendor}", VendorChangeDetector(store, vendor_id=vendor))
+            for vendor in deprecation_vendors
+        ],
     ]
 
 
@@ -514,6 +587,9 @@ def run(args: argparse.Namespace) -> int:
         # graph tables, and two vendor pages behind a slow network would hold it for the length
         # of the download rather than the length of the write.
         deprecations = _parameter_deprecations(cache)
+        # After the parameter half, which leaves each vendor's page in the cache the adapter
+        # reads: one download per vendor serves both halves of the signal.
+        model_deprecations = _model_deprecations(cache, args.from_version, args.to_version)
 
         with store.transaction():
             store.truncate_all()
@@ -529,6 +605,9 @@ def run(args: argparse.Namespace) -> int:
             for change in vendor.fetch_changes(args.from_version, args.to_version):
                 store.upsert_vendor_change(change)
 
+            for change in model_deprecations:
+                store.upsert_vendor_change(change)
+
             # Persist findings before running the graph: `scan()` returns unsaved
             # findings with no id, and the checkpointer needs a stable thread_id.
             findings = _scan(
@@ -538,6 +617,7 @@ def run(args: argparse.Namespace) -> int:
                     call_sites=call_sites,
                     deprecations=deprecations,
                     vendor_id=args.vendor,
+                    deprecation_vendors=[source.vendor_id for source in DEPRECATION_SOURCES],
                 ),
                 store,
             )
@@ -598,6 +678,61 @@ def run(args: argparse.Namespace) -> int:
     return 0
 
 
+def ingest(args: argparse.Namespace) -> int:
+    """Fold one captured OTLP/JSON export payload into `observed_call`.
+
+    `ingest_payload` had no caller in `src/` outside its own package `__init__`, so the decode
+    and the fold both worked and no span had ever reached the graph.
+
+    This reads bytes somebody else already collected -- a file, or stdin. It is not a server and
+    must not become one. `2026-07-27-sync-pipeline-discipline.md` refuses ingestion
+    infrastructure rather than OTLP: a listener needs a port, a supervisor, and an
+    authentication story telling one customer's collector from another's, none of which makes a
+    span mean more once it lands. What makes a span mean something is the correlation below, and
+    that runs here today.
+
+    The correlator is the vendor adapter, which needs the symbol map a `run` writes: a span
+    carries a URL and the graph is keyed by operation, and nothing else can bridge the two. A
+    missing map is refused rather than worked around, because an ingest that correlates nothing
+    produces a graph indistinguishable from a customer who does not call this vendor.
+
+    The salt is the deployment's existing one rather than an argument or a second file.
+    `ingest.py` names it as something that had to be decided before it could have a caller --
+    stable for the lifetime of a deployment and stored somewhere, or the same URL digests two
+    ways and the repeated-call finding disappears with nothing in the schema able to detect it.
+    `corpus_salt` already satisfies exactly that, under the same three constraints, so the
+    decision here is to reuse it: a second salt store would be a second thing an operator has
+    to carry between hosts and a second one they can silently lose.
+    """
+    cache = Path(args.cache)
+    symbol_map_path = cache / "symbols.json"
+    if not symbol_map_path.exists():
+        print(
+            f"no symbol map at {symbol_map_path}; run `sync run` against this cache first",
+            file=sys.stderr,
+        )
+        return 2
+
+    if args.payload == "-":
+        payload = json.load(sys.stdin)
+    else:
+        payload = json.loads(Path(args.payload).read_text(encoding="utf-8"))
+
+    vendor = StripeAdapter(spec_dir=cache, symbol_map_path=symbol_map_path)
+
+    store = GraphStore(args.dsn)
+    store.apply_schema()
+
+    report = ingest_payload(payload, store, args.repo_id, vendor, corpus_salt())
+    # `uncorrelated` is the number worth watching: an ingest that correlates nothing looks
+    # exactly like a repository that does not call this vendor from every query downstream.
+    print(
+        f"{report.spans_read} span(s), {report.correlated} correlated, "
+        f"{report.uncorrelated} unresolved, {report.rows_written} row(s)"
+    )
+    return 0
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(prog="sync")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -613,6 +748,19 @@ def main() -> int:
     run_parser.add_argument("--run-id", dest="run_id", default=None,
                             help="checkpoint namespace; defaults to the cloned commit")
     run_parser.set_defaults(func=run)
+
+    ingest_parser = sub.add_parser(
+        "ingest", help="fold a captured OTLP/JSON payload into the observed-call graph"
+    )
+    ingest_parser.add_argument("--vendor", default="stripe", choices=["stripe"])
+    ingest_parser.add_argument("--payload", required=True,
+                               help="path to an OTLP/JSON export request, or - for stdin")
+    ingest_parser.add_argument("--repo-id", dest="repo_id", required=True,
+                               help="the repository whose traffic this payload describes")
+    ingest_parser.add_argument("--dsn", default=DEFAULT_DSN)
+    ingest_parser.add_argument("--cache", default=".cache/specs",
+                               help="where a previous `sync run` left symbols.json")
+    ingest_parser.set_defaults(func=ingest)
 
     args = parser.parse_args()
     return args.func(args)

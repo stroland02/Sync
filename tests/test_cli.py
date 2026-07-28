@@ -132,10 +132,15 @@ class _RecordingStore:
 
 class _RecordingDetector:
     """Stands in for `VendorChangeDetector`: records that `scan()` ran, on the
-    same call list the store records into, so ordering is comparable across both."""
+    same call list the store records into, so ordering is comparable across both.
 
-    def __init__(self, store):
+    `vendor_id` is accepted because the real detector has always taken it and the suite now
+    builds one per deprecation vendor as well as one for Stripe. A stub narrower than the thing
+    it stands for fails on a correct call, which is what this one did."""
+
+    def __init__(self, store, vendor_id: str = "stripe"):
         self._store = store
+        self._vendor_id = vendor_id
 
     def scan(self):
         self._store.calls.append("scan")
@@ -231,10 +236,15 @@ def test_the_graph_is_truncated_after_apply_schema_and_before_the_scan(monkeypat
     result = run(args)
 
     assert result == 0
-    assert store.calls == [
-        "apply_schema", "begin", "truncate_all",
-        "upsert_call_site", "upsert_vendor_change", "scan", "commit",
-    ]
+    # The ordering, not the census. This pinned one `scan` entry and so counted detectors as a
+    # side effect of asserting when the truncate happens; the suite now builds a
+    # `VendorChangeDetector` per deprecation vendor as well, and how many there are is a
+    # different test's business. The property in the name is preserved literally.
+    assert store.calls[:3] == ["apply_schema", "begin", "truncate_all"]
+    assert store.calls[-1] == "commit"
+    assert store.calls.index("truncate_all") < store.calls.index("scan")
+    assert store.calls.index("upsert_call_site") < store.calls.index("scan")
+    assert store.calls.index("upsert_vendor_change") < store.calls.index("scan")
 
 
 EQUIVALENT_URLS = [
@@ -638,10 +648,15 @@ def test_two_findings_in_one_run_produce_branches_that_share_no_commits(tmp_path
     store = _TwoFindingStore(sites, _STUB_VENDOR_CHANGE)
 
     class _TwoFindingDetector:
-        def __init__(self, store):
-            pass
+        def __init__(self, store, vendor_id: str = "stripe"):
+            # Scoped like the real detector. The suite builds one of these per deprecation
+            # vendor too, and a stub that ignored `vendor_id` would answer the same two Stripe
+            # findings three times over -- six findings in a test about two.
+            self._vendor_id = vendor_id
 
         def scan(self):
+            if self._vendor_id != "stripe":
+                return []
             return [
                 Finding(detector="vendor_change", call_site_id=site.id, vendor_change_id="change-1",
                         severity="breaking", rationale=f"status removed at {site.path}")
