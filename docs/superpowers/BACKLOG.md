@@ -12,54 +12,6 @@ item that cannot say what evidence closes it is not ready to dispatch.
 
 ## Ready
 
-### B1 — A patch that needs a new file abandons instead of shipping one
-`push_branch` stages with `git add -u`, which never stages an untracked path, and the
-gate now measures the same tree — so a fix requiring a new module fails verification
-rather than pushing a branch missing it. Truthful, useless. `git add -A` was rejected
-because it commits whatever else the agent left behind: a build directory, a log, a
-stray install. The unsolved part is separating a new source file the patch needs from
-that debris. The patch agent can already stage a file itself, since anything in the
-index is both verified and committed, but its scope rules still tell it only to run
-`npx tsc --noEmit` until clean — an instruction that now names a different tree from
-the one the gate measures.
-**Closes when:** a finding whose fix requires a new file produces a branch containing
-that file, and a run where the agent leaves debris behind still does not commit the
-debris. Both proven against a real clone.
-
-### B2 — done, see Done below
-
-_Superseded._ Original text kept out of the Ready list deliberately; the closing evidence is
-recorded in the design document's limitations section.
-
-<!-- former B2 —
-`push_branch` refuses a tip Sync did not author, which stops the common case of a
-reviewer pushing a fixup. A stranger's commit sitting *beneath* a later Sync-authored
-one is invisible to it and would still be replaced. Walking the range from the merge
-base to the tip closes it.
-**Closes when:** a branch whose history contains any non-Sync author between the merge
-base and the tip refuses the push, with that commit intact afterwards. Note this is
-not a security control — `git commit --author` sets the field freely — so do not
-describe it as one.
-
-### B3 — The static gate cannot see inside `node_modules`
-`static_verify` holds untracked and ignored paths out of the clone before compiling, so
-its verdict describes the branch `push_branch` creates. Installed dependencies are the
-exception, because the customer's CI installs its own. An agent that edits a type
-declaration inside `node_modules` therefore satisfies a gate the customer's CI will not.
-Typechecking a second pristine checkout closes it, at the cost of a checkout and a
-dependency install per verification — three per finding at the current retry budget,
-the largest avoidable cost in the pipeline.
-**Closes when:** an edit inside `node_modules` fails verification, and the added
-wall-clock cost per finding is measured and stated rather than estimated.
-
-### B4 — LangGraph will stop serialising `sync.core` types
-The checkpointer warns that msgpack serialisation of `sync.core.models` types "will be
-blocked in a future version". Today it degrades to pickle; when it stops, every
-resumable run breaks at once and the failure lands on the durability guarantee that
-justified choosing LangGraph.
-**Closes when:** the types are registered explicitly, the warning is gone, and a run
-checkpoints and resumes across a process restart.
-
 ### B5 — The suite is subprocess-bound, and Postgres was never the cause
 
 **Measured, and it refutes what both coordinators assumed.** The slowdown is not database
@@ -95,17 +47,42 @@ fixtures may not be parallel-safe — that is the thing to check, not assume). T
 databases are housekeeping rather than a fix — a finished task's database can be dropped,
 and the only care needed is not dropping one a live worker is still pointed at.
 
+### B6 — A clone contaminated by a dependency edit outlives the finding that abandoned
+
+`static_verify` now refuses a patch that edited an installed dependency, and the finding
+abandons. The edit stays in the clone: `_reset_clone` returns the tree to the commit it was
+cloned at but keeps ignored files, and `node_modules` is ignored. So the doctored
+declaration is still there for the next finding processed against that clone, which either
+meets a compiler lying in the same direction or abandons on an edit it did not make.
+
+Raised by B3's worker, which deliberately did not close it because the fix is a policy
+choice rather than a mechanism: quarantine the clone and re-clone for the next finding, or
+force a dependency reinstall measured in minutes, or narrow `_reset_clone` to restore only
+the dependency directories. Each trades correctness against the pipeline's largest cost,
+which is why it is not a worker's call to make alone.
+
+**Closes when:** a run that abandons on a dependency edit leaves no clone that a later
+finding can be verified against in its contaminated state, and the wall-clock cost of
+whichever route is chosen is measured and stated rather than estimated. Note the second
+finding is the one that matters — a test proving the first finding abandons proves nothing
+about the contamination surviving it.
+
 ## In flight
 
-- **B3** — `task_b233d7d7237d`, dispatched to `m2-symbols`. Its brief
-  proposes a cheaper closure than the second checkout and explicitly asks the worker to
-  argue with that proposal rather than accept it.
-- **B1** — `task_627dab9b3617`, dispatched to `m1-forge` now that B2 has landed. Told not to
-  edit `src/sync/index/`, which B3 holds; if it concludes `shipped_tree` must change, it
-  reports the change rather than making it.
+- **B5** — `task_365c23bf0920`, worktree `m1-forge`. Owns `pyproject.toml`, `tests/conftest.py`
+  and test files; forbidden from touching `src/`. A measured "not worth it" is an acceptable
+  result and the brief says so.
+- **B6** — `task_63bec222ec75`, worktree `m2-symbols`. Owns `src/sync/index/`. Four routes are
+  named with their trade-offs; choosing and defending one is the task.
 
 ## Done
 
+- Let a patch ship a file it had to create. Landed `aeecde4`, with the install-mark fix at
+  `12f9dc9`. Staging is the agent's assertion that the patch needs the file; untracked
+  debris stays excluded because neither `git add -u` nor `git diff HEAD` reads it.
+- Catch a patch that edited an installed dependency instead of the source. Landed `a891f65`.
+  The cheap path guard's reasoning held but its mechanism did not — git cannot answer the
+  question either way — so it compares filesystem mtimes instead. Residual recorded as B6.
 - Refuse a push that would discard any non-Sync commit, not merely one at the tip. Landed
   `7adeb08`. The worker found a case the brief missed: a stranger's commit the push carries
   forward is not at risk, so refusing it would abandon findings needlessly.
