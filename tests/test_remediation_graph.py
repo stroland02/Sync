@@ -1,4 +1,5 @@
 from dataclasses import dataclass, field
+from pathlib import Path
 
 from langgraph.checkpoint.memory import InMemorySaver
 
@@ -67,11 +68,18 @@ class StubAdapter:
 class StubRemediator:
     strategy: str = "agent"
     calls: int = 0
+    # `AgentRemediator` writes into the clone and then reports what changed. A
+    # stub that only returns a diff leaves the tree untouched, which no test
+    # against a stubbed adapter can see and which is wrong the moment the real
+    # adapter is wired in: it measures the tree, not the diff.
+    writes: dict[str, str] = field(default_factory=dict)
 
     def can_handle(self, finding, change) -> bool: return True
 
     def propose(self, finding, change, site, repo, diagnostics="") -> Patch:
         self.calls += 1
+        for relative, text in self.writes.items():
+            (Path(repo.local_path) / relative).write_text(text, encoding="utf-8")
         return Patch(diff="--- a\n+++ b\n", strategy=self.strategy, rationale="fix")
 
 
@@ -496,7 +504,9 @@ def test_what_the_patch_agent_is_told_is_not_what_the_operator_is_told():
     assert "--- a\n+++ b\n" in remediator.seen[1]
 
 
-def test_a_patch_that_only_typechecks_with_untracked_files_never_reaches_push_branch(patched_clone):
+def test_a_patch_that_only_typechecks_with_untracked_files_never_reaches_push_branch(
+    base_clone, agent_edit
+):
     """The real adapter, the real graph, and the M0 acceptance failure's shape.
 
     The clone's working tree compiles clean; the branch `push_branch` would
@@ -504,17 +514,21 @@ def test_a_patch_that_only_typechecks_with_untracked_files_never_reaches_push_br
     untracked, gitignored file. Before this gate measured the shipped tree the
     run pushed, waited out a CI run, and was rejected there. It now abandons
     carrying the compiler's own complaint.
+
+    The patch node applies the patch rather than the fixture, because `prepare`
+    measures its typecheck baseline first and a tree that already carries the
+    patch would fold those errors into the baseline they are measured against.
     """
     from sync.index.typescript import TypeScriptAdapter
 
     repo = RepoRef(
         repo_id="r1", url="https://example.invalid/r",
-        local_path=str(patched_clone), head_sha="0" * 40,
+        local_path=str(base_clone), head_sha="0" * 40,
     )
     forge = StubForge()
     graph = build_graph(
         store=StubStore(), adapter=TypeScriptAdapter(vendor_adapter=None),
-        remediator=StubRemediator(), forge=forge, checkpointer=InMemorySaver(),
+        remediator=StubRemediator(writes=agent_edit), forge=forge, checkpointer=InMemorySaver(),
     )
     result = graph.invoke(
         {"finding": FINDING, "repo": repo},

@@ -100,18 +100,19 @@ def git() -> GitRunner:
 
 
 @pytest.fixture()
-def patched_clone(tmp_path: Path, git: GitRunner) -> Path:
-    """A committed project, patched, whose typecheck now passes only because of
-    a gitignored file the patch agent left behind.
+def base_clone(tmp_path: Path, git: GitRunner) -> Path:
+    """A committed project, before any patch.
 
-    This is the shape of the M0 acceptance failure. Next.js writes
-    `next-env.d.ts` during a build, `tsconfig.json` lists it in `include`, and
-    `.gitignore` keeps it out of the repository -- so the declarations it
-    carries exist in the tree the patch agent worked in and in no checkout of
-    the branch that gets pushed.
+    This is the shape of the M0 acceptance failure, minus the patch. Next.js
+    writes `next-env.d.ts` during a build, `tsconfig.json` lists it in
+    `include`, and `.gitignore` keeps it out of the repository -- so what that
+    file declares exists in the tree the patch agent works in and in no checkout
+    of the branch that gets pushed.
 
-    `push_branch` stages with `git add -u`, so the modification to `src/a.ts`
-    reaches the branch and `generated.d.ts` does not.
+    A test that drives the graph starts here and lets the patch node apply the
+    patch, because `prepare` measures its typecheck baseline against exactly
+    this tree: a baseline taken from a tree that already carries the patch
+    absorbs the errors the gate exists to catch.
     """
     repo = tmp_path / "clone"
     (repo / "src").mkdir(parents=True)
@@ -126,7 +127,32 @@ def patched_clone(tmp_path: Path, git: GitRunner) -> Path:
     git(["init", "-q", "-b", "main"], repo)
     git(["add", "."], repo)
     git(["-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qm", "base"], repo)
-
-    (repo / "src" / "a.ts").write_text("export const g: Generated = { id: 'x' };\n", encoding="utf-8")
-    (repo / "generated.d.ts").write_text("declare type Generated = { id: string };\n", encoding="utf-8")
     return repo
+
+
+@pytest.fixture()
+def agent_edit() -> dict[str, str]:
+    """What the patch agent leaves in `base_clone`: a tracked modification that
+    typechecks only because of a gitignored file it also wrote.
+
+    `push_branch` stages with `git add -u`, so `src/a.ts` reaches the branch and
+    `generated.d.ts` does not. Held in one place because two fixtures apply it
+    from opposite directions -- one before the test runs, one from inside the
+    graph's own patch node.
+    """
+    return {
+        "src/a.ts": "export const g: Generated = { id: 'x' };\n",
+        "generated.d.ts": "declare type Generated = { id: string };\n",
+    }
+
+
+@pytest.fixture()
+def patched_clone(base_clone: Path, agent_edit: dict[str, str]) -> Path:
+    """`base_clone` with the patch already applied.
+
+    For tests that call `static_verify` directly, which is how the graph calls
+    it: after the patch node has written to the clone.
+    """
+    for relative, text in agent_edit.items():
+        (base_clone / relative).write_text(text, encoding="utf-8")
+    return base_clone

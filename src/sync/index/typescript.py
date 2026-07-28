@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import subprocess
 from pathlib import Path
 from typing import Iterable
 
@@ -58,6 +59,12 @@ class TypeScriptAdapter:
 
     def __init__(self, vendor_adapter: VendorAdapter) -> None:
         self._vendor = vendor_adapter
+        # What each clone already failed before Sync touched it, keyed by clone
+        # path. Held in memory rather than in the clone because nothing has to
+        # read it after this process ends: `cli.RESUMABLE_NODES` resumes a run
+        # only at `await_ci` or `open_pr`, and anything interrupted earlier
+        # starts from `locate`, which reaches `prepare` again.
+        self._baselines: dict[Path, list] = {}
 
     def _declared_dependencies(self, repo: RepoRef) -> dict[str, object]:
         """The SDK versions `package.json` declares, or nothing it can be read from.
@@ -347,34 +354,127 @@ class TypeScriptAdapter:
         guarantee. Installing here, before the patch node, also takes the
         multi-minute install off the serial patch -> verify path: it depends
         on nothing the patch produces.
+
+        It also records what the checkout already fails, which is the only
+        moment that measurement can be taken: after the patch node runs there is
+        no pre-patch tree left to measure. Doing it here costs one `tsc` on the
+        serial path, ahead of an agent run measured in minutes, and it is
+        measured once for the clone rather than once per finding -- `_reset_clone`
+        returns that clone to the commit it was cloned at, so every finding
+        after the first would measure the same tree again. A CI retry keeps the
+        first measurement even though `push_branch` has moved HEAD, because
+        every commit Sync adds to that branch passed this gate and so introduced
+        nothing the baseline does not already hold.
         """
         from sync.index.deps import install_dependencies
 
-        install_dependencies(Path(repo.local_path))
+        path = Path(repo.local_path).resolve()
+        install_dependencies(path)
+        if path not in self._baselines:
+            self._baselines[path] = self._baseline(path)
+
+    def _baseline(self, path: Path) -> list:
+        """The diagnostics this checkout produces with no patch applied.
+
+        Measured through `shipped_tree` for the same reason the verification is:
+        a baseline taken against the working tree would carry whatever generated
+        files happen to be sitting in the clone -- the last finding's
+        `next-env.d.ts` survives `git clean -fd` -- and would then report every
+        error the shipped tree really has as one the patch introduced.
+
+        A compiler that failed to run is not a baseline of zero. A timeout, a
+        crashed compiler and a failed `npx` download all arrive as a non-zero
+        exit carrying prose and no diagnostics, and either reading of that is
+        wrong: as an empty baseline every pre-existing error looks introduced,
+        and as a clean one every introduced error looks pre-existing. It raises,
+        which the graph treats as the environment fault it is and abandons on
+        before spending an agent run.
+
+        Nor is a tree that already carries a patch. `static_verify` subtracts
+        this measurement from its own, so a modification present here is
+        subtracted from the verification that was supposed to catch it: the gate
+        approves the error it exists to reject, and reports nothing. The graph
+        cannot reach that -- `prepare` runs before the patch node, against a
+        fresh clone or one `_reset_clone` has put back -- which is exactly why
+        it has to fail loudly rather than be assumed.
+        """
+        from sync.index.deps import DEPENDENCY_DIRS
+        from sync.index.shipped_tree import shipped_tree
+        from sync.index.tsc import parse_diagnostics, run_tsc
+
+        modified = subprocess.run(
+            ["git", "diff", "--name-only"], cwd=path,
+            capture_output=True, text=True, encoding="utf-8", check=True,
+        ).stdout.split()
+        if modified:
+            raise RuntimeError(
+                f"cannot measure a typecheck baseline for {path}: uncommitted changes to "
+                f"{', '.join(modified)} would be subtracted from the verification"
+            )
+
+        with shipped_tree(path, keep=DEPENDENCY_DIRS):
+            result = run_tsc(path)
+        if result.ok:
+            return []
+        found = parse_diagnostics(result.diagnostics)
+        if not found:
+            raise RuntimeError(
+                f"could not establish a typecheck baseline for {path}: {result.diagnostics}"
+            )
+        return found
 
     def static_verify(self, repo: RepoRef, patch: Patch) -> VerifyResult:
-        """Typecheck the tree a push would carry, not the one the agent left.
+        """Fail on the diagnostics the patch introduced, and on no others.
 
         The patch is expected to be applied to `repo.local_path` before this is
         called — the graph's `patch` node writes to the clone directly, so there
         is nothing to apply here.
 
-        The agent's untracked and ignored files are held out of the way for the
-        duration of the compile, because `push_branch` will not carry them and a
-        verdict that depends on them describes no artifact anyone will review.
-        `sync.index.shipped_tree` carries why this is done in place rather than
-        against a second checkout. Dependencies are exempt: the customer's CI
-        installs its own.
+        Two subtractions, and the gate is the composition of them. The agent's
+        untracked and ignored files are held out of the way for the compile,
+        because `push_branch` will not carry them and a verdict that depends on
+        them describes no artifact anyone will review; `sync.index.shipped_tree`
+        carries why that is done in place rather than against a second checkout.
+        Then whatever the same tree already failed before the patch is
+        subtracted, because the customer's CI generates what it needs before it
+        typechecks and Sync does not -- without this the gate is stricter than
+        the CI it approximates, and the M0 acceptance run abandoned a correct
+        patch on fifteen unresolved image imports present in the base tree.
 
-        Installing here too is what makes this method safe to call on its own,
-        outside the graph: the call is idempotent, so paying for it again after
-        `prepare` has already run is free.
+        Subtracting is not the same as tolerating. What reaches the next patch
+        attempt is only what that attempt can act on, and an error the patch
+        wrote fails the gate whether or not the tree around it was already
+        broken.
+
+        A verification with no baseline raises rather than guessing. Passing
+        would approve a patch on no evidence, and rejecting everything would
+        abandon every finding on a repository that does not typecheck clean —
+        which is the population this exists for.
         """
         from sync.index.deps import DEPENDENCY_DIRS, install_dependencies
         from sync.index.shipped_tree import shipped_tree
-        from sync.index.tsc import run_tsc
+        from sync.index.tsc import introduced_diagnostics, parse_diagnostics, run_tsc
 
-        path = Path(repo.local_path)
+        path = Path(repo.local_path).resolve()
+        baseline = self._baselines.get(path)
+        if baseline is None:
+            raise RuntimeError(f"no typecheck baseline for {path}; prepare did not run")
+
         install_dependencies(path)
         with shipped_tree(path, keep=DEPENDENCY_DIRS):
-            return run_tsc(path)
+            result = run_tsc(path)
+        if result.ok:
+            return VerifyResult(ok=True)
+
+        patched = parse_diagnostics(result.diagnostics)
+        if not patched:
+            # Nothing to subtract from. An uninterpretable run is a failed
+            # verification, never an empty set of introduced errors.
+            return VerifyResult(ok=False, diagnostics=result.diagnostics)
+
+        introduced = introduced_diagnostics(baseline, patched)
+        if not introduced:
+            return VerifyResult(ok=True)
+        return VerifyResult(
+            ok=False, diagnostics="\n".join(diagnostic.render() for diagnostic in introduced)
+        )
