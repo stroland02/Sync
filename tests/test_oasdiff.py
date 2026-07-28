@@ -167,3 +167,78 @@ def test_a_path_whose_leaf_is_a_composition_segment_falls_back_to_the_last_real_
 
 def test_a_token_with_no_resolvable_field_returns_none():
     assert changed_field(_leaf_change("removed the optional property `anyOf[subschema #1: Foo]`")) is None
+
+
+def test_the_oneof_and_allof_siblings_are_skipped_like_anyof():
+    """The reduction skips every composition oasdiff interposes, not just `anyOf`.
+
+    `anyOf` is the one the Stripe corpus exercises, so a blacklist that enumerated only it
+    would look correct against every fixture here while dropping `oneOf`/`allOf` paths on
+    the first spec that composes with them.
+    """
+    for keyword in ("oneOf", "allOf"):
+        change = _leaf_change(
+            f"removed the optional property `error/payment_method/{keyword}[subschema #2: Foo]`"
+        )
+        assert changed_field(change) == "payment_method"
+
+
+def test_a_leaf_that_is_not_a_composition_segment_resolves_to_itself():
+    """A leaf is skipped only for naming a schema, never for looking unusual.
+
+    The indexer records the name a call site destructures, verbatim and quotes stripped, so
+    `3d_secure` is exactly what a match needs. Resolving the path to `payment_method` instead
+    answers with a field the vendor did not change, and the removal is filtered out of
+    existence rather than surfaced. Returning nothing would at least leave the finding matched
+    on its operation.
+    """
+    change = _leaf_change("removed the optional property `error/payment_method/3d_secure`")
+    assert changed_field(change) == "3d_secure"
+
+
+def test_a_segment_carrying_a_newline_is_not_returned_as_a_field_name():
+    """No `response_fields_read` entry can carry a newline, so returning one filters silently.
+
+    `_BACKTICKED`'s character class admits newlines, so a multi-line message reaches here even
+    though no single-line oasdiff message does today. An end anchor of `$` accepts the segment
+    and hands back the newline attached to it.
+    """
+    assert changed_field(_leaf_change("removed the optional property `status\n`")) is None
+
+
+def test_a_newline_leaf_does_not_fall_back_to_its_parent():
+    """Only a composition segment defers to the segment above it.
+
+    Falling back for any other reason answers with the parent's name, which is a different
+    field the vendor did not change -- the same wrong-answer failure as resolving `3d_secure`
+    to `payment_method`.
+    """
+    assert changed_field(_leaf_change("removed the optional property `error/status\n`")) is None
+
+
+def test_unparseable_breaking_output_raises_instead_of_propagating_a_decode_error(monkeypatch):
+    """A truncated or malformed payload is a vendor-boundary failure, reported as one.
+
+    `RuntimeError` is the failure this module documents and the only one its callers are
+    written against; a `JSONDecodeError` escaping from here reaches a graph node that handles
+    neither. It must still raise -- a differ that parsed nothing is not a vendor that changed
+    nothing.
+    """
+
+    def fake_run(*args, **kwargs):
+        return subprocess.CompletedProcess(args=args, returncode=0, stdout='[{"id": "x"', stderr="")
+
+    monkeypatch.setattr(oasdiff.subprocess, "run", fake_run)
+
+    with pytest.raises(RuntimeError, match="breaking"):
+        run_oasdiff_breaking(FIXTURES / "charges_base.json", FIXTURES / "charges_revision.json")
+
+
+def test_unparseable_checks_output_raises_instead_of_propagating_a_decode_error(monkeypatch):
+    def fake_run(*args, **kwargs):
+        return subprocess.CompletedProcess(args=args, returncode=0, stdout="not json at all", stderr="")
+
+    monkeypatch.setattr(oasdiff.subprocess, "run", fake_run)
+
+    with pytest.raises(RuntimeError, match="checks"):
+        run_oasdiff_checks()

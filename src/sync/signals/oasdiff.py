@@ -12,7 +12,10 @@ from typing import Any
 from sync.core import VendorChange
 
 _BACKTICKED = re.compile(r"`([^`]+)`")
-_PROPERTY_NAME = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
+_COMPOSITION_SEGMENT = re.compile(r"\A(?:any|one|all)Of\[.*\]\Z")
+# `\Z`, never `$`: `$` also matches before a trailing newline, so a segment ending in one
+# would be accepted and handed back with the newline still attached.
+_SINGLE_LINE_NAME = re.compile(r"[^\n]+\Z")
 
 
 def _binary() -> str:
@@ -43,7 +46,7 @@ def run_oasdiff_breaking(base_path: Path, revision_path: Path) -> list[dict[str,
     )
     if result.returncode != 0:
         raise RuntimeError(f"oasdiff failed ({result.returncode}): {result.stderr.strip()}")
-    parsed = json.loads(result.stdout.strip())
+    parsed = _parse_json(result.stdout, "oasdiff breaking")
     return parsed if isinstance(parsed, list) else []
 
 
@@ -67,8 +70,22 @@ def run_oasdiff_checks() -> list[dict[str, Any]]:
     )
     if result.returncode != 0:
         raise RuntimeError(f"oasdiff checks failed ({result.returncode}): {result.stderr.strip()}")
-    parsed = json.loads(result.stdout.strip())
+    parsed = _parse_json(result.stdout, "oasdiff checks")
     return parsed if isinstance(parsed, list) else []
+
+
+def _parse_json(stdout: str, surface: str) -> Any:
+    """Parse one oasdiff invocation's stdout, failing as this module documents.
+
+    Subprocess output is a system boundary, and a truncated or malformed payload here
+    raises `JSONDecodeError` -- an exception no caller of this module is written against,
+    since `RuntimeError` is the failure it declares. It must still raise: a differ whose
+    output could not be parsed is not a vendor that changed nothing.
+    """
+    try:
+        return json.loads(stdout.strip())
+    except json.JSONDecodeError as exc:
+        raise RuntimeError(f"{surface} output was not JSON ({exc}): {stdout[:200]!r}") from exc
 
 
 def to_vendor_changes(
@@ -138,8 +155,15 @@ def _leaf_of(token: str) -> str | None:
     The indexer records the bare names a call site reads, so a path matches
     only once reduced to one. The deepest real name is the property the vendor
     changed, which is what makes the reduction sound.
+
+    Composition is the only reason a segment defers to the one above it.
+    Skipping a segment for any other reason answers with the parent's name --
+    a field the vendor did not change, which filters the finding out of
+    existence. `None` is the safe miss: the finding still matches on its
+    operation.
     """
     for segment in reversed(token.split("/")):
-        if _PROPERTY_NAME.match(segment):
-            return segment
+        if _COMPOSITION_SEGMENT.match(segment):
+            continue
+        return segment if _SINGLE_LINE_NAME.match(segment) else None
     return None
