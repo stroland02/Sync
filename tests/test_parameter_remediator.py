@@ -1,12 +1,14 @@
-"""Tier 0 for parameters: a removal produced with no model call.
+"""Tier 0 for parameters: removals and renames produced with no model call.
 
-`LiteralSwapRemediator` handles the swap case. This handles the omit case, which needs the
-model as well as the parameter -- removal is scoped to the object that names the model, so the
-remediator reads `site.operation_id` rather than guessing which object to edit.
+`LiteralSwapRemediator` covers the value swap. These two cover the argument itself, in the two
+shapes vendors actually give guidance in: omit it, or rename it to a named successor. Each
+declines what the other handles, so `TieredRemediator` picks by remedy rather than by ordering.
 
-`rename` is declined rather than attempted. Renaming an object key is a different edit from
-removing one, and a remediator that half-implements a remedy is worse than one that hands it to
-something which can.
+Both need the model as well as the parameter -- the edit is scoped to the object that names the
+model, so the remediator reads `site.operation_id` rather than guessing which object to touch.
+
+The rename carries a hazard the omit does not: renaming onto a key that already exists produces
+a duplicate, which JavaScript resolves to the last one silently. That case is declined.
 """
 
 from __future__ import annotations
@@ -17,7 +19,7 @@ import pytest
 
 from sync.core import CallSite, Finding, RepoRef
 from sync.core.protocols import Remediator
-from sync.remediate.parameter_omit import ParameterOmitRemediator
+from sync.remediate.parameters import ParameterOmitRemediator, ParameterRenameRemediator
 from sync.signals.deprecations import ParameterDeprecation, parameters_to_vendor_changes
 
 SOURCE = """\
@@ -195,4 +197,65 @@ def test_the_patch_is_idempotent(repo: RepoRef):
 
 
 def test_it_satisfies_the_remediator_protocol():
+    assert isinstance(ParameterOmitRemediator(), Remediator)
+
+
+# --- the rename remedy, which the omit remediator declines -------------------------
+
+
+RENAME_SOURCE = """\
+const r = client.messages.create({
+  model: "claude-opus-5",
+  budget_tokens: 8,
+});
+"""
+
+
+@pytest.fixture()
+def rename_repo(tmp_path: Path) -> RepoRef:
+    (tmp_path / "src").mkdir()
+    (tmp_path / "src" / "summarise.ts").write_text(RENAME_SOURCE, encoding="utf-8")
+    return RepoRef(repo_id="r", url="https://example.invalid/r", local_path=str(tmp_path), head_sha="s")
+
+
+def test_the_rename_remediator_handles_what_the_omit_one_declines():
+    change = _change(RENAME)
+    assert ParameterOmitRemediator().can_handle(_finding(), change) is False
+    assert ParameterRenameRemediator().can_handle(_finding(), change) is True
+
+
+def test_the_rename_diff_changes_the_key_and_keeps_the_value(rename_repo: RepoRef):
+    site = _site().model_copy(update={"args_keys": ["model", "budget_tokens"]})
+    patch = ParameterRenameRemediator().propose(_finding(), _change(RENAME), site, rename_repo)
+
+    removed = [l for l in patch.diff.splitlines() if l.startswith("-") and not l.startswith("---")]
+    added = [l for l in patch.diff.splitlines() if l.startswith("+") and not l.startswith("+++")]
+
+    assert len(removed) == 1 and len(added) == 1
+    assert "budget_tokens: 8" in removed[0]
+    assert "max_tokens: 8" in added[0]
+
+
+def test_the_rename_rationale_names_the_successor(rename_repo: RepoRef):
+    patch = ParameterRenameRemediator().propose(_finding(), _change(RENAME), _site(), rename_repo)
+
+    assert "max_tokens" in patch.rationale
+    assert "budget_tokens" in patch.rationale
+
+
+def test_a_rename_onto_an_existing_key_produces_no_patch(tmp_path: Path):
+    """The silent-overwrite case. Declining leaves a real finding unrepaired, which is far
+    cheaper than a patch that type-checks and quietly changes the value sent."""
+    (tmp_path / "src").mkdir()
+    (tmp_path / "src" / "summarise.ts").write_text(
+        'create({ model: "claude-opus-5", max_tokens: 16, budget_tokens: 8 });\n', encoding="utf-8"
+    )
+    repo = RepoRef(repo_id="r", url="u", local_path=str(tmp_path), head_sha="s")
+
+    patch = ParameterRenameRemediator().propose(_finding(), _change(RENAME), _site(), repo)
+    assert patch.diff == ""
+
+
+def test_both_remediators_satisfy_the_protocol():
+    assert isinstance(ParameterRenameRemediator(), Remediator)
     assert isinstance(ParameterOmitRemediator(), Remediator)

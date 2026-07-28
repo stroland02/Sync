@@ -123,6 +123,66 @@ def _widen_to_whole_line(source: str, start: int, end: int) -> tuple[int, int]:
     return line_start, line_end + 1
 
 
+def _objects_naming(root, model: str):
+    """Object literals that carry `model` as one of their values.
+
+    The scope every parameter edit shares. A parameter nested elsewhere in the file is not this
+    call's argument, and editing it would make the diff claim something the finding never said.
+    """
+    for container in root.find_all(kind="object"):
+        pairs = [child for child in container.children() if child.kind() == "pair"]
+        if any(_pair_part(pair, "value", 2) == model for pair in pairs):
+            yield container, pairs
+
+
+def _key_node(pair):
+    return pair.field("key") or pair.child(0)
+
+
+def rename_parameter(
+    source: str, old: str, new: str, language: str, within_object_naming: str
+) -> str:
+    """`source` with the `old` argument key renamed to `new`, where it is safe to do so.
+
+    Declined per object when `new` is already a key there. A duplicate key does not fail:
+    JavaScript takes the last one, so the object would quietly carry a different value than
+    either the author or this patch intended, and it would type-check on the way through.
+    Declining one object does not stop a clean one being fixed, or a single awkward call site
+    would freeze the whole file.
+
+    Quoting is preserved. A key written `"budget_tokens"` and one written `budget_tokens` are
+    the same key, and rewriting one form as the other puts a style change in a diff whose only
+    claimed purpose is a rename.
+    """
+    root = SgRoot(source, language).root()
+    edits: list[tuple[int, int, str]] = []
+
+    for _container, pairs in _objects_naming(root, within_object_naming):
+        keys = {_pair_part(pair, "key", 0) for pair in pairs}
+        if new in keys:
+            continue
+
+        for pair in pairs:
+            if _pair_part(pair, "key", 0) != old:
+                continue
+            node = _key_node(pair)
+            if node is None:
+                continue
+
+            text = node.text()
+            quote = text[0] if text[:1] in ("\"", "'") else ""
+            span = node.range()
+            edits.append((span.start.index, span.end.index, f"{quote}{new}{quote}"))
+
+    if not edits:
+        return source
+
+    result = source
+    for start, end, replacement in sorted(edits, reverse=True):
+        result = result[:start] + replacement + result[end:]
+    return result
+
+
 def omit_parameter(
     source: str, parameter: str, language: str, within_object_naming: str
 ) -> str:
@@ -138,15 +198,7 @@ def omit_parameter(
     root = SgRoot(source, language).root()
 
     spans: list[tuple[int, int]] = []
-    for container in root.find_all(kind="object"):
-        pairs = [child for child in container.children() if child.kind() == "pair"]
-        names_the_model = any(
-            _pair_part(pair, "value", 2) == within_object_naming
-            for pair in pairs
-        )
-        if not names_the_model:
-            continue
-
+    for container, pairs in _objects_naming(root, within_object_naming):
         for pair in pairs:
             if _pair_part(pair, "key", 0) == parameter:
                 spans.append(_deletion_span(source, container, pair))
