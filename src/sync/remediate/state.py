@@ -48,6 +48,19 @@ class RunState(TypedDict, total=False):
     fatal: bool
     static_attempts: int
     ci_attempts: int
+    # Corpus bookkeeping, at the grain of one `migration_outcome` row per attempt.
+    # `static_attempts` is the attempt index: it increments once per `make_patch` call and
+    # `route_after_ci` already treats it as the bound on total patch attempts for the whole
+    # run. `ci_attempts` counts CI polls, and a run can spend its whole budget without ever
+    # reaching CI, so it cannot number attempts.
+    #
+    # These are cleared when an attempt starts and read when it ends. They are deliberately
+    # separate from `verify_ok` and `diagnostics`: those are routing inputs, and a recording
+    # concern must not be able to change where the graph goes next.
+    attempt_started_at: float
+    attempt_strategy: str | None
+    attempt_static_passed: bool | None
+    attempt_ci_result: str | None
     branch: str
     ci_url: str
     evidence: Evidence

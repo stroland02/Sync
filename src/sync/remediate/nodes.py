@@ -9,6 +9,7 @@ from __future__ import annotations
 from typing import Protocol, runtime_checkable
 
 from sync.core import Evidence, Patch, RepoRef
+from sync.remediate import corpus
 from sync.remediate.state import MAX_CI_ATTEMPTS, MAX_STATIC_ATTEMPTS, RunState
 
 
@@ -113,9 +114,46 @@ def route_after_prepare(state: RunState) -> str:
     return "abandon"
 
 
-def make_patch(remediator):
+def _attempted_strategy(exc: Exception, remediator) -> str | None:
+    """Which tier ran, for an attempt whose remediator raised.
+
+    A cascade attaches it to the exception, because only the cascade knows which of its
+    tiers was in hand. A plain remediator answers for itself. `TieredRemediator` itself
+    answers `"tiered"`, which is composition rather than a strategy, and `tier_for` drops
+    the row instead of recording a label no query could interpret.
+    """
+    carried = getattr(exc, "tier_strategy", None)
+    return carried if carried else getattr(remediator, "strategy", None)
+
+
+def _close_previous_attempt(state: RunState, record) -> None:
+    """Write the row for the attempt this one is replacing.
+
+    An attempt ends at exactly one of three places -- another attempt starting, `abandon`,
+    or `open_pr` succeeding -- and those three are mutually exclusive, which is what makes
+    "one row per attempt" hold with no de-duplicating bookkeeping here. `abandon` and
+    `open_pr` are both terminal, so neither can be followed by another attempt, and the
+    first `patch` call has no previous attempt to close. `corpus.record` drops a call that
+    describes no attempt.
+    """
+    if record is not None:
+        record(state, terminal_status="retried")
+
+
+def make_patch(remediator, record=None):
     def patch(state: RunState) -> RunState:
+        # This attempt starting is what ends the previous one, so the previous row is
+        # written from the state that still describes it, before anything is overwritten.
+        _close_previous_attempt(state, record)
+
         attempts = state.get("static_attempts", 0) + 1
+        started = {
+            "static_attempts": attempts,
+            "attempt_started_at": corpus.now(),
+            "attempt_static_passed": None,
+            "attempt_ci_result": None,
+        }
+
         try:
             proposed = remediator.propose(
                 state["finding"], state["change"], state["site"], state["repo"],
@@ -123,21 +161,31 @@ def make_patch(remediator):
             )
         except Exception as exc:
             return {
+                **started,
                 "patch": None,
-                "static_attempts": attempts,
+                "attempt_strategy": _attempted_strategy(exc, remediator),
                 "diagnostics": _describe(exc),
                 "feedback": _describe(exc),
             }
 
         if not proposed.diff.strip():
             return {
+                **started,
                 "patch": None,
-                "static_attempts": attempts,
+                # The remediator returned a `Patch`, so the tier that produced this
+                # nothing is known even though the diff is empty.
+                "attempt_strategy": proposed.strategy,
                 "diagnostics": "the remediator produced no change",
                 "feedback": "the remediator produced no change",
             }
 
-        return {"patch": proposed, "static_attempts": attempts, "diagnostics": "", "feedback": ""}
+        return {
+            **started,
+            "patch": proposed,
+            "attempt_strategy": proposed.strategy,
+            "diagnostics": "",
+            "feedback": "",
+        }
 
     return patch
 
@@ -170,6 +218,7 @@ def make_static_verify(adapter):
             "feedback": "" if result.ok else _static_feedback(result.diagnostics),
             "verify_ok": result.ok,
             "static_fatal": False,
+            "attempt_static_passed": result.ok,
         }
 
     return static_verify
@@ -223,6 +272,7 @@ def make_await_ci(forge: Forge):
             "diagnostics": "" if green else f"CI failed: {url}",
             "feedback": "" if green else _ci_feedback(url, state["branch"], state.get("patch")),
             "fatal": False,
+            "attempt_ci_result": "passed" if green else "failed",
         }
 
     return await_ci
@@ -245,7 +295,7 @@ def route_after_ci(state: RunState) -> str:
     return "patch"
 
 
-def make_open_pr(forge: Forge):
+def make_open_pr(forge: Forge, record=None):
     def open_pr(state: RunState) -> RunState:
         change = state["change"]
         site = state["site"]
@@ -258,7 +308,13 @@ def make_open_pr(forge: Forge):
         try:
             url = forge.open_pull_request(state["repo"], state["branch"], evidence)
         except Exception as exc:
+            # No row here: the attempt has not ended, it has failed on its way out, and
+            # `abandon` is the node that closes it.
             return {"fatal": True, "diagnostics": _describe(exc)}
+
+        if record is not None:
+            record(state, terminal_status="opened")
+
         return {"evidence": evidence, "pr_url": url, "outcome": "opened", "fatal": False}
 
     return open_pr
@@ -274,12 +330,19 @@ def route_after_open_pr(state: RunState) -> str:
     return "end"
 
 
-def make_abandon(store, forge):
+def make_abandon(store, forge, record=None):
     def abandon(state: RunState) -> RunState:
         reason = state.get("diagnostics") or "unknown"
         finding_id = state["finding"].id
         if finding_id:
             store.set_finding_status(finding_id, "abandoned")
+
+        # The abandoned attempt is the negative class, and a corpus of successes alone can
+        # compute no precision and evaluate no future router. A run that abandoned before
+        # any attempt writes nothing, which `corpus.record` decides -- zero attempts is
+        # zero rows at this table's grain.
+        if record is not None:
+            record(state, terminal_status="abandoned", abandon_reason=reason)
 
         # `branch` is set only by a push that succeeded, which is the one signal the
         # forge cannot derive for itself: it cannot tell a finding that abandoned
