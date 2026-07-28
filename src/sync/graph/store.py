@@ -12,7 +12,7 @@ import psycopg
 from psycopg.rows import dict_row
 
 from sync.core import CallSite, Finding, FindingStatus, MigrationOutcome, VendorChange
-from sync.core.models import ObservedShape
+from sync.core.models import ObservedCall, ObservedShape
 
 
 def _stable_id(*parts: str) -> str:
@@ -78,7 +78,8 @@ class GraphStore:
 
     def truncate_all(self) -> None:
         self._connect().execute(
-            "TRUNCATE finding, call_site, vendor_change, migration_outcome, observed_shape CASCADE"
+            "TRUNCATE finding, call_site, vendor_change, migration_outcome, observed_shape, "
+            "observed_call CASCADE"
         )
 
     def upsert_call_site(self, site: CallSite) -> str:
@@ -288,6 +289,64 @@ class GraphStore:
             """,
             [getattr(shape, name) for name in self._SHAPE_COLUMNS],
         )
+
+    def record_observed_call(self, call: ObservedCall) -> None:
+        """Fold one unit of work's calls against one operation into the graph.
+
+        The conflict clause merges the span map with `||`, which is last-write-wins per key.
+        That is what makes this idempotent under at-least-once delivery: a span already in the
+        map re-folds to the same entry, so re-ingesting a batch -- or the overlapping subset a
+        collector actually re-sends -- converges instead of inflating. There is no counter to
+        double, because every count this table answers is derived from the map rather than
+        stored beside it.
+
+        The window widens at both ends rather than taking the last write. A collector flushes
+        its buffered backlog after the live stream has resumed, so batches do not arrive in
+        order, and a `first_seen` that took the last write would walk forward every time an old
+        batch landed.
+
+        `url_template` uses COALESCE-by-emptiness rather than EXCLUDED outright: an uncorrelated
+        span writes an empty template, and a later correlated one must be able to fill it in
+        without an earlier blank erasing what is already known.
+        """
+        self._connect().execute(
+            """
+            INSERT INTO observed_call (repo_id, vendor_id, operation_id, binding_rung,
+                                       server_address, http_method, trace_id, url_template,
+                                       spans, first_seen, last_seen)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            ON CONFLICT (repo_id, vendor_id, operation_id, server_address, http_method, trace_id)
+            DO UPDATE SET
+                spans = observed_call.spans || EXCLUDED.spans,
+                url_template = CASE
+                    WHEN EXCLUDED.url_template <> '' THEN EXCLUDED.url_template
+                    ELSE observed_call.url_template
+                END,
+                first_seen = LEAST(observed_call.first_seen, EXCLUDED.first_seen),
+                last_seen = GREATEST(observed_call.last_seen, EXCLUDED.last_seen)
+            """,
+            (
+                call.repo_id, call.vendor_id, call.operation_id, call.binding_rung,
+                call.server_address, call.http_method, call.trace_id, call.url_template,
+                json.dumps(call.spans), call.first_seen, call.last_seen,
+            ),
+        )
+
+    def observed_calls(self, repo_id: str) -> list[ObservedCall]:
+        """Every observed call for one repository.
+
+        Scoped to a repository because that is the unit a finding is raised against, and a query
+        that leaked another customer's traffic in would produce findings naming the wrong code.
+        """
+        rows = self._connect().execute(
+            """
+            SELECT * FROM observed_call
+             WHERE repo_id = %s
+             ORDER BY trace_id, operation_id, http_method
+            """,
+            (repo_id,),
+        ).fetchall()
+        return [ObservedCall(**row) for row in rows]
 
     def observed_shapes(self, vendor_id: str, operation_id: str) -> list[ObservedShape]:
         """The baseline for one operation.

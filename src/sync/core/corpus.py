@@ -29,6 +29,7 @@ and a table of those is a customer list.
 from __future__ import annotations
 
 import hashlib
+from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 _VERB = "<verb>"
 _CLIENT = "<client>"
@@ -63,3 +64,32 @@ def hash_arg_keys(keys: list[str], salt: str) -> list[str]:
     return sorted(
         hashlib.sha256(f"{salt}:{key}".encode("utf-8")).hexdigest()[:32] for key in keys
     )
+
+
+def hash_request_target(url: str, salt: str) -> str:
+    """An observed request URL as a salted digest.
+
+    The only question this answers is whether two observed calls went to the same place, which
+    is what separates fetching three charges from fetching one charge three times. Answering it
+    needs no URL, so no URL is kept: the digest is one-way and the salt is per deployment,
+    because the URL space is enumerable and an unsalted digest of `/v1/charges` is `/v1/charges`
+    to anyone willing to hash a wordlist.
+
+    The whole URL, not the path. A different `limit` is a different call and the page-size
+    finding is precisely that difference. Query parameters are sorted first, so two spellings of
+    one request do not look like two calls -- SDKs and proxies do not agree on parameter order.
+    The fragment is dropped because it never reaches the server.
+
+    Comparable WITHIN one deployment only, like `arg_key_hashes` and for the same reason.
+    """
+    split = urlsplit(url)
+    normalised = urlunsplit(
+        (
+            split.scheme,
+            split.netloc,
+            split.path,
+            urlencode(sorted(parse_qsl(split.query, keep_blank_values=True))),
+            "",
+        )
+    )
+    return hashlib.sha256(f"{salt}:{normalised}".encode("utf-8")).hexdigest()[:32]

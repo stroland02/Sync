@@ -63,6 +63,7 @@ forbidden_modules = [
     "sync.signals",
     "sync.index",
     "sync.detect",
+    "sync.telemetry",
     "sync.remediate",
     "sync.forge",
     "sync.route",
