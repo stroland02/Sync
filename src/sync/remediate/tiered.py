@@ -16,13 +16,31 @@ verification, and a codemod ignores feedback by construction: re-running it re-e
 byte-identical patch that just failed. The graph would loop to its attempt budget and abandon,
 having spent the entire budget on one unchanging answer. A codemod gets one attempt; after that
 the work belongs to something that can read the error.
+
+**The decision table selects the tier, where it has jurisdiction.** `sync.route.matrix.route()`
+assigns a tier to an oasdiff rule from the rule's own metadata, and until it was consulted here
+the tier a finding got was decided by which remediator happened to be first in a list. Two
+things followed from that: tier -1 had no effect, so a lifecycle finding still reached a
+remediator that would try to patch it; and the row that decided did not exist to record, which
+is what left "tier 0 was wrong for this change kind" unanswerable.
+
+Jurisdiction is the qualification. `route()` keys on a catalogue record from
+`run_oasdiff_checks()`, and `VendorChange.kind` holds that record's id only for oasdiff-sourced
+changes. A deprecation's kind is `deprecation/model-retired`, which no catalogue carries.
+Treating an absent record as "no row matched" would route every deprecation to the fall-through
+agent and switch off the one signal that costs no tokens, so a kind the catalogue does not carry
+is outside the table's domain and keeps the `can_handle` cascade. So does a remediator built
+with no catalogue at all.
 """
 
 from __future__ import annotations
 
-from typing import Sequence
+from dataclasses import dataclass
+from typing import Any, Callable, Mapping, Sequence
 
 from sync.core import CallSite, Finding, Patch, RepoRef, VendorChange
+from sync.route.matrix import CODEMOD, NO_PATCH, RoutingFacts, Tier, route
+from sync.signals.oasdiff import changed_field
 
 # Strategies whose output is a pure function of their input, so feedback cannot change it.
 # Derived from `strategy` rather than a hand-kept registry, so a new codemod-style remediator
@@ -58,6 +76,73 @@ class NoTierApplies(RuntimeError):
     and "the agent tier ran and failed" are different facts, and squashing them loses
     exactly the signal `migration_outcome` exists to capture.
     """
+
+
+class NoPatchWarranted(RuntimeError):
+    """The table routed this finding to tier -1: no patch is justified.
+
+    Distinct from `NoTierApplies`, which means every tier was offered the work and none took
+    it. This one means the work was never offered, because no edit in a consumer's repository
+    resolves the change. `kind=lifecycle` covers 21 of oasdiff's 212 breaking rules and every
+    one of them is a complaint about how the vendor documented a deprecation --
+    `sunset-deleted` describes a defect in the vendor's specification, and there is nothing in
+    the customer's code to fix.
+
+    Raised rather than returned as an empty patch, for the reason this module already gives
+    empty diffs the opposite meaning. `make_patch` renders the message into `diagnostics`,
+    which becomes `abandon_reason`, so the row that decided travels with it.
+    """
+
+    def __init__(self, row: str, change: VendorChange) -> None:
+        super().__init__(
+            f"no patch is warranted for {change.kind} on {change.operation_id}: "
+            f"routed to tier {NO_PATCH} by row '{row}'"
+        )
+        self.row = row
+
+
+@dataclass(frozen=True)
+class RoutingDecision:
+    """What the table decided, and which row decided it.
+
+    Reported through `on_route` because the row has nowhere else to go: `Patch` carries a
+    strategy and no room for the row, and the state key the corpus reads is written by
+    `nodes.make_patch`. Recording it into `migration_outcome` is one line in that node, which
+    this module cannot write for itself.
+    """
+
+    tier: Tier
+    row: str
+    change_kind: str
+
+
+def routing_facts(change: VendorChange, site: CallSite) -> RoutingFacts:
+    """What this layer can establish about the change and the one call site it was given.
+
+    Two of the four fields stay `None`, and that is the point rather than a shortfall.
+    `RoutingFacts` defaults every field to "not established" precisely so a row needing a fact
+    declines when the fact is unknown, which is what stops an unpopulated graph routing work to
+    a codemod.
+
+    - `field_resolved` is established either way. `changed_field()` reads the change's own
+      text, and a record naming no field is a real answer -- `False`, not unknown -- which is
+      what row 2 reads to keep a codemod away from a field nobody can name.
+    - `value_already_passed` is established from `args_keys`, which is what this call site
+      passes. A field absent from it is genuinely not passed here.
+    - `call_sites_reading_field` cannot be established. It is a count across the whole graph
+      and `propose` is handed one site, with no reader for the rest.
+    - `field_passed_as_literal` cannot be established. The index records which argument keys a
+      call site passes, never whether each was written as a literal or came from a variable.
+
+    The consequence is worth stating plainly: rows 3 and 4, the two mechanical response- and
+    request-side rows, cannot fire from here. A caller holding the graph can supply those facts
+    and turn them on; guessing them would be the failure the defaults exist to prevent.
+    """
+    field = changed_field(change)
+    return RoutingFacts(
+        field_resolved=field is not None,
+        value_already_passed=(field in set(site.args_keys)) if field is not None else None,
+    )
 
 
 class TierFailed(RuntimeError):
@@ -126,10 +211,22 @@ class TieredRemediator:
 
     strategy = "tiered"
 
-    def __init__(self, remediators: Sequence) -> None:
+    def __init__(
+        self,
+        remediators: Sequence,
+        catalogue: Mapping[str, dict[str, Any]] | None = None,
+        on_route: Callable[[RoutingDecision], None] | None = None,
+        facts_for: Callable[[VendorChange, CallSite], RoutingFacts] | None = None,
+    ) -> None:
         if not remediators:
             raise ValueError("TieredRemediator needs at least one remediator")
         self._remediators = list(remediators)
+        self._catalogue = catalogue or {}
+        self._on_route = on_route
+        # A caller holding the graph can establish the two facts this layer cannot -- see
+        # `routing_facts`, whose docstring says which and why. Rows 3 and 4 cannot fire without
+        # them, so tier 0 is unreachable through the default.
+        self._facts_for = facts_for or routing_facts
 
     def can_handle(self, finding: Finding, change: VendorChange) -> bool:
         return any(r.can_handle(finding, change) for r in self._remediators)
@@ -143,7 +240,7 @@ class TieredRemediator:
         diagnostics: str = "",
     ) -> Patch:
         declined: list[str] = []
-        for remediator in self._eligible(diagnostics):
+        for remediator in self._eligible(diagnostics, self._tier_for(change, site)):
             if not remediator.can_handle(finding, change):
                 continue
             try:
@@ -167,15 +264,61 @@ class TieredRemediator:
             f"no remediator can handle {change.kind} for {change.operation_id}{detail}"
         )
 
-    def _eligible(self, diagnostics: str) -> list:
+    def _tier_for(self, change: VendorChange, site: CallSite) -> Tier | None:
+        """The tier the table assigns, or `None` where the table has no jurisdiction.
+
+        `None` is not a tier and does not mean the fall-through. It means the change is
+        outside the table's domain -- no catalogue was supplied, or the change's kind is not an
+        oasdiff rule id -- and the cascade decides as it did before routing existed.
+
+        Tier -1 raises here rather than returning, so no remediator is consulted at all. A tier
+        that is asked and declines is a different thing from one that is never reached, and
+        only the second is what tier -1 means.
+        """
+        rule = self._catalogue.get(change.kind)
+        if rule is None:
+            return None
+
+        tier, row = route(rule, self._facts_for(change, site))
+        if self._on_route is not None:
+            self._on_route(RoutingDecision(tier=tier, row=row, change_kind=change.kind))
+        if tier == NO_PATCH:
+            raise NoPatchWarranted(row, change)
+        return tier
+
+    def _serves(self, remediator, tier: Tier) -> bool:
+        """Whether a remediator serves the tier the table picked.
+
+        Tier is read off `strategy`, which is the same derivation `remediate.corpus` makes in
+        the other direction -- which tier ran *is* which remediator produced the patch. Tier 1
+        has no remediator: `PatchStrategy` is a two-value Literal and nothing implements a
+        constrained single-edit strategy, so a templated route is served by the adaptive tier.
+        That is more expensive and correct; treating it as tier 0 would hand a codemod a change
+        whose value it cannot know.
+        """
+        if tier == CODEMOD:
+            return is_deterministic(remediator)
+        return not is_deterministic(remediator)
+
+    def _eligible(self, diagnostics: str, tier: Tier | None) -> list:
         """The remediators worth trying for this attempt.
 
-        On a retry the deterministic ones are dropped -- unless dropping them would leave
-        nothing, since repeating a patch is still better than producing none and the graph's
-        own attempt budget ends the loop either way.
-        """
-        if not diagnostics.strip():
-            return self._remediators
+        Routing narrows first, then the retry rule narrows again. Both survive: a codemod
+        re-run with feedback re-emits the byte-identical patch that just failed, whatever tier
+        the table picked for it.
 
-        adaptive = [r for r in self._remediators if not is_deterministic(r)]
-        return adaptive or self._remediators
+        Neither filter is allowed to empty the list. A routed tier with no remediator serving
+        it falls back to the whole cascade rather than abandoning a repairable finding on a
+        composition detail -- the same reasoning the retry rule already carried, where
+        repeating a patch beats producing none and the graph's attempt budget ends the loop
+        either way.
+        """
+        candidates = self._remediators
+        if tier is not None:
+            candidates = [r for r in candidates if self._serves(r, tier)] or candidates
+
+        if not diagnostics.strip():
+            return candidates
+
+        adaptive = [r for r in candidates if not is_deterministic(r)]
+        return adaptive or candidates

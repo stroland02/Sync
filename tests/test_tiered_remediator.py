@@ -17,7 +17,11 @@ import pytest
 
 from sync.core import CallSite, Finding, Patch, RepoRef, VendorChange
 from sync.core.protocols import Remediator
-from sync.remediate.tiered import TieredRemediator
+from sync.remediate.tiered import (
+    NoPatchWarranted,
+    TieredRemediator,
+    routing_facts,
+)
 
 FINDING = Finding(detector="d", call_site_id="cs", severity="breaking", rationale="r")
 SITE = CallSite(
@@ -319,3 +323,290 @@ def test_the_wired_cascade_sends_an_unroutable_change_to_the_agent():
     )
     assert patch.strategy == "agent"
     assert agent.proposed == 1
+
+
+# --- the decision table selects the tier -----------------------------------------
+#
+# Until this existed the table in `sync.route.matrix` was decorative: the tier a finding got
+# was decided by which remediator happened to be first in a list, and `route()` was never
+# consulted. Two things followed. Tier -1 -- the 21 lifecycle rules where no edit in a
+# consumer repository resolves anything -- had no effect, so a lifecycle finding still reached
+# a remediator that would try to patch it. And the row that decided did not exist to record,
+# which is what left "tier 0 was wrong for this change kind" unanswerable.
+
+LIFECYCLE_RULE = {
+    "id": "sunset-deleted", "level": "error",
+    "kind": "lifecycle", "action": "remove", "direction": "none",
+}
+RESPONSE_REMOVED_RULE = {
+    "id": "response-property-removed", "level": "error",
+    "kind": "existence", "action": "remove", "direction": "response",
+}
+REQUIREDNESS_RULE = {
+    "id": "request-property-became-required", "level": "error",
+    "kind": "requiredness", "action": "change", "direction": "request",
+}
+TYPE_RULE = {
+    "id": "response-property-type-changed", "level": "error",
+    "kind": "type", "action": "change", "direction": "response",
+}
+ADDED_REQUIRED_RULE = {
+    "id": "new-required-request-property", "level": "error",
+    "kind": "existence", "action": "add", "direction": "request",
+}
+
+CATALOGUE = {
+    rule["id"]: rule
+    for rule in (LIFECYCLE_RULE, RESPONSE_REMOVED_RULE, REQUIREDNESS_RULE, TYPE_RULE,
+                 ADDED_REQUIRED_RULE)
+}
+
+
+def _change(kind: str, **over) -> VendorChange:
+    fields = dict(
+        vendor_id="stripe", from_version="a", to_version="b", kind=kind,
+        operation_id="PostCharges", path_ptr="/v1/charges", severity="breaking",
+        source="oasdiff", raw={"text": "removed the `status` property"},
+    )
+    fields.update(over)
+    return VendorChange(**fields)
+
+
+def _routed(*stubs: Stub, **kwargs) -> TieredRemediator:
+    return TieredRemediator(list(stubs), catalogue=CATALOGUE, **kwargs)
+
+
+def test_a_lifecycle_change_produces_no_patch():
+    """Tier -1. `sunset-deleted` is a complaint about how the vendor documented a deprecation;
+    no edit in a consumer's repository resolves it. Routing one to an agent produces a
+    confident patch against code that was never wrong, which is the most expensive failure
+    available -- it spends the reviewer trust the whole precision-over-recall position exists
+    to protect.
+    """
+    agent = Stub("agent")
+
+    with pytest.raises(NoPatchWarranted):
+        _routed(Stub("codemod"), agent).propose(FINDING, _change("sunset-deleted"), SITE, REPO)
+
+    assert agent.proposed == 0
+
+
+def test_a_lifecycle_change_is_not_even_asked_of_a_remediator():
+    """Asserted on `can_handle` as well as `propose`. A tier that is consulted and declines is
+    a different thing from one that is never reached, and only the second is what tier -1
+    means."""
+    codemod = Stub("codemod")
+    asked: list[str] = []
+    codemod.can_handle = lambda finding, change: bool(asked.append("codemod")) or True
+
+    with pytest.raises(NoPatchWarranted):
+        _routed(codemod, Stub("agent")).propose(FINDING, _change("sunset-deleted"), SITE, REPO)
+
+    assert asked == []
+
+
+def test_the_row_that_decided_is_reported():
+    """The whole reason `route()` returns a row name alongside the tier. Without it,
+    "tier 0 was wrong for this change kind" is an archaeology project rather than a query."""
+    seen: list[tuple] = []
+    remediator = _routed(
+        Stub("agent"), on_route=lambda decision: seen.append((decision.tier, decision.row))
+    )
+
+    remediator.propose(FINDING, _change("response-property-type-changed"), SITE, REPO)
+
+    assert seen == [(2, "type-change")]
+
+
+def test_the_row_reaches_the_message_an_operator_sees():
+    """`make_patch` renders the exception into `diagnostics`, which becomes `abandon_reason`.
+    A tier -1 abandonment that did not say which row decided would be indistinguishable from
+    every other abandonment."""
+    with pytest.raises(NoPatchWarranted, match="lifecycle"):
+        _routed(Stub("agent")).propose(FINDING, _change("sunset-deleted"), SITE, REPO)
+
+
+def test_a_change_the_table_sends_to_the_agent_never_asks_the_codemods():
+    """The table deciding, rather than the list order deciding. A type change is never
+    mechanical, so the codemod is not offered it at all -- previously it was asked and
+    declined, which reaches the same patch by a route that cannot be audited."""
+    codemod = Stub("codemod")
+    agent = Stub("agent")
+
+    patch = _routed(codemod, agent).propose(
+        FINDING, _change("response-property-type-changed"), SITE, REPO
+    )
+
+    assert patch.strategy == "agent"
+    assert codemod.proposed == 0
+
+
+def test_a_change_already_satisfied_at_the_call_site_produces_no_patch():
+    """Row 5, and the reason the graph exists. A request property becoming required needs no
+    patch when the call site already passes it; without the index this would be a needless
+    pull request against correct code."""
+    site = SITE.model_copy(update={"args_keys": ["status", "amount"]})
+
+    with pytest.raises(NoPatchWarranted, match="already-satisfied"):
+        _routed(Stub("agent")).propose(
+            FINDING, _change("request-property-became-required"), site, REPO
+        )
+
+
+def test_the_same_change_still_routes_when_the_call_site_does_not_pass_it():
+    """The other side of row 5. `args_keys` is what this call site passes, so a field absent
+    from it is established as not passed rather than unknown -- and the finding must still be
+    repaired."""
+    site = SITE.model_copy(update={"args_keys": ["amount"]})
+
+    patch = _routed(Stub("agent")).propose(
+        FINDING, _change("request-property-became-required"), site, REPO
+    )
+
+    assert patch.strategy == "agent"
+
+
+def test_a_templated_route_falls_to_the_agent():
+    """Tier 1 has no remediator: `PatchStrategy` is a two-value Literal and nothing implements
+    a constrained single-edit strategy. Falling to the agent is more expensive and correct;
+    silently treating it as tier 0 would hand a codemod a change whose value it cannot know."""
+    codemod = Stub("codemod")
+    agent = Stub("agent")
+
+    patch = _routed(codemod, agent).propose(
+        FINDING, _change("new-required-request-property"), SITE, REPO
+    )
+
+    assert patch.strategy == "agent"
+    assert codemod.proposed == 0
+
+
+# --- what the facts can and cannot establish -------------------------------------
+
+
+def test_the_facts_are_populated_from_what_the_call_site_knows():
+    """`field_resolved` comes from `changed_field()` over the change's own text."""
+    facts = routing_facts(_change("response-property-removed"), SITE)
+
+    assert facts.field_resolved is True
+
+
+def test_a_change_naming_no_field_is_established_as_unresolved():
+    """oasdiff records frequently name no field at all, and that is not a defect. It is
+    established knowledge, so it is `False` rather than unknown -- row 2 reads it to keep a
+    codemod away from a field nobody can name."""
+    facts = routing_facts(_change("response-property-removed", raw={}), SITE)
+
+    assert facts.field_resolved is False
+
+
+def test_the_facts_this_layer_cannot_establish_stay_unknown():
+    """Absent evidence must never read as permission. A single call site cannot say how many
+    sites across the graph read a field, and the index records which argument keys are passed
+    but not whether each is a literal or a variable. Both stay `None`, which makes the rows
+    needing them decline rather than route work to a codemod on a guess.
+    """
+    facts = routing_facts(_change("response-property-removed"), SITE)
+
+    assert facts.call_sites_reading_field is None
+    assert facts.field_passed_as_literal is None
+
+
+# --- the table's domain, and what lies outside it --------------------------------
+
+
+def test_a_kind_the_catalogue_does_not_carry_keeps_the_cascade():
+    """A deprecation's `kind` is `deprecation/model-retired`, not an oasdiff rule id, so the
+    table has nothing to say about it. Treating an absent record as "no row matched" would
+    route every deprecation to the agent and switch off the one signal that costs no tokens.
+    """
+    codemod = Stub("codemod")
+
+    patch = _routed(codemod, Stub("agent")).propose(FINDING, CHANGE, SITE, REPO)
+
+    assert patch.strategy == "codemod"
+    assert codemod.proposed == 1
+
+
+def test_no_catalogue_keeps_the_cascade_exactly_as_it_was():
+    """The table cannot decide without the rule metadata it keys on. A remediator built
+    without a catalogue behaves as it did before routing existed, which is what keeps this
+    change from silently disabling tier 0 wherever the catalogue is not wired."""
+    codemod = Stub("codemod")
+
+    patch = _tiered(codemod, Stub("agent")).propose(
+        FINDING, _change("response-property-type-changed"), SITE, REPO
+    )
+
+    assert patch.strategy == "codemod"
+
+
+def test_routing_still_skips_the_deterministic_tier_on_a_retry():
+    """The retry rule survives routing. A codemod re-run with feedback re-emits the
+    byte-identical patch that just failed, so a retry belongs to something that can read the
+    error -- whatever tier the table picked."""
+    codemod = Stub("codemod")
+    agent = Stub("agent")
+
+    patch = _routed(codemod, agent).propose(
+        FINDING, CHANGE, SITE, REPO, diagnostics="TS2304: Cannot find name"
+    )
+
+    assert patch.strategy == "agent"
+    assert codemod.proposed == 0
+
+
+def test_a_routed_tier_no_remediator_serves_falls_back_to_the_whole_cascade():
+    """A cascade holding only codemods, handed a change the table sends to the agent. Nothing
+    serves tier 2, and abandoning there would lose a finding on a composition detail rather
+    than on anything about the change. The same reasoning the retry rule already carried:
+    repeating a patch beats producing none, and the graph's attempt budget ends the loop
+    either way.
+    """
+    codemod = Stub("codemod")
+
+    patch = _routed(codemod).propose(
+        FINDING, _change("response-property-type-changed"), SITE, REPO
+    )
+
+    assert patch.strategy == "codemod"
+
+
+def test_a_caller_holding_the_graph_can_reach_tier_zero():
+    """The two facts this layer cannot establish are the two that gate the mechanical rows, so
+    tier 0 is unreachable through the default and rows 3 and 4 never fire. That is the
+    defaults working -- absent evidence must not read as permission -- and it is not a dead
+    end: a caller that can count the call sites reading a field supplies them and the codemod
+    tier becomes reachable.
+    """
+    from sync.route.matrix import RoutingFacts
+
+    codemod = Stub("codemod")
+    agent = Stub("agent")
+    remediator = TieredRemediator(
+        [codemod, agent],
+        catalogue=CATALOGUE,
+        facts_for=lambda change, site: RoutingFacts(
+            field_resolved=True, call_sites_reading_field=1
+        ),
+    )
+
+    patch = remediator.propose(FINDING, _change("response-property-removed"), SITE, REPO)
+
+    assert patch.strategy == "codemod"
+    assert agent.proposed == 0
+
+
+def test_the_default_facts_leave_tier_zero_unreachable():
+    """Stated as a test so the limitation is visible rather than folklore. The same change as
+    above, with the facts this layer can actually establish, routes to the agent because no
+    row assigning tier 0 can be satisfied without a call-site count.
+    """
+    codemod = Stub("codemod")
+
+    patch = _routed(codemod, Stub("agent")).propose(
+        FINDING, _change("response-property-removed"), SITE, REPO
+    )
+
+    assert patch.strategy == "agent"
+    assert codemod.proposed == 0
