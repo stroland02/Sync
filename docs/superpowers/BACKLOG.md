@@ -26,7 +26,12 @@ the one the gate measures.
 that file, and a run where the agent leaves debris behind still does not commit the
 debris. Both proven against a real clone.
 
-### B2 — The authorship check reads only the branch tip
+### B2 — done, see Done below
+
+_Superseded._ Original text kept out of the Ready list deliberately; the closing evidence is
+recorded in the design document's limitations section.
+
+<!-- former B2 —
 `push_branch` refuses a tip Sync did not author, which stops the common case of a
 reviewer pushing a fixup. A stranger's commit sitting *beneath* a later Sync-authored
 one is invisible to it and would still be replaced. Walking the range from the merge
@@ -69,14 +74,18 @@ the cause. If it turns out not to be contention, that is a more important answer
 
 ## In flight
 
-- **B2** — `task_0e6eb23d3ad7`, worktree `m1-forge`.
 - **B3** — `task_b233d7d7237d`, dispatched to `m2-symbols`. Its brief
   proposes a cheaper closure than the second checkout and explicitly asks the worker to
   argue with that proposal rather than accept it.
-- **B1** — `task_627dab9b3617`, brief written, blocked on B2 (both own `forge/github.py`). Declared as a
-  dependency so it cannot be dispatched early.
+- **B1** — `task_627dab9b3617`, dispatched to `m1-forge` now that B2 has landed. Told not to
+  edit `src/sync/index/`, which B3 holds; if it concludes `shipped_tree` must change, it
+  reports the change rather than making it.
 
 ## Done
+
+- Refuse a push that would discard any non-Sync commit, not merely one at the tip. Landed
+  `7adeb08`. The worker found a case the brief missed: a stranger's commit the push carries
+  forward is not at risk, so refusing it would abandon findings needlessly.
 
 - Register `sync.core` types with LangGraph's checkpoint serialiser. Landed `05c11f5`.
   The warning is read-side only and nothing fell back to pickle — the brief was wrong about
