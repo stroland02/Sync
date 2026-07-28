@@ -53,6 +53,12 @@ class CallSite(BaseModel):
     response_fields_read: list[str] = Field(default_factory=list)
     sdk_version: str
     content_hash: str
+    # How many loops enclose this call, counting array callbacks that iterate. Zero is a call
+    # made once per unit of work; one is a page of results becoming one vendor call each; two
+    # is quadratic. A depth rather than a flag, because a boolean cannot tell N from N*M, and
+    # that difference is the whole reason the signal is worth recording. Static evidence only:
+    # a loop that never runs still counts here, and a runtime count belongs in `observed_call`.
+    loop_depth: int = 0
     indexed_at: datetime = Field(default_factory=_now)
 
 

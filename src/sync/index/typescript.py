@@ -55,6 +55,52 @@ def _path(segments: Iterable[str]) -> str:
     return ".".join(segments)
 
 
+# Loop constructs in the grammar. `for_in_statement` covers both `for...in` and `for...of`;
+# tree-sitter does not distinguish them and neither does the count.
+_LOOP_TYPES = {
+    "for_statement",
+    "for_in_statement",
+    "while_statement",
+    "do_statement",
+}
+
+# Array methods whose callback runs once per element. A call inside one is an N+1 in every
+# sense that matters, and none of them is a loop node -- counting only `_LOOP_TYPES` would
+# report zero for the shape a real N+1 most often takes. `find` and `some` short-circuit and
+# are still unbounded in the worst case, so they count too.
+_ITERATING_METHODS = {
+    "map", "forEach", "filter", "reduce", "reduceRight",
+    "flatMap", "find", "findIndex", "some", "every",
+}
+
+
+def _iterates(node: Node, source: bytes) -> bool:
+    """Whether `node` is a call to an array method that runs its callback per element."""
+    if node.type != "call_expression":
+        return False
+    function = node.child_by_field_name("function")
+    if function is None or function.type != "member_expression":
+        return False
+    prop = function.child_by_field_name("property")
+    return prop is not None and _text(prop, source) in _ITERATING_METHODS
+
+
+def _loop_depth(node: Node, source: bytes) -> int:
+    """How many iterating constructs enclose `node`.
+
+    Walks ancestors rather than tracking depth during descent, because the call sites are
+    found by an independent pass and re-deriving the position is cheaper than threading a
+    counter through it.
+    """
+    depth = 0
+    current = node.parent
+    while current is not None:
+        if current.type in _LOOP_TYPES or _iterates(current, source):
+            depth += 1
+        current = current.parent
+    return depth
+
+
 class TypeScriptAdapter:
     language_id = "typescript"
 
@@ -346,6 +392,7 @@ class TypeScriptAdapter:
                     response_fields_read=response_fields,
                     sdk_version=sdk_version,
                     content_hash=content_hash,
+                    loop_depth=_loop_depth(node, source),
                 )
 
     def prepare(self, repo: RepoRef) -> None:

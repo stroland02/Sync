@@ -302,3 +302,29 @@ def test_get_call_site_raises_key_error_for_an_unknown_id(store):
 def test_get_vendor_change_raises_key_error_for_an_unknown_id(store):
     with pytest.raises(KeyError):
         store.get_vendor_change("no-such-vendor-change")
+
+
+def test_loop_depth_survives_the_round_trip(store):
+    """The column exists so a detector can ask for shape without re-indexing. A value that
+    reaches the row and not the query is the same as no column at all.
+    """
+    site = _site()
+    site = site.model_copy(update={"loop_depth": 2})
+    site_id = store.upsert_call_site(site)
+
+    with store._connect().cursor() as cur:
+        cur.execute("SELECT loop_depth FROM call_site WHERE id = %s", (site_id,))
+        assert cur.fetchone()["loop_depth"] == 2
+
+
+def test_reindexing_a_call_that_moved_into_a_loop_updates_its_depth(store):
+    """Wrapping an existing call in a `for` changes its shape without changing its identity,
+    and a stale zero would tell a detector the opposite of what the code now does.
+    """
+    site = _site()
+    store.upsert_call_site(site)
+    store.upsert_call_site(site.model_copy(update={"loop_depth": 1}))
+
+    with store._connect().cursor() as cur:
+        cur.execute("SELECT loop_depth FROM call_site WHERE repo_id = %s", (site.repo_id,))
+        assert [row["loop_depth"] for row in cur.fetchall()] == [1]

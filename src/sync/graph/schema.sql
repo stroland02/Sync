@@ -11,6 +11,12 @@ CREATE TABLE IF NOT EXISTS call_site (
     response_fields_read TEXT[] NOT NULL DEFAULT '{}',
     sdk_version          TEXT NOT NULL,
     content_hash         TEXT NOT NULL,
+    -- How many loops enclose the call, counting array callbacks that iterate. Zero means the
+    -- call is made once per unit of work; one means a collection becoming one vendor call
+    -- each; two means quadratic. Static evidence: a loop that never executes still counts,
+    -- which is why this is not interchangeable with a count from `observed_call`. A query
+    -- that treats a non-zero depth as proof of volume is wrong -- it is proof of shape.
+    loop_depth           INTEGER NOT NULL DEFAULT 0,
     indexed_at           TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
