@@ -111,17 +111,44 @@ The precise exposure for this detector, which is narrower than "the cache findin
 
 - `record_observed_call` merges span maps across batches — `spans = observed_call.spans || EXCLUDED.spans`.
   One row therefore accumulates spans ingested at different times, possibly in different processes.
-- Within one batch, one salt is used, so repeats are counted correctly.
-- If the salt differs *between* two batches that land in the same row, one URL yields two digests
-  inside one span map. `distinct_targets` over-counts and the cache finding **silently
-  under-fires**. It fails safe rather than raising a false finding, which is the right direction,
-  but it fails invisibly.
+- Whenever one salt covered every batch that fed a row — the normal case, and every case today —
+  the digests in that row are mutually comparable and repeats are counted correctly.
+- If the salt differs *between* two batches landing in one row, one URL yields two digests inside
+  one span map. `distinct_targets` over-counts and the cache finding **silently under-fires**. It
+  fails safe rather than raising a false finding, which is the right direction, but it fails
+  invisibly.
 - The loop and retry-storm findings do not read the digest at all and are unaffected.
+
+It is worth being exact about why that middle case is reachable, because the intuitive argument
+against it — one trace is one batch, so one salt — is not what this repository does. Two
+committed tests demonstrate a single trace's spans arriving across separate ingest calls and
+merging into one row: `test_a_partial_redelivery_of_overlapping_spans_converges`, whose docstring
+describes a collector re-sending a buffered subset repacked with newer spans, and
+`test_the_first_sighting_is_held_and_the_last_advances`, which feeds one trace two batches in
+order. `record_observed_call`'s own docstring names the same behaviour — backlog flushed after
+the live stream resumes, so batches do not arrive in order. Each of those calls takes its own
+`salt` argument. Same process means same salt and no exposure; a process boundary between two
+batches feeding one row is where a divergence could enter, and the per-process fallback below is
+the way it plausibly would.
 
 So the cache finding was built, with the dependency stated rather than worked around. The fix is
 to have whatever eventually calls `ingest_payload` source its salt from `corpus_salt()`. That is
 one line and it is not made here: telemetry belongs to another worker, and the change belongs
 with the endpoint work that will introduce the first real caller.
+
+Two further properties of the salt, recorded because they are real and are deliberately not
+defended against in code:
+
+- **A rotated salt silently changes every stored digest, and no column records which salt
+  produced a row.** That is a real gap for any future analysis comparing digests across time —
+  a corpus join, a longitudinal cache-hit measurement. It is not this finding's gap, which
+  compares digests inside one row, and it is not fixed here.
+- **`SALT_FILE` resolves to the repository root, so every worktree has its own.** Digests are
+  therefore not reproducible across checkouts. This detector's tests are unaffected because they
+  never touch the ambient salt: `_spans()` writes literal strings such as `"same"` and
+  `"charge0"` directly into the `target` field, so equality is asserted over values the test
+  controls and `hash_request_target` is never called. Anyone later writing a test that wants a
+  reproducible digest must pass an explicit salt rather than rely on the ambient one.
 
 ## Mutations
 
