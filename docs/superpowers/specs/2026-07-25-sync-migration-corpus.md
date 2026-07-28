@@ -1,7 +1,11 @@
 # Sync — The Migration Corpus
 
 **Date:** 2026-07-25
-**Status:** Specified. One table and its writes are an M0 addition; the merge webhook is M1.
+**Status:** Built, empty. The table is `src/sync/graph/schema.sql:54`, the model is
+`MigrationOutcome` in `src/sync/core/models.py`, and the remediation graph writes through
+`src/sync/remediate/corpus.py` — including the abandoned attempts, which are the negative class.
+The merge webhook is still M1: `GraphStore.set_merge_outcome` is the update path and nothing
+calls it, so `pr_merged` stays null. No real pipeline run has produced a row yet.
 **Scope:** What Sync records about every remediation attempt, where each field is captured, and why the record
 is safe to aggregate across customers.
 

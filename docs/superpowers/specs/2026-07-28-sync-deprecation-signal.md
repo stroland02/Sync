@@ -1,8 +1,10 @@
 # Sync — The Deprecation Signal
 
 **Date:** 2026-07-28
-**Status:** Built and passing, unwired. Every component below exists with tests; nothing calls
-it from the CLI yet.
+**Status:** Built and wired. Every component below exists with tests, and `src/sync/cli.py`
+runs the detector: it fetches both vendor pages (`DEPRECATION_SOURCES`, line 45), parses the
+parameter table, indexes model literals via `index_operation_literals`, and constructs
+`ParameterDeprecationDetector` in its detector suite (line 409).
 **Scope:** Vendor deprecation tables as a signal source, and the tier-0 path that repairs them
 without a model call. The first end-to-end feature Sync has that costs nothing per finding.
 

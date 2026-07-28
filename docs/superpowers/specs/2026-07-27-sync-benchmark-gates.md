@@ -13,8 +13,12 @@ often than a general autonomous pull request. A claim like that is either measur
 marketing. The pipeline's quality has to be a number that a change can move, that CI can gate
 on, and that gets recorded before anyone has an opinion about it.
 
-The obstacle is that four of the five interesting numbers cannot be computed yet, because the
-table they read from does not exist. This document separates what can be gated today from what
+The obstacle was that four of the five interesting numbers could not be computed at all, because
+the table they read from did not exist. It exists now — `migration_outcome` in
+`src/sync/graph/schema.sql:54` — and `src/sync/benchmark/axes.py` computes the axes from it, so
+the obstacle has moved: the table holds no rows, because no real pipeline run has produced one.
+The distinction that matters is between the computation and the gate, and it is drawn in tier B
+below. This document separates what can be gated today from what
 is waiting on data, and it is explicit about which is which — a benchmark spec that quietly
 mixes aspirational thresholds into a live gate produces a red build nobody trusts, which is
 worse than no gate.
@@ -40,10 +44,24 @@ cheapest signal arrives first.
 so an unpinned version would silently change the set of change kinds the pipeline can see —
 and would silently change what any completeness test over that domain is asserting.
 
-## Gate tier B — the quality axes, blocked on the corpus
+## Gate tier B — the quality axes, computed but not gated
 
-Five axes. All five read from `migration_outcome`, which is specified in
-`2026-07-25-sync-migration-corpus.md` and not yet built.
+Five axes. All five read from `migration_outcome`, specified in
+`2026-07-25-sync-migration-corpus.md` and now built: the table is
+`src/sync/graph/schema.sql:54`, the model is `MigrationOutcome` in `src/sync/core/models.py`,
+and `GraphStore.record_migration_outcome` writes it.
+
+Three of the five are computed today by `src/sync/benchmark/axes.py` — merge rate split by
+`change_kind` and by `tier`, routing accuracy, and cost per merged patch — alongside the counts
+binding precision will divide into. Each reports its sample size, and an axis with no samples
+reports a null rather than a zero, which is the distinction the Verification section below
+demands.
+
+**What remains blocked is the gate, not the computation.** The corpus holds no rows, because no
+real pipeline run has yet produced one, so every axis currently reports zero samples. Nothing is
+wired into `.github/workflows/ci.yml` and no threshold is asserted anywhere, per the tier C rule
+below. Binding precision and recall are still uncomputable for a different reason, given under
+Ground truth: the corpus records what Sync did, not what was correct.
 
 | Axis | Definition | Why it is the one that matters |
 |---|---|---|
@@ -62,16 +80,23 @@ finding costs the reviewer's willingness to read the next one.
 
 Tier B cannot be built before `migration_outcome` is written to. Three properties of that
 writing are load-bearing for the benchmark specifically, beyond what the corpus spec already
-requires:
+requires. One holds, one does not, and one holds in part:
 
 - **Abandoned attempts are written, not only successes.** A corpus of successes cannot compute
   precision, cannot compute routing accuracy, and cannot evaluate any future router. The
-  `abandon` node's `abandon_reason` is the negative class.
+  `abandon` node's `abandon_reason` is the negative class. **Holds.**
+  `src/sync/remediate/graph.py` installs the recorder from `src/sync/remediate/corpus.py`, and
+  `nodes.py:340` writes the abandoned attempt for exactly this reason.
 - **`pr_merged` and `human_edits_before_merge` are populated from a real webhook**, not
   inferred. Merge outcome arrives days after the run. A field that silently stays null for six
-  months destroys the only measurement that tests the product claim.
+  months destroys the only measurement that tests the product claim. **Does not hold.**
+  `GraphStore.set_merge_outcome` exists as the update path, and nothing calls it: no webhook
+  receiver is built, so both columns stay null and the merge rate has no numerator.
 - **The routing decision that fired is recorded**, including the decision-table row. Otherwise
   "tier 0 was wrong for this change kind" is an archaeology project rather than a query.
+  **Holds in part.** `tier` and `strategy` record which tier ran; the decision-table row does
+  not exist to record, because `sync.route.matrix.route()` is not what selects the tier — see
+  `2026-07-27-sync-routing-matrix.md`.
 
 ## Ground truth without customers
 

@@ -1,7 +1,10 @@
 # Sync — The Graph Surface
 
 **Date:** 2026-07-25
-**Status:** Approved design. Implementation follows M0.
+**Status:** Approved design. Partly implemented: `src/sync/mcp/tools.py` provides `GraphSurface`
+with the three read tools (`whats_at_risk`, `explain_call_site`, `whats_changed`).
+`sync_propose_patch`, the `sync://feed/{vendor}` resource, `FeedCache`, and any server transport
+are not built — the module is tool logic over a `GraphReader`, not a running MCP server.
 **Scope:** How the API Dependency Graph is exposed to consumers, given that the binding rather than the repair
 is what Sync sells.
 

@@ -8,6 +8,9 @@ that routing stays auditable and provably complete as oasdiff's rule set grows.
 
 ## The problem
 
+*(Written when nothing routed. A tier cascade now exists and the decision table below still
+does not drive it — see "What is built" at the end of this document.)*
+
 Today there is no routing. `src/sync/remediate/graph.py` sends every finding to one
 `remediator`, and `patch` calls a full agent loop regardless of how mechanical the change is.
 That is correct for a walking skeleton and wrong for the economics: the stated advantage is
@@ -222,3 +225,26 @@ table.
 - **The routing decision reaches the corpus.** Assert `migration_outcome.tier` and `.strategy`
   are populated from the real routing decision, not defaulted. A column that silently stays null
   destroys the only measurement that would justify the next version of this table.
+
+## What is built
+
+The problem statement above describes the state before any tiering existed. Two of its three
+parts have since changed, and the third has not.
+
+**A tier cascade runs.** `src/sync/cli.py:69` builds a `TieredRemediator` over
+`LiteralSwapRemediator`, `PropertyOmitRemediator` and `TerminalTier(AgentRemediator())`, and
+`cli.py:541` hands it to `build_graph`. So `patch` no longer calls a full agent loop regardless:
+the deterministic tiers are tried first and the agent is reached only when they decline.
+
+**The tier-0 codemods exist.** `src/sync/remediate/literal_swap.py`,
+`src/sync/remediate/property_omit.py` and `src/sync/remediate/parameters.py` are the
+deterministic strategies, built on the rule and span implementations in
+`src/sync/route/templates.py`.
+
+**The decision table below still does not drive the routing.** `sync.route.matrix.route()` is
+imported by nothing outside `src/sync/route/`; the cascade selects a tier by asking each
+remediator's `can_handle` in order, which is a different mechanism reaching a similar answer. The
+consequence is the one the Verification section names last: `migration_outcome.tier` records
+which tier ran, not which decision-table row selected it, so "tier 0 was wrong for this change
+kind" remains archaeology rather than a query. Wiring `route()` into the cascade is the
+outstanding work this document specifies.

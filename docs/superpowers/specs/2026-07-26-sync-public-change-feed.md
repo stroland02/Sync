@@ -1,7 +1,11 @@
 # Sync — The Public Change Feed
 
 **Date:** 2026-07-26
-**Status:** Specified. Fills the scope boundary left open by `2026-07-25-sync-graph-surface-design.md`.
+**Status:** Built, unpublished. `src/sync/signals/feed/publisher.py` renders and signs the array;
+`src/sync/signals/feed/consumer.py` verifies before parsing, with `FeedSignatureError` and
+`FeedFormatError` keeping the two failures apart. What does not exist is everything operational
+— no keypair, no committed public key, no hosting, no `FeedCache`. Fills the scope boundary left
+open by `2026-07-25-sync-graph-surface-design.md`.
 **Scope:** What the free, public, cross-vendor API-change feed actually is — schema, hosting, integrity,
 license, and how it is produced. Consumed by `FeedCache` (`2026-07-25-sync-mcp-graph-surface.md`, Task 4), by
 `sync_whats_changed`, and mocked against by the replay tier in `2026-07-26-sync-observed-contract-drift.md`.

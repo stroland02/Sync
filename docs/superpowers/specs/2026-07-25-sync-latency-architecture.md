@@ -165,7 +165,7 @@ Building a parallel pipeline before a sequential one produces a correct result w
 | M0 | None. Instrument only: record per-stage timings so later claims are measured rather than asserted. |
 | M1 | Lever 1 — parallel vendor and repository branches; `Send` fan-out across findings, with reducers and a fan-out test. |
 | M2 | Lever 2 — incremental indexing on push webhooks; vendor diffs computed once and fanned out across customers. |
-| M3 | The tier cascade and prompt-cache boundaries. |
+| M3 | The tier cascade and prompt-cache boundaries. The cascade is built — `TieredRemediator` in `src/sync/cli.py:69` — and the prompt-cache boundaries are not: `src/sync/remediate/agent_patch.py` sets no `cache_control` breakpoint. |
 | M4 | Lever 3 — staged delivery in the interface; speculation as a policy option. |
 
 ## The rule this document exists to enforce

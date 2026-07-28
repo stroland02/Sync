@@ -1,7 +1,10 @@
 # Sync — Observed Contract Drift
 
 **Date:** 2026-07-26
-**Status:** Specified. The shape store's format is binding now; the detector and replay tier land per Sequencing.
+**Status:** Partly built. The shape store (`observed_shape`, `src/sync/graph/schema.sql:118`),
+the `error-payload` source (`src/sync/signals/sentry/`) and the detector
+(`src/sync/detect/observed_drift.py`, wired in `src/sync/cli.py:18`) all exist. The replay tier
+and the interceptor SDK do not — see Sequencing.
 **Scope:** Detecting vendor changes no one published, and verifying patches against behavior rather than types
 alone. The design transposes Meticulous's record-replay-diff mechanism into the API-consumption domain.
 
@@ -121,6 +124,15 @@ Two comparisons, two distinct findings:
 - **Observed versus specification** — the vendor's live behavior no longer matches what they publish. A field
   arriving null that the spec marks required; a type that changed; an enum value the spec does not name. This
   is the unpublished-change case, and no shipped competitor detects it before failure.
+
+  **The third of those three cannot be built as this document states it, and is not.** The
+  privacy rule above discards any observed value the published specification does not name, so
+  `spec_enum_values` can only ever hold published members and an unpublished one leaves no trace
+  behind to detect. The two requirements contradict each other; the privacy rule is a
+  threat-model commitment and wins. `src/sync/detect/observed_drift.py` therefore detects type
+  drift, nullability drift and undeclared fields, and says so in its own module docstring.
+  Closing the gap needs a counter of observations whose value was discarded — a count, never a
+  value — which is a change to the `observed_shape` schema and is not made.
 - **Observed now versus observed before** — the baseline shifted between windows even where the spec is
   silent. Weaker signal, useful as severity enrichment rather than as a lone trigger.
 
@@ -174,12 +186,15 @@ number remains in engineering docs; the volume number is the one a customer sees
 
 ## Sequencing
 
-| When | What |
-|---|---|
-| Now | This document. The `observed_shape` schema is binding on anything that later records shapes. |
-| M1 (with the sandbox the threat model gates on) | The replay tier, feeding the shape store as `source='replay'`. |
-| M2 (signal sources) | Error-payload shapes from Sentry-class sources, `source='error-payload'`. The detector ships here, running on whatever baseline exists, with the sample floor keeping it silent where data is thin. |
-| Post-M2, opt-in | The interceptor SDK, only for customers who want unpublished-change detection on live traffic. A separate adoption decision with its own trust conversation. |
+| When | What | State |
+|---|---|---|
+| Now | This document. The `observed_shape` schema is binding on anything that later records shapes. | Built — `src/sync/graph/schema.sql:118`, `ObservedShape` in `src/sync/core/models.py` |
+| M1 (with the sandbox the threat model gates on) | The replay tier, feeding the shape store as `source='replay'`. | Not built |
+| M2 (signal sources) | Error-payload shapes from Sentry-class sources, `source='error-payload'`. The detector ships here, running on whatever baseline exists, with the sample floor keeping it silent where data is thin. | Built — `src/sync/signals/sentry/shapes.py` and `src/sync/detect/observed_drift.py`, whose `MIN_SAMPLES` is the sample floor |
+| Post-M2, opt-in | The interceptor SDK, only for customers who want unpublished-change detection on live traffic. A separate adoption decision with its own trust conversation. | Not built |
+
+The baseline is empty in practice: nothing has fed Sentry payloads in, so the detector runs and
+correctly finds nothing. That is the sample floor doing its job rather than a defect.
 
 Nothing here touches M0, the eight-task graph-surface plan, or the frozen tool schemas. The detector emits the
 existing `Finding` type; the graph surface exposes its findings through the existing tools with no schema

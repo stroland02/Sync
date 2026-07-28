@@ -71,6 +71,16 @@ control, and preferring the project's own compiler is the correct behavior for t
 mismatch between that code and a claim in `CLAUDE.md` that is marked non-negotiable. One of the two has to
 move, and the claim is worth more than the convenience.
 
+**How it was resolved: the claim moved, and one of the three paths closed.** `CLAUDE.md` no
+longer asserts the absolute; it states that never executing customer code is the intent rather
+than the invariant, and that Sync runs the customer's *toolchain* while never running their
+application. The third path above is genuinely closed — every install command in
+`src/sync/index/deps.py` passes `--ignore-scripts`, so no lifecycle script from the dependency
+tree runs. The first two are open by design: `src/sync/index/tsc.py:132` still prefers
+`node_modules/.bin/tsc`, and `tsconfig.json` still resolves plugins into the compiler process.
+The unpinned fallback is also still there (`tsc.py:150`, `--package=typescript@latest`), so the
+non-reproducibility noted above stands.
+
 ### Required mitigations
 
 The rule to adopt, stated so it can be tested rather than remembered:

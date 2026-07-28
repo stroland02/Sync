@@ -97,7 +97,12 @@ This is the synthesized-adapter machinery the competitive-position spec named as
 "the moat is the synthesis machinery that produces coverage without hand-authored adapters."
 A `GeneratedSdkAdapter` that reads whichever manifest a repository carries, follows the spec
 location it names, and hands the result to the existing oasdiff pipeline is **one adapter that
-covers every vendor either generator serves**, not one per vendor. Anthropic acquired Stainless
+covers every vendor either generator serves**, not one per vendor. This is built:
+`src/sync/signals/generated/manifest.py` parses both conventions and
+`src/sync/signals/generated/adapter.py` is the `VendorAdapter`, `GeneratedSpecAdapter`, which
+skips the spec download entirely when `openapi_spec_hash` has not moved. What it does not do is
+resolve an SDK symbol to an operation — `operation_for_symbol` returns `None`, because a symbol
+scheme is exactly the per-vendor knowledge the mechanism exists to avoid. Anthropic acquired Stainless
 in May 2026, and OpenAI and Google both depended on it; Speakeasy serves a separate and
 overlapping population. Neither generator has to cooperate, because the manifest is already
 committed to a public repository for its own reasons.
