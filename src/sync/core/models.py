@@ -13,7 +13,7 @@ from typing import Any, Literal
 from pydantic import BaseModel, Field
 
 Severity = Literal["breaking", "deprecation", "addition", "info"]
-ChangeSource = Literal["oasdiff", "changelog", "sdk-release"]
+ChangeSource = Literal["oasdiff", "changelog", "sdk-release", "vendor-deprecation-table"]
 PatchStrategy = Literal["codemod", "agent"]
 FindingStatus = Literal["open", "patched", "abandoned"]
 
