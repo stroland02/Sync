@@ -623,6 +623,11 @@ def _forge_recording(remote_tip: str | None = None) -> tuple[GitHubForge, list[l
             raise RuntimeError("fatal: couldn't find remote ref")
         if args[:2] == ["git", "rev-parse"]:
             return remote_tip
+        # The tip a stub places on the remote is one an earlier run of the same
+        # finding pushed; a stub answering the authorship query with anything
+        # else would have `push_branch` refuse its own branch here.
+        if args[:2] == ["git", "log"]:
+            return COMMIT_AUTHOR_EMAIL
         return ""
 
     forge._run = fake_run
@@ -654,11 +659,12 @@ def test_push_branch_leases_against_the_commit_it_fetched():
     forge, calls, cwds = _forge_recording(remote_tip=REMOTE_TIP)
     branch = forge.push_branch(REPO, PATCH)
 
-    assert calls[-2:] == [
+    assert calls[-3:] == [
         ["git", "rev-parse", f"refs/remotes/origin/{branch}"],
+        ["git", "log", "-1", "--format=%ae", REMOTE_TIP],
         ["git", "push", "-u", "origin", branch, f"--force-with-lease={branch}:{REMOTE_TIP}"],
     ]
-    assert cwds == [Path(REPO.local_path)] * 6
+    assert cwds == [Path(REPO.local_path)] * 7
 
 
 def test_push_branch_commits_under_syncs_identity_with_real_git(tmp_path, monkeypatch):
@@ -720,11 +726,17 @@ def test_push_branch_commits_under_syncs_identity_with_real_git(tmp_path, monkey
     assert author == "Sync <sync@users.noreply.github.com>"
 
 
-def _git(*args: str, cwd: Path) -> str:
+def _git(*args: str, cwd: Path, env: dict[str, str] | None = None) -> str:
     """Real git, failing loudly. The push tests below are worth nothing unless
-    every step of their setup actually happened."""
+    every step of their setup actually happened.
+
+    `env` overlays the inherited environment rather than replacing it, so a test
+    that sets a committer identity still gets the fixture's suppression of the
+    host's global and system git config.
+    """
     return subprocess.run(
-        ["git", *args], cwd=cwd, capture_output=True, text=True, encoding="utf-8", check=True
+        ["git", *args], cwd=cwd, capture_output=True, text=True, encoding="utf-8", check=True,
+        env=None if env is None else {**os.environ, **env},
     ).stdout.strip()
 
 
@@ -768,9 +780,24 @@ def _sync_clone(remote: Path, dest: Path) -> RepoRef:
     )
 
 
-def _push_from_another_writer(remote: Path, workdir: Path, branch: str, content: str) -> str:
-    """Whoever else has written to this branch — an earlier Sync run, or a human
-    — pushing from a clone of their own. Returns the sha the remote ends up at."""
+# Who put a commit on the branch. An earlier run of the same finding wrote as
+# Sync; anyone else — a reviewer pushing a fixup — writes as themselves, and
+# that difference is the whole of what `push_branch` may act on.
+SYNC_WRITER = (COMMIT_AUTHOR_NAME, COMMIT_AUTHOR_EMAIL)
+HUMAN_WRITER = ("Reviewer", "reviewer@example.com")
+
+
+def _push_to_branch(
+    remote: Path, workdir: Path, branch: str, content: str,
+    writer: tuple[str, str], committer: tuple[str, str] | None = None,
+) -> str:
+    """Put a commit on `branch` from a clone of the writer's own, and return the
+    sha the remote ends up at.
+
+    `committer` overrides only the committer identity, leaving the author alone,
+    which is what GitHub does to a commit it squashes or re-commits from the web
+    editor.
+    """
     _git("clone", remote.as_uri(), str(workdir), cwd=workdir.parent)
     if _git("ls-remote", "--heads", "origin", branch, cwd=workdir):
         _git("checkout", branch, cwd=workdir)
@@ -778,8 +805,13 @@ def _push_from_another_writer(remote: Path, workdir: Path, branch: str, content:
         _git("checkout", "-b", branch, cwd=workdir)
     (workdir / "file.txt").write_text(content, encoding="utf-8")
     _git("add", "-u", cwd=workdir)
-    _git("-c", "user.name=Other", "-c", "user.email=other@example.com",
-         "commit", "-m", "someone else's commit", cwd=workdir)
+
+    name, email = writer
+    env = None
+    if committer is not None:
+        env = {"GIT_COMMITTER_NAME": committer[0], "GIT_COMMITTER_EMAIL": committer[1]}
+    _git("-c", f"user.name={name}", "-c", f"user.email={email}",
+         "commit", "-m", f"commit by {name}", cwd=workdir, env=env)
     _git("push", "origin", branch, cwd=workdir)
     return _git("rev-parse", "HEAD", cwd=workdir)
 
@@ -804,10 +836,43 @@ def test_push_branch_updates_a_branch_an_earlier_run_left_on_the_remote(tmp_path
     the M0 acceptance run died of."""
     repo = _sync_clone(remote, tmp_path / "clone")
     branch = branch_name_for(PATCH, repo)
-    _push_from_another_writer(remote, tmp_path / "earlier", branch, "an earlier attempt\n")
+    _push_to_branch(remote, tmp_path / "earlier", branch, "an earlier attempt\n", SYNC_WRITER)
 
     assert GitHubForge().push_branch(repo, PATCH) == branch
     assert _git("rev-parse", branch, cwd=remote) == _git("rev-parse", "HEAD", cwd=Path(repo.local_path))
+
+
+def test_push_branch_updates_a_branch_of_its_own_that_github_re_committed(tmp_path, remote):
+    """A commit Sync authored can reach the branch with a committer that is not
+    Sync: GitHub rewrites the committer on a squash and on any edit made through
+    the web UI, and a rebase rewrites it too while leaving the author alone.
+    Reading the committer instead of the author would call that commit a
+    stranger's and abandon a finding whose branch Sync wrote every line of."""
+    repo = _sync_clone(remote, tmp_path / "clone")
+    branch = branch_name_for(PATCH, repo)
+    _push_to_branch(
+        remote, tmp_path / "earlier", branch, "an earlier attempt\n",
+        SYNC_WRITER, committer=("GitHub", "noreply@github.com"),
+    )
+
+    assert GitHubForge().push_branch(repo, PATCH) == branch
+    assert _git("rev-parse", branch, cwd=remote) == _git("rev-parse", "HEAD", cwd=Path(repo.local_path))
+
+
+def test_push_branch_refuses_a_branch_whose_tip_somebody_else_wrote(tmp_path, remote):
+    """A reviewer pushing a fixup onto Sync's branch between runs is the case that
+    matters: the lease only knows the tip was observed, not whose it was, so it
+    would fetch their commit and then replace it. Discarding a human's work on a
+    repository Sync does not own is the worst thing this product can do, and it
+    would be silent — the run would go on to open a pull request."""
+    repo = _sync_clone(remote, tmp_path / "clone")
+    branch = branch_name_for(PATCH, repo)
+    theirs = _push_to_branch(remote, tmp_path / "reviewer", branch, "a reviewer's fixup\n", HUMAN_WRITER)
+
+    with pytest.raises(RuntimeError, match="reviewer@example.com"):
+        GitHubForge().push_branch(repo, PATCH)
+
+    assert _git("rev-parse", branch, cwd=remote) == theirs
 
 
 def test_push_branch_refuses_a_branch_that_moved_after_it_was_fetched(tmp_path, remote, monkeypatch):
@@ -818,10 +883,14 @@ def test_push_branch_refuses_a_branch_that_moved_after_it_was_fetched(tmp_path, 
     A second writer moves the branch between Sync's fetch and Sync's push, so the
     state Sync observed is no longer the state it would overwrite. The push must
     be refused and their commit must survive.
+
+    Both commits are written as Sync, so the authorship check cannot be what
+    refuses this push. Were the interloper a human, this test would pass with the
+    lease deleted entirely.
     """
     repo = _sync_clone(remote, tmp_path / "clone")
     branch = branch_name_for(PATCH, repo)
-    _push_from_another_writer(remote, tmp_path / "earlier", branch, "an earlier attempt\n")
+    _push_to_branch(remote, tmp_path / "earlier", branch, "an earlier attempt\n", SYNC_WRITER)
 
     real_run = GitHubForge._run
     interloper: list[str] = []
@@ -829,7 +898,8 @@ def test_push_branch_refuses_a_branch_that_moved_after_it_was_fetched(tmp_path, 
     def run_with_a_writer_between_fetch_and_push(self, args, cwd):
         if args[:2] == ["git", "push"] and not interloper:
             interloper.append(
-                _push_from_another_writer(remote, tmp_path / "interloper", branch, "work Sync never saw\n")
+                _push_to_branch(remote, tmp_path / "interloper", branch,
+                                "work Sync never saw\n", SYNC_WRITER)
             )
         return real_run(self, args, cwd)
 
@@ -841,6 +911,162 @@ def test_push_branch_refuses_a_branch_that_moved_after_it_was_fetched(tmp_path, 
     # The property, not the wording git happens to reject with: what the other
     # writer pushed is still what the branch points at.
     assert _git("rev-parse", branch, cwd=remote) == interloper[0]
+
+
+def _forge_with_pull_requests(monkeypatch, listing: str) -> GitHubForge:
+    """A forge whose git runs for real and whose `gh pr list` answers `listing`.
+
+    The pull request state these tests turn on lives on GitHub, not in the bare
+    repository standing in for it, so it is the one thing here that has to be
+    stubbed. Everything else — the branch, its tip, its author, whether the
+    deletion actually took — is real git against a real remote.
+    """
+    real_run = GitHubForge._run
+
+    def run_with_gh_stubbed(self, args, cwd):
+        if args[1:3] == ["pr", "list"]:
+            return listing
+        return real_run(self, args, cwd)
+
+    monkeypatch.setattr(GitHubForge, "_run", run_with_gh_stubbed)
+    return GitHubForge()
+
+
+def _remote_has(remote: Path, branch: str) -> bool:
+    return bool(_git("ls-remote", "--heads", str(remote), branch, cwd=remote))
+
+
+def test_delete_branch_removes_a_branch_an_abandoned_finding_left_behind(tmp_path, remote, monkeypatch):
+    """A finding that abandons after pushing leaves a branch with no pull request
+    on a repository Sync does not own. One is untidy; a fleet of them is a mess
+    Sync made and never cleaned up."""
+    repo = _sync_clone(remote, tmp_path / "clone")
+    branch = branch_name_for(PATCH, repo)
+    _push_to_branch(remote, tmp_path / "run", branch, "the abandoned attempt\n", SYNC_WRITER)
+    forge = _forge_with_pull_requests(monkeypatch, "[]")
+
+    deleted, detail = forge.delete_branch(repo, branch)
+
+    assert deleted is True
+    assert not _remote_has(remote, branch)
+    assert branch in detail
+
+
+def test_delete_branch_keeps_a_branch_that_has_an_open_pull_request(tmp_path, remote, monkeypatch):
+    """A pull request open on the branch means a human may be reading it right
+    now. Abandonment is Sync's verdict on its own patch, not permission to close
+    a review out from under whoever is in it."""
+    repo = _sync_clone(remote, tmp_path / "clone")
+    branch = branch_name_for(PATCH, repo)
+    _push_to_branch(remote, tmp_path / "run", branch, "the abandoned attempt\n", SYNC_WRITER)
+    forge = _forge_with_pull_requests(monkeypatch, json.dumps([{"number": 7}]))
+
+    deleted, detail = forge.delete_branch(repo, branch)
+
+    assert deleted is False
+    assert _remote_has(remote, branch)
+    assert "pull request" in detail
+
+
+def test_delete_branch_keeps_a_branch_whose_tip_somebody_else_wrote(tmp_path, remote, monkeypatch):
+    """Same rule as the push, for the same reason: a tip Sync did not author is
+    somebody's work, and cleanup is not a licence to delete it."""
+    repo = _sync_clone(remote, tmp_path / "clone")
+    branch = branch_name_for(PATCH, repo)
+    theirs = _push_to_branch(remote, tmp_path / "reviewer", branch, "a reviewer's fixup\n", HUMAN_WRITER)
+    forge = _forge_with_pull_requests(monkeypatch, "[]")
+
+    deleted, detail = forge.delete_branch(repo, branch)
+
+    assert deleted is False
+    assert _git("rev-parse", branch, cwd=remote) == theirs
+    assert "reviewer@example.com" in detail
+
+
+def test_delete_branch_does_nothing_when_the_remote_has_no_such_branch(tmp_path, remote, monkeypatch):
+    """Abandonment before the push is the ordinary case — a patch that never
+    typechecked never reached a branch — and cleanup runs for those too. Asking
+    the remote to delete a branch that was never there earns an error worth
+    reporting to nobody, so the deletion must not be attempted at all."""
+    repo = _sync_clone(remote, tmp_path / "clone")
+    real_run = GitHubForge._run
+    pushes: list[list[str]] = []
+
+    def run_recording_pushes(self, args, cwd):
+        if args[1:3] == ["pr", "list"]:
+            return "[]"
+        if args[:2] == ["git", "push"]:
+            pushes.append(args)
+            return ""
+        return real_run(self, args, cwd)
+
+    monkeypatch.setattr(GitHubForge, "_run", run_recording_pushes)
+
+    deleted, detail = GitHubForge().delete_branch(repo, "sync/api-drift-never-pushed")
+
+    assert deleted is False
+    assert pushes == []
+    # Nothing to delete is a normal outcome, not a failed deletion. Reported as a
+    # failure it would put a git error into an abandon record whose actual reason
+    # is the finding's, and send an operator looking for a fault that is not there.
+    assert "could not" not in detail
+
+
+def test_delete_branch_keeps_a_branch_that_moved_after_it_was_checked(tmp_path, remote, monkeypatch):
+    """The same race as the push, on the way out. Between reading the tip and
+    deleting the branch, somebody pushes to it; the branch Sync checked is not
+    the branch it would remove. Both commits here are written as Sync, so
+    authorship cannot be what refuses this — only the lease can."""
+    repo = _sync_clone(remote, tmp_path / "clone")
+    branch = branch_name_for(PATCH, repo)
+    _push_to_branch(remote, tmp_path / "run", branch, "the abandoned attempt\n", SYNC_WRITER)
+
+    real_run = GitHubForge._run
+    interloper: list[str] = []
+
+    def run_with_a_writer_before_the_deletion(self, args, cwd):
+        if args[1:3] == ["pr", "list"]:
+            return "[]"
+        if args[:2] == ["git", "push"] and not interloper:
+            interloper.append(
+                _push_to_branch(remote, tmp_path / "interloper", branch,
+                                "work Sync never saw\n", SYNC_WRITER)
+            )
+        return real_run(self, args, cwd)
+
+    monkeypatch.setattr(GitHubForge, "_run", run_with_a_writer_before_the_deletion)
+
+    deleted, detail = GitHubForge().delete_branch(repo, branch)
+
+    assert deleted is False
+    assert detail
+    assert _git("rev-parse", branch, cwd=remote) == interloper[0]
+
+
+def test_delete_branch_reports_a_failed_deletion_rather_than_raising(tmp_path, remote, monkeypatch):
+    """Cleanup runs after a finding has already failed, and the operator's useful
+    signal is why the finding abandoned. A cleanup that raises replaces that
+    reason with its own and loses the one that matters."""
+    repo = _sync_clone(remote, tmp_path / "clone")
+    branch = branch_name_for(PATCH, repo)
+    _push_to_branch(remote, tmp_path / "run", branch, "the abandoned attempt\n", SYNC_WRITER)
+
+    real_run = GitHubForge._run
+
+    def run_with_the_deletion_failing(self, args, cwd):
+        if args[1:3] == ["pr", "list"]:
+            return "[]"
+        if args[:2] == ["git", "push"]:
+            raise RuntimeError("remote: refusing to delete a protected branch")
+        return real_run(self, args, cwd)
+
+    monkeypatch.setattr(GitHubForge, "_run", run_with_the_deletion_failing)
+
+    deleted, detail = GitHubForge().delete_branch(repo, branch)
+
+    assert deleted is False
+    assert "protected" in detail
+    assert _remote_has(remote, branch)
 
 
 def test_open_pull_request_issues_the_expected_gh_invocation():

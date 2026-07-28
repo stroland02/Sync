@@ -138,6 +138,14 @@ class GitHubForge:
           between the fetch and the push. The lease names a commit that is no
           longer there and git refuses. This is the race the lease exists for,
           and it is the only thing separating this from `--force`.
+
+        The lease settles what was observed, never whose it was, and those are
+        different questions. A reviewer who pushes a fixup onto Sync's branch
+        between runs has their commit fetched, observed, leased against and
+        replaced. So a tip Sync did not author refuses the push outright: the
+        finding abandons with a reason naming the author, which a human can act
+        on, rather than Sync discarding their work on a repository it does not
+        own.
         """
         path = Path(repo.local_path)
         branch = branch_name_for(patch, repo)
@@ -152,9 +160,85 @@ class GitHubForge:
         remote_tip = self._fetch_remote_tip(path, branch)
         push = ["git", "push", "-u", "origin", branch]
         if remote_tip is not None:
+            author = self._tip_author(path, remote_tip)
+            if author != COMMIT_AUTHOR_EMAIL:
+                raise RuntimeError(
+                    f"{branch} was last written by {author}, not Sync; refusing to replace it. "
+                    f"Merge or move that commit, or delete the branch, then re-run the finding."
+                )
             push.append(f"--force-with-lease={branch}:{remote_tip}")
         self._run(push, path)
         return branch
+
+    def _tip_author(self, path: Path, commit: str) -> str:
+        """Who wrote `commit`, not who committed it.
+
+        Author and committer differ routinely, and in ways that would go against
+        Sync: GitHub rewrites the committer on a squash and on any edit made
+        through the web UI, and a rebase rewrites it while leaving the author
+        alone. Reading the committer would call Sync's own commit a stranger's
+        after any of those and abandon a finding whose branch Sync wrote every
+        line of. The author survives all three, and a reviewer pushing a fixup
+        authors it themselves.
+
+        This guards against clobbering human work; it is not a security control.
+        `git commit --author` sets the field to anything, so anyone who can push
+        to the branch can present as Sync. What stands against that is the lease
+        and the customer's own branch protection, not this.
+        """
+        return self._run(["git", "log", "-1", "--format=%ae", commit], path)
+
+    def delete_branch(self, repo: RepoRef, branch: str) -> tuple[bool, str]:
+        """Remove a branch a finding abandoned after pushing. Returns (deleted, detail).
+
+        Branch identity is stable per finding, so a retry no longer strands a
+        branch per attempt — but a finding that abandons after its push leaves
+        one behind with no pull request and nothing that will ever come back for
+        it. Across a fleet those accumulate on repositories Sync does not own.
+
+        Three things stop a deletion, and each means the branch is not Sync's to
+        remove: an open pull request, because a human may be reading it right
+        now; a tip Sync did not author, for the reason `_tip_author` gives; and a
+        remote with no such branch, which is every finding that abandoned before
+        it ever pushed. The deletion carries the same lease as the push against
+        the same observed tip, so a branch that moved in between is left alone.
+
+        Nothing here raises, and the breadth of that is deliberate rather than
+        careless: this runs after a finding has already failed, and the
+        operator's useful signal is why it failed. A cleanup that raises on top
+        of that replaces the reason that matters with its own.
+
+        Which caller invokes this is the graph's decision, not the forge's — the
+        forge cannot see that a run abandoned, and inferring it from the absence
+        of a pull request would delete branches whose pull request simply has not
+        been opened yet.
+        """
+        path = Path(repo.local_path)
+        try:
+            open_pulls = json.loads(self._run(
+                [_gh(), "pr", "list", "--repo", repo.url, "--head", branch,
+                 "--state", "open", "--json", "number"],
+                path,
+            ))
+            if open_pulls:
+                return False, f"{branch} has an open pull request"
+
+            tip = self._fetch_remote_tip(path, branch)
+            if tip is None:
+                return False, f"the remote has no {branch}"
+
+            author = self._tip_author(path, tip)
+            if author != COMMIT_AUTHOR_EMAIL:
+                return False, f"{branch} was last written by {author}, not Sync"
+
+            self._run(
+                ["git", "push", "origin", "--delete", branch,
+                 f"--force-with-lease={branch}:{tip}"],
+                path,
+            )
+        except Exception as exc:
+            return False, f"could not delete {branch}: {exc}"
+        return True, f"deleted {branch}"
 
     def _fetch_remote_tip(self, path: Path, branch: str) -> str | None:
         """The commit the remote has for `branch` right now, or None if it has none.
