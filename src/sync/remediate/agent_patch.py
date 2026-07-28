@@ -3,6 +3,35 @@
 The Agent SDK runs against a throwaway clone, never a customer's working tree.
 Nothing it produces is trusted: the graph typechecks the result and then waits
 for the repository's own CI before anything becomes a pull request.
+
+**The completion criterion is the edit, not a clean typecheck.** The prompt names the edit
+the call site requires and tells the agent it is finished when that edit is made. It used to
+say "run `npx tsc --noEmit` and keep editing until it is clean", and the M0 acceptance run
+died on exactly that. Stripe removed `receipt_email` from the *specification*; the installed
+SDK was stripe 22.4.0-beta.1, whose TypeScript declarations still carried the property, so
+the code typechecked identically before and after the correct fix. The agent ran the command
+it was told to run, found the tree as clean as it can get, and correctly concluded there was
+nothing to do -- three times, for an empty diff each time, and ten and a half minutes of
+model time for nothing.
+
+That failure is not one field's bad luck. Anything request-side, and anything the SDK's
+generated types lag, is invisible to the typechecker until the vendor ships a regenerated
+SDK -- which is the moment the customer stops needing us. The typecheck keeps the role it
+can actually perform: catching a patch that breaks compilation. It was never capable of
+confirming that a spec-only change had been applied.
+
+The required edit is derived from what the graph resolved -- the affected field, and whether
+this call site passes it as an argument or reads it from the response -- and never from the
+change kind. `VendorChange.kind` is one of over five hundred oasdiff rule identifiers, and a
+second classifier here would rot on every oasdiff release while `sync.route.matrix` already
+keys tier decisions on the catalogue's own `direction`/`action` axes. When the field resolves
+to neither position, the prompt says so rather than asserting a location the index never
+recorded.
+
+Section order is load-bearing. Everything stable sits ahead of the diagnostics block, the
+only part that changes between retries, so the prefix stays byte-identical and cacheable
+across attempts; anything appended after diagnostics is invalidated every round. See the
+prompt-cache boundary in `docs/superpowers/specs/2026-07-25-sync-latency-architecture.md`.
 """
 
 from __future__ import annotations
@@ -34,8 +63,41 @@ Rules:
 - Do not reformat lines you did not otherwise need to touch.
 - If the removed value is still needed, derive it from what the API does return; if it
   cannot be derived, remove the usage rather than inventing a placeholder.
-- Run `npx tsc --noEmit` yourself and keep editing until it is clean.
+- Run `npx tsc --noEmit` once you have made the edit and confirm you introduced no new
+  errors. That is the whole of what it establishes. It cannot tell you whether the edit
+  was needed: the installed SDK's type declarations are generated from an older version
+  of this specification and still describe the old shape, so a change like this one
+  typechecks identically before and after the correct fix. A clean run is never a reason
+  to leave the call site as it is.
 """.strip()
+
+
+def _required_edit(field: str | None, site: CallSite) -> str:
+    """Where at this call site the edit has to land.
+
+    Positional, not directional. What happened to the field is already stated two lines
+    above as the oasdiff rule id; what the agent lacks is which expression to change.
+    """
+    if field is None:
+        return (
+            "the vendor change does not name a field, so read the call site and the change"
+            " above and determine the affected expression yourself"
+        )
+    if field in site.args_keys:
+        return (
+            f"`{field}` is passed as an argument at this call site, so that argument is what"
+            f" your edit must change to agree with the change above"
+        )
+    if field in site.response_fields_read:
+        return (
+            f"`{field}` is read from this call's response at this call site, so that read is"
+            f" what your edit must change to agree with the change above"
+        )
+    return (
+        f"the change affects `{field}`, which the index did not record among this call site's"
+        f" arguments or the response fields it reads -- locate it in the surrounding code"
+        f" rather than assuming either position"
+    )
 
 
 def build_patch_prompt(
@@ -60,6 +122,9 @@ def build_patch_prompt(
         f"SDK call: {site.symbol}",
         f"Arguments passed: {', '.join(site.args_keys) or 'none'}",
         f"Response fields read: {', '.join(site.response_fields_read) or 'none'}",
+        "",
+        f"Required edit: {_required_edit(field, site)}.",
+        "Done when: that edit is made and the call site agrees with the change above.",
         "",
         f"Why this matters: {finding.rationale}",
         "",
