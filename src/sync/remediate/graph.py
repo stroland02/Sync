@@ -10,6 +10,7 @@ from __future__ import annotations
 from langgraph.graph import END, START, StateGraph
 
 from sync.remediate import nodes
+from sync.remediate.serde import with_sync_types
 from sync.remediate.state import RunState
 
 
@@ -71,4 +72,7 @@ def build_graph(store, adapter, remediator, forge, checkpointer):
 
     builder.add_edge("abandon", END)
 
-    return builder.compile(checkpointer=checkpointer)
+    # Callers build the saver, so this is the one place every one of them passes
+    # through. A saver that reaches `compile` with langgraph's stock serialiser
+    # resumes runs on a permission langgraph says it will withdraw.
+    return builder.compile(checkpointer=with_sync_types(checkpointer))

@@ -2,6 +2,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from langgraph.checkpoint.memory import InMemorySaver
+from pydantic import BaseModel
 
 from sync.core import CallSite, Finding, Patch, RepoRef, VendorChange, VerifyResult
 from sync.remediate.graph import build_graph
@@ -203,6 +204,38 @@ def test_diagnostics_from_a_failed_verification_reach_the_next_attempt():
     _run(StubAdapter(verdicts=[_fail(), _ok()]), remediator, StubForge())
     assert remediator.seen[0] == ""
     assert "TS2339" in remediator.seen[1]
+
+
+class NotCheckpointed(BaseModel):
+    """A model no run ever puts in a checkpoint.
+
+    Module scope rather than inside the test: the ext hook rebuilds a type by
+    importing its module and taking the attribute off it, so a class nested in a
+    function comes back as a dict regardless of the allowlist.
+    """
+
+    value: str
+
+
+def test_the_graph_registers_syncs_types_on_whatever_checkpointer_it_is_handed():
+    """`cli.py` builds the saver, so `build_graph` is the only place every caller
+    passes through. A saver that reaches `compile` with langgraph's default
+    serializer resumes runs on a permission langgraph says it will withdraw.
+
+    Asserted through a type that is *not* registered, because the default carries
+    Sync's models too: only refusing a foreign type distinguishes an explicit
+    allowlist from the permissive default.
+    """
+    saver = InMemorySaver()
+    graph = build_graph(
+        store=StubStore(), adapter=StubAdapter(), remediator=StubRemediator(),
+        forge=StubForge(), checkpointer=saver,
+    )
+    serde = graph.checkpointer.serde
+
+    assert serde.loads_typed(serde.dumps_typed(FINDING)) == FINDING
+    foreign = NotCheckpointed(value="x")
+    assert serde.loads_typed(serde.dumps_typed(foreign)) == {"value": "x"}
 
 
 def test_state_is_checkpointed_at_every_node():
