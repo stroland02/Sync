@@ -8,9 +8,9 @@ that routing stays auditable and provably complete as oasdiff's rule set grows.
 
 ## The problem
 
-*(Written when nothing routed. A tier cascade now exists and the decision table below now
-selects the tier where it has jurisdiction — see "What is built" at the end of this document
-for how narrow that jurisdiction currently is.)*
+*(Written when nothing routed. A tier cascade now exists, the decision table below selects the
+tier, and the catalogue that gives it jurisdiction is loaded once per run — see "What is built"
+at the end of this document for the two limits that remain.)*
 
 Today there is no routing. `src/sync/remediate/graph.py` sends every finding to one
 `remediator`, and `patch` calls a full agent loop regardless of how mechanical the change is.
@@ -242,17 +242,19 @@ the deterministic tiers are tried first and the agent is reached only when they 
 deterministic strategies, built on the rule and span implementations in
 `src/sync/route/templates.py`.
 
-**The decision table drives the routing, and has jurisdiction over nothing in production.**
+**The decision table drives the routing, and reaches production.**
 `src/sync/remediate/tiered.py` imports `route()` at line 42 and calls it at line 282: the tier
 the table assigns narrows which remediators are eligible, and a tier −1 route raises
-`NoPatchWarranted` so no remediator is consulted at all. Three qualifications bound what that
+`NoPatchWarranted` so no remediator is consulted at all. Two qualifications bound what that
 is worth today, and each is a separate piece of work.
 
 `route()` keys on a catalogue record from `run_oasdiff_checks()`, which `TieredRemediator` takes
-as a constructor argument. `build_remediator` in `src/sync/cli.py` passes none, so `_catalogue`
-is empty, `_tier_for` returns `None` for every change, and the cascade falls back to asking each
-remediator's `can_handle` in order — exactly the mechanism that preceded the table. Supplying
-the catalogue there is the outstanding work.
+as a constructor argument. `src/sync/cli.py:557` loads that catalogue once per run and hands the
+same object to `build_remediator` and to `build_graph`, so the table has jurisdiction and there
+is one table rather than two that could drift. A tier −1 finding now reaches a report node
+without entering `patch`; before that wiring it ran the patch node three times, spent the whole
+static-attempt budget, and wrote the routing message into `abandon_reason` — the column where
+routing is supposed to learn which change kinds are not mechanically safe.
 
 Even with a catalogue, rows 3 and 4 cannot fire from the default facts. `routing_facts` in
 `tiered.py` can establish `field_resolved` and `value_already_passed` from the one call site it
