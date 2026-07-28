@@ -1,0 +1,24 @@
+{
+  "total_count": 2128,
+  "incomplete_results": false,
+  "items": [
+    {
+      "name": "stripe.ts",
+      "path": "src/lib/stripe.ts",
+      "sha": "0000000000000000000000000000000000000001",
+      "repository": { "full_name": "example-org/storefront", "private": false, "fork": false }
+    },
+    {
+      "name": "client.ts",
+      "path": "src/payments/client.ts",
+      "sha": "0000000000000000000000000000000000000002",
+      "repository": { "full_name": "example-org/storefront", "private": false, "fork": false }
+    },
+    {
+      "name": "billing.ts",
+      "path": "app/billing.ts",
+      "sha": "0000000000000000000000000000000000000003",
+      "repository": { "full_name": "another-org/checkout", "private": false, "fork": false }
+    }
+  ]
+}
