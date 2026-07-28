@@ -38,6 +38,15 @@ def _gh() -> str:
     return found
 
 
+def _owner_repo(url: str) -> str:
+    """`gh api` addresses a repository as `owner/name`, which `RepoRef` carries
+    only as part of a clone URL: after the host for an HTTPS remote, after a
+    colon for an SSH one."""
+    trimmed = url.rstrip("/").removesuffix(".git")
+    segments = trimmed.replace(":", "/").split("/")
+    return f"{segments[-2]}/{segments[-1]}"
+
+
 def branch_name_for(patch: Patch, repo: RepoRef) -> str:
     """One branch per finding, stable across that finding's CI retries.
 
@@ -73,6 +82,12 @@ def render_pr_body(evidence: Evidence) -> str:
 ## Verification
 
 CI passed on this branch before the pull request was opened: {evidence.ci_run_url}
+
+Where Sync can read the base branch's required status checks, the run linked
+above is one of them. Reading them needs repository admin rights, and where Sync
+cannot, it accepts any successful run for the commit — which a workflow
+unrelated to this change can satisfy. Check that the linked run is the one that
+verifies this repository.
 
 ---
 
@@ -119,107 +134,195 @@ class GitHubForge:
         self._run(["git", "push", "-u", "origin", branch, "--force-with-lease"], path)
         return branch
 
+    def _default_branch(self, path: Path) -> str | None:
+        """`origin/HEAD` records the default branch as of the clone, which costs
+        no API call and cannot be confused with the branch Sync just pushed."""
+        try:
+            ref = self._run(["git", "rev-parse", "--abbrev-ref", "origin/HEAD"], path)
+        except RuntimeError:
+            return None
+        return ref.removeprefix("origin/") or None
+
+    def _required_contexts(self, repo: RepoRef, path: Path) -> frozenset[str] | None:
+        """The checks that must pass for a pull request to merge, or None when
+        Sync cannot learn which those are.
+
+        Protection is read for the default branch, not for the branch Sync
+        pushed: required checks are configured on the branch a pull request
+        merges into, and a `sync/api-drift-*` branch created seconds ago is
+        unprotected by construction.
+
+        None is a documented hole, not a preference. With no check named,
+        `await_ci` accepts any successful run, which an always-green workflow —
+        a labeler, a title linter — satisfies while the workflow that would
+        have caught a bad patch is gated off for this push. Two ordinary
+        situations produce it: a default branch carrying no protection rule
+        (404), and a `gh` token that is not a repository admin, which this
+        endpoint requires (403). Erring red instead would stop Sync opening a
+        pull request against any repository in that second group. A transient
+        `gh` failure is indistinguishable from either here and downgrades the
+        gate for the whole wait, since this is read once per `await_ci`.
+        """
+        base = self._default_branch(path)
+        if base is None:
+            return None
+        try:
+            raw = self._run(
+                [_gh(), "api",
+                 f"repos/{_owner_repo(repo.url)}/branches/{base}/protection/required_status_checks"],
+                path,
+            )
+        except RuntimeError:
+            return None
+        payload = json.loads(raw)
+        # `contexts` is the flat form and `checks` the one that also carries the
+        # app id; GitHub documents the first as deprecated in favour of the
+        # second and repositories are served either.
+        contexts = payload.get("contexts") or [check["context"] for check in payload.get("checks") or []]
+        return frozenset(contexts) or None
+
+    def _checks_for(
+        self, repo: RepoRef, branch: str, head: str, path: Path, required: frozenset[str] | None
+    ) -> list[dict]:
+        """Everything that counts as verification of `head`, as `name`, `status`,
+        `conclusion`, `url`.
+
+        Two sources, because a required status check names a job and `gh run
+        list` reports only the workflow containing it. Knowing which checks
+        count, Sync asks for the commit's check runs by name; not knowing, it
+        falls back to the workflow runs on the branch, filtered to this commit
+        — a run left over from an earlier push to the same branch says nothing
+        about this patch.
+
+        One page of each is read. A commit carrying more than 100 check runs
+        would look to `await_ci` as though a required one had not reported,
+        which holds the patch back rather than letting it through.
+        """
+        if required is None:
+            raw = self._run(
+                [_gh(), "run", "list", "--branch", branch, "--limit", "50",
+                 "--json", "status,conclusion,url,headSha,workflowName"],
+                path,
+            )
+            return [
+                {"name": run["workflowName"], "status": run["status"],
+                 "conclusion": run["conclusion"], "url": run["url"]}
+                for run in json.loads(raw) if run["headSha"] == head
+            ]
+
+        raw = self._run(
+            [_gh(), "api", f"repos/{_owner_repo(repo.url)}/commits/{head}/check-runs?per_page=100"],
+            path,
+        )
+        return [
+            {"name": check["name"], "status": check["status"],
+             "conclusion": check["conclusion"], "url": check["html_url"]}
+            for check in json.loads(raw)["check_runs"] if check["name"] in required
+        ]
+
     def await_ci(self, repo: RepoRef, branch: str) -> tuple[bool, str]:
-        """Poll every workflow run for the pushed commit. Returns (green, detail).
+        """Poll the checks that verify the pushed commit. Returns (green, detail).
 
-        Green requires at least one run concluding `success`, no run
-        concluding in a blocking state (see `NON_BLOCKING_CONCLUSIONS`), and
-        the same set of successful run URLs holding on a second, later poll.
-        `--limit 1` would report whichever workflow started last, so a
-        repository whose lint job passes and whose test job fails would read
-        as green. A commit whose only runs are skipped or neutral has nothing
-        confirming it and stays red at the timeout — the "at least one
-        success" half of the rule is what keeps a *fully* gated or filtered
-        repository (every run skipped or neutral) from reading as verified
-        when nothing ran at all.
+        Green requires every check that counts to have completed, at least one
+        of them to have concluded `success`, none to have concluded in a
+        blocking state (see `NON_BLOCKING_CONCLUSIONS`), and the same set to
+        hold on a second, later poll. Which checks count comes from the base
+        branch's required status checks where Sync can read them and from every
+        workflow run for the commit where it cannot — `_required_contexts`
+        states what the second case is unable to rule out.
 
-        This does not require that the workflow which actually tests the
-        patch is the one that succeeded — only that some run did. A
-        repository where an unrelated always-on workflow succeeds (a labeler,
-        a title linter) while the workflow that would catch a bad patch is
-        itself gated off for this push reads green on the unrelated run's
-        say-so. Telling those apart needs Sync to know which workflow is the
-        one that verifies — the branch's required status checks, or a
-        per-repo config naming it — which this function does not have.
-
-        The second poll matters for a chained layout — a workflow triggered by
-        `workflow_run: types: [completed]` gets its run record only after the
+        The second poll matters for a chained layout: a workflow triggered by
+        `workflow_run: types: [completed]` gets its run record only once the
         workflow it depends on finishes. A poll landing in that gap sees one
-        green run and nothing else; without re-confirming, that reads as a
-        verdict on a commit whose second workflow hasn't even started yet.
-        A red verdict is not subject to this: an unsuccessful run is red the
-        moment it is seen, since waiting cannot make a failure not have happened.
+        green run and nothing else, which without re-confirming reads as a
+        verdict on a commit whose second workflow has not started. Read the
+        other way round, the same confirmation ends a run that can never go
+        green: a stable set with no success and no failure has nothing left to
+        wait for, and polling on to the deadline spends the customer's CI
+        window and one further patch attempt to learn what is already settled.
+        A red verdict needs no confirmation at all, since waiting cannot make a
+        failure not have happened.
 
-        Filtering on `headSha` matters for the same reason as the run-set
-        check: a run left over from an earlier push to the same branch says
-        nothing about this patch.
+        On green the detail is the URL a reviewer clicks and on red the URL of a
+        check that did not pass. Both are chosen by sorting rather than by list
+        position: `gh` orders runs by id, which says nothing about which run
+        verified anything, and two attempts against one commit must not cite
+        different runs. Where required checks are known, only they are
+        candidates, so the URL points at a check that had to pass.
 
-        On red, the returned URL points at a run that did not succeed. `gh run
-        list` orders by run id, which carries no relevance to a human
-        reviewer, so the first entry in the list cannot be assumed useful.
-
-        Three timeout messages, not one, since each implies a different fix:
-        no run ever appeared for this commit (nothing triggers on `push`),
-        runs appeared but some never finished (CI is slow or hung), or every
-        run finished without ever producing a confirmed green verdict (a lone
-        green run one poll short of stable, or a commit where nothing but
-        skips and neutrals ever ran). An unverifiable patch must never reach a
-        pull request regardless of which of the three applies.
+        Four timeout messages, since each implies a different fix: nothing ever
+        appeared for this commit (no workflow triggers on `push`), a required
+        check never reported (that job does not run on `push`), checks appeared
+        but had not all finished (CI is slow or hung), or everything finished
+        without a confirmed green verdict (a lone green run one poll short of
+        stable). An unverifiable patch must never reach a pull request whichever
+        applies.
         """
         path = Path(repo.local_path)
         head = self._run(["git", "rev-parse", "HEAD"], path)
+        required = self._required_contexts(repo, path)
         deadline = time.monotonic() + self._timeout
-        gh = _gh()
 
-        saw_a_run_for_head = False
-        saw_all_completed = False
-        stable_success_urls: frozenset[str] | None = None
+        # What the last poll saw, not what any poll ever saw. A workflow can
+        # appear several polls in, and the timeout message is an operator's
+        # account of where the run actually stopped.
+        observed = "none"
+        missing: frozenset[str] = frozenset()
+        stable: frozenset[tuple[str, str | None]] | None = None
 
         while time.monotonic() < deadline:
-            raw = self._run(
-                [gh, "run", "list", "--branch", branch, "--limit", "50",
-                 "--json", "status,conclusion,url,headSha"],
-                path,
-            )
-            runs = [run for run in json.loads(raw) if run["headSha"] == head]
+            checks = self._checks_for(repo, branch, head, path, required)
+            if required is not None:
+                missing = required - {check["name"] for check in checks}
 
-            if not runs:
-                stable_success_urls = None
+            if not checks and not missing:
+                observed, stable = "none", None
                 time.sleep(self._poll)
                 continue
 
-            saw_a_run_for_head = True
-
-            if not all(run["status"] == "completed" for run in runs):
-                stable_success_urls = None
+            if missing:
+                observed, stable = "missing", None
                 time.sleep(self._poll)
                 continue
 
-            saw_all_completed = True
+            if not all(check["status"] == "completed" for check in checks):
+                observed, stable = "running", None
+                time.sleep(self._poll)
+                continue
+
+            observed = "completed"
 
             failing = [
-                run for run in runs
-                if run["conclusion"] not in NON_BLOCKING_CONCLUSIONS and run["conclusion"] != "success"
+                check for check in checks
+                if check["conclusion"] not in NON_BLOCKING_CONCLUSIONS
+                and check["conclusion"] != "success"
             ]
             if failing:
-                return False, failing[0]["url"]
+                return False, min(check["url"] for check in failing)
 
-            succeeded = [run for run in runs if run["conclusion"] == "success"]
-            if not succeeded:
-                stable_success_urls = None
+            current = frozenset((check["url"], check["conclusion"]) for check in checks)
+            if current != stable:
+                stable = current
                 time.sleep(self._poll)
                 continue
 
-            current_success_urls = frozenset(run["url"] for run in succeeded)
-            if current_success_urls == stable_success_urls:
-                return True, succeeded[0]["url"]
-            stable_success_urls = current_success_urls
-            time.sleep(self._poll)
+            succeeded = [check for check in checks if check["conclusion"] == "success"]
+            if succeeded:
+                return True, min(check["url"] for check in succeeded)
+            return False, f"nothing verified {head[:12]}: " + ", ".join(
+                f"{check['name']} concluded {check['conclusion']}"
+                for check in sorted(checks, key=lambda check: check["name"])
+            )
 
-        if not saw_a_run_for_head:
+        if observed == "none":
             return False, f"no completed CI run for {head[:12]} within {self._timeout}s"
-        if not saw_all_completed:
-            return False, f"CI runs for {head[:12]} started but never all completed within {self._timeout}s"
+        if observed == "missing":
+            return False, (
+                f"required check(s) {', '.join(sorted(missing))} never reported for "
+                f"{head[:12]} within {self._timeout}s"
+            )
+        if observed == "running":
+            return False, f"CI for {head[:12]} was still running at the {self._timeout}s deadline"
         return False, f"CI for {head[:12]} completed without a confirmed green verdict within {self._timeout}s"
 
     def open_pull_request(self, repo: RepoRef, branch: str, evidence: Evidence) -> str:

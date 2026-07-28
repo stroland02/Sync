@@ -1,20 +1,22 @@
 import json
 import os
 import subprocess
+import time
 from pathlib import Path
 
 import pytest
 
 from sync.core import CallSite, Evidence, Finding, Patch, RepoRef, VendorChange
-from sync.remediate.agent_patch import AgentRemediator
 from sync.forge.github import (
     COMMIT_AUTHOR_EMAIL,
     COMMIT_AUTHOR_NAME,
     GitHubForge,
     _gh,
+    _owner_repo,
     branch_name_for,
     render_pr_body,
 )
+from sync.remediate.agent_patch import AgentRemediator
 from sync.remediate.nodes import Forge
 
 EVIDENCE = Evidence(
@@ -126,6 +128,20 @@ def test_branch_name_is_git_safe_even_when_rationale_contains_illegal_characters
     assert not name.endswith(".lock")
 
 
+@pytest.mark.parametrize("url", [
+    "https://github.com/o/r",
+    "https://github.com/o/r.git",
+    "https://github.com/o/r/",
+    "git@github.com:o/r.git",
+])
+def test_gh_api_addresses_the_repository_as_owner_name(url):
+    """`RepoRef.url` is whatever `--repo` was handed on the command line, and
+    `gh api` needs `owner/name` out of it. A wrong parse sends the required
+    status checks query to a path that 404s, which reads as an unprotected
+    repository and silently drops `await_ci` to its weaker fallback gate."""
+    assert _owner_repo(url) == "o/r"
+
+
 def test_pr_body_contains_every_evidence_element():
     body = render_pr_body(EVIDENCE)
     assert "response-property-removed" in body
@@ -144,6 +160,18 @@ def test_pr_body_discloses_that_it_was_generated():
     assert "Sync" in render_pr_body(EVIDENCE)
 
 
+def test_pr_body_discloses_the_limit_of_the_verification_gate():
+    """`await_ci` gates on the base branch's required status checks where it can
+    read them and on "any successful run for the commit" where it cannot — which
+    is every repository where Sync's token is not an admin, the ordinary case
+    rather than the edge one. A reviewer deciding whether to trust the linked run
+    has no other surface to learn that from, and a gate that degrades quietly is
+    the overclaim, not the degradation."""
+    body = render_pr_body(EVIDENCE).lower()
+    assert "required status checks" in body
+    assert "admin" in body
+
+
 def test_pr_body_preserves_non_ascii_characters_in_the_spec_diff():
     evidence = Evidence(
         spec_diff={"id": "response-property-removed", "note": "clé API supprimée — ne plus utiliser"},
@@ -157,22 +185,152 @@ def test_pr_body_preserves_non_ascii_characters_in_the_spec_diff():
 HEAD = "a" * 40
 
 
-def _forge_returning(payload: str, timeout_seconds: int = 1) -> GitHubForge:
+UNPROTECTED = "gh: Branch not protected (HTTP 404)"
+
+
+def _forge_returning(payload: str, timeout_seconds: float = 1) -> GitHubForge:
     """A forge whose subprocess layer is replaced, so `await_ci`'s decision logic
-    can be tested without git, without `gh`, and without the network."""
+    can be tested without git, without `gh`, and without the network.
+
+    The repository it stands for has no branch protection Sync can read, so
+    these cases exercise the fallback gate: any successful run counts.
+    """
     forge = GitHubForge(poll_interval_seconds=0, timeout_seconds=timeout_seconds)
 
     def fake_run(args, cwd):
         if args[:2] == ["git", "rev-parse"]:
             return HEAD
+        if "protection/required_status_checks" in " ".join(args):
+            raise RuntimeError(UNPROTECTED)
         return payload
 
     forge._run = fake_run
     return forge
 
 
-def _run(status: str, conclusion: str | None, sha: str = HEAD, url: str = "https://ci/1") -> dict:
-    return {"status": status, "conclusion": conclusion, "url": url, "headSha": sha}
+def _run(status: str, conclusion: str | None, sha: str = HEAD, url: str = "https://ci/1",
+         workflow: str = "CI") -> dict:
+    return {"status": status, "conclusion": conclusion, "url": url, "headSha": sha,
+            "workflowName": workflow}
+
+
+def _check(name: str, status: str, conclusion: str | None, url: str) -> dict:
+    """One entry of `gh api repos/{o}/{r}/commits/{sha}/check-runs`, whose shape
+    differs from `gh run list`'s: check runs are named per job and carry
+    `html_url`, and it is the job name that a required status check names."""
+    return {"name": name, "status": status, "conclusion": conclusion, "html_url": url}
+
+
+def _forge_against(
+    contexts: list[str] | None,
+    check_runs: list[dict] | None = None,
+    runs: list[dict] | None = None,
+    timeout_seconds: float = 0.3,
+) -> GitHubForge:
+    """A forge answering every argv `await_ci` issues against a repository whose
+    base branch requires `contexts`.
+
+    `contexts=None` stands for a repository Sync cannot read protection for:
+    `gh api` exits non-zero, which is what both a base branch with no
+    protection rule (404) and a token without the admin rights that endpoint
+    requires (403) look like from here.
+    """
+    forge = GitHubForge(poll_interval_seconds=0, timeout_seconds=timeout_seconds)
+
+    def fake_run(args, cwd):
+        if args[:2] == ["git", "rev-parse"]:
+            return "origin/main" if args[-1] == "origin/HEAD" else HEAD
+        joined = " ".join(args)
+        if "protection/required_status_checks" in joined:
+            if contexts is None:
+                raise RuntimeError(UNPROTECTED)
+            return json.dumps({"contexts": contexts})
+        if "check-runs" in joined:
+            assert "o/r" in joined, f"check runs must be read from the repository Sync pushed to: {joined}"
+            return json.dumps({"total_count": len(check_runs), "check_runs": check_runs})
+        return json.dumps(runs)
+
+    forge._run = fake_run
+    return forge
+
+
+def test_an_always_green_unrelated_workflow_does_not_satisfy_a_protected_branch():
+    """The observed shape: a `label.yml` running actions/labeler on every push,
+    green in seconds, beside a `test.yml` whose job is gated
+    `if: github.actor != 'sync-bot'` and therefore skips. Every run for the
+    commit is either green or skipped, so a gate that only asks whether some
+    run succeeded reports green and renders the labeler's URL as the
+    verification link. Nothing typechecked or tested the patch."""
+    forge = _forge_against(
+        contexts=["test"],
+        check_runs=[
+            _check("label", "completed", "success", "https://ci/label"),
+            _check("test", "completed", "skipped", "https://ci/test"),
+        ],
+        runs=[
+            _run("completed", "success", url="https://ci/label", workflow="label"),
+            _run("completed", "skipped", url="https://ci/test", workflow="test"),
+        ],
+    )
+    green, detail = forge.await_ci(REPO, "sync/x")
+    assert green is False
+    assert "test" in detail
+
+
+def test_the_required_check_supplies_the_url_a_reviewer_clicks():
+    """Both runs are green here, so the gate opens either way; what the required
+    contexts settle is which URL becomes `Evidence.ci_run_url`. The labeler
+    sorts first and would win any tie-break among successful runs, so a URL
+    pointing at it means the required-check filter did not happen."""
+    forge = _forge_against(
+        contexts=["test"],
+        check_runs=[
+            _check("label", "completed", "success", "https://ci/label"),
+            _check("test", "completed", "success", "https://ci/test"),
+        ],
+        runs=[
+            _run("completed", "success", url="https://ci/label", workflow="label"),
+            _run("completed", "success", url="https://ci/test", workflow="test"),
+        ],
+    )
+    green, url = forge.await_ci(REPO, "sync/x")
+    assert green is True
+    assert url == "https://ci/test"
+
+
+def test_a_required_check_that_never_reports_is_not_a_verdict():
+    """A required context with no check run for this commit is the case a
+    workflow that does not trigger on `push` produces. Something else being
+    green says nothing about it, and the message has to name what is missing:
+    "CI is slow" and "the required workflow never ran" need different fixes."""
+    forge = _forge_against(
+        contexts=["test", "typecheck"],
+        check_runs=[_check("label", "completed", "success", "https://ci/label")],
+        runs=[_run("completed", "success", url="https://ci/label", workflow="label")],
+    )
+    green, detail = forge.await_ci(REPO, "sync/x")
+    assert green is False
+    assert "test" in detail
+    assert "typecheck" in detail
+
+
+def test_a_repository_with_no_readable_protection_falls_back_to_any_success():
+    """Pins the documented limitation rather than endorsing it. With no required
+    contexts to name, Sync cannot tell the workflow that verifies the patch from
+    one that always passes, and accepts any success. Erring red instead would
+    mean Sync opens no pull request against any repository whose protection it
+    cannot read — which is every repository where its token is not an admin."""
+    forge = _forge_against(
+        contexts=None,
+        runs=[
+            _run("completed", "success", url="https://ci/label", workflow="label"),
+            _run("completed", "skipped", url="https://ci/test", workflow="test"),
+        ],
+        timeout_seconds=1,
+    )
+    green, url = forge.await_ci(REPO, "sync/x")
+    assert green is True
+    assert url == "https://ci/label"
 
 
 def test_ci_is_green_when_every_run_for_the_commit_succeeded():
@@ -202,7 +360,7 @@ def test_runs_still_in_progress_are_not_treated_as_a_verdict():
     forge = _forge_returning(json.dumps([_run("completed", "success"), _run("in_progress", None)]))
     green, detail = forge.await_ci(REPO, "sync/x")
     assert green is False
-    assert "never" in detail and "completed" in detail
+    assert "still running" in detail
 
 
 def test_green_requires_the_run_set_to_be_stable_across_two_polls():
@@ -239,6 +397,8 @@ def test_green_requires_the_run_set_to_be_stable_across_two_polls():
         nonlocal poll_count
         if args[:2] == ["git", "rev-parse"]:
             return HEAD
+        if "protection/required_status_checks" in " ".join(args):
+            raise RuntimeError(UNPROTECTED)
         raw = responses[poll_count]
         poll_count += 1
         return raw
@@ -327,10 +487,93 @@ def test_a_non_blocking_conclusion_alongside_a_success_is_green(conclusion):
 
 @pytest.mark.parametrize("conclusion", NON_BLOCKING_CONCLUSIONS)
 def test_a_non_blocking_conclusion_alone_is_red(conclusion):
-    forge = _forge_returning(json.dumps([_run("completed", conclusion)]))
+    """Red, and red as soon as the run set stops changing rather than at the
+    deadline — see `test_a_commit_that_can_never_go_green_is_abandoned_before_the_deadline`."""
+    forge = _forge_returning(json.dumps([_run("completed", conclusion, workflow="test")]))
     green, detail = forge.await_ci(REPO, "sync/x")
     assert green is False
-    assert "confirmed green verdict" in detail
+    assert detail == f"nothing verified {HEAD[:12]}: test concluded {conclusion}"
+
+
+def test_the_green_url_does_not_depend_on_the_order_gh_listed_the_runs():
+    """`gh run list` orders by run id, so which successful run comes first is an
+    accident of which workflow GitHub registered last. That URL is
+    `Evidence.ci_run_url` and the link a reviewer clicks, and two attempts on
+    the same commit must not cite different runs."""
+    runs = [
+        _run("completed", "success", url="https://ci/2", workflow="integration"),
+        _run("completed", "success", url="https://ci/1", workflow="ci"),
+    ]
+    forward = _forge_returning(json.dumps(runs)).await_ci(REPO, "sync/x")
+    backward = _forge_returning(json.dumps(list(reversed(runs)))).await_ci(REPO, "sync/x")
+    assert forward == backward
+
+
+def test_the_timeout_message_does_not_claim_a_still_running_workflow_completed():
+    """Poll 1 sees one completed green run; poll 2 sees a second workflow that
+    has since appeared and is still running, and the deadline passes there. The
+    message becomes the next patch attempt's diagnostics and, on abandonment,
+    the operator-facing reason, so it has to describe what the last poll saw —
+    a flag latched by an earlier poll reports a state that a later one
+    contradicted."""
+    forge = GitHubForge(poll_interval_seconds=0, timeout_seconds=0.5)
+    responses = [
+        json.dumps([_run("completed", "success", url="https://ci/ci")]),
+        json.dumps([
+            _run("completed", "success", url="https://ci/ci"),
+            _run("in_progress", None, url="https://ci/integration"),
+        ]),
+    ]
+    polls = 0
+
+    def fake_run(args, cwd):
+        nonlocal polls
+        if args[:2] == ["git", "rev-parse"]:
+            return HEAD
+        if "protection/required_status_checks" in " ".join(args):
+            raise RuntimeError(UNPROTECTED)
+        # Each poll spends a large share of the budget deliberately: with a zero
+        # poll interval and no cost per poll, the loop spins often enough that
+        # the run set never appears to change while the deadline approaches.
+        time.sleep(0.2)
+        response = responses[min(polls, len(responses) - 1)]
+        polls += 1
+        return response
+
+    forge._run = fake_run
+    green, detail = forge.await_ci(REPO, "sync/x")
+    assert green is False
+    assert "still running" in detail
+    # Below two polls the latched-flag path is never entered and the assertion
+    # above would pass for the wrong reason.
+    assert polls >= 2
+
+
+def test_a_commit_that_can_never_go_green_is_abandoned_before_the_deadline():
+    """Every run complete, none failing, none successful is terminal: the run set
+    is stable, so no further poll can turn it green or red. Waiting out the full
+    timeout costs the run half an hour it cannot use, and the graph then spends
+    another model patch attempt and another pushed branch before abandoning."""
+    forge = GitHubForge(poll_interval_seconds=0, timeout_seconds=1800)
+    payload = json.dumps([_run("completed", "skipped", url="https://ci/gated", workflow="test")])
+    polls = 0
+
+    def fake_run(args, cwd):
+        nonlocal polls
+        if args[:2] == ["git", "rev-parse"]:
+            return HEAD
+        if "protection/required_status_checks" in " ".join(args):
+            raise RuntimeError(UNPROTECTED)
+        polls += 1
+        # Confirming stability takes two identical observations. A third means
+        # `await_ci` is waiting on a set that has nothing left to change.
+        assert polls <= 2, "await_ci kept polling a run set that could not change"
+        return payload
+
+    forge._run = fake_run
+    green, detail = forge.await_ci(REPO, "sync/x")
+    assert green is False
+    assert "skipped" in detail
 
 
 def test_timeout_message_does_not_claim_completed_runs_never_completed():
@@ -346,6 +589,8 @@ def test_timeout_message_does_not_claim_completed_runs_never_completed():
     def fake_run(args, cwd):
         if args[:2] == ["git", "rev-parse"]:
             return HEAD
+        if "protection/required_status_checks" in " ".join(args):
+            raise RuntimeError(UNPROTECTED)
         return payload
 
     forge._run = fake_run
