@@ -60,17 +60,34 @@ justified choosing LangGraph.
 **Closes when:** the types are registered explicitly, the warning is gone, and a run
 checkpoints and resumes across a process restart.
 
-### B5 — The test suite slowed from ~77s to ~122s and nobody owns why
-Two coordinators are running six workers against one Postgres on port 5433. Separate
-databases do not separate the server's shared buffers, WAL, or background checkpointer,
-and every fixture calls `truncate_all()`. Contention is the likely cause but it is
-unmeasured, and "probably contention" is how a real regression hides. Both coordinators
-observed the slowdown independently on checkouts that changed nothing touching the
-database, which rules out a single worker's change.
-**Closes when:** the cause is measured rather than assumed — run the suite against an
-idle server and a loaded one and compare, and if it is contention, say what the fix is
-(a per-worker server, a tmpfs data directory, or accepting it) rather than only naming
-the cause. If it turns out not to be contention, that is a more important answer.
+### B5 — The suite is subprocess-bound, and Postgres was never the cause
+
+**Measured, and it refutes what both coordinators assumed.** The slowdown is not database
+contention. Numbers from `main` at `9b13cce`, 757 tests, 121s total:
+
+| | tests | time |
+|---|---|---|
+| `test_github_forge.py`, `test_tsc_verify.py`, `test_cli.py` | 121 | **95.5s** |
+| everything else | 636 | 29.6s |
+| `test_graph_store.py` (the Postgres-heaviest file) | 19 | 4.2s |
+
+Three files holding 16% of the tests carry 79% of the wall clock, and every slow test in
+them spawns a real `git` or `tsc` process. Postgres showed 2 connections with 1 active
+while six workers were running; the server is idle. The 77s-to-122s growth tracks tests
+being added — B2 alone added seven bare-remote git tests at roughly 3s each.
+
+So this is not a regression to fix, it is a cost to decide about. `pytest-xdist` is not
+installed and the machine has 12 cores; subprocess-bound tests parallelise almost
+perfectly, so `-n auto` is the obvious lever and nobody has measured it.
+
+Unrelated but found while measuring: **24 `sync*` databases have accumulated** on the
+server. `conftest` creates one per run and is meant to drop it, so either the drop is not
+running or it is failing silently. That is a leak, and a silent one.
+
+**Closes when:** someone measures `-n auto` against the current suite and either adopts it
+with the number stated, or records why it does not work here (the bare-remote and clone
+fixtures may not be parallel-safe — that is the thing to check, not assume). The leaked
+databases are a separate, smaller fix: find out why the drop is not happening.
 
 ## In flight
 
