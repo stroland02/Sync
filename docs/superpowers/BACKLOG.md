@@ -61,7 +61,10 @@ call sites, re-ingesting it changes nothing, and the grain is written in `schema
 
 ## In flight
 
-_(none)_
+- **B8** — `task_4c181a760d91`, worktree `m1-forge`. Owns a new `src/sync/telemetry/`, one new
+  table in `schema.sql`, and its tests. Dispatched without waiting for the other coordinator's
+  answer on M1 ownership; if they come back holding it, the collision is one table in
+  `schema.sql` and the `operation_id` correlation, both named in the brief.
 
 
 ## Done
