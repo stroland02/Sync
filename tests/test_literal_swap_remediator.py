@@ -172,3 +172,17 @@ def test_it_satisfies_the_remediator_protocol():
     from sync.core.protocols import Remediator
 
     assert isinstance(LiteralSwapRemediator(), Remediator)
+
+
+def test_the_edit_reaches_the_clone_and_not_only_the_diff(repo: RepoRef):
+    """Nothing in the pipeline applies `patch.diff`.
+
+    `nodes.make_patch` stores the `Patch`, `static_verify` typechecks the working tree, and
+    `push_branch` stages it with `git add -u`. A remediator that renders a diff without
+    writing it produces a branch with no commit, having reported success.
+    """
+    LiteralSwapRemediator().propose(_finding(), _change(), _site(), repo)
+
+    on_disk = (Path(repo.local_path) / "src" / "summarise.ts").read_text(encoding="utf-8")
+    assert "claude-opus-4-8" in on_disk
+    assert "claude-3-7-sonnet-20250219" not in on_disk

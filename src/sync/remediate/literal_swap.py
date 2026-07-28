@@ -77,7 +77,10 @@ class LiteralSwapRemediator:
             return self._patch("", change, site)
 
         try:
-            original = target.read_text(encoding="utf-8")
+            # Bytes, decoded here rather than `read_text`, so no newline translation
+            # happens in either direction: `read_text` folds CRLF to LF and `write_text`
+            # expands LF to `os.linesep`, so on Windows a round trip rewrites every line.
+            original = target.read_bytes().decode("utf-8")
         except (OSError, UnicodeDecodeError):
             # The index can outlive the file: a deleted or moved path is a stale binding, and a
             # file that is not valid UTF-8 is not source this remediator can reason about.
@@ -97,6 +100,10 @@ class LiteralSwapRemediator:
                 tofile=f"b/{site.path}",
             )
         )
+        # The edit has to land in the clone, not only in the rendered diff. Nothing
+        # downstream applies `patch.diff`: `static_verify` typechecks the working tree and
+        # `push_branch` stages it with `git add -u`, so a diff alone pushes an empty commit.
+        target.write_bytes(updated.encode("utf-8"))
         return self._patch(diff, change, site)
 
     def _patch(self, diff: str, change: VendorChange, site: CallSite) -> Patch:
