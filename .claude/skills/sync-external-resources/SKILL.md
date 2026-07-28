@@ -68,14 +68,19 @@ six were never fetched. **Each carries the exact question to answer, so whoever 
 resolves it rather than re-deriving what to ask.** Do not treat the guessed milestone as
 settled — it is a placeholder until the repo is actually read.
 
-### `public-apis/public-apis` — provisionally M3
+### `public-apis/public-apis` — largely superseded, likely SKIP
 
-*Question:* does it carry **machine-readable** structure — a JSON or YAML index — or only a
-markdown table? Do entries link to OpenAPI specs? Sync needs a vendor target list for adapter
-coverage, ranked by how many codebases consume each. If this is an unranked link dump with no
-spec URLs, it is worthless for that and should be marked SKIP. Check for a machine-readable
-mirror or API. **Also check the license**: a share-alike list could contaminate a derived
-artifact, and Sync is open-core with FSL on the engine.
+The question this repo was on the list to answer — *which vendors should Sync write adapters
+for?* — is now answered better elsewhere. `docs/superpowers/specs/2026-07-27-sync-adapter-targets.md`
+carries a verified target list, and the criterion turned out not to be popularity at all but
+**bindability**: a vendor is only a target if it publishes a machine-readable, versioned spec.
+A catalogue ranked by popularity cannot answer that, and the spec's discovery mechanism —
+reading `.stats.yml` from Stainless-generated SDKs — finds bindable vendors directly.
+
+*Residual question, if anyone still wants it:* does it carry a machine-readable index rather
+than a markdown table, and do entries link to OpenAPI specs? If not, mark SKIP outright.
+**Check the license before deriving anything from it** — a share-alike list could contaminate a
+derived artifact, and Sync is open-core with FSL on the engine.
 
 ### `ripienaar/free-for-dev` — provisionally M4, likely the most immediately useful of the six
 
