@@ -51,6 +51,32 @@ class CannotPatch(Exception):
     """
 
 
+class NoTierApplies(RuntimeError):
+    """No tier accepted the finding, so none ran and none has a strategy to record.
+
+    Distinct from `TierFailed`, and the corpus needs them apart: "nothing was attempted"
+    and "the agent tier ran and failed" are different facts, and squashing them loses
+    exactly the signal `migration_outcome` exists to capture.
+    """
+
+
+class TierFailed(RuntimeError):
+    """A tier accepted the finding, ran, and raised.
+
+    Carries the strategy of the tier that failed. That attempt is a negative example, and
+    the corpus splits merge rate by strategy -- the information exists here, so discarding
+    it would be a choice rather than a limitation.
+
+    The message keeps the original exception's class and text because `make_patch` renders
+    it into `diagnostics`, and that string is the whole of what an operator sees on an
+    abandoned run.
+    """
+
+    def __init__(self, strategy: str, cause: BaseException) -> None:
+        super().__init__(f"{type(cause).__name__}: {cause}")
+        self.tier_strategy = strategy
+
+
 class TerminalTier:
     """The last tier in a cascade, which is never asked whether it can handle a finding.
 
@@ -127,12 +153,17 @@ class TieredRemediator:
                 # The next tier gets the work; only the reason is carried forward, so a
                 # cascade that declines all the way down still says why.
                 declined.append(f"{getattr(remediator, 'strategy', '?')}: {exc}")
+            except Exception as exc:
+                # A tier that ran and failed. Re-raised carrying its strategy so the corpus
+                # can record the attempt against the tier that made it rather than losing
+                # the negative example.
+                raise TierFailed(getattr(remediator, "strategy", ""), exc) from exc
 
         # Raising rather than returning an empty patch: `make_patch` catches exceptions and
         # routes to abandon carrying the message, whereas an empty diff is indistinguishable
         # from "already migrated" and would abandon without saying why.
         detail = f" ({'; '.join(declined)})" if declined else ""
-        raise RuntimeError(
+        raise NoTierApplies(
             f"no remediator can handle {change.kind} for {change.operation_id}{detail}"
         )
 
