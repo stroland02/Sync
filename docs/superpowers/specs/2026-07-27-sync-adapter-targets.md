@@ -33,10 +33,26 @@ there and starved.
 
 ## The discovery mechanism
 
-This is the part that matters more than any individual row below, and it was found by reading
-`.stats.yml` in `anthropics/anthropic-sdk-python`.
+This is the part that matters more than any individual row below. **A generated SDK names the
+spec it was generated from, in a committed file, in a public repository.** That holds across
+generators, which makes it a discovery mechanism rather than a vendor trick.
 
-Stainless-generated SDKs commit a file that names the spec they were generated from:
+Two conventions are confirmed. Both point from an SDK repository — easy to find, because
+developers already depend on it — to the authoritative spec.
+
+**Speakeasy** writes `.speakeasy/workflow.yaml`, naming the source location directly:
+
+```yaml
+sources:
+    vercel-OAS:
+        inputs:
+            - location: https://openapi.vercel.sh/
+```
+
+That is how Vercel's spec endpoint was found. Note it is **vendor-hosted**, which is strictly
+better than the Stainless case below: it is the authoritative artifact, not a mirror.
+
+**Stainless** writes `.stats.yml`:
 
 ```yaml
 configured_endpoints: 131
@@ -79,10 +95,17 @@ engineering number should be measured against.
 
 This is the synthesized-adapter machinery the competitive-position spec named as the real moat —
 "the moat is the synthesis machinery that produces coverage without hand-authored adapters."
-A `StainlessAdapter` that reads `.stats.yml`, follows `openapi_spec_url`, and hands the result
-to the existing oasdiff pipeline is **one adapter that covers every Stainless customer**, not one
-per vendor. Anthropic acquired Stainless in May 2026, and OpenAI and Google both depended on it,
-so the covered surface is large and growing.
+A `GeneratedSdkAdapter` that reads whichever manifest a repository carries, follows the spec
+location it names, and hands the result to the existing oasdiff pipeline is **one adapter that
+covers every vendor either generator serves**, not one per vendor. Anthropic acquired Stainless
+in May 2026, and OpenAI and Google both depended on it; Speakeasy serves a separate and
+overlapping population. Neither generator has to cooperate, because the manifest is already
+committed to a public repository for its own reasons.
+
+The generator is also the right unit of effort. Supporting a new *generator* is a day of work
+that yields every vendor using it; supporting a new *vendor* under a known generator is a
+configuration line. Adapter coverage stops scaling with vendor count and starts scaling with
+generator count, and there are not many generators.
 
 Two caveats recorded rather than smoothed over. The hash is absent from several `.stats.yml`
 files (Cloudflare, Orb), so the cheap trigger is not universal and the adapter must fall back to
@@ -144,10 +167,66 @@ diff engine (`graphql-inspector` or equivalent) behind the same `VendorAdapter` 
 a real and defensible extension — the protocol was designed for it — and it is a milestone of its
 own, not a row in this table.
 
-**Supabase, Clerk, WorkOS, Resend, PostHog, Vercel, Algolia.** All actively maintained, all
-plausibly consumed by the startup segment. Every one was checked only for repository liveness,
-not for a published spec. They are candidates, not targets, and are recorded here so the next
-pass starts from a list rather than from memory.
+## The startup cohort, resolved
+
+The seven candidates left open by the first pass were checked on 2026-07-27. None is
+Stainless-generated, which usefully bounds the claim above: the `.stats.yml` trigger covers the
+AI and infrastructure vendors, not this segment.
+
+| Vendor | Finding | Verdict |
+|---|---|---|
+| **Clerk** | `clerk/openapi-specs` → `bapi/2021-02-05.yml`, 612 KB. **The filename is the pinned version.** | **Target.** Cleanest version-pair story on the list alongside Plaid. |
+| **Vercel** | Speakeasy-generated. `.speakeasy/workflow.yaml` names `https://openapi.vercel.sh/` — vendor-hosted and live. | **Target**, and the proof the generator mechanism is not Stainless-specific. |
+| **Algolia** | `algolia/api-clients-automation` → `specs/search/spec.yml`, 14 KB. Split per product. | **Target**, same shape as Twilio — many small specs, pinned per product. |
+| **Supabase** | A spec exists at `apps/docs/spec/api_v1_openapi.json`, 494 KB — inside a docs app. | **Weak.** A docs artifact is not a contract, and Supabase's data API is PostgREST-generated per project, so there is no single stable spec to diff. Skip unless the management API alone is the target. |
+| **Resend** | No `.stats.yml`; no spec repository found at the probed paths. | **Unresolved.** One timeboxed probe, then decide. |
+| **WorkOS** | No `.stats.yml`; `workos/workos-openapi` does not exist. | **Unresolved.** As above. |
+| **PostHog** | No `.stats.yml`; no spec at the probed paths. | **Unresolved.** As above. |
+
+"Unresolved" means paths were probed and none hit — not that no spec exists. The distinction
+matters, because absence of evidence at three guessed URLs is not evidence of absence.
+
+## Splitting the work
+
+Adapter targets accumulate faster than adapters get written, and a list that grows without a
+throughput rule becomes a backlog nobody believes. Two rules keep it honest.
+
+**One cohort per milestone, and at most two vendors of a genuinely new adapter *shape* per
+milestone.** Vendors sharing a shape cost far less than the second one suggests — Twilio and
+Algolia are the same problem twice, and adding both is barely more than adding one. Two vendors
+whose shapes differ is a real doubling. Count shapes, not vendors.
+
+| Cohort | Shape | Vendors | When |
+|---|---|---|---|
+| **A** | Generator-discovered — no per-vendor adapter at all | OpenAI, Anthropic, Cloudflare, Vercel, Lithic, Orb, Browserbase | M1.5 |
+| **B** | Vendor-published, version in the filename | Plaid, Clerk | M2 |
+| **C** | Vendor-published, split per product | Twilio, Algolia | M3 |
+| **D** | Large monolithic spec — the scale test | GitHub, Cloudflare | M3+ |
+| **E** | Unresolved, timeboxed probe | Resend, WorkOS, PostHog | Whenever a milestone has slack |
+| **F** | Needs a second diff engine | Linear, newer Shopify | Own milestone, or never |
+
+**Cohort A is not a batch of seven adapters.** It is one adapter that reads a generator
+manifest, and every vendor in it is configuration. That is why it sits earliest despite being
+the largest row: its cost does not scale with its length.
+
+### The intake checklist
+
+So each vendor is addressed the same way rather than however whoever picks it up feels that
+day. Six questions, answered in the pull request that adds the adapter:
+
+1. Where is the spec, and is it **vendor-hosted** or a mirror?
+2. How is a version **pinned** — filename, git tag, release, or content hash?
+3. Is there a **cheap change trigger** — a hash or an ETag — that avoids downloading the spec to
+   learn nothing changed?
+4. What is the **symbol-to-operation mapping**, and is it generated or hand-written?
+5. **Measured** breaking changes per unit time, over at least three consecutive version pairs.
+   Not estimated. This is the axis that orders the list and the one most often skipped.
+6. What does the adapter do when the spec **disappears or fails to parse** — and is that path
+   tested? Slack and SendGrid are on this list as the reason.
+
+Question 5 is the one that will get skipped under time pressure. It is also the only one whose
+absence makes the whole list guesswork, so a pull request that answers the other five and not
+that one is not finished.
 
 ## Sequencing
 
@@ -155,9 +234,9 @@ pass starts from a list rather than from memory.
 |---|---|
 | M0 | Stripe. Done. |
 | M1 | MCP, on measured drift. Unchanged by this document. |
-| M1.5 | **The `StainlessAdapter`.** One adapter, many vendors. This is the highest coverage-per-unit-effort item on the entire roadmap and it should not wait for M3's adapter SDK. |
-| M2 | OpenAI and Anthropic, which the Stainless adapter largely delivers. Sentry arrives anyway as a signal source. |
-| M3 | GitHub and Twilio, hand-written against vendor-published specs, as the reference adapters the public SDK is documented with. |
+| M1.5 | **The `GeneratedSdkAdapter`** (cohort A). One adapter reading generator manifests — Stainless `.stats.yml` and Speakeasy `.speakeasy/workflow.yaml` — covering every vendor either generator serves. Highest coverage-per-unit-effort item on the roadmap; it should not wait for M3's adapter SDK. |
+| M2 | Cohort B — Plaid and Clerk, both pinned by filename. OpenAI and Anthropic arrive free from cohort A; Sentry arrives anyway as a signal source. |
+| M3 | Cohort C — Twilio and Algolia, the same product-split shape twice. These are the reference adapters the public SDK is documented with. |
 | Later | Cloudflare as the scale test. A second diff engine for GraphQL, if demand justifies it. |
 
 ## The measurement this list still needs
