@@ -27,6 +27,12 @@ class GraphStore:
     it breaks -- a run whose database went away has no correct way to continue,
     and reconnecting inside `transaction()` would silently turn one atomic
     ingest into a partially committed one.
+
+    A store is meant for one caller at a time. psycopg serialises statements on
+    a shared connection, so concurrent callers corrupt nothing -- but they share
+    a transaction as well as a connection, which is a sharper edge than it
+    sounds and is spelled out on `transaction()`. Give each concurrent unit of
+    work its own store.
     """
 
     def __init__(self, dsn: str) -> None:
@@ -43,10 +49,24 @@ class GraphStore:
         """Group writes so a failure part-way through leaves no partial graph.
 
         Outside a block every write commits on its own, which is what the
-        detector and the remediation nodes want. Inside one, nothing is visible
-        to another connection until the block returns -- including TRUNCATE, so
-        an ingest that dies half-way rolls back to the graph it started from
-        rather than to an empty one.
+        detector and the remediation nodes want. Inside one, nothing another
+        connection reads reflects the block until it returns -- including the
+        TRUNCATE, so an ingest that dies half-way rolls back to the graph it
+        started from rather than to an empty one.
+
+        That guarantee is single-threaded, and the two ways it does not
+        generalise are both measured rather than reasoned about:
+
+        The block belongs to this store's connection, not to the caller that
+        opened it. A write issued through the same store from another thread
+        joins the block whether it means to or not, and is rolled back with it
+        without raising anything. Concurrency here needs a store per unit of
+        work; M1's fan-out across findings is the case that will meet this.
+
+        A reader on another connection does not see the previous graph while an
+        ingest runs. TRUNCATE takes ACCESS EXCLUSIVE, which conflicts with the
+        ACCESS SHARE an ordinary SELECT takes, so the reader blocks for the
+        duration of the block and then reads whatever it committed.
         """
         with self._connect().transaction():
             yield

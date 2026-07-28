@@ -1,5 +1,7 @@
 import os
+import threading
 
+import psycopg
 import pytest
 
 from sync.core import CallSite, Finding, VendorChange
@@ -223,6 +225,59 @@ def test_a_failure_after_a_truncate_restores_the_previous_graph(store):
 
     sites = store.call_sites_for_operation("stripe", "PostCharges")
     assert [s.path for s in sites] == ["src/billing.ts"]
+
+
+def test_a_second_thread_sharing_the_store_is_swept_into_the_open_transaction(store):
+    """The transaction belongs to the store's connection, not to the caller
+    that opened it. A write issued through the same store from another thread
+    is inside the block whether or not it means to be, and disappears when the
+    block rolls back -- silently, since nothing raises. This is the boundary
+    `cli.run` stays inside by being single-threaded, and the one M1's fan-out
+    across findings has to respect by giving each branch its own store.
+    """
+    opened, wrote = threading.Event(), threading.Event()
+
+    def other_thread():
+        assert opened.wait(10)
+        store.upsert_call_site(_site(path="src/other-thread.ts", content_hash="hash-other"))
+        wrote.set()
+
+    worker = threading.Thread(target=other_thread)
+    worker.start()
+    try:
+        with pytest.raises(RuntimeError):
+            with store.transaction():
+                store.upsert_call_site(_site())
+                opened.set()
+                assert wrote.wait(10)
+                raise RuntimeError("ingest died halfway")
+    finally:
+        worker.join(10)
+
+    assert store.call_sites_for_operation("stripe", "PostCharges") == []
+
+
+def test_a_reader_on_another_connection_waits_out_the_ingest(store):
+    """It does not read the previous graph while the ingest runs: TRUNCATE
+    holds ACCESS EXCLUSIVE until the block returns, so a concurrent reader
+    blocks for the whole ingest and then reads whatever committed. `lock_timeout`
+    turns that wait into an error the test can assert on; without it the read
+    would simply hang until the ingest finished.
+    """
+    store.upsert_call_site(_site())
+
+    reader = psycopg.connect(DSN, autocommit=True)
+    reader.execute("SET lock_timeout = '250ms'")
+    try:
+        with pytest.raises(psycopg.errors.LockNotAvailable):
+            with store.transaction():
+                store.truncate_all()
+                store.upsert_call_site(_site(path="src/new.ts", content_hash="hash-new"))
+                reader.execute("SELECT count(*) FROM call_site").fetchone()
+    finally:
+        reader.close()
+
+    assert [s.path for s in store.call_sites_for_operation("stripe", "PostCharges")] == ["src/billing.ts"]
 
 
 def test_get_call_site_round_trips_the_id_the_upsert_returned(store):

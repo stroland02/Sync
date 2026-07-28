@@ -72,6 +72,57 @@ def _clone(url: str, dest: Path) -> RepoRef:
     return RepoRef(repo_id=_repo_id(url), url=url, local_path=str(dest), head_sha=head)
 
 
+def _git(args: list[str], cwd: Path) -> None:
+    subprocess.run(
+        ["git", *args], cwd=cwd, check=True,
+        capture_output=True, text=True, encoding="utf-8",
+    )
+
+
+def _reset_clone(repo: RepoRef) -> None:
+    """Return the clone to the commit it was cloned at.
+
+    One clone serves every finding, and `push_branch` leaves HEAD on the branch
+    it pushed with the patch committed. Without this the next finding's agent
+    starts from the previous finding's tip: its branch carries that commit as a
+    parent, its pull request shows both diffs, and its CI verifies a combination
+    neither finding proposed. An abandoned finding is worse -- its edits are
+    still in the tree, uncommitted, and `push_branch` stages with `git add -u`,
+    so they land in the next finding's commit under a message describing
+    something else.
+
+    `git clean` runs without `-x`, so ignored files survive. `node_modules` is
+    what `prepare` spent tens of seconds installing, and reinstalling it per
+    finding would cost more than the clone this protects.
+    """
+    path = Path(repo.local_path)
+    _git(["checkout", "-f", repo.head_sha], path)
+    _git(["clean", "-fd"], path)
+
+
+def _checkout_branch(repo: RepoRef, branch: str) -> None:
+    """Put the clone on a branch some earlier process pushed.
+
+    A resumed run's checkpoint describes a working copy that died with its
+    temporary directory. `await_ci` reads HEAD out of the clone to match CI runs
+    against the commit it pushed, so a fresh clone left on the default branch
+    polls for the wrong sha and reports no CI run until it times out.
+    """
+    path = Path(repo.local_path)
+    # The refspec is explicit because `git fetch origin <branch>` leaves only
+    # FETCH_HEAD behind, and a resumed run that pushes again needs the
+    # remote-tracking ref that `--force-with-lease` compares against.
+    _git(["fetch", "origin", f"+{branch}:refs/remotes/origin/{branch}"], path)
+    _git(["checkout", "-f", "-B", branch, f"origin/{branch}"], path)
+
+
+# Nodes whose inputs outlive the process that produced them: what they need is
+# in the pushed branch. A run interrupted before `push_branch` left its patch in
+# a temporary directory that is now gone, so resuming it would typecheck a tree
+# holding none of the work and then commit an empty index. Those start over.
+RESUMABLE_NODES = frozenset({"await_ci", "open_pr"})
+
+
 def _thread_to_invoke(graph, base: str) -> tuple[str, bool]:
     """Pick the checkpoint thread for one finding, and say whether to resume it.
 
@@ -98,7 +149,7 @@ def _thread_to_invoke(graph, base: str) -> tuple[str, bool]:
         snapshot = graph.get_state({"configurable": {"thread_id": thread_id}})
         if snapshot.created_at is None:
             return thread_id, False
-        if snapshot.next:
+        if snapshot.next and set(snapshot.next) <= RESUMABLE_NODES:
             return thread_id, True
         generation += 1
 
@@ -130,11 +181,13 @@ def run(args: argparse.Namespace) -> int:
             return 2
 
         # One transaction for the whole ingest. It holds an ACCESS EXCLUSIVE
-        # lock on the graph tables from the TRUNCATE until it commits, which is
-        # acceptable only because M0 runs one scan at a time; the alternative is
-        # worse, since a run that dies part-way through would otherwise leave a
-        # graph that is neither the old one nor the new one, and the detector
-        # cannot tell a missing row from an absent call site.
+        # lock on the graph tables from the TRUNCATE until it commits, so any
+        # concurrent reader blocks for the length of the ingest rather than
+        # reading the previous graph. That is acceptable only because M0 runs
+        # one scan at a time; the alternative is worse, since a run that dies
+        # part-way through would otherwise leave a graph that is neither the old
+        # one nor the new one, and the detector cannot tell a missing row from
+        # an absent call site.
         #
         # M0 has one entry point and no incremental indexing story: a stale row
         # from a previous invocation is indistinguishable from a real finding to
@@ -178,12 +231,24 @@ def run(args: argparse.Namespace) -> int:
             for finding in selected:
                 base = f"{finding.id}:{args.run_id or repo.head_sha[:12]}"
                 thread_id, resuming = _thread_to_invoke(graph, base)
+                config = {"configurable": {"thread_id": thread_id}}
+
+                if resuming:
+                    # The checkpoint's RepoRef names a temporary directory that
+                    # died with the process that wrote it; only the pushed
+                    # branch survived, so the clone goes there and the state
+                    # learns where this process put its own copy.
+                    _checkout_branch(repo, graph.get_state(config).values["branch"])
+                    graph.update_state(config, {"repo": repo})
+                else:
+                    _reset_clone(repo)
+
                 # Resuming takes `None`: an interrupted thread handed a payload
                 # re-enters at START and redoes the patch and the push it had
                 # already paid for.
                 state = graph.invoke(
                     None if resuming else {"finding": finding, "repo": repo},
-                    config={"configurable": {"thread_id": thread_id}},
+                    config=config,
                 )
                 print(f"{state['outcome']}: {state.get('pr_url') or state.get('abandon_reason')}")
 
