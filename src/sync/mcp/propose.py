@@ -44,6 +44,9 @@ PROPOSED = "proposed"
 UNVERIFIED = "unverified"
 BLOCKED = "blocked"
 NO_PATCH_WARRANTED = "no_patch_warranted"
+# A server with no checkout configured. Distinct from `BLOCKED`, which is a run that started
+# and could not finish: nothing was attempted here, and an agent should stop asking.
+UNAVAILABLE = "unavailable"
 
 
 def run_to_static_verify(
