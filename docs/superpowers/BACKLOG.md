@@ -61,16 +61,21 @@ call sites, re-ingesting it changes nothing, and the grain is written in `schema
 
 ## In flight
 
-- **B8** — `task_4c181a760d91`, `m1-forge`. New `src/sync/telemetry/`, one new table in
-  `schema.sql`. OTLP parser and correlation green; on schema and ingest now.
-- **B9** — `task_a7a81ab1cfa2`, `m2-parsing`. A second VendorAdapter, to prove the protocol
-  generalizes past Stripe or find precisely where it does not. The design document's
-  first-listed risk. Told to report protocol changes rather than make them.
-- **B10** — `task_33a41222f14e`, `m2-depth`. Loop context on `call_site` — the one efficiency
-  signal that is static and needs no telemetry. Adds a column to `schema.sql`, which is the
-  same file B8 adds a table to; both told to rebase immediately before their final gates.
+- **B10** — `task_5b97de02fb7e`, `m1-forge`. Loop context on `call_site`. Re-dispatched after a
+  reset in a shared worktree destroyed its first attempt's uncommitted work.
+- **B11** — `task_f64fca30ed13`, `m2-parsing`. The efficiency detector, M1's second half, on the
+  `observed_call` table B8 landed. Told to refuse a dollar figure it cannot derive rather than
+  multiply by a plausible constant, and to check the salt's stability before relying on the
+  repeated-call digest.
 
 ## Done
+
+- The M1 span store: `observed_call`, OTLP ingest, and correlation behind a `RequestCorrelator`
+  protocol. Landed `ecab0bd`. Grain is one row per trace — per unit of work — which is what lets
+  a loop be told apart from ordinary traffic, and what makes ingest idempotent with no counter.
+- A second vendor adapter (Twilio), the first real second implementation of
+  `operation_for_symbol`. Landed `14394e4`. It inverted the assumption the symbol map was built
+  around; the design document now records it.
 
 - Run the suite in parallel, one database per worker. Landed `b590a5e`. Measured **2.18x** on
   an idle 12-core machine, not the 3.0x first reported — that baseline was taken while other
