@@ -16,6 +16,35 @@ def store():
     return s
 
 
+def test_many_calls_open_one_connection(monkeypatch):
+    """Every public method used to call `_connect()`, so the acceptance run's
+    2,896 vendor changes cost 2,896 connect/authenticate/close cycles. The
+    count is the assertion because it is the thing that regresses: a new
+    method that opens its own connection reads correctly and is silently
+    2,896 handshakes slower again.
+    """
+    import sync.graph.store as store_module
+
+    real_connect = store_module.psycopg.connect
+    connects = 0
+
+    def counting_connect(*args, **kwargs):
+        nonlocal connects
+        connects += 1
+        return real_connect(*args, **kwargs)
+
+    monkeypatch.setattr(store_module.psycopg, "connect", counting_connect)
+
+    s = GraphStore(DSN)
+    s.apply_schema()
+    s.upsert_call_site(_site())
+    s.upsert_call_site(_site(line=99, col=2, content_hash="hash-99"))
+    s.call_sites_for_operation("stripe", "PostCharges")
+    s.all_vendor_changes("stripe")
+
+    assert connects == 1
+
+
 def _site(**kw) -> CallSite:
     base = dict(
         repo_id="r1",
@@ -159,3 +188,62 @@ def test_upsert_vendor_change_does_not_corrupt_raw_across_operations(store):
     assert a.raw["text"] == "removed the optional property `customer` from the response"
     assert b.operation_id == "PostCharges"
     assert b.raw["text"] == "removed the optional property `payment_method` from the response"
+
+
+def test_a_transaction_that_returns_commits_its_rows(store):
+    with store.transaction():
+        store.upsert_call_site(_site())
+    assert len(store.call_sites_for_operation("stripe", "PostCharges")) == 1
+
+
+def test_a_failure_inside_a_transaction_writes_no_rows(store):
+    with pytest.raises(RuntimeError):
+        with store.transaction():
+            store.upsert_call_site(_site())
+            store.upsert_vendor_change(_change())
+            raise RuntimeError("ingest died halfway")
+
+    assert store.call_sites_for_operation("stripe", "PostCharges") == []
+    assert store.all_vendor_changes("stripe") == []
+
+
+def test_a_failure_after_a_truncate_restores_the_previous_graph(store):
+    """`cli.run` truncates and re-ingests inside one transaction, so the graph
+    a crash leaves behind is the *previous* run's, complete, rather than an
+    empty or half-filled one. TRUNCATE rolling back is what makes that hold,
+    and it is a Postgres-specific property worth pinning rather than assuming.
+    """
+    store.upsert_call_site(_site())
+
+    with pytest.raises(RuntimeError):
+        with store.transaction():
+            store.truncate_all()
+            store.upsert_call_site(_site(path="src/new.ts", content_hash="hash-new"))
+            raise RuntimeError("ingest died halfway")
+
+    sites = store.call_sites_for_operation("stripe", "PostCharges")
+    assert [s.path for s in sites] == ["src/billing.ts"]
+
+
+def test_get_call_site_round_trips_the_id_the_upsert_returned(store):
+    """`VendorChangeDetector` builds a `Finding` from `call_site.id` and
+    `cli.run` hands that id to the remediation graph, which reads the site back
+    by it. Nothing else in the suite asserts the id survives the round trip.
+    """
+    site_id = store.upsert_call_site(_site())
+    assert store.get_call_site(site_id).id == site_id
+
+
+def test_get_vendor_change_round_trips_the_id_the_upsert_returned(store):
+    change_id = store.upsert_vendor_change(_change())
+    assert store.get_vendor_change(change_id).id == change_id
+
+
+def test_get_call_site_raises_key_error_for_an_unknown_id(store):
+    with pytest.raises(KeyError):
+        store.get_call_site("no-such-call-site")
+
+
+def test_get_vendor_change_raises_key_error_for_an_unknown_id(store):
+    with pytest.raises(KeyError):
+        store.get_vendor_change("no-such-vendor-change")
