@@ -10,6 +10,7 @@ requires-python = ">=3.12"
 dependencies = [
     "ast-grep-py>=0.45.0",
     "claude-agent-sdk>=0.2.128",
+    "cryptography>=49.0.0",
     "langgraph>=1.2.9",
     "langgraph-checkpoint-postgres>=3.1.0",
     "psycopg[binary]>=3.3.4",
