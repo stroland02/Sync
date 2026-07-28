@@ -371,6 +371,7 @@ class TypeScriptAdapter:
         every commit Sync adds to that branch passed this gate and so introduced
         nothing the baseline does not already hold.
         """
+        from sync.index.dependency_edits import mark_installed
         from sync.index.deps import install_dependencies
 
         path = Path(repo.local_path).resolve()
@@ -379,7 +380,7 @@ class TypeScriptAdapter:
         # this node is the last thing to touch the clone before the patch agent
         # does, so everything under `node_modules` older than this instant is
         # the install's and everything newer is the agent's.
-        self._installed_at[path] = time.time_ns()
+        self._installed_at[path] = mark_installed(path)
         if path not in self._baselines:
             self._baselines[path] = self._baseline(path)
 
@@ -475,7 +476,11 @@ class TypeScriptAdapter:
         two agent runs to reach the same abandonment with a later timestamp --
         which is exactly what `route_after_static` reads `static_fatal` for.
         """
-        from sync.index.dependency_edits import describe, unshippable_dependency_edits
+        from sync.index.dependency_edits import (
+            describe,
+            mark_installed,
+            unshippable_dependency_edits,
+        )
         from sync.index.deps import DEPENDENCY_DIRS, install_dependencies
         from sync.index.shipped_tree import shipped_tree
         from sync.index.tsc import introduced_diagnostics, parse_diagnostics, run_tsc
@@ -488,7 +493,7 @@ class TypeScriptAdapter:
         # An install here rewrote every file under `node_modules`, so the mark
         # `prepare` took would read the whole tree as edited.
         if install_dependencies(path):
-            self._installed_at[path] = time.time_ns()
+            self._installed_at[path] = mark_installed(path)
 
         edited = unshippable_dependency_edits(path, DEPENDENCY_DIRS, self._installed_at[path])
         if edited:

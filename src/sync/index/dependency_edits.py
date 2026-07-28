@@ -31,6 +31,7 @@ from __future__ import annotations
 
 import os
 import subprocess
+import time
 from pathlib import Path
 from typing import Iterator
 
@@ -38,6 +39,32 @@ from typing import Iterator
 # install rather than making an edit changes every file in the tree, and a
 # diagnostic listing them is not one anybody reads.
 _REPORTED = 5
+
+
+def mark_installed(repo_path: Path) -> int:
+    """The instant after which a write under a dependency directory is an edit.
+
+    Not `time.time_ns()`. A filesystem records mtimes more coarsely than the clock
+    reports time -- about 0.56ms apart on this machine, and two seconds on FAT -- so a
+    file written within one tick of the mark records an mtime that is not strictly
+    greater than it, and `unshippable_dependency_edits` misses it.
+
+    A real run leaves minutes between the install and the check, so the gap is never
+    that small in production. The mark does not rely on that: it returns only once the
+    filesystem can express an instant after it, which costs about a millisecond, once
+    per clone. A guard that holds only because the thing it watches happens to be slow
+    stops holding the day that thing gets faster, and it fails towards missing edits.
+    """
+    probe = Path(repo_path) / ".sync-install-mark"
+    mark = time.time_ns()
+    try:
+        while True:
+            probe.write_text("", encoding="utf-8")
+            if probe.stat().st_mtime_ns > mark:
+                return mark
+            time.sleep(0.0005)
+    finally:
+        probe.unlink(missing_ok=True)
 
 
 def _walkable(repo_path: Path) -> str:

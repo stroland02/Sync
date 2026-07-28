@@ -8,7 +8,7 @@ narrow and it never fires, too wide and it fires on every run.
 import os
 from pathlib import Path
 
-from sync.index.dependency_edits import describe, unshippable_dependency_edits
+from sync.index.dependency_edits import describe, mark_installed, unshippable_dependency_edits
 
 DIRS = frozenset({"node_modules"})
 
@@ -25,13 +25,14 @@ def _tree(root: Path) -> None:
 
 
 def _mark(root: Path) -> int:
-    """A mark every file in the tree predates.
+    """A mark every file in the tree predates and the next write does not.
 
-    Taken from the tree rather than the clock so the assertions do not depend on
-    the filesystem's timestamp resolution: on NTFS it is coarser than a test's
-    two consecutive writes.
+    The production primitive, deliberately: taking the tree's newest mtime is not
+    enough on its own, because the write a test makes immediately afterwards can land
+    on the same filesystem tick and compare equal rather than greater. That is a real
+    1-in-12 flake, not a theoretical one.
     """
-    return max(p.stat().st_mtime_ns for p in root.rglob("*") if p.is_file())
+    return mark_installed(root)
 
 
 def test_nothing_written_since_the_install_is_reported(tmp_path: Path, git):
@@ -151,3 +152,24 @@ def test_the_diagnostic_names_a_path_and_stays_readable_when_there_are_many():
     many = describe([f"node_modules/p{index}/index.d.ts" for index in range(40)])
     assert "node_modules/p0/index.d.ts" in many
     assert "35 other paths" in many
+
+
+def test_the_mark_is_late_enough_that_the_very_next_write_is_visible(tmp_path: Path) -> None:
+    """The guard compares mtimes against a mark, and a filesystem's mtime resolution is
+    coarser than the clock's: measured here at about 0.56ms, so a write within roughly
+    1.5ms of `time.time_ns()` records an mtime that is not strictly greater than it.
+
+    In a real run the agent works for minutes between the install and the check, so the
+    gap is never that small. The mark must not depend on that being true — a guard that
+    holds only because the thing it watches happens to be slow is a guard that stops
+    holding the day something gets faster, silently, in the direction of missing edits.
+    """
+    installed_at = mark_installed(tmp_path)
+
+    offender = tmp_path / "node_modules" / "pkg" / "index.d.ts"
+    offender.parent.mkdir(parents=True)
+    offender.write_text("export {};\n", encoding="utf-8")
+
+    assert offender.stat().st_mtime_ns > installed_at, (
+        "a write immediately after the mark was not distinguishable from it"
+    )
