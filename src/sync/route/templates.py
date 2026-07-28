@@ -32,14 +32,6 @@ _DEPRECATION_PREFIX = "deprecation/model-"
 # risking a fight with whatever formatter the customer's CI runs -- the CI this patch must pass.
 _QUOTES = ('"', "'")
 
-# Upper bound on removal passes, so a span that fails to shrink the source cannot spin the
-# loop. It bounds passes over the whole source rather than over one object, and a pass makes
-# one removal, so a file holding more matching calls than this silently keeps the remainder:
-# measured, 201 calls each passing the key leaves one behind and 250 leaves fifty. No
-# realistic object carries two hundred copies of a key, but a file carrying two hundred calls
-# that each pass it is ordinary. Raising the number moves the cliff rather than removing it;
-# what the caller needs is to be told the pass ran out, which changes this function's contract.
-_MAX_REMOVALS = 200
 
 
 def model_literal_swap(change: VendorChange, language: str) -> list[dict[str, Any]]:
@@ -414,16 +406,31 @@ def omit_parameter(
     tree corrupts an object holding the key twice: the second pair takes the comma that the
     first pair's span already claimed, and applying both leaves output that does not parse.
     Re-parsing is the cheap way to make every span current rather than to reason about which
-    overlaps are safe.
+    overlaps are safe. It costs one parse per removal, so a file passing the key at N call sites
+    is parsed N times -- paid because the alternative is the overlap reasoning this module has
+    already been wrong about once.
+
+    The loop runs until a pass finds nothing, and is not bounded by a pass count. It used to be,
+    and the count bounded passes over the whole source rather than over one object: a file
+    holding more matching calls than the bound silently kept the remainder -- measured, 201 calls
+    each passing the key left one behind and 250 left fifty, in output that parsed and
+    type-checked. Raising the number moved the cliff rather than removing it.
+
+    Removing it is safe because the loop already had a variant. A span is computed only where a
+    pair matching `parameter` was found, and every branch of `_deletion_span` returns a range
+    covering that pair -- the sole-entry branch takes the whole brace interior, which is that
+    pair, and the separator branch starts no later and ends no earlier than the pair itself. So a
+    pass that shrinks the source has removed a match, and the number of matches left is a
+    non-negative integer that strictly decreases. Nor can a pass create one: the widening rule
+    consumes a whole line including its own newline, and the separator rule consumes only spaces
+    and tabs, so no deletion joins two lines into a token that was not there before.
 
     Returns `source` unchanged when there is nothing to remove, which the caller reads as
     "no edit" rather than as failure.
     """
     result = source
 
-    # Bounded by the number of pairs that could match, so a span that somehow fails to shrink
-    # the source ends the loop rather than spinning.
-    for _ in range(_MAX_REMOVALS):
+    while True:
         root = SgRoot(result, language).root()
         span = None
 
@@ -440,10 +447,12 @@ def omit_parameter(
 
         start, end = span
         if end <= start:
+            # A span that removes nothing would be recomputed identically forever. Nothing
+            # reaches this today, per the variant argument above, and it stays because it is
+            # what makes termination a property of the loop rather than a belief about
+            # `_deletion_span` -- which is the guarantee the pass count was standing in for.
             return result
         result = result[:start] + result[end:]
-
-    return result
 
 
 def _object_argument_at(root, line: int, col: int):

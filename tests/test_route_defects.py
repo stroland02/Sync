@@ -13,7 +13,6 @@ from __future__ import annotations
 from ast_grep_py import SgRoot
 
 from sync.route.templates import (
-    _MAX_REMOVALS,
     omit_argument_at,
     omit_parameter,
     omit_property_at,
@@ -241,18 +240,121 @@ def test_omit_argument_at_still_resolves_the_wrapped_call():
 
 # --- the removal bound, which the audit did not check -------------------------------
 
+# What `_MAX_REMOVALS` was. The loop bounded passes over the whole source rather than over one
+# object, and a pass makes one removal, so a file holding more matching calls than this kept the
+# remainder -- silently, and the output parsed. Kept here as a number to exceed rather than as an
+# import, because the constant is gone.
+OLD_REMOVAL_BOUND = 200
 
-def test_the_removal_bound_is_reachable_by_a_file_rather_than_by_an_object():
-    """Pinned as a known limitation, not as intended behaviour.
 
-    `_MAX_REMOVALS` bounds passes over the whole source, not over one object, and
-    `omit_parameter` makes one removal per pass. No realistic object carries two hundred
-    copies of one key, but a file carrying two hundred calls that each pass it is ordinary,
-    and the loop then returns a partially edited source that parses and type-checks. Raising
-    the constant moves the cliff rather than removing it; the fix is a caller-visible signal
-    that the pass ran out, which is a change to this function's contract and not this task's.
+def test_a_file_holding_more_matching_calls_than_the_old_bound_loses_every_one():
+    """The defect this replaces was the expensive kind: a patch that compiles, type-checks and
+    is quietly incomplete. Two hundred and one calls each passing the key left one behind and
+    two hundred and fifty left fifty, in a file large enough that nobody reads the diff line by
+    line.
+
+    Constructed rather than hand-written, so the count is the thing under test rather than a
+    number someone has to keep in step with the source.
     """
-    source = 'stripe.messages.create({ model: "claude-opus-5", temperature: 1 });\n' * (_MAX_REMOVALS + 1)
+    source = 'stripe.messages.create({ model: "claude-opus-5", temperature: 1 });\n' * (
+        OLD_REMOVAL_BOUND + 50
+    )
+
     result = omit_parameter(source, "temperature", language="typescript", within_object_naming=MODEL)
 
-    assert result.count("temperature") == 1
+    assert result.count("temperature") == 0
+    assert result.count("stripe.messages.create") == OLD_REMOVAL_BOUND + 50
+
+
+def test_a_pass_that_removes_nothing_ends_the_loop():
+    """The guard that actually makes the loop terminate, exercised rather than trusted.
+
+    No input reaches it: a span is only computed where a matching pair was found, and every
+    branch of `_deletion_span` returns a range covering that pair, so a pass that shrinks the
+    source has removed a match and the match count strictly decreases. That is the loop's
+    variant, and it is why the counter was removable rather than raisable.
+
+    The guard is what stands between a future span computation returning an empty range and an
+    unbounded loop spinning on it, so it is proven live by forcing exactly that -- the input the
+    counter was there for, injected because it cannot be written in TypeScript.
+    """
+    import sync.route.templates as templates
+
+    source = 'call({ model: "claude-opus-5", temperature: 1 });\n'
+    original = templates._deletion_span
+    calls = []
+
+    def empty_span(src, container, pair):
+        calls.append(1)
+        start, _ = original(src, container, pair)
+        return start, start
+
+    templates._deletion_span = empty_span
+    try:
+        result = omit_parameter(source, "temperature", language="typescript", within_object_naming=MODEL)
+    finally:
+        templates._deletion_span = original
+
+    assert result == source
+    assert len(calls) == 1, "a span that removes nothing must end the loop, not be retried"
+
+
+# --- can renames overlap the way deletions did? -------------------------------------
+
+
+def test_renames_at_two_positions_on_one_line_are_both_correct():
+    """`rename_parameter` builds every edit from a single parse and applies them together,
+    which is exactly what `omit_parameter` may not do. The reason it is safe is that a rename
+    replaces a key node in place and consumes no separator, so two edits are two disjoint key
+    ranges however close together they sit.
+
+    Applying them in ascending order would still corrupt, because a longer replacement shifts
+    every later index. Two calls on one line, renamed to a longer name, is the shape where that
+    shows: the second edit lands mid-token if the first has already moved it.
+    """
+    source = (
+        'call({ model: "claude-opus-5", max_tokens: 8 }); '
+        'call({ model: "claude-opus-5", max_tokens: 9 });\n'
+    )
+
+    result = rename_parameter(
+        source, "max_tokens", "max_completion_tokens",
+        language="typescript", within_object_naming=MODEL,
+    )
+
+    assert result.count("max_completion_tokens: ") == 2
+    assert "max_tokens" not in result
+    assert SgRoot(result, "typescript").root().find(pattern="call($$$ARGS)") is not None
+
+
+def test_a_nested_object_is_renamed_without_its_parent_taking_the_edit_twice():
+    """Both objects name the model, so both are in scope, and the inner object's pairs are its
+    own rather than the outer's. A pair collected twice would produce two edits over one range
+    and the second would apply to text the first had already replaced."""
+    source = (
+        'call({ model: "claude-opus-5", max_tokens: 8, '
+        'opts: { model: "claude-opus-5", max_tokens: 9 } });\n'
+    )
+
+    result = rename_parameter(
+        source, "max_tokens", "max_completion_tokens",
+        language="typescript", within_object_naming=MODEL,
+    )
+
+    assert result.count("max_completion_tokens") == 2
+    assert "max_completion_tokens: 8" in result and "max_completion_tokens: 9" in result
+
+
+def test_renaming_is_not_bounded_by_a_pass_count():
+    """`omit_parameter` looped and so acquired a cap that truncated. `rename_parameter` collects
+    every edit from one parse and applies them all, so there is no pass count to exceed -- and a
+    file far past the old bound is renamed completely."""
+    source = 'call({ model: "claude-opus-5", max_tokens: 8 });\n' * (OLD_REMOVAL_BOUND + 50)
+
+    result = rename_parameter(
+        source, "max_tokens", "max_completion_tokens",
+        language="typescript", within_object_naming=MODEL,
+    )
+
+    assert result.count("max_completion_tokens") == OLD_REMOVAL_BOUND + 50
+    assert "max_tokens:" not in result
