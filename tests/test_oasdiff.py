@@ -44,10 +44,18 @@ def test_nonzero_exit_raises_instead_of_returning_empty_list(monkeypatch):
 
 
 def test_records_convert_to_vendor_changes_with_operation_and_severity():
+    """Severity is what oasdiff graded the record, which for this fixture pair is `warning`.
+
+    Both of its records -- `request-property-removed` and `response-optional-property-removed` --
+    are `level: 2`, which `oasdiff checks` calls a warning. This assertion read `breaking` for as
+    long as `to_vendor_changes` stamped that on everything, and it passed for the same reason the
+    field carried no information.
+    """
     records = run_oasdiff_breaking(FIXTURES / "charges_base.json", FIXTURES / "charges_revision.json")
     changes = to_vendor_changes(records, vendor_id="stripe", from_version="base", to_version="revision")
     assert all(c.vendor_id == "stripe" for c in changes)
-    assert all(c.severity == "breaking" for c in changes)
+    assert all(r["level"] == 2 for r in records)
+    assert all(c.severity == "warning" for c in changes)
     assert all(c.source == "oasdiff" for c in changes)
     assert any(c.operation_id == "PostCharges" for c in changes)
 
