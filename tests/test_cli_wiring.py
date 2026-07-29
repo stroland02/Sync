@@ -24,6 +24,7 @@ from sync.graph.store import GraphStore
 from sync.remediate import corpus
 from sync.remediate.literal_swap import LiteralSwapRemediator
 from sync.signals.deprecations import ANTHROPIC, OPENAI
+from sync.signals.registry import PreparedVendor
 
 DSN = os.environ.get("SYNC_DSN", "postgresql://sync:sync@localhost:5433/sync")
 
@@ -120,7 +121,7 @@ def test_a_retired_model_reaches_the_tier_zero_remediator_end_to_end(tmp_path):
 
         findings = _scan(
             _detector_suite(
-                store, spec_document={}, call_sites=[site], deprecations=[],
+                store, spec_documents=(), call_sites=[site], deprecations=[],
                 vendor_id="stripe", repo_id=site.repo_id,
                 deprecation_vendors=("anthropic", "openai"),
             ),
@@ -167,7 +168,7 @@ def test_the_scan_joins_retirements_for_every_deprecation_vendor(tmp_path):
     any detector would ever read -- the wiring would have looked done and produced no finding.
     """
     suite = _detector_suite(
-        store=GraphStore(DSN), spec_document={}, call_sites=[], deprecations=[],
+        store=GraphStore(DSN), spec_documents=(), call_sites=[], deprecations=[],
         vendor_id="stripe", repo_id="repo-under-test",
         deprecation_vendors=("anthropic", "openai"),
     )
@@ -409,7 +410,12 @@ def _stub_collaborators(monkeypatch, store) -> None:
     monkeypatch.setattr(cli, "VendorChangeDetector", _NoFindings)
     monkeypatch.setattr(cli, "ParameterDeprecationDetector", _NoFindings)
     monkeypatch.setattr(cli, "ObservedDriftDetector", _NoFindings)
-    monkeypatch.setattr(cli, "StripeAdapter", _StubVendor)
+    # Vendor selection rather than an adapter class: `cli.py` no longer holds one to replace,
+    # and a stub that named one would keep passing after it started importing one again.
+    monkeypatch.setattr(
+        cli, "prepare_vendor",
+        lambda vendor_id, context: PreparedVendor(adapter=_StubVendor(), documents=()),
+    )
     monkeypatch.setattr(cli, "TypeScriptAdapter", _StubAdapter)
     monkeypatch.setattr(cli, "http_fetch", lambda url, **kw: "")
     # Stubbed whole rather than through the fetch: the parameter half writes each vendor's page
@@ -418,9 +424,6 @@ def _stub_collaborators(monkeypatch, store) -> None:
     # page and the model half would read that instead of what this test injects.
     monkeypatch.setattr(cli, "_parameter_deprecations", lambda cache: [])
     monkeypatch.setattr(cli, "_literal_call_sites", lambda repo: [])
-    monkeypatch.setattr(cli, "fetch_spec", _write_empty_spec)
-    monkeypatch.setattr(cli, "fetch_sdk_spec", lambda tag, dest: None)
-    monkeypatch.setattr(cli, "build_symbol_map", lambda spec, sdk: {})
     monkeypatch.setattr(
         cli, "_clone",
         lambda url, dest: RepoRef(repo_id="repo", url=url, local_path=str(dest), head_sha="0" * 40),

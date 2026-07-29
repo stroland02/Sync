@@ -36,6 +36,7 @@ from sync.core import CallSite, Finding, Patch, RepoRef, VendorChange, VerifyRes
 from sync.core.protocols import Detector
 from sync.forge.github import GitHubForge
 from sync.graph.store import GraphStore
+from sync.signals import registry
 
 DSN = os.environ.get("SYNC_DSN", "postgresql://sync:sync@localhost:5433/sync")
 
@@ -201,9 +202,9 @@ def test_the_graph_is_truncated_after_apply_schema_and_before_the_scan(monkeypat
     call site and vendor change before the detector reads them: every
     invocation reports "0 finding(s)" and exits 0 as if nothing had changed.
 
-    Every collaborator `run()` normally wires up is replaced here: `fetch_spec`
-    with a local file write, `StripeAdapter`/`TypeScriptAdapter` with stubs
-    that each produce one real call site and vendor change, `_clone` with a
+    Every collaborator `run()` normally wires up is replaced here: vendor
+    selection with a stub adapter, `TypeScriptAdapter` with another, between
+    them producing one real call site and vendor change, `_clone` with a
     fake `RepoRef`, `GraphStore` with an in-memory recorder. `VendorChangeDetector`
     is stubbed to report no findings regardless, so `run()` returns before ever
     touching `PostgresSaver` or the remediation graph, and neither needs a stub.
@@ -212,18 +213,12 @@ def test_the_graph_is_truncated_after_apply_schema_and_before_the_scan(monkeypat
 
     store = _RecordingStore()
 
-    def fake_fetch_spec(tag, dest):
-        dest.parent.mkdir(parents=True, exist_ok=True)
-        dest.write_text("{}", encoding="utf-8")
-        return dest
-
     def fake_clone(url, dest):
         return RepoRef(repo_id="repo", url=url, local_path=str(dest), head_sha="0" * 40)
 
-    monkeypatch.setattr(cli, "fetch_spec", fake_fetch_spec)
+    _stub_vendor_selection(monkeypatch, cli)
     monkeypatch.setattr(cli, "GraphStore", lambda dsn: store)
     monkeypatch.setattr(cli, "VendorChangeDetector", _RecordingDetector)
-    monkeypatch.setattr(cli, "StripeAdapter", _StubVendor)
     monkeypatch.setattr(cli, "TypeScriptAdapter", _StubAdapter)
     monkeypatch.setattr(cli, "_clone", fake_clone)
 
@@ -678,10 +673,9 @@ def test_two_findings_in_one_run_produce_branches_that_share_no_commits(tmp_path
         def open_pull_request(self, repo, branch, evidence):
             return f"https://github.invalid/pull/{branch}"
 
-    monkeypatch.setattr(cli, "fetch_spec", fake_fetch_spec)
+    _stub_vendor_selection(monkeypatch, cli)
     monkeypatch.setattr(cli, "GraphStore", lambda dsn: store)
     monkeypatch.setattr(cli, "VendorChangeDetector", _TwoFindingDetector)
-    monkeypatch.setattr(cli, "StripeAdapter", _StubVendor)
     monkeypatch.setattr(cli, "TypeScriptAdapter", _PassingAdapter)
     monkeypatch.setattr(cli, "AgentRemediator", _EditingRemediator)
     monkeypatch.setattr(cli, "GitHubForge", _LocalForge)
@@ -813,14 +807,39 @@ _SUBSCRIPTION_SDK = {
 
 
 def _stub_run_collaborators(monkeypatch, cli, store):
+    """Everything a run touches except the vendor, which is now selected rather than named.
+
+    The vendor moved out of here because `cli.py` no longer holds an adapter class to replace.
+    A test that wants a stubbed vendor calls `_stub_vendor_selection` as well; the two below
+    that assert what the staging derives deliberately do not, because the staging is the thing
+    they are about.
+    """
     monkeypatch.setattr(cli, "GraphStore", lambda dsn: store)
     monkeypatch.setattr(cli, "VendorChangeDetector", _RecordingDetector)
-    monkeypatch.setattr(cli, "StripeAdapter", _StubVendor)
     monkeypatch.setattr(cli, "TypeScriptAdapter", _StubAdapter)
     monkeypatch.setattr(cli, "http_fetch", lambda url, **kw: "")
     monkeypatch.setattr(
         cli, "_clone",
         lambda url, dest: RepoRef(repo_id="repo", url=url, local_path=str(dest), head_sha="0" * 40),
+    )
+
+
+def _stub_vendor_selection(monkeypatch, cli):
+    """Stand in for whichever adapter `--vendor` resolves to.
+
+    Patched at the selection call rather than at an adapter class, because naming a class here
+    is the defect `tests/test_vendor_registry.py` exists to hold shut -- and a stub that named
+    one would keep passing after `cli.py` started importing it again. Which adapter a run
+    selects is asserted there; these tests treat the vendor as a stubbed collaborator, the same
+    way they treat the store.
+    """
+    from sync.signals.registry import PreparedVendor
+
+    monkeypatch.setattr(
+        cli, "prepare_vendor",
+        lambda vendor_id, context: PreparedVendor(
+            adapter=_StubVendor(spec_dir=context.cache_dir, symbol_map_path=None), documents=(),
+        ),
     )
 
 
@@ -856,8 +875,8 @@ def test_the_run_builds_its_symbol_map_from_the_sdk_document(monkeypatch, tmp_pa
         dest.write_text(json.dumps(_SUBSCRIPTION_SDK), encoding="utf-8")
         return dest
 
-    monkeypatch.setattr(cli, "fetch_spec", fake_fetch_spec)
-    monkeypatch.setattr(cli, "fetch_sdk_spec", fake_fetch_sdk_spec)
+    monkeypatch.setattr(registry, "fetch_spec", fake_fetch_spec)
+    monkeypatch.setattr(registry, "fetch_sdk_spec", fake_fetch_sdk_spec)
     _stub_run_collaborators(monkeypatch, cli, store)
 
     assert run(_run_args(tmp_path)) == 0
@@ -886,8 +905,8 @@ def test_the_run_completes_on_a_version_that_publishes_no_sdk_document(monkeypat
         dest.write_text(json.dumps(_SUBSCRIPTION_SPEC), encoding="utf-8")
         return dest
 
-    monkeypatch.setattr(cli, "fetch_spec", fake_fetch_spec)
-    monkeypatch.setattr(cli, "fetch_sdk_spec", lambda tag, dest: None)
+    monkeypatch.setattr(registry, "fetch_spec", fake_fetch_spec)
+    monkeypatch.setattr(registry, "fetch_sdk_spec", lambda tag, dest: None)
     _stub_run_collaborators(monkeypatch, cli, store)
 
     assert run(_run_args(tmp_path)) == 0
@@ -990,7 +1009,7 @@ def test_the_suite_runs_every_detector(tmp_path):
     store.apply_schema()
 
     suite = _detector_suite(
-        store, spec_document={}, call_sites=[], deprecations=[], vendor_id="stripe", repo_id="r",
+        store, spec_documents=(), call_sites=[], deprecations=[], vendor_id="stripe", repo_id="r",
     )
 
     assert [name for name, _ in suite] == [
@@ -1007,7 +1026,7 @@ def test_an_empty_drift_baseline_produces_no_findings_and_does_not_error(tmp_pat
     store.truncate_all()
 
     suite = _detector_suite(
-        store, spec_document=_DRIFT_SPEC, call_sites=[], deprecations=[], vendor_id="stripe",
+        store, spec_documents=[_DRIFT_SPEC], call_sites=[], deprecations=[], vendor_id="stripe",
         repo_id="r",
     )
     drift = dict(suite)["observed-drift"]
