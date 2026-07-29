@@ -92,6 +92,28 @@ def _path(segments: Iterable[str]) -> str:
     return ".".join(segments)
 
 
+def _same(left: Node | None, right: Node | None) -> bool:
+    """Whether two handles address one node. tree-sitter returns a fresh object per access, so
+    identity is the span rather than the reference."""
+    if left is None or right is None:
+        return False
+    return left.start_byte == right.start_byte and left.end_byte == right.end_byte
+
+
+# Expressions a call's result passes through while still being what a name receives, and there
+# are exactly two. TypeScript's list also carries `as`, `satisfies`, a non-null assertion and a
+# type assertion, none of which Python has.
+#
+# What Python has instead is deliberately absent. A `boolean_operator` (`create(...) or {}`) and
+# a `conditional_expression` (`create(...) if flag else other`) each choose between two values
+# and only one of them is the call's; a `list` or other collection literal binds a container
+# rather than the response; an `argument_list` means another call received the result and its
+# own return value is what the name gets. A `named_expression` -- the walrus -- genuinely does
+# bind the result, and is still left out: recording it would make this walk report more than it
+# did, and this is a precision fix.
+_RESULT_WRAPPERS = {"await", "parenthesized_expression"}
+
+
 def _normalised(distribution: str) -> str:
     """A distribution name as PEP 503 compares it.
 
@@ -405,6 +427,35 @@ class PythonAdapter:
             return None
         return _path(reversed(segments))
 
+    def _result_target(self, call_node: Node) -> Node | None:
+        """The name this call's result is bound to, or None if the name receives something else.
+
+        One binding form, which is the whole difference from `typescript.py`. Python has no
+        declaration-versus-assignment split -- `charge = ...` is an `assignment` and so is
+        `charge: Charge = ...`, the annotation being a field on the same node -- so the shape
+        that was blind there is the shape here, and it always worked.
+
+        What did not work is the check that the call is what the name receives.
+        `charge = dict(client.charges.create(...))` binds `dict`'s return value, and the fields
+        read off it were credited to the Stripe call: a claim of dependency on response fields
+        the vendor need not carry, which is the direction that costs a reviewer's trust rather
+        than an incident.
+
+        `augmented_assignment` is deliberately not matched. `charge += client.charges.create(...)`
+        binds the concatenation and never the response, and it is a different node kind, so it
+        answers None here by falling off the wrapper set rather than by a rule of its own.
+        """
+        current = call_node
+        parent = current.parent
+        while parent is not None:
+            if parent.type == "assignment":
+                right = parent.child_by_field_name("right")
+                return parent.child_by_field_name("left") if _same(right, current) else None
+            if parent.type not in _RESULT_WRAPPERS:
+                return None
+            current, parent = parent, parent.parent
+        return None
+
     def _response_fields(self, call_node: Node, source: bytes, root: Node) -> list[str]:
         """Field paths read off the call's result.
 
@@ -417,12 +468,7 @@ class PythonAdapter:
         Tuple unpacking has no analogue to TypeScript's destructuring here: Python unpacks
         positionally, so it names no vendor field and there is nothing to record.
         """
-        assignment = call_node
-        while assignment is not None and assignment.type != "assignment":
-            assignment = assignment.parent
-        if assignment is None:
-            return []
-        left = assignment.child_by_field_name("left")
+        left = self._result_target(call_node)
         if left is None or left.type != "identifier":
             return []
 
