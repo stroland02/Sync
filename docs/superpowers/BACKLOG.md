@@ -36,31 +36,6 @@ recognises the file and then fails to edit it.
 **Closes when:** a Python call site can be mutated into a labelled pair on both change kinds, with
 the mutation attaching and the label addressing a site the mutated index still holds.
 
-### B45 — A UTF-16 manifest crashes adapter selection
-
-`python_lang._requirement_lines` promises in its own docstring that an unreadable manifest answers
-"declares nothing" rather than raising — "a customer's manifest is untrusted input". The
-`pyproject.toml` branch honours that with `except (TOMLDecodeError, UnicodeDecodeError)`. The
-`requirements.txt` branch reads with a bare `read_text(encoding="utf-8")` and no guard.
-
-Reproduced:
-
-```
-utf-16 requirements.txt -> RAISED UnicodeDecodeError: invalid start byte 0xff
-utf-8  requirements.txt -> ['stripe==11.0.0']
-```
-
-Found in the wild, not hypothesised: `LilithB92/Online_training_DRF` ships a `requirements.txt`
-beginning `ff fe`. It crashes a run at adapter selection, before any indexing, for a repository
-that merely happens to have a UTF-16 manifest.
-
-This is the `CLAUDE.md` encoding hazard in its exact documented form — and the rule there is
-explicit that bytes which are not text must not be decoded at all. Every fixture in this
-repository is ASCII, so no test would ever have caught it.
-
-**Closes when:** a UTF-16 `requirements.txt` yields "declares nothing" rather than a traceback, and
-a fixture proves it — with the same treatment for any other manifest read on that path.
-
 ### B44 — Pin the Python repository B42 found (blocked on B43)
 
 `openbraininstitute/virtual-lab-api`, Apache-2.0, **21 call sites over 12 operations**, three of
@@ -103,6 +78,21 @@ recorded with which change broke it.
 _Nothing._
 
 ## Done
+
+- **B45** — an unreadable `requirements.txt` now answers "declares nothing" rather than taking the
+  run down at adapter selection. Landed with the front-page work. The `pyproject.toml` branch had
+  always honoured that promise; the `requirements.txt` branch two lines below read with a bare
+  `utf-8` decode.
+
+  Verified across four encodings, two of them outside the brief: UTF-16 `requirements.txt` returns
+  `[]` where it used to raise, UTF-8 is unchanged, UTF-16 `pyproject.toml` still works, and a
+  latin-1 manifest is also handled — so the fix generalises rather than special-casing the byte
+  order mark that found it.
+
+  Worth knowing about the trade: a manifest with one non-UTF-8 byte anywhere now declares
+  *nothing*, so a repository with an accented comment loses adapter selection entirely. That is the
+  contract the docstring states and the safe direction — a missing binding is recoverable, a wrong
+  one spends reviewer trust — but it is a real cost and not a free fix.
 
 - **B42** — the Python blocker moved from the binder to the generator. B38 and B39 are visible in
   the counts: one repository went from zero to five call sites through the `self`-attribute
