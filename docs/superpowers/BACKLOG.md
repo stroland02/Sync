@@ -36,20 +36,6 @@ when, which is why it is recorded here rather than dispatched.
 **Closes when:** one `sync run` produces a CI-green pull request again, or the failure is
 recorded with which change broke it.
 
-### B30 — `_score_corpus` cannot read a real repository
-
-It reads every file under the checkout with `read_text(encoding="utf-8")`, so one PNG ends the run.
-The Stripe Connect demo carries 63 files that are not UTF-8. The corpus currently works around it
-by materialising only the files that decode and printing how many it dropped — a documented
-transformation of the vendor's tree, not a fix.
-
-`CLAUDE.md` already names the correct shape: when handling bytes that are not text, use
-`read_bytes` and do not decode at all. Skipping a file that does not decode is what the indexers
-want anyway, since nothing they read is binary.
-
-**Closes when:** a corpus specification naming a repository with binary files scores without a
-pre-filtering step, and the count of skipped files is reported rather than silent.
-
 ## In flight
 
 - **B28** — `task_d36a5c6e7443`, in `sync-solo-b`. Freezes a specimen corpus and measures whether
@@ -60,6 +46,24 @@ pre-filtering step, and the count of skipped files is reported rather than silen
   the first worker held the task for half an hour without starting and did not answer two nudges.
 
 ## Done
+
+- **B30** — a checkout's undecodable files are skipped and **named**, rather than one PNG ending
+  the run. The fetcher's own pre-filter is gone, so the corpus scores the vendor's subtree instead
+  of a locally transformed copy of it, and both components walk the tree through one shared
+  function (`src/sync/benchmark/checkout.py`) so the digest cannot come to cover a set of files the
+  score was not taken over.
+
+  **The axes are unchanged, measured rather than argued.** With the tree pre-filtered (0 skipped)
+  and with it verbatim (64 skipped): precision 1.0000 n=16, recall 1.0000 n=16, falsifiable
+  negatives 4, 12 of 12 pairs — identical. That is the same-criterion prediction confirmed.
+
+  Two `tree_digest` values moved and no pinned commit did. The manifest now records that the
+  digest's *coverage* changed on a date and the commits did not, so a future mismatch is not
+  misread as a vendor moving a commit.
+
+  All 64 skipped paths are images, fonts or an icon — no legacy-encoded source file among them.
+  That is a property of these four repositories rather than a guarantee, which is why they are
+  **named and not counted**.
 
 - **B35** — a walrus-bound result is now credited to the call that produced it. Landed with B34's
   work. Verified across `if` and `while`, with the wrapped form (`charge := dict(create(...))`)
