@@ -111,7 +111,7 @@ def _index(name: str, dsn: str):
     by_operation = defaultdict(list)
     for site in adapter.index(repo):
         by_operation[site.operation_id].append(site)
-    return by_operation
+    return by_operation, adapter.language_id
 
 
 def hold_back(sites: list, kind: str) -> list[dict]:
@@ -151,15 +151,29 @@ def hold_back(sites: list, kind: str) -> list[dict]:
     return [{"path": first.path, "line": first.line, "col": first.col}]
 
 
-def _read_fields(sources_root: Path) -> set[str]:
+# Which files this scan reads, by the language the adapter indexes the repository in. A
+# repository is scanned in its own language and in no other: `furever` carries one `.py` script
+# mentioning `amount` fifteen times, so a scan over both suffixes would move a TypeScript
+# specification's chosen field -- a frozen pair changing because a Python repository was added
+# somewhere else in the manifest.
+_SOURCE_SUFFIXES = {"typescript": ("*.ts",), "python": ("*.py",)}
+
+
+def _read_fields(sources_root: Path, language: str) -> set[str]:
     """Every identifier any source in the tree reads off a member expression.
 
     Deliberately coarse. `_already_depends` asks the precise question per call site, and this
     only has to avoid proposing a response field the repository mentions anywhere -- a field
     chosen wrongly makes the specification unscoreable rather than merely awkward.
+
+    Coarse is not the same as blind. Scanning a Python repository for `*.ts` reads nothing at
+    all, which is not a loose guard but an absent one: every response property would be
+    available and the alphabetically first would be chosen however heavily the repository uses
+    it.
     """
     seen: set[str] = set()
-    for path in sorted(sources_root.rglob("*.ts")):
+    patterns = _SOURCE_SUFFIXES[language]
+    for path in sorted(p for pattern in patterns for p in sources_root.rglob(pattern)):
         for token in path.read_text(encoding="utf-8").replace("\n", " ").split("."):
             head = "".join(c for c in token[:64] if c.isalnum() or c == "_")
             if head:
@@ -177,7 +191,7 @@ def build(dsn: str) -> list[Path]:
 
     for entry in entries:
         name = entry["name"]
-        by_operation = _index(name, dsn)
+        by_operation, language = _index(name, dsn)
 
         candidates = [
             (operation, sites) for operation, sites in by_operation.items()
@@ -188,7 +202,7 @@ def build(dsn: str) -> list[Path]:
 
         passed = {key.split(".")[0] for sites in by_operation.values()
                   for site in sites for key in site.args_keys or ()}
-        read = _read_fields(CORPUS / name)
+        read = _read_fields(CORPUS / name, language)
 
         for operation, sites in chosen:
             request_properties, response_properties = schemas.get(operation, ([], []))
