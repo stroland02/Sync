@@ -213,6 +213,10 @@ def test_the_indexer_tells_the_adapter_which_language_it_indexed(tmp_path):
 
     class Recording:
         vendor_id = "stripe"
+        # The indexer reads the package to bind from here rather than holding a constant, so a
+        # stub that declares none is a vendor whose SDK nothing can recognise -- it would bind
+        # no client and record no symbol, and this test would pass by proving nothing.
+        sdk_bindings = {"typescript": {"package": "stripe"}}
 
         def operation_for_symbol(self, symbol, *, language=None):
             seen.append((symbol, language))

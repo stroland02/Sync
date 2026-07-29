@@ -99,6 +99,23 @@ class TwilioAdapter:
 
     vendor_id = "twilio"
 
+    sdk_bindings = {
+        "typescript": {"package": "twilio"},
+        "python": {"distribution": "twilio", "module": "twilio"},
+    }
+    """Which package a customer imports to reach this vendor, per language.
+
+    The second vendor to declare one, and the reason the indexer stopped holding a constant:
+    this adapter could already map `twilio.insights.v1.calls.fetch` onto an operation, and no
+    indexer would ever hand it that symbol. See `StripeAdapter.sdk_bindings` for what the shape
+    is and why it is not in the protocol.
+
+    Both languages name the package `twilio`, which is a fact about this vendor rather than a
+    rule -- `twilio-node` and `twilio-python` happen to agree, and the Python entry still
+    carries a distribution and a module separately because nothing guarantees the next vendor
+    will.
+    """
+
     def __init__(
         self,
         spec_dir: Path,
