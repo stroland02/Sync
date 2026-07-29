@@ -19,6 +19,76 @@ def _stable_id(*parts: str) -> str:
     return hashlib.sha256("\x1f".join(parts).encode()).hexdigest()[:32]
 
 
+# Entries in a CREATE TABLE body that declare a constraint rather than a column. Everything
+# else is a column, which is what makes this list the whole of the grammar this needs to know.
+_TABLE_CONSTRAINTS = frozenset(
+    {"UNIQUE", "PRIMARY", "FOREIGN", "CHECK", "CONSTRAINT", "EXCLUDE", "LIKE"}
+)
+
+
+def _statements(ddl: str) -> list[str]:
+    """`schema.sql` as separate statements, comments removed.
+
+    Split on semicolons, and strip everything after a `--` to end of line. Both are correct for
+    this file and neither is correct for SQL in general: a semicolon inside a string literal, an
+    identifier or a function body would cut a statement in half, and a `--` inside a literal
+    would truncate one. That is a real limit rather than an oversight, and the convergence tests
+    fail if either ever appears in `schema.sql`.
+    """
+    without_comments = "\n".join(line.split("--", 1)[0] for line in ddl.splitlines())
+    return [statement.strip() for statement in without_comments.split(";") if statement.strip()]
+
+
+def _table_name(create: str) -> str:
+    return create[: create.index("(")].split()[-1]
+
+
+def _column_definitions(create: str) -> list[str]:
+    """The column declarations in one CREATE TABLE, verbatim and in order.
+
+    Split at commas outside parentheses, because `REFERENCES call_site (id)` and
+    `NOT NULL DEFAULT now()` both put commas' worth of structure inside brackets that a plain
+    split would cut through.
+    """
+    body = create[create.index("(") + 1 : create.rindex(")")]
+    entries, depth, start = [], 0, 0
+    for index, character in enumerate(body):
+        if character == "(":
+            depth += 1
+        elif character == ")":
+            depth -= 1
+        elif character == "," and depth == 0:
+            entries.append(body[start:index])
+            start = index + 1
+    entries.append(body[start:])
+
+    definitions = []
+    for entry in entries:
+        collapsed = " ".join(entry.split())
+        if not collapsed or collapsed.split()[0].upper() in _TABLE_CONSTRAINTS:
+            continue
+        definitions.append(collapsed)
+    return definitions
+
+
+def _add_missing_columns(creates: list[str]) -> list[str]:
+    """One `ADD COLUMN IF NOT EXISTS` per declared column, derived rather than written twice.
+
+    This is what makes `apply_schema` converge a database that already exists. It is derived
+    from the CREATE TABLE bodies on purpose: the alternative is a parallel list of ALTERs that
+    somebody has to remember to extend, and forgetting is the entire defect being fixed here --
+    a mechanism that needs the same discipline the bug needed is not a fix.
+
+    The column definition is reused verbatim, so an added column arrives with the type, default
+    and nullability the schema declares rather than a second opinion about them.
+    """
+    return [
+        f"ALTER TABLE {_table_name(create)} ADD COLUMN IF NOT EXISTS {definition}"
+        for create in creates
+        for definition in _column_definitions(create)
+    ]
+
+
 class GraphStore:
     """One store instance owns one connection, opened on first use.
 
@@ -73,14 +143,71 @@ class GraphStore:
             yield
 
     def apply_schema(self) -> None:
+        """Bring a database to the current schema, whether or not it already has one.
+
+        `schema.sql` is `CREATE TABLE IF NOT EXISTS` throughout, so against a database that
+        already has the tables it used to be a no-op: the guard skipped the whole statement and
+        a column added to the file afterwards never appeared. Two shipped that way --
+        `call_site.loop_depth` and `finding.claim` -- and neither was noticed here, because
+        `conftest` builds a fresh database per run and a schema built in one pass is exactly the
+        case that works. The failure landed later, as an insert naming a column that was not
+        there, in whichever stage happened to run first.
+
+        So every declared column is also issued as `ADD COLUMN IF NOT EXISTS`, derived from the
+        CREATE TABLE bodies rather than maintained beside them. Ordering is the reason this runs
+        in three passes rather than one: tables first, then the columns, then the indexes --
+        because an index over a column added later cannot be created until the column is.
+
+        **What this does not express.** Added columns, and nothing else. It cannot rename a
+        column, change a type, add or drop a constraint, or backfill a value, and it does not
+        restore a table-level `UNIQUE` that a dropped column took with it. Adding a `NOT NULL`
+        column to a table that already has rows fails, correctly -- there is no value to give
+        them, and inventing one is a backfill decision rather than a schema application. Any of
+        those needs a real migration: a version table, an ordered history and a workflow. Not
+        built, because this is a single-tenant local pipeline whose only databases are a
+        developer's and a test run's, and the hosted control plane that makes migration history
+        load-bearing is M4 and unbuilt. A framework bought now is carried for a year before it
+        is needed. When the first rename or backfill arrives, this is the thing to replace
+        rather than the thing to extend -- it converges forward and keeps no history to
+        reconcile, so replacing it costs nothing that has to be unwound.
+        """
         ddl = resources.files("sync.graph").joinpath("schema.sql").read_text(encoding="utf-8")
-        self._connect().execute(ddl)
+        statements = _statements(ddl)
+        creates = [s for s in statements if s.upper().startswith("CREATE TABLE")]
+        rest = [s for s in statements if s not in creates]
+
+        connection = self._connect()
+        # Nothing to converge when the database is empty: the creates below build every column.
+        # Worth a query because `apply_schema` runs in every test's fixture and the column pass
+        # is about eighty statements -- unconditional, it cost the suite 83s against 74s.
+        existing = connection.execute(
+            "SELECT count(*) AS tables FROM information_schema.tables WHERE table_schema = 'public'"
+        ).fetchone()["tables"]
+
+        # One round trip per pass rather than one per statement. Issuing them separately cost
+        # the better part of a minute across the suite for nothing -- measured at 128s.
+        passes = [creates, _add_missing_columns(creates), rest] if existing else [creates, rest]
+        for statements_in_pass in passes:
+            connection.execute(";\n".join(statements_in_pass))
+
+    def _schema_tables(self) -> list[str]:
+        ddl = resources.files("sync.graph").joinpath("schema.sql").read_text(encoding="utf-8")
+        return [
+            _table_name(statement)
+            for statement in _statements(ddl)
+            if statement.upper().startswith("CREATE TABLE")
+        ]
 
     def truncate_all(self) -> None:
-        self._connect().execute(
-            "TRUNCATE finding, call_site, vendor_change, migration_outcome, observed_shape, "
-            "observed_call CASCADE"
-        )
+        """Empty every table the schema declares.
+
+        The list used to be written out here, and it was right -- but it was right the way
+        `schema.sql` was complete: by somebody remembering. A table added later would have been
+        missed by it exactly as a column added later was missed by `apply_schema`, and the
+        consequence is quieter than a failed insert. Rows from one run survive into the next and
+        the failure surfaces somewhere with no obvious connection to this method.
+        """
+        self._connect().execute(f"TRUNCATE {', '.join(self._schema_tables())} CASCADE")
 
     def upsert_call_site(self, site: CallSite) -> str:
         # line and col are part of identity, not just data: two distinct call sites
