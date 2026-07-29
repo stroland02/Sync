@@ -12,40 +12,37 @@ item that cannot say what evidence closes it is not ready to dispatch.
 
 ## Ready
 
-### B38 — The Stripe symbol map is TypeScript-only, so Python binds almost nothing
+### B38 — Python binds nothing unless the client is a bare imported name
 
-Measured across seventeen candidate repositories while trying to give Python its first corpus
-entry. The blocker is not repository availability — it is three composing binder limitations, each
-measured rather than argued, and together they mean **`PythonAdapter` cannot see the code Stripe's
-own Python documentation tells people to write.**
+Two of the three limitations B37 measured, both in `src/sync/index/python_lang.py`, ordered by how
+many of its seventeen candidate repositories each converts from zero:
 
-**The symbol map is built from Stripe's TypeScript SDK.** 179 symbols, **93 containing camelCase**,
-and `paymentIntents` is present while `payment_intents` is absent. So the actual Python spelling
-resolves to nothing. Eight of the twelve existing corpus pairs are built on `paymentIntents`.
-Verified independently against the staged map.
+1. **A client constructed as a module attribute binds nothing.** `client = stripe.StripeClient(k)`
+   is one rule away from the imported-name case already handled, and it is what Stripe's own Python
+   documentation tells people to write. **This alone converts eleven of seventeen.**
+2. **A receiver that is an attribute of `self` binds nothing.** `self.client.customers.create(...)`
+   is the shape production code uses, and the one the corpus most wants to measure.
 
-**`stripe.StripeClient(k)` binds nothing**, because the rule matches an imported name — and that is
-the spelling Stripe's Python documentation uses.
+**Closes when:** both shapes resolve to an operation, with fixtures, and no currently-binding shape
+changes what it records.
 
-**A receiver that is a factory call or an attribute of `self` binds nothing**, which is how every
-production repository in the sample writes it.
+### B39 — The Stripe symbol map is built from one SDK and asked to serve two
 
-The measured consequence: seventeen repositories cloned and indexed with the real adapter and the
-real map yield **one** indexable call site in a repository that is licensed. The two with usable
-counts carry no licence at all, and one has no `requirements.txt` or `pyproject.toml`, so nothing
-would select an adapter for it.
+179 symbols, **93 containing camelCase**, `paymentIntents` present and `payment_intents` absent —
+verified against the staged map. So the spelling every Python program uses resolves to nothing, and
+eight of the twelve existing corpus pairs are built on that operation.
 
-**This weakens a milestone claim.** M3 lists a Python adapter "to prove `LanguageAdapter`
-generalizes past TypeScript". It is shipped and wired and it generalizes the *walk*; it does not
-yet generalize the *map*. Twilio hit the mirror image of this and it was fixed with a language axis
-(`19834b6`) — every Twilio key was snake_case, so a TypeScript call site could never resolve and
-failed silently. Stripe has the same defect facing the other way.
+Twilio had the mirror defect and it was fixed with a language axis (`19834b6`): every Twilio key was
+snake_case, so a TypeScript call site could never resolve and failed silently. This is the same
+defect facing the other way.
 
-**Fix in the order B37 measured**, which is by how many of the seventeen each unlocks: the
-module-attribute client constructor alone converts **eleven of seventeen** from zero.
+B37 places this third of three by repositories unlocked, but it is the one that decides whether a
+*resolved* Python symbol reaches an operation — B38 makes call sites bind, this makes them mean
+something. **It belongs to `sync.signals.stripe.symbols`, not the indexer**, which is why it is
+separate from B38 and can run beside it.
 
-**Closes when:** a Python call site written the way Stripe documents it resolves to an operation,
-and B37 can be re-run against a binder that can see it.
+**Closes when:** `stripe.payment_intents.create` resolves to the same operation
+`stripe.paymentIntents.create` does, and the map states which spelling belongs to which language.
 
 ### B7 — The M0 acceptance run has not executed since the pipeline changed underneath it
 
@@ -80,7 +77,12 @@ _Nothing._
 - **B37** — no Python repository was pinned, and the negative result is worth more than the pin
   would have been. Seventeen candidates cloned and indexed against the real adapter and the real
   symbol map; the corpus is unchanged, no floor was restated, and the gate is green for the same
-  reason it was this morning. What it found is B38.
+  reason it was this morning. What it found is B38 and B39.
+
+  The sharpest line in its report is about today's own work: both Python fixes landed today concern
+  what happens *after* a call site is bound, and every limitation it measured concerns whether one
+  is bound at all. **A Python corpus existing today would not have exercised either fix** — sixteen
+  of the seventeen repositories bind nothing, and the seventeenth binds one call of neither shape.
 
 - **B36** — the first quality gate this project has. `scripts/gate_corpus.py` floors binding
   precision and recall at the recorded 1.0000 over n=16, and it **recomputes both rates from
