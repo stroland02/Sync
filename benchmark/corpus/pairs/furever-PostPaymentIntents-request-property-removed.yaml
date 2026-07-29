@@ -1,0 +1,12 @@
+# 6 indexed call site(s) on PostPaymentIntents in furever, pinned at 5114c968fd8537d82889e2d04afaf00a986af7bf.
+# Field chosen by the rule in scripts/build_corpus_specs.py: the alphabetically first
+# property of this operation in v2330 that no call site in this repository already uses.
+cache: .cache/specs
+change:
+  field: amount_details
+  kind: request-property-removed
+  operation: PostPaymentIntents
+from_version: v2320
+repo: .cache/corpus/furever
+to_version: v2330
+vendor: stripe
