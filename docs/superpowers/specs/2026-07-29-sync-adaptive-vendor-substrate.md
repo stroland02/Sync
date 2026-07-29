@@ -83,6 +83,34 @@ directory of API definitions with a REST API over it, and
 data. One adapter that reads a registry covers every vendor in it, on exactly the same terms as
 tier 0: no vendor cooperation, no agreement to withdraw.
 
+**Checked against `api.apis.guru/v2/list.json` rather than assumed.** The three questions that
+decide whether this tier is real:
+
+*Is there a cheap change trigger?* Yes, and a better one than tier 0's. There is no hash or
+checksum, but every version carries `added` and `updated` ISO timestamps, and the whole registry
+is one document. So a single fetch of `list.json` yields every vendor's last-updated time, and a
+specification is downloaded only when a timestamp moves. Tier 0 must poll one manifest per SDK
+repository; tier 1 polls one file for the entire catalogue.
+
+*What is a version?* Real and diffable. Each entry carries a `versions` map keyed by version
+string, each with its own `swaggerUrl`, so two comparable artifacts exist and `fetch_changes` has
+something to diff.
+
+*Whose artifact is it?* **The registry's.** `swaggerUrl` points at
+`api.apis.guru/v2/specs/...`, not at the vendor's host — this is a mirror, and the design
+document already calls vendor-hosted strictly better. Worse, `openapiVer` is `"2.0"` on a large
+share of entries, meaning Swagger 2.0 rather than OpenAPI 3, so `oasdiff` will need converted
+input for those. A converted mirror is a **third** derivation from the vendor's truth, and the
+threat model's rule bites hardest here: a signature proves origin, not correctness, and nobody at
+the vendor signed this.
+
+That last answer is what fixes the tier's role. Registry provenance is good enough to *discover*
+that a vendor exists, has a machine-readable contract, and roughly when it last moved — which is
+exactly what the intake report in step 2 needs. It is not obviously good enough to open an
+unattended pull request against a customer's repository. The honest default is that a
+registry-derived change carries its own rung and feeds intake, and that promoting one to a
+pull-request source requires the vendor-hosted artifact the registry merely points at.
+
 Tier 3 is where the runtime signal earns its place. `observed_call` already records what the
 customer's code actually calls, and `observed_shape` records the shape of what came back. A
 vendor with no published specification still has an *observed* contract, and drift against it is
