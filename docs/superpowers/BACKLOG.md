@@ -53,9 +53,19 @@ vendor that has no fixture rather than skipping it.
 
 ## In flight
 
-- **B24** — `task_a02b14f23778`, in `sync-solo-a`. Builds B25's closing condition.
+- **B24** — `task_8e675882a386`, in `sync-solo-b`. Builds B25's closing condition. Redispatched:
+  the first worker held the task for half an hour without starting and did not answer two nudges.
 
 ## Done
+
+- **The flaky database failures were never flaky.** Measured with a sampler through one full
+  suite: peak **105** concurrent connections, mean 67.6, against the postgres default ceiling of
+  **100** — `-n auto` gives one xdist worker per core and several worktrees run suites at once.
+  Over the ceiling the failure is a `psycopg.OperationalError` on connect, landing on whichever
+  database-touching test was running, which is why it moved between runs and never reproduced
+  under a soak. Both coordinators lost time to it. `fba1f6e` raises the ceiling to 300 and takes
+  effect on the next `docker compose up -d`, so it is landed but not yet active.
+  **Reading rule while it is inactive: an assertion failure is real, a connection failure is not.**
 
 - **B23** — the conformance kit covers all five protocols. `check_request_correlator` guards a
   privacy boundary rather than a correctness one: an observed path carries a live customer
