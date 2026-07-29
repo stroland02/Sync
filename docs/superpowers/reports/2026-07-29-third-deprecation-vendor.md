@@ -271,6 +271,7 @@ mutation kills at least one test, and treats any exit code outside {0, 1} as its
 | M7 | Heading date: never find one | killed 12 |
 | M8 | Dated list: drop the already-seen guard | killed 2 |
 | M9 | Announcements: stop recording what they stated | killed 1 |
+| M8/M9 | Re-run after the refactor below, as one guard | killed 3, incl. the Anthropic digest |
 | M10 | Prefixes: guess one family from the vendor name | killed 4 |
 | M11 | Dates: stop accepting an abbreviated month (control) | killed 7, incl. the OpenAI digest |
 
@@ -288,6 +289,12 @@ untested rather than left to look verified.
 
 An earlier form of M6 also survived and was the defect described above — the whitespace
 requirement that guarded nothing. That one was resolved by deleting the guard.
+
+M8 and M9 were run against a first version that read the two derived shapes in two loops with an
+identical row construction in each. A follow-up commit folds them into one, which puts the
+one-row-per-model rule in a single place; the mutation was re-run against the folded form and now
+kills three tests rather than two, because removing it also lets Anthropic's announcement table
+duplicate rows its lifecycle table already stated.
 
 ## Gates
 
