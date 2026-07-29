@@ -30,23 +30,22 @@ regression arrives looking exactly like this one and gets re-run away.
 re-runs until failure and preserves the output is the cheap first step —
 `pytest -p no:randomly -x` in a loop, saving the first red run's full output rather than its tail.
 
-### B39 — The Stripe symbol map is built from one SDK and asked to serve two
+### B41 — The corpus is pinned against repositories but not against the symbol map
 
-179 symbols, **93 containing camelCase**, `paymentIntents` present and `payment_intents` absent —
-verified against the staged map. So the spelling every Python program uses resolves to nothing, and
-eight of the twelve existing corpus pairs are built on that operation.
+Found by accident: deleting `.cache/specs/symbols.json` makes `scripts/score_corpus.py` fail with
+`FileNotFoundError`, because the Stripe adapter **loads a staged map rather than building one**.
 
-Twilio had the mirror defect and it was fixed with a language axis (`19834b6`): every Twilio key was
-snake_case, so a TypeScript call site could never resolve and failed silently. This is the same
-defect facing the other way.
+So the corpus has two frozen inputs and only one of them is pinned. Repositories are pinned by
+commit and validated by `tree_digest`; the symbol map is a cached artifact in gitignored space that
+nothing records, nothing validates, and any `sync run` can overwrite. A map rebuilt from a different
+head specification, or with `sdk_spec` present rather than absent, changes what resolves — and the
+score would move with no commit, no digest mismatch and no explanation.
 
-B37 places this third of three by repositories unlocked, but it is the one that decides whether a
-*resolved* Python symbol reaches an operation — B38 makes call sites bind, this makes them mean
-something. **It belongs to `sync.signals.stripe.symbols`, not the indexer**, which is why it is
-separate from B38 and can run beside it.
+B39 makes this concrete rather than theoretical: it changed the map's contents from 179 symbols to
+272, and **the corpus could not see that change at all** until the artifact was rebuilt by hand.
 
-**Closes when:** `stripe.payment_intents.create` resolves to the same operation
-`stripe.paymentIntents.create` does, and the map states which spelling belongs to which language.
+**Closes when:** the score records which symbol map produced it — by digest, the same way the
+checkouts are — and a stale or mismatched map fails loudly rather than scoring quietly.
 
 ### B7 — The M0 acceptance run has not executed since the pipeline changed underneath it
 
@@ -77,6 +76,20 @@ recorded with which change broke it.
 _Nothing._
 
 ## Done
+
+- **B39** — the Stripe symbol map now carries the spelling Python actually writes. 179 symbols to
+  **272**, all 93 previously-unreachable operations addressable, `paymentIntents` and
+  `payment_intents` both resolving, and every TypeScript resolution unchanged — corpus floors all
+  cleared.
+
+  **The spelling was never missing; it was being discarded.** `payment_intents` is the
+  specification's own path segment from `/v1/payment_intents`, and `_camel` was converting it and
+  throwing the original away. So snake_case is the source and camelCase the derivation — nothing
+  was inverted and nothing transformed, which is exactly what the brief forbade.
+
+  Checked against the vendor before code was written: `StripeClient.payment_intents` is declared in
+  `stripe/_v1_services.py`, a file whose header reads "File generated from our OpenAPI spec", and 31
+  of 34 multi-word segments match letter for letter.
 
 - **B38** — Python binds the client shapes people actually write. `stripe.StripeClient(k)` and
   `self.client...` both resolve now; the bare imported name is unchanged. Landed `4656d92`.
