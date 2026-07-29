@@ -1,0 +1,952 @@
+{
+  "accuracy": {
+    "precision_by_rung": {
+      "static": {
+        "false_positives": 0,
+        "precision": {
+          "n": 9,
+          "value": 1.0
+        },
+        "true_positives": 9,
+        "unlabelled": 0
+      }
+    },
+    "recall_by_rung": {
+      "static": {
+        "false_negatives": 0,
+        "recall": {
+          "n": 9,
+          "value": 1.0
+        },
+        "true_positives": 9
+      }
+    }
+  },
+  "affected_sites": 9,
+  "excluded_by_reason": {
+    "displaced-label": 2
+  },
+  "excluded_pairs": [
+    {
+      "affected_sites": 0,
+      "detail": "1 labelled call site(s) are absent from the mutated index (66abf78abb56aea63c3c79f886eb2ba6); a mutation that inserts lines shifts the calls below it and `upsert_call_site` keys identity on position, so the label addresses a row the mutated tree no longer has",
+      "falsifiable_negatives": [],
+      "findings": [],
+      "labels": [],
+      "name": "fireship-server-PostPaymentIntents-response-property-removed",
+      "reason": "displaced-label",
+      "scored": false,
+      "unaffected_sites": 0,
+      "unreachable_targets": []
+    },
+    {
+      "affected_sites": 0,
+      "detail": "3 labelled call site(s) are absent from the mutated index (8f9aa53299ebf4ec0d6ea36b7213f9f0, df2e6332aabb6c2d26e415e4d96deea3, ef8f93bfcac7ca73133acb8b0d4979f2); a mutation that inserts lines shifts the calls below it and `upsert_call_site` keys identity on position, so the label addresses a row the mutated tree no longer has",
+      "falsifiable_negatives": [],
+      "findings": [],
+      "labels": [],
+      "name": "furever-GetCharges-response-property-removed",
+      "reason": "displaced-label",
+      "scored": false,
+      "unaffected_sites": 0,
+      "unreachable_targets": []
+    }
+  ],
+  "falsifiable_negatives": [
+    "fireship-server-PostPaymentIntents-request-property-removed::c9bb9bce76172994086083c6a94a45a3",
+    "furever-PostPaymentIntents-request-property-removed::f7b4bb5ff383390f84da0bffd82849d3",
+    "turbo-PostPaymentIntents-request-property-removed::02c042e6fed8dd5f4a0100d6c9fe01f5"
+  ],
+  "pairs": [
+    {
+      "affected_sites": 0,
+      "detail": null,
+      "falsifiable_negatives": [],
+      "findings": [],
+      "labels": [
+        {
+          "affected": false,
+          "call_site_id": "9c75409ed6e96eaa3b10de712ed3dd53",
+          "rung": "unresolved",
+          "vendor_change_id": "bc1052961c2d40a35d1905e37b8537a0"
+        },
+        {
+          "affected": false,
+          "call_site_id": "4441cdb8e0ab1a5f8b3474951c427a65",
+          "rung": "unresolved",
+          "vendor_change_id": "bc1052961c2d40a35d1905e37b8537a0"
+        },
+        {
+          "affected": false,
+          "call_site_id": "417a357365dcb26619ddee51751ddd8a",
+          "rung": "unresolved",
+          "vendor_change_id": "bc1052961c2d40a35d1905e37b8537a0"
+        },
+        {
+          "affected": false,
+          "call_site_id": "6bdb942f55f51dd66439986123bfe567",
+          "rung": "unresolved",
+          "vendor_change_id": "bc1052961c2d40a35d1905e37b8537a0"
+        },
+        {
+          "affected": false,
+          "call_site_id": "1292e9ccebd5ee09fa1eb0b91bfc782f",
+          "rung": "unresolved",
+          "vendor_change_id": "bc1052961c2d40a35d1905e37b8537a0"
+        },
+        {
+          "affected": false,
+          "call_site_id": "0e37940765d697aa0f350b2ea8ecb28d",
+          "rung": "unresolved",
+          "vendor_change_id": "bc1052961c2d40a35d1905e37b8537a0"
+        },
+        {
+          "affected": false,
+          "call_site_id": "3b762bd1f6577a41a003e613f9bd541d",
+          "rung": "unresolved",
+          "vendor_change_id": "bc1052961c2d40a35d1905e37b8537a0"
+        },
+        {
+          "affected": false,
+          "call_site_id": "c9bb9bce76172994086083c6a94a45a3",
+          "rung": "unresolved",
+          "vendor_change_id": "bc1052961c2d40a35d1905e37b8537a0"
+        },
+        {
+          "affected": false,
+          "call_site_id": "66abf78abb56aea63c3c79f886eb2ba6",
+          "rung": "unresolved",
+          "vendor_change_id": "bc1052961c2d40a35d1905e37b8537a0"
+        },
+        {
+          "affected": false,
+          "call_site_id": "0fc43e421dd0fcc907067841cd15c553",
+          "rung": "unresolved",
+          "vendor_change_id": "bc1052961c2d40a35d1905e37b8537a0"
+        },
+        {
+          "affected": false,
+          "call_site_id": "aa4121e8e8197424a9a4225eab136260",
+          "rung": "unresolved",
+          "vendor_change_id": "bc1052961c2d40a35d1905e37b8537a0"
+        },
+        {
+          "affected": false,
+          "call_site_id": "a54cf877ad6c9f761c5a99075274823f",
+          "rung": "unresolved",
+          "vendor_change_id": "bc1052961c2d40a35d1905e37b8537a0"
+        }
+      ],
+      "name": "fireship-server-GetPaymentMethods-response-property-removed",
+      "reason": null,
+      "scored": true,
+      "unaffected_sites": 12,
+      "unreachable_targets": [
+        "1292e9ccebd5ee09fa1eb0b91bfc782f"
+      ]
+    },
+    {
+      "affected_sites": 1,
+      "detail": null,
+      "falsifiable_negatives": [
+        "c9bb9bce76172994086083c6a94a45a3"
+      ],
+      "findings": [
+        {
+          "binding_rung": "static",
+          "call_site_id": "66abf78abb56aea63c3c79f886eb2ba6",
+          "vendor_change_id": "88677ebd3a285555cc71bef37e5335fb"
+        }
+      ],
+      "labels": [
+        {
+          "affected": false,
+          "call_site_id": "9c75409ed6e96eaa3b10de712ed3dd53",
+          "rung": "unresolved",
+          "vendor_change_id": "88677ebd3a285555cc71bef37e5335fb"
+        },
+        {
+          "affected": false,
+          "call_site_id": "4441cdb8e0ab1a5f8b3474951c427a65",
+          "rung": "unresolved",
+          "vendor_change_id": "88677ebd3a285555cc71bef37e5335fb"
+        },
+        {
+          "affected": false,
+          "call_site_id": "417a357365dcb26619ddee51751ddd8a",
+          "rung": "unresolved",
+          "vendor_change_id": "88677ebd3a285555cc71bef37e5335fb"
+        },
+        {
+          "affected": false,
+          "call_site_id": "6bdb942f55f51dd66439986123bfe567",
+          "rung": "unresolved",
+          "vendor_change_id": "88677ebd3a285555cc71bef37e5335fb"
+        },
+        {
+          "affected": false,
+          "call_site_id": "1292e9ccebd5ee09fa1eb0b91bfc782f",
+          "rung": "unresolved",
+          "vendor_change_id": "88677ebd3a285555cc71bef37e5335fb"
+        },
+        {
+          "affected": false,
+          "call_site_id": "0e37940765d697aa0f350b2ea8ecb28d",
+          "rung": "unresolved",
+          "vendor_change_id": "88677ebd3a285555cc71bef37e5335fb"
+        },
+        {
+          "affected": false,
+          "call_site_id": "3b762bd1f6577a41a003e613f9bd541d",
+          "rung": "unresolved",
+          "vendor_change_id": "88677ebd3a285555cc71bef37e5335fb"
+        },
+        {
+          "affected": false,
+          "call_site_id": "c9bb9bce76172994086083c6a94a45a3",
+          "rung": "unresolved",
+          "vendor_change_id": "88677ebd3a285555cc71bef37e5335fb"
+        },
+        {
+          "affected": true,
+          "call_site_id": "66abf78abb56aea63c3c79f886eb2ba6",
+          "rung": "static",
+          "vendor_change_id": "88677ebd3a285555cc71bef37e5335fb"
+        },
+        {
+          "affected": false,
+          "call_site_id": "0fc43e421dd0fcc907067841cd15c553",
+          "rung": "unresolved",
+          "vendor_change_id": "88677ebd3a285555cc71bef37e5335fb"
+        },
+        {
+          "affected": false,
+          "call_site_id": "aa4121e8e8197424a9a4225eab136260",
+          "rung": "unresolved",
+          "vendor_change_id": "88677ebd3a285555cc71bef37e5335fb"
+        },
+        {
+          "affected": false,
+          "call_site_id": "a54cf877ad6c9f761c5a99075274823f",
+          "rung": "unresolved",
+          "vendor_change_id": "88677ebd3a285555cc71bef37e5335fb"
+        }
+      ],
+      "name": "fireship-server-PostPaymentIntents-request-property-removed",
+      "reason": null,
+      "scored": true,
+      "unaffected_sites": 11,
+      "unreachable_targets": []
+    },
+    {
+      "affected_sites": 0,
+      "detail": "1 labelled call site(s) are absent from the mutated index (66abf78abb56aea63c3c79f886eb2ba6); a mutation that inserts lines shifts the calls below it and `upsert_call_site` keys identity on position, so the label addresses a row the mutated tree no longer has",
+      "falsifiable_negatives": [],
+      "findings": [],
+      "labels": [],
+      "name": "fireship-server-PostPaymentIntents-response-property-removed",
+      "reason": "displaced-label",
+      "scored": false,
+      "unaffected_sites": 0,
+      "unreachable_targets": []
+    },
+    {
+      "affected_sites": 0,
+      "detail": "3 labelled call site(s) are absent from the mutated index (8f9aa53299ebf4ec0d6ea36b7213f9f0, df2e6332aabb6c2d26e415e4d96deea3, ef8f93bfcac7ca73133acb8b0d4979f2); a mutation that inserts lines shifts the calls below it and `upsert_call_site` keys identity on position, so the label addresses a row the mutated tree no longer has",
+      "falsifiable_negatives": [],
+      "findings": [],
+      "labels": [],
+      "name": "furever-GetCharges-response-property-removed",
+      "reason": "displaced-label",
+      "scored": false,
+      "unaffected_sites": 0,
+      "unreachable_targets": []
+    },
+    {
+      "affected_sites": 5,
+      "detail": null,
+      "falsifiable_negatives": [
+        "f7b4bb5ff383390f84da0bffd82849d3"
+      ],
+      "findings": [
+        {
+          "binding_rung": "static",
+          "call_site_id": "33959fe66e3ff0ae7215ca3e712afbda",
+          "vendor_change_id": "88677ebd3a285555cc71bef37e5335fb"
+        },
+        {
+          "binding_rung": "static",
+          "call_site_id": "885d560f14c5b47d8b0244ed67dccb56",
+          "vendor_change_id": "88677ebd3a285555cc71bef37e5335fb"
+        },
+        {
+          "binding_rung": "static",
+          "call_site_id": "f82eeb47e0eeaf2f6894fb43572730eb",
+          "vendor_change_id": "88677ebd3a285555cc71bef37e5335fb"
+        },
+        {
+          "binding_rung": "static",
+          "call_site_id": "8f9aa53299ebf4ec0d6ea36b7213f9f0",
+          "vendor_change_id": "88677ebd3a285555cc71bef37e5335fb"
+        },
+        {
+          "binding_rung": "static",
+          "call_site_id": "df2e6332aabb6c2d26e415e4d96deea3",
+          "vendor_change_id": "88677ebd3a285555cc71bef37e5335fb"
+        }
+      ],
+      "labels": [
+        {
+          "affected": false,
+          "call_site_id": "1950bd675cef8ef44654afd4bbea7fa9",
+          "rung": "unresolved",
+          "vendor_change_id": "88677ebd3a285555cc71bef37e5335fb"
+        },
+        {
+          "affected": false,
+          "call_site_id": "ebf84442d5b201110d5f4c08f2505df7",
+          "rung": "unresolved",
+          "vendor_change_id": "88677ebd3a285555cc71bef37e5335fb"
+        },
+        {
+          "affected": false,
+          "call_site_id": "89fd89ac9ffe1e4f3b3fa222f10dd6c4",
+          "rung": "unresolved",
+          "vendor_change_id": "88677ebd3a285555cc71bef37e5335fb"
+        },
+        {
+          "affected": false,
+          "call_site_id": "f871a621625a9969e91e323c60c2acf2",
+          "rung": "unresolved",
+          "vendor_change_id": "88677ebd3a285555cc71bef37e5335fb"
+        },
+        {
+          "affected": false,
+          "call_site_id": "3b51a96e3549341f7ffa705a28d89be6",
+          "rung": "unresolved",
+          "vendor_change_id": "88677ebd3a285555cc71bef37e5335fb"
+        },
+        {
+          "affected": false,
+          "call_site_id": "c641b279328f852da5ece70e16f46407",
+          "rung": "unresolved",
+          "vendor_change_id": "88677ebd3a285555cc71bef37e5335fb"
+        },
+        {
+          "affected": false,
+          "call_site_id": "682f179b0c6aa78563789c31c1899238",
+          "rung": "unresolved",
+          "vendor_change_id": "88677ebd3a285555cc71bef37e5335fb"
+        },
+        {
+          "affected": false,
+          "call_site_id": "6d65027650a0bdf131fad3218b325d4e",
+          "rung": "unresolved",
+          "vendor_change_id": "88677ebd3a285555cc71bef37e5335fb"
+        },
+        {
+          "affected": false,
+          "call_site_id": "5f22b03ae1e06f43a5da5314bec9d244",
+          "rung": "unresolved",
+          "vendor_change_id": "88677ebd3a285555cc71bef37e5335fb"
+        },
+        {
+          "affected": false,
+          "call_site_id": "581b1eef9c92194dc2db47f9fea50af3",
+          "rung": "unresolved",
+          "vendor_change_id": "88677ebd3a285555cc71bef37e5335fb"
+        },
+        {
+          "affected": false,
+          "call_site_id": "9b22f8842b1665458bd5d729fbcba048",
+          "rung": "unresolved",
+          "vendor_change_id": "88677ebd3a285555cc71bef37e5335fb"
+        },
+        {
+          "affected": false,
+          "call_site_id": "6a27756b38c3fd0e60d973226a857bbe",
+          "rung": "unresolved",
+          "vendor_change_id": "88677ebd3a285555cc71bef37e5335fb"
+        },
+        {
+          "affected": false,
+          "call_site_id": "6fe80a3b7fa268bb609fda9568f489a9",
+          "rung": "unresolved",
+          "vendor_change_id": "88677ebd3a285555cc71bef37e5335fb"
+        },
+        {
+          "affected": false,
+          "call_site_id": "b2b12dcf3ebdaef9387fd328dc1d062a",
+          "rung": "unresolved",
+          "vendor_change_id": "88677ebd3a285555cc71bef37e5335fb"
+        },
+        {
+          "affected": false,
+          "call_site_id": "3d31ec72e35349427bbb19612457f163",
+          "rung": "unresolved",
+          "vendor_change_id": "88677ebd3a285555cc71bef37e5335fb"
+        },
+        {
+          "affected": true,
+          "call_site_id": "8f9aa53299ebf4ec0d6ea36b7213f9f0",
+          "rung": "static",
+          "vendor_change_id": "88677ebd3a285555cc71bef37e5335fb"
+        },
+        {
+          "affected": true,
+          "call_site_id": "df2e6332aabb6c2d26e415e4d96deea3",
+          "rung": "static",
+          "vendor_change_id": "88677ebd3a285555cc71bef37e5335fb"
+        },
+        {
+          "affected": false,
+          "call_site_id": "ef8f93bfcac7ca73133acb8b0d4979f2",
+          "rung": "unresolved",
+          "vendor_change_id": "88677ebd3a285555cc71bef37e5335fb"
+        },
+        {
+          "affected": false,
+          "call_site_id": "422b1f2bae9f662f54817a8b1653ee5f",
+          "rung": "unresolved",
+          "vendor_change_id": "88677ebd3a285555cc71bef37e5335fb"
+        },
+        {
+          "affected": false,
+          "call_site_id": "074bb1f44215a6b40d220315bed8e1b6",
+          "rung": "unresolved",
+          "vendor_change_id": "88677ebd3a285555cc71bef37e5335fb"
+        },
+        {
+          "affected": false,
+          "call_site_id": "b1607d6eb11925e537a376cc2598aa2d",
+          "rung": "unresolved",
+          "vendor_change_id": "88677ebd3a285555cc71bef37e5335fb"
+        },
+        {
+          "affected": false,
+          "call_site_id": "ae8a444915754d4f15476392ac67a281",
+          "rung": "unresolved",
+          "vendor_change_id": "88677ebd3a285555cc71bef37e5335fb"
+        },
+        {
+          "affected": false,
+          "call_site_id": "f7b4bb5ff383390f84da0bffd82849d3",
+          "rung": "unresolved",
+          "vendor_change_id": "88677ebd3a285555cc71bef37e5335fb"
+        },
+        {
+          "affected": false,
+          "call_site_id": "5e7393d7bc9be38037aa44615764f36c",
+          "rung": "unresolved",
+          "vendor_change_id": "88677ebd3a285555cc71bef37e5335fb"
+        },
+        {
+          "affected": true,
+          "call_site_id": "33959fe66e3ff0ae7215ca3e712afbda",
+          "rung": "static",
+          "vendor_change_id": "88677ebd3a285555cc71bef37e5335fb"
+        },
+        {
+          "affected": false,
+          "call_site_id": "4f03b20930ba8a0492b325226f4e8587",
+          "rung": "unresolved",
+          "vendor_change_id": "88677ebd3a285555cc71bef37e5335fb"
+        },
+        {
+          "affected": false,
+          "call_site_id": "3a38b01d206d43c4decfe8bc0a865b95",
+          "rung": "unresolved",
+          "vendor_change_id": "88677ebd3a285555cc71bef37e5335fb"
+        },
+        {
+          "affected": true,
+          "call_site_id": "885d560f14c5b47d8b0244ed67dccb56",
+          "rung": "static",
+          "vendor_change_id": "88677ebd3a285555cc71bef37e5335fb"
+        },
+        {
+          "affected": true,
+          "call_site_id": "f82eeb47e0eeaf2f6894fb43572730eb",
+          "rung": "static",
+          "vendor_change_id": "88677ebd3a285555cc71bef37e5335fb"
+        },
+        {
+          "affected": false,
+          "call_site_id": "23af288db813184f1f3dba1de2efa365",
+          "rung": "unresolved",
+          "vendor_change_id": "88677ebd3a285555cc71bef37e5335fb"
+        },
+        {
+          "affected": false,
+          "call_site_id": "cb1fccacde1ce55c66a47f99b2c5efcc",
+          "rung": "unresolved",
+          "vendor_change_id": "88677ebd3a285555cc71bef37e5335fb"
+        }
+      ],
+      "name": "furever-PostPaymentIntents-request-property-removed",
+      "reason": null,
+      "scored": true,
+      "unaffected_sites": 26,
+      "unreachable_targets": []
+    },
+    {
+      "affected_sites": 0,
+      "detail": null,
+      "falsifiable_negatives": [],
+      "findings": [],
+      "labels": [
+        {
+          "affected": false,
+          "call_site_id": "1950bd675cef8ef44654afd4bbea7fa9",
+          "rung": "unresolved",
+          "vendor_change_id": "d5dd686d2e3e2a5eac68ef9e1e0fd22b"
+        },
+        {
+          "affected": false,
+          "call_site_id": "ebf84442d5b201110d5f4c08f2505df7",
+          "rung": "unresolved",
+          "vendor_change_id": "d5dd686d2e3e2a5eac68ef9e1e0fd22b"
+        },
+        {
+          "affected": false,
+          "call_site_id": "89fd89ac9ffe1e4f3b3fa222f10dd6c4",
+          "rung": "unresolved",
+          "vendor_change_id": "d5dd686d2e3e2a5eac68ef9e1e0fd22b"
+        },
+        {
+          "affected": false,
+          "call_site_id": "f871a621625a9969e91e323c60c2acf2",
+          "rung": "unresolved",
+          "vendor_change_id": "d5dd686d2e3e2a5eac68ef9e1e0fd22b"
+        },
+        {
+          "affected": false,
+          "call_site_id": "3b51a96e3549341f7ffa705a28d89be6",
+          "rung": "unresolved",
+          "vendor_change_id": "d5dd686d2e3e2a5eac68ef9e1e0fd22b"
+        },
+        {
+          "affected": false,
+          "call_site_id": "c641b279328f852da5ece70e16f46407",
+          "rung": "unresolved",
+          "vendor_change_id": "d5dd686d2e3e2a5eac68ef9e1e0fd22b"
+        },
+        {
+          "affected": false,
+          "call_site_id": "682f179b0c6aa78563789c31c1899238",
+          "rung": "unresolved",
+          "vendor_change_id": "d5dd686d2e3e2a5eac68ef9e1e0fd22b"
+        },
+        {
+          "affected": false,
+          "call_site_id": "6d65027650a0bdf131fad3218b325d4e",
+          "rung": "unresolved",
+          "vendor_change_id": "d5dd686d2e3e2a5eac68ef9e1e0fd22b"
+        },
+        {
+          "affected": false,
+          "call_site_id": "5f22b03ae1e06f43a5da5314bec9d244",
+          "rung": "unresolved",
+          "vendor_change_id": "d5dd686d2e3e2a5eac68ef9e1e0fd22b"
+        },
+        {
+          "affected": false,
+          "call_site_id": "581b1eef9c92194dc2db47f9fea50af3",
+          "rung": "unresolved",
+          "vendor_change_id": "d5dd686d2e3e2a5eac68ef9e1e0fd22b"
+        },
+        {
+          "affected": false,
+          "call_site_id": "9b22f8842b1665458bd5d729fbcba048",
+          "rung": "unresolved",
+          "vendor_change_id": "d5dd686d2e3e2a5eac68ef9e1e0fd22b"
+        },
+        {
+          "affected": false,
+          "call_site_id": "6a27756b38c3fd0e60d973226a857bbe",
+          "rung": "unresolved",
+          "vendor_change_id": "d5dd686d2e3e2a5eac68ef9e1e0fd22b"
+        },
+        {
+          "affected": false,
+          "call_site_id": "6fe80a3b7fa268bb609fda9568f489a9",
+          "rung": "unresolved",
+          "vendor_change_id": "d5dd686d2e3e2a5eac68ef9e1e0fd22b"
+        },
+        {
+          "affected": false,
+          "call_site_id": "b2b12dcf3ebdaef9387fd328dc1d062a",
+          "rung": "unresolved",
+          "vendor_change_id": "d5dd686d2e3e2a5eac68ef9e1e0fd22b"
+        },
+        {
+          "affected": false,
+          "call_site_id": "3d31ec72e35349427bbb19612457f163",
+          "rung": "unresolved",
+          "vendor_change_id": "d5dd686d2e3e2a5eac68ef9e1e0fd22b"
+        },
+        {
+          "affected": false,
+          "call_site_id": "8f9aa53299ebf4ec0d6ea36b7213f9f0",
+          "rung": "unresolved",
+          "vendor_change_id": "d5dd686d2e3e2a5eac68ef9e1e0fd22b"
+        },
+        {
+          "affected": false,
+          "call_site_id": "df2e6332aabb6c2d26e415e4d96deea3",
+          "rung": "unresolved",
+          "vendor_change_id": "d5dd686d2e3e2a5eac68ef9e1e0fd22b"
+        },
+        {
+          "affected": false,
+          "call_site_id": "ef8f93bfcac7ca73133acb8b0d4979f2",
+          "rung": "unresolved",
+          "vendor_change_id": "d5dd686d2e3e2a5eac68ef9e1e0fd22b"
+        },
+        {
+          "affected": false,
+          "call_site_id": "422b1f2bae9f662f54817a8b1653ee5f",
+          "rung": "unresolved",
+          "vendor_change_id": "d5dd686d2e3e2a5eac68ef9e1e0fd22b"
+        },
+        {
+          "affected": false,
+          "call_site_id": "074bb1f44215a6b40d220315bed8e1b6",
+          "rung": "unresolved",
+          "vendor_change_id": "d5dd686d2e3e2a5eac68ef9e1e0fd22b"
+        },
+        {
+          "affected": false,
+          "call_site_id": "b1607d6eb11925e537a376cc2598aa2d",
+          "rung": "unresolved",
+          "vendor_change_id": "d5dd686d2e3e2a5eac68ef9e1e0fd22b"
+        },
+        {
+          "affected": false,
+          "call_site_id": "ae8a444915754d4f15476392ac67a281",
+          "rung": "unresolved",
+          "vendor_change_id": "d5dd686d2e3e2a5eac68ef9e1e0fd22b"
+        },
+        {
+          "affected": false,
+          "call_site_id": "f7b4bb5ff383390f84da0bffd82849d3",
+          "rung": "unresolved",
+          "vendor_change_id": "d5dd686d2e3e2a5eac68ef9e1e0fd22b"
+        },
+        {
+          "affected": false,
+          "call_site_id": "5e7393d7bc9be38037aa44615764f36c",
+          "rung": "unresolved",
+          "vendor_change_id": "d5dd686d2e3e2a5eac68ef9e1e0fd22b"
+        },
+        {
+          "affected": false,
+          "call_site_id": "33959fe66e3ff0ae7215ca3e712afbda",
+          "rung": "unresolved",
+          "vendor_change_id": "d5dd686d2e3e2a5eac68ef9e1e0fd22b"
+        },
+        {
+          "affected": false,
+          "call_site_id": "4f03b20930ba8a0492b325226f4e8587",
+          "rung": "unresolved",
+          "vendor_change_id": "d5dd686d2e3e2a5eac68ef9e1e0fd22b"
+        },
+        {
+          "affected": false,
+          "call_site_id": "3a38b01d206d43c4decfe8bc0a865b95",
+          "rung": "unresolved",
+          "vendor_change_id": "d5dd686d2e3e2a5eac68ef9e1e0fd22b"
+        },
+        {
+          "affected": false,
+          "call_site_id": "885d560f14c5b47d8b0244ed67dccb56",
+          "rung": "unresolved",
+          "vendor_change_id": "d5dd686d2e3e2a5eac68ef9e1e0fd22b"
+        },
+        {
+          "affected": false,
+          "call_site_id": "f82eeb47e0eeaf2f6894fb43572730eb",
+          "rung": "unresolved",
+          "vendor_change_id": "d5dd686d2e3e2a5eac68ef9e1e0fd22b"
+        },
+        {
+          "affected": false,
+          "call_site_id": "23af288db813184f1f3dba1de2efa365",
+          "rung": "unresolved",
+          "vendor_change_id": "d5dd686d2e3e2a5eac68ef9e1e0fd22b"
+        },
+        {
+          "affected": false,
+          "call_site_id": "cb1fccacde1ce55c66a47f99b2c5efcc",
+          "rung": "unresolved",
+          "vendor_change_id": "d5dd686d2e3e2a5eac68ef9e1e0fd22b"
+        }
+      ],
+      "name": "furever-PostPaymentIntents-response-property-removed",
+      "reason": null,
+      "scored": true,
+      "unaffected_sites": 31,
+      "unreachable_targets": [
+        "33959fe66e3ff0ae7215ca3e712afbda",
+        "885d560f14c5b47d8b0244ed67dccb56",
+        "8f9aa53299ebf4ec0d6ea36b7213f9f0",
+        "df2e6332aabb6c2d26e415e4d96deea3",
+        "f7b4bb5ff383390f84da0bffd82849d3",
+        "f82eeb47e0eeaf2f6894fb43572730eb"
+      ]
+    },
+    {
+      "affected_sites": 1,
+      "detail": null,
+      "falsifiable_negatives": [],
+      "findings": [
+        {
+          "binding_rung": "static",
+          "call_site_id": "833ff938521cd71c109161770a5b5e0a",
+          "vendor_change_id": "88677ebd3a285555cc71bef37e5335fb"
+        }
+      ],
+      "labels": [
+        {
+          "affected": true,
+          "call_site_id": "833ff938521cd71c109161770a5b5e0a",
+          "rung": "static",
+          "vendor_change_id": "88677ebd3a285555cc71bef37e5335fb"
+        },
+        {
+          "affected": false,
+          "call_site_id": "d3939f2d135488ffa25aa7dad58f575e",
+          "rung": "unresolved",
+          "vendor_change_id": "88677ebd3a285555cc71bef37e5335fb"
+        }
+      ],
+      "name": "remix-PostPaymentIntents-request-property-removed",
+      "reason": null,
+      "scored": true,
+      "unaffected_sites": 1,
+      "unreachable_targets": []
+    },
+    {
+      "affected_sites": 0,
+      "detail": null,
+      "falsifiable_negatives": [],
+      "findings": [],
+      "labels": [
+        {
+          "affected": false,
+          "call_site_id": "833ff938521cd71c109161770a5b5e0a",
+          "rung": "unresolved",
+          "vendor_change_id": "d5dd686d2e3e2a5eac68ef9e1e0fd22b"
+        },
+        {
+          "affected": false,
+          "call_site_id": "d3939f2d135488ffa25aa7dad58f575e",
+          "rung": "unresolved",
+          "vendor_change_id": "d5dd686d2e3e2a5eac68ef9e1e0fd22b"
+        }
+      ],
+      "name": "remix-PostPaymentIntents-response-property-removed",
+      "reason": null,
+      "scored": true,
+      "unaffected_sites": 2,
+      "unreachable_targets": [
+        "833ff938521cd71c109161770a5b5e0a"
+      ]
+    },
+    {
+      "affected_sites": 1,
+      "detail": null,
+      "falsifiable_negatives": [
+        "02c042e6fed8dd5f4a0100d6c9fe01f5"
+      ],
+      "findings": [
+        {
+          "binding_rung": "static",
+          "call_site_id": "1b3a04ba8e4719784e8537188d6b2a12",
+          "vendor_change_id": "88677ebd3a285555cc71bef37e5335fb"
+        }
+      ],
+      "labels": [
+        {
+          "affected": false,
+          "call_site_id": "02c042e6fed8dd5f4a0100d6c9fe01f5",
+          "rung": "unresolved",
+          "vendor_change_id": "88677ebd3a285555cc71bef37e5335fb"
+        },
+        {
+          "affected": true,
+          "call_site_id": "1b3a04ba8e4719784e8537188d6b2a12",
+          "rung": "static",
+          "vendor_change_id": "88677ebd3a285555cc71bef37e5335fb"
+        },
+        {
+          "affected": false,
+          "call_site_id": "e737a836e6f95ef00eb3b0ac66d24940",
+          "rung": "unresolved",
+          "vendor_change_id": "88677ebd3a285555cc71bef37e5335fb"
+        },
+        {
+          "affected": false,
+          "call_site_id": "029f6fe814a3261ce75c3bcd2bcc4e1a",
+          "rung": "unresolved",
+          "vendor_change_id": "88677ebd3a285555cc71bef37e5335fb"
+        }
+      ],
+      "name": "turbo-PostPaymentIntents-request-property-removed",
+      "reason": null,
+      "scored": true,
+      "unaffected_sites": 3,
+      "unreachable_targets": []
+    },
+    {
+      "affected_sites": 0,
+      "detail": null,
+      "falsifiable_negatives": [],
+      "findings": [],
+      "labels": [
+        {
+          "affected": false,
+          "call_site_id": "02c042e6fed8dd5f4a0100d6c9fe01f5",
+          "rung": "unresolved",
+          "vendor_change_id": "bd1e801cf7543d2d520a290df3997bed"
+        },
+        {
+          "affected": false,
+          "call_site_id": "1b3a04ba8e4719784e8537188d6b2a12",
+          "rung": "unresolved",
+          "vendor_change_id": "bd1e801cf7543d2d520a290df3997bed"
+        },
+        {
+          "affected": false,
+          "call_site_id": "e737a836e6f95ef00eb3b0ac66d24940",
+          "rung": "unresolved",
+          "vendor_change_id": "bd1e801cf7543d2d520a290df3997bed"
+        },
+        {
+          "affected": false,
+          "call_site_id": "029f6fe814a3261ce75c3bcd2bcc4e1a",
+          "rung": "unresolved",
+          "vendor_change_id": "bd1e801cf7543d2d520a290df3997bed"
+        }
+      ],
+      "name": "turbo-PostPaymentIntents-response-property-removed",
+      "reason": null,
+      "scored": true,
+      "unaffected_sites": 4,
+      "unreachable_targets": [
+        "02c042e6fed8dd5f4a0100d6c9fe01f5",
+        "1b3a04ba8e4719784e8537188d6b2a12"
+      ]
+    },
+    {
+      "affected_sites": 1,
+      "detail": null,
+      "falsifiable_negatives": [],
+      "findings": [
+        {
+          "binding_rung": "static",
+          "call_site_id": "029f6fe814a3261ce75c3bcd2bcc4e1a",
+          "vendor_change_id": "eb5632d5bcce5a6045d8afa773751d58"
+        }
+      ],
+      "labels": [
+        {
+          "affected": false,
+          "call_site_id": "02c042e6fed8dd5f4a0100d6c9fe01f5",
+          "rung": "unresolved",
+          "vendor_change_id": "eb5632d5bcce5a6045d8afa773751d58"
+        },
+        {
+          "affected": false,
+          "call_site_id": "1b3a04ba8e4719784e8537188d6b2a12",
+          "rung": "unresolved",
+          "vendor_change_id": "eb5632d5bcce5a6045d8afa773751d58"
+        },
+        {
+          "affected": false,
+          "call_site_id": "e737a836e6f95ef00eb3b0ac66d24940",
+          "rung": "unresolved",
+          "vendor_change_id": "eb5632d5bcce5a6045d8afa773751d58"
+        },
+        {
+          "affected": true,
+          "call_site_id": "029f6fe814a3261ce75c3bcd2bcc4e1a",
+          "rung": "static",
+          "vendor_change_id": "eb5632d5bcce5a6045d8afa773751d58"
+        }
+      ],
+      "name": "turbo-PostRefunds-request-property-removed",
+      "reason": null,
+      "scored": true,
+      "unaffected_sites": 3,
+      "unreachable_targets": []
+    },
+    {
+      "affected_sites": 0,
+      "detail": null,
+      "falsifiable_negatives": [],
+      "findings": [],
+      "labels": [
+        {
+          "affected": false,
+          "call_site_id": "02c042e6fed8dd5f4a0100d6c9fe01f5",
+          "rung": "unresolved",
+          "vendor_change_id": "eec7209b543bda418dacafedd9179aaa"
+        },
+        {
+          "affected": false,
+          "call_site_id": "1b3a04ba8e4719784e8537188d6b2a12",
+          "rung": "unresolved",
+          "vendor_change_id": "eec7209b543bda418dacafedd9179aaa"
+        },
+        {
+          "affected": false,
+          "call_site_id": "e737a836e6f95ef00eb3b0ac66d24940",
+          "rung": "unresolved",
+          "vendor_change_id": "eec7209b543bda418dacafedd9179aaa"
+        },
+        {
+          "affected": false,
+          "call_site_id": "029f6fe814a3261ce75c3bcd2bcc4e1a",
+          "rung": "unresolved",
+          "vendor_change_id": "eec7209b543bda418dacafedd9179aaa"
+        }
+      ],
+      "name": "turbo-PostRefunds-response-property-removed",
+      "reason": null,
+      "scored": true,
+      "unaffected_sites": 4,
+      "unreachable_targets": [
+        "029f6fe814a3261ce75c3bcd2bcc4e1a"
+      ]
+    }
+  ],
+  "pairs_scored": 10,
+  "pairs_total": 12,
+  "scored_pairs": [
+    "fireship-server-GetPaymentMethods-response-property-removed",
+    "fireship-server-PostPaymentIntents-request-property-removed",
+    "furever-PostPaymentIntents-request-property-removed",
+    "furever-PostPaymentIntents-response-property-removed",
+    "remix-PostPaymentIntents-request-property-removed",
+    "remix-PostPaymentIntents-response-property-removed",
+    "turbo-PostPaymentIntents-request-property-removed",
+    "turbo-PostPaymentIntents-response-property-removed",
+    "turbo-PostRefunds-request-property-removed",
+    "turbo-PostRefunds-response-property-removed"
+  ],
+  "unaffected_sites": 97,
+  "unreachable_targets": [
+    "fireship-server-GetPaymentMethods-response-property-removed::1292e9ccebd5ee09fa1eb0b91bfc782f",
+    "furever-PostPaymentIntents-response-property-removed::33959fe66e3ff0ae7215ca3e712afbda",
+    "furever-PostPaymentIntents-response-property-removed::885d560f14c5b47d8b0244ed67dccb56",
+    "furever-PostPaymentIntents-response-property-removed::8f9aa53299ebf4ec0d6ea36b7213f9f0",
+    "furever-PostPaymentIntents-response-property-removed::df2e6332aabb6c2d26e415e4d96deea3",
+    "furever-PostPaymentIntents-response-property-removed::f7b4bb5ff383390f84da0bffd82849d3",
+    "furever-PostPaymentIntents-response-property-removed::f82eeb47e0eeaf2f6894fb43572730eb",
+    "remix-PostPaymentIntents-response-property-removed::833ff938521cd71c109161770a5b5e0a",
+    "turbo-PostPaymentIntents-response-property-removed::02c042e6fed8dd5f4a0100d6c9fe01f5",
+    "turbo-PostPaymentIntents-response-property-removed::1b3a04ba8e4719784e8537188d6b2a12",
+    "turbo-PostRefunds-response-property-removed::029f6fe814a3261ce75c3bcd2bcc4e1a"
+  ]
+}

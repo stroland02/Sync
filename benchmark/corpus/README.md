@@ -86,56 +86,92 @@ executable and the score is whatever it produces — including the pairs the har
   or already reads, for a response change. Real properties of the real operation, so the mutation
   writes something the vendor could have removed; alphabetically first so the choice is not a
   judgement.
+- **Held back.** The first call site on the changed operation by position, when the operation has
+  more than one indexed call site and that site carries a non-empty field list on the side the
+  change is on. One per specification and never more. It goes into the specification as a
+  `hold_back` entry naming a path, a line and a column, and `sync.cli._corpus_targets` drops it
+  from the target list; the next section is what it is for.
 
 Two combinations produced no specification and the generator said so rather than substituting
 one: `furever/GetCharges` and `fireship-server/GetPaymentMethods` are GETs with no request body,
 so `request-property-removed` has no property to name.
 
+The hold-back rule selected a site in four of the twelve specifications and passed over the other
+eight, which carry no `hold_back` key and are byte-identical to what the generator wrote before
+the rule existed. Each clause of it is doing work:
+
+- **The first by position**, because every insertion `mutate.py` makes lands at or after the call
+  it breaks and `upsert_call_site` keys a call site's identity on its position. Only the earliest
+  site on the operation is guaranteed to still be where the specification says once its siblings
+  have been mutated. `furever-GetCharges` is what the other choice costs: one response guard
+  inserted above three later calls displaces all three labels and the whole pair leaves the score.
+- **Non-empty field list on the change's side**, because that is the branch
+  `VendorChangeDetector.scan` takes, and `_deepest_match` over an empty list declines against
+  every change there has ever been. Holding such a site back would cost a positive and buy no
+  candidate.
+- **More than one site on the operation**, because holding back the only one leaves the mutation
+  nothing to break, and a pair with no target is refused rather than scored.
+- **One and never more**, because every held-back site is a site binding recall no longer
+  measures.
+
 ## Reading the recorded score
 
-`recorded/2026-07-29-score.txt` and `.json` are one run's output, byte-identical to a second run
-from a clean database. `docs/superpowers/reports/2026-07-29-frozen-corpus-first-binding-numbers.md`
-carries what the numbers do and do not support.
+`recorded/` holds three runs of the same twelve specifications, each byte-identical to a second
+run from a clean database. Read the newest; the older two are kept because they are what the
+reports argue over.
 
-Three things the report insists on and this directory must keep:
+| file | corpus | what it added |
+|---|---|---|
+| `2026-07-29-score.{txt,json}` | before the hold-back | the first binding numbers over the frozen set |
+| `2026-07-29-falsifiable-negatives.{txt,json}` | before the hold-back | the count of negatives the detector could have fired on: zero |
+| `2026-07-29-held-back-negatives.{txt,json}` | current | one site held back per eligible pair, and the first non-zero count |
 
-- **Every axis carries its sample size.** Precision and recall are each over twelve labelled
-  affected call sites. Twelve.
-- **Excluded pairs are counted and named.** Two of the twelve specifications were refused, both
+`docs/superpowers/reports/2026-07-29-frozen-corpus-first-binding-numbers.md` carries what the
+first set of numbers does and does not support,
+`2026-07-29-precision-has-no-negative-to-fail-on.md` is the diagnosis the second one measured, and
+`2026-07-29-precision-gets-its-first-negative.md` is the change between the second and the third.
+
+Three things those reports insist on and this directory must keep:
+
+- **Every axis carries its sample size.** In the current recording precision and recall are each
+  over nine labelled affected call sites. Nine — it was twelve before three were held back, and
+  a recall that changed because its denominator moved is not a regression.
+- **Excluded pairs are counted and named.** Two of the twelve specifications are refused, both
   `displaced-label`.
-- **A pair that contributed no positives is visible.** Five of the ten scored pairs contributed
-  zero affected call sites — every response-side pair that was not refused outright — because the
-  response mutation could not attach to any of their calls. The corpus total cannot show that and
+- **A pair that contributed no positives is visible.** Five of the ten scored pairs contribute
+  zero affected call sites — every response-side pair that is not refused outright — because the
+  response mutation cannot attach to any of their calls. The corpus total cannot show that and
   the per-pair table does.
 
-## The precision on this corpus is a constant, and the recording now says so
+## Precision now has a negative it could be wrong about
 
-`recorded/2026-07-29-falsifiable-negatives.txt` and `.json` are the same run with one number
-added: how many labelled negatives the detector could have fired on. It is **zero**, in every one
-of the ten scored pairs, and byte-identical across two runs from two clean databases
-(`c78177750c51a04f8171cd4f3b4860991f54e6c2a98056c0f3d57bb608aa3175`).
+`falsifiable negatives` counts the labelled negatives this change gave the detector any chance of
+firing on: the site is on the changed operation, so `call_sites_for_operation` returns it, and it
+carries a non-empty field list on the side the change is on, so `_deepest_match` has something to
+test. It read **zero** in every one of the ten scored pairs before the hold-back, which meant
+precision's false-positive term had no candidates rather than few — 1.0000 was what building the
+corpus that way guaranteed, and it would have survived a binder regression that only affected
+same-operation discrimination.
 
-Precision is the share of judged findings that were genuine. With no candidate for its
-false-positive term, the rate cannot move: 1.0000 is what building the corpus this way
-guarantees, and it would survive a binder regression that only affected same-operation
-discrimination.
+It reads **3** now, and precision still reads 1.0000. Those two sentences belong together: the
+binder was offered three same-operation call sites it could have claimed and declined all three,
+which is the first evidence that axis has ever carried. One of the three is a near miss rather
+than a formality — `turbo` passes `amount` at a site where the changed property is
+`amount_details`, and a match on segment prefixes rather than whole segments would fire on it.
 
-The cause is the targeting rule rather than the repositories. `cli._score_corpus` targets **every**
-indexed call site on the changed operation, so such a site is either broken — and labelled
-affected — or a target the mutation could not attach to. Both classes are unusable as negatives,
-and the second for a reason that is structural rather than incidental: a request mutation attaches
-where the call passes an object argument, which is exactly where the indexer records `args_keys`,
-and a response mutation attaches where the result is bound in a declarator, which is exactly where
-it records `response_fields_read`. **A site the mutation cannot reach is a site whose field list is
-empty, and an empty field list declines against every change there has ever been.**
+What remains constant is that a hold-back can only help where the mutation had somewhere to
+attach. Every response-side pair reads no response field at any of its call sites, so a site held
+back there has an empty field list and declines against every change regardless; the two
+single-site request pairs cannot spare their only target. Three is therefore the whole of what
+this corpus can currently offer, not a sample of it.
 
 So no choice of repository or specification fixes this while that rule stands, and adding
 repositories would raise the negative count without adding a single candidate. What the corpus
-needs is a same-operation call site deliberately held back from the target list — which
-`generate_pair` already supports, since the caller names its targets, and which nothing currently
-asks it for.
+needed was a same-operation call site deliberately held back from the target list — which
+`generate_pair` already supported, since the caller names its targets, and which nothing asked it
+for until `hold_back` landed.
 
-Until then a directional floor on binding precision would be gating a constant, which
+While that was true a directional floor on binding precision would have gated a constant, which
 `docs/superpowers/specs/2026-07-27-sync-benchmark-gates.md` names as the failure that is worse
 than having no gate at all.
 
@@ -181,3 +217,8 @@ characters before the second call's column, `upsert_call_site` keys identity on 
 the pair is refused as `displaced-label` — correctly. `tests/test_binding_score.py` asserts the
 refusal against exactly that shape, because a refusal whose common case has disappeared is no
 longer being tested.
+
+Three is also small. A directional floor on binding precision still needs a variance measurement
+over the new corpus before it would mean anything, and
+`docs/superpowers/specs/2026-07-27-sync-benchmark-gates.md` is what says an invented threshold is
+worse than no threshold at all. Nothing here is gated.
