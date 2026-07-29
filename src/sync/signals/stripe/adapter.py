@@ -117,6 +117,42 @@ class StripeAdapter:
 
     vendor_id = "stripe"
 
+    sdk_bindings = {
+        "typescript": {"package": "stripe"},
+        "python": {"distribution": "stripe", "module": "stripe"},
+    }
+    """Which package a customer imports to reach this vendor, per language.
+
+    Read by `sync.index`, which until now held `_SDK_PACKAGE = "stripe"` as a module constant --
+    so a vendor whose specification we could diff perfectly produced no findings, because
+    nothing in the customer's code was ever bound to it. The name belongs here for the reason
+    `CLAUDE.md` gives for every other vendor fact: the moment shared code knows a vendor's name,
+    the plugin story is dead.
+
+    Keyed by `LanguageAdapter.language_id`, and the value's shape belongs to the language
+    adapter that reads it rather than to a schema stated here -- the same argument
+    `sync.signals.registry` makes for keeping each vendor's construction behind its own builder.
+    TypeScript needs one npm name, which is both the manifest key and the import specifier.
+    Python needs two, because a distribution name and a module name are different strings in
+    general even where this vendor spells them alike.
+
+    It is deliberately not part of the `VendorAdapter` protocol. An adapter that declares none
+    indexes nothing, which is the honest state of the four configured vendors and every watched
+    MCP server: their specifications are discoverable and their call sites are not. Defaulting
+    would bind another vendor's traffic to Stripe operations, and falling back to `vendor_id`
+    is the same defect one layer down -- it is wrong for a scoped npm package and for an MCP
+    server id, and it fails by resolving confidently rather than by declining.
+
+    The per-language entry is a mapping rather than a fixed record so a later field lands here
+    without a protocol change. That matters sooner than it looks: the substrate spec's harder
+    half is that a call site's shape is per-SDK rather than per-vendor, and the three generators
+    checked state the symbol-to-operation mapping three different ways -- stripe-node passes
+    verb and path as plain arguments, Stainless puts the verb in the method name and the path in
+    a tagged template, Speakeasy uses an object property and a helper call. A binding that
+    assumed one of those would not carry the others, so nothing here assumes any of them; an
+    extraction rule belongs beside the package name when the first adapter needs one.
+    """
+
     def __init__(self, spec_dir: Path, symbol_map_path: Path) -> None:
         self._spec_dir = Path(spec_dir)
         self._symbols: dict[str, dict[str, str]] = json.loads(Path(symbol_map_path).read_text(encoding="utf-8"))

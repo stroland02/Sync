@@ -53,6 +53,13 @@ class _Vendor:
     """Resolves the one symbol both fixture repositories call, in either language."""
 
     vendor_id = "stripe"
+    # The indexer reads which package to bind from the vendor rather than holding a constant,
+    # so a double that declares none is a vendor whose SDK nothing can recognise: it would bind
+    # no client, index nothing, and leave every assertion below passing over an empty list.
+    sdk_bindings = {
+        "typescript": {"package": "stripe"},
+        "python": {"distribution": "stripe", "module": "stripe"},
+    }
 
     def operation_for_symbol(self, symbol: str, *, language: str | None = None):
         if symbol.endswith("charges.create"):

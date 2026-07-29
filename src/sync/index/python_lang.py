@@ -11,13 +11,21 @@ Resolution follows the TypeScript passes: find the identifiers bound to the SDK,
 chains rooted at one of them ending in a call, then capture the keyword arguments passed and the
 fields read off the result.
 
-Three places Python differs, all of them findings about the protocol rather than about the
+Four places Python differs, all of them findings about the protocol rather than about the
 grammar:
 
 **The module is a client.** `import stripe` then `stripe.charges.create(...)` binds no variable.
 The TypeScript rule -- an identifier assigned from `new Imported(...)` -- has nothing to match,
 and ported verbatim it indexes nothing in a repository written that way. Here an imported module
 alias is a client root in its own right.
+
+**One package name does not serve.** TypeScript's npm name is at once the manifest key, the
+import specifier and the root of the symbol. Python separates them: a manifest declares a
+*distribution* and source imports a *module*, and the two are different strings in general --
+`google-cloud-storage` is imported as `google.cloud.storage`. Both vendors registered today
+spell them alike, which is a fact about those vendors and not a rule, so the binding this
+module reads carries both rather than one that happens to work twice. The distribution is
+normalised the way a requirement is; the module is not, because an import is spelled exactly.
 
 **A response is read by subscript as often as by attribute.** `typescript.py` deliberately stops
 a chain at a subscript, because in TypeScript it is nearly always an array index. In Python
@@ -48,7 +56,6 @@ from tree_sitter import Language, Node, Parser
 from sync.core import CallSite, Patch, RepoRef, VendorAdapter, VerifyResult
 
 _PY_LANGUAGE = Language(tspython.language())
-_SDK_PACKAGE = "stripe"
 _FUNCTION_TYPES = {"function_definition", "lambda"}
 # Where a project may declare that it depends on the SDK. Both are current practice, and reading
 # only one reports half the ecosystem as not using it.
@@ -85,6 +92,16 @@ def _path(segments: Iterable[str]) -> str:
     return ".".join(segments)
 
 
+def _normalised(distribution: str) -> str:
+    """A distribution name as PEP 503 compares it.
+
+    Applied to both sides so `Twilio`, `twilio` and a hypothetical `twi_lio` in a manifest all
+    meet the name an adapter declared. Only the distribution is normalised; a module name is
+    spelled exactly as it is imported.
+    """
+    return distribution.strip().lower().replace("_", "-")
+
+
 class PythonAdapter:
     language_id = "python"
 
@@ -108,6 +125,18 @@ class PythonAdapter:
 
     def __init__(self, vendor_adapter: VendorAdapter) -> None:
         self._vendor = vendor_adapter
+        # What this vendor is declared as and what it is imported as. `getattr` rather than a
+        # protocol member for the same reason `unverifiable_reason` is read that way: this
+        # module does not own `VendorAdapter`, and an adapter declaring nothing keeps working.
+        # Declaring nothing means no repository matches and no call site resolves, which is the
+        # honest answer for a vendor whose specification is discoverable and whose SDK nothing
+        # here can recognise -- and it is the answer a default would replace with a wrong one.
+        binding = getattr(vendor_adapter, "sdk_bindings", {}).get(self.language_id, {})
+        declared = binding.get("distribution")
+        self._distribution: str | None = (
+            _normalised(declared) if isinstance(declared, str) else None
+        )
+        self._module: str | None = binding.get("module")
 
     # --- manifests ----------------------------------------------------------------
 
@@ -147,10 +176,15 @@ class PythonAdapter:
         name = requirement
         for delimiter in _VERSION_DELIMITERS:
             name = name.split(delimiter, 1)[0]
-        return name.strip().lower().replace("_", "-")
+        return _normalised(name)
 
     def matches(self, repo: RepoRef) -> bool:
-        return any(self._requirement_name(item) == _SDK_PACKAGE for item in self._requirement_lines(repo))
+        if self._distribution is None:
+            return False
+        return any(
+            self._requirement_name(item) == self._distribution
+            for item in self._requirement_lines(repo)
+        )
 
     def _sdk_version(self, repo: RepoRef) -> str:
         """The version the manifest pins, as written.
@@ -161,7 +195,7 @@ class PythonAdapter:
         What is recorded is what the project declared, which is what the manifest can support.
         """
         for requirement in self._requirement_lines(repo):
-            if self._requirement_name(requirement) != _SDK_PACKAGE:
+            if self._requirement_name(requirement) != self._distribution:
                 continue
             remainder = requirement[len(self._requirement_name(requirement)) :]
             version = remainder.lstrip("=<>!~ ").split(",")[0].strip()
@@ -190,6 +224,8 @@ class PythonAdapter:
         give us.
         """
         names: set[str] = set()
+        if self._module is None:
+            return names
         parser = _parser()
 
         for file_path in self._source_files(repo):
@@ -200,17 +236,17 @@ class PythonAdapter:
             for node in _walk(tree.root_node):
                 if node.type == "import_statement":
                     for child in node.named_children:
-                        if child.type == "dotted_name" and _text(child, source) == _SDK_PACKAGE:
-                            names.add(_SDK_PACKAGE)
+                        if child.type == "dotted_name" and _text(child, source) == self._module:
+                            names.add(self._module)
                         elif child.type == "aliased_import":
                             original = child.child_by_field_name("name")
                             alias = child.child_by_field_name("alias")
                             if original is not None and alias is not None:
-                                if _text(original, source) == _SDK_PACKAGE:
+                                if _text(original, source) == self._module:
                                     names.add(_text(alias, source))
                 elif node.type == "import_from_statement":
                     module = node.child_by_field_name("module_name")
-                    if module is None or _text(module, source).split(".")[0] != _SDK_PACKAGE:
+                    if module is None or _text(module, source).split(".")[0] != self._module:
                         continue
                     for child in node.named_children:
                         if child is module:
@@ -415,7 +451,7 @@ class PythonAdapter:
                 if chain is None or len(chain) < 3 or chain[0] not in clients:
                     continue
 
-                symbol = f"{_SDK_PACKAGE}.{'.'.join(chain[1:])}"
+                symbol = f"{self._module}.{'.'.join(chain[1:])}"
                 operation = self._vendor.operation_for_symbol(symbol, language=self.language_id)
                 if operation is None:
                     continue

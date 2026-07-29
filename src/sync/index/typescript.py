@@ -1,14 +1,27 @@
 """TypeScript implementation of the LanguageAdapter protocol.
 
 Resolution happens in three passes over each file:
-  1. find the identifier bound to the Stripe SDK (import, then construction)
+  1. find the identifier bound to the vendor's SDK (import, then construction)
   2. find member-chain calls rooted at that identifier
   3. for each call, capture the argument keys passed and the response fields read
 
+Which package that is comes from the vendor adapter, never from this module. It was a
+module constant until it was measured against a second vendor, and the consequence was
+that every adapter beneath this one was unreachable: a vendor whose specification we
+could diff perfectly produced no findings, because nothing in the customer's code was
+ever bound to it. The name is a fact about one vendor's SDK, and `CLAUDE.md` puts those
+in that vendor's adapter.
+
+One npm name serves all three uses here -- the `package.json` key, the import specifier,
+and the root of the symbol handed to the adapter. That holds for every vendor registered
+today and will not hold for a scoped package, whose specifier and symbol root differ; the
+field to separate them belongs to the first adapter that needs it rather than being
+carried empty until then. Python needs two names for a reason that is live now, and
+`python_lang.py` says which.
+
 tree-sitter gives us syntax, not types. Where a client is exported from another
 module we resolve it by name across the repository rather than by type inference,
-which is sufficient for the single-vendor M0 case and is where the Python type
-resolver would be needed for a general solution.
+which is where a type resolver would be needed for a general solution.
 """
 
 from __future__ import annotations
@@ -26,7 +39,6 @@ from tree_sitter import Language, Node, Parser
 from sync.core import CallSite, Patch, RepoRef, VendorAdapter, VerifyResult
 
 _TS_LANGUAGE = Language(tsts.language_typescript())
-_SDK_PACKAGE = "stripe"
 _FUNCTION_TYPES = {
     "function_declaration",
     "function_expression",
@@ -106,6 +118,14 @@ class TypeScriptAdapter:
 
     def __init__(self, vendor_adapter: VendorAdapter) -> None:
         self._vendor = vendor_adapter
+        # The npm package this vendor is reached through, or None if it declares none.
+        # `getattr` rather than a protocol member, for the reason `PythonAdapter`'s
+        # `unverifiable_reason` gives: this module does not own `VendorAdapter`, and an
+        # adapter that declares nothing keeps working unchanged. None means no repository
+        # matches and no call site resolves, which is the honest answer for a vendor whose
+        # specification is discoverable and whose SDK nothing here can recognise.
+        binding = getattr(vendor_adapter, "sdk_bindings", {}).get(self.language_id, {})
+        self._package: str | None = binding.get("package")
         # What each clone already failed before Sync touched it, keyed by clone
         # path. Held in memory rather than in the clone because nothing has to
         # read it after this process ends: `cli.RESUMABLE_NODES` resumes a run
@@ -138,11 +158,11 @@ class TypeScriptAdapter:
         return {**data.get("dependencies", {}), **data.get("devDependencies", {})}
 
     def matches(self, repo: RepoRef) -> bool:
-        return _SDK_PACKAGE in self._declared_dependencies(repo)
+        return self._package is not None and self._package in self._declared_dependencies(repo)
 
     def _sdk_version(self, repo: RepoRef) -> str:
         deps = self._declared_dependencies(repo)
-        return str(deps.get(_SDK_PACKAGE, "unknown")).lstrip("^~")
+        return str(deps.get(self._package, "unknown")).lstrip("^~")
 
     def _source_files(self, repo: RepoRef) -> list[Path]:
         root = Path(repo.local_path)
@@ -153,11 +173,19 @@ class TypeScriptAdapter:
         ]
 
     def _client_identifiers(self, repo: RepoRef) -> set[str]:
-        """Identifiers bound to a Stripe client anywhere in the repository.
+        """Identifiers bound to a vendor client anywhere in the repository.
 
-        The one rule: `new <ImportedName>(...)` assigned to a variable, where
-        `<ImportedName>` was imported from the `stripe` package in that same
-        file. Names accumulate into a single set across every file in the
+        The rule: `new <ImportedName>(...)` or `<ImportedName>(...)` assigned to
+        a variable, where `<ImportedName>` was imported from the vendor's
+        package in that same file. The construction form was the only one until
+        a second vendor was measured -- `twilio-node` documents building a
+        client by calling the package's own default export, so under the
+        `new`-only rule an idiomatic Twilio repository bound no identifier and
+        every call site under it was invisible. Widening to the call is not a
+        guess about what any expression means: the callee had to be imported
+        from this vendor's package, so it is that package's own export.
+
+        Names accumulate into a single set across every file in the
         repository, rather than being scoped per file — that repo-wide set is
         what lets a client built in one module (`export const stripe = new
         Stripe(...)`) resolve at its call sites in another (`import { stripe }
@@ -175,6 +203,8 @@ class TypeScriptAdapter:
         accepted as a known limitation for single-vendor M0.
         """
         names: set[str] = set()
+        if self._package is None:
+            return names
         parser = _parser()
 
         for file_path in self._source_files(repo):
@@ -184,7 +214,8 @@ class TypeScriptAdapter:
 
             for node in _walk(tree.root_node):
                 if node.type == "import_statement":
-                    if f"'{_SDK_PACKAGE}'" not in _text(node, source) and f'"{_SDK_PACKAGE}"' not in _text(node, source):
+                    text = _text(node, source)
+                    if f"'{self._package}'" not in text and f'"{self._package}"' not in text:
                         continue
                     for child in _walk(node):
                         if child.type == "identifier":
@@ -197,10 +228,13 @@ class TypeScriptAdapter:
                 value_node = node.child_by_field_name("value")
                 if name_node is None or value_node is None:
                     continue
-                if value_node.type != "new_expression":
+                if value_node.type == "new_expression":
+                    callee = value_node.child_by_field_name("constructor")
+                elif value_node.type == "call_expression":
+                    callee = value_node.child_by_field_name("function")
+                else:
                     continue
-                constructor = value_node.child_by_field_name("constructor")
-                if constructor is not None and _text(constructor, source) in imported:
+                if callee is not None and _text(callee, source) in imported:
                     names.add(_text(name_node, source))
 
         return names
@@ -369,7 +403,7 @@ class TypeScriptAdapter:
                 if chain is None or len(chain) < 3 or chain[0] not in clients:
                     continue
 
-                symbol = f"{_SDK_PACKAGE}.{'.'.join(chain[1:])}"
+                symbol = f"{self._package}.{'.'.join(chain[1:])}"
                 operation = self._vendor.operation_for_symbol(symbol, language=self.language_id)
                 if operation is None:
                     continue
