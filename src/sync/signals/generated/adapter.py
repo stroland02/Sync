@@ -46,18 +46,34 @@ from pathlib import Path
 from typing import Callable, Iterable, Mapping
 
 from sync.core import OperationRef, VendorChange
+from sync.signals.generated import symbols as stainless_python
+from sync.signals.generated import symbols_typescript as stainless_typescript
 from sync.signals.generated.manifest import SpecSource
-from sync.signals.generated.symbols import (
-    ExtractedOperation,
-    extract_symbols,
-    read_spec_operations,
-    report_extraction,
-)
+from sync.signals.generated.symbols import ExtractedOperation, read_spec_operations
 from sync.signals.oasdiff import run_oasdiff_breaking, to_vendor_changes
 
 log = logging.getLogger(__name__)
 
 Fetch = Callable[[str], str]
+
+EXTRACTORS = {
+    module.GENERATOR: module for module in (stainless_python, stainless_typescript)
+}
+"""Which rule reads a staged SDK, by the generator and language that emitted it.
+
+Keyed by generator *times language*, because that is the unit an extraction rule covers. Stainless
+writes the route as a positional literal in Python and as a tagged template in TypeScript, so
+"Stainless" names two rules rather than one, and a deployment says which of them its staged
+checkout needs.
+"""
+
+DEFAULT_GENERATOR = stainless_python.GENERATOR
+"""What a deployment that stages an SDK and names no generator gets.
+
+The first flavour written, kept as the default so callers predating the second keep the behaviour
+they had. Naming it wrongly is not a silent failure: each rule raises `UnrecognisedSdkShape` on
+the other's source rather than returning the part of it that happens to parse.
+"""
 
 PROVENANCE_KEY = "sync_spec_provenance"
 """Where a row records which artifact it was diffed from. Namespaced because it sits beside
@@ -134,6 +150,7 @@ class GeneratedSpecAdapter:
         sdk_bindings: Mapping[str, Mapping[str, str]] | None = None,
         sdk_source: Path | str | None = None,
         sdk_spec_operations: Path | str | None = None,
+        sdk_source_generator: str = DEFAULT_GENERATOR,
     ) -> None:
         self._vendor_id = vendor_id
         self._sources = sources
@@ -149,6 +166,14 @@ class GeneratedSpecAdapter:
         # Its absence costs the cross-check, not the map: extraction still answers, and the
         # disagreement it would have surfaced simply is not looked for.
         self._sdk_spec_operations = Path(sdk_spec_operations) if sdk_spec_operations else None
+        # Rejected here rather than on first lookup. A misconfigured deployment must fail while
+        # someone is looking at it, not on the run where a symbol quietly stops resolving.
+        if sdk_source_generator not in EXTRACTORS:
+            raise ValueError(
+                f"{vendor_id}: no extraction rule for {sdk_source_generator!r}; "
+                f"this deployment can read {', '.join(sorted(EXTRACTORS))}"
+            )
+        self._extractor = EXTRACTORS[sdk_source_generator]
         self._symbols: dict[str, ExtractedOperation] | None = None
 
     @property
@@ -193,9 +218,10 @@ class GeneratedSpecAdapter:
         A vendor whose SDK this deployment has not staged has nothing to read, and guessing is
         the thing being avoided rather than the thing being deferred.
 
-        `language` is accepted and ignored. One generator's rule is a fact about that generator's
-        emitted shape rather than about the language, and the extractor is selected by the source
-        it is pointed at.
+        `language` is accepted and ignored. An extraction rule covers a generator *times* a
+        language and is named as one string, `sdk_source_generator`, chosen where the checkout is
+        staged. Selecting it from the caller's language instead would mean deciding that
+        `typescript` implies Stainless, which is the kind of convention this module refuses.
         """
         symbols = self._extracted_symbols()
         if symbols is None:
@@ -233,7 +259,7 @@ class GeneratedSpecAdapter:
             return None
         if self._symbols is None:
             if self._sdk_spec_operations is not None:
-                report = report_extraction(
+                report = self._extractor.report_extraction(
                     self._sdk_source, read_spec_operations(self._sdk_spec_operations)
                 )
                 log.info("%s: %s", self._vendor_id, report.render())
@@ -244,7 +270,7 @@ class GeneratedSpecAdapter:
                     )
                 extracted = report.operations
             else:
-                extracted = extract_symbols(self._sdk_source)
+                extracted = self._extractor.extract_symbols(self._sdk_source)
             self._symbols = {operation.symbol: operation for operation in extracted}
         return self._symbols
 
