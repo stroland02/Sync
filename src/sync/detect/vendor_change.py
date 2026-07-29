@@ -16,10 +16,15 @@ Why the comparison is path against path
 ---------------------------------------
 Both sides record paths, and a call site matches when its path leads into the
 change's. Two cheaper rules were measured against Stripe's real v2320 -> v2330
-window -- 327,124 breaking records after noise filtering -- and rejected.
+window and rejected. The record count that stood here has been withdrawn rather
+than refreshed: oasdiff returns a different total on every run over the same
+hash-verified bytes -- nine runs spanned 29,768 to 1,375,504 -- so any absolute
+here was one run's number wearing the clothes of a measurement. Every shape
+claim below reproduced across all nine runs and is stated as a proportion or a
+structure for that reason.
 
 Matching the change's *leaf* against a bare field name, which is what this
-detector did before, cannot work at all: not one of those 327,124 records is
+detector did before, cannot work at all: not one record in the window is
 depth-1. The shallowest is three segments and the median is about twenty-five,
 with leaves like `iin` and `stored_credential_usage` sitting under
 `error/payment_method/card/generated_from/...`. No static indexer reaches that
@@ -27,7 +32,7 @@ depth, because the code doesn't: it writes `result.error` and stops.
 
 Matching *any* segment of the change's path, leaving the indexer alone, fails
 in the opposite direction. `card` and `payment_method_details` occur in all
-327,124 records and `data` in 327,084 of them, so any call site reading `data`
+records and `data` in all but a handful, so any call site reading `data`
 -- which is nearly every call site consuming a Stripe list -- would match every
 change in the window. That is an operation-match-only finding wearing a field
 match's rationale, which is worse than an honest operation-match-only finding,
@@ -44,7 +49,8 @@ What the rule costs
 Segments may be skipped in the change's path but never in the call site's.
 oasdiff writes a segment where an array is walked (`data/items/customer`) and
 the call site's syntax writes nothing there, so a rule without skipping would
-miss almost everything -- `items` appears in 327,084 of the window's records.
+miss almost everything -- `items` appears in all but a handful of the window's
+records.
 Skipping also admits a call site whose path rejoins the change's further down
 a different branch. That is a false positive, and it is the direction this
 module has always chosen: a reviewer's glance, not a dropped breaking change.
