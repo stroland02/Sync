@@ -30,6 +30,10 @@ dependencies = [
 
 [project.scripts]
 sync = "sync.cli:main"
+# The name a review agent starts. Open Code Review launches each MCP server as a subprocess by
+# command, so `sync-mcp` is how the stdio transport is reached at all --
+# `docs/integrations/opencodereview/config.json` names it, and the two have to agree.
+sync-mcp = "sync.mcp.server:main"
 
 [build-system]
 requires = ["uv_build>=0.11.19,<0.12.0"]

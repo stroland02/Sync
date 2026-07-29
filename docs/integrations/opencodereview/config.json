@@ -1,0 +1,8 @@
+{
+  "mcp_servers": {
+    "sync": {
+      "command": "sync-mcp",
+      "tools": ["sync_explain_call_site", "sync_whats_at_risk"]
+    }
+  }
+}
