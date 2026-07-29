@@ -153,7 +153,12 @@ def test_a_bad_argument_comes_back_as_a_tool_error_naming_the_problem():
 
 
 def test_an_unknown_method_is_a_json_rpc_error_with_the_documented_code():
-    (response,) = _talk(_req(9, "resources/read", {"uri": "sync://feed/stripe"}))
+    """The example changed and the property did not. This asked for `resources/read`, which was
+    an unknown method only because `sync://feed/{vendor}` did not exist yet; the server now
+    serves it, so an unimplemented method is what the assertion needs. `prompts/list` is the
+    next thing an MCP client tries and the next thing this server does not do.
+    """
+    (response,) = _talk(_req(9, "prompts/list"))
     assert response["id"] == 9
     assert response["error"]["code"] == -32601
 

@@ -45,16 +45,6 @@ src/sync/signals/feed/publisher.py:render_feed
 src/sync/signals/feed/publisher.py:sign_feed
 src/sync/signals/feed/publisher.py:public_key_bytes
 
-# The consuming half is now built and verified -- `FeedCache.store` calls `verify_and_parse`,
-# which is why that line is no longer here -- and nothing constructs the cache.
-#
-# Its consumer is specified rather than undecided: the `sync://feed/{vendor}` resource in
-# `2026-07-25-sync-graph-surface-design.md:79`, served from the server's local copy. That
-# resource does not exist. `sync.mcp` publishes four frozen tools and has no notion of a
-# resource at all, so wiring this is a feature to be built and not a call site to be added.
-#
-# This line leaves when that resource exists.
-src/sync/signals/feed/cache.py:FeedCache
 
 
 # `omit_property_at` stays because it is not the primitive `property_omit` needs: it counts
