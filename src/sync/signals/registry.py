@@ -467,6 +467,55 @@ _BUILDERS: dict[str, tuple[Callable[[VendorContext], PreparedVendor],
     "twilio": (_prepare_twilio, _load_twilio),
 }
 
+# The adapter class behind each coded vendor, so a caller can read what the adapter *declares*
+# without constructing one. `sync.signals.intake` needs the SDK package a vendor is imported as
+# in order to match it against a customer's manifest, and constructing an adapter to ask is the
+# wrong shape twice over: it reads files a scan has not staged yet -- `_load_twilio` raises
+# without a product manifest -- and it does IO to answer a question about configuration.
+#
+# Naming the classes is this module's job and nowhere else's; `sync/signals/__init__.py` states
+# that as the rule. Keyed the same way `_BUILDERS` is, and
+# `test_every_coded_adapter_is_offered_a_binding_lookup` holds the two in step -- an adapter
+# added to one and not the other would silently stop being matchable against a manifest.
+_CODED_ADAPTERS: dict[str, type] = {
+    "stripe": StripeAdapter,
+    "twilio": TwilioAdapter,
+}
+
+
+def vendor_sdk_bindings() -> dict[str, dict[str, dict[str, str]]]:
+    """Which package each vendor is imported as, for the vendors whose adapter says.
+
+    Only coded adapters appear. A configured vendor is served by `GeneratedSpecAdapter` or
+    `McpServerAdapter`, and neither declares a binding: their specifications are discoverable
+    and their call sites are not, so they resolve through this registry and can bind nothing.
+    That is a real gap rather than an omission here, and `sync.signals.intake` reports it as
+    the missing configuration it is instead of hiding it behind a vendor that appears served.
+    """
+    return {
+        vendor_id: dict(getattr(adapter, "sdk_bindings", {}))
+        for vendor_id, adapter in _CODED_ADAPTERS.items()
+        if getattr(adapter, "sdk_bindings", None)
+    }
+
+
+def configured_generated_repos() -> dict[str, str]:
+    """The SDK repository each configured generated vendor is registered against, by repo.
+
+    Keyed by repository rather than by vendor id because that is the join a caller can make:
+    `sync.signals.intake` holds confirmed evidence of which repository a package's SDK is
+    generated from, and matching repository to repository needs neither side to guess that a
+    package name resembles a vendor id. Scoped package names are why -- one can be generated from
+    a configured repository while resembling nothing about the vendor -- and `intake.py` carries
+    the worked example, because naming a configured vendor here is the knowledge this module is
+    built to keep out.
+
+    Exact, so it is per-repository rather than per-vendor. A deployment configured against one
+    language's SDK does not answer for another's, which is the true state of the configuration
+    rather than a limitation of the lookup.
+    """
+    return {vendor.repo: vendor.vendor_id for vendor in _generated_vendors().values()}
+
 
 def available_vendors() -> tuple[str, ...]:
     """Every registered vendor id, sorted -- coded and configured alike.
