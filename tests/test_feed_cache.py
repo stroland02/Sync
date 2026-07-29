@@ -264,13 +264,19 @@ def test_no_private_key_is_committed_anywhere_in_the_repository():
         capture_output=True, check=True,
     ).stdout.split(b"\0")
 
-    markers = (
+    # Key material, scanned everywhere. A PEM block is a private key wherever it sits, and a
+    # documentation file is not a safe place to keep one.
+    material = (
         b"-----BEGIN PRIVATE KEY-----",
         b"-----BEGIN OPENSSH PRIVATE KEY-----",
         b"-----BEGIN RSA PRIVATE KEY-----",
         b"-----BEGIN EC PRIVATE KEY-----",
-        b"Ed25519PrivateKey.from_private_bytes",
     )
+    # A key built in source, scanned in source only. This one is a call, so prose naming it is
+    # discussing the hazard rather than committing one -- the task archive quotes it inside the
+    # brief that required this test. Scoping it keeps the check precise; widening `material`
+    # instead would be the mistake, because that is the half that catches an actual key.
+    in_source = (b"Ed25519PrivateKey.from_private_bytes",)
     root = Path(__file__).parent.parent
 
     offenders = []
@@ -281,6 +287,7 @@ def test_no_private_key_is_committed_anywhere_in_the_repository():
         if not path.is_file():
             continue
         body = path.read_bytes()
+        markers = material + (in_source if path.suffix == ".py" else ())
         if any(marker in body for marker in markers) and path != Path(__file__):
             offenders.append(str(path.relative_to(root)))
 
