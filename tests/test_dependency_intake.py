@@ -276,6 +276,51 @@ def test_package_json_bytes_that_are_not_utf8_are_a_fault_rather_than_a_crash(tm
     assert any("package.json could not be read" in problem for problem in unreadable)
 
 
+def test_a_byte_order_mark_on_package_json_is_read_rather_than_reported(tmp_path):
+    """A BOM is valid UTF-8, so this is a decoding choice and not a decode failure. `json.loads`
+    refuses the `\\ufeff` and says so in words that name the fix -- "Unexpected UTF-8 BOM (decode
+    using utf-8-sig)" -- and reporting the file as unreadable turns an ordinary Windows-authored
+    manifest into a fault the operator has to chase.
+    """
+    (tmp_path / "package.json").write_bytes(
+        json.dumps({"dependencies": {"stripe": "^18.0.0"}}).encode("utf-8-sig")
+    )
+
+    dependencies, unreadable = read_declared_dependencies(tmp_path)
+
+    assert [item.name for item in dependencies] == ["stripe"]
+    assert unreadable == ()
+
+
+def test_a_byte_order_mark_on_pyproject_is_read_rather_than_reported(tmp_path):
+    """The same for the other parser. `tomllib` reports `Invalid statement (at line 1, column 1)`,
+    which names neither the byte-order mark nor the fix."""
+    (tmp_path / "pyproject.toml").write_bytes(
+        '[project]\nname = "billing"\ndependencies = ["stripe>=12.0.0"]\n'.encode("utf-8-sig")
+    )
+
+    dependencies, unreadable = read_declared_dependencies(tmp_path)
+
+    assert [item.name for item in dependencies] == ["stripe"]
+    assert unreadable == ()
+
+
+def test_a_byte_order_mark_on_requirements_does_not_report_a_wrong_name(tmp_path):
+    """The worst of the three, and the only one that raises nothing at all.
+
+    `requirements.txt` is split into lines rather than parsed, so the `\\ufeff` becomes part of the
+    first requirement's name and this reports a dependency called `\\ufeffstripe`. The other two
+    answer "I could not read this"; this one answers a name no registry holds and no vendor
+    matches, with an empty `unreadable` beside it saying everything was fine.
+    """
+    (tmp_path / "requirements.txt").write_bytes("stripe==11.0.0\n".encode("utf-8-sig"))
+
+    dependencies, unreadable = read_declared_dependencies(tmp_path)
+
+    assert [item.name for item in dependencies] == ["stripe"]
+    assert unreadable == ()
+
+
 def test_both_python_manifests_are_read_when_a_project_carries_both():
     """The module reads both deliberately, because both are current practice and a project may
     declare different things in each. Reading one reports half the ecosystem as declaring nothing,

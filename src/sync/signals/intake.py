@@ -103,6 +103,19 @@ _BINDING_FIELD = {NPM: ("typescript", "package"), PYPI: ("python", "distribution
 
 _VERSION_DELIMITERS = "=<>!~ ;[#"
 
+# How a customer's manifest is decoded, and the one place in this module that is not plain
+# `utf-8`. A byte-order mark is valid UTF-8 and so does not fail to decode; it arrives as the
+# first character and each reader mishandles it differently. `json.loads` refuses it and names
+# this encoding in the message. `tomllib` calls it an invalid statement. `requirements.txt` is
+# split into lines rather than parsed, so it becomes part of the first requirement's name and this
+# module reported a dependency called `\ufeffstripe` -- a name no registry holds and no vendor
+# matches -- with an empty `unreadable` beside it saying nothing went wrong.
+#
+# `utf-8-sig` strips a leading mark and is otherwise identical, including still raising
+# `UnicodeDecodeError` on bytes that are not UTF-8, so every guard around these reads still fires
+# on a manifest that genuinely cannot be read.
+_MANIFEST_ENCODING = "utf-8-sig"
+
 
 @dataclass(frozen=True)
 class SdkRepository:
@@ -271,7 +284,7 @@ def _read_npm(root: Path, unreadable: list[str]) -> list[Dependency]:
     if not manifest.exists():
         return []
     try:
-        data = json.loads(manifest.read_text(encoding="utf-8"))
+        data = json.loads(manifest.read_text(encoding=_MANIFEST_ENCODING))
     except (json.JSONDecodeError, UnicodeDecodeError) as exc:
         unreadable.append(f"package.json could not be read: {exc}")
         return []
@@ -307,7 +320,7 @@ def _read_pypi(root: Path, unreadable: list[str]) -> list[Dependency]:
     pyproject = root / "pyproject.toml"
     if pyproject.exists():
         try:
-            data = tomllib.loads(pyproject.read_text(encoding="utf-8"))
+            data = tomllib.loads(pyproject.read_text(encoding=_MANIFEST_ENCODING))
         except (tomllib.TOMLDecodeError, UnicodeDecodeError) as exc:
             unreadable.append(f"pyproject.toml could not be read: {exc}")
             data = {}
@@ -318,7 +331,7 @@ def _read_pypi(root: Path, unreadable: list[str]) -> list[Dependency]:
     text_manifest = root / "requirements.txt"
     if text_manifest.exists():
         try:
-            lines = text_manifest.read_text(encoding="utf-8").splitlines()
+            lines = text_manifest.read_text(encoding=_MANIFEST_ENCODING).splitlines()
         except UnicodeDecodeError as exc:
             unreadable.append(f"requirements.txt could not be read: {exc}")
             lines = []

@@ -407,19 +407,19 @@ def _drive_ts_manifest(root: Path) -> None:
 DRIVERS: dict[str, Callable[[Path], None]] = {
     "sync/benchmark/checkout.py:81": _drive_checkout,
     "sync/forge/webhook.py:97": _drive_webhook,
-    "sync/index/python_lang.py:219": _drive_requirement_lines_pyproject,
-    "sync/index/python_lang.py:231": _drive_requirement_lines_requirements,
-    "sync/index/python_lang.py:704": _drive_syntax_errors,
-    "sync/index/python_lang.py:715": _drive_configured_typechecker,
-    "sync/index/typescript.py:201": _drive_ts_manifest,
+    "sync/index/python_lang.py:237": _drive_requirement_lines_pyproject,
+    "sync/index/python_lang.py:251": _drive_requirement_lines_requirements,
+    "sync/index/python_lang.py:724": _drive_syntax_errors,
+    "sync/index/python_lang.py:735": _drive_configured_typechecker,
+    "sync/index/typescript.py:206": _drive_ts_manifest,
     "sync/remediate/literal_swap.py:84": _drive_literal_swap,
     "sync/remediate/parameters.py:77": _drive_parameters,
     "sync/remediate/property_omit.py:93": _drive_property_omit,
     "sync/remediate/tiered.py:174": _drive_tiered_literal,
     "sync/signals/feed/consumer.py:72": _drive_feed,
-    "sync/signals/intake.py:275": _drive_intake_npm,
-    "sync/signals/intake.py:311": _drive_intake_pyproject,
-    "sync/signals/intake.py:322": _drive_intake_requirements,
+    "sync/signals/intake.py:288": _drive_intake_npm,
+    "sync/signals/intake.py:324": _drive_intake_pyproject,
+    "sync/signals/intake.py:335": _drive_intake_requirements,
 }
 
 

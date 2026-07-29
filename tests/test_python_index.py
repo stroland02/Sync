@@ -143,6 +143,72 @@ def test_an_unreadable_manifest_answers_no_rather_than_raising(tmp_path):
     assert _adapter(tmp_path).matches(_repo("malformed_manifest")) is False
 
 
+# A manifest a Windows editor saved. `utf-8-sig` writes the byte-order mark that `utf-8` does
+# not, and every byte after it is ordinary UTF-8 -- which is what makes this a decoding question
+# rather than a decode failure, and why nothing raised.
+def _bom_repo(tmp_path, name: str, **files: str) -> RepoRef:
+    """A project whose manifests each begin with a UTF-8 byte-order mark.
+
+    Built rather than committed for the reason `_utf16_requirements_repo` is, and here the reason
+    is sharper: a BOM is invisible in every editor and most diffs, so a committed fixture would be
+    stripped or added by anything that rewrites the file and nobody would see it happen.
+    """
+    root = tmp_path / name
+    root.mkdir(parents=True)
+    for filename, text in files.items():
+        (root / filename.replace("_", ".")).write_bytes(text.encode("utf-8-sig"))
+    return RepoRef(
+        repo_id=name, url=f"https://example.invalid/{name}",
+        local_path=str(root), head_sha="0" * 40,
+    )
+
+
+def test_a_byte_order_mark_on_pyproject_does_not_hide_the_dependency(tmp_path):
+    """A BOM is valid UTF-8, so nothing fails to decode -- `tomllib` refuses the `\\ufeff` that
+    arrives as the first character of the document instead, and the guard written for an
+    unreadable manifest swallows it. The repository declares Stripe and was reported as not
+    depending on it."""
+    repo = _bom_repo(
+        tmp_path, "bom_pyproject",
+        pyproject_toml='[project]\nname = "billing"\ndependencies = ["stripe>=12.0.0"]\n',
+    )
+    adapter = _adapter(tmp_path)
+
+    assert adapter.matches(repo) is True
+    assert adapter._requirement_lines(repo) == ["stripe>=12.0.0"]
+
+
+def test_a_byte_order_mark_on_requirements_does_not_mangle_the_first_name(tmp_path):
+    """The one that answers wrongly with no error at all, anywhere.
+
+    `requirements.txt` is split into lines rather than parsed, so a leading `\\ufeff` is not a
+    syntax error -- it becomes part of the first requirement's name. `_requirement_name`
+    normalises `\\ufeffstripe` and compares it against `stripe`, they differ, and the repository is
+    reported as not depending on the SDK. No exception is raised, no guard is entered and nothing
+    is logged: the only evidence is the answer being wrong.
+    """
+    repo = _bom_repo(tmp_path, "bom_requirements", requirements_txt="stripe==11.0.0\n")
+    adapter = _adapter(tmp_path)
+
+    assert adapter._requirement_lines(repo) == ["stripe==11.0.0"]
+    assert adapter.matches(repo) is True
+
+
+def test_a_byte_order_mark_does_not_hide_a_configured_typechecker(tmp_path):
+    """`static_verify` reads the same manifest to say which gate a project configures and does not
+    run. A BOM made it report "no typechecker is configured" for a project configuring mypy, which
+    is a weaker diagnostic standing in for a stronger one -- the distinction
+    `test_a_syntax_error_is_reported_as_such_rather_than_as_a_missing_gate` exists to protect.
+    """
+    repo = _bom_repo(
+        tmp_path, "bom_typed",
+        pyproject_toml='[project]\nname = "billing"\ndependencies = ["stripe>=12.0.0"]\n'
+                       "\n[tool.mypy]\nstrict = true\n",
+    )
+
+    assert _adapter(tmp_path)._configured_typechecker(repo) == "mypy"
+
+
 def test_a_requirements_file_that_is_not_utf8_answers_no_rather_than_raising(tmp_path):
     """The same promise, made once in the docstring and kept by only one of the two branches.
 

@@ -229,6 +229,30 @@ def test_an_unreadable_manifest_leaves_the_sdk_version_unknown_rather_than_raisi
     assert sites[0].sdk_version == "unknown"
 
 
+def test_a_byte_order_mark_on_the_manifest_does_not_hide_the_dependency(tmp_path):
+    """A BOM is valid UTF-8, so nothing fails to decode and the guard for an unreadable manifest
+    is what swallows it: `json.loads` refuses the `\\ufeff` that arrives as the document's first
+    character, and its own message says to decode with `utf-8-sig`. npm writes this file, so the
+    usual source is a Windows editor that rewrote it -- and the repository declares Stripe while
+    being reported as not depending on it.
+
+    Built rather than committed because a BOM is invisible in every editor and most diffs, so a
+    committed fixture would be added or stripped by anything that rewrites the file with nobody
+    seeing it happen.
+    """
+    root = tmp_path / "bom_manifest"
+    root.mkdir()
+    (root / "package.json").write_bytes(
+        json.dumps({"dependencies": {"stripe": "^18.0.0"}}).encode("utf-8-sig")
+    )
+    repo = RepoRef(repo_id="bom", url="https://example.invalid/bom",
+                   local_path=str(root), head_sha="0" * 40)
+    adapter = _adapter(tmp_path)
+
+    assert adapter.matches(repo) is True
+    assert adapter._declared_dependencies(repo) == {"stripe": "^18.0.0"}
+
+
 def _by_line(sites) -> dict[int, object]:
     return {s.line: s for s in sites}
 

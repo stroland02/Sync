@@ -63,6 +63,24 @@ _MANIFESTS = ("pyproject.toml", "requirements.txt")
 # Files naming a typechecker this adapter does not run. Their presence changes what
 # `static_verify` can honestly say, not what it returns.
 _MYPY_CONFIG_FILES = ("mypy.ini", ".mypy.ini", "setup.cfg")
+
+# How a customer's manifest is decoded, and the one place in this module that is not plain
+# `utf-8`. A byte-order mark is valid UTF-8, so it does not fail to decode -- it arrives as a
+# `\ufeff` first character, and what happens next depends only on who reads it. `tomllib` calls it
+# an invalid statement; `requirements.txt` is split into lines rather than parsed, so it silently
+# becomes part of the first requirement's name and the whole repository reads as not depending on
+# the SDK with nothing raised anywhere. `utf-8-sig` strips a leading mark and is otherwise
+# identical, including still raising `UnicodeDecodeError` on bytes that are not UTF-8 at all --
+# so the guards around these reads still do their work and a UTF-16 manifest is still refused
+# rather than decoded into mojibake.
+#
+# Manifests only, and the limit is a known gap rather than a judgement. `_syntax_errors` reads
+# customer source as plain `utf-8`, and a `.py` file with a mark is valid Python -- the tokenizer
+# strips it -- while `ast.parse` over a string that still carries it does not: measured as
+# `src/billing.py: invalid non-printable character U+FEFF`. So `static_verify` reports a file the
+# patch never broke as broken. That is a verification-gate answer rather than a manifest one and
+# is left for a change that can measure the gate.
+_MANIFEST_ENCODING = "utf-8-sig"
 _VERSION_DELIMITERS = "=<>!~ ;[#"
 
 
@@ -215,7 +233,7 @@ class PythonAdapter:
         pyproject = root / "pyproject.toml"
         if pyproject.exists():
             try:
-                data = tomllib.loads(pyproject.read_text(encoding="utf-8"))
+                data = tomllib.loads(pyproject.read_text(encoding=_MANIFEST_ENCODING))
             except (tomllib.TOMLDecodeError, UnicodeDecodeError):
                 data = {}
             project = data.get("project")
@@ -227,7 +245,9 @@ class PythonAdapter:
         text_manifest = root / "requirements.txt"
         if text_manifest.exists():
             try:
-                declared_lines = text_manifest.read_text(encoding="utf-8").splitlines()
+                declared_lines = text_manifest.read_text(
+                    encoding=_MANIFEST_ENCODING
+                ).splitlines()
             except UnicodeDecodeError:
                 declared_lines = []
             for line in declared_lines:
@@ -711,7 +731,7 @@ class PythonAdapter:
         pyproject = root / "pyproject.toml"
         if pyproject.exists():
             try:
-                data = tomllib.loads(pyproject.read_text(encoding="utf-8"))
+                data = tomllib.loads(pyproject.read_text(encoding=_MANIFEST_ENCODING))
             except (tomllib.TOMLDecodeError, UnicodeDecodeError):
                 data = {}
             tools = data.get("tool")

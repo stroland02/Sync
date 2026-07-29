@@ -197,7 +197,12 @@ class TypeScriptAdapter:
         if not manifest.exists():
             return {}
         try:
-            data = json.loads(manifest.read_text(encoding="utf-8"))
+            # `utf-8-sig`, because a byte-order mark is valid UTF-8 and so does not fail to
+            # decode: it arrives as the document's first character and `json.loads` refuses it,
+            # in a message that names this encoding as the fix. npm writes this file, so the
+            # usual source of a mark is a Windows editor that rewrote it. Bytes that are not
+            # UTF-8 at all still raise, which is what the guard below is for.
+            data = json.loads(manifest.read_text(encoding="utf-8-sig"))
         except (json.JSONDecodeError, UnicodeDecodeError):
             return {}
         if not isinstance(data, dict):
