@@ -39,7 +39,7 @@ def _pinned_digest() -> str:
 
 
 def _score(
-    true_positives: int = 16,
+    true_positives: int = 18,
     false_positives: int = 0,
     false_negatives: int = 0,
     negatives: int = FALSIFIABLE_NEGATIVES_FLOOR,
@@ -47,7 +47,7 @@ def _score(
 ) -> dict:
     """A score in the shape `score_corpus.py --json` writes, defaulting to what it recorded."""
     return {
-        "pairs_total": 12,
+        "pairs_total": 13,
         "pairs_scored": pairs_scored,
         "falsifiable_negatives": [f"pair::site{index}" for index in range(negatives)],
         "symbol_map_digest": _pinned_digest(),
@@ -79,7 +79,7 @@ def test_every_floor_is_the_figure_the_corpus_recorded():
     Asserted against the recording rather than against a literal, so a floor moved without the
     corpus moving fails here -- which is the direction that would quietly weaken the gate.
     """
-    recorded = json.loads((RECORDED / "2026-07-29-symbol-map-pinned.json").read_text(encoding="utf-8"))
+    recorded = json.loads((RECORDED / "2026-07-29-first-python-pair.json").read_text(encoding="utf-8"))
 
     assert PRECISION_FLOOR == recorded["accuracy"]["precision_by_rung"]["static"]["precision"]["value"]
     assert RECALL_FLOOR == recorded["accuracy"]["recall_by_rung"]["static"]["recall"]["value"]
@@ -109,7 +109,7 @@ def test_the_recorded_score_clears_every_floor():
 def test_a_score_above_every_floor_clears_them():
     """A gate that only ever passes at exactly the floor would fail the day the pipeline
     improved, which is the "fires constantly" half of the failure."""
-    assert check(_score(negatives=9, pairs_scored=12)) == []
+    assert check(_score(negatives=9, pairs_scored=14)) == []
 
 
 # --- what fails, one axis at a time ---------------------------------------------------------
@@ -149,10 +149,10 @@ def test_an_excluded_pair_fails_the_pairs_floor_even_though_both_rates_hold():
     """The failure one step further up. An exclusion shrinks both denominators and leaves both
     rates at 1.0000, so a corpus that quietly stopped covering a third of itself would clear
     every rate floor."""
-    failures = check(_score(true_positives=12, negatives=4, pairs_scored=10))
+    failures = check(_score(true_positives=12, negatives=5, pairs_scored=10))
 
     assert [f.axis for f in failures] == ["pairs scored"]
-    assert check(_score(true_positives=12, negatives=4, pairs_scored=10))[0].detail.startswith("10 of 12")
+    assert check(_score(true_positives=12, negatives=5, pairs_scored=10))[0].detail.startswith("10 of 13")
 
 
 def test_every_failing_axis_is_reported_rather_than_the_first():
@@ -248,7 +248,7 @@ def test_the_gate_clears_the_score_the_scorer_actually_records():
     """End to end against the committed recording, which is the artifact CI will judge. The tests
     above use built scores so they can fail; this one is the check that the floors and the
     recording have not drifted apart."""
-    recorded = json.loads((RECORDED / "2026-07-29-symbol-map-pinned.json").read_text(encoding="utf-8"))
+    recorded = json.loads((RECORDED / "2026-07-29-first-python-pair.json").read_text(encoding="utf-8"))
     recorded["pairs_scored"] = len(recorded["pairs"])
 
     assert check(recorded) == []
