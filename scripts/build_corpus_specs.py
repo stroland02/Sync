@@ -25,6 +25,10 @@ then refuses. The rule, in full:
     change, or already reads, for a response change. Real properties of the real operation, so
     the mutation writes something the vendor could actually have removed; alphabetically first
     so the choice is not a judgement.
+  - **Which site is held back.** The first call site on the changed operation by position, when
+    the operation has more than one and that site carries a non-empty field list on the side the
+    change is on. One per specification and never more. `hold_back` below carries why each
+    clause is there.
 
 `generate_pair` refuses a tree where any call site already carries the changed dependency, so the
 "not already used anywhere" clause is not a nicety -- a field chosen without it produces a
@@ -110,6 +114,43 @@ def _index(name: str, dsn: str):
     return by_operation
 
 
+def hold_back(sites: list, kind: str) -> list[dict]:
+    """The call sites this specification declares held out of the mutation, as positions.
+
+    A corpus that breaks every site on the changed operation gives binding precision nothing to
+    be wrong about: every same-operation site is either broken and labelled affected, or a target
+    the mutation could not reach, and neither can produce a false positive.
+    `2026-07-29-precision-has-no-negative-to-fail-on.md` measured that as zero candidates in all
+    ten scored pairs. A site held back is never edited, so it is unaffected by construction, and
+    it is still a site the detector reaches -- which is the negative the axis needs.
+
+    **One, never more.** Every held-back site is a site recall no longer measures, and recall is
+    the only genuine quality measurement this benchmark currently has.
+
+    **The first by position.** Every insertion `mutate.py` makes lands at or after the call it
+    breaks, and `upsert_call_site` keys a call site's identity on its position -- so the earliest
+    site on the operation is the only one guaranteed to still be where this file says once its
+    siblings have been mutated. `furever-GetCharges` is the pair that shows what the other choice
+    costs: a response guard inserted above three later calls displaced all three labels and the
+    whole pair left the score.
+
+    **Only when its field list is non-empty on the side the change is on.** That is the branch
+    `VendorChangeDetector.scan` takes, and `_deepest_match` over an empty list returns None for
+    every change there has ever been -- so such a site is a negative nobody asked, costing a
+    positive and buying no candidate.
+
+    **Only when the operation has more than one.** Holding back the only site leaves the mutation
+    no target, and a pair with no target is refused rather than scored.
+    """
+    if len(sites) < 2:
+        return []
+    first = min(sites, key=lambda site: (site.path, site.line, site.col))
+    judged_by = first.args_keys if kind.startswith("request-") else first.response_fields_read
+    if not judged_by:
+        return []
+    return [{"path": first.path, "line": first.line, "col": first.col}]
+
+
 def _read_fields(sources_root: Path) -> set[str]:
     """Every identifier any source in the tree reads off a member expression.
 
@@ -167,16 +208,29 @@ def build(dsn: str) -> list[Path]:
                     "to_version": TO_VERSION,
                     "change": {"kind": kind, "operation": operation, "field": field},
                 }
-                path = SPECS / f"{name}-{operation}-{kind}.yaml"
-                path.write_text(
+                held = hold_back(sites, kind)
+                # Written only when the rule selected one, so a specification the rule passed
+                # over stays byte-identical to what it was before the rule existed.
+                if held:
+                    spec["hold_back"] = held
+
+                header = (
                     f"# {len(sites)} indexed call site(s) on {operation} in {name}, pinned at "
                     f"{entry['commit']}.\n"
                     f"# Field chosen by the rule in scripts/build_corpus_specs.py: the "
                     f"alphabetically first\n# property of this operation in {TO_VERSION} that no "
                     f"call site in this repository already uses.\n"
-                    + yaml.safe_dump(spec, sort_keys=True),
-                    encoding="utf-8",
                 )
+                if held:
+                    header += (
+                        "# Held back from targets by the rule in the same script: the first call "
+                        "site on this\n# operation by position, which the mutation therefore "
+                        "never edits. It is the negative\n# binding precision is measured "
+                        "against, and a site binding recall no longer measures.\n"
+                    )
+
+                path = SPECS / f"{name}-{operation}-{kind}.yaml"
+                path.write_text(header + yaml.safe_dump(spec, sort_keys=True), encoding="utf-8")
                 written.append(path)
     return written
 

@@ -1398,6 +1398,68 @@ def benchmark(args: argparse.Namespace) -> int:
     return 0
 
 
+def _corpus_targets(
+    spec_path: Path, hold_back: Sequence[Any], sites: Sequence[CallSite], change: VendorChange
+) -> list[str]:
+    """The call sites a specification asks to be broken: every one on the changed operation
+    except the ones it holds back.
+
+    Holding one back is what gives binding precision a negative it could be wrong about. An
+    untargeted site is never edited, so nothing writes the changed dependency into it, and it is
+    unaffected by construction rather than by anyone's judgement -- while still being a site
+    `call_sites_for_operation` returns and the field match is run against. Targeting every site
+    leaves precision's false-positive term with no candidates at all, which is why it read
+    1.0000 over the frozen corpus and would have through any binder whatsoever.
+
+    The specification names them and this only honours the naming, for the reason the changed
+    field is also written down rather than derived: which sites a corpus breaks is a
+    distribution, and a harness that chose one would be choosing it without saying so. Every
+    held-back site is also a site recall no longer measures, which is a trade a reader of the
+    number has to be able to see in the file the number was taken over.
+
+    By position rather than by call site id, because a position is checkable against the pinned
+    commit by a reader and an id is a hash of one.
+
+    A position no indexed site on the changed operation holds is refused rather than skipped: a
+    specification whose checkout has moved would otherwise hold nothing back, target everything
+    as before, and report a corpus carrying a negative that it does not have.
+    """
+    on_operation = [site for site in sites if site.operation_id == change.operation_id]
+    if not on_operation:
+        raise LookupError(
+            f"no indexed call site reaches {change.operation_id}, so there is nothing this "
+            f"change could break and a score over it would be a score over an empty corpus"
+        )
+
+    by_position = {(site.path, site.line, site.col): site.id for site in on_operation}
+    held: set[str] = set()
+    for entry in hold_back:
+        absent = [key for key in ("path", "line", "col") if key not in (entry or {})]
+        if absent:
+            raise KeyError(
+                f"{spec_path}: a hold_back entry names no {', '.join(absent)}, so it addresses "
+                f"no call site"
+            )
+        position = (str(entry["path"]), int(entry["line"]), int(entry["col"]))
+        if position not in by_position:
+            raise KeyError(
+                f"{spec_path} holds back {position[0]}:{position[1]}:{position[2]}, which is not "
+                f"an indexed call site on {change.operation_id}; the specification names a "
+                f"position this checkout does not have, and scoring it anyway would break every "
+                f"site and report a negative the corpus no longer holds"
+            )
+        held.add(by_position[position])
+
+    targets = [site.id for site in on_operation if site.id not in held]
+    if not targets:
+        raise KeyError(
+            f"{spec_path} holds back every indexed call site on {change.operation_id}, leaving "
+            f"the mutation nothing to break; a pair with no target labels every site unaffected "
+            f"and emits no finding, which reads as a flawless run over an empty positive set"
+        )
+    return targets
+
+
 def _score_corpus(spec_path: Path, score_dsn: str):
     """Generate a labelled pair from a corpus specification and score the pipeline against it.
 
@@ -1410,9 +1472,9 @@ def _score_corpus(spec_path: Path, score_dsn: str):
     adapter over artifacts a previous `sync run` left in the cache, which is the same offline
     contract `sync ingest` has.
 
-    Which call sites to break is the caller's decision and this is the caller. Every indexed site
-    on the changed operation is targeted, which is the corpus saying what it is a corpus of --
-    `generate_pair` refuses to choose that itself, deliberately, and a harness that picked a
+    Which call sites to break is the caller's decision and this is the caller, but the decision
+    is read out of the specification rather than made here -- `_corpus_targets` carries why.
+    `generate_pair` refuses to choose targets itself, deliberately, and a harness that picked a
     subset would be choosing a distribution without saying so.
     """
     spec = yaml.safe_load(spec_path.read_text(encoding="utf-8")) or {}
@@ -1469,12 +1531,7 @@ def _score_corpus(spec_path: Path, score_dsn: str):
         sites = index_sources(sources, store, repo, adapter)
         change.id = store.upsert_vendor_change(change)
 
-        targets = [site.id for site in sites if site.operation_id == change.operation_id]
-        if not targets:
-            raise LookupError(
-                f"no indexed call site reaches {change.operation_id}, so there is nothing this "
-                f"change could break and a score over it would be a score over an empty corpus"
-            )
+        targets = _corpus_targets(spec_path, spec.get("hold_back") or [], sites, change)
 
         mutated = RepoRef(
             repo_id=repo.repo_id, url=repo.url,

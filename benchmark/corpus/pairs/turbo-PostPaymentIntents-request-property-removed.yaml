@@ -1,12 +1,19 @@
 # 2 indexed call site(s) on PostPaymentIntents in turbo, pinned at 6c7aac00cd271abe6dd3764316209f329501583d.
 # Field chosen by the rule in scripts/build_corpus_specs.py: the alphabetically first
 # property of this operation in v2330 that no call site in this repository already uses.
+# Held back from targets by the rule in the same script: the first call site on this
+# operation by position, which the mutation therefore never edits. It is the negative
+# binding precision is measured against, and a site binding recall no longer measures.
 cache: .cache/specs
 change:
   field: amount_details
   kind: request-property-removed
   operation: PostPaymentIntents
 from_version: v2320
+hold_back:
+- col: 33
+  line: 223
+  path: src/routes/arnsPurchaseQuote.ts
 repo: .cache/corpus/turbo
 to_version: v2330
 vendor: stripe

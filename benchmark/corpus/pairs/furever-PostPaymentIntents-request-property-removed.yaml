@@ -1,12 +1,19 @@
 # 6 indexed call site(s) on PostPaymentIntents in furever, pinned at 5114c968fd8537d82889e2d04afaf00a986af7bf.
 # Field chosen by the rule in scripts/build_corpus_specs.py: the alphabetically first
 # property of this operation in v2330 that no call site in this repository already uses.
+# Held back from targets by the rule in the same script: the first call site on this
+# operation by position, which the mutation therefore never edits. It is the negative
+# binding precision is measured against, and a site binding recall no longer measures.
 cache: .cache/specs
 change:
   field: amount_details
   kind: request-property-removed
   operation: PostPaymentIntents
 from_version: v2320
+hold_back:
+- col: 28
+  line: 104
+  path: app/api/setup_accounts/create_charges/route.ts
 repo: .cache/corpus/furever
 to_version: v2330
 vendor: stripe
