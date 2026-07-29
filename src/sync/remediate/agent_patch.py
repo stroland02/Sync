@@ -33,8 +33,12 @@ module that is not there yet, and nothing downstream can tell one from the build
 logs and stray installs the agent's `Bash` calls leave in the same clone. Classifying by
 name or extension would be wrong on somebody's repository and wrong silently, so the
 question is not answered here at all: it is put to the only party that knows, and `git add`
-is how the answer is recorded. Everything else the agent leaves behind stays untracked,
-which is what `push_branch` and `sync.index.shipped_tree` both already exclude.
+is how the answer is recorded. Everything the repository's own ignore rules cover stays
+untracked and unremarked, which is what `push_branch` and `sync.index.shipped_tree` both
+already exclude. An untracked path those rules do not cover is the case nobody answered,
+and it refuses the patch rather than being guessed at -- the diff cannot arbitrate, since
+an agent that edits a tracked call site and leaves the new module unstaged produces one
+that looks complete and compiles to `TS2307: Cannot find module`.
 
 Section order is load-bearing. Everything stable sits ahead of the diagnostics block, the
 only part that changes between retries, so the prefix stays byte-identical and cacheable
@@ -232,19 +236,24 @@ class AgentRemediator:
         identity = _identity(finding, repo)
         self._run_agent(prompt, repo_path, identity)
 
+        # Asked of the tree rather than of the diff. An unstaged addition is in
+        # neither the tree `static_verify` compiles nor the commit `push_branch`
+        # builds, and that holds whether or not the agent also edited a tracked
+        # file -- where it did, the edit fills the diff and the missing module
+        # reaches the gate as `TS2307: Cannot find module`, which names an import
+        # rather than the `git add` that was never run. Conditioning this on an
+        # empty diff sees only the half of the case where the new file is the
+        # whole patch. The graph hands the message to the next attempt as
+        # feedback, so this is also the run's chance to correct itself.
+        unstaged = _unstaged_additions(repo_path)
+        if unstaged:
+            raise RuntimeError(
+                f"the agent created {', '.join(unstaged)} and staged none of them; a new file "
+                f"has to be staged with `git add <path>` to be typechecked or pushed "
+                f"[{identity}]"
+            )
+
         diff = _git_diff(repo_path)
-        # An empty diff beside files the agent created is not a remediator that
-        # changed nothing, and reporting it as one names the wrong cause: the work
-        # was done and never asserted. This is also the run's own correction, since
-        # the graph hands the message to the next attempt as feedback.
-        if not diff.strip():
-            unstaged = _unstaged_additions(repo_path)
-            if unstaged:
-                raise RuntimeError(
-                    f"the agent created {', '.join(unstaged)} and staged none of them, so the "
-                    f"patch is empty; a new file has to be staged with `git add <path>` to be "
-                    f"typechecked or pushed [{identity}]"
-                )
 
         return Patch(
             diff=diff,

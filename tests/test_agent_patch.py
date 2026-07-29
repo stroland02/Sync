@@ -393,6 +393,13 @@ def clone(tmp_path, monkeypatch):
     """A repository shaped like the clone the patch agent is handed: one tracked
     source file, committed, and the host's git identity suppressed so nothing
     here depends on the developer machine's config.
+
+    The `.gitignore` is load-bearing rather than decoration. It is what a real
+    project uses to declare its build output and its logs disposable, and it is
+    the boundary `--exclude-standard` reads to tell a byproduct from a file the
+    patch might need. A fixture without one describes a repository that has
+    declared nothing, where every stray path the agent's `Bash` calls leave is
+    genuinely ambiguous.
     """
     monkeypatch.setenv("GIT_CONFIG_GLOBAL", os.devnull)
     monkeypatch.setenv("GIT_CONFIG_SYSTEM", os.devnull)
@@ -401,6 +408,8 @@ def clone(tmp_path, monkeypatch):
     (path / "src").mkdir(parents=True)
     _git("init", cwd=path)
     (path / "src" / "billing.ts").write_text("export const charge = () => {};\n", encoding="utf-8")
+    (path / ".gitignore").write_text("build/\n*.log\n", encoding="utf-8")
+    _git("add", ".gitignore", cwd=path)
     _git("add", "src/billing.ts", cwd=path)
     _git("-c", "user.name=Seed", "-c", "user.email=seed@example.com", "commit", "-m", "seed", cwd=path)
     return path
@@ -465,11 +474,17 @@ def test_a_patch_that_is_only_a_new_file_is_not_read_as_a_remediator_that_change
 
 
 def test_the_patch_omits_a_file_the_agent_left_unstaged(clone, monkeypatch):
-    """The guard the widening must not drop. The agent holds `Bash` and its tool
-    calls leave things in the clone that no part of the patch describes -- a build
-    directory, a log, a stray dependency install. Those stay out of the patch for
-    exactly the reason a staged file is in it: staging is the assertion, and the
-    agent never made one about these.
+    """The guard the widening must not drop, and the false-positive direction of
+    the staging check. The agent holds `Bash` and its tool calls leave things in
+    the clone that no part of the patch describes -- a build directory, a log, a
+    stray dependency install. Those stay out of the patch for exactly the reason a
+    staged file is in it: staging is the assertion, and the agent never made one
+    about these.
+
+    This repository's `.gitignore` covers both, so neither is a missed `git add`,
+    and returning at all is the assertion that matters: a staging check that read
+    every untracked path would refuse a correct patch here, and a gate that fires
+    on a compiler's temp file is one somebody switches off.
     """
     def work(path: Path) -> None:
         (path / "src" / "billing.ts").write_text("export const charge = () => 1;\n", encoding="utf-8")
@@ -482,6 +497,30 @@ def test_the_patch_omits_a_file_the_agent_left_unstaged(clone, monkeypatch):
     assert "src/billing.ts" in patch.diff
     assert "bundle.js" not in patch.diff
     assert "npm-debug.log" not in patch.diff
+
+
+def test_untracked_output_the_repository_does_not_ignore_is_refused_rather_than_guessed_at(
+    clone, monkeypatch,
+):
+    """The cost of the boundary, recorded rather than discovered later. Where a
+    repository's ignore rules do not cover what a tool wrote, git has been told
+    nothing about the path and neither has Sync, so it is indistinguishable from
+    the new module a fix needs and it refuses.
+
+    That refusal is the conservative direction and it is fed back rather than
+    fatal, but it is a real cost and the reason it is not paid down with an
+    extension allowlist is that no measurement here supports one. `.gitignore` is
+    the customer's own declaration; a list of suffixes would be ours, guessed, and
+    wrong silently on the first repository that disagreed.
+    """
+    def work(path: Path) -> None:
+        (path / "src" / "billing.ts").write_text("export const charge = () => 1;\n", encoding="utf-8")
+        (path / "out.tmp").write_text("// not covered by this repository's ignore rules\n", encoding="utf-8")
+
+    with pytest.raises(RuntimeError) as raised:
+        _propose_after(clone, monkeypatch, work)
+
+    assert "out.tmp" in str(raised.value)
 
 
 def test_an_agent_that_created_files_and_staged_none_is_told_that_rather_than_reported_as_no_change(
@@ -503,6 +542,31 @@ def test_an_agent_that_created_files_and_staged_none_is_told_that_rather_than_re
     reason = str(raised.value)
     assert "src/money.ts" in reason
     assert "stage" in reason or "staged" in reason
+    assert "f-42" in reason
+
+
+def test_an_agent_that_edits_a_tracked_file_and_leaves_the_new_one_unstaged_is_told_that(
+    clone, monkeypatch,
+):
+    """The mixed case, which an empty-diff guard cannot see. The edit to the tracked
+    call site fills the diff, so the run proceeds and the missing module surfaces at
+    the gate as `TS2307: Cannot find module` -- a compile error about an import,
+    handed to an attempt whose actual mistake was not staging a file. An agent given
+    that message edits the import path; an agent given this one stages the file.
+    """
+    def work(path: Path) -> None:
+        (path / "src" / "money.ts").write_text("export const toCents = (n: number) => n * 100;\n", encoding="utf-8")
+        (path / "src" / "billing.ts").write_text(
+            "import { toCents } from './money';\nexport const charge = () => toCents(1);\n",
+            encoding="utf-8",
+        )
+
+    with pytest.raises(RuntimeError) as raised:
+        _propose_after(clone, monkeypatch, work)
+
+    reason = str(raised.value)
+    assert "src/money.ts" in reason
+    assert "git add" in reason
     assert "f-42" in reason
 
 
