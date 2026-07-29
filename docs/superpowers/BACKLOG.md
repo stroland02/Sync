@@ -12,6 +12,38 @@ item that cannot say what evidence closes it is not ready to dispatch.
 
 ## Ready
 
+### B52 — The hold_back selection rule can pick a site the binder is unable to hold back
+
+B50 measured this rather than reasoning about it. `scripts/build_corpus_specs.py` chooses a
+same-operation site to hold back so precision has a candidate it can fail on. It carries no clause
+stopping it from choosing a site that shares an enclosing scope *and* a result name with a site it
+still targets. When it does, `_response_fields` credits the guard's field read to both assignments —
+the binder cannot tell which assignment produced the value being read, because that is data flow and
+tree-sitter does not do data flow — so the held-back site is genuinely dependent and the label
+calling it a negative is false.
+
+Measured on `furever` `PostPaymentIntents-response`:
+`app/api/setup_accounts/create_charges/route.ts` declares `let paymentIntent;` at line 78 and
+assigns it from `stripe.paymentIntents.create` at both 104 and 154. Holding back 104 while targeting
+154 gave precision 0.9615 at n=26 — one false positive, and the false thing was the label.
+
+**The binder's behaviour here is correct and is not what needs changing.** Crediting both
+assignments is the conservative direction, which is the right direction for a tool whose failure
+mode is a missed break. A worker who reads this as a binder defect and tries to make the binder
+answer a data-flow question has misread it.
+
+`turbo` is the contrast that makes the rule legible rather than arbitrary: its two sites sit in
+different files (`arnsPurchaseQuote.ts:223` held back, `topUp.ts:299` targeted), so no scope is
+shared, no cross-crediting happens, and the `hold_back` is sound. It was adopted; `furever` was
+declined.
+
+Until the clause exists, a fresh generation proposes the unsound `hold_back` again and the committed
+corpus stays a deliberate superset of what the rule proposes rather than equal to it.
+
+**Closes when:** the selection rule refuses a `hold_back` whose site shares an enclosing scope and
+result name with a targeted site on the same operation, a fresh generation stops proposing `furever`
+`PostPaymentIntents-response`, and all four gate figures are unchanged by the rule change.
+
 ### B50 — A hold_back the binder now earns, which would trade two positives for two negatives
 
 B49 found two committed specs whose content differs from a fresh generation: `furever` and `turbo`
@@ -29,6 +61,14 @@ and recall is the axis whose failure the product exists to prevent.
 
 **Closes when:** the trade is decided with the argument written down, and if taken, both rates are
 recomputed with the old and new denominators side by side.
+
+**Decided: take `turbo`, decline `furever`.** The worker measured both and stopped rather than
+adjusting anything, which is what the brief asked for. Adopting both gave precision 0.9615 at n=26,
+and the single false positive was the newly held-back `furever` site itself — so the corpus would
+have been certifying a label it had just disproved. That is the ruling B44 got and it is the same
+ruling for the same reason. `turbo` alone holds both rates at 1.0000 at n=26, takes falsifiable
+negatives from 6 to 7 and leaves pairs at 17, so the only floor that moves moves *upward*. The
+unsound-selection half is B52.
 
 ### B51 — Coverage marks these decode handlers covered without ever entering them
 
@@ -74,7 +114,12 @@ recorded with which change broke it.
 
 ## In flight
 
-_Nothing._
+- **B50** — `task_60f0bb4e037a`, worktree `sync-solo-a`. Reported at the decision gate rather than
+  choosing for itself; ruled to adopt `turbo` only and to record why `furever` was declined.
+- **B51** — `task_48d3cb708ecf`, worktree `sync-solo-b`.
+
+Both entries stay under **Ready** above with their full reasoning until they land, because the
+reasoning is what a reviewer needs and duplicating it here would let the two copies drift.
 
 ## Done
 

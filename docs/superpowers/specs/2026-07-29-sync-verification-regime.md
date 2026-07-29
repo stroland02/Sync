@@ -45,6 +45,20 @@ The three rows are one finding and three attempts, written by `tests/test_pipeli
 rather than by a run: `sdk_version` is `unknown`, `symbol_shape` is `<verb>`, and the third
 attempt terminates `abandoned` with `abandon_reason` "the remediator produced no change".
 
+**Where those three rows live is the more useful fact than the number.** Re-measured later the
+same day across 181 databases: still three rows, all of them in `sync_w46`. That is a
+pytest-xdist worker database, and worker databases persist between runs while per-run databases
+are dropped — which is the entire reason these three survived and nothing else did. A second scan
+the same day reported zero rows anywhere; the difference is which databases the scan reached, and
+both readings support the same conclusion. **The figure is fragile because it depends on a
+database surviving by accident, not because a run produced anything.** Read it as zero and the
+inference is still correct.
+
+Those rows also predate the `routing_row` column, so none of them carries one. 80 of the 122
+databases holding the table have that column and 42 do not; the 42 were created before the schema
+gained it. Fresh databases get it, so the drift is staleness rather than a defect — but it does
+mean the only outcome rows in existence cannot answer a routing question.
+
 So three of the five tier B axes — merge rate, routing accuracy, cost per merged patch — have a
 denominator of zero and cannot be computed at all. Not "compute to a low number": they have
 never had a sample. **The pipeline has never opened a pull request.**
@@ -164,11 +178,19 @@ people will read it rather than leaving each person to rediscover it.
 3. **The M0 acceptance run**, when the user authorises it, producing the first `migration_outcome`
    row with a `pr_number`. Then merge rate, routing accuracy and cost per merged patch have a
    denominator of one, which is not a measurement but is the difference between one and zero.
-4. **The routing row still has nowhere durable to land.** `_decide_tier` computes it and carries
-   it on `RunState`, `TieredRemediator` asks the table again, and `on_route` has no caller
-   anywhere in `src/`. `migration_outcome` has no column for it. Until that changes, "tier 0 was
-   wrong for this change kind" stays an archaeology project rather than a query — which is the
-   exact question routing accuracy exists to answer.
+4. **The routing row had nowhere durable to land — closed, and the storage half is the part that
+   closed.** `schema.sql` now gives `migration_outcome` both `tier INTEGER NOT NULL` and
+   `routing_row TEXT` at that table's grain of one row per attempt, `remediate/nodes.py:116` puts
+   the row on state, and `remediate/corpus.py:302` writes it through, defaulting to `unrouted`
+   rather than null so an unrouted attempt is distinguishable from an unrecorded one. `on_route`
+   is still callerless in `src/`, and that is now deliberate rather than the gap this item
+   originally named: `corpus.py:298` records the reason — the recorder already holds the state, so
+   routing does not need a second channel to reach the table.
+
+   What has *not* closed is that no row carries a routing row yet, because the only three rows in
+   existence predate the column. So "tier 0 was wrong for this change kind" is a query that can
+   now be written and has nothing to return. That is a strictly better position than an
+   archaeology project, and it is not yet a measurement.
 5. **The tier C statistics**, re-attempted at a scale that does not die on a session limit, before
    any threshold beyond the directional floor is written down. **This is blocked on step 3, and
    that was not visible when this sequence was written.** The statistics exist to separate noise
