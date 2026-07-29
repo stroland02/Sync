@@ -294,5 +294,12 @@ def test_the_registry_hands_the_adapter_what_the_file_declares():
 
     vendors = _generated_vendors()
 
+    # Compared against the file rather than against a copy of it written here. Pinning one
+    # vendor's mapping literally caught a dropped field and also broke on an added one -- the
+    # property is that the declaration arrives intact, and a field this test had never heard of
+    # going missing is exactly the failure it exists to catch.
+    for vendor_id, entry in _configured().items():
+        assert vendors[vendor_id].sdk_bindings == entry["sdk_bindings"]
+
     assert vendors["anthropic"].sdk_bindings["typescript"]["package"] == "@anthropic-ai/sdk"
-    assert vendors["vercel"].sdk_bindings == {"typescript": {"package": "@vercel/sdk"}}
+    assert "python" not in vendors["vercel"].sdk_bindings

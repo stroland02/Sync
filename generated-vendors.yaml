@@ -12,6 +12,12 @@
 #   manifest      `.stats.yml` for Stainless, `.speakeasy/workflow.yaml` for Speakeasy
 #   sdk_bindings  which package a customer imports to reach this vendor, per language
 #
+# A language binding carries up to three names, because they come apart independently and only
+# an unscoped vendor collapses them: `package` is what the manifest declares, `module` is what
+# source imports (Python only -- an npm package name is also its import specifier), and
+# `symbol_root` is what an emitted symbol is rooted at. `symbol_root` defaults to the package
+# on TypeScript and to the module on Python, so a vendor whose names agree declares none.
+#
 # Everything about the specification -- where it is, whether it moved, how many operations it
 # describes -- comes from the manifest itself. That is what the generator writes for its own
 # reasons, which is why no vendor has to cooperate and no agreement can be withdrawn.
@@ -54,7 +60,15 @@
   # on npm, where it fails. No rule for deriving one from the id is right for both.
   sdk_bindings:
     typescript:
+      # `@anthropic-ai/sdk` is a manifest key and an import specifier and cannot be a symbol
+      # root: nothing keys a map on a string with a slash in it. Rooted at `anthropic` so one
+      # map serves both languages -- the Python distribution and module are `anthropic`
+      # (confirmed 2026-07-29 from `anthropics/anthropic-sdk-python`, committed under
+      # `tests/fixtures/sdk_packages/`), and a symbol identifies an operation rather than a
+      # package. No symbol map for this vendor exists yet, so this is the convention the first
+      # one should follow rather than a key read off an existing map.
       package: "@anthropic-ai/sdk"
+      symbol_root: anthropic
     python:
       distribution: anthropic
       module: anthropic
@@ -95,4 +109,8 @@
   # above is what stops the fallback supplying it.
   sdk_bindings:
     typescript:
+      # Scoped for the same reason and rooted at the vendor id, which is what the SDK's own
+      # usage example binds its client to (`const vercel = new Vercel(...)`, USAGE.md, read
+      # 2026-07-29). There is no Python target, so nothing constrains this from the other side.
       package: "@vercel/sdk"
+      symbol_root: vercel
