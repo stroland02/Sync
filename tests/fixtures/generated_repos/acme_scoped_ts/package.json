@@ -1,0 +1,5 @@
+{
+  "name": "customer-app",
+  "private": true,
+  "dependencies": { "@acme/sdk": "^1.2.0" }
+}

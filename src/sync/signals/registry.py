@@ -49,9 +49,9 @@ from __future__ import annotations
 import json
 import logging
 import os
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any, Callable, Mapping
 
 import yaml
 
@@ -148,6 +148,14 @@ class GeneratedVendor:
     vendor_id: str
     repo: str
     manifest: str
+    sdk_bindings: Mapping[str, Mapping[str, str]] = field(default_factory=dict)
+    """Which package a customer imports to reach this vendor, per language.
+
+    A packaging fact, not knowledge about the vendor's API, which is why it sits beside the
+    other three. Optional: a vendor declaring none falls back to a guess derived from its id,
+    and `sync.signals.generated.adapter.bindings_for` carries why that is safe and where it
+    stops.
+    """
 
 
 def _generated_vendors() -> dict[str, GeneratedVendor]:
@@ -169,7 +177,8 @@ def _generated_vendors() -> dict[str, GeneratedVendor]:
     try:
         configured = [
             GeneratedVendor(
-                vendor_id=entry["vendor_id"], repo=entry["repo"], manifest=entry["manifest"]
+                vendor_id=entry["vendor_id"], repo=entry["repo"], manifest=entry["manifest"],
+                sdk_bindings=entry.get("sdk_bindings") or {},
             )
             for entry in entries
         ]
@@ -344,6 +353,7 @@ def _prepare_generated(vendor: GeneratedVendor, context: VendorContext) -> Prepa
             sources=sources,
             fetch=fetch_specification,
             cache_dir=context.cache_dir,
+            sdk_bindings=vendor.sdk_bindings,
         ),
         documents=(),
     )
@@ -363,6 +373,7 @@ def _load_generated(vendor: GeneratedVendor, context: VendorContext) -> VendorAd
         sources={},
         fetch=fetch_specification,
         cache_dir=context.cache_dir,
+        sdk_bindings=vendor.sdk_bindings,
     )
 
 

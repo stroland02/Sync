@@ -5,15 +5,28 @@
 # supporting one more vendor under a known generator costs a configuration line. Coverage stops
 # scaling with vendor count and starts scaling with generator count, and there are few generators.
 #
-# Three fields, none of which is knowledge about the vendor's API:
+# Four fields, none of which is knowledge about the vendor's API:
 #
-#   vendor_id  what `--vendor` selects, and what every row this vendor produces is keyed by
-#   repo       owner/name of the repository the generated SDK lives in
-#   manifest   `.stats.yml` for Stainless, `.speakeasy/workflow.yaml` for Speakeasy
+#   vendor_id     what `--vendor` selects, and what every row this vendor produces is keyed by
+#   repo          owner/name of the repository the generated SDK lives in
+#   manifest      `.stats.yml` for Stainless, `.speakeasy/workflow.yaml` for Speakeasy
+#   sdk_bindings  which package a customer imports to reach this vendor, per language
 #
 # Everything about the specification -- where it is, whether it moved, how many operations it
 # describes -- comes from the manifest itself. That is what the generator writes for its own
 # reasons, which is why no vendor has to cooperate and no agreement can be withdrawn.
+#
+# `sdk_bindings` meets the same standard: a package name, a distribution name and a module name
+# are packaging facts. A URL convention, an `operationId` scheme or an SDK method-naming rule is
+# knowledge about an API and does not belong here. Without it a configured vendor could be
+# diffed and never matched -- `sync.index` reads this to decide whether a repository depends on
+# the vendor at all -- so a vendor with no binding was a vendor nothing in a customer's code was
+# ever bound to.
+#
+# The field is optional and a vendor declaring none falls back to a guess derived from its id.
+# **A vendor that declares any language has spoken completely**, and a declared mapping missing a
+# language yields no binding for that language rather than falling back; vercel below is that
+# case. `sync.signals.generated.adapter.bindings_for` carries the reasoning.
 #
 # **Every entry below was confirmed by fetching the path on 2026-07-28**, the same method the
 # spec used to verify a target, and the four responses are committed under
@@ -23,15 +36,38 @@
 # as not existing and Resend and PostHog as unresolved -- none of them belongs here until
 # somebody probes and finds one.
 #
+# **Every `sdk_bindings` name below was confirmed on 2026-07-29** by reading each SDK
+# repository's own `package.json` or `pyproject.toml` -- the artifact the vendor publishes, not a
+# package registry's index of it -- and those seven files are committed under
+# `tests/fixtures/sdk_packages/`. `tests/test_generated_bindings.py` asserts each name here still
+# equals the one in the committed manifest, so this file cannot drift away from the evidence. A
+# binding nobody checked is worse than none, because it moves a vendor from honestly-unwatchable
+# to apparently-watched.
+#
 # A deployment with its own set points `SYNC_GENERATED_VENDORS` at another file.
 
 - vendor_id: anthropic
   repo: anthropics/anthropic-sdk-python
   manifest: .stats.yml
+  # The worked example of why a binding is per-language rather than per-vendor: the same vendor
+  # is `anthropic` on PyPI, where a guess derived from the id resolves, and `@anthropic-ai/sdk`
+  # on npm, where it fails. No rule for deriving one from the id is right for both.
+  sdk_bindings:
+    typescript:
+      package: "@anthropic-ai/sdk"
+    python:
+      distribution: anthropic
+      module: anthropic
 
 - vendor_id: openai
   repo: openai/openai-python
   manifest: .stats.yml
+  sdk_bindings:
+    typescript:
+      package: openai
+    python:
+      distribution: openai
+      module: openai
 
 # Publishes `configured_endpoints` and no specification URL, which is a coverage gap this
 # approach does not close. Configured anyway: the adapter reports it rather than raising, the
@@ -40,6 +76,12 @@
 - vendor_id: cloudflare
   repo: cloudflare/cloudflare-python
   manifest: .stats.yml
+  sdk_bindings:
+    typescript:
+      package: cloudflare
+    python:
+      distribution: cloudflare
+      module: cloudflare
 
 # The other generator, and the proof the mechanism is not Stainless-specific. Its manifest names
 # `https://openapi.vercel.sh/` -- the vendor's own host rather than a generator mirror -- so
@@ -47,3 +89,10 @@
 - vendor_id: vercel
   repo: vercel/sdk
   manifest: .speakeasy/workflow.yaml
+  # TypeScript only, and the omission is deliberate rather than unfinished: `vercel/sdk` has a
+  # `package.json` and a `tsconfig.json` and no `pyproject.toml`, so there is no Python
+  # distribution to name. Adding one would invent a package that does not exist, and the rule
+  # above is what stops the fallback supplying it.
+  sdk_bindings:
+    typescript:
+      package: "@vercel/sdk"
