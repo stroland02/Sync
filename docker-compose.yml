@@ -1,6 +1,13 @@
 services:
   postgres:
     image: postgres:16
+    # `-n auto` gives one xdist worker per core, each holding several connections, and more than
+    # one worktree runs a suite against this container at a time. Measured on a 12-core machine:
+    # one suite alone peaks at 105 concurrent connections and averages 68, against the postgres
+    # default of 100. Over the ceiling the failure is a psycopg.OperationalError on connect, which
+    # lands on whichever database-touching test was running -- so it moves between runs and reads
+    # as a flaky test rather than as exhausted connections. Two of us lost hours to that today.
+    command: ["postgres", "-c", "max_connections=300"]
     environment:
       POSTGRES_USER: sync
       POSTGRES_PASSWORD: sync
