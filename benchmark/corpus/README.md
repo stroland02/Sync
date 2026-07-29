@@ -1,9 +1,12 @@
 # The frozen specimen corpus
 
 `sync benchmark --score-pair` scores one pair. This directory is the set: five real repositories
-pinned by commit, twelve corpus specifications generated from a stated rule, and the recorded
-score over all of them. Five repositories and twelve specifications, because the fifth contributes
-none — "One repository contributes no pair, deliberately" below is why.
+pinned by commit, seventeen corpus specifications generated from a stated rule, and the recorded
+score over all of them.
+
+Seventeen held and twelve proposed, which is not a contradiction — "The corpus is a superset of
+what the rule proposes" below is why, and it is the one thing to read before concluding this
+directory has drifted.
 
 `docs/superpowers/specs/2026-07-29-sync-verification-regime.md` names why it had to exist.
 `2026-07-27-sync-benchmark-gates.md` is explicit that an unfrozen benchmark measures the
@@ -54,53 +57,50 @@ path pattern does not match — contributes nothing and was not selectable.
 Nothing here was chosen for being representative of the population of repositories that depend on
 Stripe, because no measurement of that population exists.
 
-## One repository contributes no pair, deliberately
+## The corpus once held a repository and no pair over it, and why that is over
 
-`virtual-lab` is pinned and indexed and appears in no specification under `pairs/`. That
-combination is odd enough to look like an oversight, so this is what it is instead.
+`virtual-lab` was pinned for several hours contributing nothing, and the reason is worth keeping
+because it is the sharpest thing this corpus has caught.
 
-The selection rule takes the two operations with the most indexed call sites where at least one
-call passes an object argument. In `virtual-lab` those are `GetCustomers` and `GetSubscriptions`,
-three sites each. Both are GETs with no request body, so `request-property-removed` has no
-property to name and is skipped the way `furever/GetCharges` already is. Both response
-specifications generate, and both label a dependency the repository does not have.
-
-The shape is the whole of it. Every one of those six call sites is written
+The selection rule then took the two operations with the most call sites passing an object
+argument, which in `virtual-lab` are `GetCustomers` and `GetSubscriptions`. Both are GETs, so no
+request pair exists; both response pairs generated, and both labelled a dependency the repository
+does not have. Every one of those six call sites is written
 
 ```python
 customers = list(self.client.customers.list(params={"limit": 100}).auto_paging_iter())
 ```
 
-and the response mutation appends its guard to the statement that binds the result:
+and the response mutation appended its guard to the statement binding the result:
 
 ```python
 customers = list(...auto_paging_iter()); assert customers.has_more is not None
 ```
 
-`customers` is a Python list built from the pager. `customers.has_more` is an `AttributeError`,
-and removing `has_more` from the `GetCustomers` response cannot break that code. The generator
-and the indexer disagree about what binding a result means:
+`customers` is a Python list built from the pager, `customers.has_more` is an `AttributeError`,
+and removing `has_more` from that response cannot break that code. The generator and the indexer
+disagreed about what binding a result means:
 
 | | rule |
 |---|---|
-| `sync.benchmark.mutate._result_binding` | climbs to an `assignment` whose value **contains** the call |
+| `sync.benchmark.mutate._result_binding` | climbed to an `assignment` whose value **contained** the call |
 | `sync.index.python_lang._result_target` | requires the value to **be** the call |
 
-Containment against identity. The generator is the more permissive of the two, so it writes a
-dependency the binder is right to refuse to record — and right, in turn, to emit no finding
-against. Scored as generated, those two pairs read as two missed breaks and take pooled recall
-from 1.0000 at n=16 to 0.8889 at n=18. That number measures the generator's permissiveness and
-not the binder's accuracy, and a recall floor lowered to admit it would certify a mislabel.
+Containment against identity. Scored as generated, those two pairs read as two missed breaks and
+would have taken pooled recall from 1.0000 to 0.8889 — a number measuring the generator's
+permissiveness rather than the binder's accuracy, and a recall floor lowered to admit it would
+have certified a mislabel. They were refused instead, and
+`docs/superpowers/reports/2026-07-29-the-corpus-refuses-to-certify-itself.md` is the measurement.
 
-So the repository is pinned, the pairs are not written, and Python binding precision and recall
-stay **null over n=0** — unmeasured rather than zero, which is the distinction `axes.py` already
-draws. `docs/superpowers/reports/2026-07-29-the-corpus-refuses-to-certify-itself.md` carries the
-measurement. What retires this is `_result_binding` requiring identity rather than containment,
-after which those targets are recorded `unreachable` and the pairs can be generated honestly.
+Both halves are closed now. `_result_binding` requires identity, so those targets are recorded
+`unreachable` rather than mislabelled; and the selection rule judges an operation on the side its
+own change is judged on, so `GetProductsId` — three positional `products.retrieve` calls reading
+fields off the result — is proposable where it was invisible. `virtual-lab` contributes two
+response pairs and three of the corpus's twenty-seven positives.
 
 ## What is committed and what is fetched
 
-Committed: `repositories.yaml`, the twelve specifications under `pairs/`, and the recorded score
+Committed: `repositories.yaml`, the seventeen specifications under `pairs/`, and the recorded score
 under `recorded/`. Fetched: the checkouts themselves, into `.cache/corpus/`, which `.gitignore`
 already excludes.
 
@@ -132,9 +132,14 @@ one set of files while the score was taken over another, and nothing in either w
 corpus assembled by picking pairs that score well measures the picker, so the selection is
 executable and the score is whatever it produces — including the pairs the harness then refuses.
 
-- **Operations.** Per repository, the two with the most indexed call sites where at least one
-  call passes an object argument, ties broken by operation id ascending. An operation whose calls
-  take no object argument is excluded because neither mutation can attach to one.
+- **Operations.** Per repository **and per kind**, the two with the most indexed call sites where
+  at least one site carries a non-empty field list on the side that kind's change is judged on —
+  `args_keys` for a request change, `response_fields_read` for a response one — ties broken by
+  operation id ascending. Per kind because the two mutations need different things: a request
+  mutation needs a call passing an object argument, so `products.retrieve(id)` has nowhere to put
+  a property; a response mutation needs a call binding a result something reads a field off, and
+  asking the request question of that operation excluded it for the wrong reason. Response
+  coverage was a side effect of request coverage until that split landed.
 - **Kinds.** `request-property-removed` and `response-property-removed`, the two mechanically
   different inversions `sync.benchmark.mutate` implements. The third supported kind,
   `request-parameter-removed`, mutates identically to the first.
@@ -152,13 +157,14 @@ executable and the score is whatever it produces — including the pairs the har
   `hold_back` entry naming a path, a line and a column, and `sync.cli._corpus_targets` drops it
   from the target list; the next section is what it is for.
 
-Two combinations produced no specification and the generator said so rather than substituting
-one: `furever/GetCharges` and `fireship-server/GetPaymentMethods` are GETs with no request body,
-so `request-property-removed` has no property to name.
+Five combinations produce no specification and the generator says so rather than substituting one.
+`furever/GetCharges`, `fireship-server/GetPaymentMethods`, `virtual-lab/GetCustomers` and
+`virtual-lab/GetSubscriptions` are GETs with no request body, so `request-property-removed` has no
+property to name; `fireship-server/GetCustomersCustomer` has no response property the repository
+does not already read.
 
-The hold-back rule selected a site in four of the twelve specifications and passed over the other
-eight, which carry no `hold_back` key and are byte-identical to what the generator wrote before
-the rule existed. Each clause of it is doing work:
+The hold-back rule selects a site in six of the seventeen specifications and passes over the other
+eleven, which carry no `hold_back` key. Each clause of it is doing work:
 
 - **The first by position**, because every insertion `mutate.py` makes lands at or after the call
   it breaks and `upsert_call_site` keys a call site's identity on its position. Only the earliest
@@ -174,30 +180,75 @@ the rule existed. Each clause of it is doing work:
 - **One and never more**, because every held-back site is a site binding recall no longer
   measures.
 
-**The committed specifications no longer match what the generator produces today, and the drift
-is in the hold-back.** Re-running `build_corpus_specs.py` over the same pinned trees now writes a
-`hold_back` entry into `furever-PostPaymentIntents-response-property-removed` and
-`turbo-PostPaymentIntents-response-property-removed`, which the committed versions do not carry —
-six of twelve specifications rather than four. Nothing about those checkouts moved. The binder
-did: B34 taught it to record fields off a result the call reaches through a wrapper, so the first
-site on each of those operations now has a non-empty `response_fields_read` where it had none, and
-the third clause of the hold-back rule fires. The twelve are left frozen, because regenerating
-them would move TypeScript's own numbers in the same commit that was measuring Python and neither
-movement would be attributable afterwards. That regeneration is a task of its own with its own
-measurement, and until it happens this directory's claim that the same specifications come out of
-the same pinned inputs holds only against the same binder.
+## The corpus is a superset of what the rule proposes
+
+Seventeen specifications are committed and the rule proposes twelve. **Every operation the rule
+proposes is in the corpus**; the five extra are pairs it no longer proposes and which score
+honestly anyway. That relationship is deliberate and is the invariant to hold this directory to —
+not equality.
+
+The gap opened when selection was corrected to judge an operation per kind. Measured against the
+pinned set afterwards, the corrected rule differed in four places. Each was checked for whether it
+was an addition or a substitution, because the answer decides the work:
+
+| the rule now proposes | classification | what the corpus gained |
+|---|---|---|
+| `virtual-lab-GetBalance-response` | **addition** — `GetProductsId` keeps its slot and this fills the second, previously empty | one response positive, Python's second pair |
+| `furever-GetAccountsAccount-response` | **substitution** — the rule picks it instead of `furever-GetCharges-response` | six response positives, the most of any pair, and the sixth falsifiable negative |
+| `turbo-GetPaymentIntentsIntent-response` | **substitution** — instead of `turbo-PostRefunds-response` | one response positive on a GET, where the corpus had only POST response coverage for `turbo` |
+| `fireship-server-DeleteSubscriptionsSubscriptionExposedId-response` | **substitution** — the rule's two response slots displace both `PostPaymentIntents-response` and `GetPaymentMethods-response` | one response positive on a DELETE, the only one in the corpus |
+
+All four were added and none of the five was replaced. What replacing would have cost, pair by
+pair:
+
+- `furever-GetCharges-response` is one positive and the worked example behind the hold-back rule's
+  first-by-position clause — a response guard inserted above three later calls displaced all three
+  labels and the whole pair left the score. Dropping it drops a documented regression witness.
+- `fireship-server-PostPaymentIntents-response` is two positives.
+- `turbo-PostRefunds-response`, `fireship-server-GetPaymentMethods-response` and
+  `remix-PostPaymentIntents-response` each contribute a labelled negative rather than a positive:
+  their targets discard the result, so the response mutation cannot attach and the site is
+  correctly unaffected. They are the corpus's record that "cannot attach" is distinguishable from
+  "attached and missed", and `remix` is the single-call-site repository, where a pair has the least
+  room to hide a miss.
+
+The general argument is that the corpus's job is to be a stable ruler, not to be reproducible from
+the current rule. A pair that scores honestly is evidence whether or not today's selection would
+have chosen it, and a rule will be corrected again. Discarding a measured, gated, byte-identical
+baseline for the tidiness of exact reproducibility trades the thing the corpus is for against a
+property it never needed.
+
+`remix` is the one place the rule proposes nothing where the corpus holds something: no `remix`
+operation reads a response field at any indexed call site, so there is no response candidate at
+all, and nothing was available to add.
+
+**Two committed specifications also differ in content from what the generator writes today, and
+the drift is in the hold-back.** Re-running it writes a `hold_back` entry into
+`furever-PostPaymentIntents-response-property-removed` and
+`turbo-PostPaymentIntents-response-property-removed` that the committed versions do not carry.
+Nothing about those checkouts moved. The binder did: B34 taught it to record fields off a result
+the call reaches through a wrapper, so the first site on each of those operations now has a
+non-empty `response_fields_read` where it had none, and the hold-back rule's third clause fires.
+Both are left as pinned. Adopting them would trade two positives for two negatives on pairs that
+already score, which is a distribution change with its own measurement rather than a side effect of
+adding four pairs — and it is the one difference here that would move a rate rather than a
+denominator.
 
 ## Reading the recorded score
 
-`recorded/` holds three runs of the same twelve specifications, each byte-identical to a second
-run from a clean database. Read the newest; the older two are kept because they are what the
-reports argue over.
+`recorded/` holds every run the reports argue over, each byte-identical to a second run from a
+clean database. Read the newest; the older ones are kept because they are the before-states those
+reports measure against.
 
 | file | corpus | what it added |
 |---|---|---|
-| `2026-07-29-score.{txt,json}` | before the hold-back | the first binding numbers over the frozen set |
-| `2026-07-29-falsifiable-negatives.{txt,json}` | before the hold-back | the count of negatives the detector could have fired on: zero |
-| `2026-07-29-held-back-negatives.{txt,json}` | current | one site held back per eligible pair, and the first non-zero count |
+| `2026-07-29-score.{txt,json}` | 10 pairs | the first binding numbers over the frozen set |
+| `2026-07-29-falsifiable-negatives.{txt,json}` | 10 pairs | the count of negatives the detector could have fired on: zero |
+| `2026-07-29-held-back-negatives.{txt,json}` | 10 pairs | one site held back per eligible pair, and the first non-zero count |
+| `2026-07-29-response-axis.{txt,json}` | 12 pairs | the response mutation attaching, and the recall fall that exposed a binder defect |
+| `2026-07-29-symbol-map-pinned.{txt,json}` | 12 pairs | the symbol map pinned, and a Python repository added contributing no pair |
+| `2026-07-29-first-python-pair.{txt,json}` | 13 pairs | `virtual-lab-GetProductsId`, the first Python pair to score |
+| `2026-07-29-the-rule-and-the-corpus-agree.{txt,json}` | **current, 17 pairs** | the four pairs the corrected selection rule proposes and the pinned set lacked |
 
 `docs/superpowers/reports/2026-07-29-frozen-corpus-first-binding-numbers.md` carries what the
 first set of numbers does and does not support,
@@ -207,14 +258,16 @@ first set of numbers does and does not support,
 Three things those reports insist on and this directory must keep:
 
 - **Every axis carries its sample size.** In the current recording precision and recall are each
-  over nine labelled affected call sites. Nine — it was twelve before three were held back, and
-  a recall that changed because its denominator moved is not a regression.
-- **Excluded pairs are counted and named.** Two of the twelve specifications are refused, both
-  `displaced-label`.
-- **A pair that contributed no positives is visible.** Five of the ten scored pairs contribute
-  zero affected call sites — every response-side pair that is not refused outright — because the
-  response mutation cannot attach to any of their calls. The corpus total cannot show that and
-  the per-pair table does.
+  over twenty-seven labelled affected call sites, twenty-four of them TypeScript and three Python.
+  A rate that changed because its denominator moved is not a regression, and the sample size is
+  what lets a reader tell the two apart.
+- **Excluded pairs are counted and named.** None of the seventeen is refused. When two were, both
+  were `displaced-label`.
+- **A pair that contributed no positives is visible.** Three of the seventeen contribute zero
+  affected call sites — `fireship-server-GetPaymentMethods-response`,
+  `remix-PostPaymentIntents-response` and `turbo-PostRefunds-response` — because every target
+  discards its result and the response mutation has nothing to attach to. The corpus total cannot
+  show that and the per-pair table does.
 
 ## Precision now has a negative it could be wrong about
 
@@ -226,23 +279,23 @@ precision's false-positive term had no candidates rather than few — 1.0000 was
 corpus that way guaranteed, and it would have survived a binder regression that only affected
 same-operation discrimination.
 
-It reads **3** now, and precision still reads 1.0000. Those two sentences belong together: the
-binder was offered three same-operation call sites it could have claimed and declined all three,
-which is the first evidence that axis has ever carried. One of the three is a near miss rather
-than a formality — `turbo` passes `amount` at a site where the changed property is
-`amount_details`, and a match on segment prefixes rather than whole segments would fire on it.
+It reads **6** now, and precision still reads 1.0000. Those two sentences belong together: the
+binder was offered six same-operation call sites it could have claimed and declined all six, which
+is the only evidence that axis carries. One of the six is a near miss rather than a formality —
+`turbo` passes `amount` at a site where the changed property is `amount_details`, and a match on
+segment prefixes rather than whole segments would fire on it.
 
-What remains constant is that a hold-back can only help where the mutation had somewhere to
-attach. Every response-side pair reads no response field at any of its call sites, so a site held
-back there has an empty field list and declines against every change regardless; the two
-single-site request pairs cannot spare their only target. Three is therefore the whole of what
-this corpus can currently offer, not a sample of it.
+The count grew with the corpus rather than with any change to the rule: three when the hold-back
+landed, five when the first Python pair did, and six with `furever-GetAccountsAccount`. What stays
+constant is that a hold-back can only help where the mutation had somewhere to attach. A pair
+whose call sites read no response field has an empty field list at the site it would hold back, so
+that site declines against every change regardless; a single-site pair cannot spare its only
+target. Six is the whole of what this corpus offers, not a sample of it, and the way to raise it
+is another operation carrying several call sites that bind their results — not another repository.
 
-So no choice of repository or specification fixes this while that rule stands, and adding
-repositories would raise the negative count without adding a single candidate. What the corpus
-needed was a same-operation call site deliberately held back from the target list — which
-`generate_pair` already supported, since the caller names its targets, and which nothing asked it
-for until `hold_back` landed.
+What the corpus needed to have any negative at all was a same-operation call site deliberately
+held back from the target list — which `generate_pair` already supported, since the caller names
+its targets, and which nothing asked it for until `hold_back` landed.
 
 While that was true a directional floor on binding precision would have gated a constant, which
 `docs/superpowers/specs/2026-07-27-sync-benchmark-gates.md` names as the failure that is worse

@@ -98,25 +98,33 @@ from scripts.symbol_map_pin import PIN, read_pin
 # the recording. These are the corpus's own answers, not round numbers chosen near them.
 #
 #                         was            now
-#   binding precision     1.0000 n=16    1.0000 n=18
-#   binding recall        1.0000 n=16    1.0000 n=18
-#   falsifiable negatives  4              5
-#   pairs scored          12             13
+#   binding precision     1.0000 n=18    1.0000 n=27
+#   binding recall        1.0000 n=18    1.0000 n=27
+#   falsifiable negatives  5              6
+#   pairs scored          13             17
 #
 # Restated on 2026-07-29 because the corpus grew, which is the only reason a floor may move
-# upward without an argument attached. `virtual-lab-GetProductsId-response-property-removed` is
-# the corpus's first Python pair: two labelled positives, both found, two findings and no false
-# one, and one held-back negative the detector could have fired on and did not. Neither rate
-# changed -- both denominators did, and the falsifiable count with them.
+# upward without an argument attached. Four pairs were added, all response-side, all of them
+# operations the corrected selection rule proposes and the pinned thirteen did not hold:
+# `furever-GetAccountsAccount` (six positives and the sixth falsifiable negative),
+# `turbo-GetPaymentIntentsIntent`, `fireship-server-DeleteSubscriptionsSubscriptionExposedId`
+# and `virtual-lab-GetBalance`, one positive each. Every rate held at 1.0000 and the movement is
+# exactly additive -- 18 + 9 positives, 5 + 1 negatives, 13 + 4 pairs -- so nothing here is a
+# rate that changed, only three denominators that did.
+#
+# `benchmark/corpus/recorded/2026-07-29-the-rule-and-the-corpus-agree.txt` is the recording, and
+# it is what says the thirteen were kept rather than replaced: three of the four additions are
+# operations the rule would pick *instead of* pairs the corpus holds, and a pair that scores
+# honestly is evidence whether or not today's rule would have chosen it.
 #
 # Lowering one is a claim that the pipeline got worse on purpose, and it belongs in the same
 # commit as the change that made it worse, with the reason in the commit body. Two Python pairs
-# were refused rather than landed a few hours before this, for exactly that reason: they would
+# were refused rather than landed earlier the same day, for exactly that reason: they would
 # have forced this recall floor to 0.8889 to accommodate ground truth already proved wrong.
 PRECISION_FLOOR = 1.0
 RECALL_FLOOR = 1.0
-FALSIFIABLE_NEGATIVES_FLOOR = 5
-PAIRS_SCORED_FLOOR = 13
+FALSIFIABLE_NEGATIVES_FLOOR = 6
+PAIRS_SCORED_FLOOR = 17
 
 
 @dataclass(frozen=True)
