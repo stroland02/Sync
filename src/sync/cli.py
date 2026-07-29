@@ -52,6 +52,7 @@ from sync.signals.deprecations import (
     parameters_to_vendor_changes,
     parse_parameter_deprecations,
 )
+from sync.signals.feed import public_key_bytes, render_feed, sign_feed
 from sync.signals.registry import (
     SYMBOL_MAP_FILENAME,
     VendorContext,
@@ -67,6 +68,11 @@ DEFAULT_DSN = "postgresql://sync:sync@localhost:5433/sync"
 # variable rather than a setting with a default: a shared secret has no value this
 # repository is allowed to know, so there is nothing to default to.
 WEBHOOK_SECRET_ENV = "SYNC_WEBHOOK_SECRET"
+
+# Where the feed signing key comes from when no file is named. The private half is never in
+# this repository and never will be: `sync.core.keys` holds only the public bytes, and
+# `tests/test_feed_cache.py` scans every tracked file to keep it that way.
+FEED_SIGNING_KEY_ENV = "SYNC_FEED_SIGNING_KEY"
 
 # Vendors whose parameter deprecations a scan reads. Both publish one page carrying both a model
 # lifecycle table and a parameter table; `parse_parameter_deprecations` tells them apart.
@@ -1057,6 +1063,127 @@ def merge_outcome(args: argparse.Namespace) -> int:
     return 0
 
 
+def _signing_key(key_file: str | None):
+    """The Ed25519 private key the feed is signed with, or `None` when there is not one.
+
+    Two sources and no third, which is the rule `_webhook_secret` already established: an
+    environment variable is how a process holds a credential without it reaching a file, a file
+    is how an operator holds one without it reaching a process listing, and `--key VALUE` is
+    deliberately not offered because an argument is visible in `ps` and lands in shell history.
+
+    PEM rather than raw bytes, for two reasons that agree. It is what an operator's key
+    management already produces -- `openssl genpkey -algorithm ed25519` writes exactly this --
+    and reconstructing a key from raw bytes needs a call that `tests/test_feed_cache.py` scans
+    every tracked file for. That scan exists to keep a private key out of this repository, and
+    the right response to it is a loader that does not need the call rather than an exception
+    to the rule.
+
+    A key that is present and unreadable answers `None` like an absent one. The caller's job is
+    to refuse, and the two cases have the same remedy -- supply a usable key -- so telling them
+    apart would only be an invitation to describe what was wrong with the bytes.
+    """
+    from cryptography.hazmat.primitives import serialization
+    from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+
+    material = (
+        Path(key_file).read_bytes()
+        if key_file
+        else os.environ.get(FEED_SIGNING_KEY_ENV, "").encode("utf-8")
+    )
+    if not material.strip():
+        return None
+
+    try:
+        key = serialization.load_pem_private_key(material, password=None)
+    except (ValueError, TypeError):
+        # Nothing about the material reaches the log. A parser's complaint about a key quotes
+        # offsets and lengths, and a narrowed key is a leaked key.
+        return None
+
+    # A different algorithm would sign, and every consumer would reject the result as a forgery.
+    return key if isinstance(key, Ed25519PrivateKey) else None
+
+
+def publish_feed(args: argparse.Namespace) -> int:
+    """Write one vendor's signed feed into a directory, and stop.
+
+    `render_feed`, `sign_feed` and `public_key_bytes` were finished and called by nothing, which
+    left the consuming half -- `FeedCache` verifying before it parses, `sync://feed/{vendor}`
+    serving the result -- with nothing to consume. This is the producer.
+
+    Not a publisher of bytes to anywhere. `2026-07-26-sync-public-change-feed.md` puts hosting
+    outside the architecture: static files behind a CDN, no server-side logic, and the keypair
+    and the publish job are operational rather than architectural. So this writes
+    `{vendor}.json` and `{vendor}.json.sig` into a directory it is handed, and whoever runs it
+    decides where those bytes go -- the boundary `ingest` and `merge-outcome` already hold.
+
+    The rows come from the graph rather than from a vendor's API. The feed publishes what a
+    scan already computed, so publishing reaches no network and a vendor nobody has scanned
+    publishes an empty array rather than an error: the array is the whole contract, and a vendor
+    that shipped nothing has a feed.
+
+    A missing key refuses, and the refusal happens before anything is written. An unsigned feed
+    drives code changes on bytes nothing vouched for, and a half-written pair is worse than
+    nothing -- a consumer may fetch a payload while its signature does not yet exist, which is
+    indistinguishable from a payload whose signature was stripped.
+
+    Both files are written as bytes. A signature covers exactly the bytes signed, so a payload
+    that went out through a text mode on this platform would carry translated line endings and
+    fail verification in a way that reads as forgery.
+    """
+    key = _signing_key(args.key_file)
+    if key is None:
+        print(
+            f"no usable feed signing key: set {FEED_SIGNING_KEY_ENV} or pass --key-file with an "
+            "Ed25519 private key in PEM form. Refusing rather than publishing a feed nothing "
+            "vouched for.",
+            file=sys.stderr,
+        )
+        return 2
+
+    store = GraphStore(args.dsn)
+    store.apply_schema()
+
+    payload = render_feed(store.all_vendor_changes(args.vendor), args.vendor)
+    signature = sign_feed(payload, key)
+
+    out_dir = Path(args.out_dir)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    # Signature first. Either order leaves a window where a reader can see one file and not the
+    # other, and the safe direction is the one where the payload is what appears last: a
+    # signature with no payload is a fetch that fails, while a payload with no signature is
+    # unverified bytes a consumer might act on.
+    (out_dir / f"{args.vendor}.json.sig").write_bytes(signature)
+    (out_dir / f"{args.vendor}.json").write_bytes(payload)
+
+    count = len(json.loads(payload.decode("utf-8")))
+    print(f"published {args.vendor}: {count} change(s) to {out_dir}")
+    return 0
+
+
+def feed_public_key(args: argparse.Namespace) -> int:
+    """Print the public half of the signing key, for an operator to commit.
+
+    The legitimate caller of `public_key_bytes`, and the reason it exists: `sync.core.keys`
+    holds the trust anchor as a hex literal rotatable only through a release, and somebody has
+    to derive it from a key this repository must never hold. Hex because that is the form the
+    constant takes, so the output is what goes in the diff.
+
+    Nothing is written and nothing else is printed. A command that also emitted the private half
+    "for convenience" is how a key reaches a terminal scrollback.
+    """
+    key = _signing_key(args.key_file)
+    if key is None:
+        print(
+            f"no usable feed signing key: set {FEED_SIGNING_KEY_ENV} or pass --key-file.",
+            file=sys.stderr,
+        )
+        return 2
+
+    print(public_key_bytes(key).hex())
+    return 0
+
+
 def benchmark(args: argparse.Namespace) -> int:
     """Print the tier B quality axes for whatever the corpus holds.
 
@@ -1125,6 +1252,30 @@ def main() -> int:
                                    "omitted leaves human_edits_before_merge unmeasured")
     merge_parser.add_argument("--dsn", default=DEFAULT_DSN)
     merge_parser.set_defaults(func=merge_outcome)
+
+    publish_parser = sub.add_parser(
+        "publish-feed", help="write one vendor's signed change feed to a directory"
+    )
+    publish_parser.add_argument("--vendor", required=True,
+                                help="which vendor's feed to publish")
+    publish_parser.add_argument("--out-dir", dest="out_dir", required=True,
+                                help="directory the two files are written to; hosting them is "
+                                     "somebody else's job")
+    # A path, never a value: an argument is visible in `ps` and lands in shell history.
+    publish_parser.add_argument("--key-file", dest="key_file", default=None,
+                                help=f"file holding the Ed25519 signing key in PEM form; "
+                                     f"defaults to ${FEED_SIGNING_KEY_ENV}")
+    publish_parser.add_argument("--dsn", default=DEFAULT_DSN)
+    publish_parser.set_defaults(func=publish_feed)
+
+    public_key_parser = sub.add_parser(
+        "feed-public-key",
+        help="print the public half of the signing key, as the hex sync.core.keys holds",
+    )
+    public_key_parser.add_argument("--key-file", dest="key_file", default=None,
+                                   help=f"file holding the Ed25519 signing key in PEM form; "
+                                        f"defaults to ${FEED_SIGNING_KEY_ENV}")
+    public_key_parser.set_defaults(func=feed_public_key)
 
     benchmark_parser = sub.add_parser(
         "benchmark", help="print the tier B quality axes with their sample sizes"
