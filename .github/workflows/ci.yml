@@ -74,3 +74,17 @@ jobs:
 
       - name: Tests
         run: uv run pytest
+
+      # Recorded, never gated. `2026-07-27-sync-benchmark-gates.md` forbids inventing a
+      # threshold -- a gate at an invented number either fires constantly and gets disabled or
+      # never fires and provides false assurance -- and a percentage that fails a build is a
+      # percentage people write tests to satisfy rather than to test something.
+      #
+      # `|| true` is the whole of the not-gating, and it is deliberate rather than defensive:
+      # a coverage run that errors must not turn a green suite red either. The baseline this
+      # is measured against is `docs/superpowers/specs/2026-07-29-sync-coverage-baseline.md`,
+      # which also records what this number cannot see -- seven components have shipped here
+      # fully covered and reachable from nothing, and every one of them looked healthy to a
+      # line count.
+      - name: Coverage (recorded, not gated)
+        run: uv run pytest -q --cov=sync --cov-report=term-missing:skip-covered || true
