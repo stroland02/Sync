@@ -16,11 +16,14 @@ out whether theirs was correct.
 The invariants below were harvested from the docstrings of the implementations in this
 repository, where they were stated as prose an outside author would never see.
 
-Four of the five protocols have a kit: `VendorAdapter`, `Remediator`, `LanguageAdapter` and
-`Detector`. `RequestCorrelator` has none, and the reason is that its one guarantee -- an
-uncorrelatable request returns None rather than a guess -- is `operation_for_symbol`'s rule
-addressed by path instead of by symbol, and nobody has written a second correlator to state it
-against.
+All five protocols have a kit. `RequestCorrelator` went without one longest, on the reading that
+its guarantee is `operation_for_symbol`'s rule addressed by path instead of by symbol, and that
+reading was wrong in the way that matters. Its rule about declining is the same rule; the rule
+above it is not a correctness rule at all. `operation_for_request` is handed a real observed path
+with a live customer identifier in it and must answer with the vendor's published template, and
+that substitution is the only place a customer's identifiers stop travelling. Everywhere else in
+this kit a broken guarantee produces a wrong answer some gate downstream refuses. There is no gate
+downstream of this one.
 
 Two things a kit of this shape cannot reach, said here rather than left to be discovered:
 
@@ -709,3 +712,274 @@ def _finding_keys(findings: list) -> list:
         )
         for finding in findings
     )
+
+
+# What the kit asks a correlator about when it wants an answer of None. Synthesized rather than
+# taken from the author, the same way `_check_operation_for_symbol` synthesizes its unknown
+# symbol: the negative case is the kit's to state, and an author who supplied it could supply one
+# their correlator happens to resolve. The empty path is not decoration -- `sync.cli` hands this
+# `urlsplit(url).path`, which is the empty string for a URL carrying no path at all.
+_UNRECOGNISED_REQUESTS = (
+    ("GET", "/sync-conformance/no-such-resource/2f8b1c"),
+    ("GET", ""),
+    ("GET", "/"),
+)
+
+# The verbs the method rule is probed with. HEAD is deliberately absent: reading a HEAD request as
+# addressing the GET operation is a defensible reading of RFC 9110, and probing it would make the
+# kit reject a correlator over a judgement the protocol never made. The rule below still applies to
+# a HEAD request an author hands in as their own case, and that is the one place a correlator could
+# conform and disagree with it -- argue it there rather than discovering it as a failure.
+_PROBE_METHODS = ("GET", "POST", "PUT", "PATCH", "DELETE")
+
+
+def check_request_correlator(
+    correlator: Any,
+    *,
+    known_request: tuple[str, str],
+    identifier: str,
+) -> None:
+    """Check `correlator` against every guarantee `RequestCorrelator` states but cannot enforce.
+
+    `known_request` is an `(http_method, path)` pair the correlator is expected to resolve, and
+    `identifier` is the substring of that path which is a live customer identifier -- the charge
+    id in `/v1/charges/ch_3PjkLm2eZvKYlo2C1cQrSt`. Both come from the author, since the kit has no
+    fixtures of its own and must run outside this repository, and the identifier cannot be derived
+    from the path: which segment is an id and which is a resource name is vendor knowledge.
+
+    This is the only check in the kit whose first rule is a privacy boundary rather than a
+    correctness one, and the difference is worth stating. Everywhere else a broken guarantee
+    produces a wrong answer, and the wrong answer is caught by a gate downstream -- a bad patch
+    fails `tsc`, a bad finding is declined by a reviewer. There is no gate downstream of this one.
+    A path that arrives carrying a customer's identifier is written to `observed_call`, joined into
+    findings, and rendered into the body of a pull request opened on a repository Sync does not
+    own. `CLAUDE.md` says we never hold customer secrets and does not qualify it; this is the check
+    that makes that sentence true of the telemetry path.
+
+    Raises `ConformanceFailure` naming the broken rule. Returns None when the correlator conforms.
+    """
+    _check_correlator_vendor_id(correlator)
+    _check_unrecognised_requests_answer_none(correlator)
+    resolved = _check_known_request_resolves(correlator, known_request, identifier)
+    _check_the_identifier_does_not_survive(resolved, known_request, identifier)
+    _check_the_method_is_the_one_asked_about(correlator, known_request, resolved)
+    _check_correlation_is_deterministic(correlator, known_request, resolved)
+
+
+def _check_correlator_vendor_id(correlator: Any) -> None:
+    """`isinstance` reaches further here than it does for a method, and still not far enough.
+
+    A `runtime_checkable` Protocol with a non-method member does check that the attribute is
+    present -- measured on Python 3.12, an object without `vendor_id` fails `isinstance` against
+    `RequestCorrelator`. What it does not check is what the attribute holds: `vendor_id = 42` and
+    `vendor_id = ""` both satisfy it. So this rule is narrower than the one on `VendorAdapter` and
+    is worth having for the half that remains.
+    """
+    vendor_id = getattr(correlator, "vendor_id", None)
+    if not isinstance(vendor_id, str) or not vendor_id:
+        _fail(
+            "vendor_id must be a non-empty string.",
+            "Every observed call this correlator resolves is filed under it, and it is what joins "
+            "a span to the call sites indexed for the same vendor. `isinstance` verifies that the "
+            f"attribute exists and nothing about its value. Got {vendor_id!r}.",
+        )
+
+
+def _correlate(correlator: Any, http_method: str, path: str, *, rule: str, why: str) -> Any:
+    resolve = getattr(correlator, "operation_for_request", None)
+    if resolve is None:
+        _fail(
+            "operation_for_request must exist.",
+            "It is how a span becomes an operation, and it is the whole of this protocol.",
+        )
+    try:
+        return resolve(http_method, path)
+    except Exception as exc:  # noqa: BLE001 - the point is that nothing may escape
+        _fail(rule, f"{why} Asked {http_method!r} {path!r} and it raised {exc!r}.")
+
+
+def _check_unrecognised_requests_answer_none(correlator: Any) -> None:
+    """None rather than a guess, and an answer rather than an exception.
+
+    Both halves are the same rule seen from two sides, and both are about a correlator being asked
+    about traffic it was never expected to know. One correlator is handed every client span in a
+    batch, most of them addressed to other hosts entirely, so declining is the ordinary case rather
+    than the exceptional one -- and an exception there abandons the whole batch over one request.
+
+    A guess is the worse half. `sync.signals.stripe.adapter` states it exactly: a missing binding
+    is visibly unresolved and can be counted; a wrong one produces a finding against code that
+    never made the call, and nobody learns it was wrong. An observed binding carries the `observed`
+    rung, which the graph surface reports as the most trustworthy of the three, so a guess here is
+    laundered into the rung an agent weighs a patch by.
+    """
+    for http_method, path in _UNRECOGNISED_REQUESTS:
+        answer = _correlate(
+            correlator,
+            http_method,
+            path,
+            rule="operation_for_request must answer for a request it cannot resolve, not raise.",
+            why=(
+                "One correlator is asked about every client span in a batch, and most of them "
+                "address something else. An exception abandons the batch over a request this "
+                "correlator was never expected to recognise."
+            ),
+        )
+        if answer is not None:
+            _fail(
+                "operation_for_request must return None for an unrecognised request, not a guess.",
+                f"Asked {http_method!r} {path!r} and got {answer!r}. A missing binding is visibly "
+                "unresolved and can be counted; a wrong one attributes real traffic to an "
+                "operation nobody called, and it arrives carrying the `observed` rung, which is "
+                "the one an agent trusts most.",
+            )
+
+
+def _check_known_request_resolves(
+    correlator: Any, known_request: tuple[str, str], identifier: str
+) -> Any:
+    """The precondition every rule below rests on, checked and named rather than assumed.
+
+    A case that exercises nothing passes everything. An identifier the path does not contain makes
+    the privacy rule vacuous -- a correlator returning the raw path would sail through it -- and a
+    request that resolves to nothing leaves no template to inspect at all.
+    """
+    http_method, path = known_request
+    if identifier not in path:
+        _fail(
+            "the identifier must appear in the request path the kit was handed.",
+            f"{identifier!r} is not in {path!r}, so the rule that it does not survive the call is "
+            "vacuous: every correlator passes it, including one that returns the path unchanged. "
+            "Fix the case handed to the kit, not the correlator.",
+        )
+
+    resolved = _correlate(
+        correlator,
+        http_method,
+        path,
+        rule="operation_for_request must not raise for the request the kit was handed.",
+        why="It is the case the author supplied as one this correlator resolves.",
+    )
+    if resolved is None:
+        _fail(
+            "the request handed to the kit must resolve to an operation.",
+            f"{http_method!r} {path!r} correlates to nothing, so there is no template to inspect "
+            "and every rule below this one is vacuous. Either the case is wrong or the correlator "
+            "resolves nothing at all -- the kit cannot tell which.",
+        )
+    if not isinstance(resolved, OperationRef):
+        _fail(
+            "operation_for_request must return an OperationRef or None.",
+            f"Got {type(resolved).__name__}. `sync.telemetry.ingest` reads `.operation_id` and "
+            "`.path` off what arrives, several stages away, so another shape fails there as an "
+            "attribute error about a field rather than here as a statement about the correlator.",
+        )
+    return resolved
+
+
+def _check_the_identifier_does_not_survive(
+    resolved: Any, known_request: tuple[str, str], identifier: str
+) -> None:
+    """The rule this check exists for.
+
+    `RequestCorrelator`'s docstring puts it in one sentence: the path is a URL path with real
+    identifiers in it, what comes back addresses the operation with the vendor's own published
+    template, and that substitution is the boundary at which a customer's identifiers stop
+    travelling. The template is public data -- it appears in the vendor's own specification. The
+    request path is not.
+
+    Every string on the ref is checked rather than `path` alone, because every string on it is
+    stored and every one of them is rendered. A correlator that substitutes the template correctly
+    and then appends the id to the operation id has moved the leak rather than closed it, and a
+    rule reading one field would certify that as conformant.
+    """
+    _, path = known_request
+    for field in sorted(type(resolved).model_fields):
+        value = getattr(resolved, field, None)
+        if isinstance(value, str) and identifier in value:
+            _fail(
+                "the operation returned carried the request's own identifier.",
+                f"`{field}` came back as {value!r} for the request {path!r}. What comes back must "
+                "address the operation with the vendor's published template, which is public "
+                "data; the request path is a customer's. This value is written to `observed_call`, "
+                "joined into findings, and rendered into the body of a pull request on a "
+                "repository we do not own, and nothing downstream removes it.",
+            )
+
+
+def _check_the_method_is_the_one_asked_about(
+    correlator: Any, known_request: tuple[str, str], resolved: Any
+) -> None:
+    """A correlator that matches on the path alone binds a write to the operation that reads.
+
+    One path is several operations -- `/v1/charges` is a list and a create -- and the span carries
+    the method that tells them apart. Merging them is not a small loss: the efficiency detector's
+    entire subject is how many times one unit of work called an operation, and a read folded into
+    a write is a call count against the wrong one.
+
+    Checked as a property of the answer rather than as a probe for a defect, because the property
+    is the simpler statement: if the correlator says this request addressed operation X, and X is
+    declared under `post`, then a `GET` request did not address it. Probed across several verbs on
+    the author's own path as well, since a correlator that ignores the method answers the known
+    request correctly by luck whenever the author's own verb is the one it always returns.
+    """
+    asked, path = known_request
+    if resolved.http_method.lower() != asked.lower():
+        _fail(
+            "the operation returned must be the method it was asked about.",
+            f"Asked {asked!r} {path!r} and got an operation declared under "
+            f"{resolved.http_method!r}. One path is several operations and the method is what "
+            "separates them, so this binds a request to an operation the customer did not make.",
+        )
+
+    for probe in _PROBE_METHODS:
+        if probe.lower() == asked.lower():
+            continue
+        answer = _correlate(
+            correlator,
+            probe,
+            path,
+            rule="operation_for_request must answer for a request it cannot resolve, not raise.",
+            why="A method a path does not serve is declined, not raised on.",
+        )
+        if answer is None:
+            continue
+        if not isinstance(answer, OperationRef):
+            _fail(
+                "operation_for_request must return an OperationRef or None.",
+                f"Got {type(answer).__name__} for {probe!r} {path!r}.",
+            )
+        if answer.http_method.lower() != probe.lower():
+            _fail(
+                "the operation returned must be the method it was asked about.",
+                f"Asked {probe!r} {path!r} and got an operation declared under "
+                f"{answer.http_method!r}. The method is not being consulted, so every span for "
+                "this path folds into one operation whichever verb produced it.",
+            )
+
+
+def _check_correlation_is_deterministic(
+    correlator: Any, known_request: tuple[str, str], resolved: Any
+) -> None:
+    """The same span, correlated twice, is the same call.
+
+    OTLP delivery is at-least-once and a collector re-sends whatever is still buffered rather than
+    the batch it sent before, so the same span really does arrive twice. `observed_call` is keyed
+    partly on the operation, so a correlator whose answer moves writes the second delivery to a
+    different row instead of folding into the first -- and every rate derived from that table
+    becomes a function of how often the ingest ran.
+    """
+    http_method, path = known_request
+    again = _correlate(
+        correlator,
+        http_method,
+        path,
+        rule="operation_for_request must not raise for the request the kit was handed.",
+        why="It resolved once already, so the second call is the same question.",
+    )
+    if again != resolved:
+        _fail(
+            "two correlations of one request must give the same answer.",
+            f"Got {resolved!r} then {again!r}. OTLP delivery is at-least-once, so the same span "
+            "arrives more than once by design; a correlator whose answer depends on how many "
+            "times it has been asked makes `observed_call` a record of ingest ordering.",
+        )

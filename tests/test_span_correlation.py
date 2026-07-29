@@ -15,6 +15,7 @@ from pathlib import Path
 
 import pytest
 
+from sync.core.conformance import check_request_correlator
 from sync.core.protocols import RequestCorrelator
 from sync.signals.stripe.adapter import StripeAdapter
 from sync.signals.stripe.symbols import build_symbol_map
@@ -147,3 +148,28 @@ def test_telemetry_never_imports_a_vendor(adapter):
     for module in (ingest, otlp):
         source = Path(module.__file__).read_text(encoding="utf-8")
         assert "stripe" not in source.lower(), f"{module.__name__} names a vendor"
+
+
+# --- the conformance kit, run against the real thing ------------------------------
+
+
+def test_the_adapter_passes_the_correlator_conformance_kit(adapter):
+    """The kit is what an outside author runs, and a kit nobody points at a real implementation
+    is a kit whose rules have only ever been read.
+
+    `isinstance` above establishes that the method name exists. This establishes the rest of what
+    the protocol's docstring promises and `runtime_checkable` cannot reach: that a live identifier
+    does not survive the call, that an unresolvable request answers None rather than raising or
+    guessing, that the operation returned is under the method that was asked about, and that the
+    same span correlates the same way twice.
+
+    The identifier is the one from `test_an_instance_path_resolves_through_its_template`, so the
+    two tests fail together if `build_symbol_map` ever stops emitting `/v1/charges/{charge}` --
+    which is a fixture problem, and the kit says so in those words rather than blaming the
+    adapter.
+    """
+    check_request_correlator(
+        adapter,
+        known_request=("GET", "/v1/charges/ch_3MtwBwLkdIwHu7ix28a3tqPa"),
+        identifier="ch_3MtwBwLkdIwHu7ix28a3tqPa",
+    )

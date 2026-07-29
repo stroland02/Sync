@@ -23,6 +23,7 @@ from sync.core import (
     OperationRef,
     Patch,
     RepoRef,
+    RequestCorrelator,
     VendorAdapter,
     VendorChange,
     VerifyResult,
@@ -32,6 +33,7 @@ from sync.core.conformance import (
     check_detector,
     check_language_adapter,
     check_remediator,
+    check_request_correlator,
     check_vendor_adapter,
 )
 
@@ -719,3 +721,251 @@ def test_a_second_scan_that_disagrees_with_the_first_fails():
 
     with pytest.raises(ConformanceFailure, match="same findings"):
         check_detector(Drifts())
+
+
+# --- RequestCorrelator ------------------------------------------------------------
+
+
+class _CorrectCorrelator:
+    """The shape every correlator invariant is stated against.
+
+    Small enough to read in one screen and shaped like the real thing: a table of published
+    templates, matched by method and segment count, answering with the template rather than with
+    the path it was asked about.
+    """
+
+    vendor_id = "example"
+
+    _ROUTES = {
+        ("get", 2): ("/v1/charges", "GetCharges"),
+        ("post", 2): ("/v1/charges", "PostCharges"),
+        ("get", 3): ("/v1/charges/{charge}", "GetChargesCharge"),
+        ("post", 3): ("/v1/charges/{charge}", "PostChargesCharge"),
+    }
+
+    def operation_for_request(self, http_method: str, path: str):
+        observed = tuple(path.strip("/").split("/")) if path.strip("/") else ()
+        entry = self._ROUTES.get((http_method.lower(), len(observed)))
+        if entry is None or any(not segment for segment in observed):
+            return None
+        template, operation_id = entry
+        expected = tuple(template.strip("/").split("/"))
+        if not all(lit.startswith("{") or lit == seen for lit, seen in zip(expected, observed)):
+            return None
+        return OperationRef(
+            operation_id=operation_id, http_method=http_method.lower(), path=template
+        )
+
+
+_KNOWN_REQUEST = ("GET", "/v1/charges/ch_3PjkLm2eZvKYlo2C1cQrSt")
+_IDENTIFIER = "ch_3PjkLm2eZvKYlo2C1cQrSt"
+
+
+def _check_correlator(correlator):
+    return check_request_correlator(
+        correlator, known_request=_KNOWN_REQUEST, identifier=_IDENTIFIER
+    )
+
+
+def test_a_correct_correlator_passes():
+    _check_correlator(_CorrectCorrelator())
+
+
+def test_a_correlator_that_returns_the_request_path_fails():
+    """The rule the kit exists for. `operation_for_request` is handed a real observed path with a
+    live customer identifier in it, and substituting the vendor's published template is the
+    boundary at which that identifier stops travelling. A correlator that hands back what it was
+    given carries the identifier into `observed_call`, into every finding joined against it, and
+    from there into the body of a pull request opened on a public repository.
+
+    Nothing else in the system checks this. `isinstance` cannot, and the two guards in `sync.cli`
+    that use it therefore verify a method name and nothing more.
+    """
+
+    class ReturnsTheRequestPath(_CorrectCorrelator):
+        def operation_for_request(self, http_method: str, path: str):
+            answer = super().operation_for_request(http_method, path)
+            return None if answer is None else answer.model_copy(update={"path": path})
+
+    assert isinstance(
+        ReturnsTheRequestPath(), RequestCorrelator
+    ), "isinstance must still pass, or this proves nothing"
+    with pytest.raises(ConformanceFailure, match="carried the request's own identifier"):
+        _check_correlator(ReturnsTheRequestPath())
+
+
+def test_a_correlator_that_leaks_the_identifier_into_the_operation_id_fails():
+    """The same leak through a different field. A rule that read only `.path` would certify this
+    as conformant, and every string on the ref is stored and reported.
+    """
+
+    class LeaksIntoTheId(_CorrectCorrelator):
+        def operation_for_request(self, http_method: str, path: str):
+            answer = super().operation_for_request(http_method, path)
+            if answer is None:
+                return None
+            last = path.rsplit("/", 1)[-1]
+            return answer.model_copy(update={"operation_id": answer.operation_id + ":" + last})
+
+    with pytest.raises(ConformanceFailure, match="carried the request's own identifier"):
+        _check_correlator(LeaksIntoTheId())
+
+
+def test_a_correlator_that_raises_on_an_unrecognised_path_fails():
+    """A correlator is asked about every client span in a batch, most of which are for other
+    hosts entirely. One that raises on a path it does not recognise takes down the ingest of the
+    whole batch over a request it was never expected to know.
+    """
+
+    class Raises(_CorrectCorrelator):
+        def operation_for_request(self, http_method: str, path: str):
+            answer = super().operation_for_request(http_method, path)
+            if answer is None:
+                raise KeyError(path)
+            return answer
+
+    assert isinstance(Raises(), RequestCorrelator)
+    with pytest.raises(ConformanceFailure, match="must answer for a request it cannot resolve"):
+        _check_correlator(Raises())
+
+
+def test_a_correlator_that_guesses_at_an_unrecognised_path_fails():
+    """`None` rather than a guess, which is `operation_for_symbol`'s rule addressed by path. A
+    missing binding is visibly unresolved and can be counted; a wrong one attributes real traffic
+    to an operation nobody called, and the finding it produces points at code that never made the
+    request.
+    """
+
+    class Guesses(_CorrectCorrelator):
+        def operation_for_request(self, http_method: str, path: str):
+            answer = super().operation_for_request(http_method, path)
+            if answer is not None:
+                return answer
+            return OperationRef(
+                operation_id="GetCharges", http_method=http_method.lower(), path="/v1/charges"
+            )
+
+    with pytest.raises(ConformanceFailure, match="must return None for an unrecognised request"):
+        _check_correlator(Guesses())
+
+
+def test_a_correlator_that_raises_on_an_empty_path_fails():
+    """`sync.cli` hands this `urlsplit(url).path`, which is the empty string for a URL that has no
+    path at all. That is a real span produced by a real exporter, and a correlator that raises on
+    it stops the ingest rather than declining one request.
+    """
+
+    class RaisesOnEmpty(_CorrectCorrelator):
+        def operation_for_request(self, http_method: str, path: str):
+            if not path:
+                raise ValueError("empty path")
+            return super().operation_for_request(http_method, path)
+
+    with pytest.raises(ConformanceFailure, match="must answer for a request it cannot resolve"):
+        _check_correlator(RaisesOnEmpty())
+
+
+def test_a_correlator_that_ignores_the_http_method_fails():
+    """A span carries a method and a URL, and `/v1/charges` is two different operations. A
+    correlator matching on the path alone merges a read with a write -- which is the distinction
+    the efficiency detector's whole subject rests on -- and binds a DELETE to the operation that
+    reads.
+    """
+
+    class IgnoresTheMethod(_CorrectCorrelator):
+        def operation_for_request(self, http_method: str, path: str):
+            return super().operation_for_request("get", path)
+
+    assert isinstance(IgnoresTheMethod(), RequestCorrelator)
+    with pytest.raises(ConformanceFailure, match="must be the method it was asked about"):
+        _check_correlator(IgnoresTheMethod())
+
+
+def test_a_correlator_that_returns_the_wrong_type_fails():
+    """A dict is not an `OperationRef`. `sync.telemetry.ingest` reads `.operation_id` and `.path`
+    off whatever arrives, so the wrong shape fails there naming a field rather than here naming
+    the correlator.
+    """
+
+    class WrongType(_CorrectCorrelator):
+        def operation_for_request(self, http_method: str, path: str):
+            answer = super().operation_for_request(http_method, path)
+            return None if answer is None else answer.model_dump()
+
+    with pytest.raises(ConformanceFailure, match="must return an OperationRef or None"):
+        _check_correlator(WrongType())
+
+
+def test_a_correlator_without_a_vendor_id_fails():
+    """`isinstance` verifies that the attribute is *there* and says nothing about what it holds.
+    An empty one keys every `observed_call` row this correlator produces under nothing.
+    """
+
+    class Anonymous(_CorrectCorrelator):
+        vendor_id = ""
+
+    assert isinstance(Anonymous(), RequestCorrelator)
+    with pytest.raises(ConformanceFailure, match="vendor_id"):
+        _check_correlator(Anonymous())
+
+
+def test_a_correlator_whose_vendor_id_is_not_a_string_fails():
+    """The half of the attribute rule `runtime_checkable` genuinely cannot reach. Presence it does
+    check, on Python 3.12; type it does not, so an integer here satisfies `isinstance` and then
+    fails wherever the value is compared against a vendor id or written to a text column.
+    """
+
+    class Numeric(_CorrectCorrelator):
+        vendor_id = 42
+
+    assert isinstance(Numeric(), RequestCorrelator)
+    with pytest.raises(ConformanceFailure, match="vendor_id"):
+        _check_correlator(Numeric())
+
+
+def test_a_correlator_that_answers_differently_the_second_time_fails():
+    """Every stage here is idempotent, and a correlator sits inside one. One whose answer depends
+    on how many times it has been asked makes `observed_call` a record of ingest ordering, and the
+    same batch re-delivered -- which at-least-once OTLP delivery guarantees will happen -- folds
+    into a different operation than it did the first time.
+    """
+
+    class Drifts(_CorrectCorrelator):
+        def __init__(self) -> None:
+            self._calls = 0
+
+        def operation_for_request(self, http_method: str, path: str):
+            self._calls += 1
+            answer = super().operation_for_request(http_method, path)
+            if answer is None:
+                return None
+            return answer.model_copy(
+                update={"operation_id": answer.operation_id + str(self._calls)}
+            )
+
+    with pytest.raises(ConformanceFailure, match="must give the same answer"):
+        _check_correlator(Drifts())
+
+
+def test_an_identifier_that_is_not_in_the_request_is_reported_against_the_case():
+    """A precondition failing is not the same as a rule passing. An identifier the request does
+    not contain makes the privacy rule vacuous -- every correlator passes it, including one that
+    returns the raw path -- so the kit says the case is wrong rather than saying the correlator is
+    right.
+    """
+    with pytest.raises(ConformanceFailure, match="identifier must appear"):
+        check_request_correlator(
+            _CorrectCorrelator(), known_request=_KNOWN_REQUEST, identifier="ch_not_in_this_path"
+        )
+
+
+def test_a_known_request_that_does_not_resolve_is_reported_against_the_case():
+    """The same discipline. If the request the author supplied correlates to nothing there is no
+    returned template to inspect, and every rule that reads one is vacuous.
+    """
+    with pytest.raises(ConformanceFailure, match="must resolve to an operation"):
+        check_request_correlator(
+            _CorrectCorrelator(),
+            known_request=("GET", "/v1/nothing_here/ch_3PjkLm2eZvKYlo2C1cQrSt"),
+            identifier=_IDENTIFIER,
+        )
