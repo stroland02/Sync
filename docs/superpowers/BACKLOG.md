@@ -105,19 +105,6 @@ want anyway, since nothing they read is binary.
 **Closes when:** a corpus specification naming a repository with binary files scores without a
 pre-filtering step, and the count of skipped files is reported rather than silent.
 
-### B28 — The routing row still has nowhere durable to land
-
-`_decide_tier` computes the decision-table row in the `locate` node and stores it on `RunState`;
-`TieredRemediator` asks the same table again; the report node names it in its reason. Nothing
-persists it. `migration_outcome` has no column for it, `sync.remediate.corpus` takes no such
-argument, and `on_route` has no caller anywhere in `src/`.
-
-Routing accuracy is one of the five quality axes, and it is the one that answers "was tier 0
-wrong for this change kind". Without the row it is an archaeology project rather than a query,
-and it stays that way however much corpus data arrives.
-
-**Closes when:** the row a run actually routed on is queryable from the outcome it produced.
-
 ## In flight
 
 - **B28** — `task_d36a5c6e7443`, in `sync-solo-b`. Freezes a specimen corpus and measures whether
@@ -128,6 +115,17 @@ and it stays that way however much corpus data arrives.
   the first worker held the task for half an hour without starting and did not answer two nudges.
 
 ## Done
+
+- **B28** — the decision-table row a run routed on now reaches `migration_outcome`. Landed
+  `47cca19`, written by the coordinator after its worker went silent with no edits across two
+  ticks. The seam is the recorder, not `on_route`, which still has no caller: `_record` already
+  receives the state the row lives on. Required rather than defaulted, and the mutation showed
+  why — with a default, removing the writer left the jurisdiction test still passing because the
+  default equalled what it asserted; required, the same mutation fails it.
+- **B31** — diagnosed why binding precision cannot fail and built `falsifiable_negatives` to say
+  so in the output. Landed `67ab335`. It corrected the coordinator's evidence: the rung on an
+  unaffected label is a literal `mutate.py:190` writes, and `binding.py:223` never reads it, so
+  counting it proved nothing. Real cause is `cli.py:1473`. Follow-up is **B32**.
 
 - **B31** — diagnosed and closed; `falsifiable_negatives` reads 0 for all ten pairs and the
   cause is `cli.py:1473`. The follow-up is **B32**, deliberately a different number.
