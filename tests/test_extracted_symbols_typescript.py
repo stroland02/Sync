@@ -303,6 +303,221 @@ def test_resources_with_nothing_mounting_them_fails_too(tmp_path):
     assert GENERATOR in str(raised.value)
 
 
+# --- every place the reader declines, and the map it leaves behind ---------------------------
+#
+# Each of these asserts on the whole symbol map rather than on an internal call. A decline is a
+# `continue` or a `return None`, and what makes it right or wrong is which operations survive it:
+# a reader that skips too much produces a smaller map, and a smaller map produces fewer findings,
+# which is indistinguishable from a healthy vendor.
+
+
+def test_the_hand_built_sdk_is_read_before_anything_is_declined(tmp_path):
+    """The control every other test in this section rests on.
+
+    Each of those adds one construct the reader declines and asserts the map is still exactly
+    this. Without this test that assertion is satisfied just as well by an SDK nothing could be
+    read from at all, which is the failure they exist to detect.
+    """
+    assert _map(_hand_built(tmp_path)) == _READABLE
+
+
+def test_a_client_call_handed_no_arguments_yields_no_operation(tmp_path):
+    """`this._client.get()` -- the verb is there and the route is not.
+
+    Declining is right and there is nothing else available: the route is the first argument and
+    this call has none. Recording the verb alone would put a symbol in the map with no route to
+    match a vendor change against.
+    """
+    root = _hand_built(tmp_path, "  ping() { return this._client.get(); }")
+
+    assert _map(root) == _READABLE
+
+
+def test_an_empty_route_however_written_reads_as_absent_rather_than_as_a_route(tmp_path):
+    """`''` and an empty tagged template both.
+
+    A string node with no fragment and a template with no parts are the same fact -- the source
+    states no route -- and both must read as absent. Reading either as the empty route would mount
+    an operation at `""`, which normalises to a path no specification declares and matches
+    whatever a later comparison decides an empty string is equal to.
+    """
+    root = _hand_built(
+        tmp_path,
+        "  ping() { return this._client.get('', {}); }",
+        "  pong() { return this._client.get(path``, {}); }",
+    )
+
+    assert _map(root) == _READABLE
+
+
+def test_a_route_built_by_a_call_this_rule_does_not_read_is_declined(tmp_path):
+    """`this._client.get(buildPath(x), {})`.
+
+    The first argument is a call, so it reaches the tagged-template reader, and its arguments are
+    a positional list rather than a template. Declining is right: reconstructing what `buildPath`
+    returns means evaluating the source, and a route this cannot see is better missing than
+    guessed -- a guessed route resolves a call site to an operation the customer never calls.
+    """
+    root = _hand_built(tmp_path, "  ping() { return this._client.get(buildPath(x), {}); }")
+
+    assert _map(root) == _READABLE
+
+
+def test_a_tagged_template_under_another_tag_is_not_read_as_a_route(tmp_path):
+    """``this._client.get(url`/v1/ping`, {})``.
+
+    Only the `path` tag is read. Declining is right for the reason the module states: reading any
+    tag would mean reading any string built by interpolation, and most of those are not routes.
+    The cost is that a Stainless flavour renaming that helper reads as a vendor with no
+    operations, which is why the tag is a named constant rather than a literal at the test site.
+    """
+    root = _hand_built(tmp_path, "  ping() { return this._client.get(url`/v1/ping`, {}); }")
+
+    assert _map(root) == _READABLE
+
+
+def test_a_mount_whose_constructor_is_not_a_name_is_not_an_edge(tmp_path):
+    """`new (pick())(this)` -- a `new` expression whose constructor is an expression.
+
+    Declining is right: which class that constructs is a runtime fact, and this rule reads what
+    the source states. An edge invented here would file a resource's whole route set under a
+    property no customer reaches by that name.
+    """
+    root = _hand_built(
+        tmp_path,
+        client=_CLIENT.replace("}\n", "  beta = new (pick())(this);\n}\n"),
+    )
+
+    assert _map(root) == _READABLE
+
+
+def test_a_comment_inside_an_export_clause_does_not_stop_the_barrel_being_followed(tmp_path):
+    """`export { /* the resource */ Models } from './models'`.
+
+    A comment is a named child of the export clause, so the clause loop meets one and skips it.
+    Declining that child is right -- it names nothing -- and what matters is that the specifier
+    beside it is still read: skipping the whole clause would unroot every mount that goes through
+    the barrel, which is every mount the client makes.
+    """
+    root = _hand_built(tmp_path, barrel="export { /* the resource */ Models } from './models';\n")
+
+    assert _map(root) == _READABLE
+
+
+def test_a_class_reached_only_through_a_star_re_export_is_followed(tmp_path):
+    """`export * from './models'` with no named specifier for `Models` anywhere.
+
+    The committed Anthropic barrel names every class it forwards, so its `export * from './shared'`
+    is never the clause that resolves one. A barrel that forwards a resource only by star is the
+    same declaration made a second way, and a rule that read one and not the other would report a
+    vendor with no operations rather than a vendor whose barrel is written differently.
+    """
+    root = _hand_built(tmp_path, barrel="export * from './models';\n")
+
+    assert _map(root) == _READABLE
+
+
+def test_an_import_resolving_above_the_checkout_root_names_nothing_here(tmp_path):
+    """`import * as Out from '../../elsewhere/thing'`, with a mount through that alias.
+
+    Relative and resolvable, so it is not refused as a package specifier; it simply lands outside
+    the tree being read. Declining is right -- a module outside the checkout is not this SDK, and
+    following it would read whatever happens to sit beside the clone -- and the mount holding the
+    unresolved alias is left out rather than matched against a class of that name somewhere else.
+    """
+    root = _hand_built(
+        tmp_path,
+        client=(
+            "import * as Out from '../../elsewhere/thing';\n"
+            + _CLIENT.replace("}\n", "  outside = new Out.Models(this);\n}\n")
+        ),
+    )
+
+    assert _map(root) == _READABLE
+
+
+def test_an_interpolation_this_rule_cannot_resolve_stands_where_it_stood(tmp_path):
+    """The module's own stated hard case: a route reassembled from the literal parts of a template.
+
+    An interpolation is never dropped and the literal parts are never simply joined. Every
+    substitution contributes a segment in the position it held, whatever the expression inside it
+    was, so the route this produces has the same number of segments the source wrote. A template
+    read with a hole in it would be a *wrong* route -- `/v1/ping` where the source says
+    `${this.baseURL}/v1/ping` -- and a wrong route binds a call site to an operation that exists.
+    """
+    root = _hand_built(
+        tmp_path,
+        "  ping() { return this._client.get(path`${this.baseURL}/v1/ping`, {}); }",
+        "  two() { return this._client.get(path`/v1/models/${modelID}/x/${version}`, {}); }",
+    )
+    extracted = _map(root)
+
+    assert extracted["models.ping"] == ("GET", "{this.baseURL}/v1/ping")
+    assert extracted["models.two"] == ("GET", "/v1/models/{modelID}/x/{version}")
+
+
+def test_a_route_carrying_an_unresolvable_interpolation_is_unknown_to_the_specification(tmp_path):
+    """And what that costs, measured on the cross-check rather than argued.
+
+    The extra segment survives the parameter reduction as an extra placeholder, so the route
+    matches nothing the specification declares and is reported. That makes an interpolation this
+    rule cannot resolve a **missing** binding that says so, not a wrong one -- the operation is in
+    the map, it resolves to no vendor change, and the cross-check names it where a spec is staged.
+    """
+    root = _hand_built(
+        tmp_path, "  ping() { return this._client.get(path`${this.baseURL}/v1/models`, {}); }"
+    )
+
+    report = report_extraction(root, read_spec_operations(SPEC_OPERATIONS))
+
+    assert [operation.symbol for operation in report.unknown_to_spec] == ["models.ping"]
+
+
+def test_a_route_literal_carrying_an_escape_is_declined_rather_than_truncated(tmp_path):
+    """Neither reader interprets an escape, and neither may read the fragments around one.
+
+    tree-sitter splits a literal at every escape, so a plain string yields two fragments and a
+    template yields two parts with the escape between them. Taking the first fragment reads
+    `/v1/a` for a source that says `/v1/aAb`, and joining a template's fragments reads `/v1/ab`
+    for the same -- both are routes the source does not state, produced silently, and a wrong
+    route is worse than a missing one because it resolves.
+    """
+    root = _hand_built(
+        tmp_path,
+        "  plain() { return this._client.get('/v1/a\\u0041b', {}); }",
+        "  tagged() { return this._client.get(path`/v1/a\\u0041b/${x}`, {}); }",
+    )
+
+    assert _map(root) == _READABLE
+
+
+def test_a_resource_this_grammar_does_not_call_a_class_declaration_is_never_reached(tmp_path):
+    """`abstract class Beta extends APIResource` parses as `abstract_class_declaration`, and
+    `export default class extends APIResource` as a class *expression*. Neither is the
+    `class_declaration` this rule matches, so neither is read and no guarded branch is reached.
+
+    Declining is defensible -- Stainless emits neither -- but the decline happens before any
+    branch that could record it, and this is what it looks like from outside: an SDK that parses,
+    roots, reports a coverage number and is missing a resource. Recorded here because the map is
+    the only place it shows.
+    """
+    root = _hand_built(
+        tmp_path,
+        client=_CLIENT.replace("}\n", "  beta: API.Beta = new API.Beta(this);\n}\n"),
+        barrel=_HAND_BUILT_BARREL + "export { Beta } from './beta';\n",
+    )
+    (root / "resources" / "beta.ts").write_text(
+        "import { APIResource } from '../core/resource';\n"
+        "\n"
+        "export abstract class Beta extends APIResource {\n"
+        "  list() { return this._client.get('/v1/beta', {}); }\n"
+        "}\n",
+        encoding="utf-8",
+    )
+
+    assert _map(root) == _READABLE
+
+
 # --- the Python flavour is unaffected -------------------------------------------------------
 
 
@@ -411,6 +626,62 @@ def test_a_generator_this_deployment_cannot_read_is_refused_where_it_is_configur
 
 def _never_fetch(url: str) -> str:
     raise AssertionError("symbol extraction must not reach a network")
+
+
+_CLIENT = """\
+import * as API from './resources/index';
+
+export class Anthropic extends BaseAnthropic {
+  models: API.Models = new API.Models(this);
+}
+"""
+
+_HAND_BUILT_BARREL = "export { Models } from './models';\n"
+
+_READABLE = {"models.list": ("GET", "/v1/models")}
+"""The one operation the hand-built SDK always states, and the whole map when nothing else is."""
+
+
+def _hand_built(
+    tmp_path: Path,
+    *methods: str,
+    client: str = _CLIENT,
+    barrel: str = _HAND_BUILT_BARREL,
+) -> Path:
+    """Three files of the shape this rule reads, with `models.list` always readable.
+
+    Written by hand rather than cut from a vendor, because every construct these tests are about
+    is one Stainless does not emit -- there is nothing in the committed Anthropic fixture to
+    replace, and corrupting it into these shapes would make the corruption the fixture.
+
+    `models.list` is here so the map has something in it either way: a decline test asserting
+    only that a symbol is absent passes just as well when the whole SDK failed to parse.
+    """
+    root = tmp_path / "sdk"
+    files = {
+        "client.ts": client,
+        "resources/index.ts": barrel,
+        "resources/models.ts": (
+            "import { APIResource } from '../core/resource';\n"
+            "import { path } from '../internal/utils/path';\n"
+            "\n"
+            "export class Models extends APIResource {\n"
+            + "\n".join(["  list() { return this._client.get('/v1/models', {}); }", *methods])
+            + "\n}\n"
+        ),
+    }
+    for relative, body in files.items():
+        target = root / relative
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(body, encoding="utf-8")
+    return root
+
+
+def _map(root: Path) -> dict[str, tuple[str, str]]:
+    return {
+        operation.symbol: (operation.http_method, operation.path)
+        for operation in extract_symbols(root)
+    }
 
 
 def _corrupt(tmp_path: Path, relative: str, old: str, new: str) -> Path:

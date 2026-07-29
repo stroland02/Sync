@@ -243,9 +243,14 @@ def _plain_route(node: Node, source: bytes) -> str | None:
     """A route written as a plain string literal.
 
     The fragment rather than the quoted text, so an empty string reads as absent rather than as a
-    route, and an escape this does not interpret cannot be mistaken for one.
+    route. A literal carrying an escape is declined whole: this grammar splits a string at every
+    escape, so reading the fragments around one returns a route the source does not state -- a
+    literal whose second character is escaped reads as everything before it -- and a wrong route
+    resolves a call site to an operation the customer never calls.
     """
     if node.type != "string":
+        return None
+    if any(child.type == "escape_sequence" for child in node.children):
         return None
     for child in node.children:
         if child.type == "string_fragment":
@@ -260,6 +265,10 @@ def _tagged_route(node: Node, source: bytes) -> str | None:
     why this reads that field rather than looking for a positional list. Only the `path` tag is
     read: an untagged template would mean reading any string built by interpolation, and most of
     those are not routes.
+
+    A template carrying an escape is declined for the reason `_plain_route` states. Every
+    substitution, by contrast, contributes a segment where it stood, so a route is never assembled
+    with a hole in it however unreadable the expression inside one is.
     """
     if node.type != "call_expression":
         return None
@@ -268,6 +277,8 @@ def _tagged_route(node: Node, source: bytes) -> str | None:
     if function is None or template is None or template.type != "template_string":
         return None
     if _text(function, source) != _PATH_TAG:
+        return None
+    if any(child.type == "escape_sequence" for child in template.children):
         return None
 
     parts: list[str] = []
