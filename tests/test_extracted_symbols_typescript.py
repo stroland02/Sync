@@ -357,8 +357,16 @@ def test_a_route_built_by_a_call_this_rule_does_not_read_is_declined(tmp_path):
     a positional list rather than a template. Declining is right: reconstructing what `buildPath`
     returns means evaluating the source, and a route this cannot see is better missing than
     guessed -- a guessed route resolves a call site to an operation the customer never calls.
+
+    The helper is handed a literal rather than a variable, deliberately. A reader that searched the
+    first argument's subtree for a string -- the obvious wrong implementation of "the route is the
+    literal beside the verb" -- would find `/v1/ping` and be wrong about what the SDK sends,
+    because what it sends is whatever `buildPath` returns. With a variable there instead, the test
+    passes whether the reader declines or merely finds nothing, which proves less.
     """
-    root = _hand_built(tmp_path, "  ping() { return this._client.get(buildPath(x), {}); }")
+    root = _hand_built(
+        tmp_path, "  ping() { return this._client.get(buildPath('/v1/ping'), {}); }"
+    )
 
     assert _map(root) == _READABLE
 
