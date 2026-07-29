@@ -44,7 +44,8 @@ CHANGE = VendorChange(
     severity="breaking", source="oasdiff", raw={"field": "status"},
 )
 FINDING = Finding(
-    id="f1", detector="vendor_change", call_site_id="cs1", vendor_change_id="vc1",
+    id="f1", detector="vendor_change", claim="response-field", call_site_id="cs1",
+    vendor_change_id="vc1",
     severity="breaking", rationale="status removed",
 )
 REPO = RepoRef(repo_id="r1", url="https://example.invalid/r", local_path="/tmp/r", head_sha="0" * 40)

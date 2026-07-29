@@ -56,7 +56,8 @@ CHANGE = VendorChange(
     raw={"id": "request-property-removed", "text": "removed the request property `amount`"},
 )
 FINDING = Finding(
-    id="f1", detector="vendor_change", call_site_id="cs1", vendor_change_id="vc1",
+    id="f1", detector="vendor_change", claim="request-field", call_site_id="cs1",
+    vendor_change_id="vc1",
     severity="breaking", rationale="PostCharges no longer accepts amount",
 )
 REPO = RepoRef(repo_id="r1", url="https://example.invalid/r", local_path="/tmp/r", head_sha="0" * 40)

@@ -144,7 +144,8 @@ def _seed(store: GraphStore, repo: RepoRef, path: str) -> Finding:
         site.id = store.upsert_call_site(site)
         change_id = store.upsert_vendor_change(CHANGE)
         finding = Finding(
-            detector="parameter-deprecation", call_site_id=site.id, vendor_change_id=change_id,
+            detector="parameter-deprecation", claim=f"parameter:{CHANGE.operation_id}",
+            call_site_id=site.id, vendor_change_id=change_id,
             severity="breaking",
             rationale=f"{CHANGE.kind} on {RETIRED}: retired, replaced by {REPLACEMENT}",
         )

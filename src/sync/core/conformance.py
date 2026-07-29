@@ -648,17 +648,25 @@ def _check_findings_are_usable(detector: Any, findings: list) -> None:
 def _check_findings_do_not_collide(findings: list) -> None:
     """Two findings the graph cannot tell apart are one row, and nobody is told which one.
 
-    A finding's identity is `(detector, call_site_id, vendor_change_id)` and the insert is
-    ON CONFLICT DO NOTHING. So a detector that says two different things about one call site
-    under one change keeps whichever it emitted first: the second is dropped silently, at the
-    store, after the detector has already decided both were worth raising.
+    A finding's identity is `(detector, call_site_id, vendor_change_id, claim)` and the insert
+    is ON CONFLICT DO NOTHING. So a detector that says two different things about one call site
+    under one change and one claim keeps whichever it emitted first: the second is dropped
+    silently, at the store, after the detector has already decided both were worth raising.
+
+    `claim` joined that key after this rule was written, and this rule followed it rather than
+    being relaxed to admit the three detectors it was failing. The distinction matters: the
+    rule still fires on two findings sharing the whole key, which is what its broken example
+    now emits. A rule loosened to pass its own violators would be worse than the defect, since
+    it would then certify the defect as conformant.
 
     Emitting the same finding twice is not that. Identical rows collapse to the identical row,
     which loses nothing, so only findings that *disagree* under one key are reported here.
     """
     seen: dict[tuple, Any] = {}
     for finding in findings:
-        key = (finding.detector, finding.call_site_id, finding.vendor_change_id or "")
+        key = (
+            finding.detector, finding.call_site_id, finding.vendor_change_id or "", finding.claim
+        )
         earlier = seen.get(key)
         if earlier is None:
             seen[key] = finding
@@ -669,10 +677,11 @@ def _check_findings_do_not_collide(findings: list) -> None:
             continue
         _fail(
             "two findings from one scan share the same natural key.",
-            "The graph identifies a finding by (detector, call_site_id, vendor_change_id) and "
-            f"inserts ON CONFLICT DO NOTHING, so only one of these is stored:\n    "
-            f"{earlier.rationale}\n    {finding.rationale}\n  Give them different vendor change "
-            "ids, or say both things in one finding.",
+            "The graph identifies a finding by (detector, call_site_id, vendor_change_id, "
+            f"claim) and inserts ON CONFLICT DO NOTHING, so only one of these is stored:\n    "
+            f"{earlier.rationale}\n    {finding.rationale}\n  Both carry claim {finding.claim!r}. "
+            "Give them claims that name the two different things they say, or say both things "
+            "in one finding.",
         )
 
 
@@ -696,7 +705,7 @@ def _finding_keys(findings: list) -> list:
     return sorted(
         (
             finding.detector, finding.call_site_id, finding.vendor_change_id or "",
-            finding.severity, finding.rationale, finding.status,
+            finding.claim, finding.severity, finding.rationale, finding.status,
         )
         for finding in findings
     )

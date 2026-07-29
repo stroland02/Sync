@@ -97,6 +97,13 @@ class ParameterDeprecationDetector:
                 findings.append(
                     Finding(
                         detector=self.detector_id,
+                        # The parameter, because that is what the claim is about: this site
+                        # passes `model` and the vendor stopped honouring it. Two deprecated
+                        # parameters on one call site already resolve to two vendor changes --
+                        # `parameters_to_vendor_changes` puts the parameter in `operation_id`,
+                        # so the ids differ -- so this does not carry identity on its own. It
+                        # says which claim the row is without a join, which is worth having.
+                        claim=f"parameter:{deprecation.parameter}",
                         call_site_id=site.id,
                         vendor_change_id=link.vendor_change_id,
                         # Severity carries the confidence. The scope was not evaluated, so

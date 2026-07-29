@@ -89,6 +89,7 @@ def test_a_patch_carries_its_findings_rationale_verbatim(tmp_path, monkeypatch):
 
     finding = Finding(
         detector="vendor_change",
+        claim="response-field",
         call_site_id="cs1",
         vendor_change_id="vc1",
         severity="breaking",

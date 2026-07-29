@@ -53,10 +53,25 @@ that corpus does not exist yet.
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from typing import Any, Iterable, Mapping
 
 from sync.core import Finding, ObservedCall
 from sync.graph.store import GraphStore
+
+
+@dataclass(frozen=True)
+class _Claim:
+    """One efficiency claim a single unit of work supports.
+
+    `kind` reaches `Finding.claim` and joins the graph's identity for the row, so it is a fixed
+    vocabulary and never carries a number. `magnitude` is the number the claim was made on, and
+    exists only so `scan` can choose which trace to quote when several make the same claim.
+    """
+
+    kind: str
+    magnitude: int
+    rationale: str
 
 LOOP_THRESHOLD = 10
 """Calls to one operation within one unit of work, at or above which this reads as iteration.
@@ -123,6 +138,21 @@ class EfficiencyDetector:
         self._resend_threshold = resend_threshold
 
     def scan(self) -> Iterable[Finding]:
+        """One finding per claim per call site, quoting the worst unit of work that made it.
+
+        The reduction over traces is not an optimisation. A trace is unbounded -- a busy
+        repository writes one `observed_call` row per request -- and every request looping over
+        one call site supports the same claim, so emitting a finding each would put a row in
+        front of a reviewer for every request the customer served. That is the same argument
+        the shared-cost note below makes about call sites, applied to the axis where the
+        numbers are far larger: N findings would assert N savings that do not exist.
+
+        Which trace gets quoted is decided rather than left to arrive: the largest magnitude,
+        with the trace id breaking ties so two scans of an unchanged graph choose the same one.
+        The worst unit of work is also the one worth showing.
+        """
+        strongest: dict[tuple[str, str], tuple[ObservedCall, _Claim]] = {}
+
         for call in self._store.observed_calls(self._repo_id):
             if call.vendor_id != self._vendor_id:
                 continue
@@ -137,73 +167,97 @@ class EfficiencyDetector:
             if not call.operation_id:
                 continue
 
-            sites = self._store.call_sites_for_operation(self._vendor_id, call.operation_id)
-            if not sites:
-                continue
+            for claim in self._claims(call):
+                key = (call.operation_id, claim.kind)
+                held = strongest.get(key)
+                if held is None or (claim.magnitude, call.trace_id) > (
+                    held[1].magnitude, held[0].trace_id
+                ):
+                    strongest[key] = (call, claim)
 
+        for (operation_id, _), (call, claim) in sorted(strongest.items()):
+            sites = self._store.call_sites_for_operation(self._vendor_id, operation_id)
             reachable = [site for site in sites if site.id is not None]
             shared_note = (
                 f", shared across {len(reachable)} call sites" if len(reachable) > 1 else ""
             )
             for site in reachable:
-                for rationale in self._rationales(call):
-                    yield Finding(
-                        detector=self.detector_id,
-                        call_site_id=site.id,
-                        # `Severity` has no cost axis and `info` is the honest fit. An
-                        # efficiency finding has not broken anything, and reporting one as
-                        # breaking would let a saving compete in triage with a call site that
-                        # no longer compiles.
-                        severity="info",
-                        # The cost is stated as shared because it was incurred once. Every
-                        # other detector's findings are repair instructions -- each call site
-                        # is independently broken and independently fixable, so N sites are N
-                        # pieces of work. This one is a cost claim, and N findings would
-                        # assert N savings that do not exist. The row count stays one per
-                        # site, so the shape matches every other detector; what the reviewer
-                        # gets is a rationale that cannot be totalled into a number three
-                        # times the truth.
-                        rationale=(
-                            f"{rationale} ({site.path}:{site.line}"
-                            f"{shared_note})"
-                        ),
-                    )
+                yield Finding(
+                    detector=self.detector_id,
+                    # The kind of claim and never its wording. The rationale beside it carries
+                    # a live call count, so a discriminator derived from it would change
+                    # between runs and write a new row on each one instead of converging.
+                    claim=claim.kind,
+                    call_site_id=site.id,
+                    # `Severity` has no cost axis and `info` is the honest fit. An
+                    # efficiency finding has not broken anything, and reporting one as
+                    # breaking would let a saving compete in triage with a call site that
+                    # no longer compiles.
+                    severity="info",
+                    # The cost is stated as shared because it was incurred once. Every
+                    # other detector's findings are repair instructions -- each call site
+                    # is independently broken and independently fixable, so N sites are N
+                    # pieces of work. This one is a cost claim, and N findings would
+                    # assert N savings that do not exist. The row count stays one per
+                    # site, so the shape matches every other detector; what the reviewer
+                    # gets is a rationale that cannot be totalled into a number three
+                    # times the truth.
+                    rationale=(
+                        f"{claim.rationale} ({site.path}:{site.line}"
+                        f"{shared_note})"
+                    ),
+                )
 
-    def _rationales(self, call: ObservedCall) -> list[str]:
+    def _claims(self, call: ObservedCall) -> list[_Claim]:
         """Every efficiency claim this one unit of work supports.
 
         A single row can support more than one -- a loop whose calls also repeat is both a loop
         and an absent cache, with different fixes -- so they are not mutually exclusive and none
         short-circuits the others.
+
+        Each carries the magnitude the claim was made on, because `scan` has to choose between
+        two traces making the same claim and the larger number is the one worth quoting.
         """
-        claims: list[str] = []
+        claims: list[_Claim] = []
         where = f"{call.operation_id} at {call.server_address}"
         unit = f"one unit of work (trace {call.trace_id})"
 
         if call.call_count >= self._loop_threshold:
-            claims.append(
-                f"{call.call_count} calls to {where} within {unit}, which reads as a loop "
-                f"rather than a written-out sequence. Volume is stated rather than a cost: "
-                f"no price per call is recorded anywhere in the graph."
-            )
+            claims.append(_Claim(
+                kind="loop",
+                magnitude=call.call_count,
+                rationale=(
+                    f"{call.call_count} calls to {where} within {unit}, which reads as a loop "
+                    f"rather than a written-out sequence. Volume is stated rather than a cost: "
+                    f"no price per call is recorded anywhere in the graph."
+                ),
+            ))
 
         targets = _successful_targets(call.spans)
         repeats = len(targets) - len(set(targets))
         if repeats >= self._repeat_threshold:
-            claims.append(
-                f"the same request to {where} was made {repeats + 1} times within {unit}, so "
-                f"{repeats} of those calls returned something the caller already had -- a cache "
-                f"would remove them. Counted over calls that succeeded, because re-issuing a "
-                f"failed call is a retry rather than an absent cache."
-            )
+            claims.append(_Claim(
+                kind="uncached-repeat",
+                magnitude=repeats,
+                rationale=(
+                    f"the same request to {where} was made {repeats + 1} times within {unit}, so "
+                    f"{repeats} of those calls returned something the caller already had -- a cache "
+                    f"would remove them. Counted over calls that succeeded, because re-issuing a "
+                    f"failed call is a retry rather than an absent cache."
+                ),
+            ))
 
         if call.max_resend_count >= self._resend_threshold:
-            claims.append(
-                f"a single call to {where} was resent {call.max_resend_count} times within "
-                f"{unit}, which is a retry storm rather than a transient. The worst single "
-                f"call, not the total: each span already counts its own resends. Whether this "
-                f"exhausted the SDK's retry policy is not recorded, so the count is quoted "
-                f"rather than a policy being claimed."
-            )
+            claims.append(_Claim(
+                kind="retry-storm",
+                magnitude=call.max_resend_count,
+                rationale=(
+                    f"a single call to {where} was resent {call.max_resend_count} times within "
+                    f"{unit}, which is a retry storm rather than a transient. The worst single "
+                    f"call, not the total: each span already counts its own resends. Whether this "
+                    f"exhausted the SDK's retry policy is not recorded, so the count is quoted "
+                    f"rather than a policy being claimed."
+                ),
+            ))
 
         return claims

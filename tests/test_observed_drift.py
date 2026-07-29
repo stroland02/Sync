@@ -311,3 +311,66 @@ def test_the_rationale_reports_the_evidence_and_its_limit(store: GraphStore):
 def test_the_detector_satisfies_the_detector_protocol(store: GraphStore):
     """Everything downstream consumes detectors through the protocol, not through this class."""
     assert isinstance(_detector(store), Detector)
+
+
+def test_two_claims_about_one_call_site_survive_being_stored(store: GraphStore):
+    """Two fields of one response are two claims, and must be two rows.
+
+    The graph derives a finding's id from its identity fields and inserts ON CONFLICT DO
+    NOTHING, so two findings the key cannot tell apart are one row and nobody is told which
+    was dropped. This detector is the case needing no assumption about reachability: it has
+    two independent yield sites for one loop -- a field the specification never described, and
+    a field whose shape drifted -- and a response carrying both produces two facts about one
+    call site.
+    """
+    _site(store, reads=("data.status", "data.extra"))
+    _observe(store, json_type="string", first_seen=OLD)
+    _observe(store, json_type="number", first_seen=NEW)
+    _observe(store, field_path="/data/extra", json_type="string")
+
+    findings = list(_detector(store).scan())
+    assert len(findings) >= 2, "the case must produce two claims or this proves nothing"
+
+    for finding in findings:
+        store.insert_finding(finding)
+
+    assert len(store.open_findings()) == len(findings)
+
+
+def test_two_undescribed_fields_on_one_call_site_are_two_rows(store: GraphStore):
+    """The field path is what carries identity here, and this is what proves it.
+
+    `test_two_claims_about_one_call_site_survive_being_stored` uses one undescribed field and
+    one drift, so it passes even if the claim names only which of the two yield sites emitted
+    it -- mutation testing established that. Two undescribed fields are the case that does not:
+    they come from one yield site, and only the path tells them apart.
+    """
+    _site(store, reads=("data.status",))
+    _observe(store, field_path="/data/first", json_type="string")
+    _observe(store, field_path="/data/second", json_type="string")
+
+    findings = list(_detector(store).scan())
+    assert len(findings) == 2
+
+    for finding in findings:
+        store.insert_finding(finding)
+
+    assert len(store.open_findings()) == 2
+
+
+def test_the_claim_says_which_of_the_two_things_this_detector_found(store: GraphStore):
+    """A field path can produce one kind of claim or the other and never both, so the prefix
+    carries no identity -- which is exactly why it needs pinning somewhere.
+
+    `claim` is a column, and a query asking how much of this detector's output is unannounced
+    additions rather than shapes contradicting the specification reads it. A prefix that named
+    the wrong one would answer that question wrongly and break nothing else.
+    """
+    _site(store, reads=("data.status",))
+    _observe(store, json_type="string", first_seen=OLD)
+    _observe(store, json_type="number", first_seen=NEW)
+    _observe(store, field_path="/data/extra", json_type="string")
+
+    claims = sorted(f.claim for f in _detector(store).scan())
+
+    assert claims == ["shape-drift:/data/status", "undescribed-field:/data/extra"]

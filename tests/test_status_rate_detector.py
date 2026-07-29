@@ -414,3 +414,48 @@ def test_scanning_twice_returns_the_same_findings(store):
     second = [f.rationale for f in _detector(store).scan()]
 
     assert first == second and first != []
+
+
+def test_two_claims_about_one_call_site_survive_being_stored(store):
+    """One operation failing on two hosts is two claims, and must be two rows.
+
+    `test_two_hosts_are_never_averaged_together` establishes that the populations are kept
+    apart, which is the whole reason `server_address` is in `observed_call`'s natural key. The
+    findings then have to be kept apart too: the graph derives a finding's id from its identity
+    fields and inserts ON CONFLICT DO NOTHING, so two findings the key cannot tell apart are
+    one row. A sandbox and a live host both erroring is one host's failure reported and the
+    other's silently discarded.
+    """
+    _site(store)
+    _observe(store, _mix(FLOOR, AT_THRESHOLD * 2), trace_id="sandbox",
+             server_address="api.sandbox.stripe.com")
+    _observe(store, _mix(FLOOR, AT_THRESHOLD * 2), trace_id="live")
+
+    findings = list(_detector(store).scan())
+    assert len(findings) >= 2, "the case must produce two claims or this proves nothing"
+
+    for finding in findings:
+        store.insert_finding(finding)
+
+    assert len(store.open_findings()) == len(findings)
+
+
+def test_two_methods_on_one_host_are_two_rows(store):
+    """The other half of the population key, and the half a two-host test cannot reach.
+
+    `_populations` groups on `(operation_id, server_address, http_method)`, so a claim naming
+    only the host collides whenever two populations differ by method alone. Rare against a
+    specification, where an operation has one method -- and this detector reads observed
+    traffic rather than the specification, so what it groups by is what telemetry reported.
+    """
+    _site(store)
+    _observe(store, _mix(FLOOR, AT_THRESHOLD * 2), trace_id="get")
+    _observe(store, _mix(FLOOR, AT_THRESHOLD * 2), trace_id="post", http_method="post")
+
+    findings = list(_detector(store).scan())
+    assert len(findings) == 2
+
+    for finding in findings:
+        store.insert_finding(finding)
+
+    assert len(store.open_findings()) == 2

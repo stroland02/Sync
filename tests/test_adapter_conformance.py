@@ -211,7 +211,8 @@ def _remediation_case(tmp_path):
         severity="breaking", source="oasdiff", raw={},
     )
     finding = Finding(
-        id="f1", detector="vendor_change", call_site_id="cs1", vendor_change_id="vc1",
+        id="f1", detector="vendor_change", claim="request-field", call_site_id="cs1",
+        vendor_change_id="vc1",
         severity="breaking", rationale="amount removed",
     )
     repo = RepoRef(repo_id="r", url="u", local_path=str(tmp_path), head_sha="0" * 40)
@@ -588,6 +589,7 @@ class _CorrectDetector:
         for call_site_id in ("cs1", "cs2"):
             yield Finding(
                 detector=self.detector_id,
+                claim="request-field",
                 call_site_id=call_site_id,
                 vendor_change_id="vc1",
                 severity="breaking",
@@ -669,10 +671,15 @@ def test_a_finding_with_no_call_site_fails():
 
 
 def test_two_findings_that_collide_on_the_graph_key_fails():
-    """The graph keys a finding on `(detector, call_site_id, vendor_change_id)` and inserts
-    `ON CONFLICT DO NOTHING`. Two findings sharing that triple are one row, and the second one
-    is discarded without a warning — so a detector saying two things about one call site says
-    whichever of them it happened to emit first.
+    """The graph keys a finding on `(detector, call_site_id, vendor_change_id, claim)` and
+    inserts `ON CONFLICT DO NOTHING`. Two findings sharing that key are one row, and the second
+    one is discarded without a warning — so a detector saying two things about one call site
+    says whichever of them it happened to emit first.
+
+    `claim` joined the key after this test was written, and the broken example gained it rather
+    than losing the collision: both findings still carry `loop`, so they still share the whole
+    key. A test that had let them differ would have stopped testing anything the moment the
+    field arrived, which is the failure mode a widened key invites.
     """
 
     class TwoClaimsOneKey(_CorrectDetector):
@@ -680,6 +687,7 @@ def test_two_findings_that_collide_on_the_graph_key_fails():
             for rationale in ("called inside a loop", "the same call repeated 40 times"):
                 yield Finding(
                     detector=self.detector_id,
+                    claim="loop",
                     call_site_id="cs1",
                     severity="info",
                     rationale=rationale,
@@ -702,6 +710,7 @@ def test_a_second_scan_that_disagrees_with_the_first_fails():
             self._runs += 1
             yield Finding(
                 detector=self.detector_id,
+                claim="request-field",
                 call_site_id="cs1",
                 vendor_change_id="vc1",
                 severity="breaking",

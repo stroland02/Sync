@@ -1,5 +1,8 @@
 from datetime import datetime
 
+import pytest
+from pydantic import ValidationError
+
 from sync.core import CallSite, Evidence, Finding, Patch, RepoRef, VerifyResult, VendorChange
 
 
@@ -41,6 +44,7 @@ def test_vendor_change_carries_severity_and_source():
 def test_finding_links_a_call_site_to_a_change():
     finding = Finding(
         detector="vendor_change",
+        claim="response-field",
         call_site_id="cs1",
         vendor_change_id="vc1",
         severity="breaking",
@@ -70,3 +74,41 @@ def test_patch_and_evidence_round_trip():
 def test_repo_ref_identifies_a_checkout():
     ref = RepoRef(repo_id="r1", url="https://github.com/o/r", local_path="/tmp/r", head_sha="deadbeef")
     assert ref.repo_id == "r1"
+
+
+def test_a_finding_cannot_be_built_without_saying_what_it_claims():
+    """`claim` is required rather than defaulted, and that is the whole fix.
+
+    The graph identifies a finding by `(detector, call_site_id, vendor_change_id, claim)`. A
+    field that defaulted to an empty string would be correct for every caller that set it and
+    silently collision-prone for every caller that did not -- which is the defect this field
+    exists to close, rebuilt one layer down. Three detectors shipped omitting a value nobody
+    forced them to supply; pydantic is what makes forgetting impossible rather than merely
+    fixed.
+    """
+    with pytest.raises(ValidationError):
+        Finding(
+            detector="vendor_change",
+            call_site_id="cs1",
+            vendor_change_id="vc1",
+            severity="breaking",
+            rationale="charges.create no longer returns `status`",
+        )
+
+
+def test_a_finding_cannot_name_its_claim_with_an_empty_string():
+    """Required is not enough on its own, and this is the gap it leaves.
+
+    Omitting the field and writing `claim=""` to satisfy a type checker produce the identical
+    collision in the graph, and only the first is caught by making the field required. The
+    length constraint closes the second at the same place rather than leaving it to a reviewer
+    who would be reading a line that looks deliberate.
+    """
+    with pytest.raises(ValidationError):
+        Finding(
+            detector="efficiency",
+            claim="",
+            call_site_id="cs1",
+            severity="info",
+            rationale="called 40 times in one unit of work",
+        )

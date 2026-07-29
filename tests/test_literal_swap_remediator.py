@@ -51,7 +51,8 @@ def _change(row: ModelDeprecation = RETIRED) -> VendorChange:
 
 def _finding() -> Finding:
     return Finding(
-        detector="deprecation", call_site_id="cs-1", vendor_change_id="vc-1",
+        detector="deprecation", claim="parameter:model", call_site_id="cs-1",
+        vendor_change_id="vc-1",
         severity="breaking", rationale="retired model in use",
     )
 

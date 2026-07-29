@@ -117,6 +117,7 @@ def test_findings_round_trip_and_change_status(store):
     finding_id = store.insert_finding(
         Finding(
             detector="vendor_change",
+            claim="response-field",
             call_site_id=site_id,
             vendor_change_id=change_id,
             severity="breaking",
@@ -328,3 +329,64 @@ def test_reindexing_a_call_that_moved_into_a_loop_updates_its_depth(store):
     with store._connect().cursor() as cur:
         cur.execute("SELECT loop_depth FROM call_site WHERE repo_id = %s", (site.repo_id,))
         assert [row["loop_depth"] for row in cur.fetchall()] == [1]
+
+
+def test_two_claims_about_one_call_site_are_two_rows(store):
+    """The natural key, and the column that was missing from it.
+
+    A finding's id is derived from `(detector, call_site_id, vendor_change_id, claim)` and the
+    insert is ON CONFLICT DO NOTHING, so anything the key cannot tell apart is one row and the
+    loser is discarded without an error. Before `claim` joined the key, one detector saying two
+    things about one call site stored whichever it emitted first.
+    """
+    site_id = store.upsert_call_site(
+        CallSite(
+            repo_id="r", path="src/billing.ts", line=12, col=4, vendor_id="stripe",
+            operation_id="GetCharges", symbol="stripe.charges.list", args_keys=["limit"],
+            response_fields_read=["data"], sdk_version="18.0.0", content_hash="h",
+        )
+    )
+
+    loop = store.insert_finding(
+        Finding(
+            detector="efficiency", call_site_id=site_id, claim="loop",
+            severity="info", rationale="called 40 times in one unit of work",
+        )
+    )
+    cached = store.insert_finding(
+        Finding(
+            detector="efficiency", call_site_id=site_id, claim="uncached-repeat",
+            severity="info", rationale="the same request was made 40 times",
+        )
+    )
+
+    assert loop != cached
+    assert len(store.open_findings()) == 2
+
+
+def test_the_same_claim_inserted_twice_converges_on_one_row(store):
+    """DETECT is a pipeline stage, so re-running it must converge rather than accumulate.
+
+    The mirror of the test above, and the reason `claim` may not carry a live count: a
+    discriminator derived from the rationale would make two runs over an unchanged graph
+    produce two ids and a fresh row every time. That trades a silent loss for a silent
+    duplication, which is the same bug wearing the opposite sign.
+    """
+    site_id = store.upsert_call_site(
+        CallSite(
+            repo_id="r", path="src/billing.ts", line=12, col=4, vendor_id="stripe",
+            operation_id="GetCharges", symbol="stripe.charges.list", args_keys=["limit"],
+            response_fields_read=["data"], sdk_version="18.0.0", content_hash="h",
+        )
+    )
+
+    def emit() -> str:
+        return store.insert_finding(
+            Finding(
+                detector="efficiency", call_site_id=site_id, claim="loop",
+                severity="info", rationale="called 40 times in one unit of work",
+            )
+        )
+
+    assert emit() == emit()
+    assert len(store.open_findings()) == 1

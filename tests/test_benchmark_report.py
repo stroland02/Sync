@@ -213,7 +213,8 @@ def _site(model: str = "claude-opus-5") -> CallSite:
 
 
 def _finding() -> Finding:
-    return Finding(detector="parameter-deprecation", call_site_id="cs-1",
+    return Finding(detector="parameter-deprecation", claim="parameter:model",
+                   call_site_id="cs-1",
                    severity="deprecation", rationale="passes a deprecated parameter")
 
 

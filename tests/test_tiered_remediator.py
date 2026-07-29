@@ -23,7 +23,8 @@ from sync.remediate.tiered import (
     routing_facts,
 )
 
-FINDING = Finding(detector="d", call_site_id="cs", severity="breaking", rationale="r")
+FINDING = Finding(detector="d", claim="c", call_site_id="cs", severity="breaking",
+                  rationale="r")
 SITE = CallSite(
     repo_id="r", path="src/a.ts", line=1, col=0, vendor_id="anthropic",
     operation_id="claude-x", symbol="model", sdk_version="1", content_hash="h",
@@ -318,7 +319,7 @@ def test_the_wired_cascade_sends_an_unroutable_change_to_the_agent():
     )
 
     patch = cascade.propose(
-        Finding(detector="d", call_site_id="cs", severity="info", rationale="r"),
+        Finding(detector="d", claim="c", call_site_id="cs", severity="info", rationale="r"),
         unroutable, SITE, REPO,
     )
     assert patch.strategy == "agent"

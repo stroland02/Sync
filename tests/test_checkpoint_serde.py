@@ -49,7 +49,8 @@ CHANGE = VendorChange(
     detected_at=datetime(2026, 7, 28, 11, 0, tzinfo=timezone.utc),
 )
 FINDING = Finding(
-    id="f1", detector="vendor_change", call_site_id="cs1", vendor_change_id="vc1",
+    id="f1", detector="vendor_change", claim="response-field", call_site_id="cs1",
+    vendor_change_id="vc1",
     severity="breaking", rationale="status removed",
     created_at=datetime(2026, 7, 28, 11, 5, tzinfo=timezone.utc),
 )

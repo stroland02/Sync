@@ -138,16 +138,28 @@ class GraphStore:
         return change_id
 
     def insert_finding(self, finding: Finding) -> str:
-        finding_id = _stable_id(finding.detector, finding.call_site_id, finding.vendor_change_id or "")
+        # `claim` is in the identity, not just data. Without it the key was
+        # (detector, call_site, vendor_change), which is one row per call site for any detector
+        # that does not join against a vendor change -- and three of them do not. Two claims
+        # about one site then derived one id, and DO NOTHING dropped the second with no error
+        # and no warning. `schema.sql` states the grain this restores.
+        #
+        # Neither the rationale nor anything derived from it may join this key: efficiency
+        # rationales carry live call counts, so an id computed from one would change between
+        # runs and accumulate a row per scan rather than converging on the row it already wrote.
+        finding_id = _stable_id(
+            finding.detector, finding.call_site_id, finding.vendor_change_id or "", finding.claim
+        )
         self._connect().execute(
             """
-            INSERT INTO finding (id, detector, call_site_id, vendor_change_id, severity, rationale, status)
-            VALUES (%s, %s, %s, %s, %s, %s, %s)
+            INSERT INTO finding (id, detector, claim, call_site_id, vendor_change_id, severity,
+                                 rationale, status)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
             ON CONFLICT (id) DO NOTHING
             """,
             (
-                finding_id, finding.detector, finding.call_site_id, finding.vendor_change_id,
-                finding.severity, finding.rationale, finding.status,
+                finding_id, finding.detector, finding.claim, finding.call_site_id,
+                finding.vendor_change_id, finding.severity, finding.rationale, finding.status,
             ),
         )
         return finding_id

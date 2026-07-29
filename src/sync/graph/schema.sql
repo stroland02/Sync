@@ -36,9 +36,23 @@ CREATE TABLE IF NOT EXISTS vendor_change (
     detected_at  TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
+-- Grain: one row per CLAIM, per detector, per call site -- identified by
+-- (detector, call_site_id, vendor_change_id, claim). One detector saying two things about one
+-- call site is two rows, and `claim` is what says which. Counting a detector's findings by
+-- counting call sites undercounts wherever a detector makes more than one claim about one.
+--
+-- The grain was never written down, and three detectors violated it without anyone noticing:
+-- `observed-drift`, `status-rate` and `efficiency` all emitted several findings per call site
+-- with no discriminator, so the insert below kept whichever arrived first and discarded the
+-- rest in silence. That is what `claim` exists for.
+--
+-- `claim` names the KIND of claim and never its wording. A discriminator carrying a live count
+-- -- "called 40 times" -- would make DETECT write a fresh row on every run instead of
+-- converging, which is the same silent failure with the opposite sign.
 CREATE TABLE IF NOT EXISTS finding (
     id                TEXT PRIMARY KEY,
     detector          TEXT NOT NULL,
+    claim             TEXT NOT NULL,
     call_site_id      TEXT NOT NULL REFERENCES call_site (id) ON DELETE CASCADE,
     vendor_change_id  TEXT REFERENCES vendor_change (id) ON DELETE SET NULL,
     severity          TEXT NOT NULL,

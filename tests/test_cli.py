@@ -660,7 +660,8 @@ def test_two_findings_in_one_run_produce_branches_that_share_no_commits(tmp_path
             if self._vendor_id != "stripe":
                 return []
             return [
-                Finding(detector="vendor_change", call_site_id=site.id, vendor_change_id="change-1",
+                Finding(detector="vendor_change", claim="response-field",
+                        call_site_id=site.id, vendor_change_id="change-1",
                         severity="breaking", rationale=f"status removed at {site.path}")
                 for site in sites
             ]
@@ -733,7 +734,8 @@ def test_the_agent_tier_is_terminal_so_nothing_narrows_what_reaches_it():
     from sync.cli import build_remediator
 
     agent_tier = build_remediator()._remediators[-1]
-    unhandleable = Finding(detector="d", call_site_id="cs", severity="info", rationale="r")
+    unhandleable = Finding(detector="d", claim="c", call_site_id="cs", severity="info",
+                           rationale="r")
     change = VendorChange(
         vendor_id="stripe", from_version="a", to_version="b", kind="whatever-this-is",
         operation_id="Op", path_ptr="/v1/x", severity="info", source="oasdiff", raw={},
@@ -775,7 +777,8 @@ def test_the_acceptance_finding_is_patched_without_reaching_the_agent(tmp_path):
     repo = RepoRef(repo_id="r", url="u", local_path=str(clone), head_sha="s")
 
     patch = build_remediator().propose(
-        Finding(detector="vendor_change", call_site_id="cs", vendor_change_id="vc",
+        Finding(detector="vendor_change", claim="request-field", call_site_id="cs",
+                vendor_change_id="vc",
                 severity="breaking", rationale="receipt_email removed"),
         change, site, repo,
     )
@@ -948,7 +951,8 @@ class _Yields:
 
     def scan(self):
         return [
-            Finding(detector=self.detector_id, call_site_id=f"cs-{i}", severity="breaking",
+            Finding(detector=self.detector_id, claim="response-field",
+                    call_site_id=f"cs-{i}", severity="breaking",
                     rationale=f"finding {i}")
             for i in range(self._count)
         ]

@@ -307,3 +307,66 @@ def test_a_cost_reaching_one_call_site_is_not_described_as_shared(store):
 
     assert findings
     assert all("shared across" not in f.rationale for f in findings)
+
+
+def test_two_claims_about_one_call_site_survive_being_stored(store):
+    """Two distinct claims about one call site are two findings, and must be two rows.
+
+    The graph derives a finding's id from its identity fields and inserts ON CONFLICT DO
+    NOTHING, so two findings the key cannot tell apart are one row and nobody is told which
+    one was dropped. One unit of work that calls the same target LOOP_THRESHOLD times is both
+    a loop and an absent cache -- the two claims `_rationales` documents as not being mutually
+    exclusive -- with different fixes, so losing either loses a repair a reviewer would act on.
+    """
+    _site(store)
+    _observe(store, _spans(["same"] * LOOP_THRESHOLD))
+
+    findings = list(_detector(store).scan())
+    assert len(findings) >= 2, "the case must produce two claims or this proves nothing"
+
+    for finding in findings:
+        store.insert_finding(finding)
+
+    assert len(store.open_findings()) == len(findings)
+
+
+def test_one_claim_evidenced_by_two_traces_is_one_finding(store):
+    """The other half of the same key, and it points the opposite way.
+
+    A trace is unbounded: a busy repository produces one `observed_call` row per request, and
+    every one of them looping over the same call site supports the same claim. Emitting a
+    finding each would put thousands of rows in front of a reviewer for one piece of work --
+    `_rationales` already argues that N findings assert N savings that do not exist -- so the
+    trace is evidence rather than identity, and the detector says it once and quotes the
+    worst unit of work it saw.
+    """
+    _site(store)
+    _observe(store, _spans(["a"] * LOOP_THRESHOLD), trace_id="quiet")
+    _observe(store, _spans(["b"] * (LOOP_THRESHOLD * 3)), trace_id="loud")
+
+    findings = [f for f in _detector(store).scan() if "loop" in f.rationale.lower()]
+
+    assert len(findings) == 1
+    assert str(LOOP_THRESHOLD * 3) in findings[0].rationale, "the worst trace is the one quoted"
+
+
+def test_a_second_ingest_updates_the_claim_rather_than_adding_a_row(store):
+    """The guard against the obvious fix, which is wrong in the opposite direction.
+
+    Folding the rationale into the finding's id would have separated the two claims, and it
+    would also have made the id a function of a live call count. The count is not stable across
+    ingests -- more traffic arrives, the loop gets longer -- so every ingest would write a fresh
+    row for a claim already in the graph, and a reviewer would see the same loop reported over
+    and over. That is a silent duplication where the bug being fixed was a silent loss.
+
+    Two scans separated by more traffic, and the claim converges on the row it already wrote.
+    """
+    _site(store)
+    _observe(store, _spans([f"a{i}" for i in range(LOOP_THRESHOLD)]))
+    first = [store.insert_finding(f) for f in _detector(store).scan()]
+
+    _observe(store, _spans([f"b{i}" for i in range(LOOP_THRESHOLD * 2)]))
+    second = [store.insert_finding(f) for f in _detector(store).scan()]
+
+    assert first and first == second, "the same claim must derive the same id after more traffic"
+    assert len(store.open_findings()) == len(first)

@@ -28,7 +28,8 @@ from sync.remediate.corpus import CorpusWriterMissing, make_recorder
 
 NODES = Path(__file__).resolve().parents[1] / "src" / "sync" / "remediate" / "nodes.py"
 
-FINDING = Finding(id="f-1", detector="vendor_change", call_site_id="cs-1",
+FINDING = Finding(id="f-1", detector="vendor_change", claim="response-field",
+                  call_site_id="cs-1",
                   severity="breaking", rationale="status removed")
 SITE = CallSite(
     id="cs-1", repo_id="r", path="src/billing.ts", line=12, col=4, vendor_id="stripe",

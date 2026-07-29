@@ -73,7 +73,8 @@ class SpyAgent:
 
 def _finding() -> Finding:
     return Finding(
-        detector="vendor_change", call_site_id="cs-1", vendor_change_id="vc-1",
+        detector="vendor_change", claim="operation-only", call_site_id="cs-1",
+        vendor_change_id="vc-1",
         severity="breaking", rationale="PostPaymentIntents changed",
     )
 

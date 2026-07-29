@@ -113,14 +113,26 @@ class VendorChangeDetector:
                 # oasdiff's ~500 change kinds all start with "request-" or
                 # "response-"; that prefix is the actual invariant, not any
                 # enumerated list of kinds we'd have to keep in sync with it.
+                # `claim` names how strong the join was, which is the one thing about this
+                # finding that varies and the first thing a reviewer wants: a matched request
+                # field is a specific argument this site passes, a matched response field is a
+                # specific field it reads, and an operation-only match says the change lands on
+                # this operation and the field could not be placed. The vendor change already
+                # keeps two findings about one site apart, so nothing here is load-bearing for
+                # identity -- which is exactly why it would have been the place to put a
+                # thoughtless constant and tell the next reader the field is optional in spirit.
                 if path is not None and change.kind.startswith("request-"):
                     detail = self._detail(path, site.args_keys, "passes")
+                    claim = "request-field"
                 elif path is not None and change.kind.startswith("response-"):
                     detail = self._detail(path, site.response_fields_read, "reads")
+                    claim = "response-field"
                 elif path is None:
                     detail = "field could not be determined from the vendor change -- operation match only"
+                    claim = "operation-only"
                 else:
                     detail = f"kind `{change.kind}` is neither request- nor response-side -- operation match only"
+                    claim = "operation-only"
 
                 if detail is None:
                     continue
@@ -128,6 +140,7 @@ class VendorChangeDetector:
                 findings.append(
                     Finding(
                         detector=self.detector_id,
+                        claim=claim,
                         call_site_id=site.id,
                         vendor_change_id=change.id,
                         severity=change.severity,

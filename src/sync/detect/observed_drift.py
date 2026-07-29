@@ -173,6 +173,10 @@ class ObservedDriftDetector:
                 continue
             yield Finding(
                 detector=self.detector_id,
+                # The field path, because a response with three undescribed fields is three
+                # claims a reviewer acts on separately. Bounded by the response schema, so it
+                # discriminates without turning traffic volume into rows.
+                claim=f"undescribed-field:{shape.field_path}",
                 call_site_id=site.id,
                 severity="addition",
                 rationale=(
@@ -208,6 +212,10 @@ class ObservedDriftDetector:
 
             yield Finding(
                 detector=self.detector_id,
+                # Separate from the undescribed-field claim above even for the same path: one
+                # says the specification never mentioned the field, the other says it did and
+                # traffic disagrees. Two different reports, two different fixes.
+                claim=f"shape-drift:{shape.field_path}",
                 call_site_id=site.id,
                 # Corroborated by the baseline's own history, this is the vendor's behaviour
                 # changing. Uncorroborated, it is more likely a specification that was always

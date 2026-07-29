@@ -63,7 +63,8 @@ PATCHABLE_CHANGE = VendorChange(
          "text": "removed the request property `amount`"},
 )
 FINDING = Finding(
-    id="f1", detector="vendor_change", call_site_id="cs1", vendor_change_id="vc1",
+    id="f1", detector="vendor_change", claim="operation-only", call_site_id="cs1",
+    vendor_change_id="vc1",
     severity="breaking", rationale="endpoint deprecated without a sunset date",
 )
 REPO = RepoRef(repo_id="r1", url="https://example.invalid/r", local_path="/tmp/r", head_sha="0" * 40)

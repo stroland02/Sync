@@ -42,7 +42,8 @@ def _change(change_id, vendor="stripe", op="PostCharges", kind="response-propert
 
 def _finding(finding_id, site_id, change_id, severity="breaking"):
     return Finding(
-        id=finding_id, detector="vendor-change", call_site_id=site_id,
+        id=finding_id, detector="vendor-change", claim="response-field",
+        call_site_id=site_id,
         vendor_change_id=change_id, severity=severity, rationale="status was removed",
     )
 

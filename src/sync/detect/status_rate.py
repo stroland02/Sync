@@ -230,6 +230,12 @@ class StatusRateDetector:
                     continue
                 yield Finding(
                     detector=self.detector_id,
+                    # The population, minus the operation the call site already determines. One
+                    # operation failing on a sandbox host and on a live one is two integrations
+                    # and two claims -- which is why `server_address` is in `observed_call`'s
+                    # key, and the findings have to be kept apart on the same grounds. Bounded
+                    # by how many hosts a vendor answers on.
+                    claim=f"error-rate:{server_address}:{method}",
                     call_site_id=site.id,
                     # Breaking only when the rate rose between two independent samples. A level
                     # that has held since the earliest traffic stored is a standing condition,

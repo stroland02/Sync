@@ -79,10 +79,41 @@ class VendorChange(BaseModel):
 
 
 class Finding(BaseModel):
-    """A vendor change intersected with a call site that it affects."""
+    """One detector's claim about one call site.
+
+    That is the grain, and it is the grain because `claim` is in the graph's identity for the
+    row. An earlier version of this docstring said "a vendor change intersected with a call
+    site", which described the first detector written and never the two that read telemetry
+    instead -- those raise findings with no vendor change at all.
+    """
 
     id: str | None = None
     detector: str
+    claim: str = Field(min_length=1)
+    """Which of this detector's claims this is -- `loop`, `shape-drift:/data/status`.
+
+    Part of the graph's identity for a finding, beside the detector, the call site and the
+    vendor change. So it has to be stable across runs and distinct per claim, and stable rules
+    out anything derived from the rationale: an efficiency rationale carries a live call count,
+    and keying on that would make two scans of an unchanged graph write two rows where they
+    should converge on one.
+
+    Required, with no default, and rejected when empty. A detector that left it blank would
+    emit findings the key cannot tell apart, and `insert_finding` discards those without an
+    error -- which is exactly how three detectors came to lose findings silently and how it
+    went unnoticed. An optional field would leave that door open and differ only in that the
+    next person through it had a chance to notice.
+
+    The length constraint is here rather than left to a reviewer because omitting the field and
+    writing `claim=""` to satisfy a type checker produce the identical collision, and only the
+    first is caught by making it required. This is the plugin boundary: a third-party detector
+    is the caller, so this is validation at an edge rather than mistrust of internal code.
+
+    A bounded axis the detector iterates belongs here, because each value is a separate claim a
+    reviewer acts on: a response field path, a host. An unbounded one does not. A trace id is
+    evidence for a claim rather than a claim, and putting it here would put a row in front of a
+    reviewer for every request the customer served.
+    """
     call_site_id: str
     vendor_change_id: str | None = None
     severity: Severity

@@ -58,7 +58,8 @@ CHANGE = VendorChange(
          "text": "removed the optional property `status` from the response"},
 )
 FINDING = Finding(
-    id="f1", detector="vendor_change", call_site_id="cs1", vendor_change_id="vc1",
+    id="f1", detector="vendor_change", claim="response-field", call_site_id="cs1",
+    vendor_change_id="vc1",
     severity="breaking", rationale="PostCharges may now answer with a null status",
 )
 

@@ -50,7 +50,8 @@ def _change() -> VendorChange:
 
 def _finding() -> Finding:
     return Finding(
-        id="f-1", detector="vendor_change", call_site_id="site-1", vendor_change_id="chg-1",
+        id="f-1", detector="vendor_change", claim="response-field", call_site_id="site-1",
+        vendor_change_id="chg-1",
         severity="breaking", rationale="response-property-removed on PostCharges",
     )
 
