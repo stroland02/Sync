@@ -213,7 +213,87 @@ def test_an_observed_enum_member_the_specification_does_not_name_is_refused():
     assert body["status"] in SCHEMA["properties"]["status"]["enum"]
 
 
+# --- the two spellings of a nullable declaration -----------------------------------
+
+
+def test_the_type_list_spelling_of_nullable_is_read_as_nullable():
+    """OpenAPI 3.0 writes `nullable: true` beside a scalar type; JSON Schema and OpenAPI 3.1
+    write the null into the type itself. Both are in the wild, and a synthesizer that read only
+    the first would emit a happy string for a field the vendor documents as nullable -- hiding
+    the null this whole tier exists to make the patched code meet.
+    """
+    decision = decide_field("/id", {"type": ["string", "null"]}, [])
+
+    assert decision.json_type == "string"
+    assert decision.nullable is True
+    assert synthesize_mock_response({"type": ["string", "null"]}, []) is None
+
+
+def test_a_union_of_two_real_types_takes_the_first_and_stays_non_nullable():
+    """`null` is the member that carries meaning here. Without it the list is a union this
+    module has no rule for, so it builds the first member rather than nothing."""
+    decision = decide_field("/id", {"type": ["string", "number"]}, [])
+
+    assert decision.json_type == "string"
+    assert decision.nullable is False
+
+
+def test_a_declaration_that_is_only_null_describes_a_field_that_is_always_null():
+    """`{"type": "null"}` and `{"type": ["null"]}` are one declaration written two ways. Both
+    describe a field the vendor always sends as null, which is a shape the patched code has to
+    survive rather than a field with no declaration at all."""
+    for schema in ({"type": "null"}, {"type": ["null"]}):
+        decision = decide_field("/x", schema, [])
+
+        assert (decision.json_type, decision.nullable) == ("null", True), schema
+        assert synthesize_mock_response(schema, []) is None
+
+
+# --- a declaration this module cannot build a value from ---------------------------
+
+
+def test_a_schema_that_names_no_type_yields_no_value():
+    """A schema that names no type has promised nothing. `None` rather than a placeholder,
+    because a placeholder would put a value in the mock that no specification supports and the
+    patched code would be tested against this module's guess."""
+    assert synthesize_mock_response({}, []) is None
+    assert synthesize_mock_response({"description": "an amount, one day"}, []) is None
+
+
+def test_a_type_this_module_has_no_rule_for_yields_no_value():
+    assert synthesize_mock_response({"type": "any"}, []) is None
+
+
+def test_an_untyped_property_is_still_a_key_in_the_object():
+    """The field is declared even where its shape is not, and step 3 checks
+    `response_fields_read` against the mock by presence. Dropping the key would report a field
+    the code legitimately reads as one the response no longer carries -- a replay failure
+    manufactured by the synthesizer rather than found in the patch.
+    """
+    body = synthesize_mock_response(
+        {"type": "object", "properties": {"id": {"type": "string"}, "extra": {}}}, []
+    )
+
+    assert set(body) == {"id", "extra"}
+    assert body["extra"] is None
+
+
 # --- nesting and arrays ------------------------------------------------------------
+
+
+def test_an_array_with_no_declared_element_is_empty_rather_than_guessed():
+    """One element of an undeclared shape would be one invented value. Empty is what this
+    module can honestly claim to know."""
+    body = synthesize_mock_response(
+        {"type": "object", "properties": {"lines": {"type": "array"}}}, []
+    )
+
+    assert body["lines"] == []
+
+
+def test_an_array_whose_items_are_a_boolean_schema_is_empty_too():
+    """`items: true` is a legal JSON Schema and names no shape at all."""
+    assert synthesize_mock_response({"type": "array", "items": True}, []) == []
 
 
 def test_a_pointer_three_levels_deep_round_trips():

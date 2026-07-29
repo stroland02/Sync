@@ -19,6 +19,7 @@ and "no credential" are claims a reviewer is being asked to trust.
 
 from __future__ import annotations
 
+import json
 import os
 import re
 import shutil
@@ -27,6 +28,7 @@ from pathlib import Path
 import pytest
 
 from sync.core import CallSite, RepoRef
+from sync.verify import replay as replay_module
 from sync.verify.replay import (
     SYNTHETIC_CREDENTIAL,
     replay_call_path,
@@ -34,6 +36,11 @@ from sync.verify.replay import (
     replay_shapes,
     unsatisfied_fields,
 )
+
+# Reached by name because it is the parser for the child's stdout, and stdout is a boundary
+# this process does not control. Its three refusals are what stops a line the harness did not
+# write from becoming a verdict, and after the nonce they cannot be provoked from outside.
+from sync.verify.replay import _payload
 
 FIXTURES = Path(__file__).parent / "fixtures" / "replay"
 TARGET = "src/billing.ts"
@@ -203,6 +210,150 @@ def test_a_missing_file_declines(tmp_path: Path) -> None:
     assert result.outcome == "declined"
 
 
+def test_no_node_on_path_declines(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """The first thing that can stop a run, and the one furthest from the patch. Nothing about
+    this machine is evidence about a customer's code."""
+    monkeypatch.setattr(replay_module.shutil, "which", lambda *args, **kwargs: None)
+
+    result = _replay(_repo(tmp_path, "handles"), _site())
+
+    assert result.outcome == "declined"
+    assert "PATH" in result.reason
+
+
+def test_a_file_node_cannot_type_strip_declines_rather_than_condemning_the_patch(
+    tmp_path: Path,
+) -> None:
+    """The routing consequence is the whole point of separating these two outcomes.
+
+    `tsc` compiles an enum and Node's strip-only mode refuses it, so the module never loads and
+    the call path never runs. Recorded as a throw, that is a verdict on the patch:
+    `route_after_replay` sends every replay failure back to `patch`, spending the static-attempt
+    budget, and the run abandons a patch that was never shown to be wrong. Recorded as a
+    decline, the same run reaches the push path carrying the fact that replay did not verify it.
+    """
+    result = _replay(_repo(tmp_path, "unsupported_syntax"), _site())
+
+    assert result.outcome == "declined", result.reason
+    assert result.ok is False
+    assert "enum" in result.reason.lower()
+
+
+def test_a_module_that_ends_the_process_declines_rather_than_passing(tmp_path: Path) -> None:
+    """No verdict on stdout is not a silent pass. Nothing ran, and the reason says so."""
+    result = _replay(_repo(tmp_path, "exits_before_the_call"), _site())
+
+    assert result.outcome == "declined"
+    assert "no verdict" in result.reason
+    assert "exited 0" in result.reason
+
+
+def test_the_reason_carries_the_last_thing_the_child_said(tmp_path: Path) -> None:
+    """When a run establishes nothing, the child's own last line is the only account of why,
+    and an operator reading `abandon_reason` has nothing else to go on."""
+    result = _replay(_repo(tmp_path, "complains_and_exits"), _site())
+
+    assert result.outcome == "declined"
+    assert "BILLING_CONFIG is not set" in result.reason
+
+
+def test_a_call_path_that_never_returns_is_bounded_rather_than_waited_on(
+    tmp_path: Path,
+) -> None:
+    """A call that has not come back is not a call that passed, and the bound is what keeps an
+    accidental await on something unsettleable from holding the pipeline open."""
+    result = _replay(_repo(tmp_path, "never_returns"), _site(), timeout=1.5)
+
+    assert result.outcome == "timed-out"
+    assert "did not return" in result.reason
+    assert result.ok is False
+
+
+# --- the verdict channel is shared with the code under test ------------------------
+#
+# The harness reports on the child's stdout and the customer's module writes to the same
+# stream. Everything in this section is one question: can a line that module printed be read
+# as the harness's verdict? A forged pass is the worst answer available anywhere in this tier
+# -- it puts "the patched path was executed and consumed the response cleanly" into a pull
+# request body for a run that executed nothing.
+
+
+def test_a_run_that_executed_nothing_is_never_recorded_as_a_run_that_passed(
+    tmp_path: Path,
+) -> None:
+    """The one outcome this tier must never produce, asked directly.
+
+    The fixture writes a pass and ends the process before anything loads, so the forged line is
+    the only thing on stdout and no call path ran. `push_branch` is downstream of a pass, and a
+    pass here is the sentence "the patched call path was executed against the new response
+    shape" in a pull request body -- which is the claim `CLAUDE.md` refuses to let anything
+    reach a pull request without.
+    """
+    result = _replay(_repo(tmp_path, "forges_before_running"), _site())
+
+    assert result.outcome == "declined", result.reason
+    assert result.ok is False
+
+
+def test_a_verdict_the_module_prints_cannot_forge_a_pass(tmp_path: Path) -> None:
+    """The forgery is written from an exit handler, so it is the last marked line on stdout --
+    exit handlers run after the harness has already reported. Underneath it is the `mishandles`
+    patch, so a tier that took the last marked line would report a pass for a call path that
+    dereferenced the null the new specification permits."""
+    result = _replay(_repo(tmp_path, "forges_a_verdict"), _site())
+
+    assert result.outcome == "threw", result.reason
+    assert result.ok is False
+    assert "toUpperCase" in result.reason
+
+
+def test_the_marker_s_nonce_is_out_of_reach_by_the_time_customer_code_loads(
+    tmp_path: Path,
+) -> None:
+    """What makes the marker the harness's rather than anyone's.
+
+    Everything else the harness is told travels in the environment, so the environment is where
+    a module would look. This fixture looks, and signs a forged pass with whatever it finds:
+    the run may only end in a throw, which is what its call path actually does.
+    """
+    result = _replay(_repo(tmp_path, "forges_with_the_nonce"), _site())
+
+    assert result.outcome == "threw", result.reason
+    assert "toUpperCase" in result.reason
+
+
+def test_a_marked_line_from_another_run_is_not_this_run_s_verdict() -> None:
+    assert _payload('SYNC_REPLAY_RESULT other {"outcome": "passed"}', "mine") is None
+
+
+def test_the_nonce_alone_decides_which_line_is_the_verdict() -> None:
+    """Two marked lines, one signed. The unsigned one neither forges a verdict nor destroys
+    the real one, which is the property the reverse scan alone did not have."""
+    stdout = "\n".join([
+        'SYNC_REPLAY_RESULT {"outcome": "passed"}',
+        'SYNC_REPLAY_RESULT mine {"outcome": "threw", "reason": "boom"}',
+        'SYNC_REPLAY_RESULT {"outcome": "passed"}',
+    ])
+
+    assert _payload(stdout, "mine") == {"outcome": "threw", "reason": "boom"}
+
+
+def test_a_marker_carrying_malformed_json_is_no_verdict() -> None:
+    assert _payload("SYNC_REPLAY_RESULT mine {not json", "mine") is None
+
+
+def test_a_marker_carrying_something_that_is_not_an_object_is_no_verdict() -> None:
+    """`3` parses. Read as a verdict it reaches `payload.get`, which an int does not have, and
+    the run dies somewhere unrelated instead of declining."""
+    assert _payload("SYNC_REPLAY_RESULT mine 3", "mine") is None
+    assert _payload("SYNC_REPLAY_RESULT mine null", "mine") is None
+
+
+def test_stdout_with_no_marker_at_all_is_no_verdict() -> None:
+    assert _payload("built 3 modules\ndone\n", "mine") is None
+    assert _payload("", "mine") is None
+
+
 # --- what the caller writes to the shape store ------------------------------------
 
 
@@ -250,3 +401,76 @@ def test_replay_shapes_reduce_a_body_to_paths_and_types_only() -> None:
     dumped = " ".join(repr(shape.model_dump()) for shape in shapes)
     assert "<sync-mock" not in dumped
     assert {"/id", "/n", "/n/-"} <= {shape.field_path for shape in shapes}
+
+
+def test_no_value_from_the_body_reaches_a_row_the_store_would_hold() -> None:
+    """The unqualified promise, asserted against a body shaped like the thing it protects.
+
+    `test_replay_shapes_reduce_a_body_to_paths_and_types_only` checks a placeholder, which is
+    the value this tier's own mock carries. This checks the values a body actually carries once
+    replay is a store writer against real responses: a person, a contact route, a card, an
+    opaque token, a free-text note and an amount. A reduction that let strings through would
+    leak every one of them, and a leak here is a customer secret in a table Sync holds.
+    """
+    shapes = replay_shapes("stripe", "PostCharges", PII_BODY)
+    rows = json.dumps([shape.model_dump(mode="json") for shape in shapes])
+
+    assert {"/customer/email", "/card/last4", "/lines/-/description"} <= {
+        shape.field_path for shape in shapes
+    }, "the reduction has to have reached these fields for their absence from the rows to mean anything"
+
+    for value in _strings_in(PII_BODY):
+        assert value not in rows, f"{value!r} survived the reduction"
+    assert "4999" not in rows
+    assert all(shape.spec_enum_values == [] for shape in shapes)
+
+
+def test_one_row_per_path_and_type_however_many_elements_carry_it() -> None:
+    """The store's grain below `source` is `(field_path, json_type)`, and an array collapses
+    every element onto one path. A row per element would write the same key repeatedly and read
+    later as several observations of a field seen once.
+
+    A mixed array is the other half: two types on one path are two rows, not one, because they
+    describe a field that arrives as both -- which is exactly what the patched code must
+    survive.
+    """
+    shapes = replay_shapes("stripe", "PostCharges", {"n": [1, 2, 3], "mixed": ["a", None]})
+
+    keys = [(shape.field_path, shape.json_type) for shape in shapes]
+    assert len(keys) == len(set(keys))
+    assert keys.count(("/n/-", "number")) == 1
+    assert {("/mixed/-", "string"), ("/mixed/-", "null")} <= set(keys)
+
+    nulls = [s for s in shapes if s.field_path == "/mixed/-" and s.json_type == "null"]
+    assert [s.nullable_seen for s in nulls] == [True]
+
+
+# --- helpers ----------------------------------------------------------------------
+
+
+# Nothing here is real, and none of it may appear in a row. Shaped like a response rather than
+# like this tier's own mock, because a reduction that passed values through would leak these
+# and not the placeholders the other test uses.
+PII_BODY = {
+    "customer": {
+        "email": "ada.lovelace@example.invalid",
+        "full_name": "Ada Lovelace",
+        "phone": "+1-555-0142",
+    },
+    "card": {"last4": "4242", "fingerprint": "aB3xQ9zRt7Kw2Lm5"},
+    "receipt_url": "https://pay.example.invalid/receipts/rcpt-9f3ka2",
+    "amount": 4999,
+    "note": "chargeback pending, do not refund",
+    "lines": [{"description": "Consulting, March"}, {"description": "Retainer"}],
+}
+
+
+def _strings_in(value):
+    if isinstance(value, str):
+        yield value
+    elif isinstance(value, dict):
+        for child in value.values():
+            yield from _strings_in(child)
+    elif isinstance(value, list):
+        for child in value:
+            yield from _strings_in(child)

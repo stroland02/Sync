@@ -82,6 +82,7 @@ from __future__ import annotations
 
 import json
 import os
+import secrets
 import shutil
 import subprocess
 import tempfile
@@ -285,6 +286,7 @@ def _environment(
     harness: Path,
     module: Path,
     export: str,
+    nonce: str,
 ) -> dict[str, str]:
     """The child's whole environment, built from an empty dict rather than from `os.environ`.
 
@@ -299,6 +301,7 @@ def _environment(
     }
     environment.update({name: SYNTHETIC_CREDENTIAL for name in credential_env})
     environment.update({
+        "SYNC_REPLAY_NONCE": nonce,
         "SYNC_REPLAY_STUB": str(harness / "stub.mjs"),
         "SYNC_REPLAY_DENY": str(harness / "deny-network.mjs"),
         "SYNC_REPLAY_MODULE": str(module),
@@ -315,6 +318,8 @@ def _environment(
 
 def _run(*, node, harness, clone, module, export, mock, arguments, vendor_packages,
          credential_env, timeout) -> tuple[Outcome | Literal["executed"], str]:
+    # Per run, and never reused: it is what makes one line on a shared stdout the harness's.
+    nonce = secrets.token_hex(16)
     command = [
         node,
         # Denies child processes, worker threads, addons and every write. Reads are scoped to
@@ -338,13 +343,14 @@ def _run(*, node, harness, clone, module, export, mock, arguments, vendor_packag
             timeout=timeout,
             env=_environment(
                 mock, arguments, vendor_packages, credential_env, harness, module, export,
+                nonce,
             ),
             cwd=str(clone),
         )
     except subprocess.TimeoutExpired:
         return "timed-out", f"the call path did not return within {timeout:g}s"
 
-    payload = _payload(completed.stdout or "")
+    payload = _payload(completed.stdout or "", nonce)
     if payload is None:
         detail = (completed.stderr or completed.stdout or "").strip().splitlines()
         return "declined", (
@@ -354,18 +360,30 @@ def _run(*, node, harness, clone, module, export, mock, arguments, vendor_packag
     return payload.get("outcome", "declined"), payload.get("reason", "")
 
 
-def _payload(stdout: str) -> dict[str, Any] | None:
-    """The harness's verdict, read from a marked line.
+def _payload(stdout: str, nonce: str) -> dict[str, Any] | None:
+    """The harness's verdict, read from the line it signed.
 
-    A marker rather than "parse the last line": the customer's own module may print, and a
-    `console.log` in their code must not be able to forge a verdict or destroy one.
+    The verdict travels on the stdout the module under test also writes to, so a marker alone
+    establishes nothing: the module can print one while it loads, and an exit handler can print
+    one after the harness has already reported. Neither position is safe to prefer -- taking
+    the last marked line reads the second as the verdict, taking the first reads the first.
+
+    `nonce` is what separates them. It is generated per run and reaches the harness in an
+    environment variable the harness removes before any customer code loads, so a line carrying
+    it was written by the harness and a line without it is output. That is what lets a
+    `console.log` in the customer's code neither forge a verdict nor destroy one.
+
+    Anything else on a signed line is no verdict rather than a verdict to act on: `stdout` is a
+    boundary, and a value that is not the object the harness emits cannot be one it wrote.
     """
+    marker = f"{_MARKER}{nonce} "
     for line in reversed(stdout.splitlines()):
-        if line.startswith(_MARKER):
+        if line.startswith(marker):
             try:
-                return json.loads(line[len(_MARKER):])
+                verdict = json.loads(line[len(marker):])
             except json.JSONDecodeError:
                 return None
+            return verdict if isinstance(verdict, dict) else None
     return None
 
 
@@ -423,25 +441,56 @@ throw new Error('SYNC_REPLAY_NETWORK_DENIED: replay has no network');
 _RUN = """\
 import { pathToFileURL } from 'node:url';
 
-const emit = (payload) => console.log('SYNC_REPLAY_RESULT ' + JSON.stringify(payload));
+// Taken and removed here, before the module under test is loaded, because that module shares
+// this process and this stdout. The nonce is the only thing separating the harness's verdict
+// from a line the customer's code printed, and a variable left in the environment is a variable
+// their code can read.
+const NONCE = process.env.SYNC_REPLAY_NONCE;
+delete process.env.SYNC_REPLAY_NONCE;
+
+const emit = (payload) =>
+  console.log('SYNC_REPLAY_RESULT ' + NONCE + ' ' + JSON.stringify(payload));
 const message = (error) => (error && error.message ? error.message : String(error));
 
+// Node refusing to produce a module at all. None of these is the call path failing, because
+// none of them reaches it -- `tsc` compiles syntax strip-only mode will not parse, so an enum
+// anywhere in the file arrives here on a patch that is fine. Reported as a throw it would be a
+// replay failure, and a replay failure spends the retry budget a failed typecheck spends.
+const REFUSED_TO_LOAD = new Set([
+  'ERR_UNSUPPORTED_TYPESCRIPT_SYNTAX',
+  'ERR_INVALID_TYPESCRIPT_SYNTAX',
+  'ERR_MODULE_NOT_FOUND',
+  'ERR_UNKNOWN_FILE_EXTENSION',
+  'ERR_UNSUPPORTED_DIR_IMPORT',
+]);
+
+let loaded = null;
 try {
-  const module = await import(pathToFileURL(process.env.SYNC_REPLAY_MODULE).href);
+  loaded = await import(pathToFileURL(process.env.SYNC_REPLAY_MODULE).href);
+} catch (error) {
+  // A module that throws while it evaluates did run, so that stays a verdict on the patch.
+  emit(REFUSED_TO_LOAD.has(error && error.code)
+    ? { outcome: 'declined', reason: message(error) }
+    : { outcome: 'threw', reason: message(error) });
+}
+
+if (loaded !== null) {
   const name = process.env.SYNC_REPLAY_EXPORT;
-  const call = module[name];
+  const call = loaded[name];
   if (typeof call !== 'function') {
     // Nothing ran, so this is not a verdict on the patch.
     emit({ outcome: 'declined', reason: `${name} is not an exported function` });
   } else {
-    // The return value stays here. Step 3 is answered from the mock and the indexed field
-    // list, both of which the caller already holds, so carrying a customer's data back
-    // across the boundary would buy nothing and risk something.
-    await call(...JSON.parse(process.env.SYNC_REPLAY_ARGUMENTS));
-    emit({ outcome: 'executed' });
+    try {
+      // The return value stays here. Step 3 is answered from the mock and the indexed field
+      // list, both of which the caller already holds, so carrying a customer's data back
+      // across the boundary would buy nothing and risk something.
+      await call(...JSON.parse(process.env.SYNC_REPLAY_ARGUMENTS));
+      emit({ outcome: 'executed' });
+    } catch (error) {
+      emit({ outcome: 'threw', reason: message(error) });
+    }
   }
-} catch (error) {
-  emit({ outcome: 'threw', reason: message(error) });
 }
 """
 
