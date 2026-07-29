@@ -1,0 +1,63 @@
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "result": {
+    "tools": [
+      {
+        "name": "list_pages",
+        "description": "Every page in one space.",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "space": {
+              "type": "string"
+            }
+          },
+          "required": ["space"]
+        }
+      },
+      {
+        "name": "rename_page",
+        "description": "Renomme la page — accents délibérés.",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "page_id": {
+              "type": "string"
+            },
+            "title": {
+              "type": "string"
+            }
+          },
+          "required": ["page_id"]
+        }
+      },
+      {
+        "name": "export_page",
+        "description": "Export one page in a single format.",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "format": {
+              "type": ["string", "null"]
+            }
+          },
+          "required": ["format"]
+        }
+      },
+      {
+        "name": "archive_page",
+        "description": "Archive one page.",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "scope": {
+              "type": "string"
+            }
+          },
+          "required": ["scope"]
+        }
+      }
+    ]
+  }
+}
