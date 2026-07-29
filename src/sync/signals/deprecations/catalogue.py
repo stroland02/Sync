@@ -302,7 +302,10 @@ def _severity_for(row: ModelDeprecation) -> Severity:
 
 
 def to_vendor_changes(
-    rows: list[ModelDeprecation], from_version: str, to_version: str
+    rows: list[ModelDeprecation],
+    from_version: str,
+    to_version: str,
+    today: date | None = None,
 ) -> list[VendorChange]:
     """`VendorChange` rows for the models that are dying, and only those.
 
@@ -311,8 +314,20 @@ def to_vendor_changes(
 
     The retirement date rides in `raw` rather than in a new column: `sync.core` is a contract
     every adapter and the graph surface depend on, and one adapter's deadline does not justify
-    changing it.
+    changing it. `urgency_days` rides there for the same reason and is the field a consumer
+    actually acts on -- `Evidence.spec_diff` is `change.raw`, so it is also what a reviewer
+    reads in the pull request body.
+
+    It is computed here rather than left to the consumer because `today` is not something a
+    reader of a stored row can recover: the number means "days from the scan that found this",
+    and a consumer subtracting against its own clock would answer a different question every
+    time the row is read.
+
+    `today` defaults the way `parse_deprecation_table`'s does, and the adapter passes one
+    explicitly so the state a row is parsed into and the urgency measured for it cannot come
+    from two different days.
     """
+    today = today or date.today()
     changes: list[VendorChange] = []
 
     for row in rows:
@@ -336,6 +351,12 @@ def to_vendor_changes(
                     "replacement": row.replacement,
                     "retirement_date": row.retirement_date.isoformat() if row.retirement_date else None,
                     "deprecated_date": row.deprecated_date.isoformat() if row.deprecated_date else None,
+                    # Signed, and null when the vendor published no date. Negative is an
+                    # outage already in the code rather than a deadline approaching, and
+                    # null is the absence of a deadline rather than one falling today --
+                    # three states a clamped or defaulted number would collapse into one.
+                    "urgency_days": urgency(row, today),
+                    "urgency_measured_from": today.isoformat(),
                 },
             )
         )

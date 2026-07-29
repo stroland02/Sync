@@ -125,8 +125,13 @@ class DeprecationAdapter:
         return None
 
     def fetch_changes(self, from_version: str, to_version: str) -> Iterable[VendorChange]:
+        # Resolved once and used twice. The parse derives lifecycle state from a date and
+        # `to_vendor_changes` measures urgency against one, so two reads of the clock could
+        # produce a row that says `retired` and counts down to a future retirement.
+        today = self._today or date.today()
+
         body, is_fresh = self._page()
-        rows = parse_deprecation_table(self.vendor_id, body, today=self._today)
+        rows = parse_deprecation_table(self.vendor_id, body, today=today)
 
         if not rows:
             # A 200 that parses to nothing is the likeliest way this breaks -- a vendor
@@ -142,7 +147,9 @@ class DeprecationAdapter:
         if is_fresh:
             self._store(body)
 
-        return to_vendor_changes(rows, from_version=from_version, to_version=to_version)
+        return to_vendor_changes(
+            rows, from_version=from_version, to_version=to_version, today=today
+        )
 
     def _page(self) -> tuple[str, bool]:
         """The page, and whether it came from the network rather than the cache.

@@ -32,11 +32,9 @@ src/sync/signals/feed/publisher.py:render_feed
 src/sync/signals/feed/publisher.py:sign_feed
 src/sync/signals/feed/publisher.py:public_key_bytes
 
-# Converters and helpers with no consumer yet. `parameters_to_vendor_changes` is the one worth
-# reading twice: the parameter-deprecation detector takes `ParameterDeprecation` rows directly,
-# so the `VendorChange` conversion beside it has never run.
-src/sync/signals/deprecations/catalogue.py:urgency
-src/sync/signals/deprecations/parameters.py:parameters_to_vendor_changes
+# Converters and helpers with no consumer yet. The two deprecation entries left together when
+# `cli.py` started reading urgency into every model change and turning parameter rows into
+# `VendorChange`s, which is the shape the rule intends: the lines went with the callers.
 src/sync/signals/generated/manifest.py:parse_manifest
 src/sync/signals/generated/manifest.py:SpecSource.has_cheap_change_trigger
 
