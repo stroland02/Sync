@@ -45,6 +45,31 @@ and a disabled gate is worse than none.
 **Closes when:** CI fails on a seeded regression that drops binding precision, passes on the
 current tree, and the failure message names the recorded value it was compared against.
 
+### B37 — Python binding accuracy has never been measured
+
+`PythonAdapter` is shipped and wired into `cli.py`. All four corpus repositories are TypeScript
+Stripe demos and **no pair specification names Python**, so binding precision and recall describe
+the TypeScript indexer only and always have.
+
+Two real defects were fixed in the Python indexer today and neither could move a corpus number:
+a false attribution (`charge = dict(create(...))` crediting the SDK call with fields read off
+`dict`'s return value) and a missed break (`charge := create(...)` recording nothing). Both were
+verified by fixtures because fixtures were the only evidence available.
+
+The precedent is not speculative. The response half of the corpus contributed nothing to either
+axis until B29 made it measure, and **it caught a real binder defect within the hour** — the corpus
+and the binder had shared a blind spot, so the benchmark agreed with the binder by construction.
+The Python indexer is in that position now: correct as far as its own fixtures go, and unmeasured.
+
+**Closes when:** at least one Python repository is pinned in the corpus with pair specifications
+against it, and binding precision and recall are reported for Python with their sample sizes —
+whatever those numbers turn out to be.
+
+**Sequence behind B36.** B36 records a directional floor at the corpus's current values. Adding a
+repository changes those values, so landing this first would either move the floor underneath the
+gate or freeze a floor that is about to be wrong. Dispatch after B36 lands, and expect the floor to
+be re-recorded as part of this work with the old and new values stated side by side.
+
 ### B7 — The M0 acceptance run has not executed since the pipeline changed underneath it
 
 `tests/test_e2e_stripe.py::test_one_command_produces_one_green_pull_request` is the
