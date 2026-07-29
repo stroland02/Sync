@@ -53,7 +53,9 @@ SERVER_NAME = "sync"
 SERVER_VERSION = "0.1.0"
 
 _PARSE_ERROR = -32700
+_INVALID_REQUEST = -32600
 _METHOD_NOT_FOUND = -32601
+_INVALID_PARAMS = -32602
 _INTERNAL_ERROR = -32603
 # What the MCP specification uses for a resource that is not there. A resource read that cannot
 # be answered is not a tool failure and has no `isError` to carry: `tools/call` returns a result
@@ -94,6 +96,16 @@ def serve(
             _write(sink, _error(None, _PARSE_ERROR, f"invalid JSON: {exc}"))
             continue
 
+        if not isinstance(request, dict):
+            # Valid JSON that is not a request object: a bare scalar, `null`, or the array a
+            # client sends to batch requests. Reaching into one costs the whole session rather
+            # than the frame, and the client is left waiting on a process that has gone.
+            _write(
+                sink,
+                _error(None, _INVALID_REQUEST, f"not a request object: {type(request).__name__}"),
+            )
+            continue
+
         response = _handle(surface, request, feed)
         if response is not None:
             _write(sink, response)
@@ -112,6 +124,19 @@ def _handle(
 
     if request_id is None:
         return None
+
+    params = request.get("params")
+    if params is None:
+        params = {}
+    elif not isinstance(params, dict):
+        # Positional parameters are legal JSON-RPC and this server takes none. Refused here,
+        # once, rather than at each method that reads them: `tools/call` and `resources/read`
+        # both index into this, and a method added later would have to remember to.
+        return _error(
+            request_id,
+            _INVALID_PARAMS,
+            "params must be an object; no method here takes positional arguments",
+        )
 
     if method == "initialize":
         return _result(
@@ -133,7 +158,7 @@ def _handle(
         return _result(request_id, {"tools": schemas_as_data()})
 
     if method == "tools/call":
-        return _call(surface, request_id, request.get("params") or {})
+        return _call(surface, request_id, params)
 
     if method == "resources/list":
         return _result(request_id, {"resources": resources_as_data(feed, _known_vendors())})
@@ -142,7 +167,7 @@ def _handle(
         return _result(request_id, {"resourceTemplates": resource_templates_as_data()})
 
     if method == "resources/read":
-        return _read(request_id, request.get("params") or {}, feed)
+        return _read(request_id, params, feed)
 
     return _error(request_id, _METHOD_NOT_FOUND, f"unknown method: {method}")
 

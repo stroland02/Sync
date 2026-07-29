@@ -58,12 +58,29 @@ class FakeGraph:
         ]
 
 
-def _talk(*requests: dict) -> list[dict]:
-    """Drive one server run over a scripted stdin, and parse what it wrote."""
-    stdin = io.StringIO("".join(json.dumps(r) + "\n" for r in requests))
+class BrokenGraph(FakeGraph):
+    """A graph whose reads fail, which is the case `_call`'s broad handler exists for."""
+
+    def open_findings(self) -> list[Finding]:
+        raise RuntimeError("the graph is unreachable")
+
+
+def _stream(text: str, graph=None) -> list[dict]:
+    """Drive one server run over a literal stdin, and parse what it wrote.
+
+    Takes the stream as text rather than as frames because the interesting inputs here are the
+    ones `json.dumps` cannot produce: a blank line, a line that is not JSON at all, a line that
+    is JSON and is not a request.
+    """
     stdout = io.StringIO()
-    serve(GraphSurface(FakeGraph()), stdin=stdin, stdout=stdout)
+    serve(GraphSurface(graph if graph is not None else FakeGraph()),
+          stdin=io.StringIO(text), stdout=stdout)
     return [json.loads(line) for line in stdout.getvalue().splitlines() if line.strip()]
+
+
+def _talk(*requests: dict, graph=None) -> list[dict]:
+    """Drive one server run over a scripted stdin, and parse what it wrote."""
+    return _stream("".join(json.dumps(r) + "\n" for r in requests), graph=graph)
 
 
 def _req(id_, method, params=None):
@@ -173,6 +190,87 @@ def test_a_malformed_line_is_a_parse_error_that_does_not_end_the_session():
     assert responses[0]["error"]["code"] == -32700
     assert responses[0]["id"] is None
     assert responses[1]["id"] == 2
+
+
+def test_valid_json_that_is_not_a_request_object_is_refused_without_ending_the_session():
+    """The frames a `json.JSONDecodeError` never sees, because they parse.
+
+    A bare scalar, `null`, and an array are all valid JSON and none of them is a request object.
+    The array is the one a conforming client sends on purpose: JSON-RPC 2.0 batches requests as
+    an array, and a server that does not implement batching owes it `-32600` rather than a
+    dereference. Every one of these ends the session if it is dereferenced, and ends it having
+    written nothing -- so the client waits on a response no live process is left to send.
+    """
+    responses = _stream(
+        '42\nnull\n"hello"\n[1, 2]\n' + json.dumps(_req(5, "tools/list")) + "\n"
+    )
+
+    assert [r["error"]["code"] for r in responses[:4]] == [-32600] * 4
+    assert [r["id"] for r in responses[:4]] == [None] * 4
+    assert responses[4]["id"] == 5
+
+
+def test_positional_parameters_are_refused_rather_than_dereferenced():
+    """`params` as an array is legal JSON-RPC and this server takes no positional parameters.
+
+    Refusing it is not pedantry about the specification: `tools/call` and `resources/read` both
+    read `params` as a mapping, so an array reaches an attribute that is not there and takes the
+    session down with it. `-32602` is what the specification calls this, and the frame after it
+    still has to be answered.
+    """
+    responses = _stream(
+        json.dumps(_req(1, "tools/call", ["sync_whats_at_risk", {}])) + "\n"
+        + json.dumps(_req(2, "resources/read", ["sync://feed/stripe"])) + "\n"
+        + json.dumps(_req(3, "tools/list")) + "\n"
+    )
+
+    assert [r["id"] for r in responses] == [1, 2, 3]
+    assert responses[0]["error"]["code"] == -32602
+    assert responses[1]["error"]["code"] == -32602
+    assert "result" in responses[2]
+
+
+def test_a_blank_line_between_frames_is_skipped_rather_than_answered():
+    """A blank line is not JSON, so without the skip it draws a parse error nobody asked for.
+
+    An unrequested frame is worse than a missing one: a client matching responses to requests in
+    order is desynchronised by it for the rest of the session. Blank lines are ordinary -- a
+    client writing CRLF endings emits one wherever a frame boundary is written twice.
+    """
+    responses = _stream(
+        "\n"
+        + json.dumps(_req(1, "tools/list")) + "\n"
+        + "   \n"
+        + "\r\n"
+        + json.dumps(_req(2, "tools/list")) + "\n"
+    )
+
+    assert [r["id"] for r in responses] == [1, 2]
+    assert all("error" not in response for response in responses)
+
+
+def test_a_tool_that_raises_is_answered_as_a_tool_error_and_the_session_survives():
+    """The claim `_call`'s broad `except Exception` makes in its comment, asserted.
+
+    A fault inside a tool has two ways to go wrong and both are silent from the client's side:
+    the exception escapes `serve` and the process dies with the request unanswered, or it is
+    swallowed into a message that says nothing about what broke. So the frame has to be a
+    result carrying `isError`, it has to name the tool and the exception, and the request after
+    it has to still be answered.
+    """
+    responses = _talk(
+        _req(1, "tools/call", {"name": "sync_whats_at_risk", "arguments": {}}),
+        _req(2, "tools/list"),
+        graph=BrokenGraph(),
+    )
+
+    assert [r["id"] for r in responses] == [1, 2]
+    assert "error" not in responses[0]
+    assert responses[0]["result"]["isError"] is True
+    message = responses[0]["result"]["content"][0]["text"]
+    assert "sync_whats_at_risk" in message
+    assert "RuntimeError" in message
+    assert "the graph is unreachable" in message
 
 
 def test_a_notification_is_not_answered():
