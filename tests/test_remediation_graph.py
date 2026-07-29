@@ -37,6 +37,7 @@ class StubStore:
     def __init__(self):
         self.status: str | None = None
         self.status_calls: list[tuple[str, str]] = []
+        self.outcomes: list = []
 
     def get_call_site(self, _id): return SITE
     def get_vendor_change(self, _id): return CHANGE
@@ -44,6 +45,16 @@ class StubStore:
     def set_finding_status(self, _id, _status):
         self.status = _status
         self.status_calls.append((_id, _status))
+
+    def record_migration_outcome(self, outcome) -> None:
+        """The corpus write, which this stub used to lack.
+
+        `make_recorder` now states that contract at construction, so a store without it fails
+        `build_graph` rather than recording nothing. Every test in this file built the real
+        graph against a store that could not record and passed regardless -- which is the
+        failure the contract exists to make visible, found by making it.
+        """
+        self.outcomes.append(outcome)
 
 
 @dataclass

@@ -15,6 +15,20 @@ whole budget without ever reaching CI.
 because bookkeeping failed is worse. Every path out of `record` is caught and logged, and
 the caller gets no exception and no way to accidentally depend on one.
 
+**The store's contract is checked once, at construction.** That swallowing is why. A store
+missing the write used to be a soft `getattr` and a warning, which is the one failure this
+module cannot survive: the write is the single call the whole benchmark depends on, and a
+warning about it scrolls past in a log nobody reads while every axis keeps reporting null with
+a sample size of zero. Null-because-nothing-ran then reads exactly like
+null-because-the-writer-vanished.
+
+Raising from `record` would not fix it, because `record` is where the swallowing lives -- the
+exception would be caught by the same handler that exists to protect the run, logged, and lost.
+And moving the check to the write is the one place it must not be: two of the three call sites
+are inside terminal nodes, and one of those runs *after* `forge.open_pull_request` has already
+opened a pull request. So the contract is stated at `make_recorder`, which `build_graph` calls
+before any node runs. A store that cannot record fails while there is still no run to lose.
+
 **Two cases deliberately write nothing**, and both are cases where a row would be a
 fabrication rather than a measurement. Neither is a schema problem; both are the grain:
 
@@ -39,6 +53,7 @@ import re
 import secrets
 import time
 from pathlib import Path
+from typing import Protocol, runtime_checkable
 
 from sync.core import MigrationOutcome, Patch
 from sync.route import AGENT, CODEMOD
@@ -158,12 +173,45 @@ def static_error_class(diagnostics: str | None) -> str | None:
     return f"TS{found.group(1)}" if found else None
 
 
-def make_recorder(store):
+class CorpusWriterMissing(TypeError):
+    """A store handed to `make_recorder` cannot write the corpus.
+
+    A `TypeError` because that is what it is: the object does not satisfy the one method this
+    module needs. Raised at construction rather than at the write, for the reason the module
+    docstring gives -- the write is wrapped in a handler that must not be removed.
+    """
+
+
+@runtime_checkable
+class CorpusWriter(Protocol):
+    """The whole contract a store owes this module.
+
+    One method. Stated as a protocol so the requirement has a name a reader can find, rather
+    than living in an attribute lookup that only fails at runtime.
+    """
+
+    def record_migration_outcome(self, outcome: MigrationOutcome) -> None: ...
+
+
+def make_recorder(store: CorpusWriter):
     """A `record(state, terminal_status, ...)` bound to one store.
 
     Built in `build_graph` from the store it already receives, so no caller has to learn a
     new argument and no run can be configured with the recording silently absent.
+
+    Raises `CorpusWriterMissing` if the store cannot write. Callability is checked rather than
+    presence, because `hasattr` is satisfied by anything bound to that name -- a column, a
+    `None`, a leftover attribute -- and the contract is a method. The message names both the
+    method and the type that lacks it, so a reader does not have to diff two versions of the
+    store to see why recording stopped.
     """
+    write = getattr(store, "record_migration_outcome", None)
+    if not callable(write):
+        raise CorpusWriterMissing(
+            f"{type(store).__name__} cannot write the migration corpus: it needs a callable "
+            f"record_migration_outcome(outcome), which is the single write every benchmark "
+            f"axis reads from"
+        )
 
     def record(state, *, terminal_status: str, abandon_reason: str | None = None) -> bool:
         try:
@@ -183,11 +231,9 @@ def make_recorder(store):
 
 
 def _record(store, state, terminal_status: str, abandon_reason: str | None) -> bool:
-    write = getattr(store, "record_migration_outcome", None)
-    if write is None:
-        log.warning("store has no record_migration_outcome; migration_outcome row omitted")
-        return False
-
+    # No lookup guard here: `make_recorder` established that this store can write before any
+    # node ran. Re-checking per write would be a check that cannot be loud, since the caller
+    # swallows everything this raises.
     finding = state.get("finding")
     site = state.get("site")
     change = state.get("change")
@@ -220,7 +266,7 @@ def _record(store, state, terminal_status: str, abandon_reason: str | None) -> b
     wall_ms = max(0, round((now() - started) * 1000)) if started else 0
 
     static_passed = state.get("attempt_static_passed")
-    write(
+    store.record_migration_outcome(
         MigrationOutcome.from_attempt(
             finding_id=finding.id,
             attempt_index=attempt_index,
