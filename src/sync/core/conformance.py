@@ -23,6 +23,7 @@ conformance kit that needs `sync.graph` is not a kit, it is an integration test.
 from __future__ import annotations
 
 import inspect
+import os
 from typing import Any
 
 from sync.core.models import OperationRef
@@ -192,13 +193,26 @@ def _check_propose_touches_the_clone(
         )
 
     before = target.read_bytes()
-    before_mtime = target.stat().st_mtime_ns
+
+    # The decline case is detected by mtime, because a remediator that rewrites identical bytes
+    # changes no content. But a filesystem records mtimes far more coarsely than the clock --
+    # measured here at 184 of 200 identical-byte rewrites leaving `st_mtime_ns` untouched -- so
+    # comparing against the file's current mtime detects a write only when it happens to cross a
+    # tick boundary. That is a check which silently fails to fire, guarding a rule that has
+    # already shipped broken twice.
+    #
+    # Backdating the baseline removes the timing entirely: any write, at any instant, moves the
+    # mtime forward from a value no write could have produced. Metadata only; the content the
+    # remediator is about to read is untouched.
+    stat = target.stat()
+    backdated = stat.st_mtime_ns - 10_000_000_000
+    os.utime(target, ns=(stat.st_atime_ns, backdated))
 
     patch = remediator.propose(finding, change, site, repo)
 
     after = target.read_bytes()
     changed = after != before
-    touched = target.stat().st_mtime_ns != before_mtime
+    touched = target.stat().st_mtime_ns != backdated
     diff = getattr(patch, "diff", None)
     if not isinstance(diff, str):
         _fail(
