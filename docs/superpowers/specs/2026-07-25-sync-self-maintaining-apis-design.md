@@ -198,6 +198,22 @@ There is no vector store at M0. Every M0 query is a structured join. Introduce `
 
 ## Milestones
 
+**This plan is revisited, not executed.** Every milestone below is a statement about the system as
+it was understood when the milestone was written, and the system has already contradicted several
+of them — a Python adapter that generalised the walk and not the map, a benchmark that agreed with
+the binder by construction because both shared a blind spot, a "frozen" corpus with a second input
+nobody had pinned. None of those were visible from here.
+
+So each milestone carries an obligation beyond its deliverable: **come back and re-derive it
+against what the system has become.** A milestone whose preconditions were true when it was written
+and false when it is picked up is the normal case, not the exception, and discovering that at the
+end of the work is the expensive way to find out.
+
+Two habits make that cheap rather than ceremonial. State what a milestone *measured* rather than
+what it assumed, so a later reader can tell which claims have decayed. And when a precondition
+turns out to be false, record the correction beside the original rather than replacing it — the
+wrong version is usually the more instructive one, because it says what was easy to believe.
+
 ### M0 — Walking skeleton, one real pull request
 
 One vendor, one language, one detector, one repository. The scope is narrow on purpose: this milestone exists to prove the spine end to end, and every additional axis of variation delays that proof.
@@ -431,6 +447,53 @@ GitHub    4f2a bumped stripe 18.0.0 -> 19.0.0
 **Why coverage compounds rather than accumulates.** Each additional signal is another dimension the join can cut on, so the quality of a remediation rises faster than the count of integrations. One source establishes that an error occurred. Four establish which deploy introduced it, which vendor change the deploy carried, which call sites are affected, and who owns them — enough to propose a fix a senior engineer would recognise as correct rather than a mechanical substitution.
 
 This is also why the graph-mediated rule is a competitive property and not only an engineering one. A product that wires tools to each other pairwise can surface each tool's data beside the others, but it cannot reason across them, because no component holds a model of how the customer's code actually uses any of it. Correlation composes only when every signal lands on a shared structure. The graph is that structure, and it is the part that is hard to copy.
+
+
+### M6 — Show it, rather than describe it
+
+The hardest thing about this product to convey in text is the only thing that matters about it: a
+vendor changed something, and a correct pull request appeared without anyone asking. That is a
+sequence, and a sequence is the one thing a README cannot show.
+
+**Deliverable: a rendered walkthrough of one real run**, built with
+[Remotion](https://github.com/remotion-dev/remotion) — React components rendered to video, so the
+artefact is code in the repository rather than a recording somebody has to redo by hand.
+
+That property is the reason for choosing it over screen capture. This pipeline changes weekly, and
+a hand-recorded demo is stale the moment a node is renamed. A Remotion composition is versioned,
+diffable, regenerable in CI, and can read its numbers from the same recorded artefacts the
+benchmark already produces — so the figures on screen are the figures the corpus scored rather than
+ones a designer typed.
+
+What it has to show, in the order a viewer needs it:
+
+1. The vendor's specification changing — the diff, as `oasdiff` reports it.
+2. The call sites that depend on it lighting up in the graph, not a mock of one.
+3. The patch, and `tsc` passing on the branch.
+4. The customer's own CI going green, which is the claim the product rests on.
+5. The pull request, with its evidence bundle.
+
+**Scope discipline, because this is the milestone most likely to expand.** It illustrates behaviour
+that already exists; it must never become the reason a behaviour exists. If a step cannot be shown
+because the pipeline does not do it yet, the video omits the step — it does not stage it. A
+demonstration of a capability we do not have is the most expensive kind of lie a pre-alpha project
+can tell, because the people it convinces are the people who then try it.
+
+Preconditions: M0's acceptance run re-executing green against the current pipeline, and the
+dashboard of M4 existing to be photographed. Static diagrams and screenshots for the README are a
+cheaper subset of the same work and can land earlier, from the same source data.
+
+**Re-derive this milestone before building it, and expect to.** Everything above describes a
+pipeline as it stands today: five nodes in that order, `oasdiff` as the differ, `tsc` as the static
+gate, a corpus of twelve TypeScript pairs. Any of those can move — and this is the milestone where
+a stale assumption is most expensive, because the output is the artefact people judge the product
+by. A video that shows a step the pipeline no longer has is worse than no video: it is a confident
+demonstration of something untrue, aimed at exactly the people who will then try it.
+
+The obligation is broader than the footage. When this is picked up, walk the sequence against the
+system as it then exists, and treat every difference as a finding about the plan rather than a
+detail to paper over. If the pipeline has grown a stage, the story has a stage. If a claim in this
+document has quietly stopped being true, that is worth more than the render.
 
 ## Risks
 

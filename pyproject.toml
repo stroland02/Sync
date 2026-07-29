@@ -7,6 +7,19 @@ authors = [
     { name = "Sebastian", email = "165098826+stroland02@users.noreply.github.com" }
 ]
 requires-python = ">=3.12"
+license = "Apache-2.0"
+license-files = ["LICENSE"]
+keywords = [
+    "api", "openapi", "breaking-changes", "dependency-management",
+    "static-analysis", "codemod", "stripe", "developer-tools",
+]
+classifiers = [
+    "Development Status :: 2 - Pre-Alpha",
+    "Intended Audience :: Developers",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Software Development :: Quality Assurance",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+]
 dependencies = [
     "ast-grep-py>=0.45.0",
     "claude-agent-sdk>=0.2.128",
@@ -27,6 +40,12 @@ dependencies = [
     "tree-sitter-python>=0.25.0",
     "tree-sitter-typescript>=0.23.2",
 ]
+
+[project.urls]
+Homepage = "https://github.com/stroland02/sync"
+Repository = "https://github.com/stroland02/sync"
+Documentation = "https://github.com/stroland02/sync/tree/main/docs/superpowers/specs"
+Issues = "https://github.com/stroland02/sync/issues"
 
 [project.scripts]
 sync = "sync.cli:main"
