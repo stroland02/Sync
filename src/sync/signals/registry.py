@@ -47,11 +47,17 @@ once an adapter ships outside this repository and is guesswork until then.
 from __future__ import annotations
 
 import json
+import logging
+import os
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable
 
+import yaml
+
 from sync.core.protocols import VendorAdapter
+from sync.signals.generated.adapter import GeneratedSpecAdapter, http_fetch
+from sync.signals.generated.manifest import SpecSource, parse_manifest
 from sync.signals.stripe.adapter import StripeAdapter, fetch_sdk_spec, fetch_spec
 from sync.signals.stripe.symbols import build_symbol_map as build_stripe_symbols
 from sync.signals.twilio.adapter import ProductDocument, TwilioAdapter
@@ -66,6 +72,28 @@ SYMBOL_MAP_FILENAME = "symbols.json"
 # deployment reads. Named per vendor rather than shared, because a vendor that publishes one
 # document has nothing to put in it.
 TWILIO_PRODUCTS_FILENAME = "twilio-products.json"
+
+# Which vendors are served by reading a generator's manifest, as a committed file rather than as
+# entries in this module. A vendor id appearing in shared code is the knowledge the plugin
+# boundary exists to keep out, and a mechanism still needing a line here per vendor would have
+# moved that knowledge rather than removed it.
+GENERATED_VENDORS_FILE = Path(__file__).resolve().parents[3] / "generated-vendors.yaml"
+
+# A deployment configuring its own set overrides the shipped one. The same shape `corpus_salt`
+# uses, and for the same reason: the committed default is right for this repository and wrong to
+# impose on a deployment that has its own vendors.
+GENERATED_VENDORS_VARIABLE = "SYNC_GENERATED_VENDORS"
+
+# The two network calls the generated path makes, held as module attributes so a test can replace
+# either without replacing the other. They are separate because the distinction is the economic
+# claim: reading two manifests is meant to happen on every scan, and fetching two specifications
+# is what an unmoved hash is supposed to avoid. One injection point could not tell them apart.
+fetch_manifest = http_fetch
+fetch_specification = http_fetch
+
+_RAW_CONTENT = "https://raw.githubusercontent.com/{repo}/{ref}/{path}"
+
+log = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -90,6 +118,140 @@ class PreparedVendor:
 
     adapter: VendorAdapter
     documents: tuple[dict[str, Any], ...]
+
+
+@dataclass(frozen=True)
+class GeneratedVendor:
+    """One vendor served by reading the manifest its SDK generator commits.
+
+    Three fields, and none of them is knowledge about the vendor's API: which repository the
+    generated SDK lives in, and which convention's manifest to read out of it. Everything about
+    the specification itself comes from the manifest, which is what makes adding a vendor under
+    a supported generator a configuration entry rather than a module.
+    """
+
+    vendor_id: str
+    repo: str
+    manifest: str
+
+
+def _generated_vendors() -> dict[str, GeneratedVendor]:
+    """Every configured generated-SDK vendor, keyed by id.
+
+    An absent file is no configured vendors, which is a legitimate deployment -- the two
+    hand-written adapters still resolve. A file that is present and unreadable raises naming the
+    path, because a deployment that configured vendors and silently got none would report a
+    quiet scan across every one of them, and quiet is indistinguishable from healthy.
+    """
+    path = Path(os.environ.get(GENERATED_VENDORS_VARIABLE) or GENERATED_VENDORS_FILE)
+    if not path.exists():
+        return {}
+
+    entries = yaml.safe_load(path.read_text(encoding="utf-8"))
+    if not isinstance(entries, list):
+        raise ValueError(f"{path} does not hold a list of generated-SDK vendors")
+
+    try:
+        configured = [
+            GeneratedVendor(
+                vendor_id=entry["vendor_id"], repo=entry["repo"], manifest=entry["manifest"]
+            )
+            for entry in entries
+        ]
+    except (KeyError, TypeError) as exc:
+        raise ValueError(
+            f"{path}: every entry needs vendor_id, repo and manifest ({exc})"
+        ) from None
+    return {vendor.vendor_id: vendor for vendor in configured}
+
+
+def _spec_source(vendor: GeneratedVendor, ref: str) -> SpecSource:
+    """What the vendor's manifest says about its specification at one commit of the SDK.
+
+    Both failures raise naming the repository and the path, and neither resolves to a default.
+    `parse_manifest` answering None is deliberate -- one vendor's broken manifest must not abort
+    a scan across the others -- but this vendor was asked for by name, so None means it cannot be
+    served, and the silent fallback is what `_builders` already refuses for an unknown id.
+
+    A fetch failure is the same judgement from the other direction: an outage that read as "this
+    vendor published nothing" is the exact failure the product exists to catch, arriving from our
+    own side.
+    """
+    url = _RAW_CONTENT.format(repo=vendor.repo, ref=ref, path=vendor.manifest)
+    try:
+        body = fetch_manifest(url)
+    except Exception as exc:
+        raise RuntimeError(
+            f"{vendor.repo} manifest {vendor.manifest} at {ref} could not be retrieved "
+            f"({url}): {exc}"
+        ) from exc
+
+    source = parse_manifest(vendor.manifest, body)
+    if source is None:
+        raise ValueError(
+            f"{vendor.repo} manifest {vendor.manifest} at {ref} names no usable specification "
+            f"({url})"
+        )
+    return source
+
+
+def _prepare_generated(vendor: GeneratedVendor, context: VendorContext) -> PreparedVendor:
+    """Read both manifests and build over them. No specification is fetched here.
+
+    That is the whole economic argument and it is easy to lose at exactly this point. A manifest
+    is a text file in a public repository, so reading two of them is the cost of asking whether
+    the specification moved; a specification is megabytes, and only a vendor whose hash actually
+    moved should pay for two of those. Staging them here -- which is what `prepare_vendor` does
+    for a hand-written vendor -- would pay that cost before anything consulted the hash, and
+    every assertion about the hash would still pass, because the fetch would simply have happened
+    earlier.
+
+    `documents` is empty for the same reason. It carries the parsed specification for the drift
+    detector, and holding one would mean having downloaded it.
+    """
+    sources = {
+        context.from_version: _spec_source(vendor, context.from_version),
+        context.to_version: _spec_source(vendor, context.to_version),
+    }
+
+    if not sources[context.to_version].has_cheap_change_trigger:
+        # The one place this is knowable and worth saying. A configured vendor whose manifest
+        # publishes no hash cannot be asked whether its specification moved, so `changed_from`
+        # answers "changed" and every scan pays for two specification fetches -- correct, and
+        # the opposite of the economics that justify configuring many vendors. Nothing
+        # downstream can tell that from a vendor that genuinely changes every time.
+        log.info(
+            "%s: %s publishes no specification hash, so every scan pays for a fetch rather "
+            "than a comparison",
+            vendor.vendor_id, vendor.manifest,
+        )
+
+    return PreparedVendor(
+        adapter=GeneratedSpecAdapter(
+            vendor_id=vendor.vendor_id,
+            sources=sources,
+            fetch=fetch_specification,
+            cache_dir=context.cache_dir,
+        ),
+        documents=(),
+    )
+
+
+def _load_generated(vendor: GeneratedVendor, context: VendorContext) -> VendorAdapter:
+    """The same adapter with nothing read, because `load_vendor` promises to reach no network.
+
+    It answers `fetch_changes` with nothing and says so in the log, which is the adapter's own
+    designed behaviour for a version it has no manifest for. That is the honest offline answer:
+    this vendor's changes cannot be known without reading its manifests, and `sync ingest` -- the
+    caller `load_vendor` exists for -- wants a request correlator, which this adapter does not
+    implement and is refused for at the entry point.
+    """
+    return GeneratedSpecAdapter(
+        vendor_id=vendor.vendor_id,
+        sources={},
+        fetch=fetch_specification,
+        cache_dir=context.cache_dir,
+    )
 
 
 def _twilio_products(context: VendorContext) -> tuple[ProductDocument, ...]:
@@ -195,19 +357,39 @@ _BUILDERS: dict[str, tuple[Callable[[VendorContext], PreparedVendor],
 
 
 def available_vendors() -> tuple[str, ...]:
-    """Every registered vendor id, sorted. What the command line offers and what an unknown id
-    is told about, both read from here so neither can drift from what is actually registered."""
-    return tuple(sorted(_BUILDERS))
+    """Every registered vendor id, sorted -- coded and configured alike.
+
+    What the command line offers and what an unknown id is told about, both read from here so
+    neither can drift from what is actually registered. Configuration is included because a
+    configured vendor the parser refuses is registered and unreachable, which is the shape of
+    defect this whole path exists to close.
+    """
+    return tuple(sorted({*_BUILDERS, *_generated_vendors()}))
 
 
 def _builders(vendor_id: str) -> tuple[Callable, Callable]:
-    try:
+    """The staging and loading pair for a vendor, coded first and configured second.
+
+    Coded first so a configuration entry cannot shadow a hand-written adapter. A vendor with a
+    hand-written adapter has it for a reason -- a symbol scheme the generated path deliberately
+    declines to guess at -- and a configuration file quietly replacing it would swap a resolving
+    adapter for one that answers `operation_for_symbol` with None every time, which produces no
+    findings and reports no fault.
+    """
+    if vendor_id in _BUILDERS:
         return _BUILDERS[vendor_id]
-    except KeyError:
-        raise KeyError(
-            f"no adapter is registered for vendor '{vendor_id}'; "
-            f"available: {', '.join(available_vendors())}"
-        ) from None
+
+    vendor = _generated_vendors().get(vendor_id)
+    if vendor is not None:
+        return (
+            lambda context: _prepare_generated(vendor, context),
+            lambda context: _load_generated(vendor, context),
+        )
+
+    raise KeyError(
+        f"no adapter is registered for vendor '{vendor_id}'; "
+        f"available: {', '.join(available_vendors())}"
+    )
 
 
 def prepare_vendor(vendor_id: str, context: VendorContext) -> PreparedVendor:
