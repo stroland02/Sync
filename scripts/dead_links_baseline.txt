@@ -54,23 +54,41 @@ src/sync/signals/registry_tier/directory.py:versions_after
 src/sync/benchmark/score.py:score_change
 src/sync/benchmark/score.py:index_sources
 
-# The reachability ranking, built and unreachable from the CLI. `rank_reachability` orders a
-# repository's third-party surface by the call sites the indexer actually found rather than by
-# the dependencies its manifest declares; `call_site_counts` and `observed_call_counts` are the
-# two inputs it ranks over.
+# The reachability ranking, built and unreachable from the command line. `rank_reachability`
+# orders a repository's declared dependencies by the call sites the indexer actually found;
+# `call_site_counts` and `observed_call_counts` are the two aggregators that feed it, over rows a
+# caller already holds.
 #
-# What it needs is one read-only reader that does not exist: a per-repository call-site count
-# keyed by vendor -- a single GROUP BY over `call_site` -- which belongs on `GraphStore` beside
-# `observed_calls`. `GraphStore` exposes call sites only through
-# `call_sites_for_operation(vendor_id, operation_id)`, which cannot answer "how many, per vendor,
-# in this repository". The module was written to take both counts as arguments precisely so it
-# does not depend on where they come from.
+# Built-and-unreachable is not the same state as not-built, and this file is what keeps them
+# distinguishable -- the same discipline the ranking itself applies to a dependency nothing could
+# bind, which must never render as one nothing calls.
 #
-# It is baselined rather than wired because `src/sync/graph/store.py` belonged to another
-# coordinator's live task when this landed. Built-and-unreachable is a different state from
-# not-built, and this entry is what keeps them distinguishable.
+# One query is missing and it is the whole of what is missing:
 #
-# These three lines leave when that reader exists and `sync intake` ranks with it.
+#     GraphStore.call_site_counts(repo_id: str) -> dict[str, int]
+#
+#     `SELECT vendor_id, count(*) FROM call_site WHERE repo_id = %s GROUP BY vendor_id`
+#
+#     One row is one indexed call site, not one dependency. A vendor with no call sites is
+#     absent from the result rather than present with a zero, because absence has two causes the
+#     query cannot separate -- the indexer looked and found nothing, or it never looked -- and
+#     only the intake category resolves which. `rank_reachability` is where that resolution
+#     happens, so the query must not attempt it.
+#
+# Scoped to a repository because that is the unit a finding is raised against, exactly as
+# `observed_calls` is. `sync.graph.store` was claimed by a live schema task while this was
+# written, and two tasks adding methods to one store is the collision this build has spent a day
+# avoiding. Three worse options were weighed and rejected: reusing the in-memory call sites `sync
+# run` already holds would report every vendor that run did not index as a measured zero, which
+# needs a "not indexed in this measurement" class in the model to state honestly -- a class that
+# exists because of where the data was read rather than because of what it means; having intake
+# index in-process needs a loaded vendor with a symbol map, so a staging failure would report
+# watched vendors as uncalled, silently and in the direction that flatters us; and shipping the
+# ranking with the two zeroes conflated is the one thing the ranking exists to prevent.
+#
+# Whoever adds that reader wires `sync intake --rank-by-repo-id` and deletes all three lines in
+# the commit that does it. The observed half already works: `GraphStore.observed_calls(repo_id)`
+# exists and `observed_call_counts` sums its spans.
+src/sync/signals/reachability.py:rank_reachability
 src/sync/signals/reachability.py:call_site_counts
 src/sync/signals/reachability.py:observed_call_counts
-src/sync/signals/reachability.py:rank_reachability
