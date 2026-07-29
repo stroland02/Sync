@@ -1575,7 +1575,7 @@ def intake(args: argparse.Namespace) -> int:
     # command reports what the deployment already knows, and a fetch inside it would make a
     # report of what is on disk quietly online.
     directory = (
-        parse_directory(json.loads(Path(args.registry_directory).read_text(encoding="utf-8")))
+        parse_directory(json.loads(Path(args.registry_directory).read_text(encoding="utf-8")))[0]
         if args.registry_directory else []
     )
     registry_apis = (
