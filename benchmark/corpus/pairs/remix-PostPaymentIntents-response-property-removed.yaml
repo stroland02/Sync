@@ -1,0 +1,12 @@
+# 1 indexed call site(s) on PostPaymentIntents in remix, pinned at 25982ff9316d5219e7e0973ee2766bd6b2012723.
+# Field chosen by the rule in scripts/build_corpus_specs.py: the alphabetically first
+# property of this operation in v2330 that no call site in this repository already uses.
+cache: .cache/specs
+change:
+  field: amount
+  kind: response-property-removed
+  operation: PostPaymentIntents
+from_version: v2320
+repo: .cache/corpus/remix
+to_version: v2330
+vendor: stripe

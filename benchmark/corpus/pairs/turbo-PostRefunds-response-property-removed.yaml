@@ -1,0 +1,12 @@
+# 1 indexed call site(s) on PostRefunds in turbo, pinned at 6c7aac00cd271abe6dd3764316209f329501583d.
+# Field chosen by the rule in scripts/build_corpus_specs.py: the alphabetically first
+# property of this operation in v2330 that no call site in this repository already uses.
+cache: .cache/specs
+change:
+  field: balance_transaction
+  kind: response-property-removed
+  operation: PostRefunds
+from_version: v2320
+repo: .cache/corpus/turbo
+to_version: v2330
+vendor: stripe

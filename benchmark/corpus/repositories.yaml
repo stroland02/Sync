@@ -1,0 +1,38 @@
+# The repositories the frozen corpus is scored over, pinned by commit.
+#
+# `benchmark/corpus/README.md` argues the selection. `scripts/fetch_corpus_repositories.py`
+# turns this file into trees under the gitignored `.cache/corpus/`, and refuses when a
+# materialised tree does not match the digest recorded here.
+#
+#   name         what the specifications and the score name this checkout by
+#   repo         owner/name on GitHub
+#   commit       the pin; the fetch asks for this commit by name rather than for a branch
+#   subpath      the directory inside that checkout the score is taken over, when the
+#                repository's `package.json` is not at its root
+#   tree_digest  SHA-256 over every materialised path and the SHA-256 of its bytes, sorted.
+#                What the commit pins is what the vendor published; this pins what the fetch
+#                produced from it, including the UTF-8 pruning the fetcher documents.
+
+- name: furever
+  repo: stripe/stripe-connect-furever-demo
+  commit: 5114c968fd8537d82889e2d04afaf00a986af7bf
+  subpath: .
+  tree_digest: 0a14ffb48adb3b929b42842fd22b89b344df36a3d27e59830842662c74f13e49
+
+- name: turbo
+  repo: ardriveapp/turbo-payment-service
+  commit: 6c7aac00cd271abe6dd3764316209f329501583d
+  subpath: .
+  tree_digest: 82d4d4342a2d53787594e16564a33abb02afea9388ce6dd7176fcad261013900
+
+- name: remix
+  repo: cjavilla-stripe/remix-stripe-sample
+  commit: 25982ff9316d5219e7e0973ee2766bd6b2012723
+  subpath: .
+  tree_digest: 20cbf5f79effef8b646a3ffe3c6c63a8d3cd2b0e11e1f25457805f600838a9bc
+
+- name: fireship-server
+  repo: fireship-io/stripe-payments-js-course
+  commit: d4a5fc4b376d25f6d9fe875b672a26a90ed662a7
+  subpath: server
+  tree_digest: 2fcb1683d028a0fbdbcc82b36347d539d2fe3d6951e7567d9acbc4126f822f4a

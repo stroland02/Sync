@@ -1,0 +1,109 @@
+# The frozen specimen corpus
+
+`sync benchmark --score-pair` scores one pair. This directory is the set: four real repositories
+pinned by commit, twelve corpus specifications generated from a stated rule, and the recorded
+score over all of them.
+
+`docs/superpowers/specs/2026-07-29-sync-verification-regime.md` names why it had to exist.
+`2026-07-27-sync-benchmark-gates.md` is explicit that an unfrozen benchmark measures the
+benchmark: a pair regenerated fresh each run scores a different input set each run, so a movement
+in the number means nothing. Freezing is what turns a score into a benchmark.
+
+## Running it
+
+```
+uv run python scripts/fetch_corpus_repositories.py                     # once; the only network step
+uv run python scripts/fetch_measurement_inputs.py --measurement symbol-coverage-105-of-414
+uv run python scripts/score_corpus.py --score-dsn postgresql://sync:sync@localhost:5433/<a database of its own>
+```
+
+Run from the repository root: the specifications name paths relative to it.
+
+The second command puts the pinned Stripe specification in `.cache/specs/`; the symbol map
+`stripe` resolves through is built from it once with `sync.signals.stripe.symbols.build_symbol_map`
+over `v2330.json` and `v2330.sdk.json`. Scoring itself reaches no network, which is the offline
+contract `_score_corpus` already keeps by loading the vendor rather than staging it.
+
+`--score-dsn` is truncated per pair. It must not name a database holding anything you want.
+
+## Which repositories, and why these
+
+Real repositories pinned by SHA, fetched into the gitignored `.cache/corpus/` by a setup step,
+with only the manifest committed. The alternative was committed fixture repositories, which are
+fully deterministic and need no fetch — and which measure the fixtures. This project's own
+fixtures were written to exercise the indexer, so a binding score over them would be a score over
+code shaped by the thing being scored. `2026-07-29-sync-ground-truth-quality.md` chose synthetic
+mutation of *real* repositories for the same reason, and this follows it.
+
+| name | repository | commit | why |
+|---|---|---|---|
+| `furever` | `stripe/stripe-connect-furever-demo` | `5114c96` | Stripe's own Connect demo, and the repository M0's acceptance test targets. `tests/fixtures/ts/two_payment_intents` was already shaped after one of its route handlers. |
+| `turbo` | `ardriveapp/turbo-payment-service` | `6c7aac0` | A production payment service rather than a sample: third-party code with no relationship to Stripe or to this project. |
+| `remix` | `cjavilla-stripe/remix-stripe-sample` | `25982ff` | Small, and a different framework. It contributes the single-call-site case, which is where a pair has the least room to hide a miss. |
+| `fireship-server` | `fireship-io/stripe-payments-js-course` | `d4a5fc4` | Course code, written to be read rather than to ship, and the only one calling subscriptions and customers. Its `package.json` is under `server/`, which is what `subpath` names. |
+
+All four are TypeScript, declare `stripe` in a `package.json`, and call operations the Stripe
+symbol map covers. That last condition is doing more work than it looks: the map covers 105 of
+414 `/v1/` paths, so a repository whose Stripe usage is `checkout.sessions.create` — which is a
+nested sub-resource the path pattern does not match — contributes nothing and was not selectable.
+
+**What this sample is not.** Four repositories, three of them demonstration or teaching code.
+Nothing here was chosen for being representative of the population of repositories that depend on
+Stripe, because no measurement of that population exists.
+
+## What is committed and what is fetched
+
+Committed: `repositories.yaml`, the twelve specifications under `pairs/`, and the recorded score
+under `recorded/`. Fetched: the checkouts themselves, into `.cache/corpus/`, which `.gitignore`
+already excludes.
+
+`repositories.yaml` pins each entry three ways — the commit, the subpath, and a `tree_digest`
+over every materialised path and the SHA-256 of its bytes. The commit pins what the vendor
+published; the digest pins what the fetch produced from it, and the fetch refuses when the two
+disagree.
+
+**The materialised tree is pruned and that is a real transformation.** `sync.cli._score_corpus`
+reads every file under the checkout with `read_text(encoding="utf-8")`, so one PNG anywhere ends
+the run — the Connect demo carries 63 files that are not UTF-8. The fetcher materialises only the
+files that decode, and prints how many it dropped. Nothing an indexer reads is lost by that;
+`package.json`, `tsconfig.json` and every `.ts` file are text. It is still not the vendor's tree,
+and the digest is over what was scored rather than over what was published.
+
+## Which pairs, and why those
+
+`scripts/build_corpus_specs.py` generates the specifications and is the record of the rule. A
+corpus assembled by picking pairs that score well measures the picker, so the selection is
+executable and the score is whatever it produces — including the pairs the harness then refuses.
+
+- **Operations.** Per repository, the two with the most indexed call sites where at least one
+  call passes an object argument, ties broken by operation id ascending. An operation whose calls
+  take no object argument is excluded because neither mutation can attach to one.
+- **Kinds.** `request-property-removed` and `response-property-removed`, the two mechanically
+  different inversions `sync.benchmark.mutate` implements. The third supported kind,
+  `request-parameter-removed`, mutates identically to the first.
+- **Field.** The alphabetically first property of that operation in the pinned `v2330`
+  specification that no indexed call site in the repository already passes, for a request change,
+  or already reads, for a response change. Real properties of the real operation, so the mutation
+  writes something the vendor could have removed; alphabetically first so the choice is not a
+  judgement.
+
+Two combinations produced no specification and the generator said so rather than substituting
+one: `furever/GetCharges` and `fireship-server/GetPaymentMethods` are GETs with no request body,
+so `request-property-removed` has no property to name.
+
+## Reading the recorded score
+
+`recorded/2026-07-29-score.txt` and `.json` are one run's output, byte-identical to a second run
+from a clean database. `docs/superpowers/reports/2026-07-29-frozen-corpus-first-binding-numbers.md`
+carries what the numbers do and do not support.
+
+Three things the report insists on and this directory must keep:
+
+- **Every axis carries its sample size.** Precision and recall are each over twelve labelled
+  affected call sites. Twelve.
+- **Excluded pairs are counted and named.** Two of the twelve specifications were refused, both
+  `displaced-label`.
+- **A pair that contributed no positives is visible.** Five of the ten scored pairs contributed
+  zero affected call sites — every response-side pair that was not refused outright — because the
+  response mutation could not attach to any of their calls. The corpus total cannot show that and
+  the per-pair table does.
