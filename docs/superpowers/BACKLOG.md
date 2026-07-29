@@ -12,24 +12,25 @@ item that cannot say what evidence closes it is not ready to dispatch.
 
 ## Ready
 
-### B48 — The generator picks operations by a request-side rule, so it cannot see response-only ones
+### B49 — The rule now proposes four pairs the corpus does not hold
 
-`build_corpus_specs.py` selects operations by "the most call sites where at least one passes an
-object argument". That is a **request-side** condition, and it makes any operation whose calls pass
-positional arguments invisible — `args_keys` is empty, so the operation never appears as a
-candidate however many sites it has.
+B48 made selection follow the change's own side, and measured what the corrected rule would
+propose for the four TypeScript repositories: it **differs from the thirteen pinned pairs in four
+places.** That was measured into a scratch directory and deliberately not landed, because a rule
+change and a corpus regeneration in one commit move the floors for two reasons at once and neither
+can be attributed.
 
-The corpus's first Python pair had to be written by hand for exactly this reason.
-`GetProductsId` has three call sites, all `client.products.retrieve(cfg.product_id)`, all
-positional. The rule could never have proposed it, and it is the best pair in the corpus — two
-positives, one held-back negative, and a `GET` so there is no request pair to compete with it.
+So the corpus currently holds four pairs the rule would no longer choose, and is missing four it
+now would. Neither set is wrong — the pinned thirteen score honestly and every floor clears — but
+the corpus has stopped being what its own generator would produce, and that gap only widens.
 
-**The half the rule does not look at is the half that matters for response-side pairs.** Every
-response pair the corpus holds got there because its operation also happened to qualify on the
-request side.
+**Closes when:** the corpus is regenerated from the corrected rule, the floors are restated in the
+same commit with old and new side by side, and each of the four differences is named with what it
+gained or lost — a falsifiable negative, a response positive, a denominator.
 
-**Closes when:** the selection rule can propose an operation on response-side evidence alone, and
-the pair that had to be hand-written would have been generated.
+**Read before starting:** whether to regenerate at all is a real question. The thirteen pinned
+pairs are a measured, gated, byte-identical baseline, and replacing them resets the history the
+floors were built from. Argue it either way, but argue it.
 
 ### B7 — The M0 acceptance run has not executed since the pipeline changed underneath it
 
@@ -60,6 +61,23 @@ recorded with which change broke it.
 _Nothing._
 
 ## Done
+
+- **B48** — operation selection now follows the change's own side. An operation qualifies on
+  `args_keys` for a request pair and `response_fields_read` for a response one, through a shared
+  `_judged_by` that `hold_back` also calls.
+
+  The diagnosis in one line: **selection was the only clause that never followed the side**, which
+  is why response coverage had been a side effect of request coverage.
+
+  The closing condition was met exactly — the rule proposes `GetProductsId` for `virtual-lab`, and
+  the specification it writes is *identical in parsed payload* to the pair that had to be
+  hand-written: same field `created`, same held-back position. Ten tests cover the symmetry in both
+  directions, including that an object argument does **not** qualify an operation for a response
+  pair, so it did not swap one blindness for another.
+
+  No floor moved and `benchmark/corpus/` is byte-untouched, which was the constraint: the four
+  differences it would propose for the TypeScript repositories were measured into a scratch
+  directory and left there. See B49.
 
 - **B47 — the corpus measures Python.** `virtual-lab-GetProductsId-response-property-removed`:
   two labelled positives, both found, no false finding, and one held-back site the detector could
