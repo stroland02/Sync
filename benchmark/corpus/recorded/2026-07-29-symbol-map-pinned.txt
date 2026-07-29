@@ -6,16 +6,16 @@ Recorded, not gated: no number here is compared against a threshold.
   binding precision     1.0000       n=16
   binding recall        1.0000       n=16
   call sites affected   16
-  call sites unaffected 133
+  call sites unaffected 136
   unlabelled findings   0
   falsifiable negatives  4
   paths not read        64
-  symbol map            90519bd7320e2c86
+  symbol map            5f71dcd3bec1302c
 
   scored pair                                                affected  unaffected  findings  unreachable  unread
-  fireship-server-GetPaymentMethods-response-property-removed        0          12         0            1       0
-  fireship-server-PostPaymentIntents-request-property-removed        1          11         1            0       0
-  fireship-server-PostPaymentIntents-response-property-removed        2          10         2            0       0
+  fireship-server-GetPaymentMethods-response-property-removed        0          13         0            1       0
+  fireship-server-PostPaymentIntents-request-property-removed        1          12         1            0       0
+  fireship-server-PostPaymentIntents-response-property-removed        2          11         2            0       0
   furever-GetCharges-response-property-removed                      1          30         1            0      63
   furever-PostPaymentIntents-request-property-removed               5          26         5            0      63
   furever-PostPaymentIntents-response-property-removed              2          29         2            4      63

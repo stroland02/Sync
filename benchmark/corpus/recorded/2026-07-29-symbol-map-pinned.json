@@ -52,6 +52,12 @@
         },
         {
           "affected": false,
+          "call_site_id": "e79eb79e615a325442ecf309efe1a147",
+          "rung": "unresolved",
+          "vendor_change_id": "bc1052961c2d40a35d1905e37b8537a0"
+        },
+        {
+          "affected": false,
           "call_site_id": "417a357365dcb26619ddee51751ddd8a",
           "rung": "unresolved",
           "vendor_change_id": "bc1052961c2d40a35d1905e37b8537a0"
@@ -115,7 +121,7 @@
       "reason": null,
       "scored": true,
       "skipped_files": [],
-      "unaffected_sites": 12,
+      "unaffected_sites": 13,
       "unreachable_targets": [
         "1292e9ccebd5ee09fa1eb0b91bfc782f"
       ]
@@ -143,6 +149,12 @@
         {
           "affected": false,
           "call_site_id": "4441cdb8e0ab1a5f8b3474951c427a65",
+          "rung": "unresolved",
+          "vendor_change_id": "88677ebd3a285555cc71bef37e5335fb"
+        },
+        {
+          "affected": false,
+          "call_site_id": "e79eb79e615a325442ecf309efe1a147",
           "rung": "unresolved",
           "vendor_change_id": "88677ebd3a285555cc71bef37e5335fb"
         },
@@ -211,7 +223,7 @@
       "reason": null,
       "scored": true,
       "skipped_files": [],
-      "unaffected_sites": 11,
+      "unaffected_sites": 12,
       "unreachable_targets": []
     },
     {
@@ -240,6 +252,12 @@
         {
           "affected": false,
           "call_site_id": "4441cdb8e0ab1a5f8b3474951c427a65",
+          "rung": "unresolved",
+          "vendor_change_id": "d5dd686d2e3e2a5eac68ef9e1e0fd22b"
+        },
+        {
+          "affected": false,
+          "call_site_id": "e79eb79e615a325442ecf309efe1a147",
           "rung": "unresolved",
           "vendor_change_id": "d5dd686d2e3e2a5eac68ef9e1e0fd22b"
         },
@@ -308,7 +326,7 @@
       "reason": null,
       "scored": true,
       "skipped_files": [],
-      "unaffected_sites": 10,
+      "unaffected_sites": 11,
       "unreachable_targets": []
     },
     {
@@ -1481,8 +1499,8 @@
     "scripts/logo2.png",
     "scripts/logo3.png"
   ],
-  "symbol_map_digest": "90519bd7320e2c866f18bd0db991e34aad5c77d969fd8ac8a21d03df92a685a5",
-  "unaffected_sites": 133,
+  "symbol_map_digest": "5f71dcd3bec1302cf70cba56bc9ebf043b38a1727acb43cee9e20fa08ead6be7",
+  "unaffected_sites": 136,
   "unreachable_targets": [
     "fireship-server-GetPaymentMethods-response-property-removed::1292e9ccebd5ee09fa1eb0b91bfc782f",
     "furever-PostPaymentIntents-response-property-removed::885d560f14c5b47d8b0244ed67dccb56",

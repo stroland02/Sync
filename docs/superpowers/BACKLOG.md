@@ -30,23 +30,6 @@ regression arrives looking exactly like this one and gets re-run away.
 re-runs until failure and preserves the output is the cheap first step —
 `pytest -p no:randomly -x` in a loop, saving the first red run's full output rather than its tail.
 
-### B41 — The corpus is pinned against repositories but not against the symbol map
-
-Found by accident: deleting `.cache/specs/symbols.json` makes `scripts/score_corpus.py` fail with
-`FileNotFoundError`, because the Stripe adapter **loads a staged map rather than building one**.
-
-So the corpus has two frozen inputs and only one of them is pinned. Repositories are pinned by
-commit and validated by `tree_digest`; the symbol map is a cached artifact in gitignored space that
-nothing records, nothing validates, and any `sync run` can overwrite. A map rebuilt from a different
-head specification, or with `sdk_spec` present rather than absent, changes what resolves — and the
-score would move with no commit, no digest mismatch and no explanation.
-
-B39 makes this concrete rather than theoretical: it changed the map's contents from 179 symbols to
-272, and **the corpus could not see that change at all** until the artifact was rebuilt by hand.
-
-**Closes when:** the score records which symbol map produced it — by digest, the same way the
-checkouts are — and a stale or mismatched map fails loudly rather than scoring quietly.
-
 ### B7 — The M0 acceptance run has not executed since the pipeline changed underneath it
 
 `tests/test_e2e_stripe.py::test_one_command_produces_one_green_pull_request` is the
@@ -76,6 +59,26 @@ recorded with which change broke it.
 _Nothing._
 
 ## Done
+
+- **B41** — the corpus's second frozen input is pinned. `benchmark/corpus/symbol_map.yaml` records
+  a digest beside `repositories.yaml`, the score carries the digest of the map that actually ran,
+  and both the scorer and the gate refuse a mismatch. A deleted map now exits 2 naming the pin
+  instead of a `FileNotFoundError` from inside the Stripe adapter.
+
+  **The digest covers content, not bytes**, and that distinction was proven both ways rather than
+  argued: reserialised with reversed key order and seven-space indent it digests identically; one
+  symbol repointed is refused naming both digests. A checkout is its bytes because the indexer
+  reads the files it was handed; a map is a mapping, and indentation is how a serialiser felt on
+  the day.
+
+  The scorer refuses **before scoring a single pair**, because that is where a wrong number would
+  be created and it is indistinguishable from a good one by the time anything reads it.
+
+  Re-pinned by the coordinator in the same act: the worker's pin named a 179-symbol artifact that
+  predated B39 and no run could stage, so it refused on every current cache — correctly and
+  uselessly. Rebuilt to 272, scored, floors measured unmoved, digest and recording landed together.
+  Its own test `test_the_gate_clears_the_score_the_scorer_actually_records` caught the incomplete
+  half of that re-pin, which is exactly what its docstring says it is for.
 
 - **B39** — the Stripe symbol map now carries the spelling Python actually writes. 179 symbols to
   **272**, all 93 previously-unreachable operations addressable, `paymentIntents` and
