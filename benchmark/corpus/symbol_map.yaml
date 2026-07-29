@@ -1,0 +1,50 @@
+# The symbol map the frozen corpus is scored against, pinned by a digest over what it resolves.
+#
+# `repositories.yaml` pins the other frozen input. This one was unpinned until 2026-07-29: it is
+# a generated artifact in the gitignored `.cache/specs/`, and nothing recorded it, nothing
+# validated it, and any `sync run` could overwrite it. A different head specification, or
+# `sdk_spec` present rather than absent, changes which symbols resolve and therefore what the
+# binder can find at all -- so the score could move, or fail to move when it should have, with no
+# commit and no mismatch to explain it. `scripts/gate_corpus.py` gates on those numbers.
+#
+#   digest      SHA-256 over a canonical rendering of the whole mapping: every symbol, every key
+#               of every entry, sorted, with fixed separators. Over the *content* and not over
+#               the file's bytes -- indentation and key order are how a serialiser felt on the
+#               day, and a digest that moved on them would report a corpus change that is not
+#               one. `scripts/symbol_map_pin.py` carries the argument.
+#   symbols     how many symbols the map resolves. Redundant against the digest and kept because
+#               it is the number a human reads in a diff.
+#   staged_at   where the scorer expects to find it. Gitignored, and deliberately: the map is
+#               generated and large, and committing it would make this repository the place a
+#               stale copy lives. Pinning it and committing it are different answers.
+#   built_from  how to get this map back, as far as it is known. A digest says which map; this
+#               says how to obtain it, without which a mismatch is a refusal nobody can act on.
+#
+# What is honest about this entry, and worth reading before trusting it
+# ---------------------------------------------------------------------
+# This map is NOT reproducible from the specifications on disk with today's builder, measured
+# rather than assumed: `build_symbol_map` over `.cache/specs/v2330.json` produces 272 symbols
+# with the SDK document and 272 without it, against the 179 recorded here. So the staged artifact
+# predates B39, which widened the map, and the corpus floors -- binding precision 1.0000 at n=16,
+# recall 1.0000 at n=16, 4 falsifiable negatives, 12 of 12 pairs scored -- were measured against
+# these 179 symbols and not against what a `sync run` would stage today.
+#
+# That gap is the reason this file exists rather than an argument against it. Before it, the
+# corpus would have silently switched to the 272-symbol map the first time anybody re-staged the
+# cache, and the floors would have moved with no commit naming the cause. Now the scorer refuses
+# and says which map it wanted.
+#
+# Re-pinning to a rebuilt map is a deliberate act with a measurement attached: rebuild, score,
+# check whether the four floors moved, and land the new digest and the new floors together in one
+# commit that says why. That is the same act `gate_corpus.py` requires for a floor, and it is not
+# this task.
+
+digest: 90519bd7320e2c866f18bd0db991e34aad5c77d969fd8ac8a21d03df92a685a5
+symbols: 179
+staged_at: .cache/specs/symbols.json
+built_from: >-
+  rebuilt by hand on 2026-07-29 after the cached artifact was deleted, from a Stripe
+  specification with no SDK document. Its provenance is not authoritative and is recorded as what
+  it is: it is faithful for scoring because it reproduces the recorded floors exactly, and it is
+  not what `sync.signals.stripe.symbols.build_symbol_map` produces from the specifications
+  currently on disk.
