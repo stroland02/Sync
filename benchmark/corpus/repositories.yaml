@@ -56,3 +56,12 @@
   commit: d4a5fc4b376d25f6d9fe875b672a26a90ed662a7
   subpath: server
   tree_digest: 2fcb1683d028a0fbdbcc82b36347d539d2fe3d6951e7567d9acbc4126f822f4a
+
+# The first entry that is not TypeScript. `2026-07-29-a-python-repository-exists-and-cannot-be-pinned.md`
+# found it and measured why it could not be pinned then; the blocker was the generator rather than
+# the binder, and B43 closed it.
+- name: virtual-lab
+  repo: openbraininstitute/virtual-lab-api
+  commit: a2577bb15dd004d170a5a454c2bc850061a06d7a
+  subpath: .
+  tree_digest: 7426825dba1243e737187237782d32bb5ff419a4b30dcf6fceeb0a385056921f

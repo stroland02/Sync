@@ -1,8 +1,9 @@
 # The frozen specimen corpus
 
-`sync benchmark --score-pair` scores one pair. This directory is the set: four real repositories
+`sync benchmark --score-pair` scores one pair. This directory is the set: five real repositories
 pinned by commit, twelve corpus specifications generated from a stated rule, and the recorded
-score over all of them.
+score over all of them. Five repositories and twelve specifications, because the fifth contributes
+none — "One repository contributes no pair, deliberately" below is why.
 
 `docs/superpowers/specs/2026-07-29-sync-verification-regime.md` names why it had to exist.
 `2026-07-27-sync-benchmark-gates.md` is explicit that an unfrozen benchmark measures the
@@ -41,15 +42,61 @@ mutation of *real* repositories for the same reason, and this follows it.
 | `turbo` | `ardriveapp/turbo-payment-service` | `6c7aac0` | A production payment service rather than a sample: third-party code with no relationship to Stripe or to this project. |
 | `remix` | `cjavilla-stripe/remix-stripe-sample` | `25982ff` | Small, and a different framework. It contributes the single-call-site case, which is where a pair has the least room to hide a miss. |
 | `fireship-server` | `fireship-io/stripe-payments-js-course` | `d4a5fc4` | Course code, written to be read rather than to ship, and the only one calling subscriptions and customers. Its `package.json` is under `server/`, which is what `subpath` names. |
+| `virtual-lab` | `openbraininstitute/virtual-lab-api` | `a2577bb` | The first entry that is not TypeScript. Apache-2.0, declares `stripe` in a `pyproject.toml`, 21 indexed call sites over 12 operations. It contributes no pair yet, and the section below is why. |
 
-All four are TypeScript, declare `stripe` in a `package.json`, and call operations the Stripe
-symbol map covers. That last condition is doing more work than it looks: the map covers 105 of
-414 `/v1/` paths, so a repository whose Stripe usage is `checkout.sessions.create` — which is a
-nested sub-resource the path pattern does not match — contributes nothing and was not selectable.
+Four of the five are TypeScript and declare `stripe` in a `package.json`; the fifth is Python and
+declares it in a `pyproject.toml`. All five call operations the Stripe symbol map covers. That
+last condition is doing more work than it looks: the map covers 105 of 414 `/v1/` paths, so a
+repository whose Stripe usage is `checkout.sessions.create` — which is a nested sub-resource the
+path pattern does not match — contributes nothing and was not selectable.
 
-**What this sample is not.** Four repositories, three of them demonstration or teaching code.
+**What this sample is not.** Five repositories, three of them demonstration or teaching code.
 Nothing here was chosen for being representative of the population of repositories that depend on
 Stripe, because no measurement of that population exists.
+
+## One repository contributes no pair, deliberately
+
+`virtual-lab` is pinned and indexed and appears in no specification under `pairs/`. That
+combination is odd enough to look like an oversight, so this is what it is instead.
+
+The selection rule takes the two operations with the most indexed call sites where at least one
+call passes an object argument. In `virtual-lab` those are `GetCustomers` and `GetSubscriptions`,
+three sites each. Both are GETs with no request body, so `request-property-removed` has no
+property to name and is skipped the way `furever/GetCharges` already is. Both response
+specifications generate, and both label a dependency the repository does not have.
+
+The shape is the whole of it. Every one of those six call sites is written
+
+```python
+customers = list(self.client.customers.list(params={"limit": 100}).auto_paging_iter())
+```
+
+and the response mutation appends its guard to the statement that binds the result:
+
+```python
+customers = list(...auto_paging_iter()); assert customers.has_more is not None
+```
+
+`customers` is a Python list built from the pager. `customers.has_more` is an `AttributeError`,
+and removing `has_more` from the `GetCustomers` response cannot break that code. The generator
+and the indexer disagree about what binding a result means:
+
+| | rule |
+|---|---|
+| `sync.benchmark.mutate._result_binding` | climbs to an `assignment` whose value **contains** the call |
+| `sync.index.python_lang._result_target` | requires the value to **be** the call |
+
+Containment against identity. The generator is the more permissive of the two, so it writes a
+dependency the binder is right to refuse to record — and right, in turn, to emit no finding
+against. Scored as generated, those two pairs read as two missed breaks and take pooled recall
+from 1.0000 at n=16 to 0.8889 at n=18. That number measures the generator's permissiveness and
+not the binder's accuracy, and a recall floor lowered to admit it would certify a mislabel.
+
+So the repository is pinned, the pairs are not written, and Python binding precision and recall
+stay **null over n=0** — unmeasured rather than zero, which is the distinction `axes.py` already
+draws. `docs/superpowers/reports/2026-07-29-the-corpus-refuses-to-certify-itself.md` carries the
+measurement. What retires this is `_result_binding` requiring identity rather than containment,
+after which those targets are recorded `unreachable` and the pairs can be generated honestly.
 
 ## What is committed and what is fetched
 
@@ -95,7 +142,10 @@ executable and the score is whatever it produces — including the pairs the har
   specification that no indexed call site in the repository already passes, for a request change,
   or already reads, for a response change. Real properties of the real operation, so the mutation
   writes something the vendor could have removed; alphabetically first so the choice is not a
-  judgement.
+  judgement. The scan behind "already reads" is coarse and reads the repository's **own**
+  language: a Python repository scanned for `*.ts` reads nothing at all, which is an absent guard
+  rather than a loose one, and a TypeScript repository scanned for `*.py` would read the one
+  stray script `furever` carries and move a frozen field.
 - **Held back.** The first call site on the changed operation by position, when the operation has
   more than one indexed call site and that site carries a non-empty field list on the side the
   change is on. One per specification and never more. It goes into the specification as a
@@ -123,6 +173,19 @@ the rule existed. Each clause of it is doing work:
   nothing to break, and a pair with no target is refused rather than scored.
 - **One and never more**, because every held-back site is a site binding recall no longer
   measures.
+
+**The committed specifications no longer match what the generator produces today, and the drift
+is in the hold-back.** Re-running `build_corpus_specs.py` over the same pinned trees now writes a
+`hold_back` entry into `furever-PostPaymentIntents-response-property-removed` and
+`turbo-PostPaymentIntents-response-property-removed`, which the committed versions do not carry —
+six of twelve specifications rather than four. Nothing about those checkouts moved. The binder
+did: B34 taught it to record fields off a result the call reaches through a wrapper, so the first
+site on each of those operations now has a non-empty `response_fields_read` where it had none, and
+the third clause of the hold-back rule fires. The twelve are left frozen, because regenerating
+them would move TypeScript's own numbers in the same commit that was measuring Python and neither
+movement would be attributable afterwards. That regeneration is a task of its own with its own
+measurement, and until it happens this directory's claim that the same specifications come out of
+the same pinned inputs holds only against the same binder.
 
 ## Reading the recorded score
 

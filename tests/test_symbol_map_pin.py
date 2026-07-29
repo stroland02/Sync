@@ -1,6 +1,6 @@
 """The corpus's second frozen input, which it did not pin.
 
-`repositories.yaml` pins four checkouts by commit and validates each against a `tree_digest`, and
+`repositories.yaml` pins every checkout by commit and validates each against a `tree_digest`, and
 the fetcher refuses on mismatch. The symbol map is the other input the score depends on and it
 was a cached artifact in gitignored space that nothing recorded, nothing validated, and any
 `sync run` could overwrite -- a different head specification, or `sdk_spec` present rather than

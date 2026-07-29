@@ -1,6 +1,6 @@
 """Pin the symbol map the frozen corpus is scored against.
 
-The corpus has two frozen inputs and pinned one. `repositories.yaml` pins four checkouts by
+The corpus has two frozen inputs and pinned one. `repositories.yaml` pins every checkout by
 commit and validates each against a `tree_digest`, and `fetch_corpus_repositories.py` refuses on
 mismatch. The symbol map is the other input, and it was a cached artifact in gitignored space
 that nothing recorded, nothing validated, and any `sync run` could overwrite: a different head
