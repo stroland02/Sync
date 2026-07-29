@@ -51,6 +51,40 @@ def _only(tmp_path, name):
     return sites[0]
 
 
+# A manifest that is not UTF-8, in the spelling found in the wild: `.encode("utf-16")` writes the
+# byte-order mark, so these bytes begin `ff fe` exactly as `LilithB92/Online_training_DRF` does.
+UTF16_REQUIREMENTS = "stripe==11.0.0\n".encode("utf-16")
+
+BILLING_PY = """import stripe
+
+
+def charge():
+    result = stripe.charges.create(amount=100, currency="eur")
+    return result.status
+"""
+
+
+def _utf16_requirements_repo(tmp_path, *, pyproject: str | None = None) -> RepoRef:
+    """A project whose `requirements.txt` is UTF-16, built here rather than committed.
+
+    Built for the reason `_broken_repo` is, one step further along: git decides text from binary
+    by heuristic and CLAUDE.md rules out a `.gitattributes` to overrule it, so a committed
+    non-UTF-8 fixture is one whose bytes a checkout may quietly change -- and a fixture that
+    silently became valid UTF-8 would leave the test below passing over nothing. Written with
+    `write_bytes`, because bytes that are not text are not decoded.
+    """
+    root = tmp_path / "utf16_requirements"
+    (root / "src").mkdir(parents=True)
+    (root / "requirements.txt").write_bytes(UTF16_REQUIREMENTS)
+    if pyproject is not None:
+        (root / "pyproject.toml").write_text(pyproject, encoding="utf-8")
+    (root / "src" / "billing.py").write_text(BILLING_PY, encoding="utf-8")
+    return RepoRef(
+        repo_id="utf16", url="https://example.invalid/utf16",
+        local_path=str(root), head_sha="0" * 40,
+    )
+
+
 def _broken_repo(tmp_path) -> RepoRef:
     """A project whose source does not parse, built here rather than committed.
 
@@ -107,6 +141,32 @@ def test_an_unreadable_manifest_answers_no_rather_than_raising(tmp_path):
     that does not demonstrably depend on the SDK, and a parse error out of `run()` is a
     traceback where that answer belongs."""
     assert _adapter(tmp_path).matches(_repo("malformed_manifest")) is False
+
+
+def test_a_requirements_file_that_is_not_utf8_answers_no_rather_than_raising(tmp_path):
+    """The same promise, made once in the docstring and kept by only one of the two branches.
+
+    This is asked at adapter selection, before any indexing, so a customer repository whose
+    `requirements.txt` carries a byte-order mark took the whole run down rather than being
+    reported as not demonstrably depending on the SDK.
+    """
+    assert _adapter(tmp_path).matches(_utf16_requirements_repo(tmp_path)) is False
+
+
+def test_an_unreadable_requirements_file_does_not_hide_a_readable_pyproject(tmp_path):
+    """Unreadable means that manifest declares nothing, never that the project declares nothing.
+
+    A repository carrying both files still depends on Stripe by the one that parses, and the
+    version recorded is the one that file pins -- so the answer here is narrowed by the
+    unreadable manifest and not replaced by it.
+    """
+    repo = _utf16_requirements_repo(
+        tmp_path, pyproject='[project]\nname = "billing"\ndependencies = ["stripe>=12.0.0"]\n'
+    )
+    adapter = _adapter(tmp_path)
+
+    assert adapter.matches(repo) is True
+    assert [site.sdk_version for site in adapter.index(repo)] == ["12.0.0"]
 
 
 # --- index ------------------------------------------------------------------------

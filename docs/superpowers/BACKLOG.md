@@ -14,52 +14,35 @@ item that cannot say what evidence closes it is not ready to dispatch.
 
 ### B43 — The pair generator cannot make a Python pair
 
-`sync.benchmark.mutate.language_for` returns `None` for `.py`, so every Python target is recorded
-unreachable and the tree comes back unedited — on both change kinds. Verified:
+`sync.benchmark.mutate` calls `language_for(site.path)` in three places, and it returns `None` for
+`.py`, so every Python target records unreachable and the tree comes back unedited on both change
+kinds. That is the visible symptom. Two things underneath it decide the shape of the fix, and the
+second one was found while scoping this task rather than while doing it.
 
-```
-language_for('src/app.ts')  -> 'typescript'
-language_for('src/app.py')  -> None
-```
+**`language_for` is not the generator's to change.** It lives in `sync.route.templates` and its own
+docstring says why it lives there: *"the routing decision and the edit have to agree on it — a path
+the router judged as TypeScript and the codemod declined to parse would route work to a tier that
+cannot take it."* Adding `.py` to `_LANGUAGES` therefore tells the **router** that Python files are
+codemod-able. They are not: the codemods hard-code `kind() == "object"` in four places, which is
+TypeScript's object literal, and Python produces `dictionary`. A Python finding would route to a
+tier whose codemod matches nothing, produce an empty diff, and abandon as "the remediator produced
+no change" — the exact failure that docstring exists to prevent, introduced by the fix for
+something else.
 
-This is now the only thing between the corpus and its first Python measurement. The binder side is
-done: B38 gave it the client shapes and B39 the Python spellings, and both are visible in the
-counts — one repository went from zero to five call sites through the `self`-attribute receiver
-alone.
+**So the generator needs its own resolution.** The router asks "can a codemod patch this file?" The
+mutator asks "can I parse and edit this file to build a labelled pair?" Those are different
+questions with different answers, and sharing one function forces them to agree where they should
+not. Decide whether that is a second mapping, a parameter, or something better — and say why.
 
-**It is deeper than `language_for`.** The mutation primitives are TypeScript grammar throughout:
+**The primitives are TypeScript grammar throughout, independently of the above.**
 `_object_argument` wants node kind `object` where Python has `dictionary` and passes fields as
-`keyword_argument`; `_result_binding` wants `lexical_declaration`/`assignment_expression` where
-Python has `assignment`. Adding `.py` to `language_for` alone would produce a generator that
-recognises the file and then fails to edit it.
+`keyword_argument`; `_result_binding` wants `lexical_declaration` / `assignment_expression` where
+Python has `assignment`, and since B35 also `named_expression`.
 
-**Closes when:** a Python call site can be mutated into a labelled pair on both change kinds, with
-the mutation attaching and the label addressing a site the mutated index still holds.
-
-### B45 — A UTF-16 manifest crashes adapter selection
-
-`python_lang._requirement_lines` promises in its own docstring that an unreadable manifest answers
-"declares nothing" rather than raising — "a customer's manifest is untrusted input". The
-`pyproject.toml` branch honours that with `except (TOMLDecodeError, UnicodeDecodeError)`. The
-`requirements.txt` branch reads with a bare `read_text(encoding="utf-8")` and no guard.
-
-Reproduced:
-
-```
-utf-16 requirements.txt -> RAISED UnicodeDecodeError: invalid start byte 0xff
-utf-8  requirements.txt -> ['stripe==11.0.0']
-```
-
-Found in the wild, not hypothesised: `LilithB92/Online_training_DRF` ships a `requirements.txt`
-beginning `ff fe`. It crashes a run at adapter selection, before any indexing, for a repository
-that merely happens to have a UTF-16 manifest.
-
-This is the `CLAUDE.md` encoding hazard in its exact documented form — and the rule there is
-explicit that bytes which are not text must not be decoded at all. Every fixture in this
-repository is ASCII, so no test would ever have caught it.
-
-**Closes when:** a UTF-16 `requirements.txt` yields "declares nothing" rather than a traceback, and
-a fixture proves it — with the same treatment for any other manifest read on that path.
+**Closes when:** a Python call site can be mutated into a labelled pair on both change kinds, the
+mutation attaches, the label addresses a site the mutated index still holds, **and the router still
+declines to route a Python finding to a codemod tier** — with a test proving that last part, since
+it is the regression this task is most likely to introduce.
 
 ### B44 — Pin the Python repository B42 found (blocked on B43)
 
@@ -103,6 +86,21 @@ recorded with which change broke it.
 _Nothing._
 
 ## Done
+
+- **B45** — an unreadable `requirements.txt` now answers "declares nothing" rather than taking the
+  run down at adapter selection. Landed with the front-page work. The `pyproject.toml` branch had
+  always honoured that promise; the `requirements.txt` branch two lines below read with a bare
+  `utf-8` decode.
+
+  Verified across four encodings, two of them outside the brief: UTF-16 `requirements.txt` returns
+  `[]` where it used to raise, UTF-8 is unchanged, UTF-16 `pyproject.toml` still works, and a
+  latin-1 manifest is also handled — so the fix generalises rather than special-casing the byte
+  order mark that found it.
+
+  Worth knowing about the trade: a manifest with one non-UTF-8 byte anywhere now declares
+  *nothing*, so a repository with an accented comment loses adapter selection entirely. That is the
+  contract the docstring states and the safe direction — a missing binding is recoverable, a wrong
+  one spends reviewer trust — but it is a real cost and not a free fix.
 
 - **B42** — the Python blocker moved from the binder to the generator. B38 and B39 are visible in
   the counts: one repository went from zero to five call sites through the `self`-attribute
