@@ -47,6 +47,12 @@ from typing import Callable, Iterable, Mapping
 
 from sync.core import OperationRef, VendorChange
 from sync.signals.generated.manifest import SpecSource
+from sync.signals.generated.symbols import (
+    ExtractedOperation,
+    extract_symbols,
+    read_spec_operations,
+    report_extraction,
+)
 from sync.signals.oasdiff import run_oasdiff_breaking, to_vendor_changes
 
 log = logging.getLogger(__name__)
@@ -126,6 +132,8 @@ class GeneratedSpecAdapter:
         cache_dir: Path | str,
         vendor_spec_urls: Mapping[str, str] | None = None,
         sdk_bindings: Mapping[str, Mapping[str, str]] | None = None,
+        sdk_source: Path | str | None = None,
+        sdk_spec_operations: Path | str | None = None,
     ) -> None:
         self._vendor_id = vendor_id
         self._sources = sources
@@ -133,6 +141,15 @@ class GeneratedSpecAdapter:
         self._cache_dir = Path(cache_dir)
         self._vendor_spec_urls = vendor_spec_urls or {}
         self._sdk_bindings = bindings_for(vendor_id, sdk_bindings)
+        # A checkout of this vendor's generated SDK, when the deployment has staged one. Absent
+        # is the ordinary case and answers nothing rather than guessing -- see
+        # `operation_for_symbol`.
+        self._sdk_source = Path(sdk_source) if sdk_source else None
+        # The specification's operation set, when this deployment staged one beside the source.
+        # Its absence costs the cross-check, not the map: extraction still answers, and the
+        # disagreement it would have surfaced simply is not looked for.
+        self._sdk_spec_operations = Path(sdk_spec_operations) if sdk_spec_operations else None
+        self._symbols: dict[str, ExtractedOperation] | None = None
 
     @property
     def vendor_id(self) -> str:
@@ -158,22 +175,78 @@ class GeneratedSpecAdapter:
     def operation_for_symbol(
         self, symbol: str, *, language: str | None = None
     ) -> OperationRef | None:
-        """Always `None`: this adapter knows a specification, not an SDK's symbol scheme.
+        """`None` unless this deployment staged the SDK's own source, and then what it says.
 
-        Mapping `acme.charges.create` onto an operation needs to know how one generator names
-        methods for one vendor, which is exactly the per-vendor knowledge this adapter exists to
-        do without. Inventing a convention would put it back, and would put it back as a guess
-        that fails silently -- an unresolvable symbol yields no finding, so nobody would learn
-        the convention was wrong.
+        The original refusal stands and is worth restating, because this does not overturn it:
+        mapping `acme.charges.create` onto an operation by *inventing* a convention would put
+        per-vendor knowledge back as a guess that fails silently -- an unresolvable symbol yields
+        no finding, so nobody would learn the convention was wrong. Nothing here is invented.
 
-        A vendor needing symbol resolution needs a hand-written adapter for that part. This one
-        still supplies the changes.
-        
-        `language` is accepted and ignored, for the same reason the answer is always None:
-        knowing one generator's naming scheme is the per-vendor knowledge this adapter exists
-        to do without, and a language does not supply it.
+        What changed is that the answer was available all along in an artifact nobody was
+        reading. A generated SDK writes the HTTP method and path into the source that makes the
+        call, so `sync.signals.generated.symbols` reads them out of it rather than proposing
+        them -- and the source cannot be wrong about what it sends, because it is the thing that
+        sends it. Where extraction finds a shape it does not recognise it raises rather than
+        answering partially, so a resolved symbol is one the SDK really states.
+
+        Without `sdk_source` the answer is still `None`, unchanged and for the original reason.
+        A vendor whose SDK this deployment has not staged has nothing to read, and guessing is
+        the thing being avoided rather than the thing being deferred.
+
+        `language` is accepted and ignored. One generator's rule is a fact about that generator's
+        emitted shape rather than about the language, and the extractor is selected by the source
+        it is pointed at.
         """
-        return None
+        symbols = self._extracted_symbols()
+        if symbols is None:
+            return None
+
+        root = f"{self._vendor_id}."
+        chain = symbol[len(root):] if symbol.startswith(root) else symbol
+        found = symbols.get(chain)
+        if found is None:
+            return None
+        return OperationRef(
+            # No operationId: the SDK states a route, not the specification's name for it. The
+            # route is what a change is matched on, and inventing an id would be the guess this
+            # module refuses in the paragraph above.
+            operation_id=f"{found.http_method} {found.path}",
+            http_method=found.http_method.lower(),
+            path=found.path,
+        )
+
+    def _extracted_symbols(self) -> dict[str, ExtractedOperation] | None:
+        """The map, read once, cross-checked against the specification where one is staged.
+
+        The cross-check runs here rather than in a reporting command, because here is where the
+        map is built and here is the only moment the disagreement is knowable. Coverage is logged
+        with its denominator attached -- "extracted 180 operations" says nothing, and the Stripe
+        map's 105 of 414 means something only because the second number travels with it.
+
+        An operation the specification does not declare is **logged, not dropped**. The SDK is
+        what runs, so a route it states is a route the customer's process will send whatever the
+        specification says; discarding it would make a misread source indistinguishable from a
+        vendor that genuinely lacks that route, which is the distinction the check exists to
+        draw. What the log gives an operator is the pair to go and reconcile.
+        """
+        if self._sdk_source is None:
+            return None
+        if self._symbols is None:
+            if self._sdk_spec_operations is not None:
+                report = report_extraction(
+                    self._sdk_source, read_spec_operations(self._sdk_spec_operations)
+                )
+                log.info("%s: %s", self._vendor_id, report.render())
+                for operation in report.unknown_to_spec:
+                    log.warning(
+                        "%s: %s reads %s %s, which the specification does not declare",
+                        self._vendor_id, operation.symbol, operation.http_method, operation.path,
+                    )
+                extracted = report.operations
+            else:
+                extracted = extract_symbols(self._sdk_source)
+            self._symbols = {operation.symbol: operation for operation in extracted}
+        return self._symbols
 
     def fetch_changes(self, from_version: str, to_version: str) -> Iterable[VendorChange]:
         base = self._sources.get(from_version)
