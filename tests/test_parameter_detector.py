@@ -14,7 +14,7 @@ from __future__ import annotations
 
 from sync.core import CallSite
 from sync.core.protocols import Detector
-from sync.detect.parameter_deprecation import ParameterDeprecationDetector
+from sync.detect.parameter_deprecation import LinkedDeprecation, ParameterDeprecationDetector
 from sync.signals.deprecations import ParameterDeprecation
 
 TEMPERATURE = ParameterDeprecation(
@@ -43,8 +43,22 @@ def _site(*, args, model="claude-opus-5", vendor="anthropic", site_id="cs-1", pa
     )
 
 
+def _linked(deprecations):
+    """Each row with an established change id, which is what the detector now takes.
+
+    A finding has to name the `VendorChange` it came from or `make_locate` abandons the run,
+    so the detector is handed pairs rather than bare rows. These tests are about the matching
+    rules and not about the link, so every row here gets one; `tests/test_parameter_deprecation_link.py`
+    is where a missing id is exercised.
+    """
+    return [
+        LinkedDeprecation(deprecation=row, vendor_change_id=f"vc-{row.parameter}")
+        for row in deprecations
+    ]
+
+
 def _scan(sites, deprecations=(TEMPERATURE,)):
-    return list(ParameterDeprecationDetector(list(deprecations), list(sites)).scan())
+    return list(ParameterDeprecationDetector(_linked(deprecations), list(sites)).scan())
 
 
 # --- the two facts ----------------------------------------------------------------
@@ -147,6 +161,11 @@ def test_it_satisfies_the_detector_protocol():
 
 def test_scanning_twice_gives_the_same_answer():
     """Idempotence, held to the same standard as every other stage."""
-    detector = ParameterDeprecationDetector([TEMPERATURE], [_site(args=["model", "temperature"])])
+    detector = ParameterDeprecationDetector(
+        _linked([TEMPERATURE]), [_site(args=["model", "temperature"])]
+    )
     first = [f.rationale for f in detector.scan()]
     assert [f.rationale for f in detector.scan()] == first
+    # The drop counter is part of the answer now, so it has to reset per scan rather than
+    # accumulate across them.
+    assert detector.unlinked == []

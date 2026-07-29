@@ -15,10 +15,32 @@ detector did not resolve it.
 
 from __future__ import annotations
 
+import logging
+from dataclasses import dataclass
 from typing import Iterable, Sequence
 
 from sync.core import CallSite, Finding
 from sync.signals.deprecations import ParameterDeprecation
+
+log = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True)
+class LinkedDeprecation:
+    """One parameter deprecation beside the id of the `VendorChange` it became.
+
+    The pair exists because a `Finding` has to name both ends of the join it represents, and
+    only the caller can supply the second: `parameters_to_vendor_changes` builds the row and
+    the store assigns its id, both of which happen before this detector is constructed.
+
+    Recomputing the id here instead was the tempting shortcut and would have been the bug. The
+    store derives it by hashing seven fields of the change, so a copy of that derivation living
+    here would be a second implementation of a private key -- correct until the store's hash
+    changed, and then silently naming rows that do not exist.
+    """
+
+    deprecation: ParameterDeprecation
+    vendor_change_id: str
 
 
 class ParameterDeprecationDetector:
@@ -28,13 +50,28 @@ class ParameterDeprecationDetector:
 
     def __init__(
         self,
-        deprecations: Sequence[ParameterDeprecation],
+        deprecations: Sequence[LinkedDeprecation],
         call_sites: Sequence[CallSite],
     ) -> None:
         self._deprecations = list(deprecations)
         self._call_sites = list(call_sites)
+        self.unlinked: list[str] = []
+        """Deprecations dropped because no `VendorChange` id was established for them.
+
+        Counted rather than merely skipped. A row this pipeline discards in silence is the
+        defect that keeps being found by hand here, and a number is what makes it answerable
+        later without re-reading a run's output.
+        """
 
     def scan(self) -> Iterable[Finding]:
+        """Every finding, as a list rather than a generator.
+
+        Eager because `unlinked` is only true once the scan has run, and a generator nobody
+        finished consuming would leave the count describing part of the work.
+        """
+        self.unlinked = []
+        findings: list[Finding] = []
+
         for site in self._call_sites:
             # A `Finding` addresses its call site by id. Inventing one would produce a finding
             # nothing downstream could resolve back to a location.
@@ -42,20 +79,42 @@ class ParameterDeprecationDetector:
                 continue
 
             passed = set(site.args_keys)
-            for deprecation in self._deprecations:
+            for link in self._deprecations:
+                deprecation = link.deprecation
                 if deprecation.vendor_id != site.vendor_id:
                     continue
                 if deprecation.parameter not in passed:
                     continue
+                # The same rule, for the other identifier. `make_locate` resolves
+                # `vendor_change_id` and abandons the run when it cannot, so a finding
+                # carrying none is a finding that dies -- and one carrying a plausible id
+                # rather than an established one is worse, because it survives and produces a
+                # patch against a change nobody matched it to.
+                if not link.vendor_change_id:
+                    self._drop(deprecation, site)
+                    continue
 
-                yield Finding(
-                    detector=self.detector_id,
-                    call_site_id=site.id,
-                    # Severity carries the confidence. The scope was not evaluated, so claiming
-                    # `breaking` would spend trust this finding has not earned.
-                    severity="deprecation",
-                    rationale=self._rationale(deprecation, site),
+                findings.append(
+                    Finding(
+                        detector=self.detector_id,
+                        call_site_id=site.id,
+                        vendor_change_id=link.vendor_change_id,
+                        # Severity carries the confidence. The scope was not evaluated, so
+                        # claiming `breaking` would spend trust this finding has not earned.
+                        severity="deprecation",
+                        rationale=self._rationale(deprecation, site),
+                    )
                 )
+
+        return findings
+
+    def _drop(self, deprecation: ParameterDeprecation, site: CallSite) -> None:
+        reason = (
+            f"`{deprecation.parameter}` is passed at {site.path}:{site.line} and no vendor "
+            f"change was established for it, so no finding was raised"
+        )
+        self.unlinked.append(reason)
+        log.warning("parameter-deprecation: %s", reason)
 
     def _rationale(self, deprecation: ParameterDeprecation, site: CallSite) -> str:
         """What a reviewer needs in order to make the call the detector deliberately did not."""

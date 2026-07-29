@@ -19,7 +19,7 @@ from sync.core import CallSite, Finding, RepoRef, VendorChange
 from sync.core.protocols import RequestCorrelator
 from sync.detect.efficiency import EfficiencyDetector
 from sync.detect.observed_drift import DeclaredField, ObservedDriftDetector
-from sync.detect.parameter_deprecation import ParameterDeprecationDetector
+from sync.detect.parameter_deprecation import LinkedDeprecation, ParameterDeprecationDetector
 from sync.detect.vendor_change import VendorChangeDetector
 from sync.forge.github import GitHubForge
 from sync.graph.store import GraphStore
@@ -453,8 +453,17 @@ def _parameter_deprecations(
 
 def _parameter_changes(
     rows: Sequence[ParameterDeprecation], today: date
-) -> list[VendorChange]:
-    """Parameter deprecations as `VendorChange` rows.
+) -> list[tuple[ParameterDeprecation, VendorChange]]:
+    """Parameter deprecations paired with the `VendorChange` each one became.
+
+    Pairs rather than a list, because the detector has to name the change its finding came
+    from and `make_locate` abandons a run whose finding names none. The correspondence is
+    established here, at the one point both ends exist at once.
+
+    Each row is converted **alone**, which is what makes that a fact rather than an inference.
+    Zipping the input against a batch conversion would hold today and rest on an ordering
+    nothing states, and the failure mode of a wrong assumption here is not a missing finding --
+    it is a rename remedy applied to the parameter that wanted an omission.
 
     `parameters_to_vendor_changes` was finished, tested, and called by nothing, so the remedy
     and the vendor's own wording never reached a remediator that keys on
@@ -470,7 +479,24 @@ def _parameter_changes(
     what day it is and a test is not a fact about when the suite ran.
     """
     stamp = today.isoformat()
-    return parameters_to_vendor_changes(list(rows), from_version=stamp, to_version=stamp)
+    paired: list[tuple[ParameterDeprecation, VendorChange]] = []
+
+    for row in rows:
+        produced = parameters_to_vendor_changes([row], from_version=stamp, to_version=stamp)
+        if len(produced) != 1:
+            # Cannot happen against today's converter, which emits one row per input. Written
+            # as a drop rather than an assertion because the alternative to dropping is
+            # guessing which of several rows this deprecation became, and a wrong guess names
+            # the wrong change.
+            print(
+                f"parameter-deprecation: {row.vendor_id} `{row.parameter}` produced "
+                f"{len(produced)} vendor change(s); dropped rather than joined to a guess",
+                file=sys.stderr,
+            )
+            continue
+        paired.append((row, produced[0]))
+
+    return paired
 
 
 def _model_deprecations(
@@ -567,7 +593,7 @@ def _detector_suite(
     *,
     spec_documents: Sequence[dict],
     call_sites: Sequence[CallSite],
-    deprecations: Sequence[ParameterDeprecation],
+    deprecations: Sequence[LinkedDeprecation],
     vendor_id: str,
     repo_id: str,
     deprecation_vendors: Sequence[str] = (),
@@ -714,12 +740,24 @@ def run(args: argparse.Namespace, today: date | None = None) -> int:
             for change in vendor.fetch_changes(args.from_version, args.to_version):
                 store.upsert_vendor_change(change)
 
-            # Both halves of the deprecation signal. The parameter rows join against
-            # `CallSite.args_keys` rather than `operation_id`, so they raise no finding through
-            # `VendorChangeDetector` -- `ParameterDeprecationDetector` does that -- and they
-            # are stored because a finding addresses the change it came from by id.
-            for change in model_deprecations + parameter_changes:
+            for change in model_deprecations:
                 store.upsert_vendor_change(change)
+
+            # The parameter half, stored and linked in one pass. These rows join against
+            # `CallSite.args_keys` rather than `operation_id`, so `VendorChangeDetector` raises
+            # nothing from them -- `ParameterDeprecationDetector` does -- and that detector has
+            # to name the change its finding came from or `make_locate` abandons the run.
+            #
+            # The id comes back from the upsert, which is why the pairing is built here rather
+            # than earlier: before this line the change exists and its id does not, and a
+            # detector constructed then could only have recomputed the store's own hash.
+            linked = [
+                LinkedDeprecation(
+                    deprecation=deprecation,
+                    vendor_change_id=store.upsert_vendor_change(change),
+                )
+                for deprecation, change in parameter_changes
+            ]
 
             # Persist findings before running the graph: `scan()` returns unsaved
             # findings with no id, and the checkpointer needs a stable thread_id.
@@ -728,7 +766,7 @@ def run(args: argparse.Namespace, today: date | None = None) -> int:
                     store,
                     spec_documents=prepared.documents,
                     call_sites=call_sites,
-                    deprecations=deprecations,
+                    deprecations=linked,
                     vendor_id=args.vendor,
                     repo_id=repo.repo_id,
                     deprecation_vendors=[source.vendor_id for source in DEPRECATION_SOURCES],
