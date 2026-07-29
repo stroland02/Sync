@@ -33,7 +33,8 @@ from sync.remediate.tiered import (
     TieredRemediator,
     routing_facts,
 )
-from sync.route.matrix import CODEMOD
+from sync.remediate import nodes
+from sync.route.matrix import CODEMOD, route
 
 FIXTURE = Path(__file__).parent / "fixtures" / "ts" / "two_payment_intents"
 TARGET = "app/api/setup_accounts/route.ts"
@@ -245,3 +246,23 @@ def test_a_codemod_route_with_no_willing_codemod_reaches_the_agent(repo: RepoRef
     assert [d.tier for d in decisions] == [CODEMOD]
     assert patch.strategy == "agent"
     assert agent.proposed == 1
+
+
+def test_the_locate_node_records_the_row_the_cascade_will_actually_take(repo: RepoRef) -> None:
+    """`_decide_tier` and `TieredRemediator` must not disagree about which row fired.
+
+    `nodes._decide_tier` states the invariant in its own docstring -- both sides call
+    `route()` over `routing_facts()`, so they cannot diverge. That held while
+    `routing_facts` took two arguments. It now takes an optional `repo`, and the fact it
+    establishes from the clone is exactly the one row 4 turns on, so a caller that omits
+    `repo` records the row a run *without* a clone would have taken. `RunState.routing_row`
+    then names an upper bound rather than the row that decided, which is the column the
+    routing matrix's Verification section exists to make queryable.
+    """
+    site = _site()
+    change = _change("receipt_email")
+
+    _, row_at_locate = nodes._decide_tier(change, site, CATALOGUE, repo)
+    _, row_in_cascade = route(CATALOGUE[change.kind], routing_facts(change, site, repo))
+
+    assert row_at_locate == row_in_cascade
