@@ -94,6 +94,7 @@ class PairResult(BaseModel):
     unaffected_sites: int = 0
     unreachable_targets: tuple[str, ...] = ()
     falsifiable_negatives: tuple[str, ...] = ()
+    skipped_files: tuple[str, ...] = ()
 
 
 class CorpusScore(BaseModel):
@@ -114,6 +115,15 @@ class CorpusScore(BaseModel):
     findings that were genuine, and with no candidate for its false-positive term the rate is
     fixed by how the corpus was built -- so it reads 1.0 through any binder regression that only
     affects same-operation discrimination.
+    """
+    skipped_files: list[str]
+    """Checkout paths no pair could read as source, pooled across the set and deduplicated.
+
+    Deduplicated because a repository appears in several specifications and its binaries are the
+    same binaries each time; the per-pair counts in `pairs` are what says how many each scoring
+    run walked past. Most entries are images and fonts and nothing is lost by skipping them. An
+    entry that looks like source is a file in a legacy encoding, which is a call site this score
+    does not cover and cannot be told apart from a binary without guessing.
     """
     scored_pairs: list[str]
     pairs: list[PairResult]
@@ -147,6 +157,7 @@ def aggregate(results: Sequence[PairResult]) -> CorpusScore:
     labels: list[BindingLabel] = []
     unreachable: list[str] = []
     falsifiable: list[str] = []
+    skipped: set[str] = set()
     for result in scored:
         findings.extend(result.findings)
         labels.extend(result.labels)
@@ -154,6 +165,10 @@ def aggregate(results: Sequence[PairResult]) -> CorpusScore:
         # are pooled across four of them.
         unreachable.extend(f"{result.name}::{target}" for target in result.unreachable_targets)
         falsifiable.extend(f"{result.name}::{site}" for site in result.falsifiable_negatives)
+        # A set rather than a list, and unqualified: several specifications name one repository,
+        # so qualifying by pair would list its images once per specification and read as though
+        # the corpus skipped them that many times.
+        skipped.update(result.skipped_files)
 
     by_reason: dict[str, int] = {}
     for result in excluded:
@@ -169,6 +184,7 @@ def aggregate(results: Sequence[PairResult]) -> CorpusScore:
         unaffected_sites=sum(result.unaffected_sites for result in scored),
         unreachable_targets=sorted(unreachable),
         falsifiable_negatives=sorted(falsifiable),
+        skipped_files=sorted(skipped),
         scored_pairs=[result.name for result in scored],
         pairs=list(results),
     )
@@ -206,10 +222,15 @@ def render(score: CorpusScore, reference: str | None) -> str:
         # Beside precision rather than under it, because the two are read together or the rate is
         # read as a property of the binder when it is partly a property of the corpus.
         f"  falsifiable negatives  {len(score.falsifiable_negatives)}",
+        # Distinct paths, not a sum over pairs: one repository's images are the same images in
+        # every specification naming it. A skip nobody counts is how a corpus stops describing
+        # the repository it names, which is the failure the exclusion counts above also guard.
+        f"  paths not read        {len(score.skipped_files)}",
         "",
         # Per pair, because a pair whose every target was unreachable is scored, counted and
         # carries no information about the binder -- and the corpus total cannot show that.
-        f"  {'scored pair':<58}{'affected':>9}{'unaffected':>12}{'findings':>10}{'unreachable':>13}",
+        f"  {'scored pair':<58}{'affected':>9}{'unaffected':>12}{'findings':>10}"
+        f"{'unreachable':>13}{'unread':>8}",
     ]
     for result in score.pairs:
         if not result.scored:
@@ -217,6 +238,7 @@ def render(score: CorpusScore, reference: str | None) -> str:
         lines.append(
             f"  {result.name:<58}{result.affected_sites:>9}{result.unaffected_sites:>12}"
             f"{len(result.findings):>10}{len(result.unreachable_targets):>13}"
+            f"{len(result.skipped_files):>8}"
         )
 
     lines.append("")
@@ -244,6 +266,15 @@ def render(score: CorpusScore, reference: str | None) -> str:
         lines.append("")
         lines.append("Targets the mutation could not attach to, labelled unaffected:")
         lines.extend(f"  {target}" for target in score.unreachable_targets)
+
+    if score.skipped_files:
+        lines.append("")
+        lines.append("Checkout paths not read as source, because they do not decode as UTF-8:")
+        # Listed and not merely counted. Every one of these is either a binary, which no indexer
+        # wanted, or a source file in a legacy encoding, which is a call site this score does not
+        # cover -- and nothing can tell the two apart without guessing, so the names are what a
+        # reader has to work from.
+        lines.extend(f"  {path}" for path in score.skipped_files)
 
     lines.extend(["", "Reference:", *(f"  {line}" for line in reference.splitlines()), ""])
     return "\n".join(lines)
@@ -274,6 +305,7 @@ def score_specs(paths: Sequence[Path], score_dsn: str) -> list[PairResult]:
             affected_sites=scored.affected_sites, unaffected_sites=scored.unaffected_sites,
             unreachable_targets=scored.unreachable_targets,
             falsifiable_negatives=scored.falsifiable_negatives,
+            skipped_files=scored.skipped_files,
         ))
     return results
 

@@ -1392,10 +1392,51 @@ def benchmark(args: argparse.Namespace) -> int:
             findings=scored.findings,
             labels=scored.labels,
             reference=scored.reference,
+            skipped_files=scored.skipped_files,
         ),
         end="",
     )
     return 0
+
+
+def _read_checkout(root: Path) -> tuple[dict[str, str], list[str]]:
+    """Every file under `root` the pipeline can read as source, and the paths of those it cannot.
+
+    A repository with one PNG in it used to be unscoreable: this read every file with
+    `read_text(encoding="utf-8")` and a single undecodable byte ended the run before a call site
+    was indexed. That is a coverage limit rather than an inconvenience -- an image, a font, a
+    compiled asset or a `.ico` is most repositories, and the frozen corpus is four of them partly
+    for this reason.
+
+    Skipped rather than decoded leniently. `errors="replace"` would hand the indexer a file full
+    of replacement characters, which is still a file it will parse, and whatever tree-sitter makes
+    of a mangled PNG can only be phantom call sites. Nothing downstream of this mapping wants a
+    binary's bytes, so the honest answer is that the file is not source.
+
+    Still `read_text` rather than `read_bytes().decode`, because the two differ on newlines:
+    `read_text` translates CRLF, and this mapping is what call site positions and content hashes
+    are computed from. Decoding by hand would change the corpus score for a reason that has
+    nothing to do with binaries.
+
+    **The skipped paths are returned, not just counted, and they are not all binaries.** A source
+    file in a legacy encoding -- cp1252 is this platform's default and the reason `CLAUDE.md`
+    demands an explicit encoding everywhere -- raises the same `UnicodeDecodeError` a PNG does,
+    and skipping it loses real call sites. Telling the two apart cheaply is not possible: any
+    byte sequence that is valid cp1252 is valid cp1252, so a guess would be a guess. Reporting
+    the paths is the mitigation, and it is a real one for the case that matters -- a reader who
+    sees `src/legacy.ts` in the list knows to look, where a reader handed only a count could not.
+    """
+    sources: dict[str, str] = {}
+    skipped: list[str] = []
+    for path in sorted(root.rglob("*")):
+        if not path.is_file() or "node_modules" in path.parts or ".git" in path.parts:
+            continue
+        relative = path.relative_to(root).as_posix()
+        try:
+            sources[relative] = path.read_text(encoding="utf-8")
+        except UnicodeDecodeError:
+            skipped.append(relative)
+    return sources, skipped
 
 
 def _corpus_targets(
@@ -1495,11 +1536,7 @@ def _score_corpus(spec_path: Path, score_dsn: str):
     ))
 
     root = Path(spec["repo"])
-    sources = {
-        path.relative_to(root).as_posix(): path.read_text(encoding="utf-8")
-        for path in sorted(root.rglob("*"))
-        if path.is_file() and "node_modules" not in path.parts and ".git" not in path.parts
-    }
+    sources, skipped = _read_checkout(root)
 
     change = VendorChange(
         vendor_id=vendor.vendor_id,
@@ -1537,7 +1574,8 @@ def _score_corpus(spec_path: Path, score_dsn: str):
             repo_id=repo.repo_id, url=repo.url,
             local_path=str(Path(workdir) / "mutated"), head_sha=repo.head_sha,
         )
-        return score_change(sources, change, sites, targets, store, mutated, adapter)
+        return score_change(sources, change, sites, targets, store, mutated, adapter,
+                            skipped_files=tuple(skipped))
 
 
 def intake(args: argparse.Namespace) -> int:

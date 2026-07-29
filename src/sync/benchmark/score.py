@@ -157,6 +157,12 @@ class ScoredPair(BaseModel):
     # this is the only number that separates them. Zero here means the precision beside it is a
     # constant, so a directional floor gated on it would gate nothing.
     falsifiable_negatives: tuple[str, ...] = ()
+    # Paths in the checkout the caller could not read as text, so the indexer never saw them.
+    # Carried for the reason the exclusion counts are: a sample that quietly dropped part of its
+    # input reports a coverage it does not have. Most entries are binaries and nothing is lost;
+    # an entry that looks like source is a legacy-encoded file and is a real gap, which is why
+    # they are named rather than tallied.
+    skipped_files: tuple[str, ...] = ()
 
 
 def falsifiable_negatives(
@@ -246,7 +252,8 @@ def index_sources(
 
 
 def score_pair(
-    pair: MutationPair, change: VendorChange, store: GraphStore, repo: RepoRef, adapter
+    pair: MutationPair, change: VendorChange, store: GraphStore, repo: RepoRef, adapter,
+    skipped_files: Sequence[str] = (),
 ) -> ScoredPair:
     """Run the pipeline over the mutated tree and score what it emitted against the pair's label.
 
@@ -254,6 +261,11 @@ def score_pair(
     that id. A caller who skipped that produces labels keyed on the empty string against findings
     keyed on the real one: nothing matches, precision is null, recall is zero, and the binder
     looks broken because the harness was.
+
+    `skipped_files` is passed through rather than discovered. Whoever read the checkout knows
+    which of its paths were not text, and this module only ever sees what that read produced --
+    a mapping with the binaries already absent, which cannot be distinguished from a repository
+    that had none.
     """
     store.truncate_all()
     stored_id = store.upsert_vendor_change(change)
@@ -311,6 +323,7 @@ def score_pair(
         unaffected_sites=len(pair.labels) - affected,
         unreachable_targets=pair.unreachable,
         falsifiable_negatives=falsifiable_negatives(pair.labels, indexed, change),
+        skipped_files=tuple(skipped_files),
     )
 
 
@@ -322,6 +335,7 @@ def score_change(
     store: GraphStore,
     repo: RepoRef,
     adapter,
+    skipped_files: Sequence[str] = (),
 ) -> ScoredPair:
     """Generate a pair for `change` and score it, which is the whole path in one call.
 
@@ -331,4 +345,5 @@ def score_change(
     rather than scored -- an unmutated tree labels every site unaffected and produces no
     findings, which reads as a flawless run rather than as a generator that declined.
     """
-    return score_pair(generate_pair(sources, change, sites, targets), change, store, repo, adapter)
+    return score_pair(generate_pair(sources, change, sites, targets), change, store, repo, adapter,
+                      skipped_files=skipped_files)

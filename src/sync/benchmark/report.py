@@ -163,6 +163,7 @@ def render_report(
     findings: Sequence[EmittedFinding] = (),
     labels: Sequence[BindingLabel] = (),
     reference: str | None = None,
+    skipped_files: Sequence[str] = (),
 ) -> str:
     """The whole report as text.
 
@@ -174,6 +175,11 @@ def render_report(
     as two missing ones. Supplying labels requires `reference` -- what they were derived from
     and what that biases -- because a precision without it is a number claiming to describe the
     binder when it partly describes the corpus.
+
+    `skipped_files` names checkout paths the scorer could not read as text, and prints only when
+    there are some. A score over a repository whose binaries were silently dropped describes a
+    tree the reader cannot reconstruct, and one of those paths being a legacy-encoded source file
+    is the case where real call sites went missing.
     """
     if labels and reference is None:
         raise ValueError(
@@ -213,5 +219,23 @@ def render_report(
         "",
         "Sample counts",
         *[f"  {label:<{_LABEL_WIDTH - 2}}{count}" for label, count in _counts(axes, accuracy)],
+        *_skipped_block(skipped_files),
     ]
     return "\n".join(lines) + "\n"
+
+
+def _skipped_block(skipped_files: Sequence[str]) -> list[str]:
+    """The checkout paths the scorer could not read, or nothing at all when it read everything.
+
+    Nothing at all, rather than a zero: a heading that prints on every run is a heading the next
+    reader learns to skip, and this one matters exactly when it appears.
+    """
+    if not skipped_files:
+        return []
+    return [
+        "",
+        f"Checkout paths not read as source ({len(skipped_files)})",
+        "  Skipped because they do not decode as UTF-8. A binary is nothing an indexer wanted; a",
+        "  source file in a legacy encoding is a call site this score does not cover.",
+        *[f"  {path}" for path in skipped_files],
+    ]

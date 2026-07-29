@@ -12,16 +12,18 @@ different input set each run, and a movement in the number would mean nothing --
 `2026-07-27-sync-benchmark-gates.md` is explicit that this is what separates a benchmark from a
 score.
 
-Why the tree is pruned, and what that costs
+The tree is the tree, and it used to not be
 -------------------------------------------
-`sync.cli._score_corpus` reads every file under the checkout with `read_text(encoding="utf-8")`,
-so one PNG anywhere in the tree ends the run. Three of the four repositories carry images; the
-Stripe Connect demo carries 63 files that are not UTF-8. So the materialised tree holds only the
-files that decode as UTF-8, and the count of what was dropped is printed rather than hidden.
+This script once held back every file that did not decode as UTF-8, because `_score_corpus` read
+the whole checkout with `read_text(encoding="utf-8")` and one PNG anywhere ended the run. Three
+of the four repositories carry images; the Stripe Connect demo carries 63 files that are not
+UTF-8. The count was printed rather than hidden, but the corpus was still scoring a tree that was
+not the repository the manifest names.
 
-Nothing an indexer reads is lost by that: `package.json`, `tsconfig.json` and every `.ts` file
-are text. It is still a transformation of the vendor's tree and it is recorded as one -- the
-alternative was to edit `_score_corpus`, which another task owns.
+`sync.cli._read_checkout` now skips what it cannot read as source and reports which paths those
+were, so the pre-filter here has nothing left to do and is gone. The materialised tree is the
+pinned subtree, minus only `.git` and `node_modules`, and the digest below pins what the vendor
+published rather than what a filter left behind.
 
 The tree digest is what makes "frozen" checkable
 ------------------------------------------------
@@ -87,32 +89,31 @@ def fetch_commit(repo: str, commit: str, into: Path) -> None:
         raise CorpusMismatch(f"{repo}: asked for {commit} and got {head}")
 
 
-def materialise(source: Path, destination: Path) -> tuple[int, int]:
-    """Copy the text of `source` into `destination`, and say how much was dropped.
+def materialise(source: Path, destination: Path) -> int:
+    """Copy `source` into `destination` verbatim, and say how many files that was.
 
-    Returns (files written, files dropped). A file is dropped only because it does not decode as
-    UTF-8, which is the one thing `_score_corpus` cannot read.
+    Bytes throughout, and nothing is decoded. A checkout carrying CRLF stays byte-identical to
+    what was fetched, and a PNG stays a PNG -- `sync.cli._read_checkout` is what decides which
+    paths are source, so this has no business holding an opinion about it. Two components deciding
+    that is one too many, and the one that used to be here is what made the corpus score a tree
+    that was not the repository the manifest names.
+
+    Only `.git` and `node_modules` are held back, and neither is a judgement about content:
+    `.git` is the fetch's own bookkeeping and `node_modules` is an install. Copying them would
+    write tens of thousands of files to be ignored later and put an install inside the digest.
     """
     if destination.exists():
         shutil.rmtree(destination)
 
-    written = dropped = 0
+    written = 0
     for path in sorted(source.rglob("*")):
         if not path.is_file() or SKIP_DIRECTORIES & set(path.parts):
             continue
-        try:
-            text = path.read_bytes().decode("utf-8")
-        except UnicodeDecodeError:
-            dropped += 1
-            continue
         target = destination / path.relative_to(source)
         target.parent.mkdir(parents=True, exist_ok=True)
-        # Bytes rather than text, so a checkout carrying CRLF stays byte-identical to what was
-        # fetched. Writing through `write_text` would rewrite line endings on this platform and
-        # move the tree digest without any file having changed.
-        target.write_bytes(text.encode("utf-8"))
+        target.write_bytes(path.read_bytes())
         written += 1
-    return written, dropped
+    return written
 
 
 def tree_digest(root: Path) -> str:
@@ -147,7 +148,7 @@ def main() -> int:
 
         source = checkout / entry.get("subpath", ".")
         destination = ROOT / name
-        written, dropped = materialise(source, destination)
+        written = materialise(source, destination)
         digest = tree_digest(destination)
 
         expected = entry.get("tree_digest")
@@ -155,8 +156,7 @@ def main() -> int:
         if state == "MISMATCH":
             failures.append(f"{name}: manifest pins {expected}, materialised {digest}")
 
-        print(f"{name:<16} {commit[:12]} {written:>4} files, {dropped:>3} dropped "
-              f"({'not utf-8' if dropped else 'all text'})  {digest}  {state}")
+        print(f"{name:<16} {commit[:12]} {written:>4} files  {digest}  {state}")
 
     for failure in failures:
         print(f"refused: {failure}", file=sys.stderr)
