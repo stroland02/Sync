@@ -279,10 +279,19 @@ def _read_npm(root: Path, unreadable: list[str]) -> list[Dependency]:
         unreadable.append("package.json does not hold an object")
         return []
 
-    declared: dict[str, Any] = {
-        **(data.get("dependencies") or {}),
-        **(data.get("devDependencies") or {}),
-    }
+    declared: dict[str, Any] = {}
+    for table in ("dependencies", "devDependencies"):
+        section = data.get(table)
+        if section is None:
+            continue
+        # Checked rather than splatted. A customer's manifest carries whatever wrote it, and a
+        # table that is not an object used to raise `TypeError` out of the whole report when it
+        # was truthy and read as zero dependencies when it was not.
+        if not isinstance(section, dict):
+            unreadable.append(f"package.json: {table} does not hold an object")
+            return []
+        declared.update(section)
+
     return [
         Dependency(name=name, version=str(version), ecosystem=NPM)
         for name, version in declared.items()

@@ -1,0 +1,4 @@
+# Both manifests are current practice and a project may carry both, declaring different things
+# in each. Reading one reports half the ecosystem as declaring nothing.
+openai==1.51.0
+requests==2.32.3

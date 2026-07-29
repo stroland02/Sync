@@ -1,0 +1,6 @@
+# Evidence written as a mapping rather than the list every reader of this file expects. Keyed by
+# package it looks reasonable and iterates as bare strings, so it must be refused rather than
+# read as a sequence of entries.
+orb-billing:
+  repo: orbcorp/orb-node
+  manifest: .stats.yml

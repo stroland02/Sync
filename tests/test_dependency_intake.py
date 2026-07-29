@@ -29,6 +29,7 @@ from sync.signals.intake import (
     SdkRepository,
     assess_repository,
     read_declared_dependencies,
+    read_registry_apis,
     read_sdk_repositories,
 )
 from sync.signals.registry import (
@@ -58,6 +59,20 @@ def _report(fixture: str, **over):
 
 def _by_name(report) -> dict[str, object]:
     return {item.dependency.name: item for item in report.assessments}
+
+
+# Constructed here rather than committed, and written with `write_bytes`. A string holding an odd
+# character is still valid UTF-8 once Python encodes it, so it would never reach the handler these
+# tests aim at. The bytes are cp1252 for an accented identifier: valid in their own manifest
+# syntax once decoded that way, and an invalid UTF-8 continuation byte -- so the *only* reason the
+# read fails is the decode, not the parse. Committing them would put a file in the tree whose
+# bytes are deliberately illegal, and any editor, formatter or agent that round-trips it as text
+# repairs it silently; the test would then pass against a valid file, which is the manufactured
+# confidence `CLAUDE.md` names. `tests/test_corpus_binary_files.py` constructs its bytes for the
+# same reason.
+NOT_UTF8_PACKAGE_JSON = b'{"dependencies": {"caf\xe9-sdk": "^1.0.0"}}'
+NOT_UTF8_PYPROJECT = b'[project]\ndependencies = ["caf\xe9-sdk>=1.0.0"]\n'
+NOT_UTF8_REQUIREMENTS = b"caf\xe9-sdk==1.0.0\n"
 
 
 # --- the closing condition -----------------------------------------------------------
@@ -236,6 +251,118 @@ def test_a_repository_with_no_manifest_is_not_an_error():
     assert report.unreadable == ()
 
 
+def test_a_package_json_that_is_valid_json_and_not_an_object_is_reported():
+    """Distinct from the unparseable case, and it has to be. A top-level array parses cleanly, so
+    nothing raises and nothing is declared -- reported as zero dependencies it is indistinguishable
+    from a project that depends on nothing, which is the narrowing this report exists to remove."""
+    report = _report("array_manifest")
+
+    assert report.assessments == ()
+    assert any("does not hold an object" in problem for problem in report.unreadable)
+
+
+def test_package_json_bytes_that_are_not_utf8_are_a_fault_rather_than_a_crash(tmp_path):
+    """The failure `CLAUDE.md` says no fixture in this repository can catch, caught deliberately.
+
+    These bytes are valid JSON read as cp1252, so the decode is the only thing that fails. A
+    customer repository with one accented package name would otherwise raise `UnicodeDecodeError`
+    out of the whole report rather than naming the file it could not read.
+    """
+    (tmp_path / "package.json").write_bytes(NOT_UTF8_PACKAGE_JSON)
+
+    dependencies, unreadable = read_declared_dependencies(tmp_path)
+
+    assert dependencies == ()
+    assert any("package.json could not be read" in problem for problem in unreadable)
+
+
+def test_both_python_manifests_are_read_when_a_project_carries_both():
+    """The module reads both deliberately, because both are current practice and a project may
+    declare different things in each. Reading one reports half the ecosystem as declaring nothing,
+    and the half that vanishes is silent -- there is no fault to notice."""
+    items = _by_name(_report("python_both"))
+
+    assert items["stripe"].category == WATCHED
+    assert items["orb-billing"].category == WATCHABLE
+    assert items["openai"].missing == "sdk-binding"
+    assert items["requests"].category == NOT_WATCHABLE
+    assert {"stripe", "orb-billing", "openai", "requests"} <= set(items)
+
+
+def test_an_unparseable_pyproject_is_reported_and_the_other_manifest_is_still_read():
+    """The two halves are independent, and collapsing them would lose one of them.
+
+    A `pyproject.toml` that does not parse must not take `requirements.txt` down with it: the
+    fault is recorded for the file that has one, and the packages the readable manifest declares
+    still reach the report. Reporting nothing here would understate the repository twice over.
+    """
+    report = _report("python_half_broken")
+
+    assert any("pyproject.toml could not be read" in problem for problem in report.unreadable)
+    assert _by_name(report)["openai"].category == WATCHABLE
+
+
+def test_a_non_string_in_the_dependency_array_is_dropped_and_the_rest_still_read():
+    """TOML arrays are heterogeneous, so a requirement list can hold something that is not a
+    requirement. The file parses, which is why this is not the unreadable case: only the entry is
+    wrong, and `Dependency(name=12)` would put a number where every consumer expects a package.
+
+    Pinned as the behaviour it is rather than endorsed. This is the one manifest malformation the
+    module drops without recording, and the report accompanying this task argues that is a
+    narrower contract than `unreadable` sets -- but it is consistent with the identical filter in
+    the npm reader, so it is a design question rather than a defect.
+    """
+    dependencies, unreadable = read_declared_dependencies(FIXTURES / "python_mixed_array")
+
+    assert [d.name for d in dependencies] == ["stripe"]
+    assert unreadable == ()
+
+
+def test_pyproject_bytes_that_are_not_utf8_are_a_fault_rather_than_a_crash(tmp_path):
+    """Valid TOML read as cp1252, so the decode is the only thing that fails."""
+    (tmp_path / "pyproject.toml").write_bytes(NOT_UTF8_PYPROJECT)
+
+    dependencies, unreadable = read_declared_dependencies(tmp_path)
+
+    assert dependencies == ()
+    assert any("pyproject.toml could not be read" in problem for problem in unreadable)
+
+
+def test_requirements_bytes_that_are_not_utf8_are_a_fault_rather_than_a_crash(tmp_path):
+    """`requirements.txt` has no parser to fail, so the decode is the only failure it has -- and
+    the arm that catches it is the one nothing else in this suite reaches."""
+    (tmp_path / "requirements.txt").write_bytes(NOT_UTF8_REQUIREMENTS)
+
+    dependencies, unreadable = read_declared_dependencies(tmp_path)
+
+    assert dependencies == ()
+    assert any("requirements.txt could not be read" in problem for problem in unreadable)
+
+
+def test_every_manifest_fault_reaches_the_artifact_rather_than_being_counted_and_dropped(tmp_path):
+    """`unreadable` is an accumulator, and a fault appended to it and dropped by the caller is
+    exactly the silent narrowing it exists to prevent.
+
+    All three manifests fail at once, which is what makes the point: `counts()` answers three
+    zeroes, and three zeroes are what a repository depending on nothing answers too. The zeroes
+    are only honest because the faults travel beside them in the same artifact, so this asserts
+    the serialised form carries all three rather than trusting that the list was populated.
+    """
+    (tmp_path / "package.json").write_bytes(NOT_UTF8_PACKAGE_JSON)
+    (tmp_path / "pyproject.toml").write_bytes(NOT_UTF8_PYPROJECT)
+    (tmp_path / "requirements.txt").write_bytes(NOT_UTF8_REQUIREMENTS)
+
+    report = assess_repository(tmp_path, generator_manifests=GENERATOR_EVIDENCE)
+
+    assert report.counts() == {WATCHED: 0, WATCHABLE: 0, NOT_WATCHABLE: 0}
+
+    payload = json.loads(report.to_json())
+    assert payload["counts"] == {WATCHED: 0, WATCHABLE: 0, NOT_WATCHABLE: 0}
+    assert len(payload["unreadable"]) == 3
+    for manifest in ("package.json", "pyproject.toml", "requirements.txt"):
+        assert any(manifest in problem for problem in payload["unreadable"])
+
+
 def test_the_manifest_read_is_pure_and_returns_versions_as_declared():
     """Separated from classification the way `manifest.py` separates parsing from fetching, so
     the classifier can be driven by committed fixtures and reaches no network."""
@@ -338,6 +465,51 @@ def test_an_evidence_entry_missing_a_field_raises_rather_than_being_skipped():
     assert "package" in str(raised.value) or "manifest" in str(raised.value)
 
 
+def test_evidence_that_is_not_a_list_raises_naming_the_file_and_the_shape():
+    """A mapping keyed by package reads as reasonable evidence, so it has to be refused loudly.
+
+    Both assertions are load-bearing and the second is the one that is easy to omit. Delete the
+    shape guard and this still raises `ValueError` naming the same path -- iterating a mapping
+    yields its keys, `"orb-billing"["package"]` is a `TypeError`, and the entry-level handler
+    turns that into a `ValueError` about the entries. The two faults are different repairs: fix
+    the container, or fix one line in it. A test that asserted only the type and the path would
+    pass against a module that could no longer tell them apart.
+    """
+    with pytest.raises(ValueError) as raised:
+        read_sdk_repositories(FIXTURES / "sdk-repositories-mapping.yaml")
+
+    assert "sdk-repositories-mapping.yaml" in str(raised.value)
+    assert "does not hold a list" in str(raised.value)
+
+
+def test_confirmed_registry_evidence_is_read_from_a_file_rather_than_fetched():
+    """The same discipline as `read_sdk_repositories`, for the directory tier. The join is never
+    a name resemblance -- an `api_id` is a domain and a package name is not -- so the pair has to
+    have been confirmed, and this file is where a reader can check that it was."""
+    apis = read_registry_apis(FIXTURES / "registry-apis.yaml")
+
+    assert apis == {"acme-sdk": "acme.com", "ancient-sdk": "ancient.com"}
+
+
+def test_registry_evidence_that_is_not_a_list_raises_naming_the_file_and_the_shape():
+    """The same pair of assertions, for the same reason as the generator tier above."""
+    with pytest.raises(ValueError) as raised:
+        read_registry_apis(FIXTURES / "registry-apis-mapping.yaml")
+
+    assert "registry-apis-mapping.yaml" in str(raised.value)
+    assert "does not hold a list" in str(raised.value)
+
+
+def test_a_registry_evidence_entry_missing_a_field_raises_rather_than_being_skipped():
+    """Skipping it would drop a package from the middle category and report no fault, which is
+    the same failure `read_sdk_repositories` refuses for the generator tier."""
+    with pytest.raises(ValueError) as raised:
+        read_registry_apis(FIXTURES / "registry-apis-partial.yaml")
+
+    assert "registry-apis-partial.yaml" in str(raised.value)
+    assert "api" in str(raised.value)
+
+
 def test_a_pypi_version_is_recorded_as_the_manifest_declares_it():
     """A specifier set is richer than npm's caret and resolving one needs an environment this
     never builds, so what is recorded is what the project declared."""
@@ -345,3 +517,20 @@ def test_a_pypi_version_is_recorded_as_the_manifest_declares_it():
 
     assert {d.name: d.version for d in dependencies}["stripe"] == ">=12.0.0"
     assert {d.name: d.version for d in dependencies}["openai"] == "==1.51.0"
+
+
+def test_a_dependency_table_that_is_not_an_object_is_a_fault_rather_than_a_crash():
+    """The manifest is a customer's file, so every shape JSON permits arrives eventually.
+
+    The top level is already checked and a bad one is reported. The two tables under it were
+    not, and they are splatted into a dict -- so `"dependencies": ["stripe"]` left `TypeError:
+    'list' object is not a mapping` to propagate out of `assess_repository` and out of `sync
+    intake`, where a traceback is what a customer gets instead of a report. Worse, the same
+    malformation had three outcomes: a top-level array was a fault, a truthy non-object crashed,
+    and a falsy one (`"dependencies": []`) was silently zero dependencies -- the exact silent
+    narrowing `IntakeReport.unreadable` exists to prevent.
+    """
+    dependencies, unreadable = read_declared_dependencies(FIXTURES / "npm_table_not_an_object")
+
+    assert dependencies == ()
+    assert any("dependencies" in problem for problem in unreadable)
