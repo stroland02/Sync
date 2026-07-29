@@ -44,35 +44,35 @@ corpus stays a deliberate superset of what the rule proposes rather than equal t
 result name with a targeted site on the same operation, a fresh generation stops proposing `furever`
 `PostPaymentIntents-response`, and all four gate figures are unchanged by the rule change.
 
-### B53 — A non-UTF-8 `package.json` crashes TypeScript adapter selection
+### B54 — A UTF-8 byte-order mark makes four manifest readers answer wrongly
 
-`TypeScriptAdapter._declared_dependencies` (`src/sync/index/typescript.py:181`) reads the customer's
-manifest with `read_text(encoding="utf-8")` and catches only `json.JSONDecodeError`. A manifest that
-is not valid UTF-8 raises `UnicodeDecodeError` from the read, before `json.loads` is reached, and
-nothing catches it — so `matches()` raises out of adapter selection instead of answering "no declared
-dependency".
+`EF BB BF` is valid UTF-8, so `read_text(encoding="utf-8")` succeeds and hands every parser
+downstream a leading `﻿`. Measured against `83825f6`, four sites, ordered by how hard the
+failure is to notice:
 
-The method's own docstring states the contract it fails to keep: *"A customer's manifest is untrusted
-input, so an unparseable one answers 'no declared dependency' rather than raising."* An undecodable
-file is unparseable in exactly that sense, so this is a gap against stated intent rather than an open
-question.
+1. `TypeScriptAdapter._declared_dependencies` — a BOM'd `package.json` makes `matches()` return
+   False silently, with no reason anywhere. `json.loads` raises `Unexpected UTF-8 BOM` and the
+   handler turns it into "no declared dependency".
+2. `sync.signals.intake` on `package.json` — declined, with an accurate reason naming the BOM. The
+   answer is wrong but a human can act on it.
+3. `sync.signals.intake` on `pyproject.toml` — declined with a *misleading* reason: `tomllib` says
+   `Invalid statement (at line 1, column 1)` for a file that is valid TOML.
+4. `sync.signals.intake` on `requirements.txt` — **no error at all and a wrong value**:
+   `name='﻿stripe'` instead of `'stripe'`, with `unreadable` empty. The second dependency in
+   the same file parses correctly, which is why it is easy to miss.
 
-Reproduced with a control, which is the part that makes it trustworthy: a valid UTF-8 manifest gives
-`matches()` True, `'{ not json'` gives False by the documented path, and the same JSON as UTF-16
-raises `UnicodeDecodeError`. A first attempt at that repro returned False for every input because
-`_package` was None — a run whose control also fails proves nothing.
+Case 4 is why this is a task rather than a note. Intake decides whether a prospective customer's
+repository depends on a vendor we cover, and a BOM'd `requirements.txt` makes it answer no for a
+repository that does, silently and unrankably. Windows editors write BOMs by default and this
+project runs on Windows.
 
-The identical defect on the Python side was fixed as `5cbf7b8`. The TypeScript side never was. Every
-fixture in this repository is ASCII, which is why no existing test catches it.
+The fix is `encoding="utf-8-sig"`, which strips a BOM when present and decodes plain UTF-8
+unchanged when not, so it does not move the answer for any manifest that works today.
 
-Carries one thing to report rather than build: `PythonAdapter.matches` silently declines a
-repository whose manifest cannot be decoded and carries no reason where `intake` reports one. B51
-ranked that first among its leave-behinds because silent is worse than loud, but where a reason
-should land is a design decision, not a fix.
-
-**Closes when:** `matches()` returns False on a non-UTF-8 `package.json` with a live control proving
-the path is reached, the new handler has a driver in `tests/test_decode_handlers.py` so every decode
-handler stays entered, and four gates are green.
+**Closes when:** each fixed case has a test that fails first for the expected reason and a control
+proving the plain-UTF-8 answer is unchanged — case 4 asserting on the parsed *value*, since there
+is no error to assert on — `DRIVERS` keys updated wherever an edit shifted a handler's line, and
+four gates green.
 
 ### B7 — The M0 acceptance run has not executed since the pipeline changed underneath it
 
@@ -100,8 +100,11 @@ recorded with which change broke it.
 
 ## In flight
 
-- **B52** — `task_15860306d7c7`, worktree `sync-solo-a`.
-- **B53** — `task_45f3e2d8c875`, worktree `sync-solo-b`.
+- **B52** — `task_15860306d7c7`, worktree `sync-solo-a`. Its commit `34789db` leaves the suite
+  red: `hold_back` gained a required `root: Path` and five two-argument callers in
+  `tests/test_corpus_hold_back.py` were not updated. Reproduced at clean `34789db` in a throwaway
+  branch — `5 failed, 10 passed`. Sent back to fix before it lands.
+- **B54** — `task_1ea8ea5094a0`, worktree `sync-solo-b`.
 
 **Briefs go in a file now, not in the dispatch spec.** Long message bodies are being truncated in
 delivery — three briefs today, and B52 received a correction paragraph while the four numbered
@@ -625,3 +628,20 @@ is what a reviewer needs and duplicating it here would let the two copies drift.
   handler — the arm a line-coverage check would still call covered — and watching the gate name
   `sync/signals/intake.py:275` exactly; a bogus driver naming a handler not in `src/` also fired.
   Two leave-behinds became B53; the 35 unhandled text decodes still need per-site triage.
+
+- Decline a non-UTF-8 `package.json` instead of crashing on it. Landed `bdabe9c`, with the driver
+  it omitted at `83825f6`. The worker measured two crash shapes rather than one — a UTF-16 manifest
+  and a cp1252 `author` field failing on byte `0xe9`, the legacy-encoding case CLAUDE.md predicts —
+  and both decline after. It also found B52's red suite and proved the five failures predate its own
+  change by stashing its files at clean `34789db`, which is why that commit did not land with it.
+
+  **What it missed is the more useful record.** Its change widened a guard to catch
+  `UnicodeDecodeError`, which adds a row to `test_decode_handlers.py`'s AST inventory, and it did not
+  register a driver — so `test_every_decode_handler_has_been_entered` failed naming
+  `sync/index/typescript.py:201`, one hour after that gate landed. The worker correctly attributed
+  the five failures it found to another commit and did not notice a sixth was its own. Proving the
+  five were not its fault is not the same as proving nothing was. The driver was written here and
+  probed by reverting the fix: the driver's own test then raises `UnicodeDecodeError` at
+  `typescript.py:200`, so it genuinely enters the arm rather than passing beside it.
+
+  Left behind and now B54: a BOM'd manifest, which decodes fine and defeats four readers instead.
