@@ -216,9 +216,16 @@ def _built(vendor_id: str, cache_dir: Path):
 # the checked set. `test_the_unstaged_set_is_exactly_the_set_that_resolves_nothing` fails in both
 # directions until then, so this cannot outlive the gap or quietly grow to cover a real defect.
 #
-# Open and not answered here: whether a generated vendor resolves symbols in a real run, once a
-# `sync run` has staged its cache. That is the difference between a staging gap in the tests and
-# a substrate that cannot bind, and nothing in this suite establishes it either way.
+# That question -- whether a generated vendor resolves in a real run -- is answered, and the
+# answer is why this entry is a staging gap rather than a substrate that cannot bind. The two
+# loaders are a deliberate pair: `_prepare_generated` (`registry.py:319`) passes `sources=sources`
+# and is what a `sync run` goes through, while `_load_generated` (`registry.py:362`) passes
+# `sources={}` and exists for `sync ingest`, which wants a request correlator and no symbols.
+# The kit is handed the second one. So what is unexercised here is the offline shape of an
+# adapter, and the shape a customer's run actually uses is the other one.
+#
+# The honest limit worth stating rather than burying: this suite certifies an adapter shape no
+# customer ever meets. Closing that needs a staged fixture, not a bug fix.
 UNSTAGED_SDK_SOURCE = {"anthropic", "cloudflare", "openai", "vercel"}
 
 _UNRESOLVED_RULE = "the adapter did not resolve the symbol the kit was given."
