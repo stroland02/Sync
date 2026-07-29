@@ -10,14 +10,34 @@
 #   subpath      the directory inside that checkout the score is taken over, when the
 #                repository's `package.json` is not at its root
 #   tree_digest  SHA-256 over every materialised path and the SHA-256 of its bytes, sorted.
-#                What the commit pins is what the vendor published; this pins what the fetch
-#                produced from it, including the UTF-8 pruning the fetcher documents.
+#                It covers the vendor's subtree at the pinned commit as published, minus only
+#                `.git` and `node_modules`. Every file is hashed as bytes and none is decoded.
+#
+# What the digest covers changed on 2026-07-29, and the pinned commits did not.
+#
+# The fetcher used to remove every file that does not decode as UTF-8 before hashing, because
+# the scorer read the whole checkout as text and one PNG ended the run. So the digest pinned
+# what our own filter left behind rather than what the vendor published -- it validated that we
+# transform a tree the same way today as yesterday, which is not a property worth freezing.
+# `sync.benchmark.checkout.read_checkout` now skips what it cannot read as source and names the
+# paths beside the score, so the fetch copies the subtree verbatim and the digest means what a
+# reader already assumed it meant.
+#
+# Two of the four moved: `furever` gained 63 images and fonts and `remix` gained one. `turbo`
+# and `fireship-server` carry no undecodable file at all, so their digests are unchanged and
+# were never affected by the old pruning. A mismatch here is still a real refusal -- it is not
+# evidence that a vendor moved a commit, and the commits below are the same commits they were.
+#
+# The corpus axes did not move across this change, measured rather than assumed: binding
+# precision 1.0000 at n=16 and binding recall 1.0000 at n=16 before and after, with 4
+# falsifiable negatives and 12 of 12 pairs scored either way. The files that arrived are files
+# the scorer skips, so the mapping the indexer runs over is the same mapping.
 
 - name: furever
   repo: stripe/stripe-connect-furever-demo
   commit: 5114c968fd8537d82889e2d04afaf00a986af7bf
   subpath: .
-  tree_digest: 0a14ffb48adb3b929b42842fd22b89b344df36a3d27e59830842662c74f13e49
+  tree_digest: 2562e449f98b97f025d786bf16c93a0b82d6fa3182101bc31c97271bca20cfe7
 
 - name: turbo
   repo: ardriveapp/turbo-payment-service
@@ -29,7 +49,7 @@
   repo: cjavilla-stripe/remix-stripe-sample
   commit: 25982ff9316d5219e7e0973ee2766bd6b2012723
   subpath: .
-  tree_digest: 20cbf5f79effef8b646a3ffe3c6c63a8d3cd2b0e11e1f25457805f600838a9bc
+  tree_digest: 31dd7aacd3701c0bf2c304d3fe66475659af199520dfd9c46eb11d1d1bf7eaca
 
 - name: fireship-server
   repo: fireship-io/stripe-payments-js-course

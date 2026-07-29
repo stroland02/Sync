@@ -1,9 +1,9 @@
 """A checkout carrying a file that is not UTF-8, which is most real repositories.
 
-`_score_corpus` read every file under the checkout with `read_text(encoding="utf-8")`, so one PNG
-anywhere ended the run. The Stripe Connect demo carries 63 such files. That is a coverage problem
-rather than an inconvenience: every candidate repository with an image, a font, a compiled asset
-or a `.ico` was unscoreable, which is why the frozen corpus is four repositories.
+`sync.cli._score_corpus` read every file under the checkout with `read_text(encoding="utf-8")`, so
+one PNG anywhere ended the run. The Stripe Connect demo carries 63 such files. That is a coverage
+problem rather than an inconvenience: every candidate repository with an image, a font, a compiled
+asset or a `.ico` was unscoreable, which is why the frozen corpus is four repositories.
 
 The fix is the one `CLAUDE.md` already names -- bytes that are not text are not decoded at all --
 and the shape it takes here is a skip. Not `errors="replace"`: a binary mangled into replacement
@@ -28,9 +28,10 @@ import yaml
 from scripts.fetch_corpus_repositories import materialise as materialise_checkout
 from scripts.score_corpus import PairResult, aggregate, render
 from sync.benchmark.binding import BindingLabel, EmittedFinding
+from sync.benchmark.checkout import read_checkout
 from sync.benchmark.report import render_report
 from sync.benchmark.score import SYNTHETIC_REFERENCE
-from sync.cli import _read_checkout, _score_corpus
+from sync.cli import _score_corpus
 
 # Invalid UTF-8 by construction: 0xFF and 0xFE are not legal lead bytes in any position.
 PNG_BYTES = b"\x89PNG\r\n\x1a\n\xff\xd8\xff\xe0\x00\x10JFIF"
@@ -73,7 +74,7 @@ def test_a_file_that_is_not_utf_8_is_skipped_rather_than_ending_the_run(tmp_path
     (checkout / "assets").mkdir()
     (checkout / "assets" / "logo.png").write_bytes(PNG_BYTES)
 
-    sources, skipped = _read_checkout(checkout)
+    sources, skipped = read_checkout(checkout)
 
     assert "src/billing.ts" in sources
     assert "assets/logo.png" not in sources
@@ -88,7 +89,7 @@ def test_a_skipped_file_is_named_and_not_merely_counted(tmp_path):
     (checkout / "src" / "legacy.ts").write_bytes(LEGACY_BYTES)
     (checkout / "logo.png").write_bytes(PNG_BYTES)
 
-    _, skipped = _read_checkout(checkout)
+    _, skipped = read_checkout(checkout)
 
     assert skipped == ["logo.png", "src/legacy.ts"]
 
@@ -101,7 +102,7 @@ def test_a_utf_8_file_with_non_ascii_bytes_is_not_skipped(tmp_path):
     (checkout / "src" / "prices.ts").write_text("export const label = '12,50 €';\n",
                                                 encoding="utf-8")
 
-    sources, skipped = _read_checkout(checkout)
+    sources, skipped = read_checkout(checkout)
 
     assert skipped == []
     assert "€" in sources["src/prices.ts"]
@@ -114,7 +115,7 @@ def test_line_endings_are_normalised_exactly_as_they_were_before(tmp_path):
     checkout = _checkout(tmp_path)
     (checkout / "src" / "crlf.ts").write_bytes(b"const a = 1;\r\nconst b = 2;\r\n")
 
-    sources, _ = _read_checkout(checkout)
+    sources, _ = read_checkout(checkout)
 
     assert sources["src/crlf.ts"] == "const a = 1;\nconst b = 2;\n"
 
@@ -129,7 +130,7 @@ def test_an_install_and_the_git_directory_are_still_not_read(tmp_path):
     (checkout / ".git").mkdir()
     (checkout / ".git" / "index").write_bytes(PNG_BYTES)
 
-    sources, skipped = _read_checkout(checkout)
+    sources, skipped = read_checkout(checkout)
 
     assert list(sources) == ["package.json", "src/billing.ts"]
     assert skipped == []
@@ -298,6 +299,27 @@ def test_the_fetcher_copies_bytes_verbatim_so_the_digest_is_over_what_was_publis
     materialise_checkout(source, tmp_path / "out")
 
     assert (tmp_path / "out" / "crlf.ts").read_bytes() == b"const a = 1;\r\n"
+
+
+def test_what_the_fetcher_materialises_is_exactly_what_the_scorer_walks(tmp_path):
+    """The tree digest is over what the fetch produced and the score is over what the scorer read.
+    If those two walks ever disagree the digest pins one set of files while the number is taken
+    over another, and nothing in either component would notice -- so they share `tree_files` and
+    this is the assertion that they still do."""
+    source = tmp_path / "src"
+    (source / "app").mkdir(parents=True)
+    (source / "node_modules").mkdir()
+    (source / "app" / "page.ts").write_text("const a = 1;\n", encoding="utf-8")
+    (source / "app" / "logo.png").write_bytes(PNG_BYTES)
+    (source / "node_modules" / "a.js").write_text("x", encoding="utf-8")
+
+    destination = tmp_path / "out"
+    materialise_checkout(source, destination)
+    sources, skipped = read_checkout(destination)
+
+    materialised = {p.relative_to(destination).as_posix()
+                    for p in destination.rglob("*") if p.is_file()}
+    assert materialised == set(sources) | set(skipped)
 
 
 def test_the_fetcher_still_materialises_neither_an_install_nor_the_git_directory(tmp_path):

@@ -256,7 +256,8 @@ def test_a_pair_that_contributed_no_positives_is_visible_beside_the_ones_that_di
 
     assert score.pairs_scored == 2
     assert len(empty) == 1
-    assert empty[0].split()[1:] == ["0", "1", "0", "1"]
+    # affected, unaffected, findings, unreachable, unread.
+    assert empty[0].split()[1:] == ["0", "1", "0", "1", "0"]
 
 
 def test_the_rendered_report_names_every_exclusion_beside_the_score():

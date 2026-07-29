@@ -62,12 +62,22 @@ over every materialised path and the SHA-256 of its bytes. The commit pins what 
 published; the digest pins what the fetch produced from it, and the fetch refuses when the two
 disagree.
 
-**The materialised tree is pruned and that is a real transformation.** `sync.cli._score_corpus`
-reads every file under the checkout with `read_text(encoding="utf-8")`, so one PNG anywhere ends
-the run — the Connect demo carries 63 files that are not UTF-8. The fetcher materialises only the
-files that decode, and prints how many it dropped. Nothing an indexer reads is lost by that;
-`package.json`, `tsconfig.json` and every `.ts` file are text. It is still not the vendor's tree,
-and the digest is over what was scored rather than over what was published.
+**The materialised tree is the vendor's subtree, minus `.git` and `node_modules`.** It was not
+always. The fetcher used to remove every file that does not decode as UTF-8, because
+`_score_corpus` read the whole checkout with `read_text(encoding="utf-8")` and one PNG anywhere
+ended the run — the Connect demo carries 63 files that are not UTF-8. So the digest pinned what
+our own filter left behind rather than what the vendor published.
+
+`sync.benchmark.checkout.read_checkout` now skips what it cannot read as source and names those
+paths beside the score, so the fetch has no filtering left to do and copies bytes verbatim. Two
+digests moved on 2026-07-29 and no pinned commit did: `furever` gained 63 images and fonts,
+`remix` gained one, and `turbo` and `fireship-server` carry no undecodable file at all. Neither
+corpus axis moved — `docs/superpowers/reports/2026-07-29-one-png-ends-a-corpus-run.md` carries the
+measurement.
+
+Both components walk the tree through one function, `sync.benchmark.checkout.tree_files`, rather
+than through two implementations of one rule. A divergence there would leave the digest pinning
+one set of files while the score was taken over another, and nothing in either would notice.
 
 ## Which pairs, and why those
 

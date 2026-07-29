@@ -20,10 +20,14 @@ of the four repositories carry images; the Stripe Connect demo carries 63 files 
 UTF-8. The count was printed rather than hidden, but the corpus was still scoring a tree that was
 not the repository the manifest names.
 
-`sync.cli._read_checkout` now skips what it cannot read as source and reports which paths those
-were, so the pre-filter here has nothing left to do and is gone. The materialised tree is the
-pinned subtree, minus only `.git` and `node_modules`, and the digest below pins what the vendor
-published rather than what a filter left behind.
+`sync.benchmark.checkout.read_checkout` now skips what it cannot read as source and reports which
+paths those were, so the pre-filter here has nothing left to do and is gone. The materialised tree
+is the pinned subtree, minus only `.git` and `node_modules`, and the digest below pins what the
+vendor published rather than what a filter left behind.
+
+The walk itself is shared with the scorer -- `tree_files` -- rather than written twice. Two
+correct implementations of one rule diverge silently, and the failure that produces is a digest
+pinning one set of files while the score is taken over another.
 
 The tree digest is what makes "frozen" checkable
 ------------------------------------------------
@@ -45,14 +49,11 @@ from pathlib import Path
 
 import yaml
 
+from sync.benchmark.checkout import tree_files
+
 MANIFEST = Path("benchmark/corpus/repositories.yaml")
 ROOT = Path(".cache/corpus")
 CHECKOUTS = ROOT / ".checkouts"
-
-# Never materialised, whatever a repository holds. `.git` is the fetch's own bookkeeping and
-# `node_modules` is an install rather than source; `_score_corpus` already skips both, and
-# carrying them here would mean copying tens of thousands of files to drop them later.
-SKIP_DIRECTORIES = frozenset({".git", "node_modules"})
 
 
 class CorpusMismatch(RuntimeError):
@@ -93,22 +94,20 @@ def materialise(source: Path, destination: Path) -> int:
     """Copy `source` into `destination` verbatim, and say how many files that was.
 
     Bytes throughout, and nothing is decoded. A checkout carrying CRLF stays byte-identical to
-    what was fetched, and a PNG stays a PNG -- `sync.cli._read_checkout` is what decides which
-    paths are source, so this has no business holding an opinion about it. Two components deciding
-    that is one too many, and the one that used to be here is what made the corpus score a tree
-    that was not the repository the manifest names.
+    what was fetched, and a PNG stays a PNG -- `sync.benchmark.checkout.read_checkout` is what
+    decides which paths are source, so this has no business holding an opinion about it. Two
+    components deciding that is one too many, and the one that used to be here is what made the
+    corpus score a tree that was not the repository the manifest names.
 
-    Only `.git` and `node_modules` are held back, and neither is a judgement about content:
-    `.git` is the fetch's own bookkeeping and `node_modules` is an install. Copying them would
-    write tens of thousands of files to be ignored later and put an install inside the digest.
+    Which paths are in the tree at all is the other question, and it is shared rather than
+    reimplemented: `tree_files` is what the scorer walks too, so the digest cannot come to cover
+    a set of files the score was not taken over.
     """
     if destination.exists():
         shutil.rmtree(destination)
 
     written = 0
-    for path in sorted(source.rglob("*")):
-        if not path.is_file() or SKIP_DIRECTORIES & set(path.parts):
-            continue
+    for path in tree_files(source):
         target = destination / path.relative_to(source)
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_bytes(path.read_bytes())
