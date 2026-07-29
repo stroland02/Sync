@@ -158,11 +158,12 @@ package.json / pyproject.toml
   index call sites for each          ← today: one vendor's import and construction rules
 ```
 
-Two things have to change, and only one of them is hard.
+Two things had to change, and only one of them was hard.
 
-**The easy half: stop filtering to one package.** `matches`, `_sdk_version` and
-`_client_identifiers` all take the package name as a constant. Taking it as a parameter, driven by
-the registry, is mechanical.
+**The easy half — stop filtering to one package — is done.** `matches`, `_sdk_version` and
+`_client_identifiers` took the package name as a constant; they now take it from the bindings
+`sync.index.sdk_bindings` derives from the vendor adapters the instance holds. It was mechanical,
+as this said it would be.
 
 **The hard half: the shape of a call site is per-SDK, not per-vendor.** `stripe.charges.create`
 and `twilio.insights.v1.calls.fetch` are both member chains rooted at a client, which is the
@@ -226,10 +227,13 @@ that would otherwise flood a coverage-driven system.
 
 Ordered by what unblocks the most, and each step is verifiable on its own.
 
-**1. Un-hardcode the indexer.** Take the SDK package as a parameter driven by the registry rather
-than as a module constant. Nothing else on this list matters until a second vendor's call sites
-can be found at all. *Closes when a Twilio call site in a fixture repository resolves to a Twilio
-operation end to end.*
+**1. Un-hardcode the indexer. Done.** The SDK package is taken from the vendor rather than from a
+module constant, through `sync.index.sdk_bindings`. Its closing condition is met:
+`tests/test_multi_vendor_index.py:182` indexes `tests/fixtures/ts/twilio` and resolves
+`twilio.messages.create` to the Twilio operation, and the same file pins what is still out of
+reach — `client.insights.v1.calls(callSid).fetch()`, a chain broken by a call in its middle,
+yields no site even though the symbol map holds the operation. Steps 2 to 5 below have not
+started.
 
 **2. Dependency intake.** Read the customer's manifest, ask the registry which declared
 dependencies a tier can serve, and report the answer as a first-class artifact: watched, watchable

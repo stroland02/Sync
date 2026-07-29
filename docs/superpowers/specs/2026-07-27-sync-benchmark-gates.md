@@ -15,7 +15,7 @@ on, and that gets recorded before anyone has an opinion about it.
 
 The obstacle was that four of the five interesting numbers could not be computed at all, because
 the table they read from did not exist. It exists now — `migration_outcome` in
-`src/sync/graph/schema.sql:54` — and `src/sync/benchmark/axes.py` computes the axes from it, so
+`src/sync/graph/schema.sql:60` — and `src/sync/benchmark/axes.py` computes the axes from it, so
 the obstacle has moved: the table holds no rows, because no real pipeline run has produced one.
 The distinction that matters is between the computation and the gate, and it is drawn in tier B
 below. This document separates what can be gated today from what
@@ -48,7 +48,7 @@ and would silently change what any completeness test over that domain is asserti
 
 Five axes. All five read from `migration_outcome`, specified in
 `2026-07-25-sync-migration-corpus.md` and now built: the table is
-`src/sync/graph/schema.sql:54`, the model is `MigrationOutcome` in `src/sync/core/models.py`,
+`src/sync/graph/schema.sql:60`, the model is `MigrationOutcome` in `src/sync/core/models.py`,
 and `GraphStore.record_migration_outcome` writes it.
 
 Three of the five are computed today by `src/sync/benchmark/axes.py` — merge rate split by
@@ -60,8 +60,15 @@ demands.
 **What remains blocked is the gate, not the computation.** The corpus holds no rows, because no
 real pipeline run has yet produced one, so every axis currently reports zero samples. Nothing is
 wired into `.github/workflows/ci.yml` and no threshold is asserted anywhere, per the tier C rule
-below. Binding precision and recall are still uncomputable for a different reason, given under
-Ground truth: the corpus records what Sync did, not what was correct.
+below. Binding precision and recall are no longer uncomputable for want of arithmetic —
+`src/sync/benchmark/binding.py` scores them and splits both by the rung the binding came from,
+and `src/sync/benchmark/mutate.py` produces the labelled pairs it takes. What they still lack is
+a corpus of those pairs: the label source moved from mined migrations to synthetic mutation
+(`2026-07-29-sync-ground-truth-quality.md`), and no pair set has been generated and frozen.
+`sync benchmark` (`src/sync/cli.py:1333`) calls `render_report(store.migration_outcomes())` and
+passes no labels, so the score it prints is computed over an empty reference. The shape of the
+blockage is now the same as for the other three axes — the computation exists and there is
+nothing to run it over.
 
 | Axis | Definition | Why it is the one that matters |
 |---|---|---|
@@ -80,31 +87,38 @@ finding costs the reviewer's willingness to read the next one.
 
 Tier B cannot be built before `migration_outcome` is written to. Three properties of that
 writing are load-bearing for the benchmark specifically, beyond what the corpus spec already
-requires. One holds, one does not, and one holds in part:
+requires. One holds outright, one holds mechanically with an operational gap, and one holds in
+part:
 
 - **Abandoned attempts are written, not only successes.** A corpus of successes cannot compute
   precision, cannot compute routing accuracy, and cannot evaluate any future router. The
   `abandon` node's `abandon_reason` is the negative class. **Holds.**
   `src/sync/remediate/graph.py` installs the recorder from `src/sync/remediate/corpus.py`, and
-  `nodes.py:340` writes the abandoned attempt for exactly this reason.
+  `nodes.py:653` writes the abandoned attempt for exactly this reason.
 - **`pr_merged` and `human_edits_before_merge` are populated from a real webhook**, not
   inferred. Merge outcome arrives days after the run. A field that silently stays null for six
-  months destroys the only measurement that tests the product claim. **Does not hold, and the
-  remaining gap is no longer the receiver.** `src/sync/forge/webhook.py` is built:
-  `record_merge_outcome` verifies GitHub's HMAC-SHA256 signature before parsing, acts only on
-  `pull_request.closed`, and calls `GraphStore.set_merge_outcome`. Two things still stand
-  between that and a numerator. It matches a delivery to a corpus row by `pr_number`, and
-  nothing writes `pr_number` when the pull request opens — `sync.remediate.corpus` records
-  every other column and leaves that one null — so every delivery takes the no-match path and
-  writes nothing. And no process mounts the receiver: it is a function over bytes, deliberately
-  carrying no HTTP framework, so nothing delivers to it either.
+  months destroys the only measurement that tests the product claim. **Holds mechanically, and
+  the remaining gap is operational.** Both things that stood between the receiver and a
+  numerator have been closed. `open_pr` records the number it opened —
+  `src/sync/remediate/nodes.py:571` passes `pr_number=pull_request.number`, and it is passed
+  rather than read off `RunState` so a retried attempt keeps a null by construction — and
+  `sync merge-outcome` (`src/sync/cli.py:1150`) is the caller of `record_merge_outcome`, which
+  verifies the HMAC-SHA256 signature before parsing, acts only on `pull_request.closed`, and
+  calls `GraphStore.set_merge_outcome`. What is left is that nothing delivers on its own: the
+  receiver is still a function over bytes with no HTTP framework, deliberately, so a delivery
+  arrives only when an operator hands one in. The same refusal `sync ingest` and `sync shapes`
+  already make.
 - **The routing decision that fired is recorded**, including the decision-table row. Otherwise
   "tier 0 was wrong for this change kind" is an archaeology project rather than a query.
-  **Holds in part.** `tier` and `strategy` record which tier ran. The row now exists to record —
-  `sync.route.matrix.route()` selects the tier in `src/sync/remediate/tiered.py:282` and returns
-  the row that decided — but it has nowhere to land: `migration_outcome` has no column for it,
-  and `TieredRemediator`'s `on_route` callback has no caller anywhere in `src/`. See
-  `2026-07-27-sync-routing-matrix.md` for the jurisdiction the table currently has.
+  **Holds in part, and the part that is missing has not moved.** `tier` and `strategy` record
+  which tier ran. The row is now decided earlier and carried further than it was:
+  `_decide_tier` at `src/sync/remediate/nodes.py:72` calls `sync.route.matrix.route()` in the
+  `locate` node and stores the row on `RunState` as `routing_row`, which the report node names
+  in its reason (`nodes.py:631`); `TieredRemediator` asks the same table again at
+  `src/sync/remediate/tiered.py:319`. It still has nowhere durable to land: `migration_outcome`
+  has no column for it, `sync.remediate.corpus` takes no such argument, and `on_route` has no
+  caller anywhere in `src/`. See `2026-07-27-sync-routing-matrix.md` for the jurisdiction the
+  table currently has.
 
 ## Ground truth without customers
 

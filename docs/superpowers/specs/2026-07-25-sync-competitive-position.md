@@ -32,8 +32,10 @@ on 2026-04-07, and agentic autofix for code scanning alerts entered public previ
 of the Agent HQ orchestration surface announced at Universe in October 2025. *(Verified — GitHub changelog,
 both dates.)*
 
-Read those two paragraphs against Sync's remediation graph — locate, strategize, patch, static verify, push,
-await CI, open PR — and the overlap is close to total. Bits Code's loop is the same loop, generally available,
+Read those two paragraphs against Sync's remediation graph — locate, prepare, patch, static verify, replay,
+push, await CI, open PR (`src/sync/remediate/graph.py`) — and the overlap is close to total everywhere except
+`replay`, which executes the patched call path against a mock of the new response before any CI minute is
+spent. Bits Code's loop is the same loop, generally available,
 built by a company that already owns the runtime telemetry Sync's M1 proposes to begin ingesting.
 
 **Consequence.** Sync should stop investing defensive effort in the pipeline and stop describing it as the

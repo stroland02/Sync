@@ -1,11 +1,15 @@
 # Sync — Observed Contract Drift
 
 **Date:** 2026-07-26
-**Status:** Partly built. The shape store (`observed_shape`, `src/sync/graph/schema.sql:118`),
+**Status:** Partly built. The shape store (`observed_shape`, `src/sync/graph/schema.sql:124`),
 two `error-payload` readers (`src/sync/signals/sentry/` and `src/sync/signals/datadog/`, which
 writes the same `source` value deliberately) and the detector (`src/sync/detect/observed_drift.py`,
-wired in `src/sync/cli.py:18`) all exist. Neither reader is constructed anywhere in `src/`, so
-nothing feeds the store. The replay tier and the interceptor SDK do not exist — see Sequencing.
+wired in `src/sync/cli.py:23`) all exist. Both readers now have a caller: `sync shapes`
+(`src/sync/cli.py:974`) folds captured error-tracker exports into the baseline through
+`_fold_sentry` (927) and `_fold_datadog` (950), so the store has a writer for the first time —
+and it is fed by hand, not by a listener. The replay tier is built (`src/sync/verify/replay.py`
+and `src/sync/verify/mock_response.py`, wired as the `replay` node in
+`src/sync/remediate/graph.py:37`); the interceptor SDK does not exist — see Sequencing.
 **Scope:** Detecting vendor changes no one published, and verifying patches against behavior rather than types
 alone. The design transposes Meticulous's record-replay-diff mechanism into the API-consumption domain.
 
@@ -167,8 +171,11 @@ This sits between `tsc` and customer CI: stronger than typechecking (it exercise
 new shape), cheaper and earlier than CI, and it produces evidence for the PR body that a reviewer can read —
 "the patched path was executed against the new response shape and consumed it cleanly."
 
-Every replay run is also a shape-store writer (`source = 'replay'`), which is how the baseline begins
-accumulating before any customer installs anything.
+Every replay run produces the shape rows for it (`source = 'replay'`), which is how the baseline begins
+accumulating before any customer installs anything. Produces, not yet writes: `replay_shapes` in
+`src/sync/verify/replay.py:171` builds them, `make_replay` carries them out on `RunState` as
+`replay_shapes`, and nothing calls `record_observed_shape` with them — so the run holds the rows and the
+store does not get them.
 
 **Boundary:** the replay tier verifies the *call path*, not the whole application. It executes customer code
 only inside the sandbox the threat model requires for `tsc` already — this adds no new execution surface, only
@@ -189,14 +196,17 @@ number remains in engineering docs; the volume number is the one a customer sees
 
 | When | What | State |
 |---|---|---|
-| Now | This document. The `observed_shape` schema is binding on anything that later records shapes. | Built — `src/sync/graph/schema.sql:118`, `ObservedShape` in `src/sync/core/models.py` |
-| M1 (with the sandbox the threat model gates on) | The replay tier, feeding the shape store as `source='replay'`. | Not built |
+| Now | This document. The `observed_shape` schema is binding on anything that later records shapes. | Built — `src/sync/graph/schema.sql:124`, `ObservedShape` in `src/sync/core/models.py` |
+| M1 (with the sandbox the threat model gates on) | The replay tier, feeding the shape store as `source='replay'`. | Built as a verification stage, not as a feeder — `src/sync/verify/replay.py`, between `static_verify` and `push_branch` in `src/sync/remediate/graph.py`. Its `source='replay'` rows reach `RunState` and no further |
 | M2 (signal sources) | Error-payload shapes from Sentry-class sources, `source='error-payload'`. The detector ships here, running on whatever baseline exists, with the sample floor keeping it silent where data is thin. | Built — `src/sync/signals/sentry/shapes.py`, `src/sync/signals/datadog/shapes.py`, and `src/sync/detect/observed_drift.py`, whose `MIN_SAMPLES` is the sample floor |
 | Post-M2, opt-in | The interceptor SDK, only for customers who want unpublished-change detection on live traffic. A separate adoption decision with its own trust conversation. | Not built |
 
-The baseline is empty in practice: `record_observed_shape` has no caller outside the two
-readers, and neither reader is constructed in `src/`, so the detector runs and correctly finds
-nothing. That is the sample floor doing its job rather than a defect.
+The baseline is empty until somebody feeds it. `record_observed_shape` still has no caller
+outside the two readers, and the readers are now constructed — but only by `sync shapes`, which
+reads an export an operator hands it. A deployment that never runs that command has an empty
+baseline and a detector that correctly finds nothing, which is the sample floor doing its job
+rather than a defect. `MIN_SAMPLES` is 30 (`src/sync/detect/observed_drift.py:66`), so one
+export is unlikely to lift a shape over the floor on its own.
 
 Both readers write `source='error-payload'`, which merges their rows rather than sitting them
 side by side. That is the correct key — both samples are drawn from failures and neither corrects

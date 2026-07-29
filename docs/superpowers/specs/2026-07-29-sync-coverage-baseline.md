@@ -128,9 +128,11 @@ guards. Lines 206-210 and 220-223 are aliased imports: `from stripe import X as 
 `import stripe as s`. Lines 308-309 walk a nested dictionary argument. None of that is a
 defensive branch; it is indexing, and it has never run.
 
-The asymmetry makes it concrete. `tests/fixtures/ts/aliased` exists, so the TypeScript adapter's
-alias handling is exercised against a fixture; `tests/fixtures/py/` has no equivalent, so the
-Python adapter's is written and never read. The repair is a fixture, not a redesign.
+The asymmetry that made it concrete has since been closed. `tests/fixtures/py/aliased` now
+exists alongside `tests/fixtures/ts/aliased`, and `tests/test_python_aliases.py` reads it, so
+the Python adapter's alias handling is exercised against a fixture the way the TypeScript
+adapter's is. The repair was a fixture rather than a redesign, as this said it would be, and the
+figures in the tables above predate it.
 
 And the exposure is new. `PythonAdapter` was wired into the pipeline days ago and was
 constructed nowhere before that, so until this week an unmatched Python call site cost nothing.

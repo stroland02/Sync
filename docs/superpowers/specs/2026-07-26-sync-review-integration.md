@@ -209,10 +209,14 @@ lacks is knowledge of what a line depends on, which is the question Sync's exist
 
 ## Sequencing
 
-That gate has passed. M0 merged and `main` carries the whole `src/` tree, so nothing below is
-blocked on the branch it was written against. What still blocks the last two rows is the MCP
-server: `src/sync/mcp/tools.py` is tool logic over a `GraphReader` with no transport, so there is
-no `sync-mcp` process for OCR to start.
+That gate has passed, and so has the one after it. M0 merged and `main` carries the whole `src/`
+tree; the MCP server is no longer the blocker either, because `src/sync/mcp/server.py` speaks
+newline-delimited JSON-RPC over stdio and `pyproject.toml` declares the `sync-mcp` entry point
+OCR's `CommandTransport` starts. The two configuration artifacts and the rule fragment are
+committed under `docs/integrations/opencodereview/` — `config.json`, `rule.json`, and
+`rules/sync-api-surface.md`. What has not happened is the falsification test below: nothing has
+run OCR against a fixture pull request and counted whether the tools are called, so the
+integration is installed and unproven.
 
 | When | What |
 |---|---|

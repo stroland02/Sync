@@ -1,10 +1,15 @@
 # Sync — The Graph Surface
 
 **Date:** 2026-07-25
-**Status:** Approved design. Partly implemented: `src/sync/mcp/tools.py` provides `GraphSurface`
-with the three read tools (`whats_at_risk`, `explain_call_site`, `whats_changed`).
-`sync_propose_patch`, the `sync://feed/{vendor}` resource, `FeedCache`, and any server transport
-are not built — the module is tool logic over a `GraphReader`, not a running MCP server.
+**Status:** Approved design, and the surface described here is built. `src/sync/mcp/tools.py`
+provides `GraphSurface` with all four tools — `whats_at_risk` (line 88), `explain_call_site`
+(134), `whats_changed` (168) and `propose_patch` (193), the last driving the remediation
+pipeline as far as static verification through `src/sync/mcp/propose.py` and stopping there.
+`src/sync/mcp/server.py` is the stdio transport, reached by the `sync-mcp` entry point
+`pyproject.toml` declares; `src/sync/mcp/resources.py` serves `sync://feed/{vendor}` out of
+`FeedCache` (`src/sync/signals/feed/cache.py`). What is still absent is the hosted half: there
+is no SQLite store, so local mode still means Postgres, and `observed` bindings still require
+telemetry nobody sends.
 **Scope:** How the API Dependency Graph is exposed to consumers, given that the binding rather than the repair
 is what Sync sells.
 

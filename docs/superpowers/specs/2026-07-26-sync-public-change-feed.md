@@ -3,9 +3,16 @@
 **Date:** 2026-07-26
 **Status:** Built, unpublished. `src/sync/signals/feed/publisher.py` renders and signs the array;
 `src/sync/signals/feed/consumer.py` verifies before parsing, with `FeedSignatureError` and
-`FeedFormatError` keeping the two failures apart. What does not exist is everything operational
-— no keypair, no committed public key, no hosting, no `FeedCache`. Fills the scope boundary left
-open by `2026-07-25-sync-graph-surface-design.md`.
+`FeedFormatError` keeping the two failures apart. `FeedCache` exists
+(`src/sync/signals/feed/cache.py`) and is the caller that made the signature load-bearing: it
+runs `verify_and_parse` and mutates nothing until both gates pass, and
+`src/sync/mcp/resources.py` serves `sync://feed/{vendor}` out of it. `sync publish-feed` and
+`sync feed-public-key` (`src/sync/cli.py:1253` and `1310`) are the producing side. What does not
+exist is everything operational — no hosting, and no production keypair. The committed key is
+`DEVELOPMENT_FEED_PUBLIC_KEY` in `src/sync/core/keys.py`, which verifies the fixtures under
+`tests/fixtures/feed/` and nothing else; it is named for what it is so that nobody mistakes it
+for the trust anchor a real publication needs. Fills the scope boundary left open by
+`2026-07-25-sync-graph-surface-design.md`.
 **Scope:** What the free, public, cross-vendor API-change feed actually is — schema, hosting, integrity,
 license, and how it is produced. Consumed by `FeedCache` (`2026-07-25-sync-mcp-graph-surface.md`, Task 4), by
 `sync_whats_changed`, and mocked against by the replay tier in `2026-07-26-sync-observed-contract-drift.md`.
@@ -160,7 +167,7 @@ publish job are operational, not architectural, and are out of scope for this do
 | When | What |
 |---|---|
 | M0 (already building this) | The Stripe `VendorAdapter` producing `VendorChange` rows is the feed's entire content for one vendor. Nothing new to build; this document specifies what is done with output that already exists. |
-| Before first publication | Ed25519 keypair generated, public key committed to `sync.core`, `FeedCache.store()` extended with the verification step above. |
+| Before first publication | Ed25519 keypair generated and its public key committed to `sync.core`, replacing the development literal already there. `FeedCache.store()` runs the verification step above and no longer needs extending. |
 | M1 | MCP as a second vendor in the feed, chosen because its measured drift rate makes it a real test of publication cadence rather than Stripe's near-static one. |
 | Ongoing | Republish per adapter run, never on a fixed clock. |
 

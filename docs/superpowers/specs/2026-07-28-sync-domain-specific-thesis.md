@@ -234,7 +234,7 @@ the project, and it is cheap to prototype because the domain is small.
 It is now built and is what tier 0 runs on. `src/sync/route/templates.py` emits the `ast-grep`
 rules and owns the deletion and rename spans; `src/sync/remediate/literal_swap.py`,
 `property_omit.py` and `parameters.py` are the deterministic strategies over it, composed by
-`TieredRemediator` in `src/sync/cli.py:69`. What has not followed is the rest of the claim. `edit_script` is declared on
+`TieredRemediator` in `build_remediator` at `src/sync/cli.py:119`. What has not followed is the rest of the claim. `edit_script` is declared on
 `MigrationOutcome` and no writer populates it, so the column this notation was meant to give a
 type is uniformly null; and the feed's published fields (`FEED_FIELDS` in
 `src/sync/signals/feed/publisher.py`) carry no migration recipe alongside the change.

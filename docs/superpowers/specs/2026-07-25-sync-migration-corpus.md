@@ -1,13 +1,17 @@
 # Sync — The Migration Corpus
 
 **Date:** 2026-07-25
-**Status:** Built, empty. The table is `src/sync/graph/schema.sql:54`, the model is
+**Status:** Built, empty. The table is `src/sync/graph/schema.sql:60`, the model is
 `MigrationOutcome` in `src/sync/core/models.py`, and the remediation graph writes through
 `src/sync/remediate/corpus.py` — including the abandoned attempts, which are the negative class.
-The merge webhook receiver is built — `record_merge_outcome` in `src/sync/forge/webhook.py`
-verifies GitHub's signature, then calls `GraphStore.set_merge_outcome` — and `pr_merged` still
-stays null, because it matches a delivery to a row by `pr_number` and nothing writes that column
-when the pull request opens. No real pipeline run has produced a row yet.
+The merge path is now joined end to end: `open_pr` records the number it opened
+(`src/sync/remediate/nodes.py:571`, `record(state, terminal_status="opened",
+pr_number=pull_request.number)`), and `sync merge-outcome` (`src/sync/cli.py:1150`) hands a
+GitHub delivery to `record_merge_outcome` in `src/sync/forge/webhook.py`, which verifies the
+HMAC signature before parsing and calls `GraphStore.set_merge_outcome`. What still stands
+between that and a merge rate is that nothing listens: the receiver takes bytes somebody else
+collected, deliberately, so a delivery reaches it only when an operator feeds one in. And no
+real pipeline run has produced a row yet.
 **Scope:** What Sync records about every remediation attempt, where each field is captured, and why the record
 is safe to aggregate across customers.
 
@@ -93,7 +97,7 @@ CREATE INDEX ON migration_outcome (vendor_id, change_kind, strategy, tier);
 CREATE INDEX ON migration_outcome (finding_id, attempt_index);
 ```
 
-Four columns above are specified and not built. `src/sync/graph/schema.sql:54` carries neither
+Four columns above are specified and not built. `src/sync/graph/schema.sql:60` carries neither
 `call_site_depth` nor `is_wrapped` from the call-site block, neither `ci_wall_ms` nor
 `pr_closed_unmerged` from the outcome block; `finding_id` is `text` there rather than `uuid`, and
 `terminal_status` is nullable. The second index is absorbed by the natural key

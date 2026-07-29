@@ -1,14 +1,14 @@
 # Sync — The Deprecation Signal
 
 **Date:** 2026-07-28
-**Status:** Built. Every component below exists with tests, and the parameter half runs:
-`src/sync/cli.py` fetches both vendor pages (`DEPRECATION_SOURCES`, line 45), parses the
-parameter table, indexes model literals via `index_operation_literals`, and constructs
-`ParameterDeprecationDetector` in its detector suite (line 409). The model-retirement half does
-not run. `DeprecationAdapter` is the only caller of `parse_deprecation_table` and
-`to_vendor_changes`, and nothing in `src/` constructs a `DeprecationAdapter` — so no
-`ModelDeprecation` becomes a `VendorChange`, and `LiteralSwapRemediator` sits in the cascade
-with nothing to act on. That wiring is the outstanding work.
+**Status:** Built, and both halves run. `src/sync/cli.py` fetches both vendor pages
+(`DEPRECATION_SOURCES`, line 82), parses the parameter table, indexes model literals via
+`index_operation_literals`, and constructs `ParameterDeprecationDetector` in its detector suite
+(line 698). The model-retirement half is now wired too: `_model_deprecations` (line 577)
+constructs a `DeprecationAdapter` per source at line 614 and collects its `VendorChange` rows,
+so a retired model becomes a change `LiteralSwapRemediator` can act on. One vendor failing costs
+that vendor's changes and is printed rather than swallowed, because an empty answer is
+indistinguishable from a healthy vendor with nothing deprecated.
 **Scope:** Vendor deprecation tables as a signal source, and the tier-0 path that repairs them
 without a model call. The first end-to-end feature Sync has that costs nothing per finding.
 
@@ -136,9 +136,8 @@ system refuses to make.
 
 | When | What |
 |---|---|
-| Done | Catalogue, adapter with cache, literal index, migration rules, tier-0 remediator, tiering, `TieredRemediator` in the CLI, parameter deprecations end to end |
-| Next | Construct `DeprecationAdapter` in the CLI, which is what turns a retired model into a `VendorChange` the tier-0 swap can repair |
-| Later | A third vendor, as the next test of whether the parser is still shaped by its first two |
+| Done | Catalogue, adapter with cache, literal index, migration rules, tier-0 remediator, tiering, `TieredRemediator` in the CLI, parameter deprecations end to end, and `DeprecationAdapter` constructed in the CLI — which is what turns a retired model into a `VendorChange` the tier-0 swap can repair |
+| Next | A third vendor, as the next test of whether the parser is still shaped by its first two |
 
 ## Verification
 

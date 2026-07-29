@@ -232,39 +232,52 @@ table.
 The problem statement above describes the state before any tiering existed. All three of its
 parts have since changed, the third only partly.
 
-**A tier cascade runs.** `src/sync/cli.py:69` builds a `TieredRemediator` over
-`LiteralSwapRemediator`, `PropertyOmitRemediator` and `TerminalTier(AgentRemediator())`, and
-`cli.py:541` hands it to `build_graph`. So `patch` no longer calls a full agent loop regardless:
-the deterministic tiers are tried first and the agent is reached only when they decline.
+**A tier cascade runs.** `build_remediator` at `src/sync/cli.py:119` builds a `TieredRemediator`
+over `LiteralSwapRemediator`, `ParameterOmitRemediator`, `ParameterRenameRemediator`,
+`PropertyOmitRemediator` and `TerminalTier(AgentRemediator())`, and `cli.py:867` hands it to
+`build_graph`. So `patch` no longer calls a full agent loop regardless: the deterministic tiers
+are tried first and the agent is reached only when they decline.
 
 **The tier-0 codemods exist.** `src/sync/remediate/literal_swap.py`,
 `src/sync/remediate/property_omit.py` and `src/sync/remediate/parameters.py` are the
 deterministic strategies, built on the rule and span implementations in
 `src/sync/route/templates.py`.
 
-**The decision table drives the routing, and reaches production.**
-`src/sync/remediate/tiered.py` imports `route()` at line 42 and calls it at line 282: the tier
+**The decision table drives the routing, and reaches production twice.**
+`src/sync/remediate/tiered.py` imports `route()` at line 43 and calls it at line 319: the tier
 the table assigns narrows which remediators are eligible, and a tier −1 route raises
-`NoPatchWarranted` so no remediator is consulted at all. Two qualifications bound what that
-is worth today, and each is a separate piece of work.
+`NoPatchWarranted` so no remediator is consulted at all. The table is also consulted a node
+earlier — `_decide_tier` at `src/sync/remediate/nodes.py:72` calls it inside `locate`, which is
+where the table's inputs are established, and stores the tier and the row on `RunState`. The two
+calls cannot disagree while they are given the same inputs, because both go through
+`tiered.routing_facts()`, one pure function; `locate` may be handed no clone, in which case its
+answer is an upper bound on the tier `propose` settles on rather than a contradiction of it.
+Two qualifications bound what that is worth today, and each is a separate piece of work.
 
 `route()` keys on a catalogue record from `run_oasdiff_checks()`, which `TieredRemediator` takes
-as a constructor argument. `src/sync/cli.py:557` loads that catalogue once per run and hands the
+as a constructor argument. `src/sync/cli.py:865` loads that catalogue once per run and hands the
 same object to `build_remediator` and to `build_graph`, so the table has jurisdiction and there
 is one table rather than two that could drift. A tier −1 finding now reaches a report node
 without entering `patch`; before that wiring it ran the patch node three times, spent the whole
 static-attempt budget, and wrote the routing message into `abandon_reason` — the column where
 routing is supposed to learn which change kinds are not mechanically safe.
 
-Even with a catalogue, rows 3 and 4 cannot fire from the default facts. `routing_facts` in
-`tiered.py` can establish `field_resolved` and `value_already_passed` from the one call site it
-is handed; `call_sites_reading_field` is a count across the whole graph and
-`field_passed_as_literal` is not recorded by the indexer at all. Both stay unestablished, and
-the rows that need them decline rather than guess. Tier 0 is therefore unreachable through the
-default, and the two mechanical rows are the entire tier-0 surface.
+Of the two mechanical rows, row 4 now fires and row 3 still cannot. `routing_facts` in
+`tiered.py` establishes three of its four facts: `field_resolved` and `value_already_passed`
+from the one call site it is handed, and `field_passed_as_literal` from the clone, by reading
+the call itself through `sync.route.templates.argument_is_literal_at` — the same file the
+codemod is about to edit, parsed by the same scoping, so router and codemod cannot disagree
+about which call they mean. Every way that reading can fail answers `None` rather than `False`,
+so absent evidence still never reads as permission. `call_sites_reading_field` remains
+unestablishable here: it is a count across the whole graph and `propose` is handed one site with
+no reader for the rest. So the request side of tier 0 is reachable and the response side is not,
+and a response-property removal still costs an agent run.
 
-The row that decided is produced and then dropped. `route()` returns it, `TieredRemediator`
-offers it through an `on_route` callback, and nothing in `src/` passes one —
-`migration_outcome` has no column for it either. So the consequence the Verification section
-names last still stands: `migration_outcome.tier` records which tier ran, not which row selected
-it, and "tier 0 was wrong for this change kind" remains archaeology rather than a query.
+The row that decided is produced, carried one node further than it used to be, and still not
+recorded. `route()` returns it, `locate` puts it on `RunState` as `routing_row`, and the report
+node names it in the reason a tier −1 finding carries (`nodes.py:631`) — which is prose for a
+human, not a column. `TieredRemediator` still offers it through an `on_route` callback that
+nothing in `src/` passes, and `migration_outcome` still has no column for it. So the consequence
+the Verification section names last stands unchanged: `migration_outcome.tier` records which
+tier ran, not which row selected it, and "tier 0 was wrong for this change kind" remains
+archaeology rather than a query.
