@@ -12,24 +12,24 @@ item that cannot say what evidence closes it is not ready to dispatch.
 
 ## Ready
 
-### B47 — Regenerate the Python pairs now the generator is honest
+### B48 — The generator picks operations by a request-side rule, so it cannot see response-only ones
 
-`openbraininstitute/virtual-lab-api` is pinned and indexed. B46 made the generator require identity
-rather than containment, so the two targets that produced mislabelled pairs are now `unreachable`
-rather than wrong. What the corpus does not yet have is an **honest** Python pair.
+`build_corpus_specs.py` selects operations by "the most call sites where at least one passes an
+object argument". That is a **request-side** condition, and it makes any operation whose calls pass
+positional arguments invisible — `args_keys` is empty, so the operation never appears as a
+candidate however many sites it has.
 
-The obstacle is no longer correctness — it is whether that repository contains a call whose result
-is bound directly. Its two candidate operations bind through `list(...auto_paging_iter())`, which is
-exactly what the stricter rule now refuses.
+The corpus's first Python pair had to be written by hand for exactly this reason.
+`GetProductsId` has three call sites, all `client.products.retrieve(cfg.product_id)`, all
+positional. The rule could never have proposed it, and it is the best pair in the corpus — two
+positives, one held-back negative, and a `GET` so there is no request pair to compete with it.
 
-**This may have no answer in that repository**, and finding that out is the task. If no operation in
-it binds a result directly, say so with the counts and the corpus stays at twelve pairs — the
-repository is still worth its pin, because it is the thing that will measure Python the moment a
-qualifying call site exists.
+**The half the rule does not look at is the half that matters for response-side pairs.** Every
+response pair the corpus holds got there because its operation also happened to qualify on the
+request side.
 
-**Closes when:** either a Python pair scores honestly and Python precision and recall are reported
-with their sample sizes, or it is established with evidence that this repository cannot produce one
-and why.
+**Closes when:** the selection rule can propose an operation on response-side evidence alone, and
+the pair that had to be hand-written would have been generated.
 
 ### B7 — The M0 acceptance run has not executed since the pipeline changed underneath it
 
@@ -60,6 +60,25 @@ recorded with which change broke it.
 _Nothing._
 
 ## Done
+
+- **B47 — the corpus measures Python.** `virtual-lab-GetProductsId-response-property-removed`:
+  two labelled positives, both found, no false finding, and one held-back site the detector could
+  have fired on and did not.
+
+  **Every floor moved up**, which is the only direction that needs no argument: precision and
+  recall n=16 to **n=18**, falsifiable negatives 4 to **5**, pairs scored 12 to **13**, symbol map
+  digest unmoved. Byte-identical across two clean databases.
+
+  The question it was sent to answer was whether an honest pair could exist at all. Of 21 call
+  sites, **five** bind a result directly — the other sixteen bind through
+  `list(...auto_paging_iter())`, a comprehension, a `for` header, or nothing, and are correctly
+  unreachable. Three of the five sit on one operation, which is what makes it a *pair* rather than
+  merely a reachable site: two targets and one held back, so it contributes a falsifiable negative
+  rather than only denominators.
+
+  It also had to restate the gate's own tests, which asserted the old floors — the same lesson as
+  the symbol-map re-pin: when a floor moves, everything that records it moves with it. See B48 for
+  why the pair had to be written by hand.
 
 - **B44** — a Python repository is pinned and **none of the pairs it would have produced were
   written**. `openbraininstitute/virtual-lab-api`, Apache-2.0, 563 files, digest validating. Twelve
