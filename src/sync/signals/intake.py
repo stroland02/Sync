@@ -73,11 +73,12 @@ import json
 import tomllib
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Mapping
+from typing import Any, Mapping, Sequence
 
 import yaml
 
 from sync.signals.registry import configured_generated_repos, vendor_sdk_bindings
+from sync.signals.registry_tier.directory import RegistryEntry, versions_after
 
 WATCHED = "watched"
 WATCHABLE = "watchable"
@@ -85,6 +86,11 @@ NOT_WATCHABLE = "not-watchable"
 
 MISSING_SDK_BINDING = "sdk-binding"
 MISSING_REGISTRY_ENTRY = "registry-entry"
+# A public OpenAPI directory knows this API and nothing here reads that directory for it. The
+# third reason is separate from the second because the fix is: `MISSING_REGISTRY_ENTRY` is a line
+# in `generated-vendors.yaml` naming a repository that commits a generator manifest, and this is
+# a tier that reads a directory nobody at the vendor signed.
+MISSING_REGISTRY_TIER = "registry-tier"
 
 NPM = "npm"
 PYPI = "pypi"
@@ -204,6 +210,44 @@ def read_sdk_repositories(path: Path) -> dict[str, SdkRepository]:
         ) from None
 
 
+def read_registry_apis(path: Path) -> dict[str, str]:
+    """Confirmed package-to-directory-entry evidence, from a file somebody probed and wrote down.
+
+    The same shape and the same discipline as `read_sdk_repositories`. The join is never a name
+    resemblance: a directory `api_id` is a domain and a package name is not, `@vercel/sdk`
+    resembles nothing it is generated from, and a package coincidentally sharing an API's name
+    has nothing to do with it. Somebody has to have confirmed the pair, and this file is where
+    that confirmation is recorded so a reader can check it.
+    """
+    entries = yaml.safe_load(path.read_text(encoding="utf-8")) or []
+    if not isinstance(entries, list):
+        raise ValueError(f"{path} does not hold a list of confirmed package-to-API entries")
+    try:
+        return {entry["package"]: entry["api"] for entry in entries}
+    except (KeyError, TypeError) as exc:
+        raise ValueError(f"{path}: every entry needs package and api ({exc})") from None
+
+
+def _registry_index(
+    entries: Sequence[RegistryEntry],
+    apis: Mapping[str, str],
+    moved_since: str | None,
+) -> dict[str, RegistryEntry]:
+    """Package name to the directory entry confirmed for it, filtered to what is still live.
+
+    `moved_since` is optional and strict when given. A directory entry proves a machine-readable
+    contract exists; an entry last touched in 2017 proves one existed once, which is a weaker
+    claim. `versions_after` is what answers that from the one document the tier already holds,
+    which is the whole economy of it -- one watermark, one fetch, and no specification
+    downloaded to find out.
+    """
+    by_api = {entry.api_id: entry for entry in entries}
+    if moved_since is not None:
+        live = {entry.api_id for entry, _ in versions_after(list(entries), moved_since)}
+        by_api = {api_id: entry for api_id, entry in by_api.items() if api_id in live}
+    return {package: by_api[api_id] for package, api_id in apis.items() if api_id in by_api}
+
+
 def _normalised(distribution: str) -> str:
     """A distribution name as PEP 503 compares it. Applied to both sides of a PyPI match."""
     return distribution.strip().lower().replace("_", "-")
@@ -312,6 +356,7 @@ def _classify(
     packages: Mapping[str, str],
     configured_repos: Mapping[str, str],
     generator_manifests: Mapping[str, SdkRepository],
+    registry: Mapping[str, RegistryEntry],
 ) -> Assessment:
     key = _normalised(dependency.name) if dependency.ecosystem == PYPI else dependency.name
 
@@ -326,6 +371,24 @@ def _classify(
 
     evidence = generator_manifests.get(dependency.name) or generator_manifests.get(key)
     if evidence is None:
+        # Checked after the generator tier and never before it. A package a generator serves has
+        # a specification derived from the vendor's own repository, and a directory entry for the
+        # same package is a mirror -- promoting on the weaker evidence first would report the
+        # weaker reason for a dependency that has the stronger one.
+        entry = registry.get(dependency.name) or registry.get(key)
+        if entry is not None:
+            return Assessment(
+                dependency=dependency,
+                category=WATCHABLE,
+                missing=MISSING_REGISTRY_TIER,
+                reason=(
+                    f"a public OpenAPI directory lists {entry.api_id} "
+                    f"(preferred {entry.preferred or 'unstated'}, {len(entry.versions)} version(s)), "
+                    f"so a machine-readable contract is discoverable -- but the directory mirrors "
+                    f"it rather than hosting it, so this is watchable and never a source a pull "
+                    f"request rests on"
+                ),
+            )
         return Assessment(
             dependency=dependency,
             category=NOT_WATCHABLE,
@@ -365,6 +428,9 @@ def assess_repository(
     generator_manifests: Mapping[str, SdkRepository] | None = None,
     bindings: Mapping[str, Mapping[str, Mapping[str, str]]] | None = None,
     configured_repos: Mapping[str, str] | None = None,
+    registry_entries: Sequence[RegistryEntry] = (),
+    registry_apis: Mapping[str, str] | None = None,
+    registry_moved_since: str | None = None,
 ) -> IntakeReport:
     """The three-way split for one repository.
 
@@ -381,8 +447,9 @@ def assess_repository(
     packages = {
         ecosystem: _declared_packages(resolved_bindings, ecosystem) for ecosystem in _BINDING_FIELD
     }
+    registry = _registry_index(registry_entries, registry_apis or {}, registry_moved_since)
     assessments = tuple(
-        _classify(dependency, packages[dependency.ecosystem], resolved_repos, evidence)
+        _classify(dependency, packages[dependency.ecosystem], resolved_repos, evidence, registry)
         for dependency in declared
     )
     return IntakeReport(assessments=assessments, unreadable=unreadable)

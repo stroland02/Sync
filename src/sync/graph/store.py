@@ -298,6 +298,36 @@ class GraphStore:
         ).fetchall()
         return [CallSite(**row) for row in rows]
 
+    def call_site_counts(self, repo_id: str) -> dict[str, int]:
+        """How many indexed call sites reach each vendor, for one repository.
+
+        **One row is one call site, not one dependency.** The count answers how many *places in
+        the code* call a vendor, which differs from how many dependencies a manifest declares
+        whenever one vendor is called from several files -- the normal case, and exactly the case
+        ranking is about.
+
+        **A vendor with no call sites is absent from the result, not present with a zero.** That
+        absence has two causes this query cannot separate: the indexer looked and found nothing,
+        or it never looked because nothing declares which package to look for. A zero would
+        assert the first. Only the intake category tells them apart, the caller holds it and this
+        does not, so the contract stops at absence deliberately rather than resolving it wrongly
+        here. `sync.signals.reachability` is where that resolution happens.
+
+        Scoped to a repository for the reason `observed_calls` is: it is the unit a finding is
+        raised against, and a count that leaked another customer's call sites in would rank the
+        wrong code.
+        """
+        rows = self._connect().execute(
+            """
+            SELECT vendor_id, count(*) AS sites
+              FROM call_site
+             WHERE repo_id = %s
+             GROUP BY vendor_id
+            """,
+            (repo_id,),
+        ).fetchall()
+        return {row["vendor_id"]: row["sites"] for row in rows}
+
     def get_call_site(self, call_site_id: str) -> CallSite:
         row = self._connect().execute(
             "SELECT * FROM call_site WHERE id = %s", (call_site_id,)
