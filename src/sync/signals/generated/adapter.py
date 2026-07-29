@@ -47,6 +47,7 @@ from typing import Callable, Iterable, Mapping
 
 from sync.core import OperationRef, VendorChange
 from sync.signals.generated import symbols as stainless_python
+from sync.signals.generated import symbols_speakeasy as speakeasy_typescript
 from sync.signals.generated import symbols_typescript as stainless_typescript
 from sync.signals.generated.manifest import SpecSource
 from sync.signals.generated.symbols import ExtractedOperation, read_spec_operations
@@ -57,7 +58,8 @@ log = logging.getLogger(__name__)
 Fetch = Callable[[str], str]
 
 EXTRACTORS = {
-    module.GENERATOR: module for module in (stainless_python, stainless_typescript)
+    module.GENERATOR: module
+    for module in (stainless_python, stainless_typescript, speakeasy_typescript)
 }
 """Which rule reads a staged SDK, by the generator and language that emitted it.
 

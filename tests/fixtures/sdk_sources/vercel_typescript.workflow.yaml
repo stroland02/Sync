@@ -1,0 +1,25 @@
+workflowVersion: 1.0.0
+speakeasyVersion: latest
+sources:
+    vercel-OAS:
+        inputs:
+            - location: https://openapi.vercel.sh/
+        overlays:
+            - location: overlay-title.yaml
+        output: vercel-spec.json
+        ruleset: vercelRestAPIRuleset
+        registry:
+            location: registry.speakeasyapi.dev/vercel/vercel-docs/vercel-oas
+targets:
+    vercel:
+        target: typescript
+        source: vercel-OAS
+        publish:
+            npm:
+                token: $npm_token
+        codeSamples:
+            registry:
+                location: registry.speakeasyapi.dev/vercel/vercel-docs/vercel-oas-typescript-code-samples
+            blocking: false
+        testing:
+            enabled: false

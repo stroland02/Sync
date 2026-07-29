@@ -72,3 +72,69 @@ at `sdk-v0.115.0`, and it publishes the same `openapi_spec_hash` and the same
 rather than this README asserting it. `test_both_flavours_were_generated_from_the_same_specification`
 holds it, so bumping either SDK to a tag generated from a different document goes red before a
 coverage number starts being measured against the wrong denominator.
+
+## `vercel_typescript/`
+
+Verbatim source from `vercel/sdk` at tag **v1.28.12**, commit
+`142fa1bd976e91e47468cee500342efe59162bde`, cloned on 2026-07-29. Twenty files, each at its path
+under `src/`:
+
+| file | bytes |
+|---|---|
+| `core.ts` | 460 |
+| `sdk/sdk.ts` | 13,273 |
+| `sdk/aliases.ts` | 4,176 |
+| `sdk/user.ts` | 2,792 |
+| `sdk/webhooks.ts` | 2,160 |
+| `funcs/aliases*.ts` (6 files) | 32,048 |
+| `funcs/user*.ts` (4 files) | 20,148 |
+| `funcs/webhooks*.ts` (4 files) | 20,010 |
+| `funcs/getStorageStoresById.ts` | 4,861 |
+
+Nothing is edited. This is the **Speakeasy** generator rather than Stainless, and the first
+fixture here that is not Stainless.
+
+Three of these files are here for a reason beyond being reachable.
+
+`sdk/sdk.ts` is committed **whole**, with all 41 of its mounts, while only three of the resource
+classes it names are. A mount naming a class this checkout does not contain must simply not be an
+edge — not raise, and not resolve to something else. Truncating `sdk.ts` would have removed the
+only case that holds that.
+
+`core.ts` is 460 bytes and declares `export class VercelCore extends ClientSDK {}` and nothing
+else. Speakeasy gives the client, every resource **and** this class the same base, so the base
+cannot pick the root; the root is the class that mounts another and is not itself mounted, and
+`VercelCore` is what proves the rule is that rather than the base class.
+
+`funcs/getStorageStoresById.ts` backs an operation the client declares on itself rather than on a
+mounted resource — `vercel.getStorageStoresById(...)`, chain length zero. The client declares 11
+such operations and a rule walking only mounts would drop all of them.
+
+As with both Stainless trees, coverage measured against this fixture is a floor rather than the
+SDK's real figure; the un-truncated number is in the task report.
+
+## `vercel_spec_operations.json`
+
+The operation set of the specification `vercel/sdk`'s own manifest names. The URL is the single
+`sources.vercel-OAS.inputs[0].location` in `vercel_typescript.workflow.yaml` —
+`https://openapi.vercel.sh/`, the vendor's own host rather than a generator mirror. Fetched on
+2026-07-29 and reduced to method and path, because the document is 9.8 MB and nothing here reads
+anything else from it.
+
+It holds **359** operations against the SDK's 349 request modules. Unlike the Anthropic pair there
+is no published endpoint count to check that against — a Speakeasy `workflow.yaml` declares its
+inputs and not its size — so what evidences the denominator here is the extraction itself: all 352
+symbols the full checkout yields resolve to routes this document declares, and none is unknown to
+it.
+
+## `vercel_typescript.workflow.yaml`
+
+`vercel/sdk`'s own `.speakeasy/workflow.yaml` at the same tag, committed so the spec URL above is
+read from the SDK's manifest rather than asserted by this README.
+`test_the_specification_fixture_is_the_one_this_sdks_manifest_names` holds it, so moving the
+fixture to a tag generated from a different document goes red before a coverage number starts
+being measured against the wrong denominator.
+
+It reports one overlay, `overlay-title.yaml`. `GeneratedSpecAdapter` diffs a spec with overlays
+anyway and says why; for this cross-check what matters is that a title overlay changes no route,
+which is consistent with the 352 extracted routes all being declared.
