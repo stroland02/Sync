@@ -65,6 +65,28 @@ This is not a hypothetical. `efcc19d fix: include line and col in call_site iden
 same-file collisions` is exactly this bug: an identity that was not unique, so re-derivation
 collided instead of converging.
 
+**One stage does not satisfy this today, and it is a named exemption rather than an oversight.**
+SIGNAL does not converge for oasdiff-derived `vendor_change` rows. `oasdiff breaking` returns a
+different answer on every invocation over the same hash-verified bytes — measured on both 1.26.0
+and the 1.26.1 CI pins — and the difference reaches the rows rather than stopping at a count,
+because `upsert_vendor_change` hashes `raw["text"]` and that is where oasdiff writes the recursive
+property path. Two runs of one version shared 23,674 rows out of 58,906 and 193,934.
+`2026-07-29-oasdiff-determinism.md` has the evidence.
+
+The exemption covers oasdiff-derived changes and nothing else. **INDEX and DETECT are not
+implicated, and neither is the rest of SIGNAL** — the deprecation and MCP sources are ordinary
+derivations and the rule binds them exactly as written. A future stage that fails to converge is
+still a defect; this one is a documented consequence of a third-party binary we pin.
+
+What retires it: `2026-07-29-oasdiff-convergence.md` measured the curve over 24 runs. Operation-
+level coverage converges — 1,174 rows on the first run, unchanged across the 23 that followed,
+with the nesting property holding on every one. The natural-key union does not: 2,135,168 rows
+after 24 runs and still growing. So a union over repeated runs recovers the *coverage* and cannot
+by itself make the *rows* converge, and the fix is that union combined with a natural key that
+does not carry the free-text message. Both halves are needed; either alone leaves this rule
+violated. Until they land, treat oasdiff-derived `vendor_change` as an at-least-once producer and
+do not read a row count from it as a measurement.
+
 Concretely: every table gets a natural key and an explicit conflict clause. The pipeline is a
 set of derived views over vendor artifacts and customer source, and a derived view that
 cannot be recomputed to the same result is not a view — it is an accumulating log wearing a
