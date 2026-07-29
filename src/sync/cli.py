@@ -12,6 +12,7 @@ import tempfile
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Callable, Iterator, Sequence
+from urllib.parse import urlsplit
 
 from langgraph.checkpoint.postgres import PostgresSaver
 
@@ -52,6 +53,7 @@ from sync.signals.deprecations import (
     parameters_to_vendor_changes,
     parse_parameter_deprecations,
 )
+from sync.signals.datadog.shapes import DatadogShapeReader
 from sync.signals.feed import public_key_bytes, render_feed, sign_feed
 from sync.signals.registry import (
     SYMBOL_MAP_FILENAME,
@@ -60,6 +62,7 @@ from sync.signals.registry import (
     load_vendor,
     prepare_vendor,
 )
+from sync.signals.sentry.shapes import SentryShapeReader
 from sync.telemetry import ingest_payload
 
 DEFAULT_DSN = "postgresql://sync:sync@localhost:5433/sync"
@@ -903,6 +906,149 @@ def run(args: argparse.Namespace, today: date | None = None) -> int:
     return 0
 
 
+def _operation_resolver(correlator) -> Callable[[str, str], str | None]:
+    """Turn a request method and a full URL into an operation id, or None.
+
+    The one vendor-shaped step in the whole shape path, and it is delegated whole: the readers
+    take this callable rather than a URL convention because mapping a URL onto an operation is a
+    fact about one vendor's paths, and that knowledge lives in that vendor's adapter.
+
+    Splitting the URL is this function's entire contribution. A reader is handed what the tracker
+    recorded, which is an absolute URL with a query string; `operation_for_request` is given a
+    path, because a template matches segments and a query string is not one.
+    """
+    def resolve(method: str, url: str) -> str | None:
+        operation = correlator.operation_for_request(method, urlsplit(url).path)
+        return operation.operation_id if operation is not None else None
+
+    return resolve
+
+
+def _fold_sentry(store: GraphStore, vendor_id: str, resolve) -> Callable[[Any], int]:
+    """Sentry forwards one event; an export is a list of them.
+
+    Both shapes are accepted here rather than in the reader, because the reader's unit is an
+    event and a list is a fact about how somebody exported a batch. Normalising it there would
+    make the reader responsible for a file format it never sees.
+
+    `spec_enums` is deliberately not supplied, and it is the one argument that could put a value
+    in the baseline. A member listed there is recorded verbatim, which is correct when it came
+    from the vendor's published specification and is a leak when it came from anywhere else --
+    and the payload being read is a captured production response. Wiring it from a specification
+    is a real improvement and it is not this command's to make blind: the safe default is to
+    retain nothing, and that is what an absent mapping does.
+    """
+    reader = SentryShapeReader(store, vendor_id, resolve)
+
+    def fold(payload: Any) -> int:
+        events = payload if isinstance(payload, list) else [payload]
+        return sum(reader.ingest(event) for event in events)
+
+    return fold
+
+
+def _fold_datadog(store: GraphStore, vendor_id: str, resolve) -> Callable[[Any], int]:
+    """Datadog answers a search with a page of records, which its reader already walks."""
+    return DatadogShapeReader(store, vendor_id, resolve).ingest
+
+
+SHAPE_FORMATS: dict[str, Callable[[GraphStore, str, Any], Callable[[Any], int]]] = {
+    "datadog": _fold_datadog,
+    "sentry": _fold_sentry,
+}
+"""Which error-tracker export format a payload is in, and how to fold it.
+
+Adding a third tracker is an entry here. The names are payload formats rather than API vendors,
+which is the distinction the boundary rule turns on: `CLAUDE.md` keeps a vendor's URL
+conventions, `operationId` scheme and SDK naming out of shared code, and none of that is here.
+Which API the payload describes arrives through `--vendor`, is resolved by the registry, and
+reaches the readers only as `_operation_resolver` -- so this file still names no vendor's
+conventions and a Stripe path is still Stripe's adapter's business.
+
+The honest qualification: two tracker names do appear here. They are the observability products
+whose export shapes differ, the same way `--format` on any importer names the formats it reads,
+and there is no arrangement of this table that teaches `cli.py` anything about an API.
+"""
+
+
+def shapes(args: argparse.Namespace) -> int:
+    """Fold captured error-tracker payloads into the observed-shape baseline.
+
+    `ObservedDriftDetector` is the detector the drift specification calls the most valuable one
+    Sync has, because it needs neither a vendor to publish nor a failure to have happened -- it
+    fires on shape divergence alone. It has always found nothing, and the reason was not the
+    sample floor: `SentryShapeReader` and `DatadogShapeReader` both write `observed_shape` and
+    neither was ever constructed, so the baseline had no writer at all.
+
+    This reads payloads somebody else exported -- a file, or stdin -- and is not a server. The
+    refusal of ingestion infrastructure stands: a listener needs a port, a supervisor and an
+    authentication story, none of which makes an observation mean more once it lands. A
+    deployment wanting live data exports it and feeds it in, which is an operational choice.
+
+    Nothing about the payload is retained beyond what the readers return. They record paths,
+    types and nullability, and the sole value they keep is an enum member the vendor published;
+    everything else is discarded at the observation boundary. So this function does not log a
+    payload, does not write one to the cache, and does not report a count per field -- an error
+    payload is a captured production response, and it is the most customer-sensitive input Sync
+    touches.
+
+    Re-ingesting the same export converges on the same rows and adds to `sample_count`, which is
+    the natural key's intent: the counter is evidence that a shape recurs, and two identical
+    bodies from two different responses are two real observations. The store cannot tell those
+    from one export fed twice, so feeding one twice inflates the floor the detector depends on.
+    That is an operator error this command cannot detect -- separating them needs a payload
+    identity the table has no column for.
+    """
+    cache = Path(args.cache)
+    symbol_map_path = cache / SYMBOL_MAP_FILENAME
+    if not symbol_map_path.exists():
+        print(
+            f"no symbol map at {symbol_map_path}; run `sync run` against this cache first",
+            file=sys.stderr,
+        )
+        return 2
+
+    fold_for = SHAPE_FORMATS.get(args.format)
+    if fold_for is None:
+        print(
+            f"no reader for format '{args.format}'; available: {', '.join(sorted(SHAPE_FORMATS))}",
+            file=sys.stderr,
+        )
+        return 2
+
+    vendor = load_vendor(args.vendor, VendorContext(
+        cache_dir=cache, from_version="", to_version="",
+    ))
+    if not isinstance(vendor, RequestCorrelator):
+        print(
+            f"the {args.vendor} adapter cannot correlate an observed request to an operation, "
+            f"so these payloads have nothing to be folded against",
+            file=sys.stderr,
+        )
+        return 2
+
+    try:
+        if args.payload == "-":
+            payload = json.load(sys.stdin)
+        else:
+            payload = json.loads(Path(args.payload).read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        # A payload that cannot be read and a vendor that sent nothing are different facts, and
+        # reporting the first as zero rows would read as a quiet vendor.
+        print(f"could not read {args.payload}: {type(exc).__name__}: {exc}", file=sys.stderr)
+        return 2
+
+    store = GraphStore(args.dsn)
+    store.apply_schema()
+
+    written = fold_for(store, args.vendor, _operation_resolver(vendor))(payload)
+    # The count of rows, and nothing about what was in them. A payload that resolved to no
+    # operation writes nothing and is not an error: most requests in a customer's error tracker
+    # are not this vendor's.
+    print(f"{written} shape observation(s) recorded from {args.format}")
+    return 0
+
+
 def ingest(args: argparse.Namespace) -> int:
     """Fold one captured OTLP/JSON export payload into `observed_call`.
 
@@ -1234,6 +1380,22 @@ def main() -> int:
     ingest_parser.add_argument("--cache", default=".cache/specs",
                                help="where a previous `sync run` left symbols.json")
     ingest_parser.set_defaults(func=ingest)
+
+    shapes_parser = sub.add_parser(
+        "shapes", help="fold captured error-tracker payloads into the observed-shape baseline"
+    )
+    shapes_parser.add_argument("--vendor", default="stripe", choices=available_vendors())
+    # Choices read from the table rather than restated, so a tracker added there is offered here
+    # without a second edit -- and a reader registered and unreachable is the defect this
+    # command exists to close, not one to reintroduce at the parser.
+    shapes_parser.add_argument("--format", default="sentry", choices=sorted(SHAPE_FORMATS),
+                               help="which error tracker exported this payload")
+    shapes_parser.add_argument("--payload", required=True,
+                               help="path to an exported payload, or - for stdin")
+    shapes_parser.add_argument("--dsn", default=DEFAULT_DSN)
+    shapes_parser.add_argument("--cache", default=".cache/specs",
+                               help="where a previous `sync run` left symbols.json")
+    shapes_parser.set_defaults(func=shapes)
 
     merge_parser = sub.add_parser(
         "merge-outcome",
