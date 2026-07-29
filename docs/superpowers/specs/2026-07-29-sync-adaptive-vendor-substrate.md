@@ -279,21 +279,30 @@ facts fall out of the generator having written things down for its own reproduci
 **But "free" was an overclaim, and checking three generators disproved it.** The mapping is
 present in all three and stated differently in each:
 
-| Generator | Example | HTTP verb | Path |
+| Generator and language | Example | HTTP verb | Path |
 |---|---|---|---|
-| Stripe's own | `stripe-node` | `_makeRequest('GET', …)` — first argument | `'/v1/charges'` — plain string, second argument |
-| Stainless | `openai-node` | the method name itself: `this._client.get(…)` | `` path`/models/${model}` `` — tagged template |
-| Speakeasy | `vercel/sdk` | `method: "POST"` — object property | `pathToFunc("/v11/projects")()` — helper call |
+| Stripe's own, TypeScript | `stripe-node` | `_makeRequest('GET', …)` — first argument | `'/v1/charges'` — plain string, second argument |
+| Stainless, **TypeScript** | `openai-node` | the method name itself: `this._client.get(…)` | `` path`/models/${model}` `` — tagged template |
+| Stainless, **Python** | `openai-python` | which helper is called: `self._get` / `self._post` / … | first argument of that call: a plain literal, or `path_template(…)` |
+| Speakeasy, TypeScript | `vercel/sdk` | `method: "POST"` — object property | `pathToFunc("/v11/projects")()` — helper call |
 
 All three are mechanically extractable and none of them is extractable by the *same* rule. An
 extractor written against `stripe-node` finds nothing in `openai-node`, because Stainless puts
 the verb in the method name and the path inside a tagged template.
 
-So the cost does not vanish, it changes what it scales with. **One extraction rule per generator,
-serving every vendor that generator produces** — and there are a handful of generators against
-hundreds of vendors. That is the same argument tier 0 already makes for specifications, and it is
-strong enough without being overstated: not free, but paid once per generator rather than once
-per vendor.
+**The unit is generator × language, not generator.** That correction came from the worker
+building the first extractor, against my table above, and it is the second time this claim has
+had to be narrowed. Stainless emits Python and TypeScript differently — Python writes the path
+as a positional literal or `path_template(…)`, TypeScript writes it as a tagged template — so a
+rule claiming to cover both would be guessing about whichever flavour it had not seen. Adding
+`stainless-typescript` to a working `stainless-python` extractor is a second module of comparable
+size, not a branch inside the first.
+
+So the cost does not vanish, and it scales with generator × language rather than with generator:
+call it a handful of generators times the two or three languages that matter, against hundreds of
+vendors. That is still the argument tier 0 makes for specifications and it is still strong — but
+the honest multiplier is a small number times another small number, not one rule per generator,
+and I have now overstated this twice.
 
 Two consequences worth stating plainly. A hand-written SDK has no generator rule to write, and
 falls back to measured coverage with a stated denominator like any tier 2 vendor. And an
