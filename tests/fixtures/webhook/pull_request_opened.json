@@ -1,0 +1,14 @@
+{
+  "action": "opened",
+  "number": 41,
+  "pull_request": {
+    "number": 41,
+    "merged": false,
+    "state": "open",
+    "title": "Remove receipt_email from PostPaymentIntents",
+    "html_url": "https://github.com/example/repo/pull/41"
+  },
+  "repository": {
+    "full_name": "example/repo"
+  }
+}

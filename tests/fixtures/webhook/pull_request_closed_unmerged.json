@@ -1,0 +1,14 @@
+{
+  "action": "closed",
+  "number": 42,
+  "pull_request": {
+    "number": 42,
+    "merged": false,
+    "state": "closed",
+    "title": "Remove receipt_email from PostCharges",
+    "html_url": "https://github.com/example/repo/pull/42"
+  },
+  "repository": {
+    "full_name": "example/repo"
+  }
+}

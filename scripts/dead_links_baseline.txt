@@ -13,10 +13,6 @@
 #
 # Format: <path from the repository root>:<qualname>
 
-# The merge webhook receiver. It verifies a signature and updates the corpus, and no process
-# mounts it -- there is no HTTP framework here by design. It leaves when something serves it.
-src/sync/forge/webhook.py:record_merge_outcome
-
 # Adapters and readers that are built and not constructed anywhere. Each leaves when `cli.py`
 # builds it. The deprecation adapter, both shape readers' `ingest`, and `PythonAdapter` left
 # this way; the reader classes stay because `cli.py` reaches their methods without naming the
