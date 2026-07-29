@@ -1,0 +1,6 @@
+[project]
+name = "mixed-dependency-array"
+version = "0.1.0"
+# Valid TOML, and TOML arrays are heterogeneous -- so a requirement list can hold something that
+# is not a requirement string. The file parses; only the entry is wrong.
+dependencies = ["stripe>=12.0.0", 12, true]

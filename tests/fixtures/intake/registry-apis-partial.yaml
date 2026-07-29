@@ -1,0 +1,4 @@
+# An entry somebody started and did not finish. It must raise rather than be skipped, because a
+# deployment that wrote evidence down and silently got none reports a smaller middle category
+# and no fault.
+- package: acme-sdk

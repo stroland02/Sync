@@ -1,0 +1,4 @@
+{
+  "name": "generated-by-something-that-emits-arrays",
+  "dependencies": ["stripe", "twilio"]
+}

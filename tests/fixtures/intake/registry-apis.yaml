@@ -1,0 +1,7 @@
+# Confirmed package-to-directory-entry evidence. The join is never a name resemblance: an
+# `api_id` is a domain and a package name is not, so somebody has to have confirmed the pair and
+# this file is where that confirmation is recorded.
+- package: acme-sdk
+  api: acme.com
+- package: ancient-sdk
+  api: ancient.com
