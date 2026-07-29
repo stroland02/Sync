@@ -129,12 +129,24 @@ def route_after_locate(state: RunState) -> str:
 
 
 def make_prepare(adapter):
+    # Whether this adapter can verify a patch, read once from the adapter rather than per run.
+    # An adapter that declares nothing verifies: that leaves every existing one unchanged and
+    # needs no widening of `LanguageAdapter`, and it is the safe default, because an adapter
+    # wrongly assumed to verify still meets a real gate at `static_verify` while one wrongly
+    # assumed not to would silently stop repairing a language Sync can repair.
+    gap = str(getattr(adapter, "unverifiable_reason", "") or "")
+
     def prepare(state: RunState) -> RunState:
         try:
             adapter.prepare(state["repo"])
         except Exception as exc:
             return {"prepare_ok": False, "diagnostics": _describe(exc)}
-        return {"prepare_ok": True, "diagnostics": ""}
+        return {
+            "prepare_ok": True,
+            "diagnostics": "",
+            "verifiable": not gap,
+            "verify_gap": gap,
+        }
 
     return prepare
 
@@ -158,6 +170,17 @@ def route_after_prepare(state: RunState) -> str:
     if not state.get("prepare_ok", True):
         return "abandon"
     if state.get("tier") == NO_PATCH:
+        return "report"
+    # A language whose adapter cannot verify reaches the same node, for a different reason and
+    # in second place. Tier -1 is the truer statement where both hold: it says no edit anywhere
+    # resolves this change, which outranks Sync being unable to check one here.
+    #
+    # Reported rather than abandoned, and reported rather than dropped. The finding is real --
+    # a Python repository calling a changed vendor operation is a genuine break -- and the only
+    # thing Sync cannot do is verify a repair, which is a fact about Sync's coverage and not
+    # about the change. Sending it to `patch` would spend the whole static-attempt budget and
+    # an agent run per attempt on a verdict knowable before the first token.
+    if not state.get("verifiable", True):
         return "report"
     return "patch"
 
@@ -577,15 +600,22 @@ def make_report():
 
     def report(state: RunState) -> RunState:
         change = state["change"]
-        row = state.get("routing_row") or "unrouted"
-        return {
-            "outcome": "reported",
-            "report_reason": (
+        gap = state.get("verify_gap", "")
+        if gap and state.get("tier") != NO_PATCH:
+            # The other reason a run knows not to try. It names the operation, because a
+            # report saying only "this language cannot be verified" tells a reader nothing
+            # about what is broken -- and the finding is the point.
+            reason = (
+                f"{change.kind} on {change.operation_id} is not repaired here: {gap}. "
+                "The finding stands; the repair does not."
+            )
+        else:
+            row = state.get("routing_row") or "unrouted"
+            reason = (
                 f"no patch is warranted for {change.kind} on {change.operation_id}: "
                 f"routed to tier {NO_PATCH} by row '{row}'"
-            ),
-            "pr_url": None,
-        }
+            )
+        return {"outcome": "reported", "report_reason": reason, "pr_url": None}
 
     return report
 
