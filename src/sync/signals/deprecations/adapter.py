@@ -115,12 +115,17 @@ class DeprecationAdapter:
         """What the literal indexer should look for in customer source."""
         return self._source.prefixes
 
-    def operation_for_symbol(self, symbol: str) -> OperationRef | None:
+    def operation_for_symbol(
+        self, symbol: str, *, language: str | None = None
+    ) -> OperationRef | None:
         """Always `None`: a model id is not an SDK symbol.
 
         Fabricating an `OperationRef` would mean inventing an HTTP method and path a model does
         not have. The binding for this signal comes from the literal indexer, which produces
         `operation_id` directly and needs no symbol map.
+        
+        `language` is accepted and ignored: this adapter returns None for every symbol, so
+        there is no spelling for a language to disambiguate.
         """
         return None
 

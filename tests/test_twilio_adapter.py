@@ -390,3 +390,26 @@ def test_the_enum_noise_filter_is_applied_to_twilio_too():
     kinds = {change.kind for change in adapter.fetch_changes("2.1.0", "2.3.0")}
 
     assert "response-property-enum-value-added" not in kinds
+
+
+def test_a_node_spelling_resolves_only_when_the_language_says_node(tmp_path):
+    """`twilio-python` exposes `call_summaries`; `twilio-node` exposes `callSummaries`. Same
+    vendor, same operation, two spellings.
+
+    Every key this map produces is snake_case, so a call site indexed from TypeScript could
+    never resolve against it. Resolution failure is silent -- it yields no finding -- so a
+    polyglot repository lost those bindings with nothing saying so. The fix is to tell
+    `operation_for_symbol` which language it is resolving for rather than have it guess from
+    the string: a spelling that is right for one SDK must be wrong for the other, in both
+    directions, or the map is just accepting anything.
+    """
+    adapter = TwilioAdapter(
+        spec_dir=FIXTURES, symbol_map_path=_written_map(tmp_path), documents=(INSIGHTS_V1,)
+    )
+    python_symbol = "twilio.insights.v1.call_summaries.list"
+    node_symbol = "twilio.insights.v1.callSummaries.list"
+
+    assert adapter.operation_for_symbol(python_symbol, language="python") is not None
+    assert adapter.operation_for_symbol(node_symbol, language="typescript") is not None
+    assert adapter.operation_for_symbol(node_symbol, language="python") is None
+    assert adapter.operation_for_symbol(python_symbol, language="typescript") is None

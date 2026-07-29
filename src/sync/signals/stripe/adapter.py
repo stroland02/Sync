@@ -131,7 +131,9 @@ class StripeAdapter:
         records = [r for r in run_oasdiff_breaking(base, revision) if r.get("id") not in NOISE_KINDS]
         return to_vendor_changes(records, self.vendor_id, from_version, to_version)
 
-    def operation_for_symbol(self, symbol: str) -> OperationRef | None:
+    def operation_for_symbol(
+        self, symbol: str, *, language: str | None = None
+    ) -> OperationRef | None:
         entry = self._symbols.get(symbol)
         if entry is None:
             return None
@@ -156,6 +158,11 @@ class StripeAdapter:
 
         None rather than a guess. A missing binding is visibly unresolved and can be counted; a
         wrong one produces a finding against code that never made the call.
+        
+        `language` is accepted and ignored: this map's keys are `stripe.<resource>.<method>`,
+        and `stripe-node` and `stripe-python` agree on both segments for every operation the
+        map holds. Twilio is where the two SDKs disagree and where the parameter earns its
+        place; ignoring it here is a statement about Stripe rather than about the protocol.
         """
         request = _segments(path)
         candidates = self._routes.get((http_method.lower(), len(request)), ())

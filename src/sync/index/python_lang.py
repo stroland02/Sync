@@ -398,7 +398,7 @@ class PythonAdapter:
                     continue
 
                 symbol = f"{_SDK_PACKAGE}.{'.'.join(chain[1:])}"
-                operation = self._vendor.operation_for_symbol(symbol)
+                operation = self._vendor.operation_for_symbol(symbol, language=self.language_id)
                 if operation is None:
                     continue
 

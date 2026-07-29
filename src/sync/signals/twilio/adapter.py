@@ -24,12 +24,17 @@ and not an adapter's business. This adapter reads a directory that something els
 from __future__ import annotations
 
 import json
+import re
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable, Sequence
 
 from sync.core import OperationRef, VendorChange
 from sync.signals.oasdiff import run_oasdiff_breaking, to_vendor_changes
+
+# A camelCase boundary: the lowercase-then-uppercase seam `twilio-node` puts between the
+# words of a mount that `twilio-python` separates with an underscore.
+_CAMEL_BOUNDARY = re.compile(r"(?<=[a-z0-9])[A-Z]")
 
 PRODUCT_DOCUMENT_KEY = "sync_product_document"
 """Where a row records which of the vendor's 61 documents produced it.
@@ -67,6 +72,26 @@ class ProductDocument:
     filename: str
     domain: str
     version: str
+
+
+def _spelled(symbol: str, language: str | None) -> str | None:
+    """`symbol` as the map spells it, or None when it is not that language's spelling.
+
+    Only the mount chain differs between the two SDKs -- vendor, domain, version and method
+    segments are identical -- so this rewrites the middle rather than re-deriving the symbol.
+
+    A symbol that is not spelled the way the named language spells it returns None rather
+    than being rewritten into a match. `call_summaries` under `typescript` is not a
+    `twilio-node` call site with unusual punctuation; it is a Python call site that arrived
+    with the wrong language, and resolving it would bind a finding to code in a file that
+    does not contain that call. Refusing keeps the failure countable, which is the property
+    the whole symbol map is built to preserve.
+    """
+    if language != "typescript":
+        return symbol
+    if "_" in symbol:
+        return None
+    return _CAMEL_BOUNDARY.sub(lambda m: "_" + m.group(0).lower(), symbol)
 
 
 class TwilioAdapter:
@@ -110,14 +135,27 @@ class TwilioAdapter:
 
         return changes
 
-    def operation_for_symbol(self, symbol: str) -> OperationRef | None:
+    def operation_for_symbol(
+        self, symbol: str, *, language: str | None = None
+    ) -> OperationRef | None:
         """The operation an SDK call site addressed, or None if the map cannot place it.
 
         None rather than a guess, for the reason the Stripe adapter gives: an unresolved
         symbol is visibly unresolved and can be counted, where a wrong one produces a
         finding against code that never made the call.
+
+        `language` is which SDK the call site was written against, and it is not optional
+        in practice for this vendor. The map is derived in snake_case, which is what
+        `twilio-python` exposes; `twilio-node` spells the same mounts in camelCase. Without
+        the language every TypeScript call site fails to resolve, and fails silently, so a
+        polyglot repository loses those bindings with nothing recording the loss.
+
+        An unknown language resolves against the derived spelling rather than refusing: a
+        third SDK we have not characterised is better served by a lookup that may miss than
+        by one that cannot succeed.
         """
-        entry = self._symbols.get(symbol)
+        spelled = _spelled(symbol, language)
+        entry = None if spelled is None else self._symbols.get(spelled)
         if entry is None:
             return None
         return OperationRef(
