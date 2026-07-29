@@ -73,6 +73,27 @@ def _path(segments: Iterable[str]) -> str:
     return ".".join(segments)
 
 
+def _same(left: Node | None, right: Node | None) -> bool:
+    """Whether two handles address one node. tree-sitter hands back a fresh object per access,
+    so identity is the span rather than the reference."""
+    if left is None or right is None:
+        return False
+    return left.start_byte == right.start_byte and left.end_byte == right.end_byte
+
+
+# Expressions a call's result passes through while still being what a name receives. Anything
+# else between the call and the binding -- an argument list, an operand, a template -- means the
+# name holds something computed from the result rather than the result.
+_RESULT_WRAPPERS = {
+    "await_expression",
+    "parenthesized_expression",
+    "non_null_expression",
+    "as_expression",
+    "satisfies_expression",
+    "type_assertion",
+}
+
+
 # Loop constructs in the grammar. `for_in_statement` covers both `for...in` and `for...of`;
 # tree-sitter does not distinguish them and neither does the count.
 _LOOP_TYPES = {
@@ -354,15 +375,49 @@ class TypeScriptAdapter:
             current = current.parent
         return root
 
+    def _result_target(self, call_node: Node) -> Node | None:
+        """The name or pattern this call's result is bound to, or None if it is not bound.
+
+        Two binding forms and the declaration is only the more obvious one.
+        `intent = await client.paymentIntents.create(...)` gives the result a
+        name to be read through exactly as `const intent = ...` does, and
+        answering nothing for it meant no response-side change could ever be
+        detected against such a call — a missed break, which is the expensive
+        direction. It was invisible until `sync.benchmark.mutate` learned the
+        same form, because a generator blind in the same place cannot produce
+        the case that exposes it.
+
+        The walk stops at anything that is not a transparent wrapper, which is
+        what keeps the widening from costing precision. `const charge =
+        wrap(await client.charges.create(...))` binds `wrap`'s return value,
+        so the fields read off `charge` describe whatever `wrap` produced;
+        crediting them here would claim a dependency on fields the vendor's
+        response need not carry, and turn a missed break into a false finding.
+        """
+        current = call_node
+        parent = current.parent
+        while parent is not None:
+            if parent.type == "variable_declarator":
+                value = parent.child_by_field_name("value")
+                return parent.child_by_field_name("name") if _same(value, current) else None
+            if parent.type == "assignment_expression":
+                right = parent.child_by_field_name("right")
+                return parent.child_by_field_name("left") if _same(right, current) else None
+            if parent.type not in _RESULT_WRAPPERS:
+                return None
+            current, parent = parent, parent.parent
+        return None
+
     def _response_fields(self, call_node: Node, source: bytes, root: Node) -> list[str]:
         """Field paths read off the call's result.
 
-        Finds the variable — or destructuring pattern — the call is assigned
-        to. For a destructured result, the pattern itself names the fields
-        read. For a plain variable, collects every member chain rooted at it,
-        searching only the call's enclosing function: two unrelated calls
-        that happen to share a generic result name (`result`, `data`) in
-        different functions must not merge into one dependency set.
+        Finds the variable — or destructuring pattern — the call's result is
+        bound to, by declaration or by assignment. For a destructured result,
+        the pattern itself names the fields read. For a plain variable,
+        collects every member chain rooted at it, searching only the call's
+        enclosing function: two unrelated calls that happen to share a generic
+        result name (`result`, `data`) in different functions must not merge
+        into one dependency set.
 
         The whole chain is recorded, not its first hop. `result.a.b` reads a
         path two deep, and a vendor change two deep can only be matched by a
@@ -374,16 +429,11 @@ class TypeScriptAdapter:
         contributes `data` and stops. That is a shorter path, never a wrong
         one, and it stops exactly where oasdiff writes an `items` segment.
         """
-        declarator = call_node
-        while declarator is not None and declarator.type != "variable_declarator":
-            declarator = declarator.parent
-        if declarator is None:
-            return []
-        name_node = declarator.child_by_field_name("name")
+        name_node = self._result_target(call_node)
         if name_node is None:
             return []
 
-        if name_node.type == "object_pattern":
+        if name_node.type in ("object_pattern", "object"):
             return sorted(self._destructured_fields(name_node, source))
         if name_node.type != "identifier":
             return []
