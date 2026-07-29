@@ -1,0 +1,3 @@
+[project]
+name = "client-forms"
+dependencies = ["stripe>=12.0.0"]

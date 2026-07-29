@@ -111,6 +111,12 @@ def _same(left: Node | None, right: Node | None) -> bool:
 # own return value is what the name gets.
 _RESULT_WRAPPERS = {"await", "parenthesized_expression"}
 
+# How many leading segments of a call chain may name the client. One for `client.charges.create`
+# and two for `self.client.charges.create`; nothing here binds a deeper root, because the only
+# two-segment form is `self.<attribute>` and a third segment would have to be an object this
+# walk cannot follow to its own construction.
+_MAX_CLIENT_SEGMENTS = 2
+
 # Nodes that bind a value to a name, as the field holding the name and the field holding the
 # value. Both are checked the same way -- the name receives this call only when the value field
 # *is* this call -- which is what keeps `dict(create(...))` uncredited in either spelling.
@@ -280,18 +286,25 @@ class PythonAdapter:
             source = file_path.read_bytes()
             tree = parser.parse(source)
             imported: set[str] = set()
+            # Names bound to the vendor's module in this file, kept apart from `names` because
+            # only these may stand to the left of a constructor. `names` also accumulates client
+            # variables, and allowing one of those as the object would make every call on a
+            # client a candidate constructor for another.
+            modules: set[str] = set()
 
             for node in _walk(tree.root_node):
                 if node.type == "import_statement":
                     for child in node.named_children:
                         if child.type == "dotted_name" and _text(child, source) == self._module:
                             names.add(self._module)
+                            modules.add(self._module)
                         elif child.type == "aliased_import":
                             original = child.child_by_field_name("name")
                             alias = child.child_by_field_name("alias")
                             if original is not None and alias is not None:
                                 if _text(original, source) == self._module:
                                     names.add(_text(alias, source))
+                                    modules.add(_text(alias, source))
                 elif node.type == "import_from_statement":
                     module = node.child_by_field_name("module_name")
                     if module is None or _text(module, source).split(".")[0] != self._module:
@@ -311,15 +324,85 @@ class PythonAdapter:
                     continue
                 left = node.child_by_field_name("left")
                 right = node.child_by_field_name("right")
-                if left is None or right is None or left.type != "identifier":
+                if left is None or right is None or right.type != "call":
                     continue
-                if right.type != "call":
+                if not self._constructs_client(right, source, imported, modules):
                     continue
-                function = right.child_by_field_name("function")
-                if function is not None and _text(function, source) in imported:
-                    names.add(_text(left, source))
+                bound = self._bound_name(left, source)
+                if bound is not None:
+                    names.add(bound)
 
         return names
+
+    def _constructs_client(self, call: Node, source: bytes, imported: set[str],
+                           modules: set[str]) -> bool:
+        """Whether this call builds the vendor's client.
+
+        Two spellings and the second is the one Stripe's own documentation uses.
+        `StripeClient(...)` names something imported from the vendor's module, which is the form
+        that already worked. `stripe.StripeClient(...)` reaches the same class through the module,
+        and bound nothing -- one rule away, and worth eleven of the seventeen repositories the
+        coverage measurement indexed.
+
+        **The object is what is checked, never the attribute.** `notstripe.StripeClient(...)`
+        spells the vendor's class name on somebody else's module, and matching the attribute
+        would bind it: every call on that object would then be attributed to a vendor it never
+        reached, which is a false attribution introduced at the binding step rather than at the
+        field step and is worse there -- a wrongly bound call site produces findings against code
+        that never called the vendor at all.
+        """
+        function = call.child_by_field_name("function")
+        if function is None:
+            return False
+        if function.type == "identifier":
+            return _text(function, source) in imported
+        if function.type == "attribute":
+            obj = function.child_by_field_name("object")
+            return obj is not None and obj.type == "identifier" and _text(obj, source) in modules
+        return False
+
+    def _bound_name(self, left: Node, source: bytes) -> str | None:
+        """The client root an assignment target introduces, dotted where it has to be.
+
+        A plain name is one segment. `self.client = ...` is two, and it is recorded as the whole
+        `self.client` rather than as `client`: the call sites that use it are written
+        `self.client.charges.create(...)`, so the root has to match what the chain actually
+        spells. Recording the attribute alone would also bind every unrelated `client.x.y()` in
+        the repository, which is the loose rule this module must not acquire.
+
+        Only `self`. An attribute of anything else -- `config.client = ...` -- names an object
+        this walk cannot follow to its call sites, and a rule matching any attribute target would
+        bind on the attribute name alone.
+        """
+        if left.type == "identifier":
+            return _text(left, source)
+        if left.type != "attribute":
+            return None
+        obj = left.child_by_field_name("object")
+        attribute = left.child_by_field_name("attribute")
+        if obj is None or attribute is None or obj.type != "identifier":
+            return None
+        if _text(obj, source) != "self":
+            return None
+        return f"self.{_text(attribute, source)}"
+
+    def _after_client(self, chain: list[str], clients: set[str]) -> list[str] | None:
+        """What a call chain says once its client root is taken off, or None if it has none.
+
+        A root is one segment for `client.charges.create` and two for
+        `self.client.charges.create`, so the match is over prefixes rather than over `chain[0]`.
+        The longest is taken first: a repository binding both `client` and `self.client` must
+        read the second as the client it is, not as the first followed by an attribute nobody
+        named.
+
+        At least two segments have to survive. One is a call on the client itself rather than on
+        a resource -- `client.close()` names no operation -- and this is the same floor the
+        single-segment root enforced as `len(chain) < 3`.
+        """
+        for size in range(min(len(chain) - 2, _MAX_CLIENT_SEGMENTS), 0, -1):
+            if ".".join(chain[:size]) in clients:
+                return chain[size:]
+        return None
 
     def _attribute_chain(self, node: Node, source: bytes) -> list[str] | None:
         """Flatten `a.b.c` into ['a', 'b', 'c']; return None for anything else."""
@@ -530,10 +613,13 @@ class PythonAdapter:
                 if function_node is None or function_node.type != "attribute":
                     continue
                 chain = self._attribute_chain(function_node, source)
-                if chain is None or len(chain) < 3 or chain[0] not in clients:
+                if chain is None:
+                    continue
+                rest = self._after_client(chain, clients)
+                if rest is None:
                     continue
 
-                symbol = f"{self._symbol_root}.{'.'.join(chain[1:])}"
+                symbol = f"{self._symbol_root}.{'.'.join(rest)}"
                 operation = self._vendor.operation_for_symbol(symbol, language=self.language_id)
                 if operation is None:
                     continue
