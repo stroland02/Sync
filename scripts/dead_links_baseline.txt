@@ -30,6 +30,15 @@ src/sync/signals/sentry/shapes.py:SentryShapeReader
 # architecture on purpose -- the keypair and the job are operational. `public_key_bytes` is how
 # the committed development key in `sync.core.keys` was derived, once, in a process that kept
 # no private half. These leave when something in this tree publishes.
+
+# The MCP server adapter, unreachable for a reason the registry cannot currently express.
+# `_BUILDERS` maps one vendor id to one builder, which suits a vendor that publishes one API.
+# MCP is a protocol, not a vendor: every server watched is a separate catalogue, so an entry
+# keyed `mcp` would have to name one server and would be the vendor knowledge that module exists
+# to keep out. Wiring it needs a decision about how a deployment declares which servers it
+# watches -- the configured `generated-vendors.yaml` path is the closest existing shape. It
+# leaves when that decision is made.
+src/sync/signals/mcp_server/adapter.py:McpServerAdapter
 src/sync/signals/feed/publisher.py:render_feed
 src/sync/signals/feed/publisher.py:sign_feed
 src/sync/signals/feed/publisher.py:public_key_bytes

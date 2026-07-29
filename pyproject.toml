@@ -13,6 +13,11 @@ dependencies = [
     "cryptography>=49.0.0",
     "langgraph>=1.2.9",
     "langgraph-checkpoint-postgres>=3.1.0",
+    # The reference models for the MCP wire format, used to parse a watched server's
+    # `tools/list` capture. Present transitively via claude-agent-sdk today; declared here
+    # because sync.signals.mcp_server imports it directly and a transitive dep can vanish in a
+    # bump. Note this is not what `sync.mcp` uses -- that serves the protocol by hand.
+    "mcp>=1.28.1",
     "psycopg[binary]>=3.3.4",
     "pydantic>=2.13.4",
     # Generated-SDK manifests are YAML. Present transitively via langchain-core today; declared
