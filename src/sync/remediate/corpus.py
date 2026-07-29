@@ -213,9 +213,23 @@ def make_recorder(store: CorpusWriter):
             f"axis reads from"
         )
 
-    def record(state, *, terminal_status: str, abandon_reason: str | None = None) -> bool:
+    def record(
+        state,
+        *,
+        terminal_status: str,
+        abandon_reason: str | None = None,
+        pr_number: int | None = None,
+    ) -> bool:
+        """`pr_number` is passed by the one node that opened a pull request, and by nothing else.
+
+        That is what holds the grain. One row is one attempt and a run can make several, but
+        only the attempt that opened the pull request has a number; a retried attempt keeps a
+        null because no call site gives it one, rather than because two writes happened to run
+        in a helpful order. A merge recorded against every row of a run would inflate the
+        numerator of the merge rate silently, which is worse than being wrong loudly.
+        """
         try:
-            return _record(store, state, terminal_status, abandon_reason)
+            return _record(store, state, terminal_status, abandon_reason, pr_number)
         except Exception:
             # Never propagates. The pull request is the product; the row is bookkeeping,
             # and bookkeeping that can fail a run is worse than bookkeeping that is missing.
@@ -230,7 +244,10 @@ def make_recorder(store: CorpusWriter):
     return record
 
 
-def _record(store, state, terminal_status: str, abandon_reason: str | None) -> bool:
+def _record(
+    store, state, terminal_status: str, abandon_reason: str | None,
+    pr_number: int | None = None,
+) -> bool:
     # No lookup guard here: `make_recorder` established that this store can write before any
     # node ran. Re-checking per write would be a check that cannot be loud, since the caller
     # swallows everything this raises.
@@ -286,6 +303,9 @@ def _record(store, state, terminal_status: str, abandon_reason: str | None) -> b
             ci_result=state.get("attempt_ci_result"),
             terminal_status=terminal_status,
             abandon_reason=abandon_reason,
+            # The join a merge delivery arrives on. Null on every attempt but the one that
+            # opened the pull request, which is the grain this table declares.
+            pr_number=pr_number,
         )
     )
     return True

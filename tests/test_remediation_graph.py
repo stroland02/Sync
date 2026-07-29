@@ -5,6 +5,7 @@ from langgraph.checkpoint.memory import InMemorySaver
 from pydantic import BaseModel
 
 from sync.core import CallSite, Finding, Patch, RepoRef, VendorChange, VerifyResult
+from sync.forge.github import PullRequest
 from sync.remediate.graph import build_graph
 
 SITE = CallSite(
@@ -111,9 +112,11 @@ class StubForge:
         self.polls += 1
         return green, "https://github.com/o/r/actions/runs/1"
 
-    def open_pull_request(self, repo, branch, evidence) -> str:
+    # Returns what the forge created, number and URL, since the merge webhook joins a
+    # delivery to a corpus row by number and nothing else durable links the two.
+    def open_pull_request(self, repo, branch, evidence) -> PullRequest:
         self.pr_url = "https://github.com/o/r/pull/1"
-        return self.pr_url
+        return PullRequest(number=1, url=self.pr_url)
 
 
 def _run(adapter, remediator, forge, store=None):
@@ -489,7 +492,7 @@ def test_a_pull_request_that_cannot_be_opened_abandons_and_leaves_no_pr_url():
 
     @dataclass
     class Unopenable(StubForge):
-        def open_pull_request(self, repo, branch, evidence) -> str:
+        def open_pull_request(self, repo, branch, evidence) -> PullRequest:
             raise RuntimeError("gh pr create failed: GraphQL: was submitted too quickly")
 
     forge = Unopenable()

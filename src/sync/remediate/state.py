@@ -139,5 +139,10 @@ class RunState(TypedDict, total=False):
     ci_url: str
     evidence: Evidence
     pr_url: str | None
+    # The number GitHub gave the pull request, from the forge that created it rather than
+    # parsed back out of the URL. `migration_outcome` is joined to a merge delivery by this
+    # and nothing else durable: the row carries no branch and the delivery carries no
+    # finding. Set only by `open_pr`, so a run that opened none leaves it unset.
+    pr_number: int | None
     outcome: Outcome
     abandon_reason: str
