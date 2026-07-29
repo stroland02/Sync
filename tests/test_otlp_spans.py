@@ -181,3 +181,159 @@ def test_a_span_without_a_url_is_skipped_rather_than_defaulted():
     }
 
     assert list(client_spans(payload)) == []
+
+
+# --- what the decoder rejects, and what it accepts that looks wrong ----------------
+#
+# Everything below this line was uncovered at the coverage re-measurement recorded in
+# `docs/superpowers/specs/2026-07-29-sync-coverage-baseline-2.md`: twelve statements, every one
+# of them a rejection or a fallback in a decoder over telemetry a customer's collector sends.
+# The accepting paths above were exercised; nothing proved the module rejects what its docstring
+# says it rejects, and a decoder that quietly accepts a malformed span writes a fabricated
+# binding into the graph rather than failing.
+#
+# These are characterization tests over behaviour that already exists, so none of them was ever
+# red on its own. Each was proven non-vacuous by mutation instead -- the guard removed, the test
+# watched to fail, the guard restored -- and the mutations are listed in that document.
+
+
+def _span(**over) -> dict:
+    """One client span, with the fields every accepted span needs and nothing else.
+
+    Written out rather than taken from the fixture because each test below removes or corrupts
+    exactly one of them, and a fixture-derived span would carry whatever else the capture held.
+    """
+    span = {
+        "traceId": "a" * 32,
+        "spanId": "b" * 16,
+        "kind": 3,
+        "startTimeUnixNano": "1785283200000000000",
+        "attributes": [
+            {"key": "http.request.method", "value": {"stringValue": "GET"}},
+            {"key": "url.full", "value": {"stringValue": "https://api.stripe.com/v1/charges"}},
+        ],
+    }
+    span.update(over)
+    return span
+
+
+def _payload(*spans: dict, resource_spans=None) -> dict:
+    if resource_spans is not None:
+        return {"resourceSpans": resource_spans}
+    return {"resourceSpans": [{"scopeSpans": [{"spans": list(spans)}]}]}
+
+
+def test_a_status_code_written_as_a_json_number_is_read(spans):
+    """The canonical mapping says a 64-bit field is a string, and the fixture above proves the
+    string form is read. Some exporters write a JSON number anyway, and the module's docstring
+    says both are accepted -- but the number branch had never run, so "accepted" was a claim
+    about code nobody had executed. Rejecting it would drop real payloads over a spelling.
+    """
+    payload = _payload(_span(attributes=[
+        {"key": "http.request.method", "value": {"stringValue": "GET"}},
+        {"key": "url.full", "value": {"stringValue": "https://api.stripe.com/v1/charges"}},
+        {"key": "http.response.status_code", "value": {"intValue": 200}},
+    ]))
+
+    assert [span.status_code for span in client_spans(payload)] == [200]
+
+
+def test_a_status_code_that_is_not_a_number_reads_as_absent_rather_than_as_a_value():
+    """`intValue: "not-a-number"` is a malformed attribute. Inventing a status code from it
+    would put a fabricated rate into the status-rate detector, which decides whether a vendor is
+    failing; absent is the only honest reading."""
+    payload = _payload(_span(attributes=[
+        {"key": "http.request.method", "value": {"stringValue": "GET"}},
+        {"key": "url.full", "value": {"stringValue": "https://api.stripe.com/v1/charges"}},
+        {"key": "http.response.status_code", "value": {"intValue": "not-a-number"}},
+    ]))
+
+    assert [span.status_code for span in client_spans(payload)] == [None]
+
+
+def test_an_attribute_whose_value_is_not_an_any_value_is_treated_as_absent():
+    """OTLP writes every attribute value as an AnyValue object. A bare scalar is a payload no
+    conforming exporter produces, which is exactly why a boundary has to survive it -- and
+    reading `"GET"` where `{"stringValue": "GET"}` belongs would accept a shape the format does
+    not define."""
+    payload = _payload(_span(attributes=[
+        {"key": "http.request.method", "value": "GET"},
+        {"key": "url.full", "value": {"stringValue": "https://api.stripe.com/v1/charges"}},
+    ]))
+
+    assert list(client_spans(payload)) == []
+
+
+def test_an_array_valued_attribute_is_treated_as_absent_rather_than_flattened():
+    """`arrayValue` and `kvlistValue` are legal AnyValue shapes and no attribute this module
+    reads is ever one. Flattening a list into a URL would build a binding out of a value the
+    customer never sent."""
+    payload = _payload(_span(attributes=[
+        {"key": "http.request.method", "value": {"stringValue": "GET"}},
+        {"key": "url.full", "value": {"arrayValue": {"values": [{"stringValue": "https://a"}]}}},
+    ]))
+
+    assert list(client_spans(payload)) == []
+
+
+def test_a_span_with_no_start_time_is_skipped():
+    """`started_at` is what correlates a span to a run and what orders retries within a trace.
+    Substituting now() would date a customer's call to whenever Sync happened to ingest it."""
+    payload = _payload(_span(startTimeUnixNano=None))
+
+    assert list(client_spans(payload)) == []
+
+
+def test_a_start_time_that_is_not_a_number_is_skipped_rather_than_defaulted():
+    payload = _payload(_span(startTimeUnixNano="the beginning of time"))
+
+    assert list(client_spans(payload)) == []
+
+
+def test_a_span_with_no_identity_is_skipped():
+    """`trace_id` and `span_id` are the pair ingest is idempotent on. A span missing either
+    would be re-folded on every replay of the same batch, inflating every count computed from
+    the table."""
+    assert list(client_spans(_payload(_span(spanId="")))) == []
+    assert list(client_spans(_payload(_span(traceId=None)))) == []
+
+
+def test_a_resource_entry_that_is_not_an_object_does_not_discard_the_batch_around_it():
+    """One malformed entry is not a reason to drop the spans beside it: a collector batches many
+    resources into one request, and a decoder that raised or returned early would lose a whole
+    customer's window over one bad neighbour."""
+    payload = _payload(resource_spans=[
+        "not an object",
+        {"scopeSpans": [{"spans": [_span()]}]},
+    ])
+
+    assert [span.span_id for span in client_spans(payload)] == ["b" * 16]
+
+
+def test_a_scope_entry_that_is_not_an_object_does_not_discard_the_spans_beside_it():
+    payload = {"resourceSpans": [{"scopeSpans": ["not an object", {"spans": [_span()]}]}]}
+
+    assert [span.span_id for span in client_spans(payload)] == ["b" * 16]
+
+
+def test_an_absent_server_address_falls_back_to_the_host_in_the_url():
+    """`server.address` is a convenience the instrumentation may omit, and the URL always
+    carries the host. Recovering it keeps the span correlatable to a vendor; leaving it empty
+    would drop the call from every per-vendor rate."""
+    payload = _payload(_span())
+
+    assert [span.server_address for span in client_spans(payload)] == ["api.stripe.com"]
+
+
+def test_a_status_code_written_as_a_floating_point_value_reads_as_absent():
+    """`doubleValue` is a legal AnyValue and a nonsensical spelling for an integer field. The
+    two accepted spellings are the string the mapping specifies and the number some exporters
+    write; truncating a double would accept a third that no exporter produces and no
+    specification defines, and 200.7 is not a status code."""
+    payload = _payload(_span(attributes=[
+        {"key": "http.request.method", "value": {"stringValue": "GET"}},
+        {"key": "url.full", "value": {"stringValue": "https://api.stripe.com/v1/charges"}},
+        {"key": "http.response.status_code", "value": {"doubleValue": 200.0}},
+    ]))
+
+    assert [span.status_code for span in client_spans(payload)] == [None]
