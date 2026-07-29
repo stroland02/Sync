@@ -27,8 +27,39 @@ done: B38 gave it the client shapes and B39 the Python spellings, and both are v
 counts — one repository went from zero to five call sites through the `self`-attribute receiver
 alone.
 
+**It is deeper than `language_for`.** The mutation primitives are TypeScript grammar throughout:
+`_object_argument` wants node kind `object` where Python has `dictionary` and passes fields as
+`keyword_argument`; `_result_binding` wants `lexical_declaration`/`assignment_expression` where
+Python has `assignment`. Adding `.py` to `language_for` alone would produce a generator that
+recognises the file and then fails to edit it.
+
 **Closes when:** a Python call site can be mutated into a labelled pair on both change kinds, with
 the mutation attaching and the label addressing a site the mutated index still holds.
+
+### B45 — A UTF-16 manifest crashes adapter selection
+
+`python_lang._requirement_lines` promises in its own docstring that an unreadable manifest answers
+"declares nothing" rather than raising — "a customer's manifest is untrusted input". The
+`pyproject.toml` branch honours that with `except (TOMLDecodeError, UnicodeDecodeError)`. The
+`requirements.txt` branch reads with a bare `read_text(encoding="utf-8")` and no guard.
+
+Reproduced:
+
+```
+utf-16 requirements.txt -> RAISED UnicodeDecodeError: invalid start byte 0xff
+utf-8  requirements.txt -> ['stripe==11.0.0']
+```
+
+Found in the wild, not hypothesised: `LilithB92/Online_training_DRF` ships a `requirements.txt`
+beginning `ff fe`. It crashes a run at adapter selection, before any indexing, for a repository
+that merely happens to have a UTF-16 manifest.
+
+This is the `CLAUDE.md` encoding hazard in its exact documented form — and the rule there is
+explicit that bytes which are not text must not be decoded at all. Every fixture in this
+repository is ASCII, so no test would ever have caught it.
+
+**Closes when:** a UTF-16 `requirements.txt` yields "declares nothing" rather than a traceback, and
+a fixture proves it — with the same treatment for any other manifest read on that path.
 
 ### B44 — Pin the Python repository B42 found (blocked on B43)
 
