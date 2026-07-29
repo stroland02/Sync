@@ -18,24 +18,40 @@ from sync.benchmark.mutate import (
     generate_pair,
 )
 from sync.benchmark.report import axis_rows, render_report
+from sync.benchmark.score import (
+    SYNTHETIC_REFERENCE,
+    DisplacedLabel,
+    ScoredPair,
+    UnbrokenLabel,
+    index_sources,
+    score_change,
+    score_pair,
+)
 
 __all__ = [
     "MUTATION_LITERAL",
     "SUPPORTED_KINDS",
+    "SYNTHETIC_REFERENCE",
     "Axis",
     "BenchmarkAxes",
     "BindingAccuracy",
     "BindingLabel",
     "Counts",
+    "DisplacedLabel",
     "EmittedFinding",
     "MutationPair",
     "RungPrecision",
     "RungRecall",
+    "ScoredPair",
+    "UnbrokenLabel",
     "UnsupportedChangeKind",
     "axis_rows",
     "compute_axes",
     "compute_binding_accuracy",
     "depends_on_change",
     "generate_pair",
+    "index_sources",
     "render_report",
+    "score_change",
+    "score_pair",
 ]

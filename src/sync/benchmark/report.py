@@ -39,6 +39,20 @@ Binding precision and recall are reported unmeasured rather than omitted. They n
 reference the corpus cannot supply, and `2026-07-28-sync-ground-truth-count.md` leaves the label
 source undecided, so the labels arrive as an argument. An axis left off the page because nobody
 can compute it yet is an axis nobody remembers is missing.
+
+A binding score renders with its reference described, or not at all
+-------------------------------------------------------------------
+Labels now have a source -- `sync.benchmark.mutate` generates them by mutating a real repository
+-- and it is a synthetic one, chosen after mining was measured and rejected, at a cost
+`2026-07-29-sync-ground-truth-quality.md` states plainly: realism. A precision printed without
+that beside it claims more than it measured.
+
+So `reference` is required whenever labels are, and the refusal is here rather than in a note
+somebody has to remember. *A benchmark whose bias is undocumented is worse than none* is this
+repository's own standard, and this is the first score it applies to. The text is the caller's
+because the label source is the caller's: `binding.py` refuses to compile one in, and a report
+that hard-coded "synthetic" would be wrong on the day a real reference exists, in the direction
+of understating a better number rather than overstating a worse one -- still wrong, and silently.
 """
 
 from __future__ import annotations
@@ -135,10 +149,20 @@ def _counts(axes: BenchmarkAxes, accuracy: BindingAccuracy) -> list[str]:
     ]
 
 
+def _reference_block(reference: str) -> list[str]:
+    """The provenance of the labels, printed under the numbers they produced.
+
+    Under rather than beside: the two binding axes are the last of the scalar rows, so a reader
+    reaching the caveat has just read the number it qualifies.
+    """
+    return ["About the binding reference", *[f"  {line}" for line in reference.splitlines()]]
+
+
 def render_report(
     outcomes: Sequence[MigrationOutcome],
     findings: Sequence[EmittedFinding] = (),
     labels: Sequence[BindingLabel] = (),
+    reference: str | None = None,
 ) -> str:
     """The whole report as text.
 
@@ -146,9 +170,17 @@ def render_report(
     rendering are both testable without Postgres, and the one reader that produces the rows
     stays the caller's business.
 
-    `findings` and `labels` default to empty because no label source is decided yet, and that
-    renders as two unmeasured axes rather than as two missing ones.
+    `findings` and `labels` default to empty, which renders as two unmeasured axes rather than
+    as two missing ones. Supplying labels requires `reference` -- what they were derived from
+    and what that biases -- because a precision without it is a number claiming to describe the
+    binder when it partly describes the corpus.
     """
+    if labels and reference is None:
+        raise ValueError(
+            "binding precision and recall were computed from labels with no reference described; "
+            "pass `reference` saying what the labels were derived from and what it biases"
+        )
+
     axes = compute_axes(outcomes)
     accuracy = compute_binding_accuracy(findings, labels)
 
@@ -169,6 +201,7 @@ def render_report(
             for label, axis in axis_rows(axes, accuracy)
         ],
         "",
+        *(_reference_block(reference) + [""] if reference is not None else []),
         *_group("Binding precision by rung", {
             rung: rung_precision.precision
             for rung, rung_precision in accuracy.precision_by_rung.items()
