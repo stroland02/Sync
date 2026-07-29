@@ -14,6 +14,15 @@ number while removing none of the reproducibility problem.
 The depth report's nine runs were on 1.26.0 — the version CI does not use — so the instability had
 to be re-measured on 1.26.1 before anything could be concluded.
 
+> **Note added 2026-07-29 by `2026-07-29-oasdiff-version-settled.md`.** "`tools/oasdiff.exe` is
+> 1.26.0" was true of the working copy this report was written in, and is still true of it today —
+> sha256 `1e78ddce…`, verified. It is not a fact about the repository. `tools/` is gitignored and
+> `scripts/bootstrap_tools.sh` pins no version, so each checkout holds whatever release was latest
+> the day it was bootstrapped: on 2026-07-29 seven checkouts on this machine held 1.26.0 and four
+> held 1.26.1, at the same time. Read the sentence as naming this report's own instrument rather
+> than the project's, and read the table below the same way — it is the one place in these three
+> reports where both binaries were run side by side.
+
 **Both are unstable.** Same command, same two hash-verified inputs, one machine, one session:
 
 | version | run 1 | run 2 | run 3 |

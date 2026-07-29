@@ -34,7 +34,10 @@ differently-named Anthropic URLs serve byte-identical documents (`a97790bd…`).
 Reproduce with `uv run python scripts/measure_generated_vendor_noise.py --runs 12`. It fetches from
 GitHub and from the generators' spec hosts, which is why it is a script and not a test.
 
-**12 runs per pair, 72 runs total, oasdiff 1.26.0.**
+**12 runs per pair, 72 runs total, oasdiff 1.26.0** — sha256 `1e78ddce…`, recorded 2026-07-29. The
+same 72 runs on 1.26.1 are committed at
+`recorded/2026-07-29-generated-vendor-noise-oasdiff-1.26.1.json` and reproduce every number below;
+see the note closing §2.
 
 ## 2. How 12 was arrived at, and why it turned out not to matter
 
@@ -66,6 +69,16 @@ specifications provokes it.
 **One caveat, and it is the same one the convergence report carries.** This is oasdiff 1.26.0;
 CI pins 1.26.1. Stability measured on one version is not stability on the other, and 72 runs on
 1.26.1 is a measurement nobody has taken.
+
+> **Note added 2026-07-29 by `2026-07-29-oasdiff-version-settled.md`: the caveat is closed and it
+> changes nothing.** Those 72 runs on 1.26.1 have now been taken — 12 per pair over the same six
+> pairs, the same sha256-pinned inputs, binary sha256 `629d435b…` — and every number in §2, §3 and
+> §4 reproduces exactly. Identical record counts on all 12 runs of all six pairs, identical
+> rule-id distributions, identical `level` values, identical operations-lost-to-the-candidate
+> figures, zero new kinds and zero new operation keys after run 1, nesting on every run. The
+> measurement is committed at `recorded/2026-07-29-generated-vendor-noise-oasdiff-1.26.1.json`.
+> The last sentence above was true the day it was written and is not true now; the conclusion it
+> qualified never depended on it.
 
 ## 3. The distribution, per vendor
 

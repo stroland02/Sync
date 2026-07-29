@@ -9,8 +9,8 @@ written.** Operation-level coverage converged on run 1 and did not move across 2
 natural-key union — the rows that would actually be written — was still growing on run 24, at
 2,135,168 and climbing. Nesting held on every run.
 
-24 runs, 1,949 seconds, oasdiff 1.26.0, the pinned `v2320 → v2330` pair with both blob hashes
-verified before the first run.
+24 runs, 1,949 seconds, oasdiff 1.26.0 (sha256 `1e78ddce…`, recorded 2026-07-29 — see §7), the
+pinned `v2320 → v2330` pair with both blob hashes verified before the first run.
 
 ## 1. The curve
 
@@ -149,6 +149,14 @@ combination needs somewhere else for that to live before it can ship.
   same way over three runs; this curve was not re-run on it, and **that is a gap.** The shape of
   the instability matched across versions, so the curve is expected to as well, but expected is not
   measured and 24 runs on 1.26.1 is another 32 minutes nobody has spent.
+
+  > **Note added 2026-07-29 by `2026-07-29-oasdiff-version-settled.md`.** The gap is still open —
+  > the curve has not been re-run on 1.26.1 and this bullet stands as written. What changed is that
+  > "1.26.0" now identifies a file rather than only a name: the binary this ran against is sha256
+  > `1e78ddce7d4477ee0a86718aa68ec7038357d1940fb053823238670f5ef472c8`, still present in the
+  > checkout that produced this report. `tools/` is gitignored and `scripts/bootstrap_tools.sh`
+  > pins no version, so a reader elsewhere may hold a different build under the same path; on
+  > 2026-07-29 seven checkouts on this machine held 1.26.0 and four held 1.26.1 at once.
 - One run consumed 9.3 GB. A memory ceiling was not tested, and a machine with less would have
   failed rather than produced a small answer — which would surface as a raised `RuntimeError`
   from `run_oasdiff_breaking` rather than as a silent undercount, so it fails in the safe

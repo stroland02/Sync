@@ -187,6 +187,52 @@ class InputMismatch(RuntimeError):
     """A fetched specification is not the one that was pinned."""
 
 
+class InstrumentUnavailable(RuntimeError):
+    """The differ cannot be identified, so nothing measured with it can be attributed."""
+
+
+@dataclass(frozen=True)
+class Instrument:
+    """Which differ produced a measurement, in a form a later reader can check.
+
+    The version string alone does not identify the binary. `tools/` is gitignored and populated per
+    checkout by `scripts/bootstrap_tools.sh`, which downloads whatever release is latest that day
+    rather than a pinned one, so two working copies hold different builds that both call themselves
+    oasdiff. The sha256 is what makes a recorded number attributable to an exact file.
+    """
+
+    version: str
+    sha256: str
+
+
+def read_instrument(binary: Path) -> Instrument:
+    """Identify the differ, or refuse.
+
+    Every failure here raises rather than returning a blank: a measurement carrying an empty
+    version looks recorded and identifies nothing, which is worse than one that never ran.
+
+    `encoding="utf-8"` is not decoration. Without it a decode error on this boundary is raised on
+    the reader thread, never propagates, and returns `stdout` as `None`.
+    """
+    if not binary.exists():
+        raise InstrumentUnavailable(f"{binary} is missing")
+
+    result = subprocess.run(
+        [str(binary), "--version"], capture_output=True, text=True, encoding="utf-8"
+    )
+    if result.returncode != 0:
+        raise InstrumentUnavailable(
+            f"{binary} --version failed ({result.returncode}): "
+            f"{(result.stderr or '').strip()[:200]}"
+        )
+
+    version = (result.stdout or "").strip()
+    if not version:
+        raise InstrumentUnavailable(f"{binary} --version reported no version")
+
+    return Instrument(version=version, sha256=hashlib.sha256(binary.read_bytes()).hexdigest())
+
+
 def gh_raw(repo: str, path: str, ref: str) -> bytes:
     """A file's bytes at a commit, through the authenticated `gh` CLI.
 
@@ -400,13 +446,11 @@ def main() -> None:
     parser.add_argument("--out", type=Path, default=None, help="write the measurement as JSON")
     args = parser.parse_args()
 
-    if not BINARY.exists():
-        sys.exit(f"{BINARY} is missing; run scripts/bootstrap_tools.sh")
-
-    version = subprocess.run(
-        [str(BINARY), "--version"], capture_output=True, text=True, encoding="utf-8"
-    ).stdout.strip()
-    print(version)
+    try:
+        instrument = read_instrument(BINARY)
+    except InstrumentUnavailable as unusable:
+        sys.exit(f"{unusable}; run scripts/bootstrap_tools.sh")
+    print(f"{instrument.version}  sha256 {instrument.sha256}")
 
     wanted = [p for p in PAIRS if args.vendor is None or p.vendor_id == args.vendor]
     results = [measure(pair, args.runs) for pair in wanted]
@@ -417,7 +461,9 @@ def main() -> None:
 
     if args.out:
         args.out.write_text(
-            json.dumps({"oasdiff": version, "pairs": results, "not_fetchable": unfetchable},
+            json.dumps({"instrument": {"version": instrument.version,
+                                       "sha256": instrument.sha256},
+                        "pairs": results, "not_fetchable": unfetchable},
                        indent=1),
             encoding="utf-8",
         )
