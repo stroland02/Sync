@@ -260,3 +260,50 @@ def test_scanning_twice_returns_the_same_findings(store):
     second = [f.rationale for f in _detector(store).scan()]
 
     assert first == second and first != []
+
+
+def test_a_cost_shared_across_call_sites_says_so_in_every_finding(store):
+    """One looping trace against an operation three call sites reach produces three findings,
+    and the cost was incurred once.
+
+    That is right for the other detectors and wrong here. A vendor-change finding is a repair
+    instruction: each site is independently broken and independently fixable, so three sites
+    are three pieces of work. An efficiency finding is a cost claim, and three of them assert
+    three savings that do not exist. Totalling a column would report three times the truth, in
+    the one setting the design document says these findings exist for.
+
+    The row count stays one per site, so this detector stays consistent with every other one.
+    What changes is that each rationale states the cost is shared, and how many sites share it.
+    """
+    _observe(store, _spans([f"t{i}" for i in range(LOOP_THRESHOLD)]))
+    for index in range(3):
+        store.upsert_call_site(
+            CallSite(
+                repo_id="r", path=f"src/a{index}.ts", line=index + 1, col=4,
+                vendor_id="stripe", operation_id="GetCharges",
+                symbol="stripe.charges.list", args_keys=["limit"],
+                response_fields_read=["data"], sdk_version="18.0.0",
+                content_hash=f"h{index}",
+            )
+        )
+
+    findings = list(_detector(store).scan())
+
+    assert len(findings) >= 3
+    assert all("shared across 3 call sites" in f.rationale for f in findings)
+
+
+def test_a_cost_reaching_one_call_site_is_not_described_as_shared(store):
+    """The common case, and the one where the note would be a lie.
+
+    One call site is where the cost is not shared with anything, so saying it is shared —
+    and saying it over a count of one — would be both false and the kind of phrasing a
+    reader stops trusting. The note has to earn its place by there being more than one site.
+    """
+    _site(store)
+    _observe(store, _spans([f"t{i}" for i in range(LOOP_THRESHOLD)]))
+
+    findings = list(_detector(store).scan())
+
+    assert findings
+    assert all("shared across" not in f.rationale for f in findings)

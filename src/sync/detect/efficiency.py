@@ -141,9 +141,11 @@ class EfficiencyDetector:
             if not sites:
                 continue
 
-            for site in sites:
-                if site.id is None:
-                    continue
+            reachable = [site for site in sites if site.id is not None]
+            shared_note = (
+                f", shared across {len(reachable)} call sites" if len(reachable) > 1 else ""
+            )
+            for site in reachable:
                 for rationale in self._rationales(call):
                     yield Finding(
                         detector=self.detector_id,
@@ -153,7 +155,18 @@ class EfficiencyDetector:
                         # breaking would let a saving compete in triage with a call site that
                         # no longer compiles.
                         severity="info",
-                        rationale=f"{rationale} ({site.path}:{site.line})",
+                        # The cost is stated as shared because it was incurred once. Every
+                        # other detector's findings are repair instructions -- each call site
+                        # is independently broken and independently fixable, so N sites are N
+                        # pieces of work. This one is a cost claim, and N findings would
+                        # assert N savings that do not exist. The row count stays one per
+                        # site, so the shape matches every other detector; what the reviewer
+                        # gets is a rationale that cannot be totalled into a number three
+                        # times the truth.
+                        rationale=(
+                            f"{rationale} ({site.path}:{site.line}"
+                            f"{shared_note})"
+                        ),
                     )
 
     def _rationales(self, call: ObservedCall) -> list[str]:
