@@ -33,6 +33,7 @@ from psycopg import sql
 
 from conftest import (
     ADMIN_DBNAME,
+    database_for,
     DEFAULT_DSN,
     LEAKED_DATABASE_PATTERN,
     dsn_for,
@@ -205,11 +206,16 @@ def test_a_database_in_use_is_refused_rather_than_force_dropped(dead_pid, made):
     pid, so the sweep genuinely tries to drop it and is genuinely refused -- if the name were live
     the liveness test would have skipped it and this would prove nothing.
     """
-    name = made(f"sync_test_{dead_pid}_gw1")
+    # Named for this live process and told to the sweep as dead, rather than named for a dead
+    # pid: a genuinely dead-named database is correctly dropped by any suite sweeping the same
+    # server in the window before the connect below, and this test then fails on the connect
+    # itself. Reproduced twice while writing this, with the error the investigation began from.
+    name = made(f"sync_test_{os.getpid()}_gw1")
+    dead_to_the_sweep = lambda pid: pid != os.getpid()  # noqa: E731
 
     with psycopg.connect(dsn_for(name, ADMIN), autocommit=True) as holder:
         holder.execute("SELECT 1")
-        dropped = sweep_leaked_databases(ADMIN)
+        dropped = sweep_leaked_databases(ADMIN, is_running=dead_to_the_sweep)
 
     assert name not in dropped
     assert _exists(name)
@@ -221,12 +227,21 @@ def test_a_database_that_cannot_be_dropped_does_not_fail_the_run(dead_pid, made)
     The refusal above must be skipped rather than raised, and the sweep must go on to drop the
     other leaked databases rather than stopping at the first one it cannot have.
     """
-    held = made(f"sync_test_{dead_pid}_gw2")
-    free = made(f"sync_test_{dead_pid}_gw3")
+    # Named for this process, which is alive, so a suite sweeping the same server concurrently
+    # spares them; the sweep under test is told they are dead instead. Named for a genuinely dead
+    # pid these are correctly dropped by that other sweep in the window before the connect below,
+    # and the test then fails with `database ... does not exist` -- which is the failure this
+    # investigation started from, reproduced twice while writing this.
+    held = made(f"sync_test_{os.getpid()}_gw2")
+    free = made(f"sync_test_{os.getpid()}_gw3")
+    # Dead for exactly this process and alive for every other, so the sweep under test drops
+    # these two and leaves another suite's databases alone. A blanket `False` would have this
+    # test drop every leaked-looking database on a shared server, including live ones.
+    dead_to_the_sweep = lambda pid: pid != os.getpid()  # noqa: E731
 
     with psycopg.connect(dsn_for(held, ADMIN), autocommit=True) as holder:
         holder.execute("SELECT 1")
-        dropped = sweep_leaked_databases(ADMIN)
+        dropped = sweep_leaked_databases(ADMIN, is_running=dead_to_the_sweep)
 
     assert free in dropped and not _exists(free)
     assert held not in dropped and _exists(held)
@@ -235,3 +250,97 @@ def test_a_database_that_cannot_be_dropped_does_not_fail_the_run(dead_pid, made)
 def test_a_server_that_cannot_be_reached_is_not_an_error():
     """`pytest_configure` already warns and carries on when Postgres is absent; so does this."""
     assert sweep_leaked_databases("postgresql://sync:sync@localhost:1/postgres") == []
+
+
+# --- what the name's pid actually identifies -------------------------------------------
+
+
+def test_a_worker_database_is_named_for_the_process_that_will_not_use_it():
+    """The hole, stated as the fact it rests on.
+
+    `pytest_configure` exports `SYNC_DSN` before xdist spawns any worker, so every worker reads
+    the controller's database as its pin and subdivides it. The pid in `sync_test_28096_gw2` is
+    therefore the **controller's**, and the worker's own pid appears nowhere -- measured by
+    running a two-worker suite, whose workers had pids 15944 and 34508 and whose databases were
+    `sync_test_30080_gw0` and `sync_test_30080_gw1`.
+
+    So the sweep's liveness test asks about a process that is not the one using the database. It
+    is right whenever the controller outlives its workers, which is every ordinary run, and wrong
+    exactly when it does not.
+    """
+    controller_pin = dsn_for("sync_test_28096", DEFAULT_DSN)
+
+    name = database_for(controller_pin, "gw2", 51234)
+
+    assert name.startswith("sync_test_28096_gw2")
+    assert "28096" in name, "the controller's pid is what the name has always carried"
+
+
+def test_a_worker_database_carries_the_worker_that_uses_it():
+    """The guard. The name keeps the controller's pid, because an operator reads it to find the
+    run, and gains the pid of the process the database actually belongs to."""
+    controller_pin = dsn_for("sync_test_28096", DEFAULT_DSN)
+
+    assert database_for(controller_pin, "gw2", 51234) == "sync_test_28096_gw2_p51234"
+
+
+def test_a_pinned_database_a_person_chose_gains_no_pid(made):
+    """`sync_b5_gw0` is what an operator asked for and is outside the swept pattern entirely.
+    Appending a pid there would be noise in a name nobody sweeps."""
+    assert database_for(dsn_for("sync_b5", DEFAULT_DSN), "gw0", 51234) == "sync_b5_gw0"
+
+
+# --- the three interleavings ------------------------------------------------------------
+
+
+def test_a_name_whose_pid_is_alive_survives():
+    """Interleaving one: the ordinary case, and the one the current implementation already gets
+    right."""
+    assert leaked_database_names(["sync_test_777_gw1"], is_running=lambda pid: pid == 777) == []
+
+
+def test_a_name_whose_only_pid_died_is_swept():
+    """Interleaving two: the case the sweep exists for."""
+    assert leaked_database_names(["sync_test_777_gw1"], is_running=lambda pid: False) == [
+        "sync_test_777_gw1"
+    ]
+
+
+def test_a_database_whose_controller_died_while_its_worker_lives_is_spared():
+    """Interleaving three, and the one the sweep failed.
+
+    A controller killed before its workers leaves them running against databases named for a pid
+    that is now dead. The sweep judged the name dead, and a plain `DROP DATABASE` does not refuse
+    an idle database -- measured directly: dropping a database nobody is connected to succeeds,
+    and only an open connection makes the server refuse. So a worker between two queries loses
+    the database out from under it and fails on its next connect with exactly the error this
+    investigation started from.
+
+    Sparing it needs the worker's own pid in the name and a rule that reads every pid there.
+    """
+    name = "sync_test_28096_gw2_p51234"
+    controller_dead_worker_alive = lambda pid: pid == 51234  # noqa: E731
+
+    assert leaked_database_names([name], is_running=controller_dead_worker_alive) == []
+
+
+def test_a_database_is_swept_only_when_every_pid_in_its_name_is_dead():
+    """The rule stated in both directions. Either pid alive spares it; both dead sweeps it.
+
+    Tightening rather than widening: a name this rule spares is a name the old rule would have
+    dropped, never the reverse, so it cannot make the sweep reach further than it did.
+    """
+    name = "sync_test_28096_gw2_p51234"
+
+    assert leaked_database_names([name], is_running=lambda pid: pid == 28096) == []
+    assert leaked_database_names([name], is_running=lambda pid: pid == 51234) == []
+    assert leaked_database_names([name], is_running=lambda pid: False) == [name]
+
+
+def test_a_recycled_pid_anywhere_in_the_name_spares_the_database():
+    """Pid reuse, which the file's own comment argued could not disturb a live run. It cannot
+    cause a wrong drop, and this pins the direction it does err in: a name holding a recycled pid
+    is spared and leaks until a later run, which costs one database rather than a live one."""
+    assert leaked_database_names(
+        ["sync_test_28096_gw2_p51234"], is_running=lambda pid: pid == 28096
+    ) == []
