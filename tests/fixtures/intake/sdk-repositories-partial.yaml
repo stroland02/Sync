@@ -1,0 +1,3 @@
+# An entry somebody started and did not finish. It must raise rather than be skipped.
+- package: orb-billing
+  repo: orbcorp/orb-node

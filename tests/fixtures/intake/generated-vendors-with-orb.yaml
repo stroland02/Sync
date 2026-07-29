@@ -1,0 +1,5 @@
+# A deployment that has configured Orb, used to show a dependency moving out of
+# "no registry entry" once someone adds the line `generated-vendors.yaml` describes.
+- vendor_id: orb
+  repo: orbcorp/orb-node
+  manifest: .stats.yml

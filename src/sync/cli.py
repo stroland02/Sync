@@ -55,6 +55,7 @@ from sync.signals.deprecations import (
 )
 from sync.signals.datadog.shapes import DatadogShapeReader
 from sync.signals.feed import public_key_bytes, render_feed, sign_feed
+from sync.signals.intake import assess_repository, read_sdk_repositories
 from sync.signals.registry import (
     SYMBOL_MAP_FILENAME,
     VendorContext,
@@ -1352,6 +1353,35 @@ def benchmark(args: argparse.Namespace) -> int:
     return 0
 
 
+def intake(args: argparse.Namespace) -> int:
+    """Report which of a repository's declared dependencies Sync can actually watch.
+
+    A run answers one question -- does this repository depend on the vendor it was told to look
+    at -- and says nothing about the rest of the manifest, so a customer pointing Sync at their
+    codebase cannot find out what it covers. The middle category is the reason this exists:
+    watchable but unconfigured is the work queue, and it is invisible until something prints it.
+
+    Reads what is on disk and reaches no network. Evidence that a package's SDK is
+    generator-produced has to be confirmed rather than assumed, and confirming it is a fetch --
+    so this command reports what the deployment already knows and leaves the middle category
+    smaller than it truly is rather than guessing to fill it. That direction is deliberate: this
+    report is a sales asset as much as an engineering one, and an overstatement is worse than an
+    omission.
+
+    Exit code says the report was produced, not whether the answer was good. A command that
+    exited non-zero on poor coverage would be a gate nobody asked for, and coverage is the thing
+    being measured.
+    """
+    evidence = read_sdk_repositories(Path(args.evidence)) if args.evidence else {}
+    report = assess_repository(Path(args.repo), generator_manifests=evidence)
+    print(report.to_json())
+    for problem in report.unreadable:
+        # To stderr, and never silently. A manifest that would not parse is not a repository
+        # with no dependencies, and reported as one it reads as a clean scan of an empty project.
+        print(f"unreadable manifest: {problem}", file=sys.stderr)
+    return 0
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(prog="sync")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -1438,6 +1468,17 @@ def main() -> int:
                                    help=f"file holding the Ed25519 signing key in PEM form; "
                                         f"defaults to ${FEED_SIGNING_KEY_ENV}")
     public_key_parser.set_defaults(func=feed_public_key)
+
+    intake_parser = sub.add_parser(
+        "intake",
+        help="report which of a repository's declared dependencies Sync can watch",
+    )
+    intake_parser.add_argument("--repo", required=True,
+                               help="path to a checkout whose manifest should be read")
+    intake_parser.add_argument("--evidence", default=None,
+                               help="a file of confirmed package-to-SDK-repository entries; "
+                                    "without one the watchable category is reported empty")
+    intake_parser.set_defaults(func=intake)
 
     benchmark_parser = sub.add_parser(
         "benchmark", help="print the tier B quality axes with their sample sizes"

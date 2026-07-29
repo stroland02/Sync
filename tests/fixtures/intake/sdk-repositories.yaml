@@ -1,0 +1,8 @@
+# Confirmed package-to-repository evidence, probed on 2026-07-29. See README.md for the method
+# and for the repository that was probed and found to publish nothing.
+- package: orb-billing
+  repo: orbcorp/orb-node
+  manifest: .stats.yml
+- package: "@vercel/sdk"
+  repo: vercel/sdk
+  manifest: .speakeasy/workflow.yaml
