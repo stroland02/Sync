@@ -202,8 +202,109 @@ the same reason.
 
 ## The defect found, and the production diff
 
-<!-- filled in below as the mutation table is built -->
+**One defect, fixed: a route literal carrying an escape produced a wrong route, silently.**
+
+tree-sitter splits a string literal at every escape, so `'/v1/aAb'` parses as
+`string_fragment('/v1/a')`, `escape_sequence('A')`, `string_fragment('b')`. `_plain_route`
+returned on the *first* fragment, so the route it read for that source was `/v1/a`.
+`_tagged_route` collected only `string_fragment` children, so ``path`/v1/aAb/${x}` `` read as
+`/v1/ab/{x}`. Both are routes the source does not state, produced with no signal of any kind.
+
+That is the failure this whole module exists to avoid, and it contradicted `_plain_route`'s own
+docstring, which claimed that reading the fragment rather than the quoted text meant "an escape
+this does not interpret cannot be mistaken for one". It did the opposite: it truncated silently.
+
+`test_a_route_literal_carrying_an_escape_is_declined_rather_than_truncated` was written first and
+failed on both halves before the fix:
+
+    Left contains 2 more items:
+    {'models.plain': ('GET', '/v1/a'), 'models.tagged': ('GET', '/v1/ab/{x}')}
+
+The fix declines the literal whole. Declining loses the operation, which is a false negative, but
+the brief's ordering is the right one: a wrong route resolves a call site to an operation the
+customer never calls, and a missing one does not.
+
+### Hunk by hunk
+
+Four hunks, 13 lines. Each is named against the test that proves it.
+
+| Hunk | Lines | Kept or reverted | The test that proves it |
+|---|---|---|---|
+| 1a. `_plain_route` docstring, replacing the sentence that described behaviour the function did not have | 4 | **Kept.** Not a refactor — the sentence it replaced was false, and it was the reason the defect went unnoticed | Same test as 1b; the docstring is the claim the code now honours |
+| 1b. `_plain_route`: decline a `string` carrying an `escape_sequence` | 2 | **Kept** | `test_a_route_literal_carrying_an_escape_is_declined_rather_than_truncated`, via its `models.plain` assertion. Mutation **M10** removes exactly this hunk and the test dies |
+| 2a. `_tagged_route` docstring paragraph: the escape decline, and that a substitution always stands where it stood | 3 | **Kept.** The second sentence is the answer to the brief's stated hard case and is the invariant `test_an_interpolation_this_rule_cannot_resolve_stands_where_it_stood` pins | `test_an_interpolation_this_rule_cannot_resolve_stands_where_it_stood`, mutation **M9** |
+| 2b. `_tagged_route`: decline a `template_string` carrying an `escape_sequence` | 2 | **Kept** | Same test, via its `models.tagged` assertion. Mutation **M11** removes exactly this hunk and the test dies |
+
+Nothing was reverted. The two code hunks are proven *independently* rather than jointly: M10 and M11
+remove one each, and each one alone turns the test red. Had only their conjunction been detectable,
+one of them would have been unproven and would have gone.
+
+### Two clauses that cannot be falsified, and what to do about them
+
+Two mutations survived on the first attempt and in both cases the mutation was at fault, not the
+test — the brief's ordering held, and it held twice. Both are worth recording as results rather than
+as detours, because they say something about the code.
+
+**`_tagged_route`'s `template.type != "template_string"` clause is redundant for the outcome.**
+Removing it, the full suite passes: `2224 passed, 2 skipped`, exit 0. It is *not* subsumed by the
+`_PATH_TAG` check that follows — the two overlap partially, and each catches inputs the other does
+not:
+
+- `path('/v1/x')`, an ordinary call under the right name, is caught by the type clause alone.
+- ``url`/v1/x` ``, a tagged template under the wrong name, is caught by `_PATH_TAG` alone.
+
+What makes removal behaviour-preserving is the trailing `or None`, not the tag check. Measured: a
+`call_expression`'s `arguments` field is either an `arguments` node or a `template_string`, and
+`string_fragment` and `template_substitution` occur only as direct children of the latter. So an
+ordinary call reaching the part loop contributes nothing, the list stays empty, and `or None`
+declines it.
+
+**Should it be deleted? No.** It is what makes the loop's assumption — that these children are
+template parts — true by construction rather than true by accident, and deleting it would move the
+guarantee onto a backstop that happens to hold. It is also a production change no test proves
+necessary, which this task is not permitted to make. Kept, and recorded here so the next reader
+knows the branch is covered while its effect is not demonstrable.
+
+**`_mount_target`'s final `return None` cannot be falsified by fabricating a class name.** The
+first M5 returned the constructor's own text as a class name; `_declaring` refuses a name no module
+declares, so the fabricated edge resolved to nothing and the map was unchanged. That is the module's
+layered refusal working, and it means the branch is only falsifiable by a mutation that produces a
+*resolvable* name. Unwrapping a parenthesized constructor is that mutation, and the test's fixture
+now carries `new (API.Models)(this)` so it has something to find.
+
+Both survivals were also test weaknesses, and both tests were strengthened rather than left: the
+`buildPath` fixture was handed a variable where it should have been handed a literal, and the mount
+fixture had no constructor that named a class. Commits `f90670b` and `1d1d1d3`.
 
 ## Mutation table
 
-<!-- filled in incrementally; see the commits on this branch -->
+Harness: `--color=no`, exit code read, mutated text compiled before the run, `ERROR` lines matched
+separately from `FAILED` lines, and the restored baseline asserted green afterwards. Every run
+reported `restored baseline: exit 0, 0 failed, 0 errors`.
+
+The three known false-survival modes were therefore all distinguishable, and **none of them
+occurred**: no mutation produced a `SyntaxError` (so none was reported as `ERROR`/DID-NOT-COMPILE),
+every exit code was 0 or 1 (so none was UNREADABLE), and colour was off throughout.
+
+| # | Mutation | Branch it attacks | Verdict | Test killed |
+|---|---|---|---|---|
+| M1 | Drop `not arguments.named_children`, reading a client call handed no arguments | 305 | killed, exit 1 | `test_a_client_call_handed_no_arguments_yields_no_operation` |
+| M2 | Fall back to the quoted text, reading an empty string as the empty route | 253 | killed, exit 1 | `test_an_empty_route_however_written_reads_as_absent_rather_than_as_a_route` |
+| M3 (first form) | Drop `template.type != "template_string"` | 269 | **SURVIVED, exit 0** — faulty mutation; see the section above | — |
+| M3 | Dig the route out of the first argument's subtree | 269 | killed, exit 1 | `test_a_route_built_by_a_call_this_rule_does_not_read_is_declined` |
+| M4 | Read a tagged template under any tag | 271 | killed, exit 1 | `test_a_tagged_template_under_another_tag_is_not_read_as_a_route` |
+| M5 (first form) | Return the constructor's own text as a class name | 328 | **SURVIVED, exit 0** — faulty mutation; see the section above | — |
+| M5 | Unwrap a parenthesized constructor and mount what it names | 328 | killed, exit 1 | `test_a_mount_whose_constructor_is_not_a_name_is_not_an_edge` |
+| M6 | `continue` becomes `break` on a non-specifier export-clause child | 386 | killed, exit 1 | `test_a_comment_inside_an_export_clause_does_not_stop_the_barrel_being_followed` |
+| M7 | Do not return what a star re-export resolved | 426-428 | killed, exit 1 | `test_a_class_reached_only_through_a_star_re_export_is_followed` |
+| M8 | Remove the `try`/`except ValueError`, letting a specifier outside the root raise | 192-193 | killed, exit 1 | `test_an_import_resolving_above_the_checkout_root_names_nothing_here` |
+| M9 | Drop an interpolation instead of standing a segment where it stood | the interpolation invariant | killed, exit 1 | `test_an_interpolation_this_rule_cannot_resolve_stands_where_it_stood` and `test_a_route_carrying_an_unresolvable_interpolation_is_unknown_to_the_specification`, plus 5 pre-existing tests |
+| M10 | Remove the escape guard from `_plain_route` (production hunk 1b) | the defect | killed, exit 1 | `test_a_route_literal_carrying_an_escape_is_declined_rather_than_truncated` |
+| M11 | Remove the escape guard from `_tagged_route` (production hunk 2b) | the defect | killed, exit 1 | `test_a_route_literal_carrying_an_escape_is_declined_rather_than_truncated` |
+| M12 | Match `abstract_class_declaration` as a declaration too | the silent pre-guard decline | killed, exit 1 | `test_a_resource_this_grammar_does_not_call_a_class_declaration_is_never_reached` |
+| M13 | Anchor resources on a base this emission does not write | the control | killed, exit 1 | `test_the_hand_built_sdk_is_read_before_anything_is_declined`, plus 26 others |
+
+M9 and M13 killing many tests each is the intended reading rather than noise: the interpolation
+reader and the resource anchor are load-bearing for the whole file, and a mutation to either that
+killed only the new test would mean the new test was measuring something the module does not
+actually depend on.
