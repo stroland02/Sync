@@ -39,35 +39,37 @@ general limitation, so overloading it with a per-repository fact would give one 
 with a control proving a legitimate silent decline stays silent, `LanguageAdapter` and the
 conformance kit unchanged, and four gates green.
 
-### B54 — A UTF-8 byte-order mark makes four manifest readers answer wrongly
+### B56 — Static verification calls a file broken that Python compiles fine
 
-`EF BB BF` is valid UTF-8, so `read_text(encoding="utf-8")` succeeds and hands every parser
-downstream a leading `﻿`. Measured against `83825f6`, four sites, ordered by how hard the
-failure is to notice:
+`PythonAdapter._syntax_errors` (`src/sync/index/python_lang.py:709`) reads customer source with
+`read_text(encoding="utf-8")` and hands the string to `ast.parse`. A `.py` file beginning with a
+UTF-8 byte-order mark decodes cleanly, so the mark arrives as the first character and `ast.parse`
+rejects it. Measured with a control:
 
-1. `TypeScriptAdapter._declared_dependencies` — a BOM'd `package.json` makes `matches()` return
-   False silently, with no reason anywhere. `json.loads` raises `Unexpected UTF-8 BOM` and the
-   handler turns it into "no declared dependency".
-2. `sync.signals.intake` on `package.json` — declined, with an accurate reason naming the BOM. The
-   answer is wrong but a human can act on it.
-3. `sync.signals.intake` on `pyproject.toml` — declined with a *misleading* reason: `tomllib` says
-   `Invalid statement (at line 1, column 1)` for a file that is valid TOML.
-4. `sync.signals.intake` on `requirements.txt` — **no error at all and a wrong value**:
-   `name='﻿stripe'` instead of `'stripe'`, with `unreadable` empty. The second dependency in
-   the same file parses correctly, which is why it is easy to miss.
+    plain UTF-8, valid Python   _syntax_errors -> none
+    same file with a BOM        _syntax_errors -> ['billing.py: invalid non-printable character U+FEFF']
+    the same BOM'd file         py_compile     -> compiles fine
 
-Case 4 is why this is a task rather than a note. Intake decides whether a prospective customer's
-repository depends on a vendor we cover, and a BOM'd `requirements.txt` makes it answer no for a
-repository that does, silently and unrankably. Windows editors write BOMs by default and this
-project runs on Windows.
+The docstring is what makes it a defect rather than a preference: it chooses `ast.parse` over the
+tree-sitter grammar because "the interpreter's own parser is the authority on that", and CPython
+strips a BOM when reading a *file* — so decoding it ourselves defeats the argument the method rests
+on.
 
-The fix is `encoding="utf-8-sig"`, which strips a BOM when present and decodes plain UTF-8
-unchanged when not, so it does not move the answer for any manifest that works today.
+**This is the first of the family that fails in the dangerous direction.** It is consumed at
+`python_lang.py:770` as part of static verification, the gate the project's central invariant rests
+on. The earlier BOM defects made Sync miss a dependency — a missed finding. This one reports that a
+patch broke a file the patch never wrote, so a correct fix fails verification and the finding is
+abandoned, and the run names our own output as the thing at fault.
 
-**Closes when:** each fixed case has a test that fails first for the expected reason and a control
-proving the plain-UTF-8 answer is unchanged — case 4 asserting on the parsed *value*, since there
-is no error to assert on — `DRIVERS` keys updated wherever an edit shifted a handler's line, and
-four gates green.
+Carries a second, smaller deliverable: `tests/test_decode_handlers.py` keys `DRIVERS` by
+`path:line` and its docstring never says so, though it explains at length why *entry* is attributed
+by exception type rather than by line. Two people hit that in one hour — seven handlers moved out
+from under their drivers by one worker's comment blocks, and a key re-anchored 201 to 206 by the
+coordinator. Document the trade; do not redesign the keying.
+
+**Closes when:** a BOM'd but valid `.py` file is no longer reported as a syntax error, a plain UTF-8
+file with a real syntax error still is, a genuinely undecodable file still reports through the
+`UnicodeDecodeError` arm, `DRIVERS` is re-anchored from what the gate reports, and four gates green.
 
 ### B7 — The M0 acceptance run has not executed since the pipeline changed underneath it
 
@@ -95,8 +97,8 @@ recorded with which change broke it.
 
 ## In flight
 
-- **B54** — `task_1ea8ea5094a0`, worktree `sync-solo-b`.
 - **B55** — `task_e03a2a5bb93f`, worktree `sync-solo-a`.
+- **B56** — `task_e07b696d699d`, worktree `sync-solo-b`.
 
 **Briefs go in a file now, not in the dispatch spec.** Long message bodies are being truncated in
 delivery — three briefs today, and B52 received a correction paragraph while the four numbered
@@ -656,3 +658,21 @@ is what a reviewer needs and duplicating it here would let the two copies drift.
   no branch. Caught within a minute and preserved as `unreviewed/b52-hold-back-scope`, then
   finished here. Two habits earned from that: stage by explicit path, and run
   `git log --oneline main..HEAD` before any `git reset --hard`.
+
+- Read a customer's manifest as `utf-8-sig`, so a byte-order mark stops changing the answer. Landed
+  `9352dbe`. **Seven sites, not the four the brief named** — the brief counted `sync/index/` and the
+  worker found `sync/signals/intake.py` reads the same three files for the intake report, correctly
+  widened the scope, and said why. The worst instance is the one it added: intake *reported* a
+  dependency called `﻿stripe` with an empty `unreadable` beside it, answering a wrong fact
+  rather than an absence.
+
+  The claim worth checking was that `utf-8-sig` narrows rather than decodes leniently, since a
+  lenient decode would have made every unreadable manifest "readable" and turned the whole family of
+  defects into silent mojibake. Verified here: BOM'd manifests now resolve to `stripe`, and UTF-16
+  still refuses with `unreadable` set, on both `package.json` and `requirements.txt`.
+
+  Landing it conflicted in three files, all of them "keep both halves" rather than a real
+  disagreement: the worker's base predated B53's widened `except`, so `typescript.py` wanted its
+  `utf-8-sig` read *and* main's `UnicodeDecodeError` clause. Its report said B53's fix was missing
+  from `origin/main`; that was its stale base showing, not origin — `bdabe9c` is in origin's
+  ancestry and the clause is there at line 201.
