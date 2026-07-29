@@ -60,6 +60,20 @@ OPENAI = DeprecationSource(
 )
 
 
+CLOUDFLARE = DeprecationSource(
+    vendor_id="cloudflare",
+    url=(
+        "https://developers.cloudflare.com/changelog/post/"
+        "2026-05-08-planned-model-deprecations/index.md"
+    ),
+    # Two namespaces, not one. Checked against every model id the page names rather than
+    # derived from the vendor's own name: `@hf/` carries four of them, three of which are
+    # among the eighteen being retired, and a list guessed as `@cf/` alone would have left
+    # those three raising a finding with no call site to attach it to.
+    prefixes=("@cf/", "@hf/"),
+)
+
+
 def http_fetch(url: str, timeout: float = 20.0) -> str:
     """A plain GET returning decoded text. The default `Fetch` for real runs.
 

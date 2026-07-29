@@ -2,6 +2,7 @@
 
 from sync.signals.deprecations.adapter import (
     ANTHROPIC,
+    CLOUDFLARE,
     OPENAI,
     DeprecationAdapter,
     DeprecationSource,
@@ -21,6 +22,7 @@ from sync.signals.deprecations.parameters import (
 
 __all__ = [
     "ANTHROPIC",
+    "CLOUDFLARE",
     "OPENAI",
     "DeprecationAdapter",
     "DeprecationSource",
