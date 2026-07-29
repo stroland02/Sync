@@ -36,48 +36,26 @@ when, which is why it is recorded here rather than dispatched.
 **Closes when:** one `sync run` produces a CI-green pull request again, or the failure is
 recorded with which change broke it.
 
-### B34 — The Python indexer credits a call with fields read off something else
+### B35 — The walrus binds a result the binder does not record
 
-**Not the gap B33 fixed. Half of it, and the other half.** Python has no
-declaration-versus-assignment split, so the shape that was blind in TypeScript is the only shape
-Python has and it already works. There is no missed break here. Do not go looking for one.
+`charge := client.charges.create(...)` genuinely binds the call's own result, and
+`python_lang._response_fields` does not walk through `named_expression`, so fields read off
+`charge` are recorded as nothing. That is a missed break of the same class B33 fixed for
+TypeScript.
 
-What is wrong is the precision half. `python_lang._response_fields` walks to the nearest
-assignment without checking the SDK call is what the name actually receives, so a result passed
-through another call is credited to the SDK call. Measured:
+It was found during B34 and **deliberately left**, which was the right call: B34 was a precision
+task, and adding a form makes the walk report *more*. A recall improvement taken as a side effect
+of a precision fix arrives with no evidence of its own and no way to tell which change moved what.
 
-```
-charge = client.charges.create(amount=n)          ->  ['id', 'status']   correct
-charge = dict(client.charges.create(amount=n))    ->  ['id', 'status']   WRONG
-return client.charges.create(amount=n)            ->  []                 correct
-```
+Small and self-contained: one node kind added to the wrapper set, with a fixture proving the
+walrus form now records what it reads and the wrapped-walrus form
+(`charge := dict(create(...))`) still records nothing.
 
-The TypeScript equivalent was found and fixed inside B33 — the walk now stops at anything that is
-not a transparent wrapper (`await`, parens, `!`, `as`, `satisfies`, type assertion). The same
-distinction applies here.
+**No corpus number will move** — all four corpus repositories are TypeScript. State the evidence
+in the fixture, not in a score.
 
-A false attribution is the direction this project has committed against: it turns a call site into
-a finding for a change it does not depend on, spending reviewer trust that does not recover at the
-rate it is spent.
-
-**This cannot be closed by a corpus number.** All four corpus repositories are TypeScript, so no
-score will move whatever you do — a brief implying otherwise would send someone hunting a
-measurement that cannot exist.
-
-Two forms to check explicitly, from the worker that measured this:
-
-- **Annotated assignment** — `charge: Charge = client.charges.create(...)` — is the same binding
-  wearing a different node, and a walk keyed on the plain assignment node will miss it.
-- **Augmented assignment** — `charge += ...` — is *not* a result binding and must stay empty. It
-  is exactly what a widening pass picks up by accident.
-
-That worker verified Python's *behaviour*, not its grammar node names, so treat the above as where
-to look rather than as the answer.
-
-**Closes when:** a fixture reproduces the false attribution, the fix makes it record `[]` for the
-wrapped form while leaving the bare form at `['id', 'status']`, annotated assignment is covered and
-augmented assignment stays empty, and the transparent-wrapper boundary is stated as deliberately as
-B33 stated it for TypeScript.
+**Closes when:** the walrus form records its reads, the wrapped-walrus form still records nothing,
+and no other form's output changes.
 
 ### B30 — `_score_corpus` cannot read a real repository
 
@@ -103,6 +81,19 @@ pre-filtering step, and the count of skipped files is reported rather than silen
   the first worker held the task for half an hour without starting and did not answer two nudges.
 
 ## Done
+
+- **B34** — the Python binder no longer credits a call with fields read off whatever wrapped it.
+  Landed `a11c3be`, with its report. Two false attributions removed, six correct cases
+  byte-identical, and **nothing anywhere records more than it did** — the check that mattered on a
+  precision task.
+
+  The wrapper set is `await` and `parenthesized_expression`, and it was derived from
+  `tree_sitter_python`'s grammar rather than translated from TypeScript's, because the worker that
+  found the defect had verified behaviour and said explicitly it had not verified node names. Every
+  rejected form carries its own reason: `boolean_operator` and `conditional_expression` choose
+  between two values and only one is the call's; collection literals bind a container; `argument_list`
+  *is* the defect. Annotated assignment needed nothing — it is the same node with the annotation as
+  a field. See B35 for the one form it declined to add.
 
 - **B33** — the binder now sees fields read off a result the code assigns rather than declares.
   Landed in `67db957`. Recall **0.8000 to 1.0000 at the unchanged n=20**, every response-side miss
