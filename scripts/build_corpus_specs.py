@@ -52,6 +52,7 @@ from collections import defaultdict
 from pathlib import Path
 
 import yaml
+from ast_grep_py import SgRoot
 
 from sync.cli import select_language_adapter
 from sync.core import RepoRef
@@ -173,7 +174,95 @@ def operations_for(by_operation: dict, kind: str, limit: int = OPERATIONS_PER_RE
     return candidates[:limit]
 
 
-def hold_back(sites: list, kind: str) -> list[dict]:
+# What the cross-crediting clause below has to read out of the source, per language. Kept here
+# rather than imported from `sync.benchmark.mutate`: the question is the corpus's own -- do these
+# two sites share a scope and a name -- and borrowing the generator's private walk would make a
+# generator change move which sites the corpus holds back, silently.
+_AST_LANGUAGES = {".py": "python"}
+_CALL_KINDS = {"python": "call", "typescript": "call_expression"}
+_FUNCTION_KINDS = {
+    "python": frozenset({"function_definition", "lambda"}),
+    "typescript": frozenset({
+        "function_declaration", "function_expression", "generator_function",
+        "generator_function_declaration", "arrow_function", "method_definition",
+    }),
+}
+_BINDERS = {
+    "python": {"assignment": ("left", "right"), "named_expression": ("name", "value")},
+    "typescript": {
+        "variable_declarator": ("name", "value"),
+        "assignment_expression": ("left", "right"),
+    },
+}
+_WRAPPERS = {
+    "python": frozenset({"await", "parenthesized_expression"}),
+    "typescript": frozenset({
+        "await_expression", "parenthesized_expression", "non_null_expression",
+        "as_expression", "satisfies_expression", "type_assertion",
+    }),
+}
+
+
+def _ast_language(path: str) -> str:
+    return _AST_LANGUAGES.get(Path(path).suffix, "typescript")
+
+
+def _bound_scope_and_name(root: Path, site) -> tuple[str, tuple[int, int], str] | None:
+    """Where this call's result is read from: the file, the enclosing scope's span, the name.
+
+    **The path is part of the identity and leaving it out is a real defect, not tidiness.** A
+    span is a byte offset within one file, so two files holding the same text -- which is
+    ordinary in a repository with a copied handler -- produce the same span, and a comparison
+    over span and name alone reads them as one scope. That refuses a hold-back whose sites are
+    in different files, which is precisely the sound case this clause has to keep accepting.
+
+    `None` when the result is not bound directly to a plain name, which is also when no guard can
+    be written and therefore when nothing can be cross-credited.
+
+    Identity rather than containment, the same rule `sync.benchmark.mutate` applies for the same
+    reason: `customers = list(client.customers.list(...))` binds what `list` returned, so a read
+    off that name is not a read of the response.
+    """
+    language = _ast_language(site.path)
+    try:
+        source = (root / site.path).read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError):
+        return None
+
+    tree = SgRoot(source, language).root()
+    call = next(
+        (node for node in tree.find_all(kind=_CALL_KINDS[language])
+         if node.range().start.line + 1 == site.line and node.range().start.column == site.col),
+        None,
+    )
+    if call is None:
+        return None
+
+    current, parent = call, call.parent()
+    while parent is not None:
+        binder = _BINDERS[language].get(parent.kind())
+        if binder is not None:
+            name_field, value_field = binder
+            value, target = parent.field(value_field), parent.field(name_field)
+            if value is None or target is None or target.kind() != "identifier":
+                return None
+            if (value.range().start.index, value.range().end.index) != (
+                current.range().start.index, current.range().end.index
+            ):
+                return None
+            scope = parent
+            while scope is not None and scope.kind() not in _FUNCTION_KINDS[language]:
+                scope = scope.parent()
+            span = ((scope.range().start.index, scope.range().end.index) if scope is not None
+                    else (-1, -1))
+            return site.path, span, target.text()
+        if parent.kind() not in _WRAPPERS[language]:
+            return None
+        current, parent = parent, parent.parent()
+    return None
+
+
+def hold_back(sites: list, kind: str, root: Path) -> list[dict]:
     """The call sites this specification declares held out of the mutation, as positions.
 
     A corpus that breaks every site on the changed operation gives binding precision nothing to
@@ -200,12 +289,41 @@ def hold_back(sites: list, kind: str) -> list[dict]:
 
     **Only when the operation has more than one.** Holding back the only site leaves the mutation
     no target, and a pair with no target is refused rather than scored.
+
+    **Never when it shares an enclosing scope and a result name with a site still targeted, on a
+    response change.** The mutation writes a guard reading a field off the result at each target,
+    and `_response_fields` collects reads rooted at the result name within the enclosing function
+    -- so two assignments in one function binding the same name from the same call credit that
+    read to both, the held-back one included. It then carries the removed property and is not a
+    negative at all. B50 measured it on `furever`: holding back
+    `create_charges/route.ts:104` while targeting `:154`, both assigning `paymentIntent` inside
+    one function, gave binding precision 0.9615 over n=26, and the one false positive was the
+    held-back site.
+
+    Refused outright rather than moved to the next candidate, because the position argument above
+    is what makes the first site the only safe one -- a later site is exactly what the mutation's
+    own insertions displace.
+
+    Response changes only. `args_keys` is read off the call's own argument list with no scope
+    walked, so nothing is cross-credited on the request side, and applying this there would refuse
+    sound hold-backs and take falsifiable negatives down with them.
+
+    The binder is not wrong in the case this refuses. It cannot tell which of two assignments
+    produced the value being read -- that is data flow, which tree-sitter does not do -- and
+    crediting both is the conservative direction for a tool whose expensive failure is a missed
+    break. What was wrong is a corpus holding back a site the binder was always going to reach.
     """
     if len(sites) < 2:
         return []
     first = min(sites, key=lambda site: (site.path, site.line, site.col))
     if not _judged_by(first, kind):
         return []
+    if kind.startswith("response-"):
+        held = _bound_scope_and_name(root, first)
+        if held is not None and any(
+            _bound_scope_and_name(root, site) == held for site in sites if site is not first
+        ):
+            return []
     return [{"path": first.path, "line": first.line, "col": first.col}]
 
 
@@ -275,7 +393,7 @@ def build(dsn: str) -> list[Path]:
                     "to_version": TO_VERSION,
                     "change": {"kind": kind, "operation": operation, "field": field},
                 }
-                held = hold_back(sites, kind)
+                held = hold_back(sites, kind, CORPUS / name)
                 # Written only when the rule selected one, so a specification the rule passed
                 # over stays byte-identical to what it was before the rule existed.
                 if held:
