@@ -36,6 +36,43 @@ when, which is why it is recorded here rather than dispatched.
 **Closes when:** one `sync run` produces a CI-green pull request again, or the failure is
 recorded with which change broke it.
 
+### B29 — The binding score's response axis has never had a sample
+
+Every `response-property-removed` pair in the frozen corpus scored **0 affected and 0 findings**,
+and eleven labels landed in `unreachable`. The corpus's twelve labelled positives are all
+request-side, so binding precision and recall are computed **entirely over the request side** and
+the response half cannot move either number. That is why 1.0000 at n=12 is a narrower result than
+it reads.
+
+Two causes, and the second compounds the first rather than being independent of it.
+
+`mutate.py`'s `_result_binding` only recognises `const`/`let` declarations. Extending it to a
+plain assignment and to a returned call converts the eleven unreachable targets into labelled
+positives. It changes a generator, not the pipeline, so it moves the corpus without moving the
+score's meaning.
+
+`upsert_call_site` keys call-site identity on line and column, so a mutation that inserts lines
+renames every call site below it in that file. The response-side mutation inserts a three-line
+guard, so two pairs were refused as `displaced-label`. The refusal is correct — it is the feature,
+not a bug — but it means a file with several calls can never carry a response-side pair.
+
+**Closes when:** the response axis reports a number over a non-zero sample, with the displaced-label
+interaction either resolved or stated as the reason a given file cannot carry a pair.
+
+### B30 — `_score_corpus` cannot read a real repository
+
+It reads every file under the checkout with `read_text(encoding="utf-8")`, so one PNG ends the run.
+The Stripe Connect demo carries 63 files that are not UTF-8. The corpus currently works around it
+by materialising only the files that decode and printing how many it dropped — a documented
+transformation of the vendor's tree, not a fix.
+
+`CLAUDE.md` already names the correct shape: when handling bytes that are not text, use
+`read_bytes` and do not decode at all. Skipping a file that does not decode is what the indexers
+want anyway, since nothing they read is binary.
+
+**Closes when:** a corpus specification naming a repository with binary files scores without a
+pre-filtering step, and the count of skipped files is reported rather than silent.
+
 ### B28 — The routing row still has nowhere durable to land
 
 `_decide_tier` computes the decision-table row in the `locate` node and stores it on `RunState`;
@@ -51,7 +88,9 @@ and it stays that way however much corpus data arrives.
 
 ## In flight
 
-- **B27** — `task_b777f003fa9f`, in `sync-solo-a` (shared with nobody now; B26 landed out of it). Freezes a specimen corpus and measures whether
+- **B27** — `task_b777f003fa9f`, in `sync-solo-a`. In review; 1091 lines uncommitted and backed up
+  outside the repository. Produces B29 and B30 as findings.
+- **B28** — `task_d36a5c6e7443`, in `sync-solo-b`. Freezes a specimen corpus and measures whether
   binding precision is actually deterministic, which is the precondition for the only tier C gate
   that is safe without the statistics research that never completed.
 
