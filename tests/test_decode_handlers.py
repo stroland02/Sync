@@ -378,6 +378,32 @@ def _drive_intake_requirements(root: Path) -> None:
     assert declared == () and any("requirements.txt" in item for item in unreadable)
 
 
+def _drive_ts_manifest(root: Path) -> None:
+    from sync.index.typescript import TypeScriptAdapter
+    from sync.signals.stripe.adapter import StripeAdapter
+    from sync.signals.stripe.symbols import build_symbol_map
+
+    map_path = root / "map.json"
+    map_path.write_text(json.dumps(build_symbol_map(SPEC)), encoding="utf-8")
+    vendor = StripeAdapter(
+        spec_dir=Path(__file__).parent / "fixtures" / "specs", symbol_map_path=map_path
+    )
+    adapter = TypeScriptAdapter(vendor_adapter=vendor)
+    manifest = root / "package.json"
+
+    # A real package.json in the wrong encoding, rather than arbitrary undecodable bytes: this
+    # handler's whole job is to answer "no declared dependency" for a manifest it cannot read,
+    # and a file that would parse once decoded is the case that distinguishes the decode arm
+    # from the JSONDecodeError arm beside it.
+    manifest.write_bytes(json.dumps({"dependencies": {"stripe": "^14.0.0"}}).encode("utf-16"))
+    assert adapter.matches(_repo(root)) is False
+
+    # Without this the assertion above passes whenever `matches` short-circuits before reading
+    # anything, which is how a driver ends up naming a handler it never enters.
+    manifest.write_text(json.dumps({"dependencies": {"stripe": "^14.0.0"}}), encoding="utf-8")
+    assert adapter.matches(_repo(root)) is True
+
+
 DRIVERS: dict[str, Callable[[Path], None]] = {
     "sync/benchmark/checkout.py:81": _drive_checkout,
     "sync/forge/webhook.py:97": _drive_webhook,
@@ -385,6 +411,7 @@ DRIVERS: dict[str, Callable[[Path], None]] = {
     "sync/index/python_lang.py:231": _drive_requirement_lines_requirements,
     "sync/index/python_lang.py:704": _drive_syntax_errors,
     "sync/index/python_lang.py:715": _drive_configured_typechecker,
+    "sync/index/typescript.py:201": _drive_ts_manifest,
     "sync/remediate/literal_swap.py:84": _drive_literal_swap,
     "sync/remediate/parameters.py:77": _drive_parameters,
     "sync/remediate/property_omit.py:93": _drive_property_omit,
