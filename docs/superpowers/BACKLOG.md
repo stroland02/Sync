@@ -44,23 +44,35 @@ corpus stays a deliberate superset of what the rule proposes rather than equal t
 result name with a targeted site on the same operation, a fresh generation stops proposing `furever`
 `PostPaymentIntents-response`, and all four gate figures are unchanged by the rule change.
 
-### B51 — Coverage marks these decode handlers covered without ever entering them
+### B53 — A non-UTF-8 `package.json` crashes TypeScript adapter selection
 
-From the other coordinator's M3-W87. `_read_npm` catches `JSONDecodeError` and `UnicodeDecodeError`
-**on one line**, so a fixture exercising the JSON arm marks the line covered while the decode arm has
-never run. Two of the three decode handlers in `sync/signals/intake.py` were invisible to the metric
-that would have been used to find them.
+`TypeScriptAdapter._declared_dependencies` (`src/sync/index/typescript.py:181`) reads the customer's
+manifest with `read_text(encoding="utf-8")` and catches only `json.JSONDecodeError`. A manifest that
+is not valid UTF-8 raises `UnicodeDecodeError` from the read, before `json.loads` is reached, and
+nothing catches it — so `matches()` raises out of adapter selection instead of answering "no declared
+dependency".
 
-That matters beyond one module: this repository has hit the same defect class four times today —
-`_requirement_lines`, `_read_npm`, and the two `tomllib` pairs — and coverage is exactly the tool
-someone would reach for to find the rest. **It will report them as already tested.**
+The method's own docstring states the contract it fails to keep: *"A customer's manifest is untrusted
+input, so an unparseable one answers 'no declared dependency' rather than raising."* An undecodable
+file is unparseable in exactly that sense, so this is a gap against stated intent rather than an open
+question.
 
-Also worth keeping, from the same worker: build a non-UTF-8 fixture *in code* rather than committing
-one. A committed non-UTF-8 file is silently repaired by anything that round-trips it as text, after
-which the test passes against a valid file while appearing to cover the decode handler.
+Reproduced with a control, which is the part that makes it trustworthy: a valid UTF-8 manifest gives
+`matches()` True, `'{ not json'` gives False by the documented path, and the same JSON as UTF-16
+raises `UnicodeDecodeError`. A first attempt at that repro returned False for every input because
+`_package` was None — a run whose control also fails proves nothing.
 
-**Closes when:** the decode arms are separated from their co-caught siblings, or a check exists that
-does not rely on line coverage to tell whether they have been entered.
+The identical defect on the Python side was fixed as `5cbf7b8`. The TypeScript side never was. Every
+fixture in this repository is ASCII, which is why no existing test catches it.
+
+Carries one thing to report rather than build: `PythonAdapter.matches` silently declines a
+repository whose manifest cannot be decoded and carries no reason where `intake` reports one. B51
+ranked that first among its leave-behinds because silent is worse than loud, but where a reason
+should land is a design decision, not a fix.
+
+**Closes when:** `matches()` returns False on a non-UTF-8 `package.json` with a live control proving
+the path is reached, the new handler has a driver in `tests/test_decode_handlers.py` so every decode
+handler stays entered, and four gates are green.
 
 ### B7 — The M0 acceptance run has not executed since the pipeline changed underneath it
 
@@ -88,8 +100,13 @@ recorded with which change broke it.
 
 ## In flight
 
-- **B51** — `task_48d3cb708ecf`, worktree `sync-solo-b`. Committed at `6d0a7d6`, not yet reported.
 - **B52** — `task_15860306d7c7`, worktree `sync-solo-a`.
+- **B53** — `task_45f3e2d8c875`, worktree `sync-solo-b`.
+
+**Briefs go in a file now, not in the dispatch spec.** Long message bodies are being truncated in
+delivery — three briefs today, and B52 received a correction paragraph while the four numbered
+answers that followed it in the same message never arrived. Write the brief to
+`.claude/<task>-brief.txt` and let the spec carry a short summary and that path.
 
 Entries stay under **Ready** above with their full reasoning until they land, because the reasoning
 is what a reviewer needs and duplicating it here would let the two copies drift.
@@ -596,3 +613,15 @@ is what a reviewer needs and duplicating it here would let the two copies drift.
   fresh database independently, and all four floors were mutation-probed: injecting one false
   positive, one negative short, two false negatives and one dropped pair each fired, naming its own
   axis, with the unmutated control clean. The unsound-selection half is B52.
+
+- Tell whether a decode handler has ever been entered. Landed `e804fe6`. Reads the handler inventory
+  out of `src/` by AST and attributes entry by *exception type* using `sys.monitoring`'s
+  `EXCEPTION_HANDLED`, so a handler reached by `JSONDecodeError` and the same handler reached by
+  `UnicodeDecodeError` are told apart on one line — the distinction line coverage cannot make, which
+  is the whole reason the defect class stayed invisible. Measuring the pre-existing suite this way
+  found **9 of 14 decode handlers in `src/` had never been entered**; all 14 behave correctly on
+  undecodable bytes, so the defect was only that nobody could tell. Nothing in `src/` changed and no
+  lint or coverage configuration was weakened. Verified by dropping the driver for a *co-caught*
+  handler — the arm a line-coverage check would still call covered — and watching the gate name
+  `sync/signals/intake.py:275` exactly; a bogus driver naming a handler not in `src/` also fired.
+  Two leave-behinds became B53; the 35 unhandled text decodes still need per-site triage.
