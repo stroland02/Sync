@@ -522,3 +522,30 @@ def test_a_directory_entry_that_has_not_moved_since_the_watermark_is_not_promote
 
     assert rows["acme-sdk"]["category"] == "watchable"
     assert rows["ancient-sdk"]["category"] == "not-watchable"
+
+
+def test_a_package_merely_resembling_a_directory_entry_is_not_promoted(
+    monkeypatch, capsys, tmp_path, registry_files
+):
+    """The join is confirmed evidence and never a resemblance.
+
+    `ancient` looks exactly like the front of `ancient.com` and nobody confirmed the pair, so it
+    stays not-watchable. Intake already holds this rule for the generator tier -- `@vercel/sdk`
+    is generated from `vercel/sdk` and resembles nothing, and a package coincidentally sharing an
+    API's name has nothing to do with it -- and a directory of thousands of domains is where a
+    resemblance rule would do the most damage.
+    """
+    directory, evidence = registry_files
+    root = tmp_path / "resembles"
+    root.mkdir()
+    (root / "package.json").write_text(
+        json.dumps({"dependencies": {"ancient": "^1.0.0", "acme": "^1.0.0"}}), encoding="utf-8"
+    )
+
+    rows = _intake(
+        monkeypatch, capsys, root,
+        "--registry-directory", str(directory), "--registry-evidence", str(evidence),
+    )
+
+    assert rows["ancient"]["category"] == "not-watchable"
+    assert rows["acme"]["category"] == "not-watchable"
