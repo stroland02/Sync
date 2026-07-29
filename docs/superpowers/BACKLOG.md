@@ -14,27 +14,35 @@ item that cannot say what evidence closes it is not ready to dispatch.
 
 ### B43 — The pair generator cannot make a Python pair
 
-`sync.benchmark.mutate.language_for` returns `None` for `.py`, so every Python target is recorded
-unreachable and the tree comes back unedited — on both change kinds. Verified:
+`sync.benchmark.mutate` calls `language_for(site.path)` in three places, and it returns `None` for
+`.py`, so every Python target records unreachable and the tree comes back unedited on both change
+kinds. That is the visible symptom. Two things underneath it decide the shape of the fix, and the
+second one was found while scoping this task rather than while doing it.
 
-```
-language_for('src/app.ts')  -> 'typescript'
-language_for('src/app.py')  -> None
-```
+**`language_for` is not the generator's to change.** It lives in `sync.route.templates` and its own
+docstring says why it lives there: *"the routing decision and the edit have to agree on it — a path
+the router judged as TypeScript and the codemod declined to parse would route work to a tier that
+cannot take it."* Adding `.py` to `_LANGUAGES` therefore tells the **router** that Python files are
+codemod-able. They are not: the codemods hard-code `kind() == "object"` in four places, which is
+TypeScript's object literal, and Python produces `dictionary`. A Python finding would route to a
+tier whose codemod matches nothing, produce an empty diff, and abandon as "the remediator produced
+no change" — the exact failure that docstring exists to prevent, introduced by the fix for
+something else.
 
-This is now the only thing between the corpus and its first Python measurement. The binder side is
-done: B38 gave it the client shapes and B39 the Python spellings, and both are visible in the
-counts — one repository went from zero to five call sites through the `self`-attribute receiver
-alone.
+**So the generator needs its own resolution.** The router asks "can a codemod patch this file?" The
+mutator asks "can I parse and edit this file to build a labelled pair?" Those are different
+questions with different answers, and sharing one function forces them to agree where they should
+not. Decide whether that is a second mapping, a parameter, or something better — and say why.
 
-**It is deeper than `language_for`.** The mutation primitives are TypeScript grammar throughout:
+**The primitives are TypeScript grammar throughout, independently of the above.**
 `_object_argument` wants node kind `object` where Python has `dictionary` and passes fields as
-`keyword_argument`; `_result_binding` wants `lexical_declaration`/`assignment_expression` where
-Python has `assignment`. Adding `.py` to `language_for` alone would produce a generator that
-recognises the file and then fails to edit it.
+`keyword_argument`; `_result_binding` wants `lexical_declaration` / `assignment_expression` where
+Python has `assignment`, and since B35 also `named_expression`.
 
-**Closes when:** a Python call site can be mutated into a labelled pair on both change kinds, with
-the mutation attaching and the label addressing a site the mutated index still holds.
+**Closes when:** a Python call site can be mutated into a labelled pair on both change kinds, the
+mutation attaches, the label addresses a site the mutated index still holds, **and the router still
+declines to route a Python finding to a codemod tier** — with a test proving that last part, since
+it is the regression this task is most likely to introduce.
 
 ### B44 — Pin the Python repository B42 found (blocked on B43)
 
