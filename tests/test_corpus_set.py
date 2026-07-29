@@ -36,12 +36,13 @@ def _label(site: str, affected: bool, change: str = "chg") -> BindingLabel:
     )
 
 
-def _scored(name: str, findings, labels, unreachable=()) -> PairResult:
+def _scored(name: str, findings, labels, unreachable=(), falsifiable=()) -> PairResult:
     affected = sum(1 for label in labels if label.affected)
     return PairResult(
         name=name, scored=True, findings=findings, labels=labels,
         affected_sites=affected, unaffected_sites=len(labels) - affected,
         unreachable_targets=tuple(unreachable),
+        falsifiable_negatives=tuple(falsifiable),
     )
 
 
@@ -172,6 +173,48 @@ def test_targets_the_mutation_could_not_attach_to_are_reported_rather_than_dropp
     ])
 
     assert score.unreachable_targets == ["a::a2"]
+
+
+# --- whether precision could have failed at all ------------------------------------
+
+
+def test_the_negatives_the_detector_could_have_fired_on_pool_across_pairs():
+    """Qualified by the pair for the reason the unreachable targets are: a call site id is unique
+    within a repository and the corpus pools four of them."""
+    score = aggregate([
+        _scored("a", [_finding("a1")], [_label("a1", True), _label("a2", False)],
+                falsifiable=("a2",)),
+        _scored("b", [], [_label("b1", False)], falsifiable=("b1",)),
+    ])
+
+    assert score.falsifiable_negatives == ["a::a2", "b::b1"]
+
+
+def test_a_corpus_with_no_falsifiable_negative_says_the_precision_beside_it_is_a_constant():
+    """The frozen corpus is this. Every negative is on another operation or carries no field list,
+    so precision 1.0 is what the construction guarantees -- and a directional floor over it would
+    be gating a constant, which `2026-07-27-sync-benchmark-gates.md` calls worse than no gate."""
+    score = aggregate([_scored("a", [_finding("a1")], [_label("a1", True), _label("a2", False)])])
+
+    rendered = render(score, reference=SYNTHETIC_REFERENCE)
+
+    assert score.falsifiable_negatives == []
+    assert "no negative the detector could have fired on" in rendered
+    assert "gate a constant" in rendered
+
+
+def test_a_corpus_holding_one_does_not_carry_that_warning():
+    """The warning has to disappear when it stops being true, or it is a banner rather than a
+    measurement and the next reader learns to skip it."""
+    score = aggregate([
+        _scored("a", [_finding("a1")], [_label("a1", True), _label("a2", False)],
+                falsifiable=("a2",)),
+    ])
+
+    rendered = render(score, reference=SYNTHETIC_REFERENCE)
+
+    assert "gate a constant" not in rendered
+    assert "falsifiable negatives  1" in rendered
 
 
 # --- the reference travels with the number -----------------------------------------

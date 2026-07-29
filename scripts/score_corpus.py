@@ -93,6 +93,7 @@ class PairResult(BaseModel):
     affected_sites: int = 0
     unaffected_sites: int = 0
     unreachable_targets: tuple[str, ...] = ()
+    falsifiable_negatives: tuple[str, ...] = ()
 
 
 class CorpusScore(BaseModel):
@@ -106,6 +107,14 @@ class CorpusScore(BaseModel):
     affected_sites: int
     unaffected_sites: int
     unreachable_targets: list[str]
+    falsifiable_negatives: list[str]
+    """The negatives the detector could have fired on, pooled across the set.
+
+    Empty is the finding rather than the absence of one. Precision is the share of judged
+    findings that were genuine, and with no candidate for its false-positive term the rate is
+    fixed by how the corpus was built -- so it reads 1.0 through any binder regression that only
+    affects same-operation discrimination.
+    """
     scored_pairs: list[str]
     pairs: list[PairResult]
     """Every pair's own numbers, kept rather than summed away.
@@ -137,12 +146,14 @@ def aggregate(results: Sequence[PairResult]) -> CorpusScore:
     findings: list[EmittedFinding] = []
     labels: list[BindingLabel] = []
     unreachable: list[str] = []
+    falsifiable: list[str] = []
     for result in scored:
         findings.extend(result.findings)
         labels.extend(result.labels)
         # Qualified by the pair, because a call site id is unique within a repository and these
         # are pooled across four of them.
         unreachable.extend(f"{result.name}::{target}" for target in result.unreachable_targets)
+        falsifiable.extend(f"{result.name}::{site}" for site in result.falsifiable_negatives)
 
     by_reason: dict[str, int] = {}
     for result in excluded:
@@ -157,6 +168,7 @@ def aggregate(results: Sequence[PairResult]) -> CorpusScore:
         affected_sites=sum(result.affected_sites for result in scored),
         unaffected_sites=sum(result.unaffected_sites for result in scored),
         unreachable_targets=sorted(unreachable),
+        falsifiable_negatives=sorted(falsifiable),
         scored_pairs=[result.name for result in scored],
         pairs=list(results),
     )
@@ -191,6 +203,9 @@ def render(score: CorpusScore, reference: str | None) -> str:
         f"  call sites affected   {score.affected_sites}",
         f"  call sites unaffected {score.unaffected_sites}",
         f"  unlabelled findings   {score.accuracy.unlabelled_findings}",
+        # Beside precision rather than under it, because the two are read together or the rate is
+        # read as a property of the binder when it is partly a property of the corpus.
+        f"  falsifiable negatives  {len(score.falsifiable_negatives)}",
         "",
         # Per pair, because a pair whose every target was unreachable is scored, counted and
         # carries no information about the binder -- and the corpus total cannot show that.
@@ -205,6 +220,17 @@ def render(score: CorpusScore, reference: str | None) -> str:
         )
 
     lines.append("")
+    if not score.falsifiable_negatives:
+        lines.extend([
+            "Binding precision above is not a measurement. This corpus holds no negative the "
+            "detector could have fired on --",
+            "every unaffected call site is on another operation, which no detector examines, or "
+            "carries no field list for the",
+            "match to test. The false-positive term has no candidates rather than few, so a "
+            "directional floor on this axis would",
+            "gate a constant and could never fire.",
+            "",
+        ])
     if score.excluded_pairs:
         lines.append("Excluded pairs, by reason:")
         for reason, count in sorted(score.excluded_by_reason.items()):
@@ -247,6 +273,7 @@ def score_specs(paths: Sequence[Path], score_dsn: str) -> list[PairResult]:
             name=name, scored=True, findings=scored.findings, labels=scored.labels,
             affected_sites=scored.affected_sites, unaffected_sites=scored.unaffected_sites,
             unreachable_targets=scored.unreachable_targets,
+            falsifiable_negatives=scored.falsifiable_negatives,
         ))
     return results
 
