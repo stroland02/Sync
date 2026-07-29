@@ -120,3 +120,49 @@ def test_a_returned_result_records_nothing(adapter) -> None:
     """Whatever reads the fields is in the caller, frequently in another module. Producing a list
     for it would be the false-attribution direction from the other end."""
     assert _fields(adapter, "forwarded.py") == []
+
+
+# --- the walrus, added by B35 -------------------------------------------------------
+
+
+def test_a_walrus_in_a_condition_records_its_reads(adapter) -> None:
+    """`if charge := client.charges.create(...)` is the form the operator exists for.
+
+    PEP 572's whole motivation is binding inside a condition, so this is the case that decides
+    whether the fix reaches the code people write. A walrus in a bare statement is the rarest
+    spelling of it and would have made a fix look green while missing the common one.
+    """
+    assert _fields(adapter, "walrus_if.py") == ["id", "status"]
+
+
+def test_a_walrus_in_a_while_condition_records_its_reads(adapter) -> None:
+    """The other condition position, and the one that reads the fields inside the loop body
+    rather than after it."""
+    assert _fields(adapter, "walrus_while.py") == ["id", "status"]
+
+
+def test_a_walrus_in_a_comprehension_records_its_reads(adapter) -> None:
+    """A comprehension has its own scope for the loop variable and deliberately not for the
+    walrus: PEP 572 binds it in the enclosing function, which is why `charge` is readable after
+    the comprehension. `_enclosing_scope` walks to the nearest function and so agrees with the
+    language rather than with the tree.
+    """
+    assert _fields(adapter, "walrus_comprehension.py") == ["id", "status"]
+
+
+def test_a_walrus_in_a_bare_statement_records_its_reads(adapter) -> None:
+    """The rarest spelling, kept because it is the one that isolates the binding from any
+    surrounding condition."""
+    assert _fields(adapter, "walrus_bare.py") == ["id", "status"]
+
+
+def test_a_wrapped_walrus_still_records_nothing(adapter) -> None:
+    """B34's defect wearing a walrus, and the case that decides whether the fix was made at the
+    right point in the walk.
+
+    `charge := dict(client.charges.create(...))` binds what `dict` returned, exactly as
+    `charge = dict(...)` does. If admitting the walrus reopens this, the walrus was treated as a
+    transparent wrapper -- something the result passes through on its way to a name -- when it is
+    a binder in its own right, and the walk would have sailed past `dict`'s argument list.
+    """
+    assert _fields(adapter, "walrus_wrapped.py") == []

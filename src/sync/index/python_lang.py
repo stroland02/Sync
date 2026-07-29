@@ -108,10 +108,24 @@ def _same(left: Node | None, right: Node | None) -> bool:
 # a `conditional_expression` (`create(...) if flag else other`) each choose between two values
 # and only one of them is the call's; a `list` or other collection literal binds a container
 # rather than the response; an `argument_list` means another call received the result and its
-# own return value is what the name gets. A `named_expression` -- the walrus -- genuinely does
-# bind the result, and is still left out: recording it would make this walk report more than it
-# did, and this is a precision fix.
+# own return value is what the name gets.
 _RESULT_WRAPPERS = {"await", "parenthesized_expression"}
+
+# Nodes that bind a value to a name, as the field holding the name and the field holding the
+# value. Both are checked the same way -- the name receives this call only when the value field
+# *is* this call -- which is what keeps `dict(create(...))` uncredited in either spelling.
+#
+# The walrus belongs here and not in `_RESULT_WRAPPERS`, and the distinction is the whole of this
+# rule rather than a detail of it. A wrapper is something the result passes *through* on its way
+# to a name somewhere further up; `named_expression` is where the name already is. Listed as a
+# wrapper it would change nothing at all -- the walk would step over it, reach the
+# `parenthesized_expression` and then the `if_statement` that PEP 572's motivating form puts
+# above it, find no binder there and answer None. That was measured rather than reasoned about:
+# adding it to the wrapper set leaves all four recall tests red exactly as they were.
+_BINDING_FORMS = {
+    "assignment": ("left", "right"),
+    "named_expression": ("name", "value"),
+}
 
 
 def _normalised(distribution: str) -> str:
@@ -444,13 +458,23 @@ class PythonAdapter:
         `augmented_assignment` is deliberately not matched. `charge += client.charges.create(...)`
         binds the concatenation and never the response, and it is a different node kind, so it
         answers None here by falling off the wrapper set rather than by a rule of its own.
+
+        Two binding forms now, not one. `charge := client.charges.create(...)` binds the call's
+        own result as surely as `=` does, and until B35 it recorded nothing -- so a response-side
+        change could not be detected against any call site written that way, which is the missed
+        break B33 fixed on the TypeScript side. The walrus is checked by the identical rule and
+        not by a looser one: the name receives this call only when the walrus's `value` *is* this
+        call, so `charge := dict(client.charges.create(...))` still answers None, for the same
+        reason and at the same point in the walk as its `=` spelling.
         """
         current = call_node
         parent = current.parent
         while parent is not None:
-            if parent.type == "assignment":
-                right = parent.child_by_field_name("right")
-                return parent.child_by_field_name("left") if _same(right, current) else None
+            binding = _BINDING_FORMS.get(parent.type)
+            if binding is not None:
+                target, value = binding
+                bound = parent.child_by_field_name(value)
+                return parent.child_by_field_name(target) if _same(bound, current) else None
             if parent.type not in _RESULT_WRAPPERS:
                 return None
             current, parent = parent, parent.parent
