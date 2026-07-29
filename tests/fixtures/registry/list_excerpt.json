@@ -1,0 +1,35 @@
+{
+  "1forge.com": {
+    "added": "2017-05-30T08:34:14.000Z",
+    "preferred": "0.0.1",
+    "versions": {
+      "0.0.1": {
+        "added": "2017-05-30T08:34:14.000Z",
+        "updated": "2017-06-27T16:49:57.000Z",
+        "swaggerUrl": "https://api.apis.guru/v2/specs/1forge.com/0.0.1/swagger.json",
+        "openapiVer": "2.0",
+        "info": {"title": "1Forge Finance APIs"}
+      }
+    }
+  },
+  "stripe.com": {
+    "added": "2016-08-15T00:00:00.000Z",
+    "preferred": "2022-11-15",
+    "versions": {
+      "2020-08-27": {
+        "added": "2020-09-01T00:00:00.000Z",
+        "updated": "2020-09-01T00:00:00.000Z",
+        "swaggerUrl": "https://api.apis.guru/v2/specs/stripe.com/2020-08-27/openapi.json",
+        "openapiVer": "3.0",
+        "info": {"title": "Stripe API"}
+      },
+      "2022-11-15": {
+        "added": "2022-11-20T00:00:00.000Z",
+        "updated": "2024-03-04T11:22:33.000Z",
+        "swaggerUrl": "https://api.apis.guru/v2/specs/stripe.com/2022-11-15/openapi.json",
+        "openapiVer": "3.0",
+        "info": {"title": "Stripe API"}
+      }
+    }
+  }
+}
