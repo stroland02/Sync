@@ -239,6 +239,19 @@ def test_a_file_node_cannot_type_strip_declines_rather_than_condemning_the_patch
     assert "enum" in result.reason.lower()
 
 
+def test_an_import_the_clone_cannot_resolve_declines(tmp_path: Path) -> None:
+    """The environment problem that would retry hardest.
+
+    Replay installs nothing, so a module importing a package the clone does not carry never
+    loads. Recorded as a throw, every attempt in the retry loop meets the same missing package
+    and the run abandons a patch nothing ever executed.
+    """
+    result = _replay(_repo(tmp_path, "missing_dependency"), _site())
+
+    assert result.outcome == "declined", result.reason
+    assert "a-package-this-clone-does-not-have" in result.reason
+
+
 def test_a_module_that_ends_the_process_declines_rather_than_passing(tmp_path: Path) -> None:
     """No verdict on stdout is not a silent pass. Nothing ran, and the reason says so."""
     result = _replay(_repo(tmp_path, "exits_before_the_call"), _site())

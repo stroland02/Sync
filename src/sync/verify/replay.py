@@ -458,10 +458,7 @@ const message = (error) => (error && error.message ? error.message : String(erro
 // replay failure, and a replay failure spends the retry budget a failed typecheck spends.
 const REFUSED_TO_LOAD = new Set([
   'ERR_UNSUPPORTED_TYPESCRIPT_SYNTAX',
-  'ERR_INVALID_TYPESCRIPT_SYNTAX',
   'ERR_MODULE_NOT_FOUND',
-  'ERR_UNKNOWN_FILE_EXTENSION',
-  'ERR_UNSUPPORTED_DIR_IMPORT',
 ]);
 
 let loaded = null;
