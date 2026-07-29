@@ -56,6 +56,7 @@ from sync.signals.deprecations import (
 from sync.signals.datadog.shapes import DatadogShapeReader
 from sync.signals.feed import public_key_bytes, render_feed, sign_feed
 from sync.signals.intake import assess_repository, read_sdk_repositories
+from sync.signals.reachability import observed_call_counts, rank_reachability
 from sync.signals.registry import (
     SYMBOL_MAP_FILENAME,
     VendorContext,
@@ -1374,7 +1375,25 @@ def intake(args: argparse.Namespace) -> int:
     """
     evidence = read_sdk_repositories(Path(args.evidence)) if args.evidence else {}
     report = assess_repository(Path(args.repo), generator_manifests=evidence)
-    print(report.to_json())
+
+    if args.rank_by_repo_id:
+        # Ranked only when asked, and only against a repository the indexer has already run
+        # over. `sync run` is what writes `call_site`, so ranking an unindexed repository would
+        # report every watched dependency as a measured zero -- not a missing feature but a
+        # confident wrong answer, indistinguishable to a reader from a repository that genuinely
+        # calls nothing. Requiring the id rather than defaulting it is what keeps that
+        # unreachable: an operator has to name the repository whose index they mean.
+        store = GraphStore(args.dsn)
+        store.apply_schema()
+        ranking = rank_reachability(
+            report,
+            call_sites=store.call_site_counts(args.rank_by_repo_id),
+            observed_calls=observed_call_counts(store.observed_calls(args.rank_by_repo_id)),
+        )
+        print(ranking.to_json())
+    else:
+        print(report.to_json())
+
     for problem in report.unreadable:
         # To stderr, and never silently. A manifest that would not parse is not a repository
         # with no dependencies, and reported as one it reads as a clean scan of an empty project.
@@ -1478,6 +1497,15 @@ def main() -> int:
     intake_parser.add_argument("--evidence", default=None,
                                help="a file of confirmed package-to-SDK-repository entries; "
                                     "without one the watchable category is reported empty")
+    intake_parser.add_argument(
+        "--rank-by-repo-id", dest="rank_by_repo_id", default=None,
+        help="rank the report by the call sites indexed for this repo_id instead of listing it; "
+             "requires that `sync run` has already indexed that repository, since an unindexed "
+             "one would report every watched dependency as never called",
+    )
+    intake_parser.add_argument("--dsn", default=DEFAULT_DSN,
+                               help="read indexed call sites and observed calls from here when "
+                                    "ranking; unused otherwise")
     intake_parser.set_defaults(func=intake)
 
     benchmark_parser = sub.add_parser(
