@@ -122,6 +122,32 @@ positive needs a partial path match and cannot arise at all from a flat change. 
 this corpus is flat. A precision of 1.0 over it is closer to a property of the corpus than a
 property of the binder.
 
+**Measured afterwards by the coordinator, and it is stronger than "almost no way to fail".** The
+rung on every label in `2026-07-29-score.json` was counted:
+
+```
+affected   (n=12): {'static': 12}
+unaffected (n=94): {'unresolved': 94}
+```
+
+**All 94 negatives are `unresolved` — bound to no operation at all.** A call site the indexer
+could not bind cannot produce a finding from any detector, so not one of the 94 had the
+opportunity to become a false positive. Precision's denominator is `true_positives +
+false_positives`, and the false-positive term had no candidates rather than few.
+
+So the two axes are not equally supported and should never be quoted together as one result:
+
+- **Recall 1.0 at n=12 is a real measurement.** Twelve call sites were labelled affected, the
+  binder was capable of missing any of them, and it missed none.
+- **Precision 1.0 at n=12 is not a measurement.** It is what the corpus construction guarantees.
+  Reporting it beside recall gives it a credibility it has not earned.
+
+What would make it a measurement is a negative the binder could plausibly get wrong: an
+untargeted call site on **the same operation** as the change that does not touch the changed
+field, and which the indexer binds to `static` rather than leaving `unresolved`. The corpus
+contains none, and until it does, a precision floor gated on this corpus would be gating a
+constant.
+
 **The sample is twelve call sites in four repositories, three of which are demonstration or
 teaching code.** Nothing was selected for being representative of the population of repositories
 that depend on Stripe, because no measurement of that population exists. Four repositories is not
