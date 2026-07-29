@@ -48,12 +48,12 @@ from sync.remediate.property_omit import PropertyOmitRemediator
 from sync.remediate.tiered import TerminalTier, TieredRemediator
 from sync.route.matrix import catalogue_index
 from sync.signals.deprecations import (
-    ANTHROPIC,
-    OPENAI,
+    DEPRECATION_SOURCES,
     DeprecationAdapter,
-    DeprecationSource,
     ParameterDeprecation,
     http_fetch,
+    model_deprecation_sources,
+    parameter_deprecation_sources,
     parameters_to_vendor_changes,
     parse_parameter_deprecations,
 )
@@ -87,10 +87,6 @@ WEBHOOK_SECRET_ENV = "SYNC_WEBHOOK_SECRET"
 # this repository and never will be: `sync.core.keys` holds only the public bytes, and
 # `tests/test_feed_cache.py` scans every tracked file to keep it that way.
 FEED_SIGNING_KEY_ENV = "SYNC_FEED_SIGNING_KEY"
-
-# Vendors whose parameter deprecations a scan reads. Both publish one page carrying both a model
-# lifecycle table and a parameter table; `parse_parameter_deprecations` tells them apart.
-DEPRECATION_SOURCES: tuple[DeprecationSource, ...] = (ANTHROPIC, OPENAI)
 
 # How long a downloaded vendor page is reused. The same twelve hours `DeprecationAdapter` uses,
 # for the same reason: these pages change on a human's schedule, and refetching two of them on
@@ -504,7 +500,8 @@ def _page(url: str, destination: Path, fetch: Callable[[str], str]) -> str:
 def _parameter_deprecations(
     cache_dir: Path, fetch: Callable[[str], str] | None = None
 ) -> list[ParameterDeprecation]:
-    """Every vendor's deprecated request parameters, skipping any vendor that cannot be reached.
+    """Deprecated request parameters from every vendor that publishes a table of them, skipping
+    any vendor that cannot be reached.
 
     `DeprecationAdapter` raises when a page cannot be retrieved, and is right to: for the model
     signal an empty answer is indistinguishable from a healthy vendor with nothing deprecated.
@@ -521,7 +518,11 @@ def _parameter_deprecations(
     fetch = fetch or http_fetch
     deprecations: list[ParameterDeprecation] = []
 
-    for source in DEPRECATION_SOURCES:
+    # Only the sources that publish a parameter table. Parsing a page without one returns
+    # nothing rather than raising, so what the filter prevents is not a bad row: it is the
+    # failure message above claiming this detector lost findings for a vendor that publishes
+    # none, which is the silent-zero confusion the whole signal exists to end.
+    for source in parameter_deprecation_sources():
         destination = cache_dir / f"{source.vendor_id}-deprecations.md"
         try:
             body = _page(source.url, destination, fetch)
@@ -592,18 +593,20 @@ def _model_deprecations(
     fetch: Callable[[str], str] | None = None,
     today: date | None = None,
 ) -> list[VendorChange]:
-    """Every vendor's retired models as `VendorChange` rows, skipping a vendor that is unreachable.
+    """Retired models as `VendorChange` rows, from every vendor that publishes them, skipping a
+    vendor that is unreachable.
 
     `DeprecationAdapter` was finished, tested, and constructed nowhere in `src/`, so no
     `ModelDeprecation` ever became a `VendorChange` and `LiteralSwapRemediator` sat in the
     cascade with nothing to act on. This is that call site.
 
-    The cache path is the one `_page` writes for the parameter half, deliberately: both halves
-    read the same page from the same vendor, and the adapter's own freshness window is the same
-    twelve hours. `_parameter_deprecations` runs first and leaves the page there, so the adapter
-    finds it fresh and the run downloads each vendor once rather than twice. That is the shared
-    input, and the sharing is the file rather than a variable because the adapter fetches for
-    itself and its signature is not this module's to change.
+    The cache path is the one `_page` writes for the parameter half, deliberately: where a vendor
+    publishes both tables the two halves read one page, and the adapter's own freshness window is
+    the same twelve hours. `_parameter_deprecations` runs first and leaves that page there, so the
+    adapter finds it fresh and the run downloads such a vendor once rather than twice. A vendor
+    publishing only retirements is fetched here and nowhere else, which is the same one download.
+    The sharing is the file rather than a variable because the adapter fetches for itself and its
+    signature is not this module's to change.
 
     The version range is Stripe's and means nothing to a model retirement -- a model dies on the
     vendor's calendar, not across an API version boundary. It is carried because `fetch_changes`
@@ -621,7 +624,7 @@ def _model_deprecations(
     fetch = fetch or http_fetch
     changes: list[VendorChange] = []
 
-    for source in DEPRECATION_SOURCES:
+    for source in model_deprecation_sources():
         adapter = DeprecationAdapter(
             source,
             fetch=fetch,
@@ -654,6 +657,11 @@ def _literal_call_sites(repo: RepoRef) -> list[CallSite]:
     The prefixes come from each vendor's own `DeprecationSource`, keeping vendor naming out of
     the index stage. `sdk_version` is unknown here and says so -- a model literal is named by the
     customer's code, not by a package the manifest pins.
+
+    **Every source, unfiltered.** This is the one deprecation call site that asks nothing about
+    which table a vendor publishes: it indexes model ids in the customer's own code, and a
+    finding of either kind needs a call site to attach to. Narrowing it to one signal's sources
+    would leave the other signal's findings pointing at nothing.
     """
     root = Path(repo.local_path)
     sites: list[CallSite] = []
@@ -856,7 +864,11 @@ def run(args: argparse.Namespace, today: date | None = None) -> int:
                     deprecations=linked,
                     vendor_id=args.vendor,
                     repo_id=repo.repo_id,
-                    deprecation_vendors=[source.vendor_id for source in DEPRECATION_SOURCES],
+                    # The same set `_model_deprecations` read, because a retirement upserted
+                    # for a vendor with no detector is a row nothing will ever read.
+                    deprecation_vendors=[
+                        source.vendor_id for source in model_deprecation_sources()
+                    ],
                 ),
                 store,
             )
