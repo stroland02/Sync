@@ -1,0 +1,9 @@
+{
+  "rules": [
+    {
+      "path": "**/*.{ts,js,tsx,jsx}",
+      "rule": ".opencodereview/rules/sync-api-surface.md",
+      "merge_system_rule": true
+    }
+  ]
+}

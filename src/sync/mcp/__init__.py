@@ -9,7 +9,7 @@ from sync.mcp.resources import (
     resource_templates_as_data,
     resources_as_data,
 )
-from sync.mcp.server import PROTOCOL_VERSION, serve
+from sync.mcp.server import PROTOCOL_VERSION, main, serve
 from sync.mcp.tools import DEFAULT_LIMIT, GraphReader, GraphSurface
 
 __all__ = [
@@ -25,6 +25,7 @@ __all__ = [
     "ResourceTemplateSpec",
     "ToolSpec",
     "dispatch",
+    "main",
     "resource_templates_as_data",
     "resources_as_data",
     "schemas_as_data",

@@ -256,6 +256,21 @@ def main() -> int:
     It is built with the committed development key, because that is the only key in this
     repository. When a production key replaces the literal in `sync.core.keys`, this picks it up
     by upgrading, which is what "rotatable only through a release" means.
+
+    Two things about the streams, both of which decide whether a client sees a working server or
+    a protocol bug.
+
+    **Stdout is the protocol and nothing else.** The real stream is taken here and handed to
+    `serve`, and `sys.stdout` is pointed at stderr for the rest of the process. Anything that
+    writes to stdout without being the transport -- a `print` left in a code path, a library
+    banner, a logging handler somebody configures later -- then lands where it is readable
+    instead of in the middle of a frame. A corrupted frame is reported by the client as a
+    protocol error, which sends the search to the framing code, which is not where the bug is.
+
+    **Both streams are read and written as UTF-8.** Python decodes stdin with the machine's
+    locale codepage, which on Windows is cp1252, so a request carrying a non-ASCII path or
+    symbol arrives mangled and is answered about a string the client never sent. `json.dumps`
+    escapes non-ASCII on the way out, so the corruption is silent in both directions.
     """
     from sync.core import DEVELOPMENT_FEED_PUBLIC_KEY
     from sync.graph.store import GraphStore
@@ -266,7 +281,17 @@ def main() -> int:
     if not dsn:
         print("SYNC_DSN is not set", file=sys.stderr)
         return 2
-    serve(GraphSurface(GraphStore(dsn)), feed=FeedCache(public_key=DEVELOPMENT_FEED_PUBLIC_KEY))
+
+    protocol = sys.stdout
+    sys.stdin.reconfigure(encoding="utf-8")
+    protocol.reconfigure(encoding="utf-8")
+    sys.stdout = sys.stderr
+
+    serve(
+        GraphSurface(GraphStore(dsn)),
+        stdout=protocol,
+        feed=FeedCache(public_key=DEVELOPMENT_FEED_PUBLIC_KEY),
+    )
     return 0
 
 
