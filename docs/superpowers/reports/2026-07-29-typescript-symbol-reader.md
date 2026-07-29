@@ -49,7 +49,7 @@ Line numbers are the pre-change ones, so they match the brief.
 | 298 | A `member_expression` callee with no `object` or no `property` field | Nothing. **Unreachable** — see the argument below | n/a | n/a |
 | 305 | A client call handed no arguments | `this._client.get()` | Yes, and there is nothing else available — the route is the first argument. Recording the verb alone puts a symbol in the map with no route to match a change against | No |
 | 326 | A `member_expression` constructor with no `object` or no `property` field | Nothing. **Unreachable** | n/a | n/a |
-| 328 | A `new` expression whose constructor is neither an identifier nor a member expression | `new (pick())(this)` | Yes. Which class that constructs is a runtime fact. An edge invented here files a resource's whole route set under a property no customer reaches by that name | No |
+| 328 | A `new` expression whose constructor is neither an identifier nor a member expression | Two forms. `new (pick())(this)`, and `new (API.Models)(this)` | Split. For `pick()` yes — which class it constructs is a runtime fact, and an edge invented from it files a resource's whole route set under a property no customer reaches. For `(API.Models)` **no**: the source names the class and the mount is lost anyway. Not fixed, because prettier strips redundant parentheses before Stainless writes the file, so the emission cannot carry it | No, for either |
 | 336 | A `class_declaration` with no `body` field | Nothing. **Unreachable** | n/a | n/a |
 | 346 | A `new_expression` with no `constructor` field | Nothing. **Unreachable** | n/a | n/a |
 | 353 | A `method_definition` with no `name` field | Nothing. **Unreachable** | n/a | n/a |
