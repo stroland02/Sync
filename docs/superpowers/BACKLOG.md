@@ -12,6 +12,24 @@ item that cannot say what evidence closes it is not ready to dispatch.
 
 ## Ready
 
+### B40 — Something in the suite fails roughly once in eight runs and nobody has named it
+
+Twice today a full `uv run pytest` returned `1 failed` and the identity was lost before it could be
+captured. Seven clean runs have followed, and the standing explanation does not hold:
+
+- **Not connection exhaustion.** Measured during a run: peak **54 of 300** connections, zero
+  sampler connection failures. That was the cause of the morning's flakiness and the ceiling fix
+  closed it.
+- **Not a specific test**, as far as anyone knows — neither failure was captured with its name.
+
+A suite that fails once in eight runs for an unknown reason erodes every gate that depends on it,
+including the corpus floors added today. The cost is not the failed run; it is that the next real
+regression arrives looking exactly like this one and gets re-run away.
+
+**Closes when:** the failing test is named and either fixed or explained. A capture harness that
+re-runs until failure and preserves the output is the cheap first step —
+`pytest -p no:randomly -x` in a loop, saving the first red run's full output rather than its tail.
+
 ### B39 — The Stripe symbol map is built from one SDK and asked to serve two
 
 179 symbols, **93 containing camelCase**, `paymentIntents` present and `payment_intents` absent —
