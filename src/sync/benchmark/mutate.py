@@ -125,10 +125,44 @@ _BINDING_FORMS = {
 }
 _PYTHON_STATEMENTS = frozenset({"expression_statement", "return_statement"})
 
+# The same table for TypeScript. `variable_declarator` is the declaration form and
+# `assignment_expression` the one that writes into a name declared earlier; a plain name only in
+# both, because `order.intent = await ...` binds a property and a guard reading it would depend
+# on the object outliving the statement rather than on the call.
+_TS_BINDING_FORMS = {
+    "variable_declarator": ("name", "value"),
+    "assignment_expression": ("left", "right"),
+}
+
 # How a field read off a name is spelled, as the node kind and the field holding the property.
 # ast-grep refuses a kind the grammar does not have rather than matching nothing, so this cannot
 # be one search over both spellings.
 _READS = {"python": ("attribute", "attribute")}
+
+# Expressions a call's result passes through while still being the value a name receives, per
+# language. Anything else between the call and the binder -- an argument list, an operand, a
+# subscript -- means the name holds something computed from the result rather than the result.
+#
+# These duplicate the sets `sync.index.python_lang` and `sync.index.typescript` keep, and the
+# duplication is deliberate: this module imports nothing from `sync.index`, and a test over its
+# import closure enforces that, because a generator that consulted the binder would be scoring
+# the binder against its own opinion. The two must agree, and a test here asserts the shape they
+# have to agree on rather than the import that would make agreement automatic.
+_RESULT_WRAPPERS = {
+    "python": frozenset({"await", "parenthesized_expression"}),
+    "typescript": frozenset({
+        "await_expression", "parenthesized_expression", "non_null_expression",
+        "as_expression", "satisfies_expression", "type_assertion",
+    }),
+}
+
+
+def _same(left, right) -> bool:
+    """Whether two handles address one node. ast-grep returns a fresh object per access, so
+    identity is the span rather than the reference."""
+    if left is None or right is None:
+        return False
+    return left.range().start.index == right.range().start.index and         left.range().end.index == right.range().end.index
 
 
 class UnsupportedChangeKind(ValueError):
@@ -480,30 +514,28 @@ def _result_binding(call, language: str = "typescript"):
     if language == "python":
         return _python_result_binding(call)
 
-    node = call
-    while node is not None and node.kind() not in _STATEMENT_KINDS:
-        node = node.parent()
-    if node is None:
-        return None
-
-    if node.kind() in ("lexical_declaration", "variable_declaration"):
-        for child in node.children():
-            if child.kind() != "variable_declarator":
-                continue
-            name = child.field("name")
-            if name is not None and name.kind() == "identifier":
-                return name.text(), node
-        return None
-
-    if node.kind() == "expression_statement":
-        for child in node.children():
-            if child.kind() != "assignment_expression":
-                continue
-            # A plain name only. `order.intent = await ...` binds a property, and a guard reading
-            # it would depend on the object outliving the statement rather than on the call.
-            target = child.field("left")
-            if target is not None and target.kind() == "identifier":
-                return target.text(), node
+    current = call
+    parent = current.parent()
+    while parent is not None:
+        binder = _TS_BINDING_FORMS.get(parent.kind())
+        if binder is not None:
+            name_field, value_field = binder
+            # Identity, not containment. Walking to the statement and taking whatever declarator
+            # it held bound `const customers = Array.from(client.customers.list(...))` to the
+            # array rather than to the response, and wrote a guard reading a field the name never
+            # carried -- a labelled positive no correct binder can find.
+            if not _same(parent.field(value_field), current):
+                return None
+            target = parent.field(name_field)
+            if target is None or target.kind() != "identifier":
+                return None
+            statement = parent
+            while statement is not None and statement.kind() not in _STATEMENT_KINDS:
+                statement = statement.parent()
+            return (target.text(), statement) if statement is not None else None
+        if parent.kind() not in _RESULT_WRAPPERS["typescript"]:
+            return None
+        current, parent = parent, parent.parent()
     return None
 
 
@@ -516,21 +548,27 @@ def _python_result_binding(call):
     is appended to the statement rather than to the expression -- `charge := create(...)` sits
     inside a condition, and splicing after the expression would land inside it.
     """
-    node = call
-    while node is not None:
-        form = _BINDING_FORMS["python"].get(node.kind())
+    current = call
+    parent = current.parent()
+    while parent is not None:
+        form = _BINDING_FORMS["python"].get(parent.kind())
         if form is not None:
             name_field, value_field = form
-            target = node.field(name_field)
+            # Identity, not containment. `customers = list(client.customers.list())` binds what
+            # `list()` returned; the response never reaches that name, and a guard reading a
+            # field off it is an AttributeError the vendor's change cannot cause.
+            if not _same(parent.field(value_field), current):
+                return None
+            target = parent.field(name_field)
             if target is None or target.kind() != "identifier":
                 return None
-            statement = node
+            statement = parent
             while statement is not None and statement.kind() not in _PYTHON_STATEMENTS:
                 statement = statement.parent()
             return (target.text(), statement) if statement is not None else None
-        if node.kind() in _PYTHON_STATEMENTS:
+        if parent.kind() not in _RESULT_WRAPPERS["python"]:
             return None
-        node = node.parent()
+        current, parent = parent, parent.parent()
     return None
 
 
