@@ -13,6 +13,7 @@ situation being fixed: the component works and nothing gets to it.
 from __future__ import annotations
 
 import argparse
+import sys
 import os
 from pathlib import Path
 
@@ -21,7 +22,7 @@ import pytest
 import sync.cli as cli
 from sync.benchmark import compute_axes, compute_binding_accuracy
 from sync.benchmark.report import axis_rows, render_report
-from sync.cli import benchmark, build_remediator
+from sync.cli import build_remediator, main
 from sync.core import CallSite, Finding, MigrationOutcome, RepoRef
 from sync.graph.store import GraphStore
 from sync.remediate.agent_patch import AgentRemediator
@@ -137,7 +138,7 @@ def test_the_report_states_that_it_gates_nothing():
         assert verdict not in lowered
 
 
-def test_the_report_reaches_a_human_through_the_cli(capsys):
+def test_the_report_reaches_a_human_through_the_cli(capsys, monkeypatch):
     """The wiring. `compute_axes` and `compute_binding_accuracy` were finished and had no caller
     in `src/` at all, so "reviewed by a human" had no surface to happen on.
     """
@@ -146,7 +147,11 @@ def test_the_report_reaches_a_human_through_the_cli(capsys):
     with store.transaction():
         store.truncate_all()
 
-    assert benchmark(argparse.Namespace(dsn=DSN)) == 0
+    # Through the parser rather than through a hand-built namespace. `benchmark` grew two flags
+    # for scoring a generated pair, and a namespace assembled by hand goes stale on every one of
+    # them -- which fails the wiring test for a reason that has nothing to do with the wiring.
+    monkeypatch.setattr(sys, "argv", ["sync", "benchmark", "--dsn", DSN])
+    assert main() == 0
 
     printed = capsys.readouterr().out
     assert "n=0" in printed

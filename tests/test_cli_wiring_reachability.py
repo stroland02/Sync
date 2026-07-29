@@ -378,3 +378,147 @@ def test_benchmark_compares_nothing_to_a_threshold(monkeypatch, capsys, corpus, 
     # The word appears once, in the sentence denying one. What must not appear is a verdict.
     assert "nothing here is compared against a threshold" in out
     assert not any(word in out for word in ("PASS", "FAIL", "OK ", "REGRESSION"))
+
+
+# --- sync intake consumes the registry directory -----------------------------------------
+
+DIRECTORY = {
+    "acme.com": {
+        "preferred": "1.0",
+        "versions": {
+            "1.0": {
+                "updated": "2026-07-01T00:00:00.000Z",
+                "swaggerUrl": "https://api.apis.guru/v2/specs/acme.com/1.0/openapi.json",
+                "openapiVer": "3.0",
+            }
+        },
+    },
+    "ancient.com": {
+        "preferred": "0.1",
+        "versions": {
+            "0.1": {
+                "updated": "2017-06-27T16:49:57.000Z",
+                "swaggerUrl": "https://api.apis.guru/v2/specs/ancient.com/0.1/swagger.json",
+                "openapiVer": "2.0",
+            }
+        },
+    },
+}
+
+
+@pytest.fixture()
+def registry_files(tmp_path: Path) -> tuple[Path, Path]:
+    """A directory document and the confirmed package-to-entry evidence that joins it.
+
+    The join is evidence and never a name resemblance, which is the rule intake already holds:
+    `@vercel/sdk` is generated from `vercel/sdk` and resembles nothing, and a package
+    coincidentally sharing an API's name has nothing to do with it. A directory `api_id` is a
+    domain and a package name is not, so somebody has to have confirmed the pair.
+    """
+    import yaml
+
+    directory = tmp_path / "list.json"
+    directory.write_text(json.dumps(DIRECTORY), encoding="utf-8")
+
+    evidence = tmp_path / "registry-apis.yaml"
+    evidence.write_text(
+        yaml.safe_dump([
+            {"package": "acme-sdk", "api": "acme.com"},
+            {"package": "ancient-sdk", "api": "ancient.com"},
+        ]),
+        encoding="utf-8",
+    )
+    return directory, evidence
+
+
+@pytest.fixture()
+def registry_checkout(tmp_path: Path) -> Path:
+    root = tmp_path / "declares"
+    root.mkdir()
+    (root / "package.json").write_text(
+        json.dumps({"dependencies": {"stripe": "^18.0.0", "acme-sdk": "^1.0.0"}}),
+        encoding="utf-8",
+    )
+    return root
+
+
+def _intake(monkeypatch, capsys, checkout: Path, *extra: str):
+    code, out = _cli(monkeypatch, capsys, "intake", "--repo", str(checkout), *extra)
+    assert code == 0
+    return {row["name"]: row for row in json.loads(out)["dependencies"]}
+
+
+def test_without_the_directory_a_package_no_tier_serves_is_not_watchable(
+    monkeypatch, capsys, registry_checkout
+):
+    """The control. Whatever the directory changes, it has to change something -- a test that
+    only asserts the promoted state cannot tell a working join from one that promotes
+    everything."""
+    rows = _intake(monkeypatch, capsys, registry_checkout)
+
+    assert rows["acme-sdk"]["category"] == "not-watchable"
+
+
+def test_a_registry_directory_entry_makes_a_dependency_watchable(
+    monkeypatch, capsys, registry_checkout, registry_files
+):
+    """One document answers what exists across every vendor, which is what intake needs to tell
+    a customer a declared dependency has a machine-readable contract somewhere."""
+    directory, evidence = registry_files
+
+    rows = _intake(
+        monkeypatch, capsys, registry_checkout,
+        "--registry-directory", str(directory), "--registry-evidence", str(evidence),
+    )
+
+    assert rows["acme-sdk"]["category"] == "watchable"
+    assert rows["acme-sdk"]["missing"] == "registry-tier"
+    assert "acme.com" in rows["acme-sdk"]["reason"]
+
+
+def test_a_registry_directory_entry_alone_never_makes_a_dependency_watched(
+    monkeypatch, capsys, registry_checkout, registry_files
+):
+    """The rule intake already established: watched needs a registered vendor *and* a declared
+    SDK binding. A directory knowing an API exists is neither, and the artifact it points at is
+    the directory's own mirror rather than the vendor's, so a change derived from it is a third
+    derivation from the vendor's truth and must never look like one a pull request could rest on.
+    """
+    directory, evidence = registry_files
+
+    rows = _intake(
+        monkeypatch, capsys, registry_checkout,
+        "--registry-directory", str(directory), "--registry-evidence", str(evidence),
+    )
+
+    assert rows["acme-sdk"]["category"] != "watched"
+    assert rows["acme-sdk"]["vendor_id"] is None
+    # And it cannot demote or duplicate a dependency a real vendor already serves.
+    assert rows["stripe"]["category"] == "watched"
+    assert rows["stripe"]["vendor_id"] == "stripe"
+
+
+def test_a_directory_entry_that_has_not_moved_since_the_watermark_is_not_promoted(
+    monkeypatch, capsys, tmp_path, registry_files
+):
+    """`versions_after` is the tier's whole economy: one watermark, one document, and what moved
+    without downloading a specification. An entry last touched in 2017 proves a contract existed
+    once, which is a weaker claim than one that moved last month, and an operator asking for the
+    live ones gets the strict answer.
+    """
+    directory, evidence = registry_files
+    root = tmp_path / "stale"
+    root.mkdir()
+    (root / "package.json").write_text(
+        json.dumps({"dependencies": {"acme-sdk": "^1.0.0", "ancient-sdk": "^0.1.0"}}),
+        encoding="utf-8",
+    )
+
+    rows = _intake(
+        monkeypatch, capsys, root,
+        "--registry-directory", str(directory), "--registry-evidence", str(evidence),
+        "--registry-moved-since", "2026-01-01T00:00:00.000Z",
+    )
+
+    assert rows["acme-sdk"]["category"] == "watchable"
+    assert rows["ancient-sdk"]["category"] == "not-watchable"

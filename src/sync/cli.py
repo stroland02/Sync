@@ -58,7 +58,12 @@ from sync.signals.deprecations import (
 )
 from sync.signals.datadog.shapes import DatadogShapeReader
 from sync.signals.feed import public_key_bytes, render_feed, sign_feed
-from sync.signals.intake import assess_repository, read_sdk_repositories
+from sync.signals.intake import (
+    assess_repository,
+    read_registry_apis,
+    read_sdk_repositories,
+)
+from sync.signals.registry_tier.directory import parse_directory
 from sync.signals.reachability import observed_call_counts, rank_reachability
 from sync.signals.registry import (
     SYMBOL_MAP_FILENAME,
@@ -1498,7 +1503,23 @@ def intake(args: argparse.Namespace) -> int:
     being measured.
     """
     evidence = read_sdk_repositories(Path(args.evidence)) if args.evidence else {}
-    report = assess_repository(Path(args.repo), generator_manifests=evidence)
+    # The directory is a document somebody fetched, parsed here rather than downloaded: this
+    # command reports what the deployment already knows, and a fetch inside it would make a
+    # report of what is on disk quietly online.
+    directory = (
+        parse_directory(json.loads(Path(args.registry_directory).read_text(encoding="utf-8")))
+        if args.registry_directory else []
+    )
+    registry_apis = (
+        read_registry_apis(Path(args.registry_evidence)) if args.registry_evidence else {}
+    )
+    report = assess_repository(
+        Path(args.repo),
+        generator_manifests=evidence,
+        registry_entries=directory,
+        registry_apis=registry_apis,
+        registry_moved_since=args.registry_moved_since,
+    )
 
     if args.rank_by_repo_id:
         # Ranked only when asked, and only against a repository the indexer has already run
@@ -1621,6 +1642,22 @@ def main() -> int:
     intake_parser.add_argument("--evidence", default=None,
                                help="a file of confirmed package-to-SDK-repository entries; "
                                     "without one the watchable category is reported empty")
+    intake_parser.add_argument(
+        "--registry-directory", dest="registry_directory", default=None,
+        help="a public OpenAPI directory document; entries in it make a declared dependency "
+             "watchable, never watched -- the directory mirrors a specification rather than "
+             "hosting it",
+    )
+    intake_parser.add_argument(
+        "--registry-evidence", dest="registry_evidence", default=None,
+        help="a file of confirmed package-to-directory-entry pairs; the join is never a name "
+             "resemblance, so without one the directory promotes nothing",
+    )
+    intake_parser.add_argument(
+        "--registry-moved-since", dest="registry_moved_since", default=None,
+        help="only count a directory entry whose specification moved after this timestamp; "
+             "without it an entry last touched years ago counts the same as one that moved today",
+    )
     intake_parser.add_argument(
         "--rank-by-repo-id", dest="rank_by_repo_id", default=None,
         help="rank the report by the call sites indexed for this repo_id instead of listing it; "
