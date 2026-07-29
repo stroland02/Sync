@@ -36,64 +36,37 @@ when, which is why it is recorded here rather than dispatched.
 **Closes when:** one `sync run` produces a CI-green pull request again, or the failure is
 recorded with which change broke it.
 
-### B32 — Hold a same-operation site back, so precision has something to fail on
+### B34 — The Python indexer credits a call with fields read off something else
 
-`falsifiable_negatives` now counts negatives the detector could have fired on and prints beside
-precision. It reads **0** for all ten scored pairs, so the corpus states its own vacuousness in
-its output rather than requiring a reader to know.
+**Not the gap B33 fixed. Half of it, and the other half.** Python has no
+declaration-versus-assignment split, so the shape that was blind in TypeScript is the only shape
+Python has and it already works. There is no missed break here. Do not go looking for one.
 
-The cause is one line, `cli.py:1473`:
-
-```python
-targets = [site.id for site in sites if site.operation_id == change.operation_id]
-```
-
-Every same-operation site is targeted, so none is ever left untargeted, so no falsifiable negative
-can exist. Verified empirically: `affected + unreachable` equals the same-operation count each
-spec header records, for all ten pairs.
-
-**Not fixed, deliberately, and the reason is a real trade rather than a boundary.** Holding a
-same-operation site back from `targets` creates the negative — `generate_pair` already supports it,
-since the caller names its targets — but it also **moves recall's denominator**, and recall at
-n=12 is currently the only genuine quality measurement this project has. Trading the one real
-number for a second one needs a decision, not a patch.
-
-**Start from the diagnosis, do not re-derive it.**
-`docs/superpowers/reports/2026-07-29-precision-has-no-negative-to-fail-on.md` is the finished
-investigation — B31 diagnosed this and is closed. The remaining work is one edit to the target
-list at `cli.py:1473` plus a declaration in the pair specifications naming which sites are held
-back. `generate_pair` needs no change, since the caller already names its targets, and
-`falsifiable_negatives` will report whether the new corpus actually bought a candidate.
-
-**Closes when:** that trade is decided and, if taken, precision is recomputed with
-`falsifiable_negatives` non-zero and recall's new denominator stated beside it.
-
-### B33 — The binder is blind to a result assigned rather than declared
-
-`sync.index.typescript._response_fields` walks up to a `variable_declarator` and returns `[]` for
-anything else. So an SDK result assigned to a variable declared earlier records **no response
-fields at all**, and no response-side change can ever be detected against it.
-
-Reproduced directly, identical guard, only the binding form differing:
+What is wrong is the precision half. `python_lang._response_fields` walks to the nearest
+assignment without checking the SDK call is what the name actually receives, so a result passed
+through another call is credited to the SDK call. Measured:
 
 ```
-const intent = await client.paymentIntents.create({...})   ->  ['amount_details', 'id']
-intent = await client.paymentIntents.create({...})         ->  []
+charge = client.charges.create(amount=n)          ->  ['id', 'status']   correct
+charge = dict(client.charges.create(amount=n))    ->  ['id', 'status']   WRONG
+return client.charges.create(amount=n)            ->  []                 correct
 ```
 
-**This is the first production defect the benchmark has caught**, and it is why the response axis
-now reads recall 0.8000 at n=20 rather than the 1.0000 at n=12 it reported while the corpus shared
-the binder's blind spot. Four of the twenty labelled positives are missed and all four are
-response-side. A missed break is the failure the product exists to prevent.
+The TypeScript equivalent was found and fixed inside B33 — the walk now stops at anything that is
+not a transparent wrapper (`await`, parens, `!`, `as`, `satisfies`, type assertion). The same
+distinction applies here.
 
-**Whoever takes this must not also change the corpus.** The corpus is what measures the fix, and
-B29 declined to fix it for exactly that reason — a worker changing both would have destroyed the
-evidence. Measure against the frozen corpus at
-`benchmark/corpus/recorded/2026-07-29-response-axis.json`, sha256
-`8d5b39830546b2d5958f72f310cc358aa97eeb0807f3dff731a1a2ebde0e11ff`.
+A false attribution is the direction this project has committed against: it turns a call site into
+a finding for a change it does not depend on, spending reviewer trust that does not recover at the
+rate it is spent.
 
-**Closes when:** recall over that unchanged corpus rises above 0.8000, with the new value and its
-denominator recorded beside the old one.
+**This cannot be closed by a corpus number.** All four corpus repositories are TypeScript, so no
+score will move whatever you do — a brief implying otherwise would send someone hunting a
+measurement that cannot exist.
+
+**Closes when:** a fixture reproduces the false attribution, the fix makes it record `[]` for the
+wrapped form while leaving the bare form at `['id', 'status']`, and the transparent-wrapper
+boundary is stated as deliberately as B33 stated it for TypeScript.
 
 ### B30 — `_score_corpus` cannot read a real repository
 
@@ -119,6 +92,23 @@ pre-filtering step, and the count of skipped files is reported rather than silen
   the first worker held the task for half an hour without starting and did not answer two nudges.
 
 ## Done
+
+- **B33** — the binder now sees fields read off a result the code assigns rather than declares.
+  Landed in `67db957`. Recall **0.8000 to 1.0000 at the unchanged n=20**, every response-side miss
+  found, and precision held at 1.0000 while its sample grew 16 to 20 — the check that mattered,
+  since recall bought by claiming unread fields would have been worse than the defect.
+
+  It also found and fixed an **unbriefed precision bug** its own test caught:
+  `const c = wrap(await stripe.charges.create(...))` was crediting `wrap`'s return value to the
+  Stripe call. Widening the binding forms without that guard would have doubled false attribution
+  rather than fixed anything. And it refused to write under `benchmark/corpus/recorded/` on the
+  grounds that recording into the instrument's directory is editing the instrument — a stricter
+  reading than the constraint it was given, and the right one.
+
+- **B32** — a pair specification can hold a call site out of the mutation, so precision has
+  something it could fail on. Landed in `67db957`. **Falsifiable negatives 0 to 4, and the binder
+  declined all four**, which is the first evidence that axis has ever carried. Its own recording
+  was taken against a corpus B29 had already replaced; the coordinator rebased and re-measured.
 
 - **B29** — the response half of the corpus now measures something, and it immediately caught a
   production defect. Landed `4a00841`. Two causes, not the one diagnosed: `_result_binding` reading
