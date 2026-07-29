@@ -210,9 +210,28 @@ map; the binder is not pinned and cannot be.
 ## What would unblock Python's first honest number, in the order it would pay
 
 1. **`_result_binding` must require identity rather than containment**, matching `_result_target`.
-   Then these two targets are recorded `unreachable` — correctly, as targets the mutation cannot
-   honestly attach to — and the two pairs can be generated. They would contribute zero affected
-   sites and no positives, so this alone gives Python a pair and still no measurement.
+   **This landed while this task was measuring, as `21ac7ce`, and the prediction was checked
+   against it rather than left as one.** Regenerated and scored over the fixed generator, every
+   target in both specifications is now recorded `unreachable` — correctly, as a target the
+   mutation cannot honestly attach to — and neither pair emits a label anybody could be wrong
+   about:
+
+   ```
+     scored pair                                             affected  unaffected  findings  unreachable
+     virtual-lab-GetCustomers-response-property-removed              0          21         0            3
+     virtual-lab-GetSubscriptions-response-property-removed          0          21         0            3
+
+     binding precision     unmeasured   n=0
+     binding recall        unmeasured   n=0
+   ```
+
+   So the mislabel is gone and the measurement is not. Both pairs would still contribute zero to
+   either rate while adding two to `pairs_scored` and therefore to its floor, which is the shape
+   `2026-07-29-a-python-repository-exists-and-cannot-be-pinned.md` already named as the exclusion
+   an exclusion count cannot catch. They stay out of the corpus for that reason now rather than
+   for the labelling one. The twelve-pair score is byte-identical over the fixed generator —
+   `e48ee05da861900f07c807c99f34d03c6d5bac821f5facf3e76d452348855d60`, the same digest as before
+   it — and all four floors clear.
 2. **A rule that can reach `GetProductsId`.** It is the only operation in this repository whose
    call sites read a response field, and the object-argument clause excludes it. That clause exists
    because neither mutation can attach to a call with no object argument — which was true when both
