@@ -42,27 +42,39 @@ implementation.
 **A conformance kit exists** so an outside author can find out they are wrong before the pipeline
 tells them, badly.
 
-## The bottleneck, and it is not where the effort has been going
+## The bottleneck, closed 2026-07-29
 
-`src/sync/index/typescript.py:29`:
+This section described the system's highest-value defect. It has since been repaired, and the
+paragraphs below record what the claim was and what measurement retired it, because a spec that
+silently drops a limitation teaches nobody why it mattered.
 
-```python
-_SDK_PACKAGE = "stripe"
-```
+**What was true when this was written.** `src/sync/index/typescript.py:29` read
+`_SDK_PACKAGE = "stripe"`. The indexer resolved call sites for exactly one vendor: it checked
+`package.json` for `stripe`, resolved identifiers bound to `new Stripe(...)`, and emitted symbols
+shaped `stripe.<chain>`. The two halves of the system had generalised asymmetrically — SIGNAL
+could discover a specification for any vendor a generator serves while INDEX could bind only
+Stripe, so a vendor whose spec we diffed perfectly still produced zero findings. The sentence
+this document used to carry was: "Twilio's adapter can map `twilio.insights.v1.calls.fetch` onto
+an operation, and no indexer will ever hand it that symbol."
 
-The indexer resolves call sites for exactly one vendor. It checks `package.json` for `stripe`, it
-resolves identifiers bound to `new Stripe(...)`, and it emits symbols shaped `stripe.<chain>`.
+**What is true now.** The constant is gone. Both indexers take the package from the vendor
+adapter — `sdk_bindings[language_id]` — and never from the module. A vendor whose package name,
+import specifier and symbol root disagree declares all three; one whose names agree declares
+none, which is what keeps the change additive.
 
-So the two halves of the system have generalised asymmetrically. **SIGNAL can already discover a
-specification for any vendor a generator serves. INDEX can only find call sites for Stripe.** A
-vendor whose spec we can diff perfectly still produces zero findings, because nothing in the
-customer's code is ever bound to it.
+The evidence is `tests/test_indexer_vendor_agnostic.py` and `tests/test_scoped_package_symbols.py`,
+37 tests, green. They bind Twilio in **both** languages against real operations —
+`twilio.insights.v1.callSummaries.list` resolves to `ListCallSummaries`, and the TypeScript and
+Python fixtures agree the repository depends on Twilio — and they cover the two forms that were
+never exercised while a bare word was the only package name: a scoped package
+(`@anthropic-ai/sdk`, whose import specifier is not its symbol root) and a client built by calling
+the package's own default export rather than by construction.
 
-Every adapter written under the current shape inherits this. Twilio's adapter can map
-`twilio.insights.v1.calls.fetch` onto an operation, and no indexer will ever hand it that symbol.
-
-That is the highest-value defect in the system and it is invisible from the test suite, because
-every indexer test uses a Stripe fixture.
+**The lesson this section exists to keep.** The defect was invisible from a green suite because
+every indexer fixture was a Stripe fixture — the same shape as the scoped-package gap that
+followed it, where the suite stayed green because no fixture declared a scoped package. A test
+suite proves the cases it contains. When one vendor, one shape, or one spelling is the only thing
+any fixture ever declares, the suite is measuring that instance and reporting it as the protocol.
 
 ## The architecture: four tiers, and vendors are configuration
 
@@ -72,11 +84,22 @@ code serving every vendor in it.
 | Tier | How the spec is found | Per-vendor cost | Status |
 |---|---|---|---|
 | **0 — Generator-discovered** | The SDK repository commits a manifest naming its spec | Zero. A vendor is a row. | Built |
-| **1 — Registry-discovered** | A public directory of OpenAPI definitions | Zero | Not started |
+| **1 — Registry-discovered** | A public directory of OpenAPI definitions | Zero | Built, reachable from nothing |
 | **2 — Vendor-published** | Configured location, versioned by tag or filename | One configuration entry | Built (Stripe, Twilio) |
 | **3 — Synthesised** | No specification exists; the contract is inferred | Real work, and honest about it | Partial |
 
-Tier 1 is the gap worth taking next on the signal side. [APIs.guru's
+Tier 1 was the gap worth taking next on the signal side, and the reader half of it now exists:
+`src/sync/signals/registry_tier/directory.py` provides `parse_directory` and `versions_after`,
+which answer which APIs a directory holds and when each last moved. Both are baselined in
+`scripts/dead_links_baseline.txt` as reachable from nothing, because their consumer is dependency
+intake. The baseline entry names intake as what retires them, and whoever wires it deletes both
+lines in that commit. Read that entry before extending this tier: it also records why this is
+deliberately **not** a `VendorAdapter` — the directory's `swaggerUrl` points at its own storage
+rather than the vendor's host and many entries are Swagger 2.0 needing conversion, so a change
+derived from it is a third derivation from the vendor's truth. Good enough to tell a customer a
+declared dependency is watchable; not good enough to open a pull request against.
+
+[APIs.guru's
 openapi-directory](https://github.com/APIs-guru/openapi-directory) is a machine-readable
 directory of API definitions with a REST API over it, and
 [Speakeasy maintains a fork](https://github.com/speakeasy-api/openapi-directory) of the same
