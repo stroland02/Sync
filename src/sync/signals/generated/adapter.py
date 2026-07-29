@@ -37,6 +37,21 @@ stored history instead of re-fetching every spec pair.
 A manifest reporting overlays is diffed anyway. The fetched spec is then not byte-identical to
 what the generator consumed, but both sides of the diff get the same treatment, so a comparison
 between two fetches stays sound; only comparing a spec against the SDK would not be.
+
+Why no noise filter
+-------------------
+Both hand-written adapters drop `response-property-enum-value-added`, and this one drops nothing.
+That asymmetry is measured rather than overlooked: `2026-07-29-generated-vendor-noise.md` ran the
+pinned differ over the configured vendors' own specification pairs and found the kind carries their
+findings rather than burying them. It is the sole route to 28 of 31 affected operations across one
+OpenAI window and to all three across another, so a vendor filtering it would report a real release
+as no change at all -- the silent-vendor failure `_spec` refuses to accept from a fetch outage,
+arriving instead from our own filter. Volume does not argue for it either: the widest window
+measured produced 424 records against Stripe's hundreds of thousands.
+
+Anything proposing to filter here has to be measured against the vendor it would apply to, and
+because one code path serves every configured vendor, a constant would apply one vendor's answer to
+all of them. `tests/test_generated_adapter_noise.py` holds the decision.
 """
 
 from __future__ import annotations
@@ -311,6 +326,8 @@ class GeneratedSpecAdapter:
         base_path = self._spec(from_version, base_url)
         head_path = self._spec(to_version, head_url)
 
+        # Unfiltered, and the module docstring carries the measurement that says so. A kind list
+        # here would be one vendor's release habits applied to every configured vendor.
         records = run_oasdiff_breaking(base_path, head_path)
         changes = to_vendor_changes(
             records, vendor_id=self._vendor_id, from_version=from_version, to_version=to_version
