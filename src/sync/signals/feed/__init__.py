@@ -1,5 +1,6 @@
 """The public change feed: one signed JSON array per vendor."""
 
+from sync.signals.feed.cache import FeedCache, FeedSnapshot
 from sync.signals.feed.consumer import (
     FeedFormatError,
     FeedSignatureError,
@@ -17,7 +18,9 @@ from sync.signals.feed.publisher import (
 
 __all__ = [
     "FEED_FIELDS",
+    "FeedCache",
     "FeedFormatError",
+    "FeedSnapshot",
     "FeedSignatureError",
     "load_public_key",
     "parse_feed",
