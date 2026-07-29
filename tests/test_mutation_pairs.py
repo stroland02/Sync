@@ -26,6 +26,7 @@ import pytest
 from sync.benchmark.mutate import (
     SUPPORTED_KINDS,
     UnsupportedChangeKind,
+    depends_on_change,
     generate_pair,
 )
 from sync.core import CallSite, VendorChange
@@ -67,7 +68,7 @@ def _change(kind: str, field: str = "receipt_email") -> VendorChange:
         id="vc-1", vendor_id="stripe", from_version="2026-05-01", to_version="2026-11-01",
         kind=kind, operation_id="PostCharges", path_ptr="/v1/charges", severity="breaking",
         source="oasdiff",
-        raw={"id": kind, "text": f"removed the request property {field} from POST /v1/charges"},
+        raw={"id": kind, "text": f"removed the request property `{field}` from POST /v1/charges"},
     )
 
 
@@ -109,10 +110,10 @@ def test_the_label_names_every_site_the_mutation_broke_and_no_other(kind):
 
     affected = _labels(pair)
     assert affected["cs-billing-1"] is True
-    assert pair.depends_on_change(pair.sources, change, sites[0]) is True
+    assert depends_on_change(pair.sources, change, sites[0]) is True
     for site in sites[1:]:
         assert affected[site.id] is False
-        assert pair.depends_on_change(pair.sources, change, site) is False
+        assert depends_on_change(pair.sources, change, site) is False
 
 
 @pytest.mark.parametrize("kind", sorted(SUPPORTED_KINDS))
@@ -190,8 +191,11 @@ def test_the_generator_never_imports_the_binder():
         for alias in node.names
     }
 
+    # `sync.benchmark.binding` is deliberately not on this list: it defines the label's shape
+    # and computes nothing about which call sites a change affects. What must not be reachable
+    # is the machinery that decides that -- the indexer, the detector, and the graph they read.
     forbidden = [name for name in imported
-                 if name.startswith(("sync.index", "sync.detect", "sync.graph", "sync.benchmark.binding"))]
+                 if name.startswith(("sync.index", "sync.detect", "sync.graph"))]
     assert forbidden == []
 
 
@@ -270,8 +274,12 @@ def test_a_request_mutation_is_undone_exactly_by_the_repair_primitive():
 
     pair = generate_pair(sources, change, sites, targets=["cs-billing-1"])
     target = sites[0]
+    # `line - 1` is `omit_argument_at`'s contract, not a fudge: it counts lines from zero
+    # while `CallSite.line` counts from one, and `sync.remediate.property_omit` converts at the
+    # same boundary. Its neighbour `omit_property_at` takes the 1-based form, which is worth
+    # knowing before reusing either.
     repaired = omit_argument_at(
-        pair.sources["src/billing.ts"], "receipt_email", "typescript", target.line, target.col
+        pair.sources["src/billing.ts"], "receipt_email", "typescript", target.line - 1, target.col
     )
 
     assert repaired == sources["src/billing.ts"]
