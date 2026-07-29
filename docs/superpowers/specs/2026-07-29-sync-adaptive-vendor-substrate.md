@@ -188,12 +188,75 @@ but unconfigured, and not watchable. That report is a sales asset as much as an 
 **3. Registry tier.** One adapter over a public OpenAPI directory. *Closes when a vendor nobody
 configured produces a real `VendorChange` from two registry versions.*
 
-**4. Proposed symbol maps, refutable by construction.** An agent proposes; coverage is measured
-against the spec's operation set; a proposal that resolves nothing is rejected mechanically.
-*Closes when a vendor with no hand-written map reaches measured coverage, with the denominator
-stated.*
+**4. Proposed symbol maps, refuted by a second artifact.** An agent proposes from the SDK's own
+type definitions; the proposal is checked against the specification's operation set, which are
+two independently derived artifacts rather than one and its own output. Coverage is measured with
+the denominator stated. A proposed map carries the rung `proposed`, and until the cross-check
+exists it is evidence for a human rather than an input to the pipeline — see the threat-model
+paragraph above for why coverage alone cannot refute a plausible-but-wrong mapping.
+*Closes when a vendor with no hand-written map reaches measured coverage, stated against a named
+denominator, and a deliberately wrong mapping is caught by the cross-check rather than by a
+reviewer.*
 
 **5. Reachability.** Rank by call sites actually indexed, not by dependencies declared.
+
+## Checked against the documents that bind this
+
+Not a formality. One of these found a hole in the proposal above.
+
+**Latency architecture — "every proposed agent must shorten the critical path or improve a
+result. An agent that does neither is latency and cost with extra steps."** Step 4 is the only
+agent this document adds, and it passes on the second clause rather than the first: it improves
+coverage, which is a result. It must also stay off the critical path, and it does — a symbol map
+is built once per vendor version and read from disk on every run, which is precomputation in the
+sense that document argues for. **This is a constraint on the implementation, not a description
+of it:** an agent invoked per finding, or per run, would fail this rule outright and must be
+rejected in review.
+
+**Pipeline discipline.** Tiers 0 and 1 fetch artifacts, so the rules apply unchanged. Keep the
+raw record — a discovered specification is stored as fetched, not only as interpreted, for the
+same reason `VendorChange.raw` exists. Every binding carries its rung, and a binding derived from
+a *discovered* spec is not the same evidence as one from a configured vendor; the rung has to say
+which. And a signature proves origin, not correctness — which matters more here than anywhere
+else, because tier 1 introduces artifacts nobody at the vendor published.
+
+**Threat model — and this is the hole.** The document's containment argument is that the
+verification gate stops an injected instruction, because a malicious edit still has to pass `tsc`
+and the customer's CI and still lands as a reviewable diff. That argument does not cover a
+poisoned *symbol map*. A wrong mapping does not produce a malformed patch; it produces a
+perfectly valid patch applied to **the wrong call site**, which typechecks, passes CI, and reads
+as correct.
+
+So "refutable by coverage measurement" is insufficient as stated above. Coverage counts how many
+symbols resolved, not whether they resolved *correctly*, and a plausible-but-wrong map scores
+well. The Twilio work already demonstrated the failure mode in miniature: `x-twilio.className`
+raised apparent coverage from 29% to 45% and was wrong on every path where it disagreed with the
+path segment. That was caught by a human reading generated SDK source, not by a metric.
+
+Two consequences, and they change step 4 rather than decorating it:
+
+- A proposed mapping must be checked against **the SDK's own source or type definitions**, not
+  only against the specification's operation set. Agreement between two independently derived
+  artifacts is refutation; agreement with the thing that generated the proposal is not.
+- Until that check exists, a proposed map is **evidence for a human**, not an input to the
+  pipeline. Mapping provenance therefore belongs in the rung: `proposed` is a fourth rung, and a
+  finding resting on one should say so on the pull request.
+
+**Positioning and open core.** The free cross-vendor change feed described there is the clearest
+beneficiary. A feed's value scales directly with how many vendors it covers, and tiers 0 and 1
+are the only mechanisms here whose coverage does not scale with headcount. `sync.signals.feed`
+already publishes and consumes it. This document is the supply side of that strategy.
+
+**Cost.** Tiers 0 and 1 add no per-vendor engineering, and the change-detection cost is already
+solved: a Stainless manifest carries `openapi_spec_hash`, so a poll reads a text file and the
+specification is fetched only when the hash moves. That property should be a requirement of the
+registry tier too, not a happy accident of the generator tier — a tier that must download every
+specification to learn nothing changed does not belong in this architecture.
+
+**Simplicity for users.** The user-visible surface of all of this is one artifact: a repository's
+dependencies split into watched, watchable-but-unconfigured, and not watchable. Nobody configures
+a vendor, and nobody learns what a tier is. If a tier ever becomes something a user has to know
+about, the abstraction has failed.
 
 ## What this document does not claim
 
