@@ -98,7 +98,9 @@ class GeneratedSpecAdapter:
     def vendor_id(self) -> str:
         return self._vendor_id
 
-    def operation_for_symbol(self, symbol: str) -> OperationRef | None:
+    def operation_for_symbol(
+        self, symbol: str, *, language: str | None = None
+    ) -> OperationRef | None:
         """Always `None`: this adapter knows a specification, not an SDK's symbol scheme.
 
         Mapping `acme.charges.create` onto an operation needs to know how one generator names
@@ -109,6 +111,10 @@ class GeneratedSpecAdapter:
 
         A vendor needing symbol resolution needs a hand-written adapter for that part. This one
         still supplies the changes.
+        
+        `language` is accepted and ignored, for the same reason the answer is always None:
+        knowing one generator's naming scheme is the per-vendor knowledge this adapter exists
+        to do without, and a language does not supply it.
         """
         return None
 

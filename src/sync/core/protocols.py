@@ -32,7 +32,9 @@ class VendorAdapter(Protocol):
 
     def fetch_changes(self, from_version: str, to_version: str) -> Iterable[VendorChange]: ...
 
-    def operation_for_symbol(self, symbol: str) -> OperationRef | None: ...
+    def operation_for_symbol(
+        self, symbol: str, *, language: str | None = None
+    ) -> OperationRef | None: ...
 
 
 @runtime_checkable

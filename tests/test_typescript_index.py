@@ -198,3 +198,31 @@ def test_a_call_in_a_map_callback_counts_as_a_loop(tmp_path):
     """
     sites = _by_line(_adapter(tmp_path).index(_repo("in_loop")))
     assert sites[24].loop_depth == 1
+
+
+def test_the_indexer_tells_the_adapter_which_language_it_indexed(tmp_path):
+    """The language axis is worth nothing if the indexer does not use it.
+
+    A vendor whose two SDKs spell mounts differently can only resolve a call site when it is
+    told which SDK produced it. This repository has shipped built-but-unwired components more
+    than once -- a tier table nothing constructed, a detector nothing ran -- and each time the
+    unit tests passed because the component itself was correct. This asserts the call, not the
+    component.
+    """
+    seen: list[tuple[str, str | None]] = []
+
+    class Recording:
+        vendor_id = "stripe"
+
+        def operation_for_symbol(self, symbol, *, language=None):
+            seen.append((symbol, language))
+            return None
+
+        def fetch_changes(self, since):
+            return []
+
+    adapter = TypeScriptAdapter(vendor_adapter=Recording())
+    list(adapter.index(_repo("simple")))
+
+    assert seen, "the indexer resolved no symbols, so this proves nothing"
+    assert {language for _, language in seen} == {"typescript"}
