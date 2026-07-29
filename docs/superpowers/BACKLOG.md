@@ -12,39 +12,6 @@ item that cannot say what evidence closes it is not ready to dispatch.
 
 ## Ready
 
-### B36 — The one gate that is safe to add now has its preconditions met
-
-`2026-07-27-sync-benchmark-gates.md` names exactly one gate addable without the tier C statistics
-research that never completed: **a directional floor on a deterministic axis.** Binding precision
-over a frozen corpus is deterministic given a fixed pipeline and fixed inputs, so a drop is a real
-change rather than sampling noise.
-
-That gate was unavailable all day for two separate reasons, and both closed today:
-
-- **Determinism was assumed, not measured.** It is now measured — byte-identical output across
-  independent runs from clean databases, four times over (B27, B32, B33, and the coordinator's own
-  re-run after the fetcher change).
-- **Precision was a constant.** With every same-operation site targeted there was no negative the
-  binder could fail on, so a floor would have gated something that could never fire — the "never
-  fires and provides false assurance" half of the failure that document warns about. B32's
-  `hold_back` gives it **4 falsifiable negatives**, and the binder declined all four.
-
-**This is not inventing a threshold, and the distinction is the whole task.** A floor at the
-recorded value asserts "this must not get worse", which is derived from a measurement. A floor at
-a round number someone liked would be invented, and is forbidden. Gate on the recorded figure or
-do not gate.
-
-Current recorded state, verbatim from the corpus: precision 1.0000 n=16, recall 1.0000 n=16,
-falsifiable negatives 4, 12 of 12 pairs scored, 64 paths not read.
-
-**Decide, and argue for it, whether recall gets a floor too.** Its determinism is equally
-established, but it moved twice today for legitimate reasons — a corpus fix exposing a real defect,
-and a deliberate trade of positives for negatives. A gate that fires on honest work gets disabled,
-and a disabled gate is worse than none.
-
-**Closes when:** CI fails on a seeded regression that drops binding precision, passes on the
-current tree, and the failure message names the recorded value it was compared against.
-
 ### B37 — Python binding accuracy has never been measured
 
 `PythonAdapter` is shipped and wired into `cli.py`. All four corpus repositories are TypeScript
@@ -65,10 +32,10 @@ The Python indexer is in that position now: correct as far as its own fixtures g
 against it, and binding precision and recall are reported for Python with their sample sizes —
 whatever those numbers turn out to be.
 
-**Sequence behind B36.** B36 records a directional floor at the corpus's current values. Adding a
-repository changes those values, so landing this first would either move the floor underneath the
-gate or freeze a floor that is about to be wrong. Dispatch after B36 lands, and expect the floor to
-be re-recorded as part of this work with the old and new values stated side by side.
+**B36 has landed, so this is now dispatchable** — and the floors it added are the thing to watch.
+Adding a repository moves `pairs_scored`, and both rates' denominators, so `scripts/gate_corpus.py`
+will fail until its recorded figures are restated. That failure is the gate working: restate them
+in the same commit, with the old and new values side by side and the reason they moved.
 
 ### B7 — The M0 acceptance run has not executed since the pipeline changed underneath it
 
@@ -99,6 +66,27 @@ recorded with which change broke it.
 _Nothing._
 
 ## Done
+
+- **B36** — the first quality gate this project has. `scripts/gate_corpus.py` floors binding
+  precision and recall at the recorded 1.0000 over n=16, and it **recomputes both rates from
+  `true_positives` and `false_positives` rather than reading the stored value**, so a stale or
+  edited number cannot satisfy it.
+
+  It floored two things beyond the brief, both guarding the gate rather than the binder.
+  `falsifiable_negatives` at 4: if that count silently returns to zero, precision's false-positive
+  term has no candidates again and the precision floor stays green while gating nothing.
+  `pairs_scored` at 12: an exclusion regression shrinks both denominators while leaving both rates
+  at 1.0000, so the gate would pass over a corpus that had quietly stopped covering a third of
+  itself.
+
+  Verified by seeded regression rather than by report — precision to 0.8889, recall to 0.8889,
+  negatives to 0, pairs to 8, each exits 1 naming the floor it broke; the clean tree exits 0; a
+  missing score file exits 2 rather than passing.
+
+  Recall was floored on an argued judgement, not by default: it moved twice on the day the corpus
+  was frozen, both times through deliberate corpus authoring, and a frozen corpus is authored rarely
+  and on purpose. Leaving it open would have gated the less important half, since a missed break is
+  the failure the product exists to prevent.
 
 - **B30** — a checkout's undecodable files are skipped and **named**, rather than one PNG ending
   the run. The fetcher's own pre-filter is gone, so the corpus scores the vendor's subtree instead
