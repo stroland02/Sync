@@ -1,0 +1,1438 @@
+[
+  {
+    "method": "PATCH",
+    "path": "/aliases/{id}/protection-bypass"
+  },
+  {
+    "method": "POST",
+    "path": "/api-keys"
+  },
+  {
+    "method": "GET",
+    "path": "/domains/records/{recordId}"
+  },
+  {
+    "method": "PUT",
+    "path": "/domains/{domain}/records"
+  },
+  {
+    "method": "PUT",
+    "path": "/projects/transfer-request/{code}"
+  },
+  {
+    "method": "POST",
+    "path": "/projects/{idOrName}/transfer-request"
+  },
+  {
+    "method": "POST",
+    "path": "/speed-insights/toggle"
+  },
+  {
+    "method": "POST",
+    "path": "/storage/stores/blob"
+  },
+  {
+    "method": "DELETE",
+    "path": "/storage/stores/blob/{id}"
+  },
+  {
+    "method": "GET",
+    "path": "/storage/stores/{id}"
+  },
+  {
+    "method": "GET",
+    "path": "/v1/access-groups"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/access-groups"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/access-groups/{accessGroupIdOrName}/projects"
+  },
+  {
+    "method": "DELETE",
+    "path": "/v1/access-groups/{accessGroupIdOrName}/projects/{projectId}"
+  },
+  {
+    "method": "GET",
+    "path": "/v1/access-groups/{accessGroupIdOrName}/projects/{projectId}"
+  },
+  {
+    "method": "PATCH",
+    "path": "/v1/access-groups/{accessGroupIdOrName}/projects/{projectId}"
+  },
+  {
+    "method": "DELETE",
+    "path": "/v1/access-groups/{idOrName}"
+  },
+  {
+    "method": "GET",
+    "path": "/v1/access-groups/{idOrName}"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/access-groups/{idOrName}"
+  },
+  {
+    "method": "GET",
+    "path": "/v1/access-groups/{idOrName}/members"
+  },
+  {
+    "method": "GET",
+    "path": "/v1/access-groups/{idOrName}/projects"
+  },
+  {
+    "method": "DELETE",
+    "path": "/v1/ai-gateway/rules"
+  },
+  {
+    "method": "GET",
+    "path": "/v1/ai-gateway/rules"
+  },
+  {
+    "method": "PATCH",
+    "path": "/v1/ai-gateway/rules"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/ai-gateway/rules"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/billing/buy"
+  },
+  {
+    "method": "GET",
+    "path": "/v1/billing/charges"
+  },
+  {
+    "method": "GET",
+    "path": "/v1/billing/contract-commitments"
+  },
+  {
+    "method": "DELETE",
+    "path": "/v1/bulk-redirects"
+  },
+  {
+    "method": "GET",
+    "path": "/v1/bulk-redirects"
+  },
+  {
+    "method": "PATCH",
+    "path": "/v1/bulk-redirects"
+  },
+  {
+    "method": "PUT",
+    "path": "/v1/bulk-redirects"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/bulk-redirects/restore"
+  },
+  {
+    "method": "GET",
+    "path": "/v1/bulk-redirects/versions"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/bulk-redirects/versions"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/connect/authorize/{connector}"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/connect/connectors"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/connect/install/{connector}"
+  },
+  {
+    "method": "GET",
+    "path": "/v1/connect/networks"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/connect/networks"
+  },
+  {
+    "method": "DELETE",
+    "path": "/v1/connect/networks/{networkId}"
+  },
+  {
+    "method": "GET",
+    "path": "/v1/connect/networks/{networkId}"
+  },
+  {
+    "method": "PATCH",
+    "path": "/v1/connect/networks/{networkId}"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/connect/token/{connector}"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/connect/token/{connector}/import"
+  },
+  {
+    "method": "GET",
+    "path": "/v1/deployments/{deploymentId}/checks"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/deployments/{deploymentId}/checks"
+  },
+  {
+    "method": "GET",
+    "path": "/v1/deployments/{deploymentId}/checks/{checkId}"
+  },
+  {
+    "method": "PATCH",
+    "path": "/v1/deployments/{deploymentId}/checks/{checkId}"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/deployments/{deploymentId}/checks/{checkId}/rerequest"
+  },
+  {
+    "method": "GET",
+    "path": "/v1/deployments/{deploymentId}/feature-flags"
+  },
+  {
+    "method": "PATCH",
+    "path": "/v1/deployments/{deploymentId}/integrations/{integrationConfigurationId}/resources/{resourceId}/actions/{action}"
+  },
+  {
+    "method": "PATCH",
+    "path": "/v1/domains/records/{recordId}"
+  },
+  {
+    "method": "GET",
+    "path": "/v1/domains/{domain}/project-domains"
+  },
+  {
+    "method": "GET",
+    "path": "/v1/drains"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/drains"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/drains/test"
+  },
+  {
+    "method": "DELETE",
+    "path": "/v1/drains/{id}"
+  },
+  {
+    "method": "GET",
+    "path": "/v1/drains/{id}"
+  },
+  {
+    "method": "PATCH",
+    "path": "/v1/drains/{id}"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/edge-cache/dangerously-delete-by-src-images"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/edge-cache/dangerously-delete-by-tags"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/edge-cache/invalidate-by-src-images"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/edge-cache/invalidate-by-tags"
+  },
+  {
+    "method": "GET",
+    "path": "/v1/edge-config"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/edge-config"
+  },
+  {
+    "method": "DELETE",
+    "path": "/v1/edge-config/{edgeConfigId}"
+  },
+  {
+    "method": "GET",
+    "path": "/v1/edge-config/{edgeConfigId}"
+  },
+  {
+    "method": "PUT",
+    "path": "/v1/edge-config/{edgeConfigId}"
+  },
+  {
+    "method": "GET",
+    "path": "/v1/edge-config/{edgeConfigId}/backups"
+  },
+  {
+    "method": "GET",
+    "path": "/v1/edge-config/{edgeConfigId}/backups/{edgeConfigBackupVersionId}"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/edge-config/{edgeConfigId}/backups/{edgeConfigBackupVersionId}/restore"
+  },
+  {
+    "method": "GET",
+    "path": "/v1/edge-config/{edgeConfigId}/item/{edgeConfigItemKey}"
+  },
+  {
+    "method": "GET",
+    "path": "/v1/edge-config/{edgeConfigId}/items"
+  },
+  {
+    "method": "PATCH",
+    "path": "/v1/edge-config/{edgeConfigId}/items"
+  },
+  {
+    "method": "DELETE",
+    "path": "/v1/edge-config/{edgeConfigId}/schema"
+  },
+  {
+    "method": "GET",
+    "path": "/v1/edge-config/{edgeConfigId}/schema"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/edge-config/{edgeConfigId}/schema"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/edge-config/{edgeConfigId}/token"
+  },
+  {
+    "method": "GET",
+    "path": "/v1/edge-config/{edgeConfigId}/token/{token}"
+  },
+  {
+    "method": "DELETE",
+    "path": "/v1/edge-config/{edgeConfigId}/tokens"
+  },
+  {
+    "method": "GET",
+    "path": "/v1/edge-config/{edgeConfigId}/tokens"
+  },
+  {
+    "method": "DELETE",
+    "path": "/v1/env"
+  },
+  {
+    "method": "GET",
+    "path": "/v1/env"
+  },
+  {
+    "method": "PATCH",
+    "path": "/v1/env"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/env"
+  },
+  {
+    "method": "GET",
+    "path": "/v1/env/{id}"
+  },
+  {
+    "method": "PATCH",
+    "path": "/v1/env/{id}/unlink/{projectId}"
+  },
+  {
+    "method": "GET",
+    "path": "/v1/events/types"
+  },
+  {
+    "method": "PATCH",
+    "path": "/v1/installations/{integrationConfigurationId}"
+  },
+  {
+    "method": "GET",
+    "path": "/v1/installations/{integrationConfigurationId}/account"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/installations/{integrationConfigurationId}/billing"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/installations/{integrationConfigurationId}/billing/balance"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/installations/{integrationConfigurationId}/billing/finalize"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/installations/{integrationConfigurationId}/billing/invoices"
+  },
+  {
+    "method": "GET",
+    "path": "/v1/installations/{integrationConfigurationId}/billing/invoices/{invoiceId}"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/installations/{integrationConfigurationId}/billing/invoices/{invoiceId}/actions"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/installations/{integrationConfigurationId}/events"
+  },
+  {
+    "method": "GET",
+    "path": "/v1/installations/{integrationConfigurationId}/member/{memberId}"
+  },
+  {
+    "method": "PUT",
+    "path": "/v1/installations/{integrationConfigurationId}/products/{integrationProductIdOrSlug}/resources/{resourceId}/secrets"
+  },
+  {
+    "method": "GET",
+    "path": "/v1/installations/{integrationConfigurationId}/resources"
+  },
+  {
+    "method": "DELETE",
+    "path": "/v1/installations/{integrationConfigurationId}/resources/{resourceId}"
+  },
+  {
+    "method": "GET",
+    "path": "/v1/installations/{integrationConfigurationId}/resources/{resourceId}"
+  },
+  {
+    "method": "PATCH",
+    "path": "/v1/installations/{integrationConfigurationId}/resources/{resourceId}"
+  },
+  {
+    "method": "PUT",
+    "path": "/v1/installations/{integrationConfigurationId}/resources/{resourceId}"
+  },
+  {
+    "method": "GET",
+    "path": "/v1/installations/{integrationConfigurationId}/resources/{resourceId}/experimentation/edge-config"
+  },
+  {
+    "method": "HEAD",
+    "path": "/v1/installations/{integrationConfigurationId}/resources/{resourceId}/experimentation/edge-config"
+  },
+  {
+    "method": "PUT",
+    "path": "/v1/installations/{integrationConfigurationId}/resources/{resourceId}/experimentation/edge-config"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/installations/{integrationConfigurationId}/resources/{resourceId}/experimentation/items"
+  },
+  {
+    "method": "DELETE",
+    "path": "/v1/installations/{integrationConfigurationId}/resources/{resourceId}/experimentation/items/{itemId}"
+  },
+  {
+    "method": "PATCH",
+    "path": "/v1/installations/{integrationConfigurationId}/resources/{resourceId}/experimentation/items/{itemId}"
+  },
+  {
+    "method": "PUT",
+    "path": "/v1/installations/{integrationConfigurationId}/resources/{resourceId}/secrets"
+  },
+  {
+    "method": "DELETE",
+    "path": "/v1/integrations/configuration/{id}"
+  },
+  {
+    "method": "GET",
+    "path": "/v1/integrations/configuration/{id}"
+  },
+  {
+    "method": "GET",
+    "path": "/v1/integrations/configuration/{id}/products"
+  },
+  {
+    "method": "GET",
+    "path": "/v1/integrations/configurations"
+  },
+  {
+    "method": "GET",
+    "path": "/v1/integrations/git-namespaces"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/integrations/installations/{integrationConfigurationId}/resources/{resourceId}/connections"
+  },
+  {
+    "method": "GET",
+    "path": "/v1/integrations/integration/{integrationIdOrSlug}/products/{productIdOrSlug}/plans"
+  },
+  {
+    "method": "DELETE",
+    "path": "/v1/integrations/log-drains/{id}"
+  },
+  {
+    "method": "GET",
+    "path": "/v1/integrations/search-repo"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/integrations/sso/token"
+  },
+  {
+    "method": "GET",
+    "path": "/v1/log-drains"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/log-drains"
+  },
+  {
+    "method": "DELETE",
+    "path": "/v1/log-drains/{id}"
+  },
+  {
+    "method": "GET",
+    "path": "/v1/log-drains/{id}"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/microfrontends/group"
+  },
+  {
+    "method": "GET",
+    "path": "/v1/microfrontends/groups"
+  },
+  {
+    "method": "GET",
+    "path": "/v1/microfrontends/groups/{groupId}/projects"
+  },
+  {
+    "method": "GET",
+    "path": "/v1/microfrontends/projects/{projectIdOrName}/production-mfe-config"
+  },
+  {
+    "method": "GET",
+    "path": "/v1/microfrontends/{deploymentId}/config"
+  },
+  {
+    "method": "GET",
+    "path": "/v1/observability/manage/configuration/projects"
+  },
+  {
+    "method": "PUT",
+    "path": "/v1/observability/manage/configuration/projects/{projectIdOrName}"
+  },
+  {
+    "method": "GET",
+    "path": "/v1/projects/traces"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/projects/traces/session"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/projects/{idOrName}/avatar"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/projects/{idOrName}/domains/{domain}/move"
+  },
+  {
+    "method": "DELETE",
+    "path": "/v1/projects/{idOrName}/env"
+  },
+  {
+    "method": "GET",
+    "path": "/v1/projects/{idOrName}/env/{id}"
+  },
+  {
+    "method": "GET",
+    "path": "/v1/projects/{idOrName}/members"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/projects/{idOrName}/members"
+  },
+  {
+    "method": "DELETE",
+    "path": "/v1/projects/{idOrName}/members/{uid}"
+  },
+  {
+    "method": "PATCH",
+    "path": "/v1/projects/{idOrName}/protection-bypass"
+  },
+  {
+    "method": "GET",
+    "path": "/v1/projects/{idOrName}/rolling-release"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/projects/{idOrName}/rolling-release/approve-stage"
+  },
+  {
+    "method": "GET",
+    "path": "/v1/projects/{idOrName}/rolling-release/billing"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/projects/{idOrName}/rolling-release/complete"
+  },
+  {
+    "method": "DELETE",
+    "path": "/v1/projects/{idOrName}/rolling-release/config"
+  },
+  {
+    "method": "GET",
+    "path": "/v1/projects/{idOrName}/rolling-release/config"
+  },
+  {
+    "method": "PATCH",
+    "path": "/v1/projects/{idOrName}/rolling-release/config"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/projects/{idOrName}/rolling-release/start"
+  },
+  {
+    "method": "PATCH",
+    "path": "/v1/projects/{idOrName}/shared-connect-links"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/projects/{idOrName}/token"
+  },
+  {
+    "method": "GET",
+    "path": "/v1/projects/{projectIdOrName}/feature-flags/flags"
+  },
+  {
+    "method": "PUT",
+    "path": "/v1/projects/{projectIdOrName}/feature-flags/flags"
+  },
+  {
+    "method": "DELETE",
+    "path": "/v1/projects/{projectIdOrName}/feature-flags/flags/{flagIdOrSlug}"
+  },
+  {
+    "method": "GET",
+    "path": "/v1/projects/{projectIdOrName}/feature-flags/flags/{flagIdOrSlug}"
+  },
+  {
+    "method": "PATCH",
+    "path": "/v1/projects/{projectIdOrName}/feature-flags/flags/{flagIdOrSlug}"
+  },
+  {
+    "method": "GET",
+    "path": "/v1/projects/{projectIdOrName}/feature-flags/flags/{flagIdOrSlug}/versions"
+  },
+  {
+    "method": "GET",
+    "path": "/v1/projects/{projectIdOrName}/feature-flags/sdk-keys"
+  },
+  {
+    "method": "PUT",
+    "path": "/v1/projects/{projectIdOrName}/feature-flags/sdk-keys"
+  },
+  {
+    "method": "DELETE",
+    "path": "/v1/projects/{projectIdOrName}/feature-flags/sdk-keys/{hashKey}"
+  },
+  {
+    "method": "GET",
+    "path": "/v1/projects/{projectIdOrName}/feature-flags/segments"
+  },
+  {
+    "method": "PUT",
+    "path": "/v1/projects/{projectIdOrName}/feature-flags/segments"
+  },
+  {
+    "method": "DELETE",
+    "path": "/v1/projects/{projectIdOrName}/feature-flags/segments/{segmentIdOrSlug}"
+  },
+  {
+    "method": "GET",
+    "path": "/v1/projects/{projectIdOrName}/feature-flags/segments/{segmentIdOrSlug}"
+  },
+  {
+    "method": "PATCH",
+    "path": "/v1/projects/{projectIdOrName}/feature-flags/segments/{segmentIdOrSlug}"
+  },
+  {
+    "method": "GET",
+    "path": "/v1/projects/{projectIdOrName}/feature-flags/settings"
+  },
+  {
+    "method": "PATCH",
+    "path": "/v1/projects/{projectIdOrName}/feature-flags/settings"
+  },
+  {
+    "method": "GET",
+    "path": "/v1/projects/{projectId}/deployments/{deploymentId}/runtime-logs"
+  },
+  {
+    "method": "PATCH",
+    "path": "/v1/projects/{projectId}/microfrontends"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/projects/{projectId}/pause"
+  },
+  {
+    "method": "GET",
+    "path": "/v1/projects/{projectId}/promote/aliases"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/projects/{projectId}/rollback/{deploymentId}"
+  },
+  {
+    "method": "PATCH",
+    "path": "/v1/projects/{projectId}/rollback/{deploymentId}/update-description"
+  },
+  {
+    "method": "DELETE",
+    "path": "/v1/projects/{projectId}/routes"
+  },
+  {
+    "method": "GET",
+    "path": "/v1/projects/{projectId}/routes"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/projects/{projectId}/routes"
+  },
+  {
+    "method": "PUT",
+    "path": "/v1/projects/{projectId}/routes"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/projects/{projectId}/routes/generate"
+  },
+  {
+    "method": "GET",
+    "path": "/v1/projects/{projectId}/routes/versions"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/projects/{projectId}/routes/versions"
+  },
+  {
+    "method": "PATCH",
+    "path": "/v1/projects/{projectId}/routes/{routeId}"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/projects/{projectId}/unpause"
+  },
+  {
+    "method": "GET",
+    "path": "/v1/query/web-analytics/events/aggregate"
+  },
+  {
+    "method": "GET",
+    "path": "/v1/query/web-analytics/events/count"
+  },
+  {
+    "method": "GET",
+    "path": "/v1/query/web-analytics/visits/aggregate"
+  },
+  {
+    "method": "GET",
+    "path": "/v1/query/web-analytics/visits/count"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/registrar/domains/availability"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/registrar/domains/buy"
+  },
+  {
+    "method": "GET",
+    "path": "/v1/registrar/domains/{domain}/auth-code"
+  },
+  {
+    "method": "PATCH",
+    "path": "/v1/registrar/domains/{domain}/auto-renew"
+  },
+  {
+    "method": "GET",
+    "path": "/v1/registrar/domains/{domain}/availability"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/registrar/domains/{domain}/buy"
+  },
+  {
+    "method": "GET",
+    "path": "/v1/registrar/domains/{domain}/contact-info/schema"
+  },
+  {
+    "method": "GET",
+    "path": "/v1/registrar/domains/{domain}/contact-verification"
+  },
+  {
+    "method": "PATCH",
+    "path": "/v1/registrar/domains/{domain}/nameservers"
+  },
+  {
+    "method": "GET",
+    "path": "/v1/registrar/domains/{domain}/price"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/registrar/domains/{domain}/renew"
+  },
+  {
+    "method": "GET",
+    "path": "/v1/registrar/domains/{domain}/transfer"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/registrar/domains/{domain}/transfer"
+  },
+  {
+    "method": "GET",
+    "path": "/v1/registrar/orders/{orderId}"
+  },
+  {
+    "method": "GET",
+    "path": "/v1/registrar/tlds/supported"
+  },
+  {
+    "method": "GET",
+    "path": "/v1/registrar/tlds/{tld}"
+  },
+  {
+    "method": "GET",
+    "path": "/v1/registrar/tlds/{tld}/price"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/security/attack-mode"
+  },
+  {
+    "method": "GET",
+    "path": "/v1/security/firewall/attack-status"
+  },
+  {
+    "method": "DELETE",
+    "path": "/v1/security/firewall/bypass"
+  },
+  {
+    "method": "GET",
+    "path": "/v1/security/firewall/bypass"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/security/firewall/bypass"
+  },
+  {
+    "method": "GET",
+    "path": "/v1/security/firewall/config"
+  },
+  {
+    "method": "PATCH",
+    "path": "/v1/security/firewall/config"
+  },
+  {
+    "method": "PUT",
+    "path": "/v1/security/firewall/config"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/security/firewall/config/generate-rule"
+  },
+  {
+    "method": "DELETE",
+    "path": "/v1/security/firewall/config/{configVersion}"
+  },
+  {
+    "method": "GET",
+    "path": "/v1/security/firewall/config/{configVersion}"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/security/firewall/config/{configVersion}/activate"
+  },
+  {
+    "method": "GET",
+    "path": "/v1/security/firewall/events"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/storage/stores/integration/direct"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/teams"
+  },
+  {
+    "method": "DELETE",
+    "path": "/v1/teams/{teamId}"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/teams/{teamId}/dsync-roles"
+  },
+  {
+    "method": "GET",
+    "path": "/v1/teams/{teamId}/feature-flags/flags"
+  },
+  {
+    "method": "GET",
+    "path": "/v1/teams/{teamId}/feature-flags/settings"
+  },
+  {
+    "method": "DELETE",
+    "path": "/v1/teams/{teamId}/invites/{inviteId}"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/teams/{teamId}/members/teams/join"
+  },
+  {
+    "method": "DELETE",
+    "path": "/v1/teams/{teamId}/members/{uid}"
+  },
+  {
+    "method": "PATCH",
+    "path": "/v1/teams/{teamId}/members/{uid}"
+  },
+  {
+    "method": "DELETE",
+    "path": "/v1/teams/{teamId}/microfrontends/{groupId}"
+  },
+  {
+    "method": "PATCH",
+    "path": "/v1/teams/{teamId}/microfrontends/{groupId}"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/teams/{teamId}/request"
+  },
+  {
+    "method": "GET",
+    "path": "/v1/teams/{teamId}/request/{userId}"
+  },
+  {
+    "method": "DELETE",
+    "path": "/v1/user"
+  },
+  {
+    "method": "GET",
+    "path": "/v1/vcr/repository"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/vcr/repository"
+  },
+  {
+    "method": "DELETE",
+    "path": "/v1/vcr/repository/{idOrName}"
+  },
+  {
+    "method": "GET",
+    "path": "/v1/vcr/repository/{idOrName}"
+  },
+  {
+    "method": "GET",
+    "path": "/v1/vcr/repository/{idOrName}/images"
+  },
+  {
+    "method": "GET",
+    "path": "/v1/vcr/repository/{idOrName}/images/{imageIdOrDigest}"
+  },
+  {
+    "method": "DELETE",
+    "path": "/v1/vcr/repository/{idOrName}/images/{imageId}"
+  },
+  {
+    "method": "GET",
+    "path": "/v1/vcr/repository/{idOrName}/tags"
+  },
+  {
+    "method": "GET",
+    "path": "/v1/vcr/repository/{idOrName}/tags/{tag}"
+  },
+  {
+    "method": "GET",
+    "path": "/v1/webhooks"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/webhooks"
+  },
+  {
+    "method": "DELETE",
+    "path": "/v1/webhooks/{id}"
+  },
+  {
+    "method": "GET",
+    "path": "/v1/webhooks/{id}"
+  },
+  {
+    "method": "GET",
+    "path": "/v10/projects"
+  },
+  {
+    "method": "POST",
+    "path": "/v10/projects/{idOrName}/domains"
+  },
+  {
+    "method": "GET",
+    "path": "/v10/projects/{idOrName}/env"
+  },
+  {
+    "method": "POST",
+    "path": "/v10/projects/{idOrName}/env"
+  },
+  {
+    "method": "POST",
+    "path": "/v10/projects/{projectId}/promote/{deploymentId}"
+  },
+  {
+    "method": "POST",
+    "path": "/v11/projects"
+  },
+  {
+    "method": "PATCH",
+    "path": "/v12/deployments/{id}/cancel"
+  },
+  {
+    "method": "POST",
+    "path": "/v13/deployments"
+  },
+  {
+    "method": "GET",
+    "path": "/v13/deployments/{idOrUrl}"
+  },
+  {
+    "method": "DELETE",
+    "path": "/v13/deployments/{id}"
+  },
+  {
+    "method": "DELETE",
+    "path": "/v2/aliases/{aliasId}"
+  },
+  {
+    "method": "GET",
+    "path": "/v2/deployments/{deploymentId}/check-runs"
+  },
+  {
+    "method": "POST",
+    "path": "/v2/deployments/{deploymentId}/check-runs"
+  },
+  {
+    "method": "GET",
+    "path": "/v2/deployments/{deploymentId}/check-runs/{checkRunId}"
+  },
+  {
+    "method": "PATCH",
+    "path": "/v2/deployments/{deploymentId}/check-runs/{checkRunId}"
+  },
+  {
+    "method": "GET",
+    "path": "/v2/deployments/{id}/aliases"
+  },
+  {
+    "method": "POST",
+    "path": "/v2/deployments/{id}/aliases"
+  },
+  {
+    "method": "POST",
+    "path": "/v2/domains/{domain}/records"
+  },
+  {
+    "method": "DELETE",
+    "path": "/v2/domains/{domain}/records/{recordId}"
+  },
+  {
+    "method": "POST",
+    "path": "/v2/files"
+  },
+  {
+    "method": "GET",
+    "path": "/v2/integrations/log-drains"
+  },
+  {
+    "method": "POST",
+    "path": "/v2/integrations/log-drains"
+  },
+  {
+    "method": "POST",
+    "path": "/v2/observability/query"
+  },
+  {
+    "method": "GET",
+    "path": "/v2/observability/schema"
+  },
+  {
+    "method": "GET",
+    "path": "/v2/observability/schema/{metricId}"
+  },
+  {
+    "method": "GET",
+    "path": "/v2/projects/{projectIdOrName}/checks"
+  },
+  {
+    "method": "POST",
+    "path": "/v2/projects/{projectIdOrName}/checks"
+  },
+  {
+    "method": "DELETE",
+    "path": "/v2/projects/{projectIdOrName}/checks/{checkId}"
+  },
+  {
+    "method": "GET",
+    "path": "/v2/projects/{projectIdOrName}/checks/{checkId}"
+  },
+  {
+    "method": "PATCH",
+    "path": "/v2/projects/{projectIdOrName}/checks/{checkId}"
+  },
+  {
+    "method": "GET",
+    "path": "/v2/projects/{projectIdOrName}/checks/{checkId}/runs"
+  },
+  {
+    "method": "GET",
+    "path": "/v2/projects/{projectIdOrName}/feature-flags/flags"
+  },
+  {
+    "method": "GET",
+    "path": "/v2/sandboxes"
+  },
+  {
+    "method": "POST",
+    "path": "/v2/sandboxes"
+  },
+  {
+    "method": "GET",
+    "path": "/v2/sandboxes/drives"
+  },
+  {
+    "method": "DELETE",
+    "path": "/v2/sandboxes/drives/{name}"
+  },
+  {
+    "method": "POST",
+    "path": "/v2/sandboxes/drives/{name}"
+  },
+  {
+    "method": "GET",
+    "path": "/v2/sandboxes/sessions"
+  },
+  {
+    "method": "GET",
+    "path": "/v2/sandboxes/sessions/{sessionId}"
+  },
+  {
+    "method": "GET",
+    "path": "/v2/sandboxes/sessions/{sessionId}/cmd"
+  },
+  {
+    "method": "POST",
+    "path": "/v2/sandboxes/sessions/{sessionId}/cmd"
+  },
+  {
+    "method": "GET",
+    "path": "/v2/sandboxes/sessions/{sessionId}/cmd/{cmdId}"
+  },
+  {
+    "method": "POST",
+    "path": "/v2/sandboxes/sessions/{sessionId}/cmd/{cmdId}/kill"
+  },
+  {
+    "method": "GET",
+    "path": "/v2/sandboxes/sessions/{sessionId}/cmd/{cmdId}/logs"
+  },
+  {
+    "method": "POST",
+    "path": "/v2/sandboxes/sessions/{sessionId}/extend-timeout"
+  },
+  {
+    "method": "POST",
+    "path": "/v2/sandboxes/sessions/{sessionId}/fs/mkdir"
+  },
+  {
+    "method": "POST",
+    "path": "/v2/sandboxes/sessions/{sessionId}/fs/read"
+  },
+  {
+    "method": "POST",
+    "path": "/v2/sandboxes/sessions/{sessionId}/fs/write"
+  },
+  {
+    "method": "POST",
+    "path": "/v2/sandboxes/sessions/{sessionId}/network-policy"
+  },
+  {
+    "method": "POST",
+    "path": "/v2/sandboxes/sessions/{sessionId}/snapshot"
+  },
+  {
+    "method": "POST",
+    "path": "/v2/sandboxes/sessions/{sessionId}/stop"
+  },
+  {
+    "method": "GET",
+    "path": "/v2/sandboxes/snapshots"
+  },
+  {
+    "method": "DELETE",
+    "path": "/v2/sandboxes/snapshots/{snapshotId}"
+  },
+  {
+    "method": "GET",
+    "path": "/v2/sandboxes/snapshots/{snapshotId}"
+  },
+  {
+    "method": "DELETE",
+    "path": "/v2/sandboxes/{name}"
+  },
+  {
+    "method": "GET",
+    "path": "/v2/sandboxes/{name}"
+  },
+  {
+    "method": "PATCH",
+    "path": "/v2/sandboxes/{name}"
+  },
+  {
+    "method": "POST",
+    "path": "/v2/sandboxes/{name}/fork"
+  },
+  {
+    "method": "GET",
+    "path": "/v2/teams"
+  },
+  {
+    "method": "GET",
+    "path": "/v2/teams/{teamId}"
+  },
+  {
+    "method": "PATCH",
+    "path": "/v2/teams/{teamId}"
+  },
+  {
+    "method": "GET",
+    "path": "/v2/teams/{teamId}/feature-flags/flags"
+  },
+  {
+    "method": "POST",
+    "path": "/v2/teams/{teamId}/members"
+  },
+  {
+    "method": "GET",
+    "path": "/v2/user"
+  },
+  {
+    "method": "GET",
+    "path": "/v3/deployments/{idOrUrl}/events"
+  },
+  {
+    "method": "PATCH",
+    "path": "/v3/domains/{domain}"
+  },
+  {
+    "method": "GET",
+    "path": "/v3/events"
+  },
+  {
+    "method": "GET",
+    "path": "/v3/teams/{teamId}/members"
+  },
+  {
+    "method": "POST",
+    "path": "/v3/user/tokens"
+  },
+  {
+    "method": "DELETE",
+    "path": "/v3/user/tokens/{tokenId}"
+  },
+  {
+    "method": "GET",
+    "path": "/v4/aliases"
+  },
+  {
+    "method": "GET",
+    "path": "/v4/aliases/{idOrAlias}"
+  },
+  {
+    "method": "GET",
+    "path": "/v5/domains"
+  },
+  {
+    "method": "GET",
+    "path": "/v5/domains/{domain}"
+  },
+  {
+    "method": "GET",
+    "path": "/v5/domains/{domain}/records"
+  },
+  {
+    "method": "GET",
+    "path": "/v5/user/tokens/{tokenId}"
+  },
+  {
+    "method": "GET",
+    "path": "/v6/deployments/{id}/files"
+  },
+  {
+    "method": "DELETE",
+    "path": "/v6/domains/{domain}"
+  },
+  {
+    "method": "GET",
+    "path": "/v6/domains/{domain}/config"
+  },
+  {
+    "method": "GET",
+    "path": "/v6/user/tokens"
+  },
+  {
+    "method": "GET",
+    "path": "/v7/deployments"
+  },
+  {
+    "method": "POST",
+    "path": "/v7/domains"
+  },
+  {
+    "method": "DELETE",
+    "path": "/v8/artifacts"
+  },
+  {
+    "method": "POST",
+    "path": "/v8/artifacts"
+  },
+  {
+    "method": "POST",
+    "path": "/v8/artifacts/events"
+  },
+  {
+    "method": "GET",
+    "path": "/v8/artifacts/status"
+  },
+  {
+    "method": "GET",
+    "path": "/v8/artifacts/{hash}"
+  },
+  {
+    "method": "HEAD",
+    "path": "/v8/artifacts/{hash}"
+  },
+  {
+    "method": "PUT",
+    "path": "/v8/artifacts/{hash}"
+  },
+  {
+    "method": "GET",
+    "path": "/v8/certs"
+  },
+  {
+    "method": "POST",
+    "path": "/v8/certs"
+  },
+  {
+    "method": "PUT",
+    "path": "/v8/certs"
+  },
+  {
+    "method": "DELETE",
+    "path": "/v8/certs/{id}"
+  },
+  {
+    "method": "GET",
+    "path": "/v8/certs/{id}"
+  },
+  {
+    "method": "GET",
+    "path": "/v8/deployments/{id}/files/{fileId}"
+  },
+  {
+    "method": "POST",
+    "path": "/v9/domains/{domain}/claim"
+  },
+  {
+    "method": "GET",
+    "path": "/v9/domains/{domain}/verification"
+  },
+  {
+    "method": "DELETE",
+    "path": "/v9/projects/{idOrName}"
+  },
+  {
+    "method": "GET",
+    "path": "/v9/projects/{idOrName}"
+  },
+  {
+    "method": "PATCH",
+    "path": "/v9/projects/{idOrName}"
+  },
+  {
+    "method": "GET",
+    "path": "/v9/projects/{idOrName}/custom-environments"
+  },
+  {
+    "method": "POST",
+    "path": "/v9/projects/{idOrName}/custom-environments"
+  },
+  {
+    "method": "DELETE",
+    "path": "/v9/projects/{idOrName}/custom-environments/{environmentSlugOrId}"
+  },
+  {
+    "method": "GET",
+    "path": "/v9/projects/{idOrName}/custom-environments/{environmentSlugOrId}"
+  },
+  {
+    "method": "PATCH",
+    "path": "/v9/projects/{idOrName}/custom-environments/{environmentSlugOrId}"
+  },
+  {
+    "method": "GET",
+    "path": "/v9/projects/{idOrName}/domains"
+  },
+  {
+    "method": "DELETE",
+    "path": "/v9/projects/{idOrName}/domains/{domain}"
+  },
+  {
+    "method": "GET",
+    "path": "/v9/projects/{idOrName}/domains/{domain}"
+  },
+  {
+    "method": "PATCH",
+    "path": "/v9/projects/{idOrName}/domains/{domain}"
+  },
+  {
+    "method": "POST",
+    "path": "/v9/projects/{idOrName}/domains/{domain}/verify"
+  },
+  {
+    "method": "DELETE",
+    "path": "/v9/projects/{idOrName}/env/{id}"
+  },
+  {
+    "method": "PATCH",
+    "path": "/v9/projects/{idOrName}/env/{id}"
+  },
+  {
+    "method": "POST",
+    "path": "/web/insights/toggle"
+  }
+]
