@@ -12,12 +12,18 @@ could diff perfectly produced no findings, because nothing in the customer's cod
 ever bound to it. The name is a fact about one vendor's SDK, and `CLAUDE.md` puts those
 in that vendor's adapter.
 
-One npm name serves all three uses here -- the `package.json` key, the import specifier,
-and the root of the symbol handed to the adapter. That holds for every vendor registered
-today and will not hold for a scoped package, whose specifier and symbol root differ; the
-field to separate them belongs to the first adapter that needs it rather than being
-carried empty until then. Python needs two names for a reason that is live now, and
-`python_lang.py` says which.
+One npm name serves two of the three uses here -- the `package.json` key and the import
+specifier are the same string for every npm package there is. The third came apart as soon
+as a configured vendor shipped a scoped package: `@anthropic-ai/sdk` is a manifest key and
+an import specifier and is not a symbol root, because no symbol map can hold a key with a
+slash in it. `symbol_root` is that third name, defaulting to the package so every vendor
+whose package is a bare word is unaffected.
+
+The defect it closes was silent in the worst way available. The vendor resolved, the
+manifest matched, the call site was found, and only `operation_for_symbol` returned None --
+so a repository that called the vendor was indistinguishable from one that did not, and a
+green suite said nothing because no fixture declared a scoped package. Python needs two
+names for a reason that is live now, and `python_lang.py` says which.
 
 tree-sitter gives us syntax, not types. Where a client is exported from another
 module we resolve it by name across the repository rather than by type inference,
@@ -126,6 +132,20 @@ class TypeScriptAdapter:
         # specification is discoverable and whose SDK nothing here can recognise.
         binding = getattr(vendor_adapter, "sdk_bindings", {}).get(self.language_id, {})
         self._package: str | None = binding.get("package")
+        # What an emitted symbol is rooted at, which is not what the manifest declares. An npm
+        # package name is also its import specifier, so rooting a symbol at the package looked
+        # right for as long as every vendor's package was a bare word -- and `@anthropic-ai/sdk`
+        # is not a symbol root any map can hold. Rooting there failed in the worst way
+        # available: the vendor resolves, the manifest matches, the call site is found, and only
+        # `operation_for_symbol` returns None, so a repository that calls the vendor is
+        # indistinguishable from one that does not.
+        #
+        # Defaults to the package, which is what makes this additive: Stripe and Twilio declare
+        # no root and emit exactly what they emitted before. A vendor that declares this
+        # language and omits the root gets that default and does not acquire a guess from its
+        # id or from another language -- the same rule the binding fallback already follows one
+        # field up.
+        self._symbol_root: str | None = binding.get("symbol_root") or self._package
         # What each clone already failed before Sync touched it, keyed by clone
         # path. Held in memory rather than in the clone because nothing has to
         # read it after this process ends: `cli.RESUMABLE_NODES` resumes a run
@@ -403,7 +423,7 @@ class TypeScriptAdapter:
                 if chain is None or len(chain) < 3 or chain[0] not in clients:
                     continue
 
-                symbol = f"{self._package}.{'.'.join(chain[1:])}"
+                symbol = f"{self._symbol_root}.{'.'.join(chain[1:])}"
                 operation = self._vendor.operation_for_symbol(symbol, language=self.language_id)
                 if operation is None:
                     continue

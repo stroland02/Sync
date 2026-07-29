@@ -113,7 +113,9 @@ class TwilioAdapter:
     Both languages name the package `twilio`, which is a fact about this vendor rather than a
     rule -- `twilio-node` and `twilio-python` happen to agree, and the Python entry still
     carries a distribution and a module separately because nothing guarantees the next vendor
-    will.
+    will. Neither declares a `symbol_root` for the same reason: this vendor's four names are
+    one string, so the default -- the package on TypeScript, the module on Python -- already
+    answers, and declaring it would be configuration that says nothing.
     """
 
     def __init__(

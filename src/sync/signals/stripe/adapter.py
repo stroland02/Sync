@@ -132,9 +132,16 @@ class StripeAdapter:
     Keyed by `LanguageAdapter.language_id`, and the value's shape belongs to the language
     adapter that reads it rather than to a schema stated here -- the same argument
     `sync.signals.registry` makes for keeping each vendor's construction behind its own builder.
-    TypeScript needs one npm name, which is both the manifest key and the import specifier.
-    Python needs two, because a distribution name and a module name are different strings in
-    general even where this vendor spells them alike.
+    TypeScript needs one npm name for two of the three uses, because a package name is also
+    its import specifier. Python needs two, because a distribution name and a module name are
+    different strings in general even where this vendor spells them alike.
+
+    A third name, `symbol_root`, is what an emitted symbol is rooted at, and it defaults to the
+    package on TypeScript and to the module on Python. This vendor declares none and must not:
+    `stripe` is simultaneously the vendor id, the npm package, the PyPI distribution, the import
+    name and the symbol root, and that coincidence is exactly what hid the defect the field
+    closes -- a scoped package such as `@anthropic-ai/sdk` cannot be a symbol root, and rooting
+    a symbol there resolved nothing while looking like a repository that made no calls.
 
     It is deliberately not part of the `VendorAdapter` protocol. An adapter that declares none
     indexes nothing, which is the honest state of the four configured vendors and every watched

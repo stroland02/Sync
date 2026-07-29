@@ -137,6 +137,18 @@ class PythonAdapter:
             _normalised(declared) if isinstance(declared, str) else None
         )
         self._module: str | None = binding.get("module")
+        # What an emitted symbol is rooted at. Defaults to the module rather than to the
+        # distribution, and that default is the reason this side never carried TypeScript's
+        # defect: a distribution is not importable -- PEP 503 folds `_` to `-` in a requirement
+        # and never in an `import` -- so rooting at it would put `slack-sdk` into a symbol,
+        # which is exactly the failure being fixed on the other side. Defaulting here to the
+        # package would have introduced the defect rather than removed it.
+        #
+        # A module name and a symbol root are still different strings in general, so the field
+        # earns its place here too: a map keying on `slack` is unreachable from a module named
+        # `slack_sdk` without it. A binding that declares this language and omits the root gets
+        # the module, and does not acquire a guess from elsewhere.
+        self._symbol_root: str | None = binding.get("symbol_root") or self._module
 
     # --- manifests ----------------------------------------------------------------
 
@@ -451,7 +463,7 @@ class PythonAdapter:
                 if chain is None or len(chain) < 3 or chain[0] not in clients:
                     continue
 
-                symbol = f"{self._module}.{'.'.join(chain[1:])}"
+                symbol = f"{self._symbol_root}.{'.'.join(chain[1:])}"
                 operation = self._vendor.operation_for_symbol(symbol, language=self.language_id)
                 if operation is None:
                     continue
