@@ -1,0 +1,12 @@
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "result": {
+    "tools": [
+      {
+        "name": "search_docs",
+        "description": "A tool advertised without the inputSchema the protocol requires."
+      }
+    ]
+  }
+}

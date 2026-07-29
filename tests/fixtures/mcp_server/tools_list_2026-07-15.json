@@ -1,0 +1,105 @@
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "result": {
+    "tools": [
+      {
+        "name": "search_docs",
+        "title": "Search documentation",
+        "description": "Full-text search inside one space.",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "query": {
+              "type": "string",
+              "description": "What to search for."
+            },
+            "space_id": {
+              "type": "string",
+              "description": "Which space to search."
+            },
+            "format": {
+              "type": "string",
+              "description": "Render the hits as this."
+            }
+          },
+          "required": ["query", "space_id"]
+        }
+      },
+      {
+        "name": "get_page",
+        "description": "Fetch one page by id.",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "page_id": {
+              "type": "string"
+            },
+            "include_body": {
+              "type": "boolean"
+            }
+          },
+          "required": ["page_id"]
+        }
+      },
+      {
+        "name": "delete_page",
+        "description": "Delete one page.",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "page_id": {
+              "type": "string"
+            }
+          },
+          "required": ["page_id"],
+          "additionalProperties": false
+        },
+        "annotations": {
+          "destructiveHint": true
+        }
+      },
+      {
+        "name": "compose_query",
+        "description": "Build a search from a filter object.",
+        "inputSchema": {
+          "type": "object",
+          "allOf": [
+            {
+              "$ref": "#/$defs/filters"
+            }
+          ],
+          "$defs": {
+            "filters": {
+              "type": "object",
+              "properties": {
+                "tags": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      {
+        "name": "create_page",
+        "description": "Create a page in a space.",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "space_id": {
+              "type": "string"
+            },
+            "title": {
+              "type": "string"
+            }
+          },
+          "required": ["space_id", "title"]
+        }
+      }
+    ]
+  }
+}
