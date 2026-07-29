@@ -44,32 +44,6 @@ corpus stays a deliberate superset of what the rule proposes rather than equal t
 result name with a targeted site on the same operation, a fresh generation stops proposing `furever`
 `PostPaymentIntents-response`, and all four gate figures are unchanged by the rule change.
 
-### B50 — A hold_back the binder now earns, which would trade two positives for two negatives
-
-B49 found two committed specs whose content differs from a fresh generation: `furever` and `turbo`
-`PostPaymentIntents-response` would now earn a `hold_back`, because B34's change to what the binder
-records made a second site on those operations bindable.
-
-It deliberately did not adopt it, and the reason is the sharpest distinction in the corpus's
-accounting: **every other difference moved a denominator, this one would move a rate.** Adopting it
-trades two labelled positives for two falsifiable negatives — recall's denominator falls by two
-while precision gains two candidates it could fail on.
-
-Neither direction is obviously right. More falsifiable negatives make precision a stronger claim,
-which is the axis that was a constant until this morning. Fewer positives make recall a weaker one,
-and recall is the axis whose failure the product exists to prevent.
-
-**Closes when:** the trade is decided with the argument written down, and if taken, both rates are
-recomputed with the old and new denominators side by side.
-
-**Decided: take `turbo`, decline `furever`.** The worker measured both and stopped rather than
-adjusting anything, which is what the brief asked for. Adopting both gave precision 0.9615 at n=26,
-and the single false positive was the newly held-back `furever` site itself — so the corpus would
-have been certifying a label it had just disproved. That is the ruling B44 got and it is the same
-ruling for the same reason. `turbo` alone holds both rates at 1.0000 at n=26, takes falsifiable
-negatives from 6 to 7 and leaves pairs at 17, so the only floor that moves moves *upward*. The
-unsound-selection half is B52.
-
 ### B51 — Coverage marks these decode handlers covered without ever entering them
 
 From the other coordinator's M3-W87. `_read_npm` catches `JSONDecodeError` and `UnicodeDecodeError`
@@ -114,12 +88,11 @@ recorded with which change broke it.
 
 ## In flight
 
-- **B50** — `task_60f0bb4e037a`, worktree `sync-solo-a`. Reported at the decision gate rather than
-  choosing for itself; ruled to adopt `turbo` only and to record why `furever` was declined.
-- **B51** — `task_48d3cb708ecf`, worktree `sync-solo-b`.
+- **B51** — `task_48d3cb708ecf`, worktree `sync-solo-b`. Committed at `6d0a7d6`, not yet reported.
+- **B52** — `task_15860306d7c7`, worktree `sync-solo-a`.
 
-Both entries stay under **Ready** above with their full reasoning until they land, because the
-reasoning is what a reviewer needs and duplicating it here would let the two copies drift.
+Entries stay under **Ready** above with their full reasoning until they land, because the reasoning
+is what a reviewer needs and duplicating it here would let the two copies drift.
 
 ## Done
 
@@ -612,3 +585,14 @@ reasoning is what a reviewer needs and duplicating it here would let the two cop
 - Refuse a push lease against a tip Sync did not author; delete the branch an abandoned
   finding leaves behind. Landed `38ec2c7` and wired at `9627f65`.
 - Run the tier cascade and give it the change class the acceptance run hit.
+
+- Take the `hold_back` `turbo` earns and refuse the one `furever` earns. Landed `10f925b`. The
+  worker stopped at the decision gate rather than adopting both, which is what caught it: adopting
+  both put precision at 0.9615 over n=26, and the single false positive was the newly held-back
+  site itself. The label was false, not the binder — two assignments to one name in one scope, so
+  the guard's field read is credited to both and the held-back site genuinely depends on the
+  removed property. Both rates hold at 1.0000 over n=26, falsifiable negatives 6 to 7, pairs
+  unchanged at 17, so the only floor that moved moved upward. Verified by scoring the corpus from a
+  fresh database independently, and all four floors were mutation-probed: injecting one false
+  positive, one negative short, two false negatives and one dropped pair each fired, naming its own
+  axis, with the unmutated control clean. The unsound-selection half is B52.
