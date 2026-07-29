@@ -1,0 +1,22 @@
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "result": {
+    "tools": [
+      {
+        "name": "search_docs",
+        "description": "Full-text search across every space in the workspace.",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "query": {
+              "type": "string"
+            }
+          },
+          "required": ["query"]
+        }
+      }
+    ],
+    "nextCursor": "eyJwYWdlIjogMn0="
+  }
+}

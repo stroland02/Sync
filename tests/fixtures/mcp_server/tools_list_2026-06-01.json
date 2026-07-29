@@ -1,0 +1,101 @@
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "result": {
+    "tools": [
+      {
+        "name": "search_docs",
+        "title": "Search documentation",
+        "description": "Full-text search across every space in the workspace.",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "query": {
+              "type": "string",
+              "description": "What to search for."
+            },
+            "limit": {
+              "type": "number",
+              "description": "How many hits to return."
+            },
+            "highlight": {
+              "type": "boolean",
+              "description": "Mark the matched terms in each hit."
+            },
+            "format": {
+              "type": ["string", "null"],
+              "description": "Render the hits as this; null renders the server default."
+            }
+          },
+          "required": ["query"]
+        }
+      },
+      {
+        "name": "get_page",
+        "description": "Fetch one page by id.",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "page_id": {
+              "type": "string"
+            },
+            "include_body": {
+              "type": "boolean"
+            }
+          },
+          "required": ["page_id"]
+        }
+      },
+      {
+        "name": "list_spaces",
+        "description": "Every space the caller can read.",
+        "inputSchema": {
+          "type": "object",
+          "properties": {}
+        }
+      },
+      {
+        "name": "delete_page",
+        "description": "Delete one page.",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "page_id": {
+              "type": "string"
+            },
+            "confirm": {
+              "type": "boolean"
+            }
+          },
+          "required": ["page_id"],
+          "additionalProperties": false
+        },
+        "annotations": {
+          "destructiveHint": true
+        }
+      },
+      {
+        "name": "compose_query",
+        "description": "Build a search from a filter object.",
+        "inputSchema": {
+          "type": "object",
+          "allOf": [
+            {
+              "$ref": "#/$defs/filters"
+            }
+          ],
+          "$defs": {
+            "filters": {
+              "type": "object",
+              "properties": {
+                "tag": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    ]
+  }
+}
