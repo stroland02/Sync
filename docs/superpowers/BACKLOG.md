@@ -12,30 +12,40 @@ item that cannot say what evidence closes it is not ready to dispatch.
 
 ## Ready
 
-### B37 — Python binding accuracy has never been measured
+### B38 — The Stripe symbol map is TypeScript-only, so Python binds almost nothing
 
-`PythonAdapter` is shipped and wired into `cli.py`. All four corpus repositories are TypeScript
-Stripe demos and **no pair specification names Python**, so binding precision and recall describe
-the TypeScript indexer only and always have.
+Measured across seventeen candidate repositories while trying to give Python its first corpus
+entry. The blocker is not repository availability — it is three composing binder limitations, each
+measured rather than argued, and together they mean **`PythonAdapter` cannot see the code Stripe's
+own Python documentation tells people to write.**
 
-Two real defects were fixed in the Python indexer today and neither could move a corpus number:
-a false attribution (`charge = dict(create(...))` crediting the SDK call with fields read off
-`dict`'s return value) and a missed break (`charge := create(...)` recording nothing). Both were
-verified by fixtures because fixtures were the only evidence available.
+**The symbol map is built from Stripe's TypeScript SDK.** 179 symbols, **93 containing camelCase**,
+and `paymentIntents` is present while `payment_intents` is absent. So the actual Python spelling
+resolves to nothing. Eight of the twelve existing corpus pairs are built on `paymentIntents`.
+Verified independently against the staged map.
 
-The precedent is not speculative. The response half of the corpus contributed nothing to either
-axis until B29 made it measure, and **it caught a real binder defect within the hour** — the corpus
-and the binder had shared a blind spot, so the benchmark agreed with the binder by construction.
-The Python indexer is in that position now: correct as far as its own fixtures go, and unmeasured.
+**`stripe.StripeClient(k)` binds nothing**, because the rule matches an imported name — and that is
+the spelling Stripe's Python documentation uses.
 
-**Closes when:** at least one Python repository is pinned in the corpus with pair specifications
-against it, and binding precision and recall are reported for Python with their sample sizes —
-whatever those numbers turn out to be.
+**A receiver that is a factory call or an attribute of `self` binds nothing**, which is how every
+production repository in the sample writes it.
 
-**B36 has landed, so this is now dispatchable** — and the floors it added are the thing to watch.
-Adding a repository moves `pairs_scored`, and both rates' denominators, so `scripts/gate_corpus.py`
-will fail until its recorded figures are restated. That failure is the gate working: restate them
-in the same commit, with the old and new values side by side and the reason they moved.
+The measured consequence: seventeen repositories cloned and indexed with the real adapter and the
+real map yield **one** indexable call site in a repository that is licensed. The two with usable
+counts carry no licence at all, and one has no `requirements.txt` or `pyproject.toml`, so nothing
+would select an adapter for it.
+
+**This weakens a milestone claim.** M3 lists a Python adapter "to prove `LanguageAdapter`
+generalizes past TypeScript". It is shipped and wired and it generalizes the *walk*; it does not
+yet generalize the *map*. Twilio hit the mirror image of this and it was fixed with a language axis
+(`19834b6`) — every Twilio key was snake_case, so a TypeScript call site could never resolve and
+failed silently. Stripe has the same defect facing the other way.
+
+**Fix in the order B37 measured**, which is by how many of the seventeen each unlocks: the
+module-attribute client constructor alone converts **eleven of seventeen** from zero.
+
+**Closes when:** a Python call site written the way Stripe documents it resolves to an operation,
+and B37 can be re-run against a binder that can see it.
 
 ### B7 — The M0 acceptance run has not executed since the pipeline changed underneath it
 
@@ -66,6 +76,11 @@ recorded with which change broke it.
 _Nothing._
 
 ## Done
+
+- **B37** — no Python repository was pinned, and the negative result is worth more than the pin
+  would have been. Seventeen candidates cloned and indexed against the real adapter and the real
+  symbol map; the corpus is unchanged, no floor was restated, and the gate is green for the same
+  reason it was this morning. What it found is B38.
 
 - **B36** — the first quality gate this project has. `scripts/gate_corpus.py` floors binding
   precision and recall at the recorded 1.0000 over n=16, and it **recomputes both rates from
