@@ -35,21 +35,3 @@ src/sync/route/templates.py:omit_property_at
 # Whoever wires intake deletes both lines in that commit.
 src/sync/signals/registry_tier/directory.py:parse_directory
 src/sync/signals/registry_tier/directory.py:versions_after
-
-# The binding scorer. `score_change` generates a labelled pair, runs the indexer and the vendor
-# change detector over the mutated tree, and hands what they emitted to
-# `compute_binding_accuracy`; `index_sources` is the half of that a caller needs first, since the
-# mutation is positional and has to be computed against the tree whose positions were indexed.
-# Both replace the two `mutate.py` entries that stood here until this commit: the generator and
-# the predicate its ground truth is derived from are now reached, which is what those lines said
-# would retire them.
-#
-# This is a harness and not a pipeline stage. Nothing in a remediation run scores anything, so
-# its caller is a benchmark entry point -- a `sync benchmark` subcommand reading the corpus and a
-# generated pair together -- and `cli.py` was owned by another task while this was written. The
-# alternative was to leave the two axes uncomputable for one more milestone, which is the
-# condition `2026-07-27-sync-benchmark-gates.md` has been recording since it was written.
-#
-# Whoever adds that entry point deletes both lines in the commit that adds it.
-src/sync/benchmark/score.py:score_change
-src/sync/benchmark/score.py:index_sources

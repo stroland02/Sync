@@ -16,7 +16,10 @@ from urllib.parse import urlsplit
 
 from langgraph.checkpoint.postgres import PostgresSaver
 
+import yaml
+
 from sync.benchmark.report import render_report
+from sync.benchmark.score import index_sources, materialise, score_change
 from sync.core import CallSite, Finding, RepoRef, VendorChange
 from sync.core.protocols import RequestCorrelator
 from sync.detect.efficiency import EfficiencyDetector
@@ -1350,8 +1353,129 @@ def benchmark(args: argparse.Namespace) -> int:
     """
     store = GraphStore(args.dsn)
     store.apply_schema()
-    print(render_report(store.migration_outcomes()), end="")
+
+    # Read before anything is scored. Scoring truncates the graph it works in, so the corpus has
+    # to be in hand before that happens even though the two databases are required to differ --
+    # the ordering costs nothing and does not depend on the check below holding.
+    outcomes = store.migration_outcomes()
+
+    if not args.score_pair:
+        print(render_report(outcomes), end="")
+        return 0
+
+    if args.score_dsn is None or args.score_dsn == args.dsn:
+        # `score_pair` empties the store before indexing the mutated tree, because the detector
+        # reads every call site the graph holds and a row from another tree is a finding nobody
+        # labelled. Pointed at the corpus database that would delete the outcomes this same
+        # command just rendered, so the refusal is what makes it impossible to get wrong once.
+        print(
+            "--score-pair scores into the same database it truncates, so --score-dsn is required "
+            "and must not name the same database as --dsn",
+            file=sys.stderr,
+        )
+        return 2
+
+    try:
+        scored = _score_corpus(Path(args.score_pair), args.score_dsn)
+    except (KeyError, LookupError, ValueError) as exc:
+        print(f"pair specification: {exc}", file=sys.stderr)
+        return 2
+
+    print(
+        render_report(
+            outcomes,
+            findings=scored.findings,
+            labels=scored.labels,
+            reference=scored.reference,
+        ),
+        end="",
+    )
     return 0
+
+
+def _score_corpus(spec_path: Path, score_dsn: str):
+    """Generate a labelled pair from a corpus specification and score the pipeline against it.
+
+    A file rather than eight flags, and for the reason `generated-vendors.yaml` is a file: a
+    score is worth having only if what it was taken over is recorded where a reader can check it.
+    Every field is required and a missing one raises naming the file -- a corpus that quietly
+    defaulted its change kind would report a number over a mutation nobody chose.
+
+    The vendor is loaded rather than staged, so this reaches no network: `load_vendor` builds the
+    adapter over artifacts a previous `sync run` left in the cache, which is the same offline
+    contract `sync ingest` has.
+
+    Which call sites to break is the caller's decision and this is the caller. Every indexed site
+    on the changed operation is targeted, which is the corpus saying what it is a corpus of --
+    `generate_pair` refuses to choose that itself, deliberately, and a harness that picked a
+    subset would be choosing a distribution without saying so.
+    """
+    spec = yaml.safe_load(spec_path.read_text(encoding="utf-8")) or {}
+    required = ("repo", "vendor", "cache", "from_version", "to_version", "change")
+    missing = [key for key in required if key not in spec]
+    if missing:
+        raise KeyError(f"{spec_path} names no {', '.join(missing)}")
+    change_spec = spec["change"]
+    change_required = ("kind", "operation", "field")
+    change_missing = [key for key in change_required if key not in change_spec]
+    if change_missing:
+        raise KeyError(f"{spec_path}: change names no {', '.join(change_missing)}")
+
+    vendor = load_vendor(spec["vendor"], VendorContext(
+        cache_dir=Path(spec["cache"]),
+        from_version=str(spec["from_version"]),
+        to_version=str(spec["to_version"]),
+    ))
+
+    root = Path(spec["repo"])
+    sources = {
+        path.relative_to(root).as_posix(): path.read_text(encoding="utf-8")
+        for path in sorted(root.rglob("*"))
+        if path.is_file() and "node_modules" not in path.parts and ".git" not in path.parts
+    }
+
+    change = VendorChange(
+        vendor_id=vendor.vendor_id,
+        from_version=str(spec["from_version"]),
+        to_version=str(spec["to_version"]),
+        kind=str(change_spec["kind"]),
+        operation_id=str(change_spec["operation"]),
+        path_ptr=str(change_spec.get("path", "")),
+        severity="breaking",
+        source="oasdiff",
+        raw={"id": str(change_spec["kind"]),
+             "text": f"removed `{change_spec['field']}` from {change_spec['operation']}"},
+    )
+
+    store = GraphStore(score_dsn)
+    store.apply_schema()
+
+    with tempfile.TemporaryDirectory() as workdir:
+        repo = RepoRef(
+            repo_id=f"benchmark:{root.name}", url=str(root),
+            local_path=str(Path(workdir) / "indexed"), head_sha="0" * 40,
+        )
+        # Written before the adapter is chosen, because `matches` reads the manifest off disk:
+        # `select_language_adapter` asks each language's adapter whether this repository declares
+        # the vendor's package, and a tree that is still a dict answers nothing. `index_sources`
+        # writes it again, which is a no-op over identical bytes.
+        materialise(sources, Path(repo.local_path))
+        adapter = select_language_adapter(repo, vendor)
+        sites = index_sources(sources, store, repo, adapter)
+        change.id = store.upsert_vendor_change(change)
+
+        targets = [site.id for site in sites if site.operation_id == change.operation_id]
+        if not targets:
+            raise LookupError(
+                f"no indexed call site reaches {change.operation_id}, so there is nothing this "
+                f"change could break and a score over it would be a score over an empty corpus"
+            )
+
+        mutated = RepoRef(
+            repo_id=repo.repo_id, url=repo.url,
+            local_path=str(Path(workdir) / "mutated"), head_sha=repo.head_sha,
+        )
+        return score_change(sources, change, sites, targets, store, mutated, adapter)
 
 
 def intake(args: argparse.Namespace) -> int:
@@ -1512,6 +1636,16 @@ def main() -> int:
         "benchmark", help="print the tier B quality axes with their sample sizes"
     )
     benchmark_parser.add_argument("--dsn", default=DEFAULT_DSN)
+    benchmark_parser.add_argument(
+        "--score-pair", dest="score_pair", default=None,
+        help="a corpus specification naming a checkout, a staged vendor cache and one change; "
+             "the pair is generated from it and the pipeline scored against its labels",
+    )
+    benchmark_parser.add_argument(
+        "--score-dsn", dest="score_dsn", default=None,
+        help="a database of its own for scoring, which truncates what it scores in; it must not "
+             "name the database --dsn reads the corpus from",
+    )
     benchmark_parser.set_defaults(func=benchmark)
 
     args = parser.parse_args()

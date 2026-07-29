@@ -229,14 +229,121 @@ def test_benchmark_without_a_pair_reports_the_axes_it_always_did(monkeypatch, ca
     assert "unmeasured" in out
 
 
+SPEC_JSON = json.dumps({"openapi": "3.0.0", "info": {"title": "t", "version": "1"}, "paths": {}})
+
+CORPUS_TS = """import Stripe from 'stripe';
+
+const stripe = new Stripe(process.env.STRIPE_KEY!);
+
+export async function chargeCustomer(amount: number) {
+  const charge = await stripe.charges.create({ amount, currency: 'eur' });
+  return charge.id;
+}
+
+export async function lookUpCharge(id: string) {
+  const found = await stripe.charges.retrieve(id);
+  return found.amount;
+}
+"""
+
+
+@pytest.fixture()
+def corpus(tmp_path: Path) -> Path:
+    """A pair specification, and the checkout and cache it names.
+
+    A file rather than eight flags, and for the reason `generated-vendors.yaml` is a file: the
+    corpus a score was taken over is worth having only if it is recorded where a reader can
+    check it. The cache holds what `load_vendor` reads offline -- the symbol map that lets the
+    indexer resolve a call, and the two specification files the vendor is staged against.
+    """
+    import yaml
+
+    checkout = tmp_path / "checkout"
+    (checkout / "src").mkdir(parents=True)
+    (checkout / "package.json").write_text(
+        json.dumps({"dependencies": {"stripe": "^18.0.0"}}), encoding="utf-8"
+    )
+    (checkout / "src" / "billing.ts").write_text(CORPUS_TS, encoding="utf-8")
+
+    cache = tmp_path / "cache"
+    cache.mkdir()
+    (cache / "symbols.json").write_text(
+        json.dumps({
+            "stripe.charges.create": {
+                "operation_id": "PostCharges", "http_method": "post", "path": "/v1/charges"
+            },
+            "stripe.charges.retrieve": {
+                "operation_id": "GetChargesCharge", "http_method": "get",
+                "path": "/v1/charges/{charge}"
+            },
+        }),
+        encoding="utf-8",
+    )
+    for version in ("2026-05-01", "2026-11-01"):
+        (cache / f"{version}.json").write_text(SPEC_JSON, encoding="utf-8")
+
+    spec = tmp_path / "corpus.yaml"
+    spec.write_text(
+        yaml.safe_dump({
+            "repo": str(checkout),
+            "vendor": "stripe",
+            "cache": str(cache),
+            "from_version": "2026-05-01",
+            "to_version": "2026-11-01",
+            "change": {
+                "kind": "request-property-removed",
+                "operation": "PostCharges",
+                "field": "receipt_email",
+            },
+        }),
+        encoding="utf-8",
+    )
+    return spec
+
+
+@pytest.fixture()
+def score_dsn() -> str:
+    """A database of its own, because scoring truncates the graph it scores in.
+
+    `score_pair` empties the store before indexing the mutated tree -- the detector reads every
+    call site the graph holds, so a row from another tree is a finding nobody labelled. Pointed
+    at the corpus database that would destroy the corpus the same command is reporting on.
+    """
+    import psycopg
+    from psycopg import sql
+    from psycopg.conninfo import conninfo_to_dict, make_conninfo
+
+    parts = conninfo_to_dict(DSN)
+    name = f"{parts['dbname']}_score"
+    admin = make_conninfo(**{**parts, "dbname": "postgres"})
+    with psycopg.connect(admin, autocommit=True) as conn:
+        conn.execute(sql.SQL("DROP DATABASE IF EXISTS {} WITH (FORCE)").format(sql.Identifier(name)))
+        conn.execute(sql.SQL("CREATE DATABASE {}").format(sql.Identifier(name)))
+    return make_conninfo(**{**parts, "dbname": name})
+
+
+def test_benchmark_refuses_to_score_into_the_database_it_is_reporting_on(
+    monkeypatch, capsys, corpus
+):
+    """Scoring truncates. Pointed at the corpus database it would delete the migration outcomes
+    the same command just rendered, so the two databases have to be different and the refusal is
+    what makes that impossible to get wrong once."""
+    monkeypatch.setattr(sys, "argv", [
+        "sync", "benchmark", "--dsn", DSN, "--score-pair", str(corpus), "--score-dsn", DSN,
+    ])
+    assert main() != 0
+    assert "same database" in capsys.readouterr().err
+
+
 def test_benchmark_scores_a_generated_pair_and_reports_both_axes_with_sample_sizes(
-    monkeypatch, capsys
+    monkeypatch, capsys, corpus, score_dsn
 ):
     """The two axes the benchmark specification calls the ones that matter most, computed over a
     pair this command generates and scores. Sample sizes because a rate without its denominator
     is the number that specification spends a section warning about.
     """
-    code, out = _cli(monkeypatch, capsys, "benchmark", "--dsn", DSN, "--score-pair")
+    code, out = _cli(monkeypatch, capsys, "benchmark", "--dsn", DSN,
+                     "--score-pair", str(corpus), "--score-dsn", score_dsn)
 
     assert code == 0
     assert "binding precision" in out
@@ -248,23 +355,26 @@ def test_benchmark_scores_a_generated_pair_and_reports_both_axes_with_sample_siz
     assert "n=" in recall and "unmeasured" not in recall
 
 
-def test_benchmark_says_its_reference_is_synthetic_beside_the_score(monkeypatch, capsys):
+def test_benchmark_says_its_reference_is_synthetic_beside_the_score(
+    monkeypatch, capsys, corpus, score_dsn
+):
     """A benchmark whose bias is undocumented is worse than none. The reference is a mechanical
     mutation of a real repository, and the caveat has to travel to the page rather than live in
     a specification the reader of the number never opens."""
-    _, out = _cli(monkeypatch, capsys, "benchmark", "--dsn", DSN, "--score-pair")
+    _, out = _cli(monkeypatch, capsys, "benchmark", "--dsn", DSN,
+                  "--score-pair", str(corpus), "--score-dsn", score_dsn)
 
     assert "synthetic" in out
     assert "About the binding reference" in out
 
 
-def test_benchmark_compares_nothing_to_a_threshold(monkeypatch, capsys):
+def test_benchmark_compares_nothing_to_a_threshold(monkeypatch, capsys, corpus, score_dsn):
     """Tier C is explicit: do not invent a threshold. The exit code says the report was produced
     and not whether the numbers were good, and no pass mark appears anywhere on the page."""
-    code, out = _cli(monkeypatch, capsys, "benchmark", "--dsn", DSN, "--score-pair")
+    code, out = _cli(monkeypatch, capsys, "benchmark", "--dsn", DSN,
+                     "--score-pair", str(corpus), "--score-dsn", score_dsn)
 
     assert code == 0
-    lowered = out.lower()
-    assert "threshold" not in lowered
-    assert "pass" not in lowered
-    assert "fail" not in lowered
+    # The word appears once, in the sentence denying one. What must not appear is a verdict.
+    assert "nothing here is compared against a threshold" in out
+    assert not any(word in out for word in ("PASS", "FAIL", "OK ", "REGRESSION"))
