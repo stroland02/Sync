@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
 import subprocess
 import sys
@@ -23,6 +24,12 @@ from sync.detect.parameter_deprecation import LinkedDeprecation, ParameterDeprec
 from sync.detect.status_rate import StatusRateDetector
 from sync.detect.vendor_change import VendorChangeDetector
 from sync.forge.github import GitHubForge
+from sync.forge.webhook import (
+    SIGNATURE_HEADER,
+    WebhookFormatError,
+    WebhookSignatureError,
+    record_merge_outcome,
+)
 from sync.graph.store import GraphStore
 from sync.index.literals import index_operation_literals
 from sync.index.python_lang import PythonAdapter
@@ -55,6 +62,11 @@ from sync.signals.registry import (
 from sync.telemetry import ingest_payload
 
 DEFAULT_DSN = "postgresql://sync:sync@localhost:5433/sync"
+
+# Where the GitHub webhook secret is read from when no file is named. An environment
+# variable rather than a setting with a default: a shared secret has no value this
+# repository is allowed to know, so there is nothing to default to.
+WEBHOOK_SECRET_ENV = "SYNC_WEBHOOK_SECRET"
 
 # Vendors whose parameter deprecations a scan reads. Both publish one page carrying both a model
 # lifecycle table and a parameter table; `parse_parameter_deprecations` tells them apart.
@@ -957,6 +969,94 @@ def ingest(args: argparse.Namespace) -> int:
     return 0
 
 
+def _webhook_secret(secret_file: str | None) -> bytes | None:
+    """The shared secret GitHub signs deliveries with, or `None` when there is not one.
+
+    Two sources and no third. An environment variable is how a process holds a credential
+    without it reaching a file, and a file is how an operator holds one without it reaching a
+    process listing -- `--secret VALUE` is deliberately not offered, because an argument is
+    visible in `ps` and lands in shell history. There is no default and no committed value: this
+    is a shared secret rather than a public key, so any value in the tree teaches the pattern
+    that puts a real one in a diff later.
+
+    The value *is* the key. GitHub's secret is a string somebody types into a settings page and
+    the HMAC is taken over its bytes, so decoding it here would be a Sync-specific rule an
+    operator pasting their own secret would get wrong -- and would fail as a signature mismatch
+    that looks exactly like forgery.
+
+    Trailing whitespace is stripped from a file because `echo secret > file` writes a newline
+    the shared secret does not have, and an HMAC under the wrong key is indistinguishable from
+    a forged delivery. An empty value is no value: an exported-but-empty variable is the
+    ordinary way a secret goes missing in a shell, and reading it as one would verify every
+    delivery against the empty string.
+    """
+    if secret_file:
+        return Path(secret_file).read_bytes().strip() or None
+    return os.environ.get(WEBHOOK_SECRET_ENV, "").strip().encode("utf-8") or None
+
+
+def merge_outcome(args: argparse.Namespace) -> int:
+    """Record what one GitHub pull request delivery says about a patch Sync opened.
+
+    `record_merge_outcome` verified a signature, told a forgery from a malformed payload, and
+    updated the corpus -- and nothing handed it a delivery, so `pr_merged` stayed null and merge
+    rate, "the direct test of the product claim", had no numerator. This is the caller.
+
+    Not a server, and it must not become one. `2026-07-27-sync-pipeline-discipline.md` refuses
+    ingestion infrastructure, and the shape is the one `ingest` already took: bytes somebody else
+    collected, handed in. A listener would need a port, a supervisor and an authentication story
+    telling one installation's deliveries from another's, none of which makes a delivery mean
+    more once it lands.
+
+    Bytes, never text. The HMAC covers exactly what GitHub sent, so a payload decoded and
+    re-encoded on the way past verifies against a different string and fails in a way that reads
+    as forgery.
+
+    A missing secret refuses rather than skipping the check. There is no question to ask of
+    unverified bytes, and a receiver that processed them anyway would let anyone on the internet
+    write the table every future routing decision is measured against.
+    """
+    secret = _webhook_secret(args.secret_file)
+    if secret is None:
+        print(
+            f"no webhook secret: set {WEBHOOK_SECRET_ENV} or pass --secret-file. "
+            "Refusing rather than processing an unverified delivery.",
+            file=sys.stderr,
+        )
+        return 2
+
+    body = sys.stdin.buffer.read() if args.payload == "-" else Path(args.payload).read_bytes()
+    # Fetched by whoever holds a GitHub client, not here: the pull request event carries a count
+    # and a link rather than the commits. Absent, the column stays null rather than zero, and
+    # zero would read as "no human touched this patch" -- the claim the benchmark rests on.
+    commits = (
+        json.loads(Path(args.commits).read_text(encoding="utf-8")) if args.commits else None
+    )
+
+    store = GraphStore(args.dsn)
+    store.apply_schema()
+
+    try:
+        written = record_merge_outcome(body, args.signature, secret, store, commits)
+    except WebhookSignatureError:
+        # The message says nothing about the secret or the digest. An operator pastes this
+        # into an issue, and "expected X, got Y" is a free guess at how close a forgery came.
+        print("delivery rejected: the signature does not verify", file=sys.stderr)
+        return 1
+    except WebhookFormatError as exc:
+        print(f"delivery rejected: {exc}", file=sys.stderr)
+        return 1
+
+    if written:
+        print("merge outcome recorded")
+    else:
+        # Not an error. Humans and other automation open pull requests in the same repository
+        # and every one of them delivers here, so the ordinary answer is that this one was not
+        # Sync's or did not decide anything.
+        print("nothing to record: the delivery decides nothing or names no attempt Sync opened")
+    return 0
+
+
 def benchmark(args: argparse.Namespace) -> int:
     """Print the tier B quality axes for whatever the corpus holds.
 
@@ -1007,6 +1107,24 @@ def main() -> int:
     ingest_parser.add_argument("--cache", default=".cache/specs",
                                help="where a previous `sync run` left symbols.json")
     ingest_parser.set_defaults(func=ingest)
+
+    merge_parser = sub.add_parser(
+        "merge-outcome",
+        help="record one GitHub pull request delivery against the migration corpus",
+    )
+    merge_parser.add_argument("--payload", required=True,
+                              help="path to the delivery body, or - for stdin")
+    merge_parser.add_argument("--signature", required=True,
+                              help=f"the {SIGNATURE_HEADER} header value, verbatim")
+    # A path, never a value: an argument is visible in `ps` and lands in shell history.
+    merge_parser.add_argument("--secret-file", dest="secret_file", default=None,
+                              help=f"file holding the shared secret; "
+                                   f"defaults to ${WEBHOOK_SECRET_ENV}")
+    merge_parser.add_argument("--commits", default=None,
+                              help="path to the branch's commits, as GitHub's API returns them; "
+                                   "omitted leaves human_edits_before_merge unmeasured")
+    merge_parser.add_argument("--dsn", default=DEFAULT_DSN)
+    merge_parser.set_defaults(func=merge_outcome)
 
     benchmark_parser = sub.add_parser(
         "benchmark", help="print the tier B quality axes with their sample sizes"

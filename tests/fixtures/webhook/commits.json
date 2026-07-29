@@ -1,0 +1,22 @@
+[
+  {
+    "sha": "1111111111111111111111111111111111111111",
+    "commit": {
+      "author": {
+        "name": "Sync",
+        "email": "sync@users.noreply.github.com"
+      },
+      "message": "fix: remove the withdrawn receipt_email argument"
+    }
+  },
+  {
+    "sha": "2222222222222222222222222222222222222222",
+    "commit": {
+      "author": {
+        "name": "A Reviewer",
+        "email": "reviewer@example.com"
+      },
+      "message": "also drop the now-unused import"
+    }
+  }
+]
