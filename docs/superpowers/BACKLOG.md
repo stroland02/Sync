@@ -36,6 +36,22 @@ when, which is why it is recorded here rather than dispatched.
 **Closes when:** one `sync run` produces a CI-green pull request again, or the failure is
 recorded with which change broke it.
 
+### B31 — The corpus contains no negative the binder could get wrong
+
+Counted across every label in the frozen corpus: the 12 affected sites are all `static` rung, and
+**all 94 unaffected sites are `unresolved`** — bound to no operation at all. A call site the
+indexer could not bind cannot produce a finding from any detector, so not one negative had the
+opportunity to become a false positive.
+
+So binding precision 1.0 is what the corpus construction guarantees rather than something the
+binder earned, and **a directional floor gated on it would be gating a constant** — the "never
+fires and provides false assurance" half of the failure `2026-07-27-sync-benchmark-gates.md`
+warns about. Recall 1.0 at n=12 is unaffected by this and remains a real measurement.
+
+**Closes when:** the corpus carries an untargeted call site on the *same operation* as the change
+that does not touch the changed field and that the indexer binds `static` rather than leaving
+`unresolved` — and precision is recomputed with that negative present.
+
 ### B29 — The binding score's response axis has never had a sample
 
 Every `response-property-removed` pair in the frozen corpus scored **0 affected and 0 findings**,
@@ -88,8 +104,6 @@ and it stays that way however much corpus data arrives.
 
 ## In flight
 
-- **B27** — `task_b777f003fa9f`, in `sync-solo-a`. In review; 1091 lines uncommitted and backed up
-  outside the repository. Produces B29 and B30 as findings.
 - **B28** — `task_d36a5c6e7443`, in `sync-solo-b`. Freezes a specimen corpus and measures whether
   binding precision is actually deterministic, which is the precondition for the only tier C gate
   that is safe without the statistics research that never completed.
@@ -98,6 +112,19 @@ and it stays that way however much corpus data arrives.
   the first worker held the task for half an hour without starting and did not answer two nudges.
 
 ## Done
+
+- **B27** — a specimen corpus is frozen and scored: 12 pairs across 4 repositories pinned by commit
+  SHA, checkouts materialised into gitignored space, exclusions counted by reason. Landed
+  `c6e18a0` after its worker died holding 1091 lines uncommitted; preserved as `4631c01` on the
+  worker branch first, then verified and landed.
+
+  **Determinism is measured, not assumed** — two runs byte-identical, which is what the only
+  safely-addable tier C gate rested on and nobody had ever tested.
+
+  Two caveats that must travel with the number. Both axes are computed over the **request side
+  only**: every `response-property-removed` pair scored 0 affected and 0 findings, with 11 labels
+  unreachable. And **precision 1.0 is a constant, not a measurement** — all 94 negatives are
+  `unresolved`, so the false-positive term had no candidates. Recall 1.0 at n=12 is real. See B31.
 
 - **B26** — the conformance kit no longer certifies what it never exercised. `check_vendor_adapter`
   refused nothing when `known_symbol` was `None` or resolved to `None`; `check_remediator` read an
