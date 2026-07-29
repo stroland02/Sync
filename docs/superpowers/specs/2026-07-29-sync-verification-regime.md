@@ -73,19 +73,31 @@ It stays user-gated for the reasons already recorded: it opens a pull request on
 repository and spends `xhigh` model time. Run it with `-n0`, because `addopts` carries `-n auto`
 and that applies to the e2e test too.
 
-### 2. No frozen specimen corpus — owned by us, and unblocked today
+### 2. No frozen specimen corpus — **closed the same day this was written**
 
-`--score-pair` takes **one** corpus specification and scores **one** pair. There is no set, and
-nothing is frozen.
+When this section was written, `--score-pair` took one specification and scored one pair, there
+was no set, and nothing was frozen. All three are now false.
 
-`2026-07-27-sync-benchmark-gates.md` is explicit that an unfrozen benchmark measures the
-benchmark, and that the mined corpus must be pinned by commit SHA so a score is comparable across
-runs. The same requirement transfers intact to synthetic pairs, which is what
-`2026-07-29-sync-ground-truth-quality.md` selected after mining was ruled out: a pair generated
-fresh each run scores a different input set each run, and a movement in the number means nothing.
+`benchmark/corpus/` holds twelve pair specifications over four repositories pinned by commit SHA
+and validated by tree digest, and the whole set scores in one run. The reason freezing was
+non-negotiable is the one `2026-07-27-sync-benchmark-gates.md` gives: a pair regenerated each run
+scores a different input set each run, so a movement in the number means nothing.
 
-This needs no pull request, no model API, and no decision from anyone. It is the next thing to
-build.
+What it measures today:
+
+```
+  pairs specified       12        pairs scored          12
+  binding precision     1.0000    n=16
+  binding recall        1.0000    n=16
+  falsifiable negatives  4        paths not read        64
+```
+
+Three things happened on the way that are worth more than the numbers. The corpus caught a real
+binder defect the moment its response half started measuring — recall fell to 0.8000 before the fix
+because the corpus and the binder had shared a blind spot, so the benchmark had been agreeing with
+the binder by construction. Precision was a **constant** until `hold_back` gave it negatives the
+binder could fail on; it declined all four. And the fetcher's own pre-filter is gone, so the corpus
+scores the vendor's subtree rather than a locally transformed copy of it.
 
 ### 3. No regression thresholds — deliberately, and still correctly
 
@@ -97,8 +109,15 @@ constantly and gets disabled or never fires and gives false assurance.
 That rule holds and this document does not weaken it. The one gate available without statistics
 is named there too — a directional floor on a deterministic axis, because binding precision over
 a *frozen* corpus is deterministic given a fixed pipeline and a fixed input set, so a drop is a
-real change rather than sampling noise. **That gate becomes available the moment blocker 2 is
-closed, and not before.**
+real change rather than sampling noise.
+
+**That gate is now available, and it needed two things rather than the one this section named.**
+Blocker 2 closing was necessary and not sufficient. Determinism had to stop being an assumption —
+it is now measured, byte-identical across four independent runs from clean databases. And
+precision had to stop being a constant: while every same-operation site was targeted, no negative
+existed that the binder could fail on, so a floor would have gated something that could never fire.
+Queued as B36, with the distinction it turns on written down — a floor at the recorded value is
+derived from measurement, a floor at a round number is invented and still forbidden.
 
 ## What "enhanced testing" should mean here, concretely
 
