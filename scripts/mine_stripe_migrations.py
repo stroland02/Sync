@@ -157,9 +157,13 @@ BUMP_QUERIES = [
 # fixture carries a real Stripe release date -- `tests/fixtures/specs/charges_base.json`
 # declares `"version": "base"` and `stripe_v2330_shape.json` has no `info` block at all --
 # so these were read out of the `info.version` field of the specs in the gitignored
-# `.cache/specs/`. That cache is not part of the repository, which means this list is not
-# reproducible from a fresh clone, and it is emphatically not Stripe's own classification
-# of which releases are breaking. It is three points that happen to be visible from here.
+# `.cache/specs/`. That cache is still not part of the repository, but the list is now
+# reproducible from a fresh clone: `scripts/fetch_measurement_inputs.py` fetches each spec by
+# tag and refuses it unless the bytes match a pinned blob hash, and
+# `tests/fixtures/measurement_inputs/stripe-spec3-info.json` carries the same three strings
+# lifted verbatim from Stripe's own documents, keyed by the blob they came from. It is
+# emphatically still not Stripe's own classification of which releases are breaking. It is
+# three points that happen to be visible from here, now attested rather than remembered.
 OBSERVED_API_VERSIONS = ("2026-02-25.clover", "2026-05-27.dahlia", "2026-06-24.dahlia")
 
 BREAKING_BUMP_QUERIES = [
