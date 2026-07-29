@@ -36,6 +36,14 @@ import sys
 from typing import Any, IO
 
 from sync.mcp.registry import dispatch, schemas_as_data
+from sync.mcp.resources import (
+    FEED_MIME_TYPE,
+    ResourceError,
+    read as read_resource,
+    resource_templates_as_data,
+    resources_as_data,
+)
+from sync.signals.feed.cache import FeedCache
 from sync.mcp.tools import GraphSurface
 
 # The revision of the MCP protocol these frames conform to. Reported back at initialize so a
@@ -47,14 +55,30 @@ SERVER_VERSION = "0.1.0"
 _PARSE_ERROR = -32700
 _METHOD_NOT_FOUND = -32601
 _INTERNAL_ERROR = -32603
+# What the MCP specification uses for a resource that is not there. A resource read that cannot
+# be answered is not a tool failure and has no `isError` to carry: `tools/call` returns a result
+# because the agent can fix its arguments and retry, and a feed nobody has fetched is not
+# something the agent's next frame can repair.
+_RESOURCE_NOT_FOUND = -32002
 
 
-def serve(surface: GraphSurface, stdin: IO[str] | None = None, stdout: IO[str] | None = None) -> None:
+def serve(
+    surface: GraphSurface,
+    stdin: IO[str] | None = None,
+    stdout: IO[str] | None = None,
+    feed: FeedCache | None = None,
+) -> None:
     """Read requests until the stream ends, answering each on one line.
 
     Reads from and writes to the streams handed in, which is what lets a test be the client:
     a client is a writer of request lines and a reader of response lines, and nothing about
     that requires a process boundary.
+
+    `feed` is separate from `surface` and deliberately so. The graph is the customer's private
+    data and the feed is vendor-side public information, and
+    `2026-07-25-sync-graph-surface-design.md` draws that line as a data boundary rather than a
+    packaging one -- so the resource is handed a cache and no store, and there is nothing here
+    for it to reach the graph with.
     """
     source = stdin if stdin is not None else sys.stdin
     sink = stdout if stdout is not None else sys.stdout
@@ -70,12 +94,14 @@ def serve(surface: GraphSurface, stdin: IO[str] | None = None, stdout: IO[str] |
             _write(sink, _error(None, _PARSE_ERROR, f"invalid JSON: {exc}"))
             continue
 
-        response = _handle(surface, request)
+        response = _handle(surface, request, feed)
         if response is not None:
             _write(sink, response)
 
 
-def _handle(surface: GraphSurface, request: dict[str, Any]) -> dict[str, Any] | None:
+def _handle(
+    surface: GraphSurface, request: dict[str, Any], feed: FeedCache | None = None
+) -> dict[str, Any] | None:
     """One request to one response, or `None` for a notification.
 
     A JSON-RPC request with no `id` is a notification and takes no reply. `initialized` is one,
@@ -92,7 +118,13 @@ def _handle(surface: GraphSurface, request: dict[str, Any]) -> dict[str, Any] | 
             request_id,
             {
                 "protocolVersion": PROTOCOL_VERSION,
-                "capabilities": {"tools": {"listChanged": False}},
+                "capabilities": {
+                    "tools": {"listChanged": False},
+                    # `subscribe` is false rather than absent: a feed changes when something
+                    # fetches one, this server fetches nothing, and advertising a subscription
+                    # it can never notify on would have a client wait for an event.
+                    "resources": {"listChanged": False, "subscribe": False},
+                },
                 "serverInfo": {"name": SERVER_NAME, "version": SERVER_VERSION},
             },
         )
@@ -103,7 +135,55 @@ def _handle(surface: GraphSurface, request: dict[str, Any]) -> dict[str, Any] | 
     if method == "tools/call":
         return _call(surface, request_id, request.get("params") or {})
 
+    if method == "resources/list":
+        return _result(request_id, {"resources": resources_as_data(feed, _known_vendors())})
+
+    if method == "resources/templates/list":
+        return _result(request_id, {"resourceTemplates": resource_templates_as_data()})
+
+    if method == "resources/read":
+        return _read(request_id, request.get("params") or {}, feed)
+
     return _error(request_id, _METHOD_NOT_FOUND, f"unknown method: {method}")
+
+
+def _known_vendors() -> tuple[str, ...]:
+    """Which vendor ids exist, from the one place that answers it.
+
+    Read through the registry rather than kept here, so a vendor added by configuration is
+    offered by this server without a second edit -- and so "unknown vendor" cannot come to mean
+    two different things in two files.
+    """
+    from sync.signals.registry import available_vendors
+
+    return available_vendors()
+
+
+def _read(request_id: Any, params: dict[str, Any], feed: FeedCache | None) -> dict[str, Any]:
+    """One resource read, or a JSON-RPC error carrying which of the outcomes it was.
+
+    The reason travels in `error.data` rather than only in the message. A client branching on
+    wording breaks when the wording improves, and the difference between a vendor nobody
+    registers and a vendor nobody has fetched is the difference between fixing a typo and
+    running a fetch.
+    """
+    try:
+        contents = read_resource(params.get("uri") or "", feed, _known_vendors())
+    except ResourceError as exc:
+        return _error(request_id, _RESOURCE_NOT_FOUND, str(exc), data=exc.data)
+
+    return _result(
+        request_id,
+        {
+            "contents": [
+                {
+                    "uri": params.get("uri"),
+                    "mimeType": FEED_MIME_TYPE,
+                    "text": json.dumps(contents),
+                }
+            ]
+        },
+    )
 
 
 def _call(surface: GraphSurface, request_id: Any, params: dict[str, Any]) -> dict[str, Any]:
@@ -141,8 +221,11 @@ def _result(request_id: Any, result: dict[str, Any]) -> dict[str, Any]:
     return {"jsonrpc": "2.0", "id": request_id, "result": result}
 
 
-def _error(request_id: Any, code: int, message: str) -> dict[str, Any]:
-    return {"jsonrpc": "2.0", "id": request_id, "error": {"code": code, "message": message}}
+def _error(request_id: Any, code: int, message: str, data: dict[str, Any] | None = None) -> dict[str, Any]:
+    error: dict[str, Any] = {"code": code, "message": message}
+    if data is not None:
+        error["data"] = data
+    return {"jsonrpc": "2.0", "id": request_id, "error": error}
 
 
 def _write(sink: IO[str], payload: dict[str, Any]) -> None:
@@ -163,7 +246,18 @@ def main() -> int:
     `sync_propose_patch` reports itself unavailable rather than running a pipeline against a
     checkout this entry point never established. Wiring those is the caller's decision, because
     which checkout is served is a deployment fact and not a default.
+
+    The feed cache starts empty and this entry point never fills it. Fetching a published feed
+    is the operational half the feed specification puts outside the architecture, alongside the
+    keypair and the publish job -- so `sync://feed/{vendor}` answers "no verified feed has been
+    fetched" until something fetches one, which is the honest answer and not the same as an
+    empty feed.
+
+    It is built with the committed development key, because that is the only key in this
+    repository. When a production key replaces the literal in `sync.core.keys`, this picks it up
+    by upgrading, which is what "rotatable only through a release" means.
     """
+    from sync.core import DEVELOPMENT_FEED_PUBLIC_KEY
     from sync.graph.store import GraphStore
 
     import os
@@ -172,7 +266,7 @@ def main() -> int:
     if not dsn:
         print("SYNC_DSN is not set", file=sys.stderr)
         return 2
-    serve(GraphSurface(GraphStore(dsn)))
+    serve(GraphSurface(GraphStore(dsn)), feed=FeedCache(public_key=DEVELOPMENT_FEED_PUBLIC_KEY))
     return 0
 
 
