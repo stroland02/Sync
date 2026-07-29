@@ -363,7 +363,7 @@ class GraphStore:
         "finding_id", "attempt_index", "vendor_id", "from_version", "to_version",
         "change_kind", "change_severity", "operation_id", "path_ptr", "language",
         "sdk_version", "symbol_shape", "arg_arity", "arg_key_hashes",
-        "response_fields_touched_count", "strategy", "tier", "input_tokens",
+        "response_fields_touched_count", "strategy", "tier", "routing_row", "input_tokens",
         "output_tokens", "cache_read_input_tokens", "wall_ms", "static_verify_passed",
         "static_verify_error_class", "ci_result", "terminal_status", "abandon_reason",
         "pr_number", "pr_merged", "pr_merged_at", "human_edits_before_merge",

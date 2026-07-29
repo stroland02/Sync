@@ -50,7 +50,7 @@ def _outcome(finding_id: str = "f-1", attempt_index: int = 0, pr_number: int | N
     row = MigrationOutcome.from_attempt(
         finding_id=finding_id, attempt_index=attempt_index, site=SITE, change=CHANGE,
         patch=Patch(diff="d", strategy="codemod", rationale="r"),
-        tier=0, wall_ms=12, salt="s1",
+        tier=0, routing_row="unrouted", wall_ms=12, salt="s1",
     )
     return row.model_copy(update={"pr_number": pr_number})
 

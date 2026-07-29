@@ -41,7 +41,7 @@ def _outcome(**overrides) -> MigrationOutcome:
         change_kind="response-property-removed", change_severity="breaking",
         language="typescript", symbol_shape="stripe.charges.*", arg_arity=2,
         response_fields_touched_count=1,
-        strategy="agent", tier=2, wall_ms=1000,
+        strategy="agent", tier=2, routing_row="unrouted", wall_ms=1000,
     )
     fields.update(overrides)
     return MigrationOutcome(**fields)

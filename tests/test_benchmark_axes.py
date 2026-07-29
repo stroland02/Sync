@@ -45,6 +45,7 @@ def _attempt(**over) -> MigrationOutcome:
         response_fields_touched_count=2,
         strategy="codemod",
         tier=0,
+        routing_row="unrouted",
         wall_ms=1000,
         input_tokens=100,
         output_tokens=50,

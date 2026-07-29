@@ -294,6 +294,12 @@ def _record(
             # cannot leak anything a real patch would not.
             patch=Patch(diff="", strategy=strategy, rationale=""),
             tier=tier,
+            # `_decide_tier` put this on the state at `locate`. Read from there rather than
+            # through `on_route`, which has no caller: the recorder already holds the state
+            # the row lives on, so a second delivery path would be one more thing to keep in
+            # agreement with this one. `"unrouted"` when the table had no jurisdiction, which
+            # `nodes.py` already calls by that name in the report reason.
+            routing_row=state.get("routing_row") or "unrouted",
             wall_ms=wall_ms,
             salt=corpus_salt(),
             static_verify_passed=static_passed,

@@ -196,6 +196,20 @@ class MigrationOutcome(BaseModel):
     # What was attempted.
     strategy: PatchStrategy
     tier: int
+    # Which decision-table row assigned that tier. `tier` says what ran; this says what said
+    # it should, and routing accuracy is defined over the difference. `"unrouted"` is a value
+    # rather than a null because the table having no jurisdiction is a fact about the finding,
+    # and a null has to stay available to mean the column was never written -- the attempts
+    # that predate it, and any write that loses it. Conflating those makes the column unable
+    # to answer the one question it exists for.
+    #
+    # Required rather than defaulted, for the reason `Finding.claim` is: a default is what a
+    # writer silently falls back to after someone forgets to set it, and the fallback here
+    # would be indistinguishable from a real "the table had no jurisdiction". `str | None`
+    # rather than `str` because a row read back out of the database may legitimately carry the
+    # NULL that predates this column -- required governs whether a caller must supply it, not
+    # whether the value can be absent.
+    routing_row: str | None
     edit_script: dict[str, Any] | None = None
     input_tokens: int | None = None
     output_tokens: int | None = None

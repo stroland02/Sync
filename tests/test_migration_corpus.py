@@ -99,7 +99,7 @@ def test_an_outcome_is_built_from_a_site_and_a_change():
     outcome = MigrationOutcome.from_attempt(
         finding_id="f-1", attempt_index=0, site=SITE, change=CHANGE,
         patch=Patch(diff="d", strategy="codemod", rationale="r"),
-        tier=0, wall_ms=12, salt="s1",
+        tier=0, routing_row="unrouted", wall_ms=12, salt="s1",
     )
 
     assert outcome.change_kind == "request-property-removed"
@@ -115,7 +115,7 @@ def test_no_source_text_reaches_the_row():
     outcome = MigrationOutcome.from_attempt(
         finding_id="f-1", attempt_index=0, site=SITE, change=CHANGE,
         patch=Patch(diff="const x = secretValue;", strategy="agent", rationale="r"),
-        tier=2, wall_ms=1, salt="s1",
+        tier=2, routing_row="unrouted", wall_ms=1, salt="s1",
     )
     serialised = outcome.model_dump_json()
 
@@ -131,7 +131,7 @@ def test_the_diff_is_never_stored():
     outcome = MigrationOutcome.from_attempt(
         finding_id="f-1", attempt_index=0, site=SITE, change=CHANGE,
         patch=Patch(diff="- old\n+ new", strategy="codemod", rationale="r"),
-        tier=0, wall_ms=1, salt="s1",
+        tier=0, routing_row="unrouted", wall_ms=1, salt="s1",
     )
     assert "old" not in outcome.model_dump_json()
 
@@ -142,7 +142,7 @@ def test_the_grain_is_one_row_per_attempt():
     rows = [
         MigrationOutcome.from_attempt(
             finding_id="f-1", attempt_index=i, site=SITE, change=CHANGE,
-            patch=Patch(diff="d", strategy="agent", rationale="r"), tier=2, wall_ms=1, salt="s",
+            patch=Patch(diff="d", strategy="agent", rationale="r"), tier=2, routing_row="unrouted", wall_ms=1, salt="s",
         )
         for i in range(3)
     ]
@@ -165,7 +165,7 @@ def _outcome(**over):
     fields = dict(
         finding_id="f-1", attempt_index=0, site=SITE, change=CHANGE,
         patch=Patch(diff="d", strategy="codemod", rationale="r"),
-        tier=0, wall_ms=12, salt="s1",
+        tier=0, routing_row="unrouted", wall_ms=12, salt="s1",
     )
     fields.update(over)
     return MigrationOutcome.from_attempt(**fields)

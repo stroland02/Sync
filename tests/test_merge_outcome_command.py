@@ -76,7 +76,7 @@ def _outcome(**overrides) -> MigrationOutcome:
         change_kind="request-property-removed", change_severity="breaking",
         language="typescript", symbol_shape="stripe.paymentIntents.*", arg_arity=3,
         response_fields_touched_count=1,
-        strategy="codemod", tier=0, wall_ms=1200,
+        strategy="codemod", tier=0, routing_row="unrouted", wall_ms=1200,
         input_tokens=0, output_tokens=0,
         static_verify_passed=True, terminal_status="pr_opened",
     )

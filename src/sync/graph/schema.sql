@@ -93,6 +93,16 @@ CREATE TABLE IF NOT EXISTS migration_outcome (
 
     strategy                      TEXT NOT NULL,
     tier                          INTEGER NOT NULL,
+    -- Which decision-table row assigned `tier`, at this table's grain of one row per attempt.
+    -- A retried attempt that routed differently from its predecessor carries its own value
+    -- rather than collapsing into one, which is what makes "tier 0 was wrong for this change
+    -- kind" a query instead of an archaeology project.
+    --
+    -- 'unrouted' means the table had no jurisdiction over the finding, which is a fact about
+    -- the finding. NULL is reserved for a row this column was never written for: the three
+    -- attempts that predate it, which cannot be backfilled because the table they routed on
+    -- has changed since.
+    routing_row                   TEXT,
     edit_script                   JSONB,
     input_tokens                  INTEGER,
     output_tokens                 INTEGER,
