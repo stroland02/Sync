@@ -12,7 +12,15 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
-Severity = Literal["breaking", "deprecation", "addition", "info"]
+# `warning` is oasdiff's own word and is here because oasdiff uses it. `oasdiff breaking` grades
+# what it returns -- an endpoint deleted without deprecation is `error`, an optional response
+# property removed is `warning` -- and the whole of that grading used to be discarded at the one
+# line that built a `VendorChange`. Without a term for it the mapping would have had to collapse
+# two of oasdiff's three levels into one of ours, which is the constant this vocabulary was
+# widened to stop. Nothing enumerates this type on a frozen surface: the MCP tool schemas type
+# `severity` as a bare string and `schema.sql` stores it as TEXT, so widening it moves no
+# contract.
+Severity = Literal["breaking", "warning", "deprecation", "addition", "info"]
 ChangeSource = Literal["oasdiff", "changelog", "sdk-release", "vendor-deprecation-table"]
 PatchStrategy = Literal["codemod", "agent"]
 FindingStatus = Literal["open", "patched", "abandoned"]

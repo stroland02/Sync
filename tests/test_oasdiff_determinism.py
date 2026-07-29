@@ -132,24 +132,28 @@ def test_the_noise_filter_drops_the_volume_and_keeps_the_kind_that_loses_operati
     assert [r["id"] for r in kept] == [OPTIONAL_REMOVED]
 
 
-def test_every_record_becomes_a_breaking_change_whatever_oasdiff_called_it():
-    """A separate defect this investigation found, pinned rather than fixed.
+def test_a_record_carries_the_severity_oasdiff_graded_it():
+    """The defect this investigation found, now fixed, and this is what it was replaced with.
 
     All 792,552 records measured across six runs carry `level: 2`, which is oasdiff's *warning*.
-    `to_vendor_changes` stamps `severity="breaking"` on every record unconditionally, so the
-    severity on a `VendorChange` from this source is a constant rather than evidence.
+    `to_vendor_changes` used to stamp `severity="breaking"` on every record unconditionally, so
+    the severity on a `VendorChange` from this source was a constant rather than evidence, and a
+    triage queue ordered by it was ordered by nothing.
 
-    Asserted as it is rather than corrected: severity feeds triage, and changing what it means is
-    a decision with a blast radius well outside this task. The report recommends it; this test is
-    what makes the current behaviour deliberate instead of accidental, and what will fail when
-    somebody acts on that recommendation.
+    This test previously pinned that behaviour so it was deliberate rather than accidental, and
+    said it would fail when somebody acted on the recommendation. Somebody did. It now pins the
+    other direction, over the same record the measurement was taken on: the whole population this
+    report counted is warning-level, and it now arrives saying so.
+
+    `tests/test_oasdiff_severity.py` carries the rest -- the integer-to-string cross-reference
+    against the pinned binary, the error level, and what an unrecognised one does.
     """
     records = [_record(ENUM_ADDED, "added the new enum value `x`")]
     assert records[0]["level"] == 2
 
     changes = to_vendor_changes(records, "stripe", "v1", "v2")
 
-    assert [c.severity for c in changes] == ["breaking"]
+    assert [c.severity for c in changes] == ["warning"]
 
 
 @pytest.mark.skipif(

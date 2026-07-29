@@ -9,13 +9,36 @@ import subprocess
 from pathlib import Path
 from typing import Any
 
-from sync.core import VendorChange
+from sync.core import Severity, VendorChange
 
 _BACKTICKED = re.compile(r"`([^`]+)`")
 _COMPOSITION_SEGMENT = re.compile(r"\A(?:any|one|all)Of\[.*\]\Z")
 # `\Z`, never `$`: `$` also matches before a trailing newline, so a segment ending in one
 # would be accepted and handed back with the newline still attached.
 _SINGLE_LINE_NAME = re.compile(r"[^\n]+\Z")
+
+# oasdiff's own grading, as the two surfaces encode it. A `breaking` record carries `level` as an
+# **integer**; `oasdiff checks` carries it as a **string**. Nothing but the rule id is common to
+# both, so every pair below was established by joining a record to the catalogue on that id
+# against the pinned binary rather than inferred from the names --
+# `test_the_two_surfaces_encode_level_differently_and_the_integers_cross_reference` is that join,
+# and it runs the binary rather than asserting a table against itself.
+#
+# `1` is reachable only through `changelog`; `breaking` emits `2` and `3`. It is mapped anyway,
+# because a level this module knows about and declines to map is the same silent default the
+# mapping exists to remove.
+LEVEL_SEVERITY: dict[int, Severity] = {3: "breaking", 2: "warning", 1: "info"}
+
+
+class UnknownOasdiffLevel(ValueError):
+    """A record graded at a level this mapping does not know.
+
+    An oasdiff release adding a level, renaming the field, or moving the record surface to the
+    catalogue's string encoding all arrive here. Every one of them is a finding about the tool
+    and none is a record to guess at: defaulting an unknown grading to `breaking` is precisely
+    the behaviour this mapping replaced, one release later and harder to see, because it would
+    once again be a constant that reads as evidence.
+    """
 
 
 def _binary() -> str:
@@ -88,6 +111,23 @@ def _parse_json(stdout: str, surface: str) -> Any:
         raise RuntimeError(f"{surface} output was not JSON ({exc}): {stdout[:200]!r}") from exc
 
 
+def severity_for(record: dict[str, Any]) -> Severity:
+    """What oasdiff graded this record, in this repository's vocabulary.
+
+    Raises rather than defaulting. `level` is read exactly as it arrives -- an integer key, no
+    coercion -- because a string here would mean the record surface had moved to the catalogue's
+    encoding, and coercing it would hide the one change worth being told about.
+    """
+    level = record.get("level")
+    if not isinstance(level, int) or isinstance(level, bool) or level not in LEVEL_SEVERITY:
+        raise UnknownOasdiffLevel(
+            f"oasdiff graded a {record.get('id', 'unknown')!r} record at level {level!r}, which "
+            f"this mapping does not know; known levels are "
+            f"{sorted(LEVEL_SEVERITY)} (see `oasdiff checks`)"
+        )
+    return LEVEL_SEVERITY[level]
+
+
 def to_vendor_changes(
     records: list[dict[str, Any]], vendor_id: str, from_version: str, to_version: str
 ) -> list[VendorChange]:
@@ -96,6 +136,13 @@ def to_vendor_changes(
     oasdiff reports `operationId` when the spec declares one, and always reports
     `operation` (the HTTP method) plus `path`. We prefer operationId and fall back
     to `METHOD path` so a spec without operation IDs still produces usable changes.
+
+    Severity is what oasdiff said about this record and not a constant. It used to be
+    `"breaking"` unconditionally, which `2026-07-29-oasdiff-determinism.md` measured as a field
+    carrying no information at all -- every one of 792,552 records was warning-level -- and which
+    `2026-07-27-sync-routing-matrix.md` had already named as the reason an endpoint deleted
+    without deprecation and an optional response property removed arrived downstream
+    indistinguishable.
     """
     changes: list[VendorChange] = []
     for record in records:
@@ -108,7 +155,7 @@ def to_vendor_changes(
                 kind=record.get("id", "unknown"),
                 operation_id=operation_id,
                 path_ptr=record.get("path", ""),
-                severity="breaking",
+                severity=severity_for(record),
                 source="oasdiff",
                 raw=record,
             )

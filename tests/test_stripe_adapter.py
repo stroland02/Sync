@@ -381,11 +381,15 @@ def test_fetch_changes_filters_noise_records_before_they_become_vendor_changes(m
     """
 
     def fake_run_oasdiff_breaking(base, revision):
+        # `level` is present because every real record carries it: `to_vendor_changes` reads
+        # oasdiff's own grading rather than stamping a constant, and refuses a record it cannot
+        # grade. Both of these are `2`, oasdiff's warning, which is what the binary reports for
+        # both of these rule ids.
         return [
             {"id": "response-property-enum-value-added", "text": "added `mastercard_compliance`",
-             "operationId": "PostCharges", "path": "/v1/charges"},
+             "level": 2, "operationId": "PostCharges", "path": "/v1/charges"},
             {"id": "response-optional-property-removed", "text": "removed the optional property `status`",
-             "operationId": "PostCharges", "path": "/v1/charges"},
+             "level": 2, "operationId": "PostCharges", "path": "/v1/charges"},
         ]
 
     monkeypatch.setattr(adapter_module, "run_oasdiff_breaking", fake_run_oasdiff_breaking)
