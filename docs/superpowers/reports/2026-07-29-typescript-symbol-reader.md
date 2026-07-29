@@ -20,15 +20,21 @@ Before, on `24ea4af`:
 
     2194 passed, 2 skipped
 
-After:
+After, on the final tree — this branch merged up to `origin/main` at `3cd71eb`:
 
     src\sync\signals\generated\symbols_typescript.py   255    8   97%
       309, 337, 347, 357, 364, 405, 410, 522
+
+    2298 passed, 2 skipped
 
 The statement count rises from 251 to 255 because the one defect found here cost four statements to
 fix. Eleven of the nineteen are now covered; the remaining eight are the same eight statements
 throughout, renumbered by that fix, and every one of them is argued unreachable below rather than
 reached by calling an internal.
+
+The suite grew from 2194 to 2298 across the run because `origin/main` moved several times while this
+was in progress and was merged before the final measurement. Thirteen of those tests are this
+task's.
 
 ## Every declining branch, what reaches it, and whether declining is right
 
@@ -308,3 +314,30 @@ M9 and M13 killing many tests each is the intended reading rather than noise: th
 reader and the resource anchor are load-bearing for the whole file, and a mutation to either that
 killed only the new test would mean the new test was measuring something the module does not
 actually depend on.
+
+## Gates
+
+Run on the final tree, `stroland02/m2-symbols` merged up to `origin/main` at `3cd71eb`.
+
+| Gate | Exit | Result |
+|---|---|---|
+| `uv run pytest -q` | 0 | 2298 passed, 2 skipped. Run unpiped, so this is pytest's own status rather than a pipe's |
+| `uv run python scripts/lint_encoding.py src scripts tests` | 0 | clean |
+| `PYTHONIOENCODING=utf-8 uv run lint-imports` | 0 | 95 files, 201 dependencies, 1 contract kept, 0 broken |
+| `uv run python scripts/lint_dead_links.py src --baseline scripts/dead_links_baseline.txt` | 0 | clean |
+
+## What this leaves for the next task
+
+1. **`ExtractionReport` has no field for a decline, and it should.** Every branch above is silent,
+   and the manifest already publishes the number that would make them visible —
+   `configured_endpoints`, parsed and unused. Comparing it against `extracted_count` needs a field
+   on `ExtractionReport` and a line in `render()`, both in `symbols.py`, which changes what the
+   Python and Speakeasy flavours emit too. A contract change across three rules, wanting its own
+   work.
+2. **`_comparable`'s parameter reduction stops at the first closing brace.** An interpolated
+   expression containing one leaves debris in the comparable. It cannot produce a wrong match, so it
+   costs a binding rather than misdirecting one, and the same regex is copied in
+   `symbols_speakeasy.py` — so fixing it is a two-module change.
+3. **Two constructs are declined before any guarded branch**: `abstract class` and
+   `export default class`. Pinned by a test now, so a generator that starts emitting one is a red
+   test rather than a quietly smaller map.
