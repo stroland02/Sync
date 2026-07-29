@@ -170,11 +170,23 @@ people will read it rather than leaving each person to rediscover it.
    wrong for this change kind" stays an archaeology project rather than a query — which is the
    exact question routing accuracy exists to answer.
 5. **The tier C statistics**, re-attempted at a scale that does not die on a session limit, before
-   any threshold beyond the directional floor is written down.
+   any threshold beyond the directional floor is written down. **This is blocked on step 3, and
+   that was not visible when this sequence was written.** The statistics exist to separate noise
+   from regression on axes that legitimately move run to run. The deterministic axes need none —
+   which is exactly why the directional floor was addable without them. The axes that do need them
+   are merge rate, routing accuracy and cost per merged patch, and all three have never had a
+   sample. There is no noise to characterise until a pipeline run produces one.
 
 ## What this document does not claim
 
-It does not claim the regime is nearly done. Three of five axes have never had a sample, no pull
-request has ever been opened by the pipeline, and the labelled corpus does not exist. It claims
+It does not claim the regime is nearly done. Three of five axes have never had a sample and no
+pull request has ever been opened by the pipeline.
+
+**The labelled corpus, which this document said did not exist, now does** — twelve pairs over four
+repositories pinned by commit and validated by digest, both frozen inputs pinned, scoring
+byte-identically, and gated. Steps 1, 2 and 4 of the sequence above are done. What remains
+ungated is nothing: step 5 waits on step 3, and step 3 is a decision rather than a task.
+
+It claims
 that the machinery to compute all of it is built and reachable, that the remaining work is
 data rather than code, and that one of the three blockers is a decision rather than a task.

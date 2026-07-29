@@ -1,0 +1,130 @@
+[
+ {
+  "comment": "Adding new enum values to a response can be unexpected for clients; use x-extensible-enum instead.",
+  "fingerprint": "ef60d30580e1",
+  "id": "response-property-enum-value-added",
+  "level": 2,
+  "operation": "POST",
+  "operationId": "create-realtime-client-secret",
+  "path": "/realtime/client_secrets",
+  "revisionSource": {
+   "column": 19,
+   "file": ".cache/generated-specs/openai-9152683f2fa71f5555cbbb53123ec013b7c83ee6fed4333e76c22a6f48a05f1c.yml",
+   "line": 28492
+  },
+  "section": "paths",
+  "text": "added the new `gpt-live-transcribe` enum value to the `session/anyOf[subschema #1: Realtime session configuration object]/audio/input/transcription/model/anyOf[subschema #2]/` response property for the response status `200`"
+ },
+ {
+  "comment": "Adding new enum values to a response can be unexpected for clients; use x-extensible-enum instead.",
+  "fingerprint": "7ebf9ce021a5",
+  "id": "response-property-enum-value-added",
+  "level": 2,
+  "operation": "POST",
+  "operationId": "create-realtime-client-secret",
+  "path": "/realtime/client_secrets",
+  "revisionSource": {
+   "column": 19,
+   "file": ".cache/generated-specs/openai-9152683f2fa71f5555cbbb53123ec013b7c83ee6fed4333e76c22a6f48a05f1c.yml",
+   "line": 28492
+  },
+  "section": "paths",
+  "text": "added the new `gpt-live-transcribe` enum value to the `session/anyOf[subschema #2: Realtime transcription session configuration object]/audio/input/transcription/model/anyOf[subschema #2]/` response property for the response status `200`"
+ },
+ {
+  "comment": "Adding new enum values to a response can be unexpected for clients; use x-extensible-enum instead.",
+  "fingerprint": "77dab44c98a3",
+  "id": "response-property-enum-value-added",
+  "level": 2,
+  "operation": "POST",
+  "operationId": "create-realtime-client-secret",
+  "path": "/realtime/client_secrets",
+  "revisionSource": {
+   "column": 19,
+   "file": ".cache/generated-specs/openai-9152683f2fa71f5555cbbb53123ec013b7c83ee6fed4333e76c22a6f48a05f1c.yml",
+   "line": 28491
+  },
+  "section": "paths",
+  "text": "added the new `gpt-transcribe` enum value to the `session/anyOf[subschema #1: Realtime session configuration object]/audio/input/transcription/model/anyOf[subschema #2]/` response property for the response status `200`"
+ },
+ {
+  "comment": "Adding new enum values to a response can be unexpected for clients; use x-extensible-enum instead.",
+  "fingerprint": "5e9e6e1922d0",
+  "id": "response-property-enum-value-added",
+  "level": 2,
+  "operation": "POST",
+  "operationId": "create-realtime-client-secret",
+  "path": "/realtime/client_secrets",
+  "revisionSource": {
+   "column": 19,
+   "file": ".cache/generated-specs/openai-9152683f2fa71f5555cbbb53123ec013b7c83ee6fed4333e76c22a6f48a05f1c.yml",
+   "line": 28491
+  },
+  "section": "paths",
+  "text": "added the new `gpt-transcribe` enum value to the `session/anyOf[subschema #2: Realtime transcription session configuration object]/audio/input/transcription/model/anyOf[subschema #2]/` response property for the response status `200`"
+ },
+ {
+  "comment": "Adding new enum values to a response can be unexpected for clients; use x-extensible-enum instead.",
+  "fingerprint": "f8ec4a4ef83b",
+  "id": "response-property-enum-value-added",
+  "level": 2,
+  "operation": "POST",
+  "operationId": "create-realtime-session",
+  "path": "/realtime/sessions",
+  "revisionSource": {
+   "column": 19,
+   "file": ".cache/generated-specs/openai-9152683f2fa71f5555cbbb53123ec013b7c83ee6fed4333e76c22a6f48a05f1c.yml",
+   "line": 28492
+  },
+  "section": "paths",
+  "text": "added the new `gpt-live-transcribe` enum value to the `audio/input/transcription/model/anyOf[subschema #2]/` response property for the response status `200`"
+ },
+ {
+  "comment": "Adding new enum values to a response can be unexpected for clients; use x-extensible-enum instead.",
+  "fingerprint": "995a47a2af4a",
+  "id": "response-property-enum-value-added",
+  "level": 2,
+  "operation": "POST",
+  "operationId": "create-realtime-session",
+  "path": "/realtime/sessions",
+  "revisionSource": {
+   "column": 19,
+   "file": ".cache/generated-specs/openai-9152683f2fa71f5555cbbb53123ec013b7c83ee6fed4333e76c22a6f48a05f1c.yml",
+   "line": 28491
+  },
+  "section": "paths",
+  "text": "added the new `gpt-transcribe` enum value to the `audio/input/transcription/model/anyOf[subschema #2]/` response property for the response status `200`"
+ },
+ {
+  "comment": "Adding new enum values to a response can be unexpected for clients; use x-extensible-enum instead.",
+  "fingerprint": "e8d33b5126d2",
+  "id": "response-property-enum-value-added",
+  "level": 2,
+  "operation": "POST",
+  "operationId": "create-realtime-transcription-session",
+  "path": "/realtime/transcription_sessions",
+  "revisionSource": {
+   "column": 19,
+   "file": ".cache/generated-specs/openai-9152683f2fa71f5555cbbb53123ec013b7c83ee6fed4333e76c22a6f48a05f1c.yml",
+   "line": 28492
+  },
+  "section": "paths",
+  "text": "added the new `gpt-live-transcribe` enum value to the `input_audio_transcription/model/anyOf[subschema #2]/` response property for the response status `200`"
+ },
+ {
+  "comment": "Adding new enum values to a response can be unexpected for clients; use x-extensible-enum instead.",
+  "fingerprint": "891e5ed79ed0",
+  "id": "response-property-enum-value-added",
+  "level": 2,
+  "operation": "POST",
+  "operationId": "create-realtime-transcription-session",
+  "path": "/realtime/transcription_sessions",
+  "revisionSource": {
+   "column": 19,
+   "file": ".cache/generated-specs/openai-9152683f2fa71f5555cbbb53123ec013b7c83ee6fed4333e76c22a6f48a05f1c.yml",
+   "line": 28491
+  },
+  "section": "paths",
+  "text": "added the new `gpt-transcribe` enum value to the `input_audio_transcription/model/anyOf[subschema #2]/` response property for the response status `200`"
+ }
+]

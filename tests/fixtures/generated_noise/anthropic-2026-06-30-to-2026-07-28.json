@@ -1,0 +1,433 @@
+[
+ {
+  "fingerprint": "d3f51cd21305",
+  "id": "request-property-any-of-removed",
+  "level": 3,
+  "operation": "POST",
+  "operationId": "BetaUpdateAgent",
+  "path": "/v1/agents/{agent_id}?beta=true",
+  "section": "paths",
+  "text": "removed `subschema #4, subschema #5, subschema #6, subschema #10, subschema #11` from the `model/allOf[#/components/schemas/BetaManagedAgentsModelParams]/oneOf[#/components/schemas/BetaManagedAgentsModelConfigParams]/id` request property `anyOf` list"
+ },
+ {
+  "fingerprint": "4950200cc627",
+  "id": "request-property-any-of-removed",
+  "level": 3,
+  "operation": "POST",
+  "operationId": "BetaUpdateAgent",
+  "path": "/v1/agents/{agent_id}?beta=true",
+  "section": "paths",
+  "text": "removed `subschema #4, subschema #5, subschema #6, subschema #10, subschema #11` from the `model/allOf[#/components/schemas/BetaManagedAgentsModelParams]/oneOf[subschema #1: BetaManagedAgentsModel]/allOf[subschema #1: BetaManagedAgentsModel]/` request property `anyOf` list"
+ },
+ {
+  "fingerprint": "125fd46eb8a7",
+  "id": "request-property-any-of-removed",
+  "level": 3,
+  "operation": "POST",
+  "operationId": "BetaCreateAgent",
+  "path": "/v1/agents?beta=true",
+  "section": "paths",
+  "text": "removed `subschema #4, subschema #5, subschema #6, subschema #10, subschema #11` from the `model/allOf[#/components/schemas/BetaManagedAgentsModelParams]/oneOf[#/components/schemas/BetaManagedAgentsModelConfigParams]/id` request property `anyOf` list"
+ },
+ {
+  "fingerprint": "0015e65d72a8",
+  "id": "request-property-any-of-removed",
+  "level": 3,
+  "operation": "POST",
+  "operationId": "BetaCreateAgent",
+  "path": "/v1/agents?beta=true",
+  "section": "paths",
+  "text": "removed `subschema #4, subschema #5, subschema #6, subschema #10, subschema #11` from the `model/allOf[#/components/schemas/BetaManagedAgentsModelParams]/oneOf[subschema #1: BetaManagedAgentsModel]/allOf[subschema #1: BetaManagedAgentsModel]/` request property `anyOf` list"
+ },
+ {
+  "fingerprint": "66573977912d",
+  "id": "request-property-any-of-removed",
+  "level": 3,
+  "operation": "POST",
+  "operationId": "complete_post",
+  "path": "/v1/complete",
+  "section": "paths",
+  "text": "removed `subschema #5, subschema #6, subschema #8, subschema #12, subschema #13, subschema #16, subschema #17` from the `model` request property `anyOf` list"
+ },
+ {
+  "fingerprint": "116a41242f51",
+  "id": "response-property-const-removed",
+  "level": 3,
+  "operation": "DELETE",
+  "operationId": "beta_delete_environment_v1_environments__environment_id__delete",
+  "path": "/v1/environments/{environment_id}?beta=true",
+  "section": "paths",
+  "text": "the `type` response property const value `environment_deleted` was removed for the status `200`"
+ },
+ {
+  "fingerprint": "7db67618de29",
+  "id": "request-property-any-of-removed",
+  "level": 3,
+  "operation": "POST",
+  "operationId": "messages_post",
+  "path": "/v1/messages",
+  "section": "paths",
+  "text": "removed `subschema #5, subschema #6, subschema #8, subschema #12, subschema #13, subschema #16, subschema #17` from the `model` request property `anyOf` list"
+ },
+ {
+  "fingerprint": "6340bc1b77ad",
+  "id": "request-property-any-of-removed",
+  "level": 3,
+  "operation": "POST",
+  "operationId": "message_batches_post",
+  "path": "/v1/messages/batches",
+  "section": "paths",
+  "text": "removed `subschema #5, subschema #6, subschema #8, subschema #12, subschema #13, subschema #16, subschema #17` from the `requests/items/params/model` request property `anyOf` list"
+ },
+ {
+  "fingerprint": "a06f893290fc",
+  "id": "request-property-any-of-removed",
+  "level": 3,
+  "operation": "POST",
+  "operationId": "beta_message_batches_post",
+  "path": "/v1/messages/batches?beta=true",
+  "section": "paths",
+  "text": "removed `subschema #5, subschema #6, subschema #8, subschema #12, subschema #13, subschema #16, subschema #17` from the `requests/items/params/messages/items/content/anyOf[subschema #2]/items/oneOf[subschema #22: RequestFallbackBlock -> subschema #24: RequestFallbackBlock]/from/model` request property `anyOf` list"
+ },
+ {
+  "fingerprint": "9b95e5c175ee",
+  "id": "request-property-any-of-removed",
+  "level": 3,
+  "operation": "POST",
+  "operationId": "beta_message_batches_post",
+  "path": "/v1/messages/batches?beta=true",
+  "section": "paths",
+  "text": "removed `subschema #5, subschema #6, subschema #8, subschema #12, subschema #13, subschema #16, subschema #17` from the `requests/items/params/messages/items/content/anyOf[subschema #2]/items/oneOf[subschema #22: RequestFallbackBlock -> subschema #24: RequestFallbackBlock]/to/model` request property `anyOf` list"
+ },
+ {
+  "fingerprint": "20955717839d",
+  "id": "request-property-any-of-removed",
+  "level": 3,
+  "operation": "POST",
+  "operationId": "beta_message_batches_post",
+  "path": "/v1/messages/batches?beta=true",
+  "section": "paths",
+  "text": "removed `subschema #5, subschema #6, subschema #8, subschema #12, subschema #13, subschema #16, subschema #17` from the `requests/items/params/model` request property `anyOf` list"
+ },
+ {
+  "fingerprint": "ebddd500b88d",
+  "id": "request-property-any-of-removed",
+  "level": 3,
+  "operation": "POST",
+  "operationId": "beta_message_batches_post",
+  "path": "/v1/messages/batches?beta=true",
+  "section": "paths",
+  "text": "removed `subschema #5, subschema #6, subschema #8, subschema #12, subschema #13, subschema #16, subschema #17` from the `requests/items/params/tools/items/oneOf[subschema #23: AdvisorTool_20260301]/model` request property `anyOf` list"
+ },
+ {
+  "fingerprint": "627466bf2e43",
+  "id": "request-property-any-of-removed",
+  "level": 3,
+  "operation": "POST",
+  "operationId": "messages_count_tokens_post",
+  "path": "/v1/messages/count_tokens",
+  "section": "paths",
+  "text": "removed `subschema #5, subschema #6, subschema #8, subschema #12, subschema #13, subschema #16, subschema #17` from the `model` request property `anyOf` list"
+ },
+ {
+  "fingerprint": "eafd1bb87919",
+  "id": "request-property-any-of-removed",
+  "level": 3,
+  "operation": "POST",
+  "operationId": "beta_messages_count_tokens_post",
+  "path": "/v1/messages/count_tokens?beta=true",
+  "section": "paths",
+  "text": "removed `subschema #5, subschema #6, subschema #8, subschema #12, subschema #13, subschema #16, subschema #17` from the `messages/items/content/anyOf[subschema #2]/items/oneOf[subschema #22: RequestFallbackBlock -> subschema #24: RequestFallbackBlock]/from/model` request property `anyOf` list"
+ },
+ {
+  "fingerprint": "1c9834979c6e",
+  "id": "request-property-any-of-removed",
+  "level": 3,
+  "operation": "POST",
+  "operationId": "beta_messages_count_tokens_post",
+  "path": "/v1/messages/count_tokens?beta=true",
+  "section": "paths",
+  "text": "removed `subschema #5, subschema #6, subschema #8, subschema #12, subschema #13, subschema #16, subschema #17` from the `messages/items/content/anyOf[subschema #2]/items/oneOf[subschema #22: RequestFallbackBlock -> subschema #24: RequestFallbackBlock]/to/model` request property `anyOf` list"
+ },
+ {
+  "fingerprint": "bf3a98b01065",
+  "id": "request-property-any-of-removed",
+  "level": 3,
+  "operation": "POST",
+  "operationId": "beta_messages_count_tokens_post",
+  "path": "/v1/messages/count_tokens?beta=true",
+  "section": "paths",
+  "text": "removed `subschema #5, subschema #6, subschema #8, subschema #12, subschema #13, subschema #16, subschema #17` from the `model` request property `anyOf` list"
+ },
+ {
+  "fingerprint": "258e557089b9",
+  "id": "request-property-any-of-removed",
+  "level": 3,
+  "operation": "POST",
+  "operationId": "beta_messages_count_tokens_post",
+  "path": "/v1/messages/count_tokens?beta=true",
+  "section": "paths",
+  "text": "removed `subschema #5, subschema #6, subschema #8, subschema #12, subschema #13, subschema #16, subschema #17` from the `tools/items/oneOf[subschema #23: AdvisorTool_20260301]/model` request property `anyOf` list"
+ },
+ {
+  "fingerprint": "8a6e3839f633",
+  "id": "request-property-any-of-removed",
+  "level": 3,
+  "operation": "POST",
+  "operationId": "beta_messages_post",
+  "path": "/v1/messages?beta=true",
+  "section": "paths",
+  "text": "removed `subschema #5, subschema #6, subschema #8, subschema #12, subschema #13, subschema #16, subschema #17` from the `messages/items/content/anyOf[subschema #2]/items/oneOf[subschema #22: RequestFallbackBlock -> subschema #24: RequestFallbackBlock]/from/model` request property `anyOf` list"
+ },
+ {
+  "fingerprint": "0ce07a1d6c0d",
+  "id": "request-property-any-of-removed",
+  "level": 3,
+  "operation": "POST",
+  "operationId": "beta_messages_post",
+  "path": "/v1/messages?beta=true",
+  "section": "paths",
+  "text": "removed `subschema #5, subschema #6, subschema #8, subschema #12, subschema #13, subschema #16, subschema #17` from the `messages/items/content/anyOf[subschema #2]/items/oneOf[subschema #22: RequestFallbackBlock -> subschema #24: RequestFallbackBlock]/to/model` request property `anyOf` list"
+ },
+ {
+  "fingerprint": "cdb98098867e",
+  "id": "request-property-any-of-removed",
+  "level": 3,
+  "operation": "POST",
+  "operationId": "beta_messages_post",
+  "path": "/v1/messages?beta=true",
+  "section": "paths",
+  "text": "removed `subschema #5, subschema #6, subschema #8, subschema #12, subschema #13, subschema #16, subschema #17` from the `model` request property `anyOf` list"
+ },
+ {
+  "fingerprint": "5c8b2ea45cc2",
+  "id": "request-property-any-of-removed",
+  "level": 3,
+  "operation": "POST",
+  "operationId": "beta_messages_post",
+  "path": "/v1/messages?beta=true",
+  "section": "paths",
+  "text": "removed `subschema #5, subschema #6, subschema #8, subschema #12, subschema #13, subschema #16, subschema #17` from the `tools/items/oneOf[subschema #23: AdvisorTool_20260301]/model` request property `anyOf` list"
+ },
+ {
+  "fingerprint": "07f60f21ae72",
+  "id": "response-body-one-of-added",
+  "level": 3,
+  "operation": "GET",
+  "operationId": "BetaStreamSessionEvents",
+  "path": "/v1/sessions/{session_id}/events/stream?beta=true",
+  "section": "paths",
+  "text": "added `#/components/schemas/BetaManagedAgentsEventStartEvent, #/components/schemas/BetaManagedAgentsEventDeltaEvent` to the response body `oneOf` list for the response status `200`"
+ },
+ {
+  "fingerprint": "5c3a2942d096",
+  "id": "response-body-one-of-added",
+  "level": 3,
+  "operation": "GET",
+  "operationId": "BetaStreamSessionThreadEvents",
+  "path": "/v1/sessions/{session_id}/threads/{thread_id}/stream?beta=true",
+  "section": "paths",
+  "text": "added `#/components/schemas/BetaManagedAgentsEventStartEvent, #/components/schemas/BetaManagedAgentsEventDeltaEvent` to the response body `oneOf` list for the response status `200`"
+ },
+ {
+  "fingerprint": "d9a76aa47242",
+  "id": "request-property-all-of-added",
+  "level": 3,
+  "operation": "POST",
+  "operationId": "BetaCreateSession",
+  "path": "/v1/sessions?beta=true",
+  "section": "paths",
+  "text": "added `#/components/schemas/BetaManagedAgentsCreateSessionAgentUnionParams` to the `agent` request property `allOf` list"
+ },
+ {
+  "fingerprint": "556afc687c12",
+  "id": "request-body-became-required",
+  "level": 3,
+  "operation": "POST",
+  "operationId": "beta_create_skill_version_v1_skills__skill_id__versions_post",
+  "path": "/v1/skills/{skill_id}/versions?beta=true",
+  "section": "paths",
+  "text": "request body became required"
+ },
+ {
+  "fingerprint": "b5c44f033b87",
+  "id": "request-property-became-required",
+  "level": 3,
+  "operation": "POST",
+  "operationId": "beta_create_skill_version_v1_skills__skill_id__versions_post",
+  "path": "/v1/skills/{skill_id}/versions?beta=true",
+  "section": "paths",
+  "text": "the request property `files` became required"
+ },
+ {
+  "fingerprint": "576a3128e2dd",
+  "id": "request-property-list-of-types-narrowed",
+  "level": 3,
+  "operation": "POST",
+  "operationId": "beta_create_skill_version_v1_skills__skill_id__versions_post",
+  "path": "/v1/skills/{skill_id}/versions?beta=true",
+  "section": "paths",
+  "text": "request property `files` list-of-types was narrowed by removing types `null` from media type `multipart/form-data`"
+ },
+ {
+  "fingerprint": "182bdcfab561",
+  "id": "request-body-became-required",
+  "level": 3,
+  "operation": "POST",
+  "operationId": "beta_create_skill_v1_skills_post",
+  "path": "/v1/skills?beta=true",
+  "section": "paths",
+  "text": "request body became required"
+ },
+ {
+  "fingerprint": "5993f7a4a097",
+  "id": "request-property-became-required",
+  "level": 3,
+  "operation": "POST",
+  "operationId": "beta_create_skill_v1_skills_post",
+  "path": "/v1/skills?beta=true",
+  "section": "paths",
+  "text": "the request property `files` became required"
+ },
+ {
+  "fingerprint": "50add700f557",
+  "id": "request-property-list-of-types-narrowed",
+  "level": 3,
+  "operation": "POST",
+  "operationId": "beta_create_skill_v1_skills_post",
+  "path": "/v1/skills?beta=true",
+  "section": "paths",
+  "text": "request property `files` list-of-types was narrowed by removing types `null` from media type `multipart/form-data`"
+ },
+ {
+  "comment": "Adding new enum values to a response can be unexpected for clients; use x-extensible-enum instead.",
+  "fingerprint": "e88c75067dd2",
+  "id": "response-property-enum-value-added",
+  "level": 2,
+  "operation": "DELETE",
+  "operationId": "beta_delete_environment_v1_environments__environment_id__delete",
+  "path": "/v1/environments/{environment_id}?beta=true",
+  "section": "paths",
+  "text": "added the new `environment_deleted` enum value to the `type` response property for the response status `200`"
+ },
+ {
+  "comment": "This is a warning because some clients may return an error when receiving an unexpected parameter. It is recommended to deprecate the parameter first.",
+  "fingerprint": "704fdd581ed9",
+  "id": "request-parameter-removed",
+  "level": 2,
+  "operation": "GET",
+  "operationId": "BetaListMemories",
+  "path": "/v1/memory_stores/{memory_store_id}/memories?beta=true",
+  "section": "paths",
+  "text": "deleted the `query` request parameter `order`"
+ },
+ {
+  "comment": "This is a warning because some clients may return an error when receiving an unexpected parameter. It is recommended to deprecate the parameter first.",
+  "fingerprint": "4fbe5a764a55",
+  "id": "request-parameter-removed",
+  "level": 2,
+  "operation": "GET",
+  "operationId": "BetaListMemories",
+  "path": "/v1/memory_stores/{memory_store_id}/memories?beta=true",
+  "section": "paths",
+  "text": "deleted the `query` request parameter `order_by`"
+ },
+ {
+  "comment": "Adding new enum values to a response can be unexpected for clients; use x-extensible-enum instead.",
+  "fingerprint": "a067ae22cac4",
+  "id": "response-property-enum-value-added",
+  "level": 2,
+  "operation": "POST",
+  "operationId": "messages_post",
+  "path": "/v1/messages",
+  "section": "paths",
+  "text": "added the new `general_harms` enum value to the `stop_details/anyOf[subschema #1: RefusalStopDetails]/category/anyOf[subschema #1: RefusalCategory]/` response property for the response status `200`"
+ },
+ {
+  "comment": "Adding new enum values to a response can be unexpected for clients; use x-extensible-enum instead.",
+  "fingerprint": "bd23309b64aa",
+  "id": "response-property-enum-value-added",
+  "level": 2,
+  "operation": "POST",
+  "operationId": "messages_post",
+  "path": "/v1/messages",
+  "section": "paths",
+  "text": "added the new `model_context_window_exceeded` enum value to the `stop_reason/anyOf[#/components/schemas/StopReason]/` response property for the response status `200`"
+ },
+ {
+  "comment": "Adding new enum values to a response can be unexpected for clients; use x-extensible-enum instead.",
+  "fingerprint": "62c85313dbac",
+  "id": "response-property-enum-value-added",
+  "level": 2,
+  "operation": "GET",
+  "operationId": "message_batches_results",
+  "path": "/v1/messages/batches/{message_batch_id}/results",
+  "section": "paths",
+  "text": "added the new `general_harms` enum value to the `result/oneOf[subschema #1: SucceededResult]/message/stop_details/anyOf[subschema #1: RefusalStopDetails]/category/anyOf[subschema #1: RefusalCategory]/` response property for the response status `200`"
+ },
+ {
+  "comment": "Adding new enum values to a response can be unexpected for clients; use x-extensible-enum instead.",
+  "fingerprint": "c09a9367364b",
+  "id": "response-property-enum-value-added",
+  "level": 2,
+  "operation": "GET",
+  "operationId": "message_batches_results",
+  "path": "/v1/messages/batches/{message_batch_id}/results",
+  "section": "paths",
+  "text": "added the new `model_context_window_exceeded` enum value to the `result/oneOf[subschema #1: SucceededResult]/message/stop_reason/anyOf[#/components/schemas/StopReason]/` response property for the response status `200`"
+ },
+ {
+  "comment": "Adding new enum values to a response can be unexpected for clients; use x-extensible-enum instead.",
+  "fingerprint": "b48b421eade7",
+  "id": "response-property-enum-value-added",
+  "level": 2,
+  "operation": "GET",
+  "operationId": "beta_message_batches_results",
+  "path": "/v1/messages/batches/{message_batch_id}/results?beta=true",
+  "section": "paths",
+  "text": "added the new `general_harms` enum value to the `result/oneOf[subschema #1: SucceededResult]/message/content/items/oneOf[subschema #17: ResponseFallbackBlock]/trigger/category/anyOf[subschema #1: RefusalCategory]/` response property for the response status `200`"
+ },
+ {
+  "comment": "Adding new enum values to a response can be unexpected for clients; use x-extensible-enum instead.",
+  "fingerprint": "41b65ff2aa26",
+  "id": "response-property-enum-value-added",
+  "level": 2,
+  "operation": "GET",
+  "operationId": "beta_message_batches_results",
+  "path": "/v1/messages/batches/{message_batch_id}/results?beta=true",
+  "section": "paths",
+  "text": "added the new `general_harms` enum value to the `result/oneOf[subschema #1: SucceededResult]/message/stop_details/anyOf[subschema #1: RefusalStopDetails]/category/anyOf[subschema #1: RefusalCategory]/` response property for the response status `200`"
+ },
+ {
+  "comment": "Adding new enum values to a response can be unexpected for clients; use x-extensible-enum instead.",
+  "fingerprint": "33a635d0d738",
+  "id": "response-property-enum-value-added",
+  "level": 2,
+  "operation": "POST",
+  "operationId": "beta_messages_post",
+  "path": "/v1/messages?beta=true",
+  "section": "paths",
+  "text": "added the new `general_harms` enum value to the `content/items/oneOf[subschema #17: ResponseFallbackBlock]/trigger/category/anyOf[subschema #1: RefusalCategory]/` response property for the response status `200`"
+ },
+ {
+  "comment": "Adding new enum values to a response can be unexpected for clients; use x-extensible-enum instead.",
+  "fingerprint": "14ba029d0bef",
+  "id": "response-property-enum-value-added",
+  "level": 2,
+  "operation": "POST",
+  "operationId": "beta_messages_post",
+  "path": "/v1/messages?beta=true",
+  "section": "paths",
+  "text": "added the new `general_harms` enum value to the `stop_details/anyOf[subschema #1: RefusalStopDetails]/category/anyOf[subschema #1: RefusalCategory]/` response property for the response status `200`"
+ },
+ {
+  "fingerprint": "e0068adbfc01",
+  "id": "request-property-all-of-removed",
+  "level": 2,
+  "operation": "POST",
+  "operationId": "BetaCreateSession",
+  "path": "/v1/sessions?beta=true",
+  "section": "paths",
+  "text": "removed `#/components/schemas/BetaManagedAgentsAgentUnionParams` from the `agent` request property `allOf` list"
+ }
+]

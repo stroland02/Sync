@@ -53,6 +53,13 @@ from sync.benchmark.binding import (
 from sync.benchmark.mutate import UnsupportedChangeKind
 from sync.benchmark.score import SYNTHETIC_REFERENCE, DisplacedLabel, UnbrokenLabel
 
+# Run as `uv run python scripts/score_corpus.py`, Python puts `scripts/` on the path and not the
+# repository root, so the sibling module below is unimportable by the name the tests use. Adding
+# the root rather than importing it as a bare sibling keeps one spelling for both callers.
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from scripts.symbol_map_pin import PIN, SymbolMapMismatch, read_pin, verify_staged_map
+
 SPECS = Path("benchmark/corpus/pairs")
 
 # Ordered, because `DisplacedLabel`, `UnbrokenLabel` and `UnsupportedChangeKind` are all
@@ -115,6 +122,14 @@ class CorpusScore(BaseModel):
     findings that were genuine, and with no candidate for its false-positive term the rate is
     fixed by how the corpus was built -- so it reads 1.0 through any binder regression that only
     affects same-operation discrimination.
+    """
+    symbol_map_digest: str = ""
+    """Which symbol map produced this score.
+
+    The corpus's second frozen input, unpinned until 2026-07-29. It is recorded here as well as
+    in `benchmark/corpus/symbol_map.yaml` because the two answer different questions: the pin
+    says which map this corpus is scored against, and this says which one actually ran. A score
+    that cannot name its map is a score `gate_corpus.py` refuses.
     """
     skipped_files: list[str]
     """Checkout paths no pair could read as source, pooled across the set and deduplicated.
@@ -226,6 +241,9 @@ def render(score: CorpusScore, reference: str | None) -> str:
         # every specification naming it. A skip nobody counts is how a corpus stops describing
         # the repository it names, which is the failure the exclusion counts above also guard.
         f"  paths not read        {len(score.skipped_files)}",
+        # The other frozen input, beside the number it produced. A score whose map is unnamed is
+        # a score over a resolution nobody recorded.
+        f"  symbol map            {score.symbol_map_digest[:16] or 'unrecorded'}",
         "",
         # Per pair, because a pair whose every target was unreachable is scored, counted and
         # carries no information about the binder -- and the corpus total cannot show that.
@@ -319,6 +337,11 @@ def main() -> int:
     )
     parser.add_argument("--specs", default=str(SPECS), help="directory of corpus specifications")
     parser.add_argument("--json", dest="json_out", default=None, help="also write the score here")
+    parser.add_argument(
+        "--pin", default=str(PIN),
+        help="the symbol map this corpus is scored against; a staged map that does not match it "
+             "is refused rather than scored",
+    )
     args = parser.parse_args()
 
     # Sorted, so two runs over one set score in one order and a comparison of the two is a
@@ -328,7 +351,19 @@ def main() -> int:
         print(f"no corpus specifications under {args.specs}", file=sys.stderr)
         return 2
 
+    # Before a single pair is scored, because the map decides what the binder can resolve at
+    # all. Scoring first and checking after would produce a real number over a resolution nobody
+    # recorded, and by the time it reached `gate_corpus.py` it would be indistinguishable from a
+    # good one. Refusing here means no such number exists.
+    try:
+        pin = read_pin(Path(args.pin))
+        digest = verify_staged_map(Path(pin["staged_at"]), pin)
+    except (OSError, ValueError, SymbolMapMismatch) as exc:
+        print(f"refused: {exc}", file=sys.stderr)
+        return 2
+
     score = aggregate(score_specs(paths, args.score_dsn))
+    score = score.model_copy(update={"symbol_map_digest": digest})
     print(render(score, reference=SYNTHETIC_REFERENCE), end="")
 
     if args.json_out:

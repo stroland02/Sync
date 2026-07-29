@@ -12,40 +12,67 @@ item that cannot say what evidence closes it is not ready to dispatch.
 
 ## Ready
 
-### B40 — Something in the suite fails roughly once in eight runs and nobody has named it
+### B43 — The pair generator cannot make a Python pair
 
-Twice today a full `uv run pytest` returned `1 failed` and the identity was lost before it could be
-captured. Seven clean runs have followed, and the standing explanation does not hold:
+`sync.benchmark.mutate.language_for` returns `None` for `.py`, so every Python target is recorded
+unreachable and the tree comes back unedited — on both change kinds. Verified:
 
-- **Not connection exhaustion.** Measured during a run: peak **54 of 300** connections, zero
-  sampler connection failures. That was the cause of the morning's flakiness and the ceiling fix
-  closed it.
-- **Not a specific test**, as far as anyone knows — neither failure was captured with its name.
+```
+language_for('src/app.ts')  -> 'typescript'
+language_for('src/app.py')  -> None
+```
 
-A suite that fails once in eight runs for an unknown reason erodes every gate that depends on it,
-including the corpus floors added today. The cost is not the failed run; it is that the next real
-regression arrives looking exactly like this one and gets re-run away.
+This is now the only thing between the corpus and its first Python measurement. The binder side is
+done: B38 gave it the client shapes and B39 the Python spellings, and both are visible in the
+counts — one repository went from zero to five call sites through the `self`-attribute receiver
+alone.
 
-**Closes when:** the failing test is named and either fixed or explained. A capture harness that
-re-runs until failure and preserves the output is the cheap first step —
-`pytest -p no:randomly -x` in a loop, saving the first red run's full output rather than its tail.
+**It is deeper than `language_for`.** The mutation primitives are TypeScript grammar throughout:
+`_object_argument` wants node kind `object` where Python has `dictionary` and passes fields as
+`keyword_argument`; `_result_binding` wants `lexical_declaration`/`assignment_expression` where
+Python has `assignment`. Adding `.py` to `language_for` alone would produce a generator that
+recognises the file and then fails to edit it.
 
-### B41 — The corpus is pinned against repositories but not against the symbol map
+**Closes when:** a Python call site can be mutated into a labelled pair on both change kinds, with
+the mutation attaching and the label addressing a site the mutated index still holds.
 
-Found by accident: deleting `.cache/specs/symbols.json` makes `scripts/score_corpus.py` fail with
-`FileNotFoundError`, because the Stripe adapter **loads a staged map rather than building one**.
+### B45 — A UTF-16 manifest crashes adapter selection
 
-So the corpus has two frozen inputs and only one of them is pinned. Repositories are pinned by
-commit and validated by `tree_digest`; the symbol map is a cached artifact in gitignored space that
-nothing records, nothing validates, and any `sync run` can overwrite. A map rebuilt from a different
-head specification, or with `sdk_spec` present rather than absent, changes what resolves — and the
-score would move with no commit, no digest mismatch and no explanation.
+`python_lang._requirement_lines` promises in its own docstring that an unreadable manifest answers
+"declares nothing" rather than raising — "a customer's manifest is untrusted input". The
+`pyproject.toml` branch honours that with `except (TOMLDecodeError, UnicodeDecodeError)`. The
+`requirements.txt` branch reads with a bare `read_text(encoding="utf-8")` and no guard.
 
-B39 makes this concrete rather than theoretical: it changed the map's contents from 179 symbols to
-272, and **the corpus could not see that change at all** until the artifact was rebuilt by hand.
+Reproduced:
 
-**Closes when:** the score records which symbol map produced it — by digest, the same way the
-checkouts are — and a stale or mismatched map fails loudly rather than scoring quietly.
+```
+utf-16 requirements.txt -> RAISED UnicodeDecodeError: invalid start byte 0xff
+utf-8  requirements.txt -> ['stripe==11.0.0']
+```
+
+Found in the wild, not hypothesised: `LilithB92/Online_training_DRF` ships a `requirements.txt`
+beginning `ff fe`. It crashes a run at adapter selection, before any indexing, for a repository
+that merely happens to have a UTF-16 manifest.
+
+This is the `CLAUDE.md` encoding hazard in its exact documented form — and the rule there is
+explicit that bytes which are not text must not be decoded at all. Every fixture in this
+repository is ASCII, so no test would ever have caught it.
+
+**Closes when:** a UTF-16 `requirements.txt` yields "declares nothing" rather than a traceback, and
+a fixture proves it — with the same treatment for any other manifest read on that path.
+
+### B44 — Pin the Python repository B42 found (blocked on B43)
+
+`openbraininstitute/virtual-lab-api`, Apache-2.0, **21 call sites over 12 operations**, three of
+them carrying enough sites for the hold-back rule to fire. It clears every bar B37 set.
+
+**Do not pin it until B43 lands.** Today it would add pairs scoring zero affected and zero
+findings — moving `pairs_scored` and its floor while contributing nothing to either rate. A Python
+repository in the corpus that measures no Python is worse than no Python repository, because the
+gate would then be defending a number that describes nothing.
+
+**Closes when:** it is pinned, its pairs score, and Python binding precision and recall are
+reported with their sample sizes — whatever they turn out to be.
 
 ### B7 — The M0 acceptance run has not executed since the pipeline changed underneath it
 
@@ -76,6 +103,61 @@ recorded with which change broke it.
 _Nothing._
 
 ## Done
+
+- **B42** — the Python blocker moved from the binder to the generator. B38 and B39 are visible in
+  the counts: one repository went from zero to five call sites through the `self`-attribute
+  receiver, another gained two through the Python spellings the map had lacked.
+
+  **It repeated the search rather than only the measurement**, and the reason is the sharpest thing
+  in the report: B37 assembled its seventeen candidates by searching for the shape the *old* binder
+  could index, so re-measuring only those would have asked the new binder a question shaped by the
+  old one's limits. That found a repository none of the seventeen matched.
+
+  It did not pin it, because `mutate.language_for` returns `None` for `.py` — and it did not fix
+  that either, because teaching the generator Python and pinning the repository it unblocks in one
+  change is one worker moving both the corpus and the thing measured. That constraint has held all
+  day and it applied it without being told. See B43 and B44.
+
+- **B40** — the once-in-eight failure has a name:
+  `test_a_database_that_cannot_be_dropped_does_not_fail_the_run`, caught on run 5 of 14 and failing
+  in its own setup with `database "sync_test_22000_gw2" does not exist`.
+
+  **A race between two pytest runs, not between two tests.** The sweep is server-wide and drops
+  every `sync_test_%` database whose embedded pid is dead; three tests deliberately create databases
+  named for a dead pid, because that is the only thing the sweep will consent to drop. That is the
+  bait every *other* run's `pytest_configure` eats. Reproduced deterministically — a second run's
+  `--collect-only` is enough, because the sweep happens before any test executes.
+
+  Alternatives falsified with evidence rather than dismissed: not connections (the server answers
+  "does not exist" *after* a successful connect, where a limit says "too many clients already", and
+  the peak-54-of-300 measurement stands), not order dependence inside a run (the sweep runs once in
+  the controller before any test), not product code (everything involved is under `tests/`). Load
+  widens the window — the red run took 354.96s against 108–122s for the four green ones.
+
+  **Two workers converged on the identical fix independently**: name the bait for a live pid and
+  inject a probe that calls it dead, so the `DROP` and the in-use refusal stay real while the
+  database is invisible to other runs. The other coordinator's landed first as `bf3356a`, so only
+  this one's capture harness and report were taken.
+
+- **B41** — the corpus's second frozen input is pinned. `benchmark/corpus/symbol_map.yaml` records
+  a digest beside `repositories.yaml`, the score carries the digest of the map that actually ran,
+  and both the scorer and the gate refuse a mismatch. A deleted map now exits 2 naming the pin
+  instead of a `FileNotFoundError` from inside the Stripe adapter.
+
+  **The digest covers content, not bytes**, and that distinction was proven both ways rather than
+  argued: reserialised with reversed key order and seven-space indent it digests identically; one
+  symbol repointed is refused naming both digests. A checkout is its bytes because the indexer
+  reads the files it was handed; a map is a mapping, and indentation is how a serialiser felt on
+  the day.
+
+  The scorer refuses **before scoring a single pair**, because that is where a wrong number would
+  be created and it is indistinguishable from a good one by the time anything reads it.
+
+  Re-pinned by the coordinator in the same act: the worker's pin named a 179-symbol artifact that
+  predated B39 and no run could stage, so it refused on every current cache — correctly and
+  uselessly. Rebuilt to 272, scored, floors measured unmoved, digest and recording landed together.
+  Its own test `test_the_gate_clears_the_score_the_scorer_actually_records` caught the incomplete
+  half of that re-pin, which is exactly what its docstring says it is for.
 
 - **B39** — the Stripe symbol map now carries the spelling Python actually writes. 179 symbols to
   **272**, all 93 previously-unreachable operations addressable, `paymentIntents` and

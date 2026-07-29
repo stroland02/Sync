@@ -32,6 +32,12 @@ from scripts.gate_corpus import (
 RECORDED = Path(__file__).parents[1] / "benchmark" / "corpus" / "recorded"
 
 
+def _pinned_digest() -> str:
+    from scripts.symbol_map_pin import PIN, read_pin
+
+    return read_pin(PIN)["digest"]
+
+
 def _score(
     true_positives: int = 16,
     false_positives: int = 0,
@@ -44,6 +50,7 @@ def _score(
         "pairs_total": 12,
         "pairs_scored": pairs_scored,
         "falsifiable_negatives": [f"pair::site{index}" for index in range(negatives)],
+        "symbol_map_digest": _pinned_digest(),
         "accuracy": {
             "precision_by_rung": {
                 "static": {
@@ -72,7 +79,7 @@ def test_every_floor_is_the_figure_the_corpus_recorded():
     Asserted against the recording rather than against a literal, so a floor moved without the
     corpus moving fails here -- which is the direction that would quietly weaken the gate.
     """
-    recorded = json.loads((RECORDED / "2026-07-29-held-back-negatives.json").read_text(encoding="utf-8"))
+    recorded = json.loads((RECORDED / "2026-07-29-symbol-map-pinned.json").read_text(encoding="utf-8"))
 
     assert PRECISION_FLOOR == recorded["accuracy"]["precision_by_rung"]["static"]["precision"]["value"]
     assert RECALL_FLOOR == recorded["accuracy"]["recall_by_rung"]["static"]["recall"]["value"]
@@ -241,7 +248,37 @@ def test_the_gate_clears_the_score_the_scorer_actually_records():
     """End to end against the committed recording, which is the artifact CI will judge. The tests
     above use built scores so they can fail; this one is the check that the floors and the
     recording have not drifted apart."""
-    recorded = json.loads((RECORDED / "2026-07-29-held-back-negatives.json").read_text(encoding="utf-8"))
+    recorded = json.loads((RECORDED / "2026-07-29-symbol-map-pinned.json").read_text(encoding="utf-8"))
     recorded["pairs_scored"] = len(recorded["pairs"])
 
     assert check(recorded) == []
+
+
+def test_a_score_that_does_not_name_its_symbol_map_is_refused():
+    """The corpus's second frozen input. Every floor above was measured against one resolution,
+    so judging a score taken against another compares two different corpora -- and a score JSON
+    is a file, which can arrive from a scorer predating the pin or from a hand edit."""
+    score = _score()
+    score.pop("symbol_map_digest", None)
+
+    failures = check(score)
+
+    assert "symbol map" in [f.axis for f in failures]
+    assert "no symbol map" in next(f for f in failures if f.axis == "symbol map").detail
+
+
+def test_a_score_naming_a_different_symbol_map_is_refused():
+    from scripts.symbol_map_pin import PIN, read_pin
+
+    score = {**_score(), "symbol_map_digest": "0" * 64}
+
+    failures = check(score)
+
+    assert [f.axis for f in failures] == ["symbol map"]
+    assert read_pin(PIN)["digest"][:16] in failures[0].detail
+
+
+def test_a_score_naming_the_pinned_symbol_map_clears_every_floor():
+    from scripts.symbol_map_pin import PIN, read_pin
+
+    assert check({**_score(), "symbol_map_digest": read_pin(PIN)["digest"]}) == []
