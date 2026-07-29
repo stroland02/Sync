@@ -12,6 +12,37 @@ item that cannot say what evidence closes it is not ready to dispatch.
 
 ## Ready
 
+### B43 — The pair generator cannot make a Python pair
+
+`sync.benchmark.mutate.language_for` returns `None` for `.py`, so every Python target is recorded
+unreachable and the tree comes back unedited — on both change kinds. Verified:
+
+```
+language_for('src/app.ts')  -> 'typescript'
+language_for('src/app.py')  -> None
+```
+
+This is now the only thing between the corpus and its first Python measurement. The binder side is
+done: B38 gave it the client shapes and B39 the Python spellings, and both are visible in the
+counts — one repository went from zero to five call sites through the `self`-attribute receiver
+alone.
+
+**Closes when:** a Python call site can be mutated into a labelled pair on both change kinds, with
+the mutation attaching and the label addressing a site the mutated index still holds.
+
+### B44 — Pin the Python repository B42 found (blocked on B43)
+
+`openbraininstitute/virtual-lab-api`, Apache-2.0, **21 call sites over 12 operations**, three of
+them carrying enough sites for the hold-back rule to fire. It clears every bar B37 set.
+
+**Do not pin it until B43 lands.** Today it would add pairs scoring zero affected and zero
+findings — moving `pairs_scored` and its floor while contributing nothing to either rate. A Python
+repository in the corpus that measures no Python is worse than no Python repository, because the
+gate would then be defending a number that describes nothing.
+
+**Closes when:** it is pinned, its pairs score, and Python binding precision and recall are
+reported with their sample sizes — whatever they turn out to be.
+
 ### B7 — The M0 acceptance run has not executed since the pipeline changed underneath it
 
 `tests/test_e2e_stripe.py::test_one_command_produces_one_green_pull_request` is the
@@ -41,6 +72,20 @@ recorded with which change broke it.
 _Nothing._
 
 ## Done
+
+- **B42** — the Python blocker moved from the binder to the generator. B38 and B39 are visible in
+  the counts: one repository went from zero to five call sites through the `self`-attribute
+  receiver, another gained two through the Python spellings the map had lacked.
+
+  **It repeated the search rather than only the measurement**, and the reason is the sharpest thing
+  in the report: B37 assembled its seventeen candidates by searching for the shape the *old* binder
+  could index, so re-measuring only those would have asked the new binder a question shaped by the
+  old one's limits. That found a repository none of the seventeen matched.
+
+  It did not pin it, because `mutate.language_for` returns `None` for `.py` — and it did not fix
+  that either, because teaching the generator Python and pinning the repository it unblocks in one
+  change is one worker moving both the corpus and the thing measured. That constraint has held all
+  day and it applied it without being told. See B43 and B44.
 
 - **B40** — the once-in-eight failure has a name:
   `test_a_database_that_cannot_be_dropped_does_not_fail_the_run`, caught on run 5 of 14 and failing
