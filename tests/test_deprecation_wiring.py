@@ -299,7 +299,13 @@ def test_the_run_report_omits_a_vendor_that_publishes_no_retirements(monkeypatch
 
     pages = _Pages()
     pages.bodies[PARAMETERS_ONLY.url] = PARAMETER_TABLE
-    monkeypatch.setattr(adapter, "DEPRECATION_SOURCES", (*DEPRECATION_SOURCES, PARAMETERS_ONLY))
+    registered = (*DEPRECATION_SOURCES, PARAMETERS_ONLY)
+    # Both bindings, and the second one is why this test exists in this form. `cli.py` imports
+    # the tuple by name, so it holds its own reference: patching only the adapter's global leaves
+    # `cli.DEPRECATION_SOURCES` pointing at the shipped three, and a report reading that
+    # unfiltered list would return exactly the set this test expects and look correct.
+    monkeypatch.setattr(adapter, "DEPRECATION_SOURCES", registered)
+    monkeypatch.setattr(cli, "DEPRECATION_SOURCES", registered)
 
     recorded: dict = {}
     real_suite = cli._detector_suite
