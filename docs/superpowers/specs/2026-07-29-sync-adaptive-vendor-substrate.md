@@ -284,6 +284,39 @@ than correctness ones. Our case is easier than the literature's and it would be 
 adopt the literature's answer: **we have ground truth, so agreement between models is the wrong
 tool.**
 
+## Prior art, and what it means that so much of this is solved
+
+Searched rather than assumed. Most of what this project does has been done — on packages.
+
+**Provider-side breaking-change detection is mature and in production.** JAPICMP and REVAPI run
+against Apache Commons, Spring, Gson and Neo4j; [ROSEAU](https://arxiv.org/pdf/2507.17369) does
+fast source-based analysis; [AutoGuard](https://arxiv.org/pdf/2311.08175) analyses REST changes
+statically without running the service and is wired into GitHub and GitLab CI to generate
+changelogs and flag breaks on pull requests.
+
+**Automated client migration is an active field.** One study mined
+[461 correct migration rules from 1,179 pull requests](https://arxiv.org/pdf/2301.04563) across
+four Python libraries. And [Agentic Generation of AST Transformation Rules
+(2026)](https://arxiv.org/pdf/2606.24446) is close to this project's tier-0 codemod: agents
+synthesise AST transformations for breaking updates, validated by executing tests. That is the
+same containment discipline used here, arrived at independently, which is reassuring rather than
+threatening — our remediation approach is not novel and does not need to be.
+
+**What none of it does is the web API surface.** Every one of those works on packages, where the
+contract is a signature in an artifact you compiled against and hold a copy of. Two differences
+do real work:
+
+- A package break is found by comparing two artifacts already on disk. A web API break is only
+  findable if you know **where the vendor's specification lives**, which is the discovery problem
+  this document exists for.
+- A package break is caught by a compiler or a test. A web API break **compiles perfectly and
+  fails in production**, which is why the gate has to be the customer's CI.
+
+The open research direction those studies name — *automating change-impact analysis to improve
+notification accuracy and trustworthiness* — is the ADG join. Somebody else's stated open problem
+is this project's shipped mechanism, and that is the clearest evidence available that the join is
+the defensible part rather than the pipeline around it.
+
 ## Checked against the documents that bind this
 
 Not a formality. One of these found a hole in the proposal above.

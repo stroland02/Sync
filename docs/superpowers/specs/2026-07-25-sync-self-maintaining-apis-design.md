@@ -14,6 +14,14 @@ Nothing watches the APIs you *consume*, across vendors, and nothing repairs the 
 
 Dependabot solved this exact shape for package versions and never extended to API semantics. Dependabot does not tell npm it broke semver; it edits your `package.json` and opens a pull request. Sync does that for API surfaces.
 
+**The analogy holds until it inverts, and the inversion is the whole argument.** The literature on breaking changes in package ecosystems reports a consistent and initially deflating result: only a small subset of theoretically-affected clients ever break — largely because most clients *deliberately avoid upgrades* ([Venturini et al., "I depended on you and you broke me"](https://arxiv.org/pdf/2301.04563)). A pinned version is a complete defence, so the population needing automated repair is smaller than the dependency graph suggests.
+
+**None of that protection exists for a hosted API.** There is no version to pin, no upgrade to decline, and no lockfile that holds. The vendor deploys, and every consumer is on the new behaviour whether or not anyone chose it. The safety valve that shrinks the package-ecosystem problem is precisely the thing consumers of a web API do not have.
+
+So the demand argument is not "this is like Dependabot but for APIs". It is that the mitigation which makes the package version of this problem tolerable is unavailable here, which is why the consuming team learns about the change from an incident rather than from a dependency bump.
+
+Two consequences follow for what gets built. The gate has to be the customer's CI rather than a type checker, because a web API break compiles perfectly and fails in production. And a change must be discoverable from the *vendor's* published artifacts, because unlike a package there is no local copy of the new version to compare against — which is what makes specification discovery a first-class problem rather than a configuration detail.
+
 ## Why now
 
 Remediation requires write access to a customer's codebase. Two years ago that was unsellable. Agentic coding tools — Claude Code, Devin, Greptile — established that developers and enterprises will grant codebase access to an external tool when the value is clear. The infrastructure for automated code change now exists. The missing layer is the one connecting API change to the code that calls it.
