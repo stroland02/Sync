@@ -45,7 +45,7 @@ mutation of *real* repositories for the same reason, and this follows it.
 | `turbo` | `ardriveapp/turbo-payment-service` | `6c7aac0` | A production payment service rather than a sample: third-party code with no relationship to Stripe or to this project. |
 | `remix` | `cjavilla-stripe/remix-stripe-sample` | `25982ff` | Small, and a different framework. It contributes the single-call-site case, which is where a pair has the least room to hide a miss. |
 | `fireship-server` | `fireship-io/stripe-payments-js-course` | `d4a5fc4` | Course code, written to be read rather than to ship, and the only one calling subscriptions and customers. Its `package.json` is under `server/`, which is what `subpath` names. |
-| `virtual-lab` | `openbraininstitute/virtual-lab-api` | `a2577bb` | The first entry that is not TypeScript. Apache-2.0, declares `stripe` in a `pyproject.toml`, 21 indexed call sites over 12 operations. It contributes no pair yet, and the section below is why. |
+| `virtual-lab` | `openbraininstitute/virtual-lab-api` | `a2577bb` | The first entry that is not TypeScript. Apache-2.0, declares `stripe` in a `pyproject.toml`, 21 indexed call sites over 12 operations. It contributes two response pairs, and took several hours and two refusals to contribute either. |
 
 Four of the five are TypeScript and declare `stripe` in a `package.json`; the fifth is Python and
 declares it in a `pyproject.toml`. All five call operations the Stripe symbol map covers. That
@@ -96,7 +96,7 @@ Both halves are closed now. `_result_binding` requires identity, so those target
 `unreachable` rather than mislabelled; and the selection rule judges an operation on the side its
 own change is judged on, so `GetProductsId` — three positional `products.retrieve` calls reading
 fields off the result — is proposable where it was invisible. `virtual-lab` contributes two
-response pairs and three of the corpus's twenty-seven positives.
+response pairs and three of the corpus's twenty-six positives.
 
 ## What is committed and what is fetched
 
@@ -163,8 +163,8 @@ Five combinations produce no specification and the generator says so rather than
 property to name; `fireship-server/GetCustomersCustomer` has no response property the repository
 does not already read.
 
-The hold-back rule selects a site in six of the seventeen specifications and passes over the other
-eleven, which carry no `hold_back` key. Each clause of it is doing work:
+The hold-back rule selects a site in seven of the seventeen specifications and passes over the
+other ten, which carry no `hold_back` key. Each clause of it is doing work:
 
 - **The first by position**, because every insertion `mutate.py` makes lands at or after the call
   it breaks and `upsert_call_site` keys a call site's identity on its position. Only the earliest
@@ -222,17 +222,50 @@ property it never needed.
 operation reads a response field at any indexed call site, so there is no response candidate at
 all, and nothing was available to add.
 
-**Two committed specifications also differ in content from what the generator writes today, and
-the drift is in the hold-back.** Re-running it writes a `hold_back` entry into
-`furever-PostPaymentIntents-response-property-removed` and
-`turbo-PostPaymentIntents-response-property-removed` that the committed versions do not carry.
-Nothing about those checkouts moved. The binder did: B34 taught it to record fields off a result
-the call reaches through a wrapper, so the first site on each of those operations now has a
-non-empty `response_fields_read` where it had none, and the hold-back rule's third clause fires.
-Both are left as pinned. Adopting them would trade two positives for two negatives on pairs that
-already score, which is a distribution change with its own measurement rather than a side effect of
-adding four pairs — and it is the one difference here that would move a rate rather than a
-denominator.
+## One hold-back was adopted and one was refused, and the refusal is the finding
+
+Two committed specifications differed in content from what the generator writes, and the drift was
+in the hold-back. B34 taught the binder to record fields off a result assigned to a variable
+declared earlier, so the first site on `furever-PostPaymentIntents` and on
+`turbo-PostPaymentIntents` acquired a non-empty `response_fields_read` and the hold-back rule's
+third clause began to fire on both. Nothing about either checkout moved.
+
+`turbo` was adopted: one labelled positive became the seventh falsifiable negative, both rates held
+at 1.0000, and both denominators fell from 27 to 26. **A denominator that falls while its rate holds
+is not a lowered floor**, and that sentence is the whole of why this was a restatement rather than a
+concession.
+
+`furever` was refused, because taking it drops precision to **0.9615 over n=26** — and the false
+positive is the newly held-back site itself.
+
+```typescript
+let paymentIntent;                                   // line 78
+...
+paymentIntent = await stripe.paymentIntents.create(  // line 104 — held back
+...
+paymentIntent = await stripe.paymentIntents.create(  // line 154 — targeted
+```
+
+One variable, two assignments, one function. The guard the mutation writes at line 154 reads
+`paymentIntent.amount`, and `_response_fields` collects reads rooted at the result name inside the
+enclosing function — so `amount` is credited to line 104 as well. The binder cannot tell which
+assignment produced the value being read; that is a data-flow question tree-sitter cannot answer,
+and crediting both is the conservative direction, which is the right direction for a tool whose
+failure mode is a missed break.
+
+So the **label** is what is false. The mutation does make the held-back site carry the changed
+dependency, at a distance, which means it is not a negative at all. Scoring it as a binder false
+positive would punish the binder for a limitation the corpus manufactured by choosing that site —
+the same mistake as the two Python pairs this corpus refused rather than certify.
+
+`turbo` is sound for the opposite reason: its two `PostPaymentIntents` sites are in **different
+files**, `arnsPurchaseQuote.ts` and `topUp.ts`, so no scope is shared and the mutation never edits
+the file the held-back site lives in.
+
+**The rule is missing a clause.** A held-back site must not share an enclosing scope *and* result
+name with a targeted site on the same operation. Until `scripts/build_corpus_specs.py` carries that,
+`furever-PostPaymentIntents-response-property-removed` stays as pinned and a fresh generation will
+keep proposing a `hold_back` for it that must not be taken.
 
 ## Reading the recorded score
 
@@ -248,7 +281,8 @@ reports measure against.
 | `2026-07-29-response-axis.{txt,json}` | 12 pairs | the response mutation attaching, and the recall fall that exposed a binder defect |
 | `2026-07-29-symbol-map-pinned.{txt,json}` | 12 pairs | the symbol map pinned, and a Python repository added contributing no pair |
 | `2026-07-29-first-python-pair.{txt,json}` | 13 pairs | `virtual-lab-GetProductsId`, the first Python pair to score |
-| `2026-07-29-the-rule-and-the-corpus-agree.{txt,json}` | **current, 17 pairs** | the four pairs the corrected selection rule proposes and the pinned set lacked |
+| `2026-07-29-the-rule-and-the-corpus-agree.{txt,json}` | 17 pairs | the four pairs the corrected selection rule proposes and the pinned set lacked |
+| `2026-07-29-the-hold-back-the-binder-earns.{txt,json}` | **current, 17 pairs** | one positive traded for the seventh falsifiable negative on `turbo`, and the same trade refused on `furever` |
 
 `docs/superpowers/reports/2026-07-29-frozen-corpus-first-binding-numbers.md` carries what the
 first set of numbers does and does not support,
@@ -258,7 +292,7 @@ first set of numbers does and does not support,
 Three things those reports insist on and this directory must keep:
 
 - **Every axis carries its sample size.** In the current recording precision and recall are each
-  over twenty-seven labelled affected call sites, twenty-four of them TypeScript and three Python.
+  over twenty-six labelled affected call sites, twenty-three of them TypeScript and three Python.
   A rate that changed because its denominator moved is not a regression, and the sample size is
   what lets a reader tell the two apart.
 - **Excluded pairs are counted and named.** None of the seventeen is refused. When two were, both
@@ -279,18 +313,20 @@ precision's false-positive term had no candidates rather than few — 1.0000 was
 corpus that way guaranteed, and it would have survived a binder regression that only affected
 same-operation discrimination.
 
-It reads **6** now, and precision still reads 1.0000. Those two sentences belong together: the
-binder was offered six same-operation call sites it could have claimed and declined all six, which
-is the only evidence that axis carries. One of the six is a near miss rather than a formality —
+It reads **7** now, and precision still reads 1.0000. Those two sentences belong together: the
+binder was offered seven same-operation call sites it could have claimed and declined all seven,
+which is the only evidence that axis carries. One of the seven is a near miss rather than a
+formality —
 `turbo` passes `amount` at a site where the changed property is `amount_details`, and a match on
 segment prefixes rather than whole segments would fire on it.
 
 The count grew with the corpus rather than with any change to the rule: three when the hold-back
-landed, five when the first Python pair did, and six with `furever-GetAccountsAccount`. What stays
+landed, five when the first Python pair did, six with `furever-GetAccountsAccount`, and seven when
+`turbo-PostPaymentIntents-response` adopted the hold-back the binder had come to earn. What stays
 constant is that a hold-back can only help where the mutation had somewhere to attach. A pair
 whose call sites read no response field has an empty field list at the site it would hold back, so
 that site declines against every change regardless; a single-site pair cannot spare its only
-target. Six is the whole of what this corpus offers, not a sample of it, and the way to raise it
+target. Seven is the whole of what this corpus offers, not a sample of it, and the way to raise it
 is another operation carrying several call sites that bind their results — not another repository.
 
 What the corpus needed to have any negative at all was a same-operation call site deliberately

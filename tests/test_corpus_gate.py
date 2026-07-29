@@ -39,7 +39,7 @@ def _pinned_digest() -> str:
 
 
 def _score(
-    true_positives: int = 27,
+    true_positives: int = 26,
     false_positives: int = 0,
     false_negatives: int = 0,
     negatives: int = FALSIFIABLE_NEGATIVES_FLOOR,
@@ -79,7 +79,7 @@ def test_every_floor_is_the_figure_the_corpus_recorded():
     Asserted against the recording rather than against a literal, so a floor moved without the
     corpus moving fails here -- which is the direction that would quietly weaken the gate.
     """
-    recorded = json.loads((RECORDED / "2026-07-29-the-rule-and-the-corpus-agree.json").read_text(encoding="utf-8"))
+    recorded = json.loads((RECORDED / "2026-07-29-the-hold-back-the-binder-earns.json").read_text(encoding="utf-8"))
 
     assert PRECISION_FLOOR == recorded["accuracy"]["precision_by_rung"]["static"]["precision"]["value"]
     assert RECALL_FLOOR == recorded["accuracy"]["recall_by_rung"]["static"]["recall"]["value"]
@@ -92,7 +92,7 @@ def test_no_floor_carries_a_tolerance():
     deterministic -- byte-identical output across independent runs from clean databases -- so a
     drop is real and there is nothing for slack to absorb.
 
-    The smallest movement the corpus can express is one sample in twenty-seven, so a floor with
+    The smallest movement the corpus can express is one sample in twenty-six, so a floor with
     any slack at all would pass a score that lost one.
     """
     assert check(_score(true_positives=15, false_positives=1))
@@ -149,10 +149,10 @@ def test_an_excluded_pair_fails_the_pairs_floor_even_though_both_rates_hold():
     """The failure one step further up. An exclusion shrinks both denominators and leaves both
     rates at 1.0000, so a corpus that quietly stopped covering a third of itself would clear
     every rate floor."""
-    failures = check(_score(true_positives=12, negatives=6, pairs_scored=10))
+    failures = check(_score(true_positives=12, negatives=7, pairs_scored=10))
 
     assert [f.axis for f in failures] == ["pairs scored"]
-    assert check(_score(true_positives=12, negatives=6, pairs_scored=10))[0].detail.startswith("10 of 17")
+    assert check(_score(true_positives=12, negatives=7, pairs_scored=10))[0].detail.startswith("10 of 17")
 
 
 def test_every_failing_axis_is_reported_rather_than_the_first():
@@ -248,7 +248,7 @@ def test_the_gate_clears_the_score_the_scorer_actually_records():
     """End to end against the committed recording, which is the artifact CI will judge. The tests
     above use built scores so they can fail; this one is the check that the floors and the
     recording have not drifted apart."""
-    recorded = json.loads((RECORDED / "2026-07-29-the-rule-and-the-corpus-agree.json").read_text(encoding="utf-8"))
+    recorded = json.loads((RECORDED / "2026-07-29-the-hold-back-the-binder-earns.json").read_text(encoding="utf-8"))
     recorded["pairs_scored"] = len(recorded["pairs"])
 
     assert check(recorded) == []
