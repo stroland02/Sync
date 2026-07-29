@@ -36,27 +36,37 @@ when, which is why it is recorded here rather than dispatched.
 **Closes when:** one `sync run` produces a CI-green pull request again, or the failure is
 recorded with which change broke it.
 
-### B21 — An existing database never gains a new column
+### B22 — Nothing validates the vendor configuration we actually ship
 
-`GraphStore.apply_schema` executes `schema.sql`, which is `CREATE TABLE IF NOT EXISTS`
-throughout with **zero** `ALTER TABLE` statements. Against a database that already has the
-tables it is a no-op, so a column added later never appears. Two have shipped this way:
-`call_site.loop_depth` and `finding.claim`.
+`generated-vendors.yaml` is the file that makes vendors configuration rather than code, and no
+test reads it. `tests/test_dependency_intake.py` points `SYNC_GENERATED_VENDORS` at fixtures, so
+every assertion is about the loader and none can fail because of a defect in the shipped file.
 
-The failure lands at runtime on the first insert naming the missing column, and the message
-names a column rather than a missing migration — so whoever meets it debugs the wrong thing.
+That gap has already produced one defect, found by a person reading code rather than by a gate:
+`vercel` is configured against a Speakeasy manifest and no Speakeasy symbol extractor exists, so
+its specification is diffable while its call sites can never be bound. Five components on this
+project have now reached that built-and-unreachable state.
 
-Nothing catches it because `conftest` creates a fresh database per run, so every test starts
-from a schema built in one pass, which is exactly the case that works.
-
-**Closes when:** a test builds a database from a schema missing a column, runs `apply_schema`,
-and inserts a row using that column successfully — failing against the current code.
+**Closes when:** the shipped file is asserted against directly — every row carries the four
+documented fields, every manifest name maps to a parser in `_PARSERS`, every language in
+`sdk_bindings` has an indexer, and every (generator, language) pair either has a symbol extractor
+or appears in a named pending list that fails in both directions, as
+`scripts/dead_links_baseline.txt` does.
 
 ## In flight
 
-- **B21** — `task_375ac7413ad1`.
+- **B22** — `task_509370a00e28`, in `sync-solo-b`.
 
 ## Done
+
+- **B21** — an existing database now gains columns added after it was created. `apply_schema`
+  derives each table's columns from `schema.sql` and issues `ADD COLUMN IF NOT EXISTS` for
+  whatever is missing, rather than executing a create-only script. The ALTERs are derived rather
+  than hand-maintained, because a hand-kept list reintroduces the original bug the first time
+  someone adds a column and forgets the migration. Landed `8a5cd89`, on main at `245382f`.
+  Mutation-tested two ways before landing: reverting `apply_schema` to its create-only form fails
+  2 of the 6 new tests, and the small SQL parser's documented limit is real — a semicolon inside a
+  string literal fails 5 tests loudly rather than mis-parsing in silence.
 
 - The conformance kit now covers four of five protocols, with 29 rules each proved to fire.
   Landed via `fc7090f`. It found the finding-collision defect below.
