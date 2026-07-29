@@ -13,8 +13,10 @@ from __future__ import annotations
 
 import pytest
 
-from sync.core import OperationRef, VendorAdapter
-from sync.core.conformance import ConformanceFailure, check_vendor_adapter
+from pathlib import Path
+
+from sync.core import CallSite, Finding, OperationRef, Patch, RepoRef, VendorAdapter, VendorChange
+from sync.core.conformance import ConformanceFailure, check_remediator, check_vendor_adapter
 
 
 class _Correct:
@@ -103,3 +105,97 @@ def test_fetch_changes_must_be_iterable_rather_than_none():
 
     with pytest.raises(ConformanceFailure, match="iterable"):
         check_vendor_adapter(ReturnsNone(), known_symbol="example.charges.create")
+
+
+# --- Remediator -------------------------------------------------------------------
+
+
+class _CorrectRemediator:
+    """Writes its edit to the clone, then describes it."""
+
+    strategy = "codemod"
+
+    def can_handle(self, finding, change) -> bool:
+        return True
+
+    def propose(self, finding, change, site, repo, diagnostics: str = ""):
+        target = Path(repo.local_path) / site.path
+        original = target.read_text(encoding="utf-8")
+        updated = original.replace("amount", "value")
+        if updated == original:
+            return Patch(diff="", strategy=self.strategy, rationale="nothing to change")
+        target.write_text(updated, encoding="utf-8")
+        return Patch(diff="--- a\n+++ b\n", strategy=self.strategy, rationale="renamed")
+
+
+def test_a_correct_remediator_passes(tmp_path):
+    check_remediator(_CorrectRemediator(), *_remediation_case(tmp_path))
+
+
+def test_a_remediator_that_only_returns_a_diff_fails(tmp_path):
+    """The defect this rule exists for, and it has shipped twice.
+
+    Nothing downstream applies `patch.diff`. `make_patch` stores the `Patch`, `static_verify`
+    typechecks the working tree, and `push_branch` stages with `git add -u`. So a remediator
+    that computes the right edit and returns it without writing produces a branch with an
+    empty commit and reports success — green verdict, empty pull request. It shipped in
+    `literal_swap` and again in both parameter remediators, and was caught the second time
+    only because one worker happened to read another's fix.
+    """
+
+    class DiffOnly(_CorrectRemediator):
+        def propose(self, finding, change, site, repo, diagnostics: str = ""):
+            return Patch(diff="--- a\n+++ b\n", strategy=self.strategy, rationale="renamed")
+
+    with pytest.raises(ConformanceFailure, match="did not change the clone"):
+        check_remediator(DiffOnly(), *_remediation_case(tmp_path))
+
+
+def test_a_remediator_that_writes_while_declining_fails(tmp_path):
+    """The mirror, and the one a naive fix introduces.
+
+    An empty diff means the remediator declined. Writing anyway — even identical bytes —
+    touches a file it decided not to edit, and a tool that does that near a working tree is
+    one nobody trusts. `test_declining_writes_nothing` asserts `st_mtime_ns` for this reason.
+    """
+
+    class WritesWhileDeclining(_CorrectRemediator):
+        def propose(self, finding, change, site, repo, diagnostics: str = ""):
+            target = Path(repo.local_path) / site.path
+            target.write_text(target.read_text(encoding="utf-8"), encoding="utf-8")
+            return Patch(diff="", strategy=self.strategy, rationale="declined")
+
+    with pytest.raises(ConformanceFailure, match="declined.*changed the clone|changed the clone"):
+        check_remediator(WritesWhileDeclining(), *_remediation_case(tmp_path))
+
+
+def test_a_remediator_whose_strategy_is_empty_fails(tmp_path):
+    class Anonymous(_CorrectRemediator):
+        strategy = ""
+
+    with pytest.raises(ConformanceFailure, match="strategy"):
+        check_remediator(Anonymous(), *_remediation_case(tmp_path))
+
+
+def _remediation_case(tmp_path):
+    """A finding, a change, a call site and a clone the remediator is expected to edit."""
+    (tmp_path / "src").mkdir(parents=True, exist_ok=True)
+    (tmp_path / "src" / "billing.ts").write_text(
+        "stripe.charges.create({ amount: 100 });\n", encoding="utf-8"
+    )
+    site = CallSite(
+        repo_id="r", path="src/billing.ts", line=1, col=0, vendor_id="example",
+        operation_id="PostCharges", symbol="example.charges.create",
+        args_keys=["amount"], response_fields_read=[], sdk_version="1.0.0", content_hash="h",
+    )
+    change = VendorChange(
+        vendor_id="example", from_version="v1", to_version="v2",
+        kind="request-property-removed", operation_id="PostCharges", path_ptr="/amount",
+        severity="breaking", source="oasdiff", raw={},
+    )
+    finding = Finding(
+        id="f1", detector="vendor_change", call_site_id="cs1", vendor_change_id="vc1",
+        severity="breaking", rationale="amount removed",
+    )
+    repo = RepoRef(repo_id="r", url="u", local_path=str(tmp_path), head_sha="0" * 40)
+    return finding, change, site, repo
