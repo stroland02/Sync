@@ -19,3 +19,19 @@
 # consequences -- and it has no spread guard. Wiring it would be an off-by-one and a
 # collapsed distinction, which is worse than a baselined line.
 src/sync/route/templates.py:omit_property_at
+
+# `parse_directory` and `versions_after` read a public OpenAPI directory and answer which APIs
+# exist and when each last moved. They are reachable from nothing because their consumer is
+# dependency intake, which another coordinator owns and which is live as I write this. The
+# alternative was to hold the module unlanded until intake exists, and unlanded work in a shared
+# worktree has already been destroyed twice on this project.
+#
+# Deliberately not a `VendorAdapter`. The directory's `swaggerUrl` points at its own storage
+# rather than the vendor's host, and a large share of entries are Swagger 2.0 needing conversion,
+# so a change derived from it is a third derivation from the vendor's truth. It is good enough to
+# tell a customer a declared dependency is watchable; it is not good enough to open a pull
+# request. Wiring it to the remediation pipeline would be the defect, not the fix.
+#
+# Whoever wires intake deletes both lines in that commit.
+src/sync/signals/registry_tier/directory.py:parse_directory
+src/sync/signals/registry_tier/directory.py:versions_after
