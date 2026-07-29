@@ -1,4 +1,4 @@
-# 2 indexed call site(s) on PostPaymentIntents in turbo, pinned at 6c7aac00cd271abe6dd3764316209f329501583d.
+# 7 indexed call site(s) on GetAccountsAccount in furever, pinned at 5114c968fd8537d82889e2d04afaf00a986af7bf.
 # Field chosen by the rule in scripts/build_corpus_specs.py: the alphabetically first
 # property of this operation in v2330 that no call site in this repository already uses.
 # Held back from targets by the rule in the same script: the first call site on this
@@ -6,14 +6,14 @@
 # binding precision is measured against, and a site binding recall no longer measures.
 cache: .cache/specs
 change:
-  field: amount_capturable
+  field: business_profile
   kind: response-property-removed
-  operation: PostPaymentIntents
+  operation: GetAccountsAccount
 from_version: v2320
 hold_back:
-- col: 33
-  line: 223
-  path: src/routes/arnsPurchaseQuote.ts
-repo: .cache/corpus/turbo
+- col: 26
+  line: 23
+  path: app/api/account_session/route.ts
+repo: .cache/corpus/furever
 to_version: v2330
 vendor: stripe

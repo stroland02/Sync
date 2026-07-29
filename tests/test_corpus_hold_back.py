@@ -153,6 +153,13 @@ def test_a_change_no_indexed_call_site_reaches_is_still_refused_as_an_empty_corp
 
 # --- the rule that chose them, which is executable rather than argued -----------------
 
+# The sites below are synthetic: their paths name files nothing ever wrote. `hold_back` reads
+# this root only to ask whether a candidate shares an enclosing scope and a result name with a
+# site it still targets, and a path it cannot read answers "not bound" -- so that clause cannot
+# apply here and these tests exercise the selection rule alone. That separation is deliberate:
+# the scope clause has its own file, `tests/test_hold_back_scope.py`, where the sources exist.
+NO_CHECKOUT = Path(__file__).parent / "fixtures" / "no-checkout-on-disk"
+
 
 def test_the_rule_holds_back_the_first_call_site_on_the_operation_by_position():
     """First rather than any other, and for a reason rather than a preference. Every insertion
@@ -165,7 +172,7 @@ def test_the_rule_holds_back_the_first_call_site_on_the_operation_by_position():
         _site("c", "src/refunds.ts", 4, 10),
     ]
 
-    assert hold_back(sites, "request-property-removed") == [
+    assert hold_back(sites, "request-property-removed", NO_CHECKOUT) == [
         {"path": "src/billing.ts", "line": 6, "col": 23}
     ]
 
@@ -177,14 +184,14 @@ def test_the_rule_holds_one_site_back_and_never_two():
     sites = [_site(name, "src/billing.ts", line, 23)
              for name, line in (("a", 6), ("b", 11), ("c", 16), ("d", 21))]
 
-    assert len(hold_back(sites, "request-property-removed")) == 1
+    assert len(hold_back(sites, "request-property-removed", NO_CHECKOUT)) == 1
 
 
 def test_an_operation_with_one_indexed_call_site_holds_nothing_back():
     """Holding back the only site empties the target list, and a pair with no target is refused
     outright -- so the whole specification would leave the corpus rather than contribute a
     negative to it."""
-    assert hold_back([_site("a", "src/billing.ts", 6, 23)], "request-property-removed") == []
+    assert hold_back([_site("a", "src/billing.ts", 6, 23)], "request-property-removed", NO_CHECKOUT) == []
 
 
 def test_a_first_site_passing_no_arguments_holds_nothing_back():
@@ -194,7 +201,7 @@ def test_a_first_site_passing_no_arguments_holds_nothing_back():
     sites = [_site("a", "src/billing.ts", 6, 23, args_keys=()),
              _site("b", "src/billing.ts", 11, 23)]
 
-    assert hold_back(sites, "request-property-removed") == []
+    assert hold_back(sites, "request-property-removed", NO_CHECKOUT) == []
 
 
 def test_a_response_change_reads_the_response_field_list_rather_than_the_arguments():
@@ -205,8 +212,8 @@ def test_a_response_change_reads_the_response_field_list_rather_than_the_argumen
     reads_too = [_site("a", "src/billing.ts", 6, 23, reads=("id",)),
                  _site("b", "src/billing.ts", 11, 23)]
 
-    assert hold_back(passes_only, "response-property-removed") == []
-    assert hold_back(reads_too, "response-property-removed") == [
+    assert hold_back(passes_only, "response-property-removed", NO_CHECKOUT) == []
+    assert hold_back(reads_too, "response-property-removed", NO_CHECKOUT) == [
         {"path": "src/billing.ts", "line": 6, "col": 23}
     ]
 

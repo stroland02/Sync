@@ -12,24 +12,62 @@ item that cannot say what evidence closes it is not ready to dispatch.
 
 ## Ready
 
-### B48 — The generator picks operations by a request-side rule, so it cannot see response-only ones
+### B55 — Adapter selection declines a repository silently where intake explains itself
 
-`build_corpus_specs.py` selects operations by "the most call sites where at least one passes an
-object argument". That is a **request-side** condition, and it makes any operation whose calls pass
-positional arguments invisible — `args_keys` is empty, so the operation never appears as a
-candidate however many sites it has.
+Two paths read the same customer manifest and one of them says nothing. Measured with a control on
+a UTF-16 `requirements.txt`:
 
-The corpus's first Python pair had to be written by hand for exactly this reason.
-`GetProductsId` has three call sites, all `client.products.retrieve(cfg.product_id)`, all
-positional. The rule could never have proposed it, and it is the best pair in the corpus — two
-positives, one held-back negative, and a `GET` so there is no request pair to compete with it.
+    plain UTF-8 (control)   PythonAdapter.matches() True    intake reason: (none)
+    UTF-16, undecodable     PythonAdapter.matches() False   intake reason: names the file and the byte
 
-**The half the rule does not look at is the half that matters for response-side pairs.** Every
-response pair the corpus holds got there because its operation also happened to qualify on the
-request side.
+`src/sync/cli.py:203` is the whole of it — `if adapter.matches(repo):`. So "this repository does not
+use the SDK" and "we could not read the file that would have told us" are the same observable, and
+only one of them is a defect in the customer's repository rather than in ours. Adapter selection is
+the gate every later stage sits behind, so a silent decline costs the index, the finding and the
+remediation with no record of why.
 
-**Closes when:** the selection rule can propose an operation on response-side evidence alone, and
-the pair that had to be hand-written would have been generated.
+B51 ranked this first among its leave-behinds on the grounds that a crash gets fixed, an accurate
+reason is actionable, and a wrong answer with no reason is the one nobody finds.
+
+**The design is decided rather than left open:** report at the selection site using the reason
+`intake.read_declared_dependencies` already computes. `LanguageAdapter.matches` is a published
+plugin protocol asserted on by `src/sync/core/conformance.py:394`, and the `unverifiable_reason`
+precedent (`python_lang.py:150`, read in `remediate/nodes.py:143`) is a *static* attribute for a
+general limitation, so overloading it with a per-repository fact would give one name two meanings.
+
+**Closes when:** an unreadable manifest is distinguishable from a clean manifest declaring nothing,
+with a control proving a legitimate silent decline stays silent, `LanguageAdapter` and the
+conformance kit unchanged, and four gates green.
+
+### B54 — A UTF-8 byte-order mark makes four manifest readers answer wrongly
+
+`EF BB BF` is valid UTF-8, so `read_text(encoding="utf-8")` succeeds and hands every parser
+downstream a leading `﻿`. Measured against `83825f6`, four sites, ordered by how hard the
+failure is to notice:
+
+1. `TypeScriptAdapter._declared_dependencies` — a BOM'd `package.json` makes `matches()` return
+   False silently, with no reason anywhere. `json.loads` raises `Unexpected UTF-8 BOM` and the
+   handler turns it into "no declared dependency".
+2. `sync.signals.intake` on `package.json` — declined, with an accurate reason naming the BOM. The
+   answer is wrong but a human can act on it.
+3. `sync.signals.intake` on `pyproject.toml` — declined with a *misleading* reason: `tomllib` says
+   `Invalid statement (at line 1, column 1)` for a file that is valid TOML.
+4. `sync.signals.intake` on `requirements.txt` — **no error at all and a wrong value**:
+   `name='﻿stripe'` instead of `'stripe'`, with `unreadable` empty. The second dependency in
+   the same file parses correctly, which is why it is easy to miss.
+
+Case 4 is why this is a task rather than a note. Intake decides whether a prospective customer's
+repository depends on a vendor we cover, and a BOM'd `requirements.txt` makes it answer no for a
+repository that does, silently and unrankably. Windows editors write BOMs by default and this
+project runs on Windows.
+
+The fix is `encoding="utf-8-sig"`, which strips a BOM when present and decodes plain UTF-8
+unchanged when not, so it does not move the answer for any manifest that works today.
+
+**Closes when:** each fixed case has a test that fails first for the expected reason and a control
+proving the plain-UTF-8 answer is unchanged — case 4 asserting on the parsed *value*, since there
+is no error to assert on — `DRIVERS` keys updated wherever an edit shifted a handler's line, and
+four gates green.
 
 ### B7 — The M0 acceptance run has not executed since the pipeline changed underneath it
 
@@ -57,9 +95,47 @@ recorded with which change broke it.
 
 ## In flight
 
-_Nothing._
+- **B54** — `task_1ea8ea5094a0`, worktree `sync-solo-b`.
+- **B55** — `task_e03a2a5bb93f`, worktree `sync-solo-a`.
+
+**Briefs go in a file now, not in the dispatch spec.** Long message bodies are being truncated in
+delivery — three briefs today, and B52 received a correction paragraph while the four numbered
+answers that followed it in the same message never arrived. Write the brief to
+`.claude/<task>-brief.txt` and let the spec carry a short summary and that path.
+
+Entries stay under **Ready** above with their full reasoning until they land, because the reasoning
+is what a reviewer needs and duplicating it here would let the two copies drift.
 
 ## Done
+
+- **B49** — the corpus is now a **superset** of what the rule proposes rather than equal to it. The
+  four differences were classified before anything moved: one genuine addition
+  (`virtual-lab-GetBalance`, filling a response slot nothing occupied) and **three substitutions** —
+  and all four were added while none was replaced, so nothing measured was discarded.
+
+  Floors all moved **up**: precision and recall **n=18 to n=27**, falsifiable negatives 5 to 6,
+  pairs scored 13 to 17. Symbol map digest unmoved. Byte-identical across two clean databases.
+
+  The rates held at 1.0000 over half again as many labelled positives, which is the part worth more
+  than the count — a perfect rate at n=18 and a perfect rate at n=27 are different amounts of
+  evidence for the same claim.
+
+- **B48** — operation selection now follows the change's own side. An operation qualifies on
+  `args_keys` for a request pair and `response_fields_read` for a response one, through a shared
+  `_judged_by` that `hold_back` also calls.
+
+  The diagnosis in one line: **selection was the only clause that never followed the side**, which
+  is why response coverage had been a side effect of request coverage.
+
+  The closing condition was met exactly — the rule proposes `GetProductsId` for `virtual-lab`, and
+  the specification it writes is *identical in parsed payload* to the pair that had to be
+  hand-written: same field `created`, same held-back position. Ten tests cover the symmetry in both
+  directions, including that an object argument does **not** qualify an operation for a response
+  pair, so it did not swap one blindness for another.
+
+  No floor moved and `benchmark/corpus/` is byte-untouched, which was the constraint: the four
+  differences it would propose for the TypeScript repositories were measured into a scratch
+  directory and left there. See B49.
 
 - **B47 — the corpus measures Python.** `virtual-lab-GetProductsId-response-property-removed`:
   two labelled positives, both found, no false finding, and one held-back site the detector could
@@ -521,3 +597,62 @@ _Nothing._
 - Refuse a push lease against a tip Sync did not author; delete the branch an abandoned
   finding leaves behind. Landed `38ec2c7` and wired at `9627f65`.
 - Run the tier cascade and give it the change class the acceptance run hit.
+
+- Take the `hold_back` `turbo` earns and refuse the one `furever` earns. Landed `10f925b`. The
+  worker stopped at the decision gate rather than adopting both, which is what caught it: adopting
+  both put precision at 0.9615 over n=26, and the single false positive was the newly held-back
+  site itself. The label was false, not the binder — two assignments to one name in one scope, so
+  the guard's field read is credited to both and the held-back site genuinely depends on the
+  removed property. Both rates hold at 1.0000 over n=26, falsifiable negatives 6 to 7, pairs
+  unchanged at 17, so the only floor that moved moved upward. Verified by scoring the corpus from a
+  fresh database independently, and all four floors were mutation-probed: injecting one false
+  positive, one negative short, two false negatives and one dropped pair each fired, naming its own
+  axis, with the unmutated control clean. The unsound-selection half is B52.
+
+- Tell whether a decode handler has ever been entered. Landed `e804fe6`. Reads the handler inventory
+  out of `src/` by AST and attributes entry by *exception type* using `sys.monitoring`'s
+  `EXCEPTION_HANDLED`, so a handler reached by `JSONDecodeError` and the same handler reached by
+  `UnicodeDecodeError` are told apart on one line — the distinction line coverage cannot make, which
+  is the whole reason the defect class stayed invisible. Measuring the pre-existing suite this way
+  found **9 of 14 decode handlers in `src/` had never been entered**; all 14 behave correctly on
+  undecodable bytes, so the defect was only that nobody could tell. Nothing in `src/` changed and no
+  lint or coverage configuration was weakened. Verified by dropping the driver for a *co-caught*
+  handler — the arm a line-coverage check would still call covered — and watching the gate name
+  `sync/signals/intake.py:275` exactly; a bogus driver naming a handler not in `src/` also fired.
+  Two leave-behinds became B53; the 35 unhandled text decodes still need per-site triage.
+
+- Decline a non-UTF-8 `package.json` instead of crashing on it. Landed `bdabe9c`, with the driver
+  it omitted at `83825f6`. The worker measured two crash shapes rather than one — a UTF-16 manifest
+  and a cp1252 `author` field failing on byte `0xe9`, the legacy-encoding case CLAUDE.md predicts —
+  and both decline after. It also found B52's red suite and proved the five failures predate its own
+  change by stashing its files at clean `34789db`, which is why that commit did not land with it.
+
+  **What it missed is the more useful record.** Its change widened a guard to catch
+  `UnicodeDecodeError`, which adds a row to `test_decode_handlers.py`'s AST inventory, and it did not
+  register a driver — so `test_every_decode_handler_has_been_entered` failed naming
+  `sync/index/typescript.py:201`, one hour after that gate landed. The worker correctly attributed
+  the five failures it found to another commit and did not notice a sixth was its own. Proving the
+  five were not its fault is not the same as proving nothing was. The driver was written here and
+  probed by reverting the fix: the driver's own test then raises `UnicodeDecodeError` at
+  `typescript.py:200`, so it genuinely enters the arm rather than passing beside it.
+
+  Left behind and now B54: a BOM'd manifest, which decodes fine and defeats four readers instead.
+
+- Refuse a hold-back whose site shares a scope and a result name with a target. Landed `9812313`,
+  with the five callers `hold_back`'s new required `root` broke fixed at `0dfd09f`. A fresh
+  generation now leaves `furever-PostPaymentIntents-response` without the unsound hold_back, which
+  was the deliverable, and the four figures are unchanged: precision 1.0000 n=26, recall 1.0000
+  n=26, falsifiable negatives 7, pairs scored 17, `Every floor cleared.`
+
+  Probed in both directions, because a clause that refuses everything is as wrong as one that
+  refuses nothing. Disabling the refusal fails `test_a_site_sharing_a_scope_and_a_name_with_a_target_is_refused`;
+  dropping the path out of the scope identity — so two files holding the same text compare equal —
+  fails `test_sites_in_different_files_are_still_held_back`, which is the case the docstring argues
+  for. Regenerating the whole set changes one other file, and only its hand-written commentary:
+  zero non-comment lines, `hold_back` key intact.
+
+  **The worker did not land this itself.** It went silent for 53 minutes across two messages, and
+  something reset its tree onto a stale main and orphaned `34789db` — 300 insertions reachable from
+  no branch. Caught within a minute and preserved as `unreviewed/b52-hold-back-scope`, then
+  finished here. Two habits earned from that: stage by explicit path, and run
+  `git log --oneline main..HEAD` before any `git reset --hard`.

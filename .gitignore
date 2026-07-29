@@ -16,6 +16,13 @@ tools/
 # .claude/rules/ and .claude/skills/ are checked in deliberately.
 .claude/worktrees/
 
+# Coordination scratch handed to workers by path. Briefs go in a file rather than a dispatch
+# message because long message bodies are truncated in delivery, and a worker whose tree is
+# being written by someone else needs somewhere outside every worktree to park work.
+# Untracked and unignored, these show up as `??` in every checkout and ride along on `git add -A`.
+.claude/*-brief.txt
+.claude/*-wip/
+
 # Coverage artifacts, written by the command docs/superpowers/specs/2026-07-29-sync-coverage-baseline.md publishes.
 .coverage
 # `-n auto` puts coverage in parallel mode, and each worker writes its own

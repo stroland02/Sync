@@ -1,0 +1,137 @@
+Sync benchmark -- binding accuracy over the frozen corpus
+Recorded, not gated: no number here is compared against a threshold.
+
+  pairs specified       17
+  pairs scored          17
+  binding precision     1.0000       n=27
+  binding recall        1.0000       n=27
+  call sites affected   27
+  call sites unaffected 215
+  unlabelled findings   0
+  falsifiable negatives  6
+  paths not read        71
+  symbol map            5f71dcd3bec1302c
+
+  scored pair                                                affected  unaffected  findings  unreachable  unread
+  fireship-server-DeleteSubscriptionsSubscriptionExposedId-response-property-removed        1          12         1            0       0
+  fireship-server-GetPaymentMethods-response-property-removed        0          13         0            1       0
+  fireship-server-PostPaymentIntents-request-property-removed        1          12         1            0       0
+  fireship-server-PostPaymentIntents-response-property-removed        2          11         2            0       0
+  furever-GetAccountsAccount-response-property-removed              6          25         6            0      63
+  furever-GetCharges-response-property-removed                      1          30         1            0      63
+  furever-PostPaymentIntents-request-property-removed               5          26         5            0      63
+  furever-PostPaymentIntents-response-property-removed              2          29         2            4      63
+  remix-PostPaymentIntents-request-property-removed                 1           1         1            0       1
+  remix-PostPaymentIntents-response-property-removed                0           2         0            1       1
+  turbo-GetPaymentIntentsIntent-response-property-removed           1           3         1            0       0
+  turbo-PostPaymentIntents-request-property-removed                 1           3         1            0       0
+  turbo-PostPaymentIntents-response-property-removed                2           2         2            0       0
+  turbo-PostRefunds-request-property-removed                        1           3         1            0       0
+  turbo-PostRefunds-response-property-removed                       0           4         0            1       0
+  virtual-lab-GetBalance-response-property-removed                  1          20         1            0       7
+  virtual-lab-GetProductsId-response-property-removed               2          19         2            0       7
+
+Excluded pairs: none.
+
+Targets the mutation could not attach to, labelled unaffected:
+  fireship-server-GetPaymentMethods-response-property-removed::1292e9ccebd5ee09fa1eb0b91bfc782f
+  furever-PostPaymentIntents-response-property-removed::885d560f14c5b47d8b0244ed67dccb56
+  furever-PostPaymentIntents-response-property-removed::8f9aa53299ebf4ec0d6ea36b7213f9f0
+  furever-PostPaymentIntents-response-property-removed::df2e6332aabb6c2d26e415e4d96deea3
+  furever-PostPaymentIntents-response-property-removed::f82eeb47e0eeaf2f6894fb43572730eb
+  remix-PostPaymentIntents-response-property-removed::833ff938521cd71c109161770a5b5e0a
+  turbo-PostRefunds-response-property-removed::029f6fe814a3261ce75c3bcd2bcc4e1a
+
+Checkout paths not read as source, because they do not decode as UTF-8:
+  app/opengraph-image.png
+  public/cover.png
+  public/dashboard.png
+  public/dot-grid-dark.png
+  public/dot-grid.png
+  public/favicon.ico
+  public/favicon.png
+  public/fonts/Sohne-Buch.otf
+  public/fonts/Sohne-Halbfett.otf
+  public/fonts/Sohne-Kraftig.otf
+  public/furever_logo.png
+  public/landing-page.jpeg
+  public/onboarding-images/pointinghand.png
+  public/onboarding-images/step-1.png
+  public/onboarding-images/step-2.png
+  public/onboarding-images/step-3.png
+  public/pattern-green.png
+  public/pattern-white.png
+  public/pattern.png
+  public/pet_photos/apple.jpg
+  public/pet_photos/bisco-1.jpg
+  public/pet_photos/bisco.jpg
+  public/pet_photos/buffy.jpg
+  public/pet_photos/cedar.jpg
+  public/pet_photos/chai.jpg
+  public/pet_photos/coco.jpg
+  public/pet_photos/dahlia.jpg
+  public/pet_photos/deedee.jpg
+  public/pet_photos/default-1.jpg
+  public/pet_photos/default-2.jpg
+  public/pet_photos/default-3.jpg
+  public/pet_photos/doudou.jpg
+  public/pet_photos/feifei_celery.jpg
+  public/pet_photos/franklin.jpg
+  public/pet_photos/hamilton.jpg
+  public/pet_photos/hazel.jpg
+  public/pet_photos/henley.jpg
+  public/pet_photos/hobbes.jpg
+  public/pet_photos/hot-fudge.jpg
+  public/pet_photos/jake.jpg
+  public/pet_photos/jaques.jpg
+  public/pet_photos/jasper.jpg
+  public/pet_photos/juney.jpg
+  public/pet_photos/kiba.jpg
+  public/pet_photos/kiki.jpg
+  public/pet_photos/maple.jpg
+  public/pet_photos/miko.jpg
+  public/pet_photos/misiu.jpg
+  public/pet_photos/mo.jpg
+  public/pet_photos/moony.jpg
+  public/pet_photos/pebbleton.jpg
+  public/pet_photos/rambo.jpg
+  public/pet_photos/rolo.jpg
+  public/pet_photos/rowdy.jpg
+  public/pet_photos/shorty.jpg
+  public/pet_photos/stephen.jpg
+  public/pet_photos/udon.jpg
+  public/pet_photos/waffles.jpg
+  public/pet_photos/willow.jpg
+  public/testimonial-portrait.jpg
+  public/testimonial.jpeg
+  scripts/logo1.png
+  scripts/logo2.png
+  scripts/logo3.png
+  virtual_labs/infrastructure/email/assets/advertisement-video-poster.webp
+  virtual_labs/infrastructure/email/assets/hippocampus_bg.jpg
+  virtual_labs/infrastructure/email/assets/linkedin-filled-light-40.png
+  virtual_labs/infrastructure/email/assets/logo.png
+  virtual_labs/infrastructure/email/assets/open-brain-institute-logo-large.png
+  virtual_labs/infrastructure/email/assets/twitter-filled-light-40.png
+  virtual_labs/infrastructure/email/assets/youtube-filled-light-40.png
+
+Reference:
+  The reference is synthetic. A vendor change was applied mechanically by `sync.benchmark.mutate`
+  to a real repository written against the old contract, and the label is the record of those
+  edits. Mining real migrations was measured and rejected -- 2026-07-29-sync-ground-truth-quality
+  read 117 candidate commits, found 58% carried a coding-agent trailer, and found none of the five
+  plausible ones to be a migration -- and this is the fallback that verdict named, at the cost of
+  realism.
+  
+  What it biases, all of it towards the binder:
+    - The break is mechanical and local: one property in one argument object, or one guard reading
+      one response field. A real break lands in code that has drifted around the call for years,
+      which is where a static reading is weakest.
+    - The distribution is whatever this generator implements, in the proportions the caller asked
+      for, and not the shape of any vendor's release history.
+    - Precision has almost no way to fail. The generator refuses a tree where an untargeted call
+      site already carries the changed dependency, and that is the only thing the detector's field
+      match fires on, so a false positive needs a partial path match and cannot arise at all from
+      a flat change.
+  
+  A binder that scores well here has been shown to handle the mechanical case, and nothing more.

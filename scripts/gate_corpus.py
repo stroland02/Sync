@@ -29,11 +29,11 @@ it, which is the only form in which lowering a gate can be argued with.
 
 What is floored, and what is deliberately not
 ---------------------------------------------
-**Binding precision**, at the recorded 1.0000 over n=16. Deterministic given a fixed pipeline and
+**Binding precision**, at the recorded 1.0000 over n=26. Deterministic given a fixed pipeline and
 fixed inputs -- measured byte-identical across independent runs from clean databases -- so a drop
 is a regression rather than sampling noise.
 
-**Binding recall**, at the recorded 1.0000 over n=16. This one is a judgement and the argument
+**Binding recall**, at the recorded 1.0000 over n=26. This one is a judgement and the argument
 against it is real: recall moved twice on the day the corpus was frozen, once when a corpus fix
 exposed a genuine binder defect and once when positives were deliberately traded for negatives.
 A gate that fires on honest work gets disabled, and a disabled gate is worse than none.
@@ -47,7 +47,7 @@ exists to prevent: a missed break is the thing Sync is for, so gating precision 
 recall open would gate the less important half. The cost is friction on a rare deliberate act,
 paid to catch a binder that quietly stops finding what it used to.
 
-**Falsifiable negatives**, at the recorded 4, and this one guards a gate rather than the binder.
+**Falsifiable negatives**, at the recorded 7, and this one guards a gate rather than the binder.
 Precision is the share of judged findings that were genuine; with no negative the detector could
 have fired on, its false-positive term has no candidates and the rate is fixed by how the corpus
 was built. That was the state before `hold_back` existed, and a precision floor over it would
@@ -55,7 +55,7 @@ have gated a constant -- the "never fires and provides false assurance" half of 
 specification warns about. If the count silently returns to zero, the precision floor above stops
 gating anything while staying green. A floor on the count is what makes that arrive loudly.
 
-**Pairs scored**, at the recorded 12, for the same reason one step up. Two pairs were excluded by
+**Pairs scored**, at the recorded 17, for the same reason one step up. Two pairs were excluded by
 `displaced-label` before that defect was fixed, and an exclusion regression shrinks both axes'
 denominators while leaving both values at 1.0000. The rates would stay green over a corpus that
 had quietly stopped covering a third of itself.
@@ -98,25 +98,48 @@ from scripts.symbol_map_pin import PIN, read_pin
 # the recording. These are the corpus's own answers, not round numbers chosen near them.
 #
 #                         was            now
-#   binding precision     1.0000 n=16    1.0000 n=18
-#   binding recall        1.0000 n=16    1.0000 n=18
-#   falsifiable negatives  4              5
-#   pairs scored          12             13
+#   binding precision     1.0000 n=27    1.0000 n=26
+#   binding recall        1.0000 n=27    1.0000 n=26
+#   falsifiable negatives  6              7
+#   pairs scored          17             17
 #
-# Restated on 2026-07-29 because the corpus grew, which is the only reason a floor may move
-# upward without an argument attached. `virtual-lab-GetProductsId-response-property-removed` is
-# the corpus's first Python pair: two labelled positives, both found, two findings and no false
-# one, and one held-back negative the detector could have fired on and did not. Neither rate
-# changed -- both denominators did, and the falsifiable count with them.
+# **A denominator that fell while its rate held is not a lowered floor.** Both rates are the
+# figures they were; one labelled positive became a labelled negative, so both denominators fell
+# by one and the negative count rose by one. Nothing here is a claim that the pipeline got worse.
+#
+# Restated on 2026-07-29 to adopt the `hold_back` on
+# `turbo-PostPaymentIntents-response-property-removed`, which the selection rule earns and the
+# committed specification did not carry: B34 taught the binder to record fields off a result
+# assigned to a variable declared earlier, which made a second site on that operation bindable.
+#
+# The trade is deliberate and it is a trade. Precision's evidence is the number of labelled
+# negatives the detector could have fired on and did not -- six before this, and a constant at
+# zero until the morning of the same day. Recall's evidence is the number of labelled positives,
+# twenty-seven before this. So one negative is a sixth more evidence for the weaker axis and one
+# positive is four per cent less for the stronger one, and
+# `docs/superpowers/specs/2026-07-26-sync-review-integration.md` puts precision first for a
+# reviewer-facing tool. Recall is still the axis whose failure the product exists to prevent, so
+# this is worth doing once on this evidence and is not a trade to keep making.
+#
+# `furever-PostPaymentIntents-response-property-removed` earns the same `hold_back` and it was
+# **declined**, because taking it drops precision to 0.9615 over n=26. Its two call sites assign
+# one `paymentIntent` variable inside one function, so the guard the mutation writes at the
+# targeted site is a read the binder credits to the held-back site as well -- it cannot tell which
+# assignment produced the value, and crediting both is the conservative direction. The mutation
+# makes that site dependent at a distance, so labelling it a negative is false and the false
+# positive is the corpus's rather than the binder's. `turbo` is sound for the opposite reason: its
+# two sites are in different files, so no scope is shared.
+#
+# `benchmark/corpus/recorded/2026-07-29-the-hold-back-the-binder-earns.txt` is the recording.
 #
 # Lowering one is a claim that the pipeline got worse on purpose, and it belongs in the same
 # commit as the change that made it worse, with the reason in the commit body. Two Python pairs
-# were refused rather than landed a few hours before this, for exactly that reason: they would
+# were refused rather than landed earlier the same day, for exactly that reason: they would
 # have forced this recall floor to 0.8889 to accommodate ground truth already proved wrong.
 PRECISION_FLOOR = 1.0
 RECALL_FLOOR = 1.0
-FALSIFIABLE_NEGATIVES_FLOOR = 5
-PAIRS_SCORED_FLOOR = 13
+FALSIFIABLE_NEGATIVES_FLOOR = 7
+PAIRS_SCORED_FLOOR = 17
 
 
 @dataclass(frozen=True)

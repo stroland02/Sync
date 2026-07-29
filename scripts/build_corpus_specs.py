@@ -12,14 +12,23 @@ selection is executable and the score is whatever it produces, including the pai
 then refuses. The rule, in full:
 
   - **Which repositories.** Every entry in `benchmark/corpus/repositories.yaml`.
-  - **Which operations.** Per repository, the two operations with the most indexed call sites
-    where at least one call passes an object argument, ties broken by operation id ascending. An
-    operation whose calls take no object argument is excluded because neither mutation can attach
-    to one -- `stripe.customers.retrieve(id)` has nowhere to put a property.
-  - **Which kinds.** `request-property-removed` and `response-property-removed` for each, which
-    are the two mechanically different inversions `sync.benchmark.mutate` implements. The third
-    supported kind, `request-parameter-removed`, mutates identically to the first and would add
-    pairs without adding information.
+  - **Which kinds.** `request-property-removed` and `response-property-removed`, which are the
+    two mechanically different inversions `sync.benchmark.mutate` implements. The third supported
+    kind, `request-parameter-removed`, mutates identically to the first and would add pairs
+    without adding information.
+  - **Which operations.** Per repository *and per kind*, the two operations with the most indexed
+    call sites where at least one site carries a non-empty field list **on the side that kind's
+    change is judged on** -- `args_keys` for a request change, `response_fields_read` for a
+    response one -- ties broken by operation id ascending.
+
+    Per kind, because the two mutations need different things and asking one question for both
+    answered it wrong in both directions. A request-property mutation needs a call passing an
+    object argument, so `stripe.customers.retrieve(id)` has nowhere to put a property and must
+    not acquire a request pair. A response-property mutation needs a call binding a result
+    something reads a field off, and that operation was excluded for the wrong reason: the rule
+    asked the request question of it. `virtual-lab-GetProductsId` is the pair that cost --
+    three positional `client.products.retrieve(cfg.product_id)` calls, two of them reading
+    fields off the result, unproposable and written by hand.
   - **Which field.** The alphabetically first property of that operation in the pinned
     specification that no indexed call site in the repository already passes, for a request
     change, or already reads, for a response change. Real properties of the real operation, so
@@ -43,6 +52,7 @@ from collections import defaultdict
 from pathlib import Path
 
 import yaml
+from ast_grep_py import SgRoot
 
 from sync.cli import select_language_adapter
 from sync.core import RepoRef
@@ -114,7 +124,145 @@ def _index(name: str, dsn: str):
     return by_operation, adapter.language_id
 
 
-def hold_back(sites: list, kind: str) -> list[dict]:
+def _judged_by(site, kind: str) -> list[str]:
+    """The field list `VendorChangeDetector.scan` judges this call site on, for this kind.
+
+    One function because two clauses need the same answer and had drifted apart: the hold-back
+    already followed the side the change is on, and the selection above it did not.
+    """
+    return site.args_keys if kind.startswith("request-") else site.response_fields_read
+
+
+def operations_for(by_operation: dict, kind: str, limit: int = OPERATIONS_PER_REPOSITORY):
+    """The operations this repository contributes a pair of `kind` over, most call sites first.
+
+    An operation qualifies on the field list the change's own side is judged on, and the two
+    sides are asked separately. The rule used to ask one question for both: the operations with
+    the most call sites where at least one passes an object argument, then a request pair and a
+    response pair over each. That condition is request-side, so response coverage was a side
+    effect of request coverage -- every response pair the corpus holds is there because its
+    operation also happened to qualify on the other side.
+
+    `virtual-lab-GetProductsId` is what that cost and why this changed. Three call sites, all
+    `client.products.retrieve(cfg.product_id)`, so `args_keys` is empty at every one and no
+    number of them could make it a candidate; two of the three read fields off the result, which
+    is everything a response pair needs. It is the strongest pair in the corpus and it had to be
+    written by hand.
+
+    **Per side rather than either side.** Qualifying an operation on evidence from the other half
+    and then generating both kinds is the defect running the other way: a request pair over calls
+    passing no object argument has nowhere to write the mutation, so every target comes back
+    unreachable and the pair contributes no positive while still moving `pairs_scored` and its
+    floor. The cap is therefore per kind, which leaves the ceiling where it was -- two operations
+    times two kinds -- while letting the four slots fall on up to four different operations.
+
+    **Non-empty rather than "the result is bound".** A bound result the repository reads nothing
+    off is a site the response mutation could still attach a guard to, so this is the stricter
+    of the two available readings. It is the one that can be asked: `CallSite` records the fields
+    read and not whether a name received the call, and the alternative -- asking
+    `sync.benchmark.mutate` which sites it can break -- would make the corpus select exactly what
+    the generator can currently mutate. A generator regression would then shrink the corpus
+    silently instead of arriving as the refused pairs `score_corpus.py` counts and names.
+    """
+    candidates = [
+        (operation, sites) for operation, sites in by_operation.items()
+        if operation and any(_judged_by(site, kind) for site in sites)
+    ]
+    # Most call sites first, because a pair over one site has the least room to hide a miss;
+    # ties by operation id ascending, so the choice is not the dictionary's insertion order.
+    candidates.sort(key=lambda item: (-len(item[1]), item[0]))
+    return candidates[:limit]
+
+
+# What the cross-crediting clause below has to read out of the source, per language. Kept here
+# rather than imported from `sync.benchmark.mutate`: the question is the corpus's own -- do these
+# two sites share a scope and a name -- and borrowing the generator's private walk would make a
+# generator change move which sites the corpus holds back, silently.
+_AST_LANGUAGES = {".py": "python"}
+_CALL_KINDS = {"python": "call", "typescript": "call_expression"}
+_FUNCTION_KINDS = {
+    "python": frozenset({"function_definition", "lambda"}),
+    "typescript": frozenset({
+        "function_declaration", "function_expression", "generator_function",
+        "generator_function_declaration", "arrow_function", "method_definition",
+    }),
+}
+_BINDERS = {
+    "python": {"assignment": ("left", "right"), "named_expression": ("name", "value")},
+    "typescript": {
+        "variable_declarator": ("name", "value"),
+        "assignment_expression": ("left", "right"),
+    },
+}
+_WRAPPERS = {
+    "python": frozenset({"await", "parenthesized_expression"}),
+    "typescript": frozenset({
+        "await_expression", "parenthesized_expression", "non_null_expression",
+        "as_expression", "satisfies_expression", "type_assertion",
+    }),
+}
+
+
+def _ast_language(path: str) -> str:
+    return _AST_LANGUAGES.get(Path(path).suffix, "typescript")
+
+
+def _bound_scope_and_name(root: Path, site) -> tuple[str, tuple[int, int], str] | None:
+    """Where this call's result is read from: the file, the enclosing scope's span, the name.
+
+    **The path is part of the identity and leaving it out is a real defect, not tidiness.** A
+    span is a byte offset within one file, so two files holding the same text -- which is
+    ordinary in a repository with a copied handler -- produce the same span, and a comparison
+    over span and name alone reads them as one scope. That refuses a hold-back whose sites are
+    in different files, which is precisely the sound case this clause has to keep accepting.
+
+    `None` when the result is not bound directly to a plain name, which is also when no guard can
+    be written and therefore when nothing can be cross-credited.
+
+    Identity rather than containment, the same rule `sync.benchmark.mutate` applies for the same
+    reason: `customers = list(client.customers.list(...))` binds what `list` returned, so a read
+    off that name is not a read of the response.
+    """
+    language = _ast_language(site.path)
+    try:
+        source = (root / site.path).read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError):
+        return None
+
+    tree = SgRoot(source, language).root()
+    call = next(
+        (node for node in tree.find_all(kind=_CALL_KINDS[language])
+         if node.range().start.line + 1 == site.line and node.range().start.column == site.col),
+        None,
+    )
+    if call is None:
+        return None
+
+    current, parent = call, call.parent()
+    while parent is not None:
+        binder = _BINDERS[language].get(parent.kind())
+        if binder is not None:
+            name_field, value_field = binder
+            value, target = parent.field(value_field), parent.field(name_field)
+            if value is None or target is None or target.kind() != "identifier":
+                return None
+            if (value.range().start.index, value.range().end.index) != (
+                current.range().start.index, current.range().end.index
+            ):
+                return None
+            scope = parent
+            while scope is not None and scope.kind() not in _FUNCTION_KINDS[language]:
+                scope = scope.parent()
+            span = ((scope.range().start.index, scope.range().end.index) if scope is not None
+                    else (-1, -1))
+            return site.path, span, target.text()
+        if parent.kind() not in _WRAPPERS[language]:
+            return None
+        current, parent = parent, parent.parent()
+    return None
+
+
+def hold_back(sites: list, kind: str, root: Path) -> list[dict]:
     """The call sites this specification declares held out of the mutation, as positions.
 
     A corpus that breaks every site on the changed operation gives binding precision nothing to
@@ -141,13 +289,41 @@ def hold_back(sites: list, kind: str) -> list[dict]:
 
     **Only when the operation has more than one.** Holding back the only site leaves the mutation
     no target, and a pair with no target is refused rather than scored.
+
+    **Never when it shares an enclosing scope and a result name with a site still targeted, on a
+    response change.** The mutation writes a guard reading a field off the result at each target,
+    and `_response_fields` collects reads rooted at the result name within the enclosing function
+    -- so two assignments in one function binding the same name from the same call credit that
+    read to both, the held-back one included. It then carries the removed property and is not a
+    negative at all. B50 measured it on `furever`: holding back
+    `create_charges/route.ts:104` while targeting `:154`, both assigning `paymentIntent` inside
+    one function, gave binding precision 0.9615 over n=26, and the one false positive was the
+    held-back site.
+
+    Refused outright rather than moved to the next candidate, because the position argument above
+    is what makes the first site the only safe one -- a later site is exactly what the mutation's
+    own insertions displace.
+
+    Response changes only. `args_keys` is read off the call's own argument list with no scope
+    walked, so nothing is cross-credited on the request side, and applying this there would refuse
+    sound hold-backs and take falsifiable negatives down with them.
+
+    The binder is not wrong in the case this refuses. It cannot tell which of two assignments
+    produced the value being read -- that is data flow, which tree-sitter does not do -- and
+    crediting both is the conservative direction for a tool whose expensive failure is a missed
+    break. What was wrong is a corpus holding back a site the binder was always going to reach.
     """
     if len(sites) < 2:
         return []
     first = min(sites, key=lambda site: (site.path, site.line, site.col))
-    judged_by = first.args_keys if kind.startswith("request-") else first.response_fields_read
-    if not judged_by:
+    if not _judged_by(first, kind):
         return []
+    if kind.startswith("response-"):
+        held = _bound_scope_and_name(root, first)
+        if held is not None and any(
+            _bound_scope_and_name(root, site) == held for site in sites if site is not first
+        ):
+            return []
     return [{"path": first.path, "line": first.line, "col": first.col}]
 
 
@@ -193,20 +369,15 @@ def build(dsn: str) -> list[Path]:
         name = entry["name"]
         by_operation, language = _index(name, dsn)
 
-        candidates = [
-            (operation, sites) for operation, sites in by_operation.items()
-            if operation and any(site.args_keys for site in sites)
-        ]
-        candidates.sort(key=lambda item: (-len(item[1]), item[0]))
-        chosen = candidates[:OPERATIONS_PER_REPOSITORY]
-
         passed = {key.split(".")[0] for sites in by_operation.values()
                   for site in sites for key in site.args_keys or ()}
         read = _read_fields(CORPUS / name, language)
 
-        for operation, sites in chosen:
-            request_properties, response_properties = schemas.get(operation, ([], []))
-            for kind in KINDS:
+        # Kind first, because the candidate set is now a property of the kind rather than one
+        # list both kinds are taken over.
+        for kind in KINDS:
+            for operation, sites in operations_for(by_operation, kind):
+                request_properties, response_properties = schemas.get(operation, ([], []))
                 available = request_properties if kind.startswith("request") else response_properties
                 taken = passed if kind.startswith("request") else read
                 field = next((p for p in available if p not in taken), None)
@@ -222,7 +393,7 @@ def build(dsn: str) -> list[Path]:
                     "to_version": TO_VERSION,
                     "change": {"kind": kind, "operation": operation, "field": field},
                 }
-                held = hold_back(sites, kind)
+                held = hold_back(sites, kind, CORPUS / name)
                 # Written only when the rule selected one, so a specification the rule passed
                 # over stays byte-identical to what it was before the rule existed.
                 if held:

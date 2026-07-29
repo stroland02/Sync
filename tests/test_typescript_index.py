@@ -166,6 +166,69 @@ def test_a_malformed_manifest_is_not_a_match_rather_than_a_traceback(tmp_path):
     assert _adapter(tmp_path).matches(_repo("malformed_manifest")) is False
 
 
+# A manifest that is not UTF-8, in the spelling found in the wild: `.encode("utf-16")` writes the
+# byte-order mark, so these bytes begin `ff fe`.
+UTF16_MANIFEST = json.dumps({"dependencies": {"stripe": "^18.0.0"}}).encode("utf-16")
+
+BILLING_TS = """import Stripe from 'stripe';
+
+const stripe = new Stripe(process.env.STRIPE_KEY!);
+
+export async function charge(amount: number) {
+  const charge = await stripe.charges.create({ amount, currency: 'eur' });
+  return charge.status;
+}
+"""
+
+
+def _utf16_manifest_repo(tmp_path) -> RepoRef:
+    """A project whose `package.json` is UTF-16, built here rather than committed.
+
+    Built for the reason `test_python_index._utf16_requirements_repo` is: git decides text from
+    binary by heuristic and CLAUDE.md rules out a `.gitattributes` to overrule it, so a committed
+    non-UTF-8 fixture is one whose bytes a checkout may quietly change -- and a fixture silently
+    repaired into valid UTF-8 leaves this test passing over nothing while appearing to cover the
+    decode handler. Written with `write_bytes`, because bytes that are not text are not decoded.
+    """
+    root = tmp_path / "utf16_manifest"
+    (root / "src").mkdir(parents=True)
+    (root / "package.json").write_bytes(UTF16_MANIFEST)
+    (root / "src" / "billing.ts").write_text(BILLING_TS, encoding="utf-8")
+    return RepoRef(
+        repo_id="utf16", url="https://example.invalid/utf16",
+        local_path=str(root), head_sha="0" * 40,
+    )
+
+
+def test_a_manifest_that_is_not_utf8_is_not_a_match_rather_than_a_traceback(tmp_path):
+    """The same promise as the malformed manifest above, and the other way a manifest is
+    unreadable.
+
+    `read_text` raises before `json.loads` is reached, so the `JSONDecodeError` guard never sees
+    it. This is asked at adapter selection, before any indexing, so a customer repository whose
+    manifest carries a byte-order mark took the whole run down rather than being reported as not
+    demonstrably depending on the SDK.
+
+    It is also the arm of that handler line coverage cannot see: the two exceptions are caught
+    together, so the malformed-manifest test above marks the line covered while this arm has
+    never been entered. One test per arm is what makes the distinction checkable.
+    """
+    assert _adapter(tmp_path).matches(_utf16_manifest_repo(tmp_path)) is False
+
+
+def test_an_unreadable_manifest_leaves_the_sdk_version_unknown_rather_than_raising(tmp_path):
+    """`_declared_dependencies` has a second caller, and the fix has to hold at both.
+
+    `_sdk_version` reads the same manifest from inside `index`, so a repository reaching the
+    indexer with an undecodable manifest would raise there instead -- one layer further in, where
+    the answer is a call site recorded against an unknown version rather than no answer at all.
+    """
+    sites = list(_adapter(tmp_path).index(_utf16_manifest_repo(tmp_path)))
+
+    assert [site.operation_id for site in sites] == ["PostCharges"]
+    assert sites[0].sdk_version == "unknown"
+
+
 def _by_line(sites) -> dict[int, object]:
     return {s.line: s for s in sites}
 

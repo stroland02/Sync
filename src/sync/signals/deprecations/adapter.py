@@ -28,7 +28,8 @@ _DEFAULT_MAX_AGE = timedelta(hours=12)
 
 @dataclass(frozen=True)
 class DeprecationSource:
-    """Where a vendor publishes its deprecations, and how its models are named."""
+    """Where a vendor publishes its deprecations, how its models are named, and what the page
+    carries."""
 
     vendor_id: str
     url: str
@@ -36,11 +37,36 @@ class DeprecationSource:
     """Literal prefixes the indexer looks for. A family missing here is never indexed, so the
     finding would exist and point at nothing."""
 
+    publishes_model_deprecations: bool
+    """Whether this page carries model retirements.
+
+    `DeprecationAdapter.fetch_changes` raises when a page parses to zero rows, because for this
+    signal an empty answer is indistinguishable from a healthy vendor. A source declared here
+    whose page carries no retirements would therefore print a vendor-unavailable message on
+    every scan, which is how an operator learns to ignore the one message this signal has.
+    """
+
+    publishes_parameter_deprecations: bool
+    """Whether this page carries a request-parameter table.
+
+    Declared per source rather than derived by parsing and seeing what comes back. Deriving it
+    cannot separate "this vendor publishes none" from "the parser could not read this page", and
+    that distinction is the one the rest of this signal is built on.
+
+    Both fields are required. A default would let a fourth source inherit whichever answer was
+    right for the vendor that happened to be added first, which is the failure this pair exists
+    to end.
+    """
+
 
 ANTHROPIC = DeprecationSource(
     vendor_id="anthropic",
     url="https://platform.claude.com/docs/en/about-claude/model-deprecations.md",
     prefixes=("claude-",),
+    publishes_model_deprecations=True,
+    # The only one of the three. Its page carries an `## API parameter deprecations` section
+    # beneath the lifecycle table.
+    publishes_parameter_deprecations=True,
 )
 
 OPENAI = DeprecationSource(
@@ -57,6 +83,11 @@ OPENAI = DeprecationSource(
         "code-", "codex-", "ft-",
         "dall-e", "whisper", "tts-", "sora-", "omni-",
     ),
+    publishes_model_deprecations=True,
+    # Measured against the captured page rather than assumed from the two-vendor comment this
+    # replaced: the word "parameter" does not occur anywhere on it. The page deprecates models,
+    # endpoints and products, and says nothing about request parameters.
+    publishes_parameter_deprecations=False,
 )
 
 
@@ -71,7 +102,36 @@ CLOUDFLARE = DeprecationSource(
     # among the eighteen being retired, and a list guessed as `@cf/` alone would have left
     # those three raising a finding with no call site to attach it to.
     prefixes=("@cf/", "@hf/"),
+    publishes_model_deprecations=True,
+    # A single dated changelog post about model retirements, not a living deprecations
+    # reference. It carries no parameter table and is not the kind of document that grows one.
+    publishes_parameter_deprecations=False,
 )
+
+
+# Every source a scan reads, and the one place a vendor is registered. It lives beside the
+# constants rather than in `cli.py` because a source defined here and absent from the entry
+# point is importable, tested and unreachable -- `sync.signals.registry` carries the same
+# argument for vendor adapters, where `cli.py` naming one by hand meant no run could reach the
+# second.
+DEPRECATION_SOURCES: tuple[DeprecationSource, ...] = (ANTHROPIC, OPENAI, CLOUDFLARE)
+
+
+def model_deprecation_sources() -> tuple[DeprecationSource, ...]:
+    """Sources whose page carries model retirements.
+
+    Read by the scan that fetches retirements *and* by the one that builds a detector per
+    vendor, so the two cannot drift: `VendorChangeDetector` is scoped to a single vendor, and a
+    retirement upserted for a vendor with no detector is a row nothing will ever read.
+    """
+    return tuple(source for source in DEPRECATION_SOURCES if source.publishes_model_deprecations)
+
+
+def parameter_deprecation_sources() -> tuple[DeprecationSource, ...]:
+    """Sources whose page carries a request-parameter table."""
+    return tuple(
+        source for source in DEPRECATION_SOURCES if source.publishes_parameter_deprecations
+    )
 
 
 def http_fetch(url: str, timeout: float = 20.0) -> str:

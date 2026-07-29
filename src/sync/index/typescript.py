@@ -186,13 +186,19 @@ class TypeScriptAdapter:
         path for a repository that does not demonstrably depend on the SDK, and
         a `JSONDecodeError` out of `run()` is a traceback where that answer
         belongs.
+
+        Unreadable has two spellings and only one of them reaches `json.loads`.
+        A manifest that does not decode raises out of `read_text` first, so the
+        two are caught together -- and neither is decoded leniently, because
+        `errors="replace"` would hand the parser mojibake and a dependency
+        table invented from it is worse than the traceback it replaces.
         """
         manifest = Path(repo.local_path) / "package.json"
         if not manifest.exists():
             return {}
         try:
             data = json.loads(manifest.read_text(encoding="utf-8"))
-        except json.JSONDecodeError:
+        except (json.JSONDecodeError, UnicodeDecodeError):
             return {}
         if not isinstance(data, dict):
             return {}
