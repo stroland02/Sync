@@ -36,39 +36,38 @@ when, which is why it is recorded here rather than dispatched.
 **Closes when:** one `sync run` produces a CI-green pull request again, or the failure is
 recorded with which change broke it.
 
-### B8 — M1 has no span store, so the efficiency detector cannot be built
+### B12 — `operation_for_symbol` cannot tell one SDK language from another
 
-Surveyed on `main` at `d6538fe`: there is no telemetry package. `src/sync/` holds core,
-graph, index, signals, detect, remediate, forge, route, mcp and cli, and nothing ingests
-runtime spans. `detect/` holds `vendor_change`, `parameter_deprecation` and `observed_drift`.
-The design document's M1 — an OTLP endpoint over client spans, then an efficiency detector
-finding calls in loops, default page sizes, uncached repeats and retry storms — is entirely
-unwritten.
+`VendorAdapter.operation_for_symbol(symbol)` takes a symbol and nothing else, and a symbol is
+not unique across SDK languages: `twilio-python` exposes `call_summaries` where `twilio-node`
+exposes `callSummaries` — same vendor, same operation, two spellings. A failure to resolve
+produces no finding, so a polyglot repository loses half its bindings silently.
 
-`observed_shape` does not substitute for it, and the distinction matters. That table records
-response *shape* — `field_path`, `json_type`, `nullable_seen`, `spec_enum_values` — which is
-the right evidence for contract drift and the wrong evidence for efficiency, which needs call
-volume, timing, retry counts and repetition. They are different signals from different
-sources and one is not a cheaper version of the other.
+This was theoretical until the second language adapter landed. `src/sync/index/` now holds
+`language_id = "typescript"` and `language_id = "python"`, so the graph can hold call sites
+from both. The asymmetry that makes it a bug rather than a gap: `MigrationOutcome` already
+records `language` as a first-class field, and `CallSite` does not.
 
-Split deliberately: the store and its correlation first, the detector second, and the detector
-should not start until the store has real rows. The hard part of the first slice is the
-table's grain — one row is not one span, and a query that counts calls by counting rows would
-be wrong quietly.
+Evidenced by the Twilio adapter's report, which recorded the needed signature change rather
+than making it, because `protocols.py` is shared.
 
-**Closes when:** a captured OTLP payload committed as a fixture produces rows correlated to
-call sites, re-ingesting it changes nothing, and the grain is written in `schema.sql`.
+**Closes when:** a symbol from the wrong language stops resolving, or one that could not
+resolve starts, with a test that fails without the change. A `language` column nothing reads
+does not close it.
 
 ## In flight
 
-- **B10** — `task_5b97de02fb7e`, `m1-forge`. Loop context on `call_site`. Re-dispatched after a
-  reset in a shared worktree destroyed its first attempt's uncommitted work.
-- **B11** — `task_f64fca30ed13`, `m2-parsing`. The efficiency detector, M1's second half, on the
-  `observed_call` table B8 landed. Told to refuse a dollar figure it cannot derive rather than
-  multiply by a plausible constant, and to check the salt's stability before relying on the
-  repeated-call digest.
+- **B12** — `task_d14dd41aac3c`. Spans `core/protocols.py`, `core/models.py`, both vendor
+  adapters, `index/`, and the `call_site` table — deliberately, and nobody else is in them.
 
 ## Done
+
+- The efficiency detector, M1's second half. Landed via `cb0ee3e`. Three findings — calls in a
+  loop, uncached repeats, retry storms — and deliberately **no dollar figure**: a call count is
+  a fact, a cost needs a price per call no table here holds.
+- Loop context on `call_site`. Landed `e8076be`. A depth rather than a flag, counting array
+  callbacks alongside loop statements. Written by the coordinator after two dispatched attempts
+  had their work destroyed in shared worktrees.
 
 - The M1 span store: `observed_call`, OTLP ingest, and correlation behind a `RequestCorrelator`
   protocol. Landed `ecab0bd`. Grain is one row per trace — per unit of work — which is what lets
