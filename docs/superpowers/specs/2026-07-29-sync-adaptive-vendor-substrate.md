@@ -84,20 +84,23 @@ code serving every vendor in it.
 | Tier | How the spec is found | Per-vendor cost | Status |
 |---|---|---|---|
 | **0 — Generator-discovered** | The SDK repository commits a manifest naming its spec | Zero. A vendor is a row. | Built |
-| **1 — Registry-discovered** | A public directory of OpenAPI definitions | Zero | Built, reachable from nothing |
+| **1 — Registry-discovered** | A public directory of OpenAPI definitions | Zero | Built and wired into intake |
 | **2 — Vendor-published** | Configured location, versioned by tag or filename | One configuration entry | Built (Stripe, Twilio) |
 | **3 — Synthesised** | No specification exists; the contract is inferred | Real work, and honest about it | Partial |
 
-Tier 1 was the gap worth taking next on the signal side, and the reader half of it now exists:
+Tier 1 was the gap worth taking next on the signal side, and it is now closed end to end.
 `src/sync/signals/registry_tier/directory.py` provides `parse_directory` and `versions_after`,
-which answer which APIs a directory holds and when each last moved. Both are baselined in
-`scripts/dead_links_baseline.txt` as reachable from nothing, because their consumer is dependency
-intake. The baseline entry names intake as what retires them, and whoever wires it deletes both
-lines in that commit. Read that entry before extending this tier: it also records why this is
-deliberately **not** a `VendorAdapter` — the directory's `swaggerUrl` points at its own storage
-rather than the vendor's host and many entries are Swagger 2.0 needing conversion, so a change
-derived from it is a third derivation from the vendor's truth. Good enough to tell a customer a
-declared dependency is watchable; not good enough to open a pull request against.
+which answer which APIs a public directory holds and when each last moved, and dependency intake
+consumes both — `sync.signals.intake` imports `versions_after`, `sync.cli` imports
+`parse_directory`. Their entries left `scripts/dead_links_baseline.txt` in the commit that wired
+them, which is the mechanic those entries specified when they were written.
+
+This tier is deliberately **not** a `VendorAdapter`, and that constraint survives the wiring. The
+directory's `swaggerUrl` points at its own storage rather than the vendor's host, and a large
+share of entries are Swagger 2.0 needing conversion, so a change derived from it is a third
+derivation from the vendor's truth. It is good enough to tell a customer that a declared
+dependency is watchable. It is not good enough to open a pull request against, and wiring it to
+the remediation pipeline would be the defect rather than the fix.
 
 [APIs.guru's
 openapi-directory](https://github.com/APIs-guru/openapi-directory) is a machine-readable
