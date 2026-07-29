@@ -22,7 +22,6 @@ src/sync/forge/webhook.py:record_merge_outcome
 # reader classes stay because `cli.py` reaches their methods without naming the class.
 src/sync/index/python_lang.py:PythonAdapter
 src/sync/signals/datadog/shapes.py:DatadogShapeReader
-src/sync/signals/generated/adapter.py:GeneratedSpecAdapter
 src/sync/signals/sentry/shapes.py:SentryShapeReader
 
 
@@ -37,8 +36,6 @@ src/sync/signals/feed/publisher.py:public_key_bytes
 # so the `VendorChange` conversion beside it has never run.
 src/sync/signals/deprecations/catalogue.py:urgency
 src/sync/signals/deprecations/parameters.py:parameters_to_vendor_changes
-src/sync/signals/generated/manifest.py:parse_manifest
-src/sync/signals/generated/manifest.py:SpecSource.has_cheap_change_trigger
 
 # `omit_property_at` stays because it is not the primitive `property_omit` needs: it counts
 # lines from one where `omit_argument_at` counts from zero, it answers two ways where the
