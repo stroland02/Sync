@@ -272,29 +272,35 @@ def _insert_property(source: str, call, field: str) -> str | None:
 
 
 def _insert_response_guard(source: str, call, field: str) -> str | None:
-    """A guard reading `field` off the call's result, inserted after the statement binding it.
+    """A guard reading `field` off the call's result, appended to the statement binding it.
 
     A response property is depended upon by being read, and the shortest realistic read is the
     check a caller writes anyway. A call whose result is never bound has nothing to read it off,
     which is the `None` case.
+
+    **On the statement's own line, never on a new one.** `upsert_call_site` keys a call site's
+    identity on line and column, so a guard occupying a line renames every call below it in the
+    file: the label then addresses a row the mutated tree does not hold, `score.py` refuses the
+    pair as `displaced-label`, and a file with several calls can carry no response-side pair at
+    all. Two of the twelve frozen-corpus specifications were refused for exactly that. Widening
+    the binding forms below without this would have converted unreachable targets into refused
+    pairs rather than into labelled positives.
+
+    Keeping identity stable here rather than changing what identity is keyed on is deliberate.
+    The key belongs to `sync.graph` and every stage depends on it; a benchmark that needed the
+    production key changed in order to score itself would be measuring a pipeline nobody runs.
     """
     binding = _result_binding(call)
     if binding is None:
         return None
     name, statement = binding
 
-    span = statement.range()
-    line_start = source.rfind("\n", 0, span.start.index) + 1
-    indent = source[line_start:span.start.index]
-    if indent.strip():
-        indent = ""
-
-    guard = (
-        f"\n{indent}if ({name}.{field} === undefined) {{\n"
-        f"{indent}  throw new Error('{field} missing');\n"
-        f"{indent}}}"
-    )
-    return source[:span.end.index] + guard + source[span.end.index:]
+    end = statement.range().end.index
+    # A statement the grammar ends without a semicolon was terminated by a newline, and appending
+    # to that line would splice the guard onto the expression instead of following it.
+    separator = "" if source[:end].rstrip().endswith(";") else ";"
+    guard = f"{separator} if ({name}.{field} === undefined) throw new Error('{field} missing');"
+    return source[:end] + guard + source[end:]
 
 
 def _call_at(root, line: int, col: int):
@@ -341,24 +347,46 @@ def _declared_keys(argument) -> set[str]:
 
 
 def _result_binding(call):
-    """The identifier a call's result is assigned to, with the statement doing it.
+    """The identifier a call's result is bound to, with the statement doing the binding.
 
-    `None` when the result is not bound to a plain name: an awaited call thrown away, a result
-    destructured into several names, a call used inline. Each is a site a response-side
-    mutation cannot attach to, and none is an error.
+    Two forms, and a declaration is only the more obvious one. `intent = await stripe
+    .paymentIntents.create(...)` binds the result to a name a guard can read exactly as `const`
+    does; the frozen corpus meets it four times, in `furever` and in `turbo`, both writing into a
+    variable declared further up.
+
+    `None` when the result is not bound to a plain name, and the two shapes that reach it are
+    findings rather than gaps. A call whose result is discarded -- `await stripe.paymentIntents
+    .create({...});` -- reads no response field, so a removed response property does not break it
+    and `unaffected` is the correct label. A call whose result is returned puts whatever reads
+    the field outside this function, where an insertion cannot see it; binding it to a name first
+    would be a restructuring, and the label would then describe that rather than a dependency the
+    vendor's change breaks. Five of the corpus's eleven unreachable targets are the first, two are
+    the second.
     """
     node = call
     while node is not None and node.kind() not in _STATEMENT_KINDS:
         node = node.parent()
-    if node is None or node.kind() not in ("lexical_declaration", "variable_declaration"):
+    if node is None:
         return None
 
-    for child in node.children():
-        if child.kind() != "variable_declarator":
-            continue
-        name = child.field("name")
-        if name is not None and name.kind() == "identifier":
-            return name.text(), node
+    if node.kind() in ("lexical_declaration", "variable_declaration"):
+        for child in node.children():
+            if child.kind() != "variable_declarator":
+                continue
+            name = child.field("name")
+            if name is not None and name.kind() == "identifier":
+                return name.text(), node
+        return None
+
+    if node.kind() == "expression_statement":
+        for child in node.children():
+            if child.kind() != "assignment_expression":
+                continue
+            # A plain name only. `order.intent = await ...` binds a property, and a guard reading
+            # it would depend on the object outliving the statement rather than on the call.
+            target = child.field("left")
+            if target is not None and target.kind() == "identifier":
+                return target.text(), node
     return None
 
 

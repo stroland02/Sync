@@ -98,6 +98,19 @@ export async function lookUpCharge(id: string) {
 }
 """
 
+# Two calls on the changed operation sharing one line. A response guard appended to the first
+# statement moves no line and still shifts the second call's column, which is the displacement
+# that remains once the guard stops occupying lines of its own.
+SAME_LINE = """import Stripe from 'stripe';
+
+const stripe = new Stripe(process.env.STRIPE_KEY!);
+
+export async function chargeBoth(amount: number) {
+  const charge = await stripe.charges.create({ amount, currency: 'eur' }); const payment = await stripe.charges.create({ amount, currency: 'usd' });
+  return [charge.id, payment.id];
+}
+"""
+
 # The same repository where both calls on the changed operation pass `metadata`. Against a
 # change nested under `metadata`, the detector matches on the outer segment and says so -- an
 # operation-match-only finding. It is how a false positive arises without anything being
@@ -404,15 +417,21 @@ def test_a_label_the_mutation_displaced_is_refused_rather_than_scored_as_a_miss(
 ):
     """The one place the generator and the graph disagree, found by joining them.
 
-    A response-side mutation inserts lines, and `upsert_call_site` puts `line` in a call site's
-    identity -- its own comment says a site that merely shifts down the file becomes a new row.
-    So every call below the mutation is a different id in the mutated index, its label addresses
-    a row that no longer exists, and the score would read as a miss plus an unlabelled finding
-    with nothing saying why. Refused, naming the ids.
+    `upsert_call_site` puts `line` and `col` in a call site's identity, so a call the mutation
+    moves becomes a new row: its label addresses one that no longer exists, and the score would
+    read as a miss beside an unlabelled finding with nothing saying the two were the same call.
+    Refused, naming the ids.
+
+    Displacement used to arrive by the line, because the response guard occupied three of them,
+    and that is what refused two of the twelve frozen-corpus specifications outright. The guard
+    is now appended to the statement it follows and moves no line -- so this asserts the refusal
+    against what remains, which is the column. Two calls sharing a line still shift the second
+    when the first is mutated, and the refusal has to survive its common case disappearing or it
+    is no longer being tested at all.
     """
     repo = _repo(tmp_path)
     change = _change("receipt_email", kind="response-property-removed")
-    sources = _sources(PLAIN)
+    sources = _sources(SAME_LINE)
     sites = _prepared(sources, change, store, adapter, repo)
     first = _create_sites(sites)[0]
 
