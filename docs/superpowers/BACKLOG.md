@@ -12,26 +12,6 @@ item that cannot say what evidence closes it is not ready to dispatch.
 
 ## Ready
 
-### B49 — The rule now proposes four pairs the corpus does not hold
-
-B48 made selection follow the change's own side, and measured what the corrected rule would
-propose for the four TypeScript repositories: it **differs from the thirteen pinned pairs in four
-places.** That was measured into a scratch directory and deliberately not landed, because a rule
-change and a corpus regeneration in one commit move the floors for two reasons at once and neither
-can be attributed.
-
-So the corpus currently holds four pairs the rule would no longer choose, and is missing four it
-now would. Neither set is wrong — the pinned thirteen score honestly and every floor clears — but
-the corpus has stopped being what its own generator would produce, and that gap only widens.
-
-**Closes when:** the corpus is regenerated from the corrected rule, the floors are restated in the
-same commit with old and new side by side, and each of the four differences is named with what it
-gained or lost — a falsifiable negative, a response positive, a denominator.
-
-**Read before starting:** whether to regenerate at all is a real question. The thirteen pinned
-pairs are a measured, gated, byte-identical baseline, and replacing them resets the history the
-floors were built from. Argue it either way, but argue it.
-
 ### B7 — The M0 acceptance run has not executed since the pipeline changed underneath it
 
 `tests/test_e2e_stripe.py::test_one_command_produces_one_green_pull_request` is the
@@ -61,6 +41,16 @@ recorded with which change broke it.
 _Nothing._
 
 ## Done
+
+- **B49** — the corpus and the rule that should produce it now agree, and **all four differences
+  were additions**, which was the outcome to prefer: nothing measured was discarded to get there.
+
+  Floors all moved **up**: precision and recall **n=18 to n=27**, falsifiable negatives 5 to 6,
+  pairs scored 13 to 17. Symbol map digest unmoved. Byte-identical across two clean databases.
+
+  The rates held at 1.0000 over half again as many labelled positives, which is the part worth more
+  than the count — a perfect rate at n=18 and a perfect rate at n=27 are different amounts of
+  evidence for the same claim.
 
 - **B48** — operation selection now follows the change's own side. An operation qualifies on
   `args_keys` for a request pair and `response_fields_read` for a response one, through a shared
