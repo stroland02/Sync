@@ -122,18 +122,37 @@ positive needs a partial path match and cannot arise at all from a flat change. 
 this corpus is flat. A precision of 1.0 over it is closer to a property of the corpus than a
 property of the binder.
 
-**Measured afterwards by the coordinator, and it is stronger than "almost no way to fail".** The
-rung on every label in `2026-07-29-score.json` was counted:
+**The conclusion below is right and the coordinator's first evidence for it was wrong. Both are
+kept, because the wrong one is the more instructive.**
 
-```
-affected   (n=12): {'static': 12}
-unaffected (n=94): {'unresolved': 94}
+What the coordinator did was count the `rung` on every label in `2026-07-29-score.json`, get
+`affected: {'static': 12}` and `unaffected: {'unresolved': 94}`, and conclude that all 94
+negatives were bound to no operation and so could never have produced a finding.
+
+**That established nothing.** `mutate.py:190` writes the rung as a literal —
+`rung="static" if site.id in broken else "unresolved"` — so every unaffected label is stamped
+`unresolved` by construction, whatever the indexer actually did. And `binding.py:223` skips
+unaffected labels before rung is ever read, so those 94 values never enter the computation at
+all. In fact every one of those sites *is* a static binding: sites come from `adapter.index`,
+which yields no `CallSite` whose symbol it could not resolve.
+
+Counting a hardcoded literal and reporting it as a measured property is the same defect this
+project keeps finding in its own gates, arrived at from the other side.
+
+**The real cause is `cli.py:1473`:**
+
+```python
+targets = [site.id for site in sites if site.operation_id == change.operation_id]
 ```
 
-**All 94 negatives are `unresolved` — bound to no operation at all.** A call site the indexer
-could not bind cannot produce a finding from any detector, so not one of the 94 had the
-opportunity to become a false positive. Precision's denominator is `true_positives +
-false_positives`, and the false-positive term had no candidates rather than few.
+Every same-operation site is targeted, so no same-operation site is ever left untargeted, so no
+negative exists that the detector could plausibly have fired on. Verified empirically rather than
+read: `affected + unreachable` equals the same-operation count each spec header records, for all
+ten scored pairs — the two apparent mismatches are the displaced-label exclusions, which are
+`0/0/0`.
+
+That is why `falsifiable_negatives` exists and reads **0** for all ten pairs. It counts the
+opportunity rather than asserting its absence.
 
 So the two axes are not equally supported and should never be quoted together as one result:
 

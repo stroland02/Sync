@@ -36,21 +36,30 @@ when, which is why it is recorded here rather than dispatched.
 **Closes when:** one `sync run` produces a CI-green pull request again, or the failure is
 recorded with which change broke it.
 
-### B31 — The corpus contains no negative the binder could get wrong
+### B31 — Give the corpus a negative the binder could get wrong (diagnosed, not fixed)
 
-Counted across every label in the frozen corpus: the 12 affected sites are all `static` rung, and
-**all 94 unaffected sites are `unresolved`** — bound to no operation at all. A call site the
-indexer could not bind cannot produce a finding from any detector, so not one negative had the
-opportunity to become a false positive.
+`falsifiable_negatives` now counts negatives the detector could have fired on and prints beside
+precision. It reads **0** for all ten scored pairs, so the corpus states its own vacuousness in
+its output rather than requiring a reader to know.
 
-So binding precision 1.0 is what the corpus construction guarantees rather than something the
-binder earned, and **a directional floor gated on it would be gating a constant** — the "never
-fires and provides false assurance" half of the failure `2026-07-27-sync-benchmark-gates.md`
-warns about. Recall 1.0 at n=12 is unaffected by this and remains a real measurement.
+The cause is one line, `cli.py:1473`:
 
-**Closes when:** the corpus carries an untargeted call site on the *same operation* as the change
-that does not touch the changed field and that the indexer binds `static` rather than leaving
-`unresolved` — and precision is recomputed with that negative present.
+```python
+targets = [site.id for site in sites if site.operation_id == change.operation_id]
+```
+
+Every same-operation site is targeted, so none is ever left untargeted, so no falsifiable negative
+can exist. Verified empirically: `affected + unreachable` equals the same-operation count each
+spec header records, for all ten pairs.
+
+**Not fixed, deliberately, and the reason is a real trade rather than a boundary.** Holding a
+same-operation site back from `targets` creates the negative — `generate_pair` already supports it,
+since the caller names its targets — but it also **moves recall's denominator**, and recall at
+n=12 is currently the only genuine quality measurement this project has. Trading the one real
+number for a second one needs a decision, not a patch.
+
+**Closes when:** that trade is decided and, if taken, precision is recomputed with
+`falsifiable_negatives` non-zero and recall's new denominator stated beside it.
 
 ### B29 — The binding score's response axis has never had a sample
 
@@ -123,8 +132,9 @@ and it stays that way however much corpus data arrives.
 
   Two caveats that must travel with the number. Both axes are computed over the **request side
   only**: every `response-property-removed` pair scored 0 affected and 0 findings, with 11 labels
-  unreachable. And **precision 1.0 is a constant, not a measurement** — all 94 negatives are
-  `unresolved`, so the false-positive term had no candidates. Recall 1.0 at n=12 is real. See B31.
+  unreachable. And **precision 1.0 is a constant, not a measurement** — `cli.py:1473` targets
+  every same-operation site, so no negative the detector could have fired on exists. Recall 1.0 at
+  n=12 is real. See B31.
 
 - **B26** — the conformance kit no longer certifies what it never exercised. `check_vendor_adapter`
   refused nothing when `known_symbol` was `None` or resolved to `None`; `check_remediator` read an
