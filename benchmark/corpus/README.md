@@ -107,3 +107,34 @@ Three things the report insists on and this directory must keep:
   zero affected call sites — every response-side pair that was not refused outright — because the
   response mutation could not attach to any of their calls. The corpus total cannot show that and
   the per-pair table does.
+
+## The precision on this corpus is a constant, and the recording now says so
+
+`recorded/2026-07-29-falsifiable-negatives.txt` and `.json` are the same run with one number
+added: how many labelled negatives the detector could have fired on. It is **zero**, in every one
+of the ten scored pairs, and byte-identical across two runs from two clean databases
+(`c78177750c51a04f8171cd4f3b4860991f54e6c2a98056c0f3d57bb608aa3175`).
+
+Precision is the share of judged findings that were genuine. With no candidate for its
+false-positive term, the rate cannot move: 1.0000 is what building the corpus this way
+guarantees, and it would survive a binder regression that only affected same-operation
+discrimination.
+
+The cause is the targeting rule rather than the repositories. `cli._score_corpus` targets **every**
+indexed call site on the changed operation, so such a site is either broken — and labelled
+affected — or a target the mutation could not attach to. Both classes are unusable as negatives,
+and the second for a reason that is structural rather than incidental: a request mutation attaches
+where the call passes an object argument, which is exactly where the indexer records `args_keys`,
+and a response mutation attaches where the result is bound in a declarator, which is exactly where
+it records `response_fields_read`. **A site the mutation cannot reach is a site whose field list is
+empty, and an empty field list declines against every change there has ever been.**
+
+So no choice of repository or specification fixes this while that rule stands, and adding
+repositories would raise the negative count without adding a single candidate. What the corpus
+needs is a same-operation call site deliberately held back from the target list — which
+`generate_pair` already supports, since the caller names its targets, and which nothing currently
+asks it for.
+
+Until then a directional floor on binding precision would be gating a constant, which
+`docs/superpowers/specs/2026-07-27-sync-benchmark-gates.md` names as the failure that is worse
+than having no gate at all.
