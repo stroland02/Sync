@@ -15,3 +15,7 @@ tools/
 # Agent worktrees live inside .claude/ but are checkouts, not configuration.
 # .claude/rules/ and .claude/skills/ are checked in deliberately.
 .claude/worktrees/
+
+# Coverage artifacts, written by the command docs/superpowers/specs/2026-07-29-sync-coverage-baseline.md publishes.
+.coverage
+coverage.json
