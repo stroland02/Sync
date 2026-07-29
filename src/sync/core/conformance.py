@@ -73,7 +73,8 @@ def check_vendor_adapter(adapter: Any, *, known_symbol: str) -> None:
     """Check `adapter` against every guarantee `VendorAdapter` states but cannot enforce.
 
     `known_symbol` is a symbol the adapter is expected to resolve — an author's own example,
-    since the kit has no fixtures of its own and must run outside this repository.
+    since the kit has no fixtures of its own and must run outside this repository. It is
+    required, and it has to resolve; `_check_operation_for_symbol` carries why.
 
     Raises `ConformanceFailure` naming the broken rule. Returns None when the adapter conforms.
     """
@@ -93,9 +94,33 @@ def _check_vendor_id(adapter: Any) -> None:
 
 
 def _check_operation_for_symbol(adapter: Any, known_symbol: str) -> None:
+    """`operation_for_symbol` is the hinge, so the rule that it works cannot be the vacuous one.
+
+    Every other rule here is about what the adapter must *not* do -- not raise on an unknown
+    symbol, not guess, not return the wrong type. An adapter that resolves nothing satisfies all
+    of them, and until this function required an answer the kit certified it. That is not a
+    hypothetical shape: it is what a vendor served by a generated-spec adapter with no SDK source
+    staged actually does, and it produces no finding ever, because this method is what joins a
+    specification diff to a call site.
+
+    So the positive case is required, and the two ways it can be missing are reported separately.
+    "You did not give me a symbol" is a defect in the call; "your adapter did not resolve the
+    symbol you gave me" is a defect in the adapter, or in the example chosen for it. They have
+    different fixes, and an author told the wrong one edits the wrong file.
+    """
     resolve = getattr(adapter, "operation_for_symbol", None)
     if resolve is None:
         _fail("operation_for_symbol must exist.", "It is how a call site becomes an operation.")
+
+    if not isinstance(known_symbol, str) or not known_symbol:
+        _fail(
+            "the kit must be given a symbol this adapter is expected to resolve.",
+            f"Got {known_symbol!r}. Nothing about the adapter has been established by this "
+            "call: every other rule here is about what it must not do, and an adapter that does "
+            "nothing satisfies all of them. Hand the kit a symbol from your own SDK -- the kit "
+            "has no fixtures of its own and cannot invent one, because which strings a vendor's "
+            "SDK spells is the vendor knowledge this whole interface exists to keep out of core.",
+        )
 
     parameters = inspect.signature(resolve).parameters
     if "language" not in parameters:
@@ -127,6 +152,15 @@ def _check_operation_for_symbol(adapter: Any, known_symbol: str) -> None:
             "operation_for_symbol must return an OperationRef or None.",
             f"Got {type(resolved).__name__}. The pipeline reads attributes off this value, so a "
             "wrong type fails far from the adapter and names a field rather than the cause.",
+        )
+    if resolved is None:
+        _fail(
+            "the adapter did not resolve the symbol the kit was given.",
+            f"Asked for {known_symbol!r} and got None. An adapter that resolves nothing is "
+            "indexed against a customer's repository, matches their call sites, and binds none "
+            "of them -- it produces no finding whatever the vendor ships, and reports no fault "
+            "while doing it. If this symbol is not one your adapter serves, hand the kit one "
+            "that is; if it is, the map this adapter reads is not reaching it.",
         )
 
 
@@ -209,6 +243,33 @@ def _check_propose_touches_the_clone(
     The mirror matters too. An empty diff means the remediator declined, and a decline must leave
     the tree alone -- writing identical bytes still updates an mtime, and a tool that touches
     files it decided not to edit is one nobody trusts near a working tree.
+
+    A decline is not a pass, and the order below is what keeps both statements true
+    ------------------------------------------------------------------------------
+    A remediator that declines this case writes nothing, satisfies the mirror, and used to be
+    reported as conforming -- so every rule about what `propose` produces was vacuous, and it was
+    vacuous in production rather than in theory: `ParameterRenameRemediator` passed this kit on a
+    patch it never produced, because the clone it was handed already declared the key it renames
+    onto and declining was the correct answer.
+
+    That is reported against the **case**, not against the remediator, and the distinction is the
+    whole resolution of the obvious tension. A tier declining a change outside its strategy is
+    doing its job, and the kit has no way to know whether the author meant this case to be
+    handled -- so it does not say the remediator is wrong. It says nothing was measured, which is
+    true, and which the author can act on: they wrote the remediator, so they can always supply a
+    case it claims. This is the same shape as the three preconditions already in this module --
+    a repository with no call sites, a detector that finds nothing, a request that correlates to
+    nothing -- and it is a hard failure for the reason those are. A distinct return value would
+    make every existing caller branch on it, and a caller that ignored the branch would be back
+    where this started.
+
+    The ordering matters and is not cosmetic. "Declined and still changed the clone" is checked
+    **before** "this case was not one you patch", because the first is a real violation and the
+    second is only a statement that nothing was learned. Reversing them would make the mirror
+    unreachable: every violator of it declines by construction, so a precondition that fired
+    first would swallow the rule it is standing in front of. That failure mode -- a rule whose
+    probe can no longer reach it -- is the one this module has already met once, and it is worth
+    a sentence here because the fix for one hole is exactly what digs the other.
     """
     target = Path(repo.local_path) / site.path
     if not target.exists():
@@ -258,6 +319,16 @@ def _check_propose_touches_the_clone(
             "propose declined and still changed the clone.",
             "An empty diff means no patch. Writing anyway -- even identical bytes -- updates an "
             "mtime and edits a file the remediator decided to leave alone.",
+        )
+    if not diff.strip():
+        _fail(
+            "the case handed to the kit must be one this remediator patches.",
+            f"{type(remediator).__name__} returned an empty diff, which is a decline, so nothing "
+            "this check is about was observed: the rule that a patch is written to disk rather "
+            "than merely described is measured on a patch, and there was none. This is a "
+            "statement about the case and not about the remediator -- declining a change outside "
+            "its strategy is what a tier is for. Hand the kit a finding and change your "
+            "remediator claims, and confirm it with `can_handle` before you get here.",
         )
 
 

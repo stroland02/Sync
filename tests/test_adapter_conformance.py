@@ -56,6 +56,37 @@ def test_a_correct_adapter_passes():
     check_vendor_adapter(_Correct(), known_symbol="example.charges.create")
 
 
+@pytest.mark.parametrize("known_symbol", [None, ""])
+def test_no_known_symbol_is_reported_against_the_case(known_symbol):
+    """"You did not give me a symbol to check" is a different problem from "your adapter did not
+    resolve the symbol you gave me", and an author who conflates them edits the wrong thing.
+
+    This half is the case being wrong. Nothing about the adapter has been established either way,
+    and the message has to say so -- an author told their adapter failed would go looking in the
+    adapter for a defect that is in the call.
+    """
+    with pytest.raises(ConformanceFailure, match="must be given a symbol"):
+        check_vendor_adapter(_Correct(), known_symbol=known_symbol)
+
+
+def test_an_adapter_that_resolves_no_symbol_at_all_fails():
+    """The other half, and the hole this closes.
+
+    `operation_for_symbol` is the hinge of the whole system: it is what joins a specification diff
+    to a call site. An adapter that resolves nothing produces no findings ever, and the kit used
+    to certify it -- every rule above this one is about what the adapter does *not* do, and an
+    adapter that does nothing satisfies all of them.
+    """
+
+    class ResolvesNothing(_Correct):
+        def operation_for_symbol(self, symbol: str, *, language: str | None = None):
+            return None
+
+    assert isinstance(ResolvesNothing(), VendorAdapter), "isinstance must still pass, or this proves nothing"
+    with pytest.raises(ConformanceFailure, match="did not resolve the symbol"):
+        check_vendor_adapter(ResolvesNothing(), known_symbol="example.charges.create")
+
+
 def test_an_adapter_that_raises_on_an_unknown_symbol_fails():
     """The invariant this repository states most often and writes down least visibly: an
     unresolvable symbol returns None rather than raising or guessing. An unresolved symbol is
@@ -149,6 +180,29 @@ class _CorrectRemediator:
 
 def test_a_correct_remediator_passes(tmp_path):
     check_remediator(_CorrectRemediator(), *_remediation_case(tmp_path))
+
+
+def test_a_remediator_that_declines_the_case_is_reported_against_the_case(tmp_path):
+    """A decline is not a pass, and the second hole this closes.
+
+    Every rule below is about what `propose` writes. A remediator that declines writes nothing,
+    satisfies the decline branch, and the kit reports success having watched it do nothing at
+    all. It was live: `ParameterRenameRemediator` passed on a patch it never produced, because
+    the fixture clone already declared the key it renames onto and declining was correct.
+
+    Reported against the *case*, not the remediator, and that is the whole resolution of the
+    tension. Declining a change outside its strategy is what a tier is supposed to do, so the kit
+    cannot call it a defect -- but it can say that nothing was measured, which is true and is what
+    an author needs to hear. The fix is a case they hand it that their own remediator handles,
+    and they can always produce one.
+    """
+
+    class DeclinesEverything(_CorrectRemediator):
+        def propose(self, finding, change, site, repo, diagnostics: str = ""):
+            return Patch(diff="", strategy=self.strategy, rationale="not my change kind")
+
+    with pytest.raises(ConformanceFailure, match="must be one this remediator patches"):
+        check_remediator(DeclinesEverything(), *_remediation_case(tmp_path))
 
 
 def test_a_remediator_that_only_returns_a_diff_fails(tmp_path):

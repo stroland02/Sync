@@ -59,6 +59,7 @@ from sync.core import (
     VendorChange,
 )
 from sync.core.conformance import (
+    ConformanceFailure,
     check_detector,
     check_language_adapter,
     check_remediator,
@@ -198,11 +199,49 @@ def _built(vendor_id: str, cache_dir: Path):
     )
 
 
+# Vendors whose SDK source **this suite** never stages, so the kit's requirement that the known
+# symbol resolves cannot be met here.
+#
+# Read the reason precisely, because the shorter version of it is alarming and wrong. These
+# adapters are not unable to resolve symbols. `registry._load_generated` builds
+# `GeneratedSpecAdapter` with `sources={}` -- an empty cache, deliberately, because that loader
+# promises to reach no network and builds from the manifest alone. Symbol resolution needs the
+# SDK source, and nothing here stages one, so `operation_for_symbol` is being asked a question it
+# was never given the material to answer. The extraction that would answer it is proved
+# separately, against committed SDK checkouts, in `test_extracted_symbols.py`,
+# `test_extracted_symbols_typescript.py` and `test_extracted_symbols_speakeasy.py`.
+#
+# What retires an entry: a fixture in this suite that stages that vendor's SDK source into the
+# cache `load_vendor` is pointed at, after which the adapter resolves and the vendor moves into
+# the checked set. `test_the_unstaged_set_is_exactly_the_set_that_resolves_nothing` fails in both
+# directions until then, so this cannot outlive the gap or quietly grow to cover a real defect.
+#
+# Open and not answered here: whether a generated vendor resolves symbols in a real run, once a
+# `sync run` has staged its cache. That is the difference between a staging gap in the tests and
+# a substrate that cannot bind, and nothing in this suite establishes it either way.
+UNSTAGED_SDK_SOURCE = {"anthropic", "cloudflare", "openai", "vercel"}
+
+_UNRESOLVED_RULE = "the adapter did not resolve the symbol the kit was given."
+
+
 @pytest.mark.parametrize("vendor_id", available_vendors())
 def test_every_registered_vendor_adapter_passes_the_kit(vendor_id: str, tmp_path):
-    check_vendor_adapter(
-        _built(vendor_id, tmp_path), known_symbol=_vendor_case(vendor_id).known_symbol
-    )
+    adapter = _built(vendor_id, tmp_path)
+    known_symbol = _vendor_case(vendor_id).known_symbol
+
+    if vendor_id in UNSTAGED_SDK_SOURCE:
+        # Asserted on the rule's own wording rather than on the exception type. Every rule in the
+        # kit raises `ConformanceFailure`, so `pytest.raises` alone would let this entry absorb
+        # some later, unrelated failure of the same type and go on reporting it as the known gap.
+        with pytest.raises(ConformanceFailure) as raised:
+            check_vendor_adapter(adapter, known_symbol=known_symbol)
+        assert _UNRESOLVED_RULE in str(raised.value), (
+            f"'{vendor_id}' is exempted for having no SDK source staged, and the kit refused it "
+            f"for a different reason: {raised.value}"
+        )
+        return
+
+    check_vendor_adapter(adapter, known_symbol=known_symbol)
 
 
 def test_no_vendor_case_names_something_that_is_not_registered():
@@ -220,19 +259,22 @@ def test_no_vendor_case_names_something_that_is_not_registered():
         )
 
 
-def test_which_registered_vendors_actually_resolve_their_known_symbol(tmp_path):
-    """What the kit's own rule cannot say, recorded here so it is not read as coverage.
+def test_the_unstaged_set_is_exactly_the_set_that_resolves_nothing(tmp_path):
+    """The staleness gate on `UNSTAGED_SDK_SOURCE`, and it has to fail in both directions.
 
-    `check_vendor_adapter` accepts `None` for the known symbol: the rule is that a resolved
-    symbol is an `OperationRef`, not that the symbol resolves. That is right for the kit -- an
-    author's adapter may legitimately not know the example they supplied -- and it means passing
-    the check is not evidence that a vendor resolves anything at all.
+    An exemption that starts covering something it does not describe is the failure mode a list
+    exists to be immune to, and it arrives from either side. A vendor in the set that starts
+    resolving -- because somebody staged its SDK source -- leaves a line exempting a vendor that
+    no longer needs exempting, and the next vendor added to the set inherits the silence. A
+    vendor *outside* the set that stops resolving is the direction that matters more: that is a
+    real regression in an adapter this repository ships, and without this assertion it would
+    surface as its parametrisation failing with a message about the case rather than about the
+    adapter.
 
-    Every configured vendor is in that position today. `load_vendor` builds `GeneratedSpecAdapter`
-    with no staged SDK source because it promises to reach no network, so it answers None for
-    every symbol, and the kit passes it. Asserted in both directions so the day a configured
-    vendor starts resolving, this fails and someone reads why rather than the file continuing to
-    claim the gap is still open.
+    So the set is asserted as an equality against what the adapters actually answer, rather than
+    each half being spot-checked. This replaces an earlier assertion here that pinned the
+    resolving set to the literal `{"stripe", "twilio"}`: the two would have had to be kept in
+    step by hand, and one of them would eventually have been the only one updated.
     """
     resolving = {
         vendor_id
@@ -243,10 +285,11 @@ def test_which_registered_vendors_actually_resolve_their_known_symbol(tmp_path):
         is not None
     }
 
-    assert resolving == {"stripe", "twilio"}, (
-        f"{sorted(resolving)} resolve their known symbol. The hand-written adapters do and the "
-        f"configured ones do not, because `registry._load_generated` stages no SDK source. If "
-        f"that changed, this file's coverage claim changed with it"
+    assert resolving == set(available_vendors()) - UNSTAGED_SDK_SOURCE, (
+        f"{sorted(resolving)} resolve their known symbol and UNSTAGED_SDK_SOURCE says "
+        f"{sorted(set(available_vendors()) - UNSTAGED_SDK_SOURCE)} should. A vendor that started "
+        f"resolving means its SDK source is now staged and its entry should be deleted; a vendor "
+        f"that stopped is a regression in an adapter this repository ships"
     )
 
 
@@ -509,30 +552,27 @@ def test_every_remediator_case_and_exemption_still_names_a_shipped_tier():
         )
 
 
-def test_the_case_each_remediator_was_given_is_one_it_actually_patches(tmp_path):
-    """A decline passes the kit, so a case a remediator does not handle is a pass that measured
-    nothing.
+def test_each_remediator_agrees_with_can_handle_about_the_case_it_was_given(tmp_path):
+    """What is left here after the kit learned to refuse a case it was not exercised by.
 
-    The kit cannot state this rule itself: declining is legitimate remediator behaviour and it
-    has no way to know whether the author meant this case to be handled. Here it is knowable, so
-    both halves are asserted -- the remediator claims the case, and `propose` returns a patch
-    rather than an empty diff. Without the second half a remediator that claims everything and
-    writes nothing satisfies the kit's decline branch, which is the shape the write rule exists
-    to catch.
+    This test used to assert two things: that the remediator claims the case, and that `propose`
+    returns a patch rather than an empty diff. The second is now `check_remediator`'s own
+    precondition -- "the case handed to the kit must be one this remediator patches" -- so
+    `test_every_shipped_remediator_passes_the_kit` above catches it one layer down, for every
+    author rather than only for this repository. Asserting it twice would leave two statements of
+    one rule free to drift, and the weaker one is the one that would survive.
+
+    The `can_handle` half stays, because the kit genuinely cannot see it: nothing in
+    `check_remediator` consults `can_handle`, and `nodes.make_patch` calls `propose` directly
+    without it. So a tier that patches a change it publicly declines is a real inconsistency
+    between what routing is told and what the tier does, and this is the only place it is checked.
     """
     for name in CHECKABLE_REMEDIATORS:
         case = REMEDIATOR_CASES[name](tmp_path / name)
-        remediator = SHIPPED_REMEDIATORS[name]
 
-        assert remediator.can_handle(case.finding, case.change), (
-            f"{name} declines the case REMEDIATOR_CASES gives it, so check_remediator observes "
-            f"a decline and every rule about what propose writes is vacuous"
-        )
-        patch = remediator.propose(case.finding, case.change, case.site, case.repo)
-        assert patch.diff.strip(), (
-            f"{name} returns an empty diff for the case REMEDIATOR_CASES gives it. The kit reads "
-            f"that as a decline and checks only that the clone was left alone, so the rule that "
-            f"a patch is written to disk is never reached"
+        assert SHIPPED_REMEDIATORS[name].can_handle(case.finding, case.change), (
+            f"{name} declines the case REMEDIATOR_CASES gives it and then patches it, so routing "
+            f"is told this tier does not serve a change it does in fact serve"
         )
 
 
