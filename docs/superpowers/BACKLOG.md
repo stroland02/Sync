@@ -12,24 +12,6 @@ item that cannot say what evidence closes it is not ready to dispatch.
 
 ## Ready
 
-### B40 — Something in the suite fails roughly once in eight runs and nobody has named it
-
-Twice today a full `uv run pytest` returned `1 failed` and the identity was lost before it could be
-captured. Seven clean runs have followed, and the standing explanation does not hold:
-
-- **Not connection exhaustion.** Measured during a run: peak **54 of 300** connections, zero
-  sampler connection failures. That was the cause of the morning's flakiness and the ceiling fix
-  closed it.
-- **Not a specific test**, as far as anyone knows — neither failure was captured with its name.
-
-A suite that fails once in eight runs for an unknown reason erodes every gate that depends on it,
-including the corpus floors added today. The cost is not the failed run; it is that the next real
-regression arrives looking exactly like this one and gets re-run away.
-
-**Closes when:** the failing test is named and either fixed or explained. A capture harness that
-re-runs until failure and preserves the output is the cheap first step —
-`pytest -p no:randomly -x` in a loop, saving the first red run's full output rather than its tail.
-
 ### B7 — The M0 acceptance run has not executed since the pipeline changed underneath it
 
 `tests/test_e2e_stripe.py::test_one_command_produces_one_green_pull_request` is the
@@ -59,6 +41,27 @@ recorded with which change broke it.
 _Nothing._
 
 ## Done
+
+- **B40** — the once-in-eight failure has a name:
+  `test_a_database_that_cannot_be_dropped_does_not_fail_the_run`, caught on run 5 of 14 and failing
+  in its own setup with `database "sync_test_22000_gw2" does not exist`.
+
+  **A race between two pytest runs, not between two tests.** The sweep is server-wide and drops
+  every `sync_test_%` database whose embedded pid is dead; three tests deliberately create databases
+  named for a dead pid, because that is the only thing the sweep will consent to drop. That is the
+  bait every *other* run's `pytest_configure` eats. Reproduced deterministically — a second run's
+  `--collect-only` is enough, because the sweep happens before any test executes.
+
+  Alternatives falsified with evidence rather than dismissed: not connections (the server answers
+  "does not exist" *after* a successful connect, where a limit says "too many clients already", and
+  the peak-54-of-300 measurement stands), not order dependence inside a run (the sweep runs once in
+  the controller before any test), not product code (everything involved is under `tests/`). Load
+  widens the window — the red run took 354.96s against 108–122s for the four green ones.
+
+  **Two workers converged on the identical fix independently**: name the bait for a live pid and
+  inject a probe that calls it dead, so the `DROP` and the in-use refusal stay real while the
+  database is invisible to other runs. The other coordinator's landed first as `bf3356a`, so only
+  this one's capture harness and report were taken.
 
 - **B41** — the corpus's second frozen input is pinned. `benchmark/corpus/symbol_map.yaml` records
   a digest beside `repositories.yaml`, the score carries the digest of the map that actually ran,
