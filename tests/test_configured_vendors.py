@@ -50,14 +50,11 @@ DOCUMENTED_FIELDS = {"vendor_id", "repo", "manifest", "sdk_bindings"}
 # Format: (generator, language), where the generator is what the vendor's manifest convention
 # yields and the language is what a binding names. An extraction rule for the pair is
 # `EXTRACTORS["<generator>-<language>"]`.
-PENDING_EXTRACTORS: set[tuple[str, str]] = {
-    # `vercel` is configured against `.speakeasy/workflow.yaml` and declares a TypeScript
-    # binding, and `src/sync/signals/generated/` holds Stainless rules only. So the vendor can be
-    # discovered and diffed and every call site it has stays unbound, which produces no findings
-    # and reports no fault. The rule is being written as this lands; whoever adds
-    # `symbols_speakeasy.py` deletes this entry in the same commit.
-    ("speakeasy", "typescript"),
-}
+# Empty, and that is the state worth defending: every generator-times-language pair some vendor
+# is configured against has a rule that can read symbols out of the SDK. The set held exactly one
+# entry for the few minutes between this file landing and `symbols_speakeasy.py` landing, and the
+# entry was deleted by the stale-exemption test firing rather than by anyone remembering to.
+PENDING_EXTRACTORS: set[tuple[str, str]] = set()
 
 
 def _rows() -> list:
