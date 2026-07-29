@@ -12,7 +12,9 @@ whether the order is honest:
   zeroes mean opposite things and read identically;
 - the static count and the observed count stay separable, since one is shape and the other is
   volume;
-- equal rows come out in the same order every time, or nobody can diff two reports.
+- equal rows come out in the same order every time, or nobody can diff two reports;
+- a manifest that would not parse is named in the artifact, because counts with no record of it
+  read as a clean scan of a repository that depends on nothing.
 """
 
 from __future__ import annotations
@@ -47,6 +49,7 @@ from sync.signals.reachability import (
 )
 
 REACHABILITY_SOURCE = Path(__file__).parents[1] / "src" / "sync" / "signals" / "reachability.py"
+INTAKE_FIXTURES = Path(__file__).parent / "fixtures" / "intake"
 
 
 def _assessment(
@@ -65,8 +68,8 @@ def _assessment(
     )
 
 
-def _report(*assessments: Assessment) -> IntakeReport:
-    return IntakeReport(assessments=tuple(assessments), unreadable=())
+def _report(*assessments: Assessment, unreadable: tuple[str, ...] = ()) -> IntakeReport:
+    return IntakeReport(assessments=tuple(assessments), unreadable=unreadable)
 
 
 def _names(ranking) -> list[str]:
@@ -353,3 +356,139 @@ def test_the_counts_add_up_to_the_rows():
 
     assert ranking.counts() == {CALLED: 1, UNCALLED: 1, UNBINDABLE: 1}
     assert sum(ranking.counts().values()) == len(ranking.rows)
+
+
+# --- a manifest that would not parse survives into the ranked artifact -----------------
+
+
+def test_a_ranked_artifact_names_the_manifests_that_would_not_parse():
+    """The ranked artifact is the one an operator keeps, and it was the one that forgot.
+
+    A manifest that will not parse contributes no assessments, so the counts beside it read as a
+    clean scan of a project depending on nothing. The unranked artifact carries the fault beside
+    those zeroes; the ranked one carried nothing, and stderr does not close that -- it is not
+    what a caller redirects to a file, commits, or diffs between runs.
+    """
+    report = _report(
+        _assessment("stripe", WATCHED, vendor_id="stripe"),
+        unreadable=("pyproject.toml could not be read: unclosed table header",),
+    )
+
+    payload = json.loads(rank_reachability(report, call_sites={"stripe": 2}).to_json())
+
+    assert payload["unreadable"] == ["pyproject.toml could not be read: unclosed table header"]
+
+
+def test_a_clean_scan_records_an_empty_list_rather_than_omitting_the_key():
+    """`absent` and `empty` are different answers to whoever writes the parser.
+
+    An absent key is indistinguishable from an artifact produced before anything recorded
+    faults, which is the defect being closed -- omitting it on a clean run would leave that
+    ambiguity in place for every clean run. An empty list is a positive claim instead: every
+    manifest that was found was read.
+    """
+    payload = json.loads(rank_reachability(_report(_assessment("lodash", NOT_WATCHABLE))).to_json())
+
+    assert "unreadable" in payload
+    assert payload["unreadable"] == []
+
+
+def test_the_ranked_artifact_uses_the_same_key_and_shape_as_the_unranked_one():
+    """One vocabulary, not two.
+
+    A reader parsing both artifacts should need one rule for this fact, so the key is the one
+    `IntakeReport.to_json` already publishes and the shape is the same list of strings -- not a
+    nested object, and not a second name for the same thing. The key set is asserted alongside
+    the values, because a fault recorded under a name of its own would satisfy the values and
+    still cost the reader a second rule.
+    """
+    report = _report(
+        _assessment("stripe", WATCHED, vendor_id="stripe"),
+        unreadable=("package.json does not hold an object",),
+    )
+
+    unranked = json.loads(report.to_json())
+    ranked = json.loads(rank_reachability(report).to_json())
+
+    assert set(ranked) == {"counts", "rows", "unreadable"}
+    assert ranked["unreadable"] == unranked["unreadable"] == ["package.json does not hold an object"]
+
+
+def test_a_manifest_fault_is_never_a_row_and_never_moves_a_count():
+    """The record is a record, not a rank.
+
+    A fault ranked as a dependency would put a parse error in a list of packages, and a fault
+    counted would break the one arithmetic a reader is entitled to trust here -- that the counts
+    sum to the rows. Both reports are ranked from the same assessments and differ only in the
+    faults, so anything that moved is the addition's fault.
+    """
+    assessments = (
+        _assessment("stripe", WATCHED, vendor_id="stripe"),
+        _assessment("lodash", NOT_WATCHABLE),
+    )
+    clean = rank_reachability(_report(*assessments), call_sites={"stripe": 1})
+    faulted = rank_reachability(
+        _report(
+            *assessments,
+            unreadable=("package.json could not be read: Expecting value", "requirements.txt"),
+        ),
+        call_sites={"stripe": 1},
+    )
+
+    assert _names(faulted) == _names(clean) == ["stripe", "lodash"]
+    assert faulted.counts() == clean.counts()
+    assert sum(faulted.counts().values()) == len(faulted.rows)
+    assert json.loads(faulted.to_json())["rows"] == json.loads(clean.to_json())["rows"]
+
+
+def test_the_unranked_artifact_is_exactly_what_it_was():
+    """The path that already reported the fault correctly, pinned.
+
+    `sync intake` holds one `IntakeReport` and prints whichever artifact was asked for, so the
+    obvious wrong way to close this defect is to move the record instead of copying it. Pinning
+    the unranked key set here is what makes that show up as a failure rather than as a ranked
+    artifact that gained a key while the other one quietly lost it.
+    """
+    report = _report(
+        _assessment("stripe", WATCHED, vendor_id="stripe"),
+        unreadable=("package.json could not be read: Expecting value",),
+    )
+
+    unranked = json.loads(report.to_json())
+
+    assert set(unranked) == {"counts", "dependencies", "unreadable"}
+    assert unranked["unreadable"] == ["package.json could not be read: Expecting value"]
+    assert [item["name"] for item in unranked["dependencies"]] == ["stripe"]
+
+
+def test_a_repository_whose_manifest_will_not_parse_does_not_rank_as_an_empty_one(tmp_path: Path):
+    """The scenario the record exists for, over the fixture that genuinely fails to parse.
+
+    Nothing binds, nothing ranks, and every count is zero -- which is exactly what a repository
+    declaring no dependencies produces. The two artifacts are identical apart from the faults,
+    which is what makes the faults the only thing telling them apart.
+    """
+    faulted = json.loads(
+        rank_reachability(assess_repository(INTAKE_FIXTURES / "broken_manifest")).to_json()
+    )
+    empty = json.loads(rank_reachability(assess_repository(tmp_path)).to_json())
+
+    assert faulted["rows"] == empty["rows"] == []
+    assert faulted["counts"] == empty["counts"]
+    assert empty["unreadable"] == []
+    assert any("package.json" in problem for problem in faulted["unreadable"])
+
+
+def test_a_half_read_repository_ranks_what_it_read_and_still_names_what_it_could_not(
+    tmp_path: Path,
+):
+    """The harder half. One unreadable manifest beside one that parsed produces rows *and* a
+    fault, so an artifact carrying only the rows understates the repository without looking
+    empty -- which is the version of this a reader is least likely to catch.
+    """
+    ranking = rank_reachability(assess_repository(INTAKE_FIXTURES / "python_half_broken"))
+    payload = json.loads(ranking.to_json())
+
+    assert "openai" in _names(ranking)
+    assert sum(ranking.counts().values()) == len(ranking.rows)
+    assert any("pyproject.toml" in problem for problem in payload["unreadable"])

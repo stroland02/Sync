@@ -116,6 +116,21 @@ class ReachabilityRanking:
 
     rows: tuple[Reach, ...]
 
+    unreadable: tuple[str, ...]
+    """Manifests that would not parse, carried through from the report this ranks.
+
+    Repeated here rather than left to the caller's stderr, which `cli.py` also writes: the JSON
+    is what a caller redirects to a file, commits and diffs between runs, and a fault visible
+    only in a terminal nobody kept did not survive the run. A ranking whose counts are zero
+    because nothing could be read is otherwise indistinguishable from one over a repository that
+    depends on nothing.
+
+    `IntakeReport.unreadable`'s key and its shape, deliberately: a reader parsing both artifacts
+    needs one rule for this fact rather than two. Empty rather than absent on a clean scan,
+    because an absent key does not distinguish a repository whose manifests all read from an
+    artifact produced by something that never recorded a fault. Required rather than defaulted
+    for the same reason -- a ranking constructed without it would report a clean scan silently."""
+
     def counts(self) -> dict[str, int]:
         counts = {CALLED: 0, UNBINDABLE: 0, UNCALLED: 0}
         for row in self.rows:
@@ -146,6 +161,7 @@ class ReachabilityRanking:
                     }
                     for row in self.rows
                 ],
+                "unreadable": list(self.unreadable),
             },
             indent=2,
         )
@@ -258,4 +274,7 @@ def rank_reachability(
         )
     ]
 
-    return ReachabilityRanking(rows=tuple(sorted(rows, key=_order)))
+    return ReachabilityRanking(
+        rows=tuple(sorted(rows, key=_order)),
+        unreadable=report.unreadable,
+    )
