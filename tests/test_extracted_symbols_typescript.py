@@ -385,15 +385,25 @@ def test_a_tagged_template_under_another_tag_is_not_read_as_a_route(tmp_path):
 
 
 def test_a_mount_whose_constructor_is_not_a_name_is_not_an_edge(tmp_path):
-    """`new (pick())(this)` -- a `new` expression whose constructor is an expression.
+    """Two `new` expressions whose constructor is neither an identifier nor a member expression.
 
-    Declining is right: which class that constructs is a runtime fact, and this rule reads what
-    the source states. An edge invented here would file a resource's whole route set under a
+    `new (pick())(this)` is the case declining is plainly right for: which class that constructs
+    is a runtime fact, and an edge invented here files a resource's whole route set under a
     property no customer reaches by that name.
+
+    `new (API.Models)(this)` is the same branch reached by a source that does name a class, and it
+    is here to make the branch falsifiable -- a reader that unwrapped the parentheses would gain a
+    real `beta` edge onto the real `Models`, so the mutation that matters has something to find.
+    Declining it loses a mount the source states, and the loss is silent. Stainless cannot emit it,
+    because prettier removes redundant parentheses before the file is written, which is why this is
+    recorded rather than fixed.
     """
     root = _hand_built(
         tmp_path,
-        client=_CLIENT.replace("}\n", "  beta = new (pick())(this);\n}\n"),
+        client=_CLIENT.replace(
+            "}\n",
+            "  beta = new (pick())(this);\n  gamma = new (API.Models)(this);\n}\n",
+        ),
     )
 
     assert _map(root) == _READABLE
