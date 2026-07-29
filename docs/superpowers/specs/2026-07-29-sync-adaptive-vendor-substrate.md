@@ -263,7 +263,10 @@ The consequence for step 4 is that its ordering inverts:
    the only one derived from reality rather than from a document.
 4. **Propose with a model only where extraction fails**, and then only to locate the calling
    pattern in an unfamiliar SDK's source — a proposal that is itself refutable, because an
-   extractor built on it either resolves symbols against the spec or does not.
+   extractor built on it either resolves symbols against the spec or does not. Stated more
+   sharply by the coordinator who took this step, and the sharper form is the rule:
+   **finding no pattern is a report rather than a licence.** An extraction that finds nothing is
+   a fact to record about that SDK, not permission to guess at it.
 
 So the model's role shrinks from *authoring a contract* to *finding where a contract is written
 down*, which is the difference between a guess nobody can check and a search whose result is
