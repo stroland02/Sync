@@ -12,6 +12,39 @@ item that cannot say what evidence closes it is not ready to dispatch.
 
 ## Ready
 
+### B36 — The one gate that is safe to add now has its preconditions met
+
+`2026-07-27-sync-benchmark-gates.md` names exactly one gate addable without the tier C statistics
+research that never completed: **a directional floor on a deterministic axis.** Binding precision
+over a frozen corpus is deterministic given a fixed pipeline and fixed inputs, so a drop is a real
+change rather than sampling noise.
+
+That gate was unavailable all day for two separate reasons, and both closed today:
+
+- **Determinism was assumed, not measured.** It is now measured — byte-identical output across
+  independent runs from clean databases, four times over (B27, B32, B33, and the coordinator's own
+  re-run after the fetcher change).
+- **Precision was a constant.** With every same-operation site targeted there was no negative the
+  binder could fail on, so a floor would have gated something that could never fire — the "never
+  fires and provides false assurance" half of the failure that document warns about. B32's
+  `hold_back` gives it **4 falsifiable negatives**, and the binder declined all four.
+
+**This is not inventing a threshold, and the distinction is the whole task.** A floor at the
+recorded value asserts "this must not get worse", which is derived from a measurement. A floor at
+a round number someone liked would be invented, and is forbidden. Gate on the recorded figure or
+do not gate.
+
+Current recorded state, verbatim from the corpus: precision 1.0000 n=16, recall 1.0000 n=16,
+falsifiable negatives 4, 12 of 12 pairs scored, 64 paths not read.
+
+**Decide, and argue for it, whether recall gets a floor too.** Its determinism is equally
+established, but it moved twice today for legitimate reasons — a corpus fix exposing a real defect,
+and a deliberate trade of positives for negatives. A gate that fires on honest work gets disabled,
+and a disabled gate is worse than none.
+
+**Closes when:** CI fails on a seeded regression that drops binding precision, passes on the
+current tree, and the failure message names the recorded value it was compared against.
+
 ### B7 — The M0 acceptance run has not executed since the pipeline changed underneath it
 
 `tests/test_e2e_stripe.py::test_one_command_produces_one_green_pull_request` is the
@@ -38,12 +71,7 @@ recorded with which change broke it.
 
 ## In flight
 
-- **B28** — `task_d36a5c6e7443`, in `sync-solo-b`. Freezes a specimen corpus and measures whether
-  binding precision is actually deterministic, which is the precondition for the only tier C gate
-  that is safe without the statistics research that never completed.
-
-- **B24** — `task_8e675882a386`, in `sync-solo-b`. Builds B25's closing condition. Redispatched:
-  the first worker held the task for half an hour without starting and did not answer two nudges.
+_Nothing._
 
 ## Done
 

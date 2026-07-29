@@ -138,7 +138,10 @@ people will read it rather than leaving each person to rediscover it.
    generated pairs, and the first real binding precision and recall numbers reported with their
    sample sizes and their excluded cases counted. Unblocked. Dispatched as B27.
 2. **Add the directional floor** on binding precision over that frozen corpus, once it exists and
-   its variance is known to be zero across two identical runs. Not before.
+   its variance is known to be zero across two identical runs. Not before. **Both conditions are now
+   met** — the corpus is frozen and digest-validated, variance is measured byte-identical across
+   four independent runs, and precision stopped being a constant when `hold_back` gave it four
+   falsifiable negatives. Queued as B36.
 3. **The M0 acceptance run**, when the user authorises it, producing the first `migration_outcome`
    row with a `pr_number`. Then merge rate, routing accuracy and cost per merged patch have a
    denominator of one, which is not a measurement but is the difference between one and zero.
