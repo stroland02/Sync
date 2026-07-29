@@ -36,7 +36,7 @@ when, which is why it is recorded here rather than dispatched.
 **Closes when:** one `sync run` produces a CI-green pull request again, or the failure is
 recorded with which change broke it.
 
-### B31 — Give the corpus a negative the binder could get wrong (diagnosed, not fixed)
+### B32 — Hold a same-operation site back, so precision has something to fail on
 
 `falsifiable_negatives` now counts negatives the detector could have fired on and prints beside
 precision. It reads **0** for all ten scored pairs, so the corpus states its own vacuousness in
@@ -57,6 +57,13 @@ same-operation site back from `targets` creates the negative — `generate_pair`
 since the caller names its targets — but it also **moves recall's denominator**, and recall at
 n=12 is currently the only genuine quality measurement this project has. Trading the one real
 number for a second one needs a decision, not a patch.
+
+**Start from the diagnosis, do not re-derive it.**
+`docs/superpowers/reports/2026-07-29-precision-has-no-negative-to-fail-on.md` is the finished
+investigation — B31 diagnosed this and is closed. The remaining work is one edit to the target
+list at `cli.py:1473` plus a declaration in the pair specifications naming which sites are held
+back. `generate_pair` needs no change, since the caller already names its targets, and
+`falsifiable_negatives` will report whether the new corpus actually bought a candidate.
 
 **Closes when:** that trade is decided and, if taken, precision is recomputed with
 `falsifiable_negatives` non-zero and recall's new denominator stated beside it.
@@ -122,6 +129,8 @@ and it stays that way however much corpus data arrives.
 
 ## Done
 
+- **B31** — diagnosed and closed; `falsifiable_negatives` reads 0 for all ten pairs and the
+  cause is `cli.py:1473`. The follow-up is **B32**, deliberately a different number.
 - **B27** — a specimen corpus is frozen and scored: 12 pairs across 4 repositories pinned by commit
   SHA, checkouts materialised into gitignored space, exclusions counted by reason. Landed
   `c6e18a0` after its worker died holding 1091 lines uncommitted; preserved as `4631c01` on the
