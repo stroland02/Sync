@@ -29,11 +29,13 @@ to change.
 
 from __future__ import annotations
 
+import ctypes
 import os
+import re
 import subprocess
 import warnings
 from pathlib import Path
-from typing import Callable
+from typing import Callable, Iterable
 
 import pytest
 
@@ -44,12 +46,160 @@ from psycopg.conninfo import conninfo_to_dict, make_conninfo
 DEFAULT_DSN = "postgresql://sync:sync@localhost:5433/sync"
 ADMIN_DBNAME = "postgres"
 
+LEAKED_DATABASE_PATTERN = r"sync\_test\_%"
+"""The SQL `LIKE` pattern for databases this file creates, and nothing else.
+
+The underscores are escaped because `_` is a single-character wildcard in `LIKE`; unescaped, the
+pattern would also match `syncXtestY...`. That is cosmetic here and the substantive point is the
+prefix.
+
+**It must never be `sync%`.** That matches the primary `sync` database, which `POSTGRES_DB`
+creates and `DEFAULT_DSN` points at, and it matches every pinned development database on the
+server -- `sync_b14` and `sync_w50` are deliberate pins somebody is working in. Sweeping by that
+pattern took Postgres down for fourteen seconds and killed a run that was gating a merge.
+`sync\\_test\\_%` reaches `sync_test_<pid>`, `sync_test_<pid>_<worker>` and the suffixed variants
+fixtures derive from those, which is exactly the set this file is responsible for.
+"""
+
+_LEAKED_NAME = re.compile(r"^sync_test_(\d+)(?:_.+)?$")
+"""The same set as a regex, for reading the pid back out of a name.
+
+Two spellings of one rule is a duplication worth naming: the `LIKE` form is what the server can
+filter on, and only Python can parse the pid. `test_the_primary_database_is_never_matched_by_the
+_pattern` holds the SQL half and `test_a_pinned_development_database_is_not_matched` holds this
+one, so neither drifts on its own.
+"""
+
 _created_dbname: str | None = None
 _admin_dsn: str | None = None
 
 
 def dsn_for(dbname: str, template: str) -> str:
     return make_conninfo(**{**conninfo_to_dict(template), "dbname": dbname})
+
+
+def pid_is_running(pid: int) -> bool:
+    """Whether a process with this pid exists.
+
+    The liveness test the sweep rests on, and it is the pid already in the database's name rather
+    than a connection check -- a leaked database has no connections either way, so counting them
+    cannot tell a dead run's database from a live run's idle one.
+
+    **`os.kill(pid, 0)` is the portable idiom and it does not answer this question on Windows.**
+    Measured on Python 3.12 here: against the pid of a process that has already exited it returns
+    without raising, because a handle to the finished process keeps the process object alive, and
+    it raises `OSError` only for a pid outside the valid range. So it reports "plausible pid"
+    where the sweep needs "something is running", and a sweep built on it would spare nothing.
+    `GetExitCodeProcess` is the answer that distinguishes them.
+
+    Unsure resolves to alive, everywhere. A wrong `True` costs one leaked database surviving until
+    the next run; a wrong `False` drops a database out from under a suite that is using it.
+    """
+    if pid <= 0:
+        return True
+    if os.name == "nt":
+        return _windows_pid_is_running(pid)
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    except OSError:
+        # Permission denied, or anything else this cannot interpret. The process exists as far as
+        # the sweep is concerned.
+        return True
+    return True
+
+
+_PROCESS_QUERY_LIMITED_INFORMATION = 0x1000
+_STILL_ACTIVE = 259
+_ERROR_INVALID_PARAMETER = 87
+
+
+def _windows_pid_is_running(pid: int) -> bool:
+    """`OpenProcess` and then the exit code, because the handle alone is not the answer.
+
+    A process that has exited while somebody still holds a handle to it keeps its process object,
+    so `OpenProcess` succeeds for it. Only `GetExitCodeProcess` separates that from a running one.
+    `STILL_ACTIVE` is also a legal exit code, so a process that exited with 259 reads as alive --
+    which is the direction this errs in anyway.
+    """
+    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    handle = kernel32.OpenProcess(_PROCESS_QUERY_LIMITED_INFORMATION, False, pid)
+    if not handle:
+        return ctypes.get_last_error() != _ERROR_INVALID_PARAMETER
+    try:
+        code = ctypes.c_ulong()
+        if not kernel32.GetExitCodeProcess(handle, ctypes.byref(code)):
+            return True
+        return code.value == _STILL_ACTIVE
+    finally:
+        kernel32.CloseHandle(handle)
+
+
+def leaked_database_names(
+    candidates: Iterable[str],
+    *,
+    is_running: Callable[[int], bool] = pid_is_running,
+    exclude: str | None = None,
+) -> list[str]:
+    """Which of `candidates` belong to a run that is no longer alive.
+
+    `exclude` is the name the caller is about to create. Inside `pytest_configure` the risk of
+    sweeping it is small -- this process picks its name from its own live pid -- but the guard is
+    here rather than in the caller so anything reusing this function inherits it.
+    """
+    dead = []
+    for name in candidates:
+        if name == exclude:
+            continue
+        match = _LEAKED_NAME.match(name)
+        if match is None:
+            continue
+        if is_running(int(match.group(1))):
+            continue
+        dead.append(name)
+    return sorted(dead)
+
+
+def sweep_leaked_databases(admin_dsn: str, *, exclude: str | None = None) -> list[str]:
+    """Drop the databases killed runs left behind, and return what was dropped.
+
+    A killed run cannot run its own finalizer, so the next run cleans up after it. This is called
+    from `pytest_configure`, which is where a database is created anyway and therefore exactly
+    when a leak is in the way -- no scheduler, no cron, and no separate script to remember.
+
+    Plain `DROP DATABASE`, never `WITH (FORCE)`. Plain refuses a database that is in use and
+    `FORCE` kills the connections of whatever is using it. Letting the server enforce that is
+    stronger than checking first, because a snapshot of live connections is stale the moment
+    another suite starts.
+
+    **Nothing here may fail the run.** Cleanup that breaks a suite is worse than the leak it
+    fixes, so every drop is attempted on its own and a refusal is skipped rather than raised. An
+    unreachable server returns an empty list for the same reason `pytest_configure` warns and
+    carries on when Postgres is absent.
+    """
+    try:
+        with psycopg.connect(admin_dsn, autocommit=True, connect_timeout=10) as conn:
+            candidates = [
+                row[0]
+                for row in conn.execute(
+                    "SELECT datname FROM pg_database WHERE datname LIKE %s",
+                    (LEAKED_DATABASE_PATTERN,),
+                ).fetchall()
+            ]
+            dropped = []
+            for name in leaked_database_names(candidates, exclude=exclude):
+                try:
+                    conn.execute(
+                        sql.SQL("DROP DATABASE IF EXISTS {}").format(sql.Identifier(name))
+                    )
+                except psycopg.Error:
+                    # In use, or dropped by another run's sweep between the query and here.
+                    continue
+                dropped.append(name)
+            return dropped
+    except psycopg.Error:
+        return []
 
 
 def database_for(pinned_dsn: str | None, worker: str | None, pid: int) -> str | None:
@@ -72,7 +222,8 @@ def pytest_configure(config) -> None:
     global _created_dbname, _admin_dsn
 
     pinned = os.environ.get("SYNC_DSN")
-    dbname = database_for(pinned, os.environ.get("PYTEST_XDIST_WORKER"), os.getpid())
+    worker = os.environ.get("PYTEST_XDIST_WORKER")
+    dbname = database_for(pinned, worker, os.getpid())
     if dbname is None:
         return
 
@@ -93,6 +244,15 @@ def pytest_configure(config) -> None:
         # since no two live processes share a pid -- nor a pid and a worker id.
         conn.execute(sql.SQL("DROP DATABASE IF EXISTS {} WITH (FORCE)").format(sql.Identifier(dbname)))
         conn.execute(sql.SQL("CREATE DATABASE {}").format(sql.Identifier(dbname)))
+
+    # The same argument one line further: this run cleans up after the runs that were killed
+    # before they could. Only in the controller, because a worker would repeat the whole sweep
+    # once per process for nothing, and only after this process has created its own database, so
+    # the name it is using exists and cannot be a candidate.
+    if worker is None:
+        swept = sweep_leaked_databases(admin_dsn, exclude=dbname)
+        if swept:
+            print(f"swept {len(swept)} leaked test database(s)")
 
     _created_dbname, _admin_dsn = dbname, admin_dsn
     os.environ["SYNC_DSN"] = dsn_for(dbname, template)
