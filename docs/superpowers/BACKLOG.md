@@ -36,52 +36,36 @@ when, which is why it is recorded here rather than dispatched.
 **Closes when:** one `sync run` produces a CI-green pull request again, or the failure is
 recorded with which change broke it.
 
-### B16 — The conformance kit covers one protocol of five
+### B21 — An existing database never gains a new column
 
-`sync.core.conformance` shipped with `check_vendor_adapter` and nothing else. `protocols.py`
-declares five: `LanguageAdapter`, `VendorAdapter`, `RequestCorrelator`, `Detector`, `Remediator`.
-Four are unchecked, and each has real implementations — two language adapters, five detectors,
-four remediators.
+`GraphStore.apply_schema` executes `schema.sql`, which is `CREATE TABLE IF NOT EXISTS`
+throughout with **zero** `ALTER TABLE` statements. Against a database that already has the
+tables it is a no-op, so a column added later never appears. Two have shipped this way:
+`call_site.loop_depth` and `finding.claim`.
 
-The invariant most worth checking has already shipped broken twice: **a remediator must apply
-its edit to the clone, not merely return a diff describing it.** Nothing downstream applies
-`patch.diff`, so a remediator that computes the right edit and does not write produces an empty
-commit and reports success. It shipped in `literal_swap` and again in both parameter
-remediators, caught the second time only because one worker read another's fix.
+The failure lands at runtime on the first insert naming the missing column, and the message
+names a column rather than a missing migration — so whoever meets it debugs the wrong thing.
 
-**Closes when:** the kit checks the other protocols, every rule has a deliberately broken example
-proving it fires, and every existing implementation has been run against it — with failures
-reported rather than fixed, since a real implementation failing a new rule means one of the two
-is wrong and that judgement is the coordinator's.
+Nothing catches it because `conftest` creates a fresh database per run, so every test starts
+from a schema built in one pass, which is exactly the case that works.
 
-### B17 — The indexer finds call sites for one vendor, starving every adapter since
-
-`src/sync/index/typescript.py:29` is `_SDK_PACKAGE = "stripe"`, a module constant. `matches`
-checks `package.json` for that one name, `_client_identifiers` only treats an import as an SDK
-import if the specifier is that name, and the symbol is built as `f"{_SDK_PACKAGE}.{chain}"`.
-
-The two halves of the system generalised asymmetrically. SIGNAL can discover a specification for
-any vendor a generator serves — `sync.signals.generated` reads Stainless and Speakeasy manifests,
-`registry.py` routes vendor to adapter as data. INDEX finds Stripe and nothing else. The Twilio
-adapter can map `twilio.insights.v1.calls.fetch` onto an operation and no indexer will ever hand
-it that symbol.
-
-Invisible from the test suite, because every indexer test uses a Stripe fixture. That is why it
-survived, and it is as much what the tests have to fix as the code.
-
-Argument in `docs/superpowers/specs/2026-07-29-sync-adaptive-vendor-substrate.md`, which names it
-the highest-value defect in the system and step 1 of the sequence.
-
-**Closes when:** a second vendor's call site in a fixture repository resolves to that vendor's
-operation end to end, the Stripe path still passes unchanged, and a mutation reverting the
-parameter to a constant fails a test.
+**Closes when:** a test builds a database from a schema missing a column, runs `apply_schema`,
+and inserts a row using that column successfully — failing against the current code.
 
 ## In flight
 
-- **B16** — `task_ac1724b883c9`, `m2-parsing`. Conformance kit beyond `VendorAdapter`.
-- **B17** — `task_41d2ba9defb9`, `m1-forge`. Un-hardcoding the indexer.
+- **B21** — `task_375ac7413ad1`.
 
 ## Done
+
+- The conformance kit now covers four of five protocols, with 29 rules each proved to fire.
+  Landed via `fc7090f`. It found the finding-collision defect below.
+- `Finding.claim` joins the natural key, so three detectors stop overwriting themselves.
+  Landed `c88f240`. Reproducing first revealed a second, unnamed axis in efficiency that a
+  key-only fix would have turned from silent loss into a flood of rows.
+- The indexer takes the SDK package from the vendor adapter rather than a module constant,
+  delivered by the other coordinator's workers; `symbol_root` followed after a scoped-package
+  defect that no fixture could see.
 
 - An MCP vendor adapter, M3's last unstarted item. Landed via `28b0772`.
 - The status-rate detector, M2's missing half. Landed via `28b0772`. It reports a *level* rather
