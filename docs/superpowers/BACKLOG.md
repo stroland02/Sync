@@ -75,6 +75,22 @@ _Nothing._
   rather than labelled; a call already passing the field is refused; and the mutated Python still
   parses.
 
+  **Then it found a corrupting defect in its own landed work.** The keyword insertion mirrored the
+  TypeScript literal insertion and placed the field first, which is `SyntaxError: positional
+  argument follows keyword argument` in Python — and `create(customer_id)` is an ordinary shape the
+  corpus candidate writes.
+
+  Worse than a failed mutation, because it would not have failed: **tree-sitter recovers from a
+  syntax error and returns a tree**, so the dependency would have been read back out of a file that
+  is not Python and the pair labelled affected. A corrupt pair rather than a refused one — the one
+  unrecoverable mistake this generator has, since ground truth is what every future score is
+  measured against.
+
+  Fixed by writing the break last, and the tests now `ast.parse` the mutated source rather than
+  comparing strings, which is the only check that could have caught it. This is the same trap the
+  design document already records from the other side: a codemod cannot verify its own work by
+  re-parsing, because the parser will not tell you it is wrong.
+
 - **B45** — an unreadable `requirements.txt` now answers "declares nothing" rather than taking the
   run down at adapter selection. Landed with the front-page work. The `pyproject.toml` branch had
   always honoured that promise; the `requirements.txt` branch two lines below read with a bare

@@ -320,18 +320,26 @@ def _insert_keyword_argument(source: str, call, field: str) -> str | None:
     mutation into a dict literal would produce a dependency the indexer reads and the SDK does
     not accept, and one the repair primitives could not invert.
 
-    First rather than last, for the reason the literal insertion gives: a trailing entry has to
-    reason about the trailing comma, and a leading one does not.
+    **Last rather than first, which is the opposite of the literal insertion above and not a
+    style choice.** Python forbids a positional argument after a keyword one, so a leading
+    insertion turns `create(customer_id)` -- an ordinary shape, and one the corpus candidate
+    writes -- into a `SyntaxError`. The pair would then carry a tree that is not Python, and
+    tree-sitter's error recovery means the generator would still label it affected: a corrupt
+    pair rather than a refused one. That is why the mutated source is parsed with `ast` in the
+    tests rather than only compared.
+
+    So this pays the trailing-comma reasoning the leading form avoids, because the alternative
+    is a break that does not compile.
     """
     arguments = call.field("arguments")
     if arguments is None:
         return None
-    span = arguments.range()
-    opening = span.start.index + 1
-    existing = [child for child in arguments.children()
-                if child.kind() not in ("(", ")", ",")]
-    separator = ", " if existing else ""
-    return f"{source[:opening]}{field}={MUTATION_LITERAL}{separator}{source[opening:]}"
+    closing = arguments.range().end.index - 1
+    written = source[:closing].rstrip()
+    if written.endswith("("):
+        return f"{source[:closing]}{field}={MUTATION_LITERAL}{source[closing:]}"
+    separator = "" if written.endswith(",") else ", "
+    return f"{source[:closing]}{separator}{field}={MUTATION_LITERAL}{source[closing:]}"
 
 
 def _insert_response_guard(source: str, call, field: str, language: str = "typescript") -> str | None:
