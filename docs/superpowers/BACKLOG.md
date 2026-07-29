@@ -12,20 +12,6 @@ item that cannot say what evidence closes it is not ready to dispatch.
 
 ## Ready
 
-### B38 — Python binds nothing unless the client is a bare imported name
-
-Two of the three limitations B37 measured, both in `src/sync/index/python_lang.py`, ordered by how
-many of its seventeen candidate repositories each converts from zero:
-
-1. **A client constructed as a module attribute binds nothing.** `client = stripe.StripeClient(k)`
-   is one rule away from the imported-name case already handled, and it is what Stripe's own Python
-   documentation tells people to write. **This alone converts eleven of seventeen.**
-2. **A receiver that is an attribute of `self` binds nothing.** `self.client.customers.create(...)`
-   is the shape production code uses, and the one the corpus most wants to measure.
-
-**Closes when:** both shapes resolve to an operation, with fixtures, and no currently-binding shape
-changes what it records.
-
 ### B39 — The Stripe symbol map is built from one SDK and asked to serve two
 
 179 symbols, **93 containing camelCase**, `paymentIntents` present and `payment_intents` absent —
@@ -73,6 +59,19 @@ recorded with which change broke it.
 _Nothing._
 
 ## Done
+
+- **B38** — Python binds the client shapes people actually write. `stripe.StripeClient(k)` and
+  `self.client...` both resolve now; the bare imported name is unchanged. Landed `4656d92`.
+
+  The guards are the valuable half, and each is **asserted not to bind** rather than left to
+  discovery — `notstripe.StripeClient(k)` (the object is checked, never the attribute),
+  `config.client = stripe.StripeClient(k)` (only `self`), and a client received as a parameter and
+  stored on the instance (nothing statically says a parameter is a Stripe client, and binding it
+  would count any attribute assigned from any parameter). All four verified independently here.
+
+  A rule loose enough to match any `x.Something(...)` would have reintroduced false attribution at
+  the binding step — the same defect this file was fixed for earlier today, one layer earlier. It
+  did not.
 
 - **B37** — no Python repository was pinned, and the negative result is worth more than the pin
   would have been. Seventeen candidates cloned and indexed against the real adapter and the real
