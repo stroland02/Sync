@@ -51,9 +51,7 @@ and it stays that way however much corpus data arrives.
 
 ## In flight
 
-- **B26** — `task_90be59456e23`, in `sync-solo-b`. Moves the two vacuous-pass holes out of the
-  caller and into the kit, so an outside adapter author stops getting a false pass.
-- **B27** — `task_b777f003fa9f`, in `sync-solo-a`. Freezes a specimen corpus and measures whether
+- **B27** — `task_b777f003fa9f`, in `sync-solo-a` (shared with nobody now; B26 landed out of it). Freezes a specimen corpus and measures whether
   binding precision is actually deterministic, which is the precondition for the only tier C gate
   that is safe without the statistics research that never completed.
 
@@ -61,6 +59,23 @@ and it stays that way however much corpus data arrives.
   the first worker held the task for half an hour without starting and did not answer two nudges.
 
 ## Done
+
+- **B26** — the conformance kit no longer certifies what it never exercised. `check_vendor_adapter`
+  refused nothing when `known_symbol` was `None` or resolved to `None`; `check_remediator` read an
+  empty diff as a decline, so a remediator claiming everything and writing nothing passed. Landed
+  `f297e47`. The two refusals carry distinct messages, because "you gave me no symbol" and "your
+  adapter did not resolve it" are different problems and an author who conflates them edits the
+  wrong thing.
+
+  The new rule fails four generated vendors, and the exemption's wording was the hard part. They
+  are **not** unable to resolve: `_load_generated` (`registry.py:362`) passes `sources={}` because
+  it promises to reach no network, while `_prepare_generated` (`registry.py:319`) passes
+  `sources=sources` and is the path a real run takes. The kit is handed the offline one. Its
+  staleness test fails in **both** directions — verified by mutation, dropping a vendor and adding
+  one that resolves.
+
+  The limit worth remembering: **this suite certifies an adapter shape no customer ever meets.**
+  That closes with a staged fixture, not a bug fix.
 
 - **B24** — nineteen shipped implementations are now asserted against the conformance kit, with
   every list derived from the registry rather than restated and a registered implementation that
