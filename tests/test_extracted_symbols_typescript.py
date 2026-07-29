@@ -12,20 +12,35 @@ sites are matched, the client is found, and every symbol resolves to nothing.
 Fixtures
 --------
 `sdk_sources/anthropic_typescript/` is verbatim source from
-`anthropics/anthropic-sdk-typescript` at tag **sdk-v0.115.0**, fetched through the GitHub contents
-API on 2026-07-29. Seven files under `src/`: `client.ts`, `resources/models.ts`,
-`resources/completions.ts`, `resources/messages/messages.ts`, `resources/messages/batches.ts`,
-`resources/beta/beta.ts` and `resources/beta/models.ts`.
+`anthropics/anthropic-sdk-typescript` at tag **sdk-v0.115.0**, commit
+`3b45cd3b69c956ac63384fdb09ce1d8109f3fa80`. Eight files under `src/`: `client.ts`,
+`resources/index.ts`, `resources/models.ts`, `resources/completions.ts`,
+`resources/messages/messages.ts`, `resources/messages/batches.ts`, `resources/beta/beta.ts` and
+`resources/beta/models.ts`.
 
-The last two are there for one reason. `resources/models.ts` and `resources/beta/models.ts` both
-export a class named `Models`, and `beta.ts` mounts the second while `client.ts` mounts the first.
-A rule keying classes by bare name conflates them and files beta routes under the top-level mount;
+Three of them are there for a reason beyond being reachable.
+
+`resources/models.ts` and `resources/beta/models.ts` both export a class named `Models`, and
+`beta.ts` mounts the second while `client.ts` mounts the first. A rule keying classes by bare name
+conflates them and files beta routes under the top-level mount;
 `test_two_classes_sharing_a_name_are_told_apart_by_their_module` is what holds that apart.
 
+`resources/index.ts` declares no class at all. It is the barrel every one of the client's own
+mounts goes through -- `new API.Completions(this)` where `API` is that file -- so without it
+nothing is rooted and the extractor raises rather than returning a partial map. That is the right
+refusal and the wrong outcome, which is why the barrel is read;
+`test_a_mount_through_a_re_export_barrel_is_followed` is what holds it.
+
 The specification fixture is **reused** from the Python flavour, and the reuse is evidenced rather
-than assumed: this SDK's own `.stats.yml` publishes `openapi_spec_hash: d2deb0fef6a15bf53cc6c53f07973a54`,
-which is byte-identical to the Python SDK's, and fetching both specifications and comparing their
-operation sets gave the same 131 operations. Two flavours generated from one specification.
+than assumed. `anthropic_typescript.stats.yml` is this SDK's own manifest at the same tag, and it
+publishes the same `openapi_spec_hash` and the same `configured_endpoints` as the Python SDK's --
+two flavours generated from one specification, each saying so itself.
+`test_both_flavours_were_generated_from_the_same_specification` is what holds that, so the
+denominator this file measures against stops being an assumption the moment either SDK moves.
+
+The two manifests name different `openapi_spec_url`s. That is Stainless storing one document under
+two content-addressed uploads; the hash is what the manifest publishes as the specification's
+identity and is what `SpecSource.changed_from` compares, so it is what this reads.
 """
 
 from __future__ import annotations
@@ -46,6 +61,8 @@ from sync.signals.generated.symbols_typescript import (
 FIXTURES = Path(__file__).parent / "fixtures" / "sdk_sources"
 SDK = FIXTURES / "anthropic_typescript"
 SPEC_OPERATIONS = FIXTURES / "anthropic_spec_operations.json"
+TYPESCRIPT_MANIFEST = FIXTURES / "anthropic_typescript.stats.yml"
+PYTHON_MANIFEST = Path(__file__).parent / "fixtures" / "manifests" / "anthropic.stats.yml"
 
 
 def _extracted() -> dict[str, object]:
@@ -83,6 +100,21 @@ def test_a_tagged_template_path_is_read_from_its_literal_parts():
 
     assert retrieve.http_method == "GET"
     assert retrieve.path == "/v1/models/{modelID}"
+
+
+def test_a_mount_through_a_re_export_barrel_is_followed():
+    """`client.ts` mounts `API.Completions`, and `API` is `./resources/index` -- a barrel that
+    declares no class at all and re-exports `Completions` from `./completions`.
+
+    Every one of the client's own mounts arrives this way, so a rule that resolves a mount only
+    against classes declared in the aliased module finds nothing rooted and raises. The barrel is
+    read the same way everything else here is read: `export { Completions } from './completions'`
+    is a declaration in the source, so it is parsed rather than worked around.
+    """
+    extracted = _extracted()
+
+    assert extracted["completions.create"].http_method == "POST"
+    assert extracted["completions.create"].path == "/v1/complete"
 
 
 def test_a_nested_resource_carries_its_whole_chain():
@@ -124,6 +156,27 @@ def test_the_deprecated_and_type_only_declarations_do_not_become_operations():
 # --- coverage against a named denominator ------------------------------------------------
 
 
+def test_both_flavours_were_generated_from_the_same_specification():
+    """Why one specification fixture is a sound denominator for two SDKs.
+
+    Each manifest publishes its own `openapi_spec_hash`, and the two agree. That is the SDKs
+    saying it rather than this test asserting it, and it is what makes the 131 operations a
+    denominator for the TypeScript extraction as well as the Python one. If either SDK is bumped
+    to a tag generated from a different specification, this goes red before any coverage number
+    silently starts being measured against the wrong document.
+    """
+    from sync.signals.generated.manifest import STAINLESS_MANIFEST, parse_manifest
+
+    typescript = parse_manifest(
+        STAINLESS_MANIFEST, TYPESCRIPT_MANIFEST.read_text(encoding="utf-8")
+    )
+    python = parse_manifest(STAINLESS_MANIFEST, PYTHON_MANIFEST.read_text(encoding="utf-8"))
+
+    assert typescript is not None and python is not None
+    assert typescript.spec_hash == python.spec_hash
+    assert typescript.endpoint_count == python.endpoint_count == 131
+
+
 def test_coverage_is_reported_against_the_specifications_operation_count():
     """Both numbers, because a ratio hides which one moved.
 
@@ -145,10 +198,19 @@ def test_coverage_is_reported_against_the_specifications_operation_count():
 
 def test_the_rendered_line_names_the_generator_and_carries_the_denominator():
     """"Extracted 180 operations" says nothing. The Stripe map's 105 of 414 means something only
-    because the second number travels with it."""
+    because the second number travels with it.
+
+    And it names *this* rule. The report type is shared with the Python flavour, whose `render`
+    writes its own module's generator, so a line saying `stainless-python` over a TypeScript
+    extraction is the failure this asserts against -- naming the generator is only worth doing if
+    a reader learns which rule spoke.
+    """
+    from sync.signals.generated.symbols import GENERATOR as PYTHON_GENERATOR
+
     rendered = report_extraction(SDK, read_spec_operations(SPEC_OPERATIONS)).render()
 
-    assert GENERATOR in rendered
+    assert rendered.startswith(f"{GENERATOR}:")
+    assert PYTHON_GENERATOR not in rendered
     assert "of 121 specification operations" in rendered
 
 
@@ -307,6 +369,44 @@ def test_the_adapter_still_defaults_to_the_python_flavour():
 
     reference = adapter.operation_for_symbol("anthropic.models.list", language="python")
     assert reference is not None and reference.path == "/v1/models"
+
+
+def test_the_adapter_cross_checks_a_typescript_map_and_names_this_rule_in_the_log(caplog):
+    """The adapter's own reporting path, which is where an operator meets the coverage number.
+
+    Worth asserting separately from `report_extraction`: the adapter is what selects a rule, and a
+    line naming the wrong one is a wrong answer that reads as a measurement.
+    """
+    import logging
+
+    from sync.signals.generated.adapter import GeneratedSpecAdapter
+
+    adapter = GeneratedSpecAdapter(
+        vendor_id="anthropic", sources={}, fetch=_never_fetch, cache_dir=FIXTURES,
+        sdk_source=SDK, sdk_spec_operations=SPEC_OPERATIONS, sdk_source_generator=GENERATOR,
+    )
+    with caplog.at_level(logging.INFO, logger="sync.signals.generated.adapter"):
+        assert adapter.operation_for_symbol("anthropic.models.list") is not None
+
+    assert any(GENERATOR in record.getMessage() for record in caplog.records)
+
+
+def test_a_generator_this_deployment_cannot_read_is_refused_where_it_is_configured():
+    """Not on the run where a symbol quietly stops resolving.
+
+    A rule is named by generator *times* language, so a name is a thing a deployment can get
+    wrong. Getting it wrong must fail while someone is looking at the configuration.
+    """
+    from sync.signals.generated.adapter import GeneratedSpecAdapter
+
+    with pytest.raises(ValueError) as raised:
+        GeneratedSpecAdapter(
+            vendor_id="anthropic", sources={}, fetch=_never_fetch, cache_dir=FIXTURES,
+            sdk_source=SDK, sdk_source_generator="speakeasy-go",
+        )
+
+    assert "speakeasy-go" in str(raised.value)
+    assert GENERATOR in str(raised.value)
 
 
 def _never_fetch(url: str) -> str:

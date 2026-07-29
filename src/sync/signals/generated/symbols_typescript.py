@@ -8,8 +8,8 @@ Two of those are surface and one is not: the tagged template has to be reassembl
 parts, and a rule covering both would be guessing about whichever it had not seen.
 
 Everything else follows `symbols.py`, deliberately. Same `ExtractedOperation`, same
-`ExtractionReport`, same `read_spec_operations`, so `GeneratedSpecAdapter` can take either and
-`report_extraction` reads the same in a log line whichever produced it.
+`ExtractionReport`, same `read_spec_operations`, so `GeneratedSpecAdapter` can take either and a
+report reads the same in a log line whichever produced it.
 
 What Stainless writes down in TypeScript, and where
 ---------------------------------------------------
@@ -40,6 +40,19 @@ routes under the top-level mount. That is a wrong answer that *resolves*, which 
 this whole approach exists to avoid -- so a class is keyed by the module that declares it, and a
 mount is resolved through the importing file's own `import * as X from './y'` alias map.
 
+The client's own mounts arrive through a barrel
+-----------------------------------------------
+`client.ts` writes `new API.Completions(this)`, and `API` is `./resources/index` -- a module that
+declares no class and re-exports every resource from the file that does. Resolving a mount only
+against classes declared in the aliased module therefore finds nothing at all rooted, which is
+not a partial reading of this SDK but a total one.
+
+So `export { Completions } from './completions'` and `export * from './shared'` are parsed and
+followed, transitively, exactly as the aliases are. This stays inside the rule: a re-export is a
+declaration the source makes, not a convention inferred about where a class probably lives. A
+name that no chain of re-exports reaches is left unresolved rather than guessed at, and the mount
+holding it simply is not an edge.
+
 Two raise sites, and why those points
 -------------------------------------
 The same rule the Python flavour states -- half the shape is not the shape -- at the two places
@@ -63,12 +76,15 @@ Both stand, and the duplication is the signal.
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 import tree_sitter_typescript as tsts
 from tree_sitter import Language, Node, Parser
 
+from sync.signals.generated.symbols import (
+    GENERATOR as _PYTHON_GENERATOR,
+)
 from sync.signals.generated.symbols import (
     ExtractedOperation,
     ExtractionReport,
@@ -81,6 +97,8 @@ GENERATOR = "stainless-typescript"
 _TS_LANGUAGE = Language(tsts.language_typescript())
 
 _RESOURCE_BASE = "APIResource"
+
+_CLIENT_PROPERTY = "this._client"
 
 # The client methods Stainless emits, and the verb each one sends. `getAPIList` is the paginated
 # read; it is a GET like any other and is listed because its name does not say so.
@@ -105,6 +123,24 @@ _RELATIVE = re.compile(r"^\.{1,2}/")
 # spelling; only the comparison is normalised.
 _PARAMETER = re.compile(r"\{[^}]*\}")
 
+_ClassKey = tuple[str, str]
+"""A class's identity: the module that declares it, and its name."""
+
+
+@dataclass(frozen=True)
+class TypeScriptExtractionReport(ExtractionReport):
+    """The same report, carrying the name of the rule that actually produced it.
+
+    Only the name differs, and it has to differ: `ExtractionReport.render` names the module-level
+    generator of the flavour that defined it, so a TypeScript extraction rendered through it would
+    tell an operator that `stainless-python` read the SDK -- and the whole point of naming the
+    generator is that a reader learns which rule spoke. Every number the line carries is the same
+    line the Python flavour renders, deliberately, and is composed by it rather than restated.
+    """
+
+    def render(self) -> str:
+        return f"{GENERATOR}{super().render().removeprefix(_PYTHON_GENERATOR)}"
+
 
 def _comparable(http_method: str, path: str) -> tuple[str, str]:
     """A method and route reduced to what two artifacts can be compared on.
@@ -119,7 +155,13 @@ def _comparable(http_method: str, path: str) -> tuple[str, str]:
 
 
 def _text(node: Node, source: bytes) -> str:
-    return source[node.start_byte : node.end_byte].decode("utf-8", errors="replace")
+    """A node's own bytes as text.
+
+    Decoded strictly. A real SDK carries identifiers and comments in any language, and a lenient
+    decode would turn one of them into a route or a class name that silently differs from what
+    the file says.
+    """
+    return source[node.start_byte : node.end_byte].decode("utf-8")
 
 
 def _walk(node: Node):
@@ -133,58 +175,89 @@ def _module_key(path: Path, root: Path) -> str:
     return path.relative_to(root).with_suffix("").as_posix()
 
 
-def _import_aliases(tree_root: Node, source: bytes, path: Path, root: Path) -> dict[str, str]:
-    """`import * as ModelsAPI from './models'` as alias to module key.
+def _specifier_target(node: Node, source: bytes, path: Path, root: Path) -> str | None:
+    """The module an `import`/`export ... from` clause names, when it names one in this checkout.
 
-    Only relative specifiers are resolved. A namespace import from a package names nothing in
-    this checkout, and following it would be reading a dependency rather than the SDK.
+    Only relative specifiers are resolved. A specifier naming a package names nothing here, and
+    following it would be reading a dependency rather than the SDK.
     """
-    aliases: dict[str, str] = {}
-    for node in _walk(tree_root):
-        if node.type != "import_statement":
-            continue
-        source_node = node.child_by_field_name("source")
-        if source_node is None:
-            continue
-        specifier = _text(source_node, source).strip("'\"")
-        if not _RELATIVE.match(specifier):
-            continue
-        target = (path.parent / specifier).resolve()
-        try:
-            key = _module_key(target, root)
-        except ValueError:
-            continue
-        for child in _walk(node):
-            if child.type == "namespace_import":
-                for name in child.children:
-                    if name.type == "identifier":
-                        aliases[_text(name, source)] = key
-    return aliases
+    source_node = node.child_by_field_name("source")
+    if source_node is None:
+        return None
+    specifier = _text(source_node, source).strip("'\"")
+    if not _RELATIVE.match(specifier):
+        return None
+    try:
+        return _module_key((path.parent / specifier).resolve(), root)
+    except ValueError:
+        return None
+
+
+@dataclass
+class _Class:
+    """One class, as the three things this rule reads out of it."""
+
+    mounts: dict[str, tuple[str, str]] = field(default_factory=dict)
+    """Property name to the class it constructs, as (aliased module, class name) before
+    re-exports are followed."""
+
+    operations: dict[str, tuple[str, str]] = field(default_factory=dict)
+    is_resource: bool = False
+
+
+@dataclass
+class _Module:
+    """One file, as what it declares and what it forwards."""
+
+    classes: dict[str, _Class] = field(default_factory=dict)
+    aliases: dict[str, str] = field(default_factory=dict)
+    """`import * as ModelsAPI from './models'` as alias to module key."""
+
+    reexports: dict[str, str] = field(default_factory=dict)
+    """`export { Models } from './models'` as exported name to the module it came from."""
+
+    star_reexports: list[str] = field(default_factory=list)
+    """`export * from './shared'`, as module keys, consulted in declaration order."""
 
 
 def _extends(node: Node, source: bytes) -> set[str]:
+    """The classes a declaration extends.
+
+    The `extends` clause only. An `implements` clause names an interface, which cannot be the
+    base this rule anchors on, and reading the whole heritage would let one be mistaken for it.
+    """
     names: set[str] = set()
     for child in node.children:
         if child.type != "class_heritage":
             continue
         for inner in _walk(child):
-            if inner.type in ("identifier", "property_identifier"):
-                names.add(_text(inner, source))
+            if inner.type != "extends_clause":
+                continue
+            for named in _walk(inner):
+                if named.type in ("identifier", "property_identifier", "type_identifier"):
+                    names.add(_text(named, source))
     return names
 
 
 def _plain_route(node: Node, source: bytes) -> str | None:
-    """A route written as a plain string literal."""
+    """A route written as a plain string literal.
+
+    The fragment rather than the quoted text, so an empty string reads as absent rather than as a
+    route, and an escape this does not interpret cannot be mistaken for one.
+    """
     if node.type != "string":
         return None
-    return _text(node, source).strip("'\"`") or None
+    for child in node.children:
+        if child.type == "string_fragment":
+            return _text(child, source)
+    return None
 
 
 def _tagged_route(node: Node, source: bytes) -> str | None:
     """A route written as a tagged template.
 
-    In this grammar a tagged template is a call whose arguments node *is* the template, which is
-    why this reads `arguments` rather than looking for a positional list. Only the `path` tag is
+    In this grammar a tagged template is a call whose `arguments` node *is* the template, which is
+    why this reads that field rather than looking for a positional list. Only the `path` tag is
     read: an untagged template would mean reading any string built by interpolation, and most of
     those are not routes.
     """
@@ -202,8 +275,8 @@ def _tagged_route(node: Node, source: bytes) -> str | None:
         if child.type == "string_fragment":
             parts.append(_text(child, source))
         elif child.type == "template_substitution":
-            inner = [c for c in child.named_children]
-            parts.append("{" + (_text(inner[0], source) if inner else "param") + "}")
+            expression = child.named_children
+            parts.append("{" + (_text(expression[0], source) if expression else "param") + "}")
     return "".join(parts) or None
 
 
@@ -224,7 +297,7 @@ def _operation_in(method: Node, source: bytes) -> tuple[str, str] | None:
         if property_node is None or object_node is None:
             continue
         verb = _REQUEST_METHODS.get(_text(property_node, source))
-        if verb is None or _text(object_node, source) != "this._client":
+        if verb is None or _text(object_node, source) != _CLIENT_PROPERTY:
             continue
 
         arguments = node.child_by_field_name("arguments")
@@ -237,24 +310,30 @@ def _operation_in(method: Node, source: bytes) -> tuple[str, str] | None:
     return None
 
 
-@dataclass
-class _Resource:
-    """One class, as the two things this rule reads out of it."""
+def _mount_target(constructor: Node, source: bytes, module: str) -> tuple[str, str] | None:
+    """Which class a mount points at, as (module named by the constructor, class name).
 
-    mounts: dict[str, tuple[str, str]]
-    operations: dict[str, tuple[str, str]]
-    is_resource: bool
+    `ModelsAPI.Models` keeps its alias here and is resolved to a declaring module later, because
+    two files in this SDK export a class called `Models` and only the module tells them apart. A
+    bare `Models` is named by the module that writes it.
+    """
+    if constructor.type == "identifier":
+        return module, _text(constructor, source)
+    if constructor.type == "member_expression":
+        alias_node = constructor.child_by_field_name("object")
+        class_node = constructor.child_by_field_name("property")
+        if alias_node is None or class_node is None:
+            return None
+        return _text(alias_node, source), _text(class_node, source)
+    return None
 
 
-def _read_class(
-    node: Node, source: bytes, module: str, aliases: dict[str, str]
-) -> _Resource:
-    mounts: dict[str, tuple[str, str]] = {}
-    operations: dict[str, tuple[str, str]] = {}
+def _read_class(node: Node, source: bytes, module: str) -> _Class:
+    read = _Class(is_resource=_RESOURCE_BASE in _extends(node, source))
 
     body = node.child_by_field_name("body")
     if body is None:
-        return _Resource(mounts={}, operations={}, is_resource=False)
+        return read
 
     for member in body.named_children:
         if member.type in ("public_field_definition", "field_definition"):
@@ -265,45 +344,102 @@ def _read_class(
             constructor = value_node.child_by_field_name("constructor")
             if constructor is None:
                 continue
-            target = _mount_target(constructor, source, module, aliases)
+            target = _mount_target(constructor, source, module)
             if target is not None:
-                mounts[_text(name_node, source)] = target
+                read.mounts[_text(name_node, source)] = target
         elif member.type == "method_definition":
             name_node = member.child_by_field_name("name")
             if name_node is None:
                 continue
             found = _operation_in(member, source)
             if found is not None:
-                operations[_text(name_node, source)] = found
+                read.operations[_text(name_node, source)] = found
 
-    return _Resource(
-        mounts=mounts,
-        operations=operations,
-        is_resource=_RESOURCE_BASE in _extends(node, source),
-    )
+    return read
 
 
-def _mount_target(
-    constructor: Node, source: bytes, module: str, aliases: dict[str, str]
-) -> tuple[str, str] | None:
-    """Which class a mount points at, as (module, class name).
+def _read_module(tree_root: Node, source: bytes, path: Path, root: Path) -> _Module:
+    module = _module_key(path, root)
+    read = _Module()
 
-    `ModelsAPI.Models` is resolved through the importing file's alias map, because two files in
-    this SDK export a class called `Models` and only the module tells them apart. A bare
-    `Models` is declared in the same module.
+    for node in _walk(tree_root):
+        if node.type == "import_statement":
+            target = _specifier_target(node, source, path, root)
+            if target is None:
+                continue
+            for child in _walk(node):
+                if child.type != "namespace_import":
+                    continue
+                for name in child.children:
+                    if name.type == "identifier":
+                        read.aliases[_text(name, source)] = target
+        elif node.type == "export_statement":
+            target = _specifier_target(node, source, path, root)
+            if target is None:
+                continue
+            clause = next((c for c in node.children if c.type == "export_clause"), None)
+            if clause is None:
+                read.star_reexports.append(target)
+                continue
+            for specifier in clause.named_children:
+                if specifier.type != "export_specifier":
+                    continue
+                # `type Foo` forwards a type, and a mounted resource is a value. Skipping them
+                # keeps a type sharing a class's name from shadowing the class.
+                if any(child.type == "type" for child in specifier.children):
+                    continue
+                alias = specifier.child_by_field_name("alias")
+                name = specifier.child_by_field_name("name")
+                if name is None:
+                    continue
+                read.reexports[_text(alias or name, source)] = target
+        elif node.type == "class_declaration":
+            name_node = node.child_by_field_name("name")
+            if name_node is None:
+                continue
+            read.classes[_text(name_node, source)] = _read_class(node, source, module)
+
+    return read
+
+
+def _declaring(
+    module: str, name: str, modules: dict[str, _Module], seen: frozenset[str] = frozenset()
+) -> _ClassKey | None:
+    """The module that actually declares `name`, following re-exports from `module`.
+
+    A barrel declares nothing and forwards everything, so a mount naming one has to be followed
+    to the file that writes the class. `seen` guards the cycle two barrels re-exporting each
+    other would otherwise make; a name no chain reaches returns `None` and its mount is not an
+    edge, which is the same refusal the rest of this module makes -- an unresolved name is left
+    unresolved rather than matched against a class of that name somewhere else.
     """
-    if constructor.type == "identifier":
-        return module, _text(constructor, source)
-    if constructor.type == "member_expression":
-        alias_node = constructor.child_by_field_name("object")
-        class_node = constructor.child_by_field_name("property")
-        if alias_node is None or class_node is None:
-            return None
-        target_module = aliases.get(_text(alias_node, source))
-        if target_module is None:
-            return None
-        return target_module, _text(class_node, source)
+    read = modules.get(module)
+    if read is None or module in seen:
+        return None
+    if name in read.classes:
+        return module, name
+    seen = seen | {module}
+    forwarded = read.reexports.get(name)
+    if forwarded is not None:
+        return _declaring(forwarded, name, modules, seen)
+    for star in read.star_reexports:
+        found = _declaring(star, name, modules, seen)
+        if found is not None:
+            return found
     return None
+
+
+def _resolved_mounts(
+    module: str, read: _Class, modules: dict[str, _Module]
+) -> dict[str, _ClassKey]:
+    """Every mount this class makes, as the key of the class it actually reaches."""
+    resolved: dict[str, _ClassKey] = {}
+    aliases = modules[module].aliases
+    for attribute, (named, class_name) in read.mounts.items():
+        target = _declaring(aliases.get(named, named), class_name, modules)
+        if target is not None:
+            resolved[attribute] = target
+    return resolved
 
 
 def _source_files(root: Path) -> list[Path]:
@@ -317,28 +453,24 @@ def _source_files(root: Path) -> list[Path]:
 def extract_symbols(source_root: Path) -> tuple[ExtractedOperation, ...]:
     """Every operation the SDK's source states, keyed by the chain a customer writes.
 
-    Raises `UnrecognisedSdkShape` when the source does not carry the shape this rule reads.
+    Raises `UnrecognisedSdkShape` when the source does not carry the shape this rule reads --
+    nothing extending `APIResource`, or resources with nothing mounting any of them.
     """
     root = Path(source_root).resolve()
     parser = Parser(_TS_LANGUAGE)
 
-    classes: dict[tuple[str, str], _Resource] = {}
+    modules: dict[str, _Module] = {}
     for path in _source_files(root):
         source = path.read_bytes()
         tree = parser.parse(source)
-        module = _module_key(path, root)
-        aliases = _import_aliases(tree.root_node, source, path, root)
-        for node in _walk(tree.root_node):
-            if node.type != "class_declaration":
-                continue
-            name_node = node.child_by_field_name("name")
-            if name_node is None:
-                continue
-            classes[(module, _text(name_node, source))] = _read_class(
-                node, source, module, aliases
-            )
+        modules[_module_key(path, root)] = _read_module(tree.root_node, source, path, root)
 
-    resources = {key for key, value in classes.items() if value.is_resource}
+    classes = {
+        (module, name): read
+        for module, parsed in modules.items()
+        for name, read in parsed.classes.items()
+    }
+    resources = {key for key, read in classes.items() if read.is_resource}
     if not resources:
         raise UnrecognisedSdkShape(
             f"{GENERATOR}: no class extends {_RESOURCE_BASE} under {root}, so this source is not "
@@ -346,11 +478,18 @@ def extract_symbols(source_root: Path) -> tuple[ExtractedOperation, ...]:
             f"indistinguishable from a vendor whose operations cannot be seen"
         )
 
-    roots = [
+    mounts = {
+        key: _resolved_mounts(key[0], read, modules) for key, read in classes.items()
+    }
+    # The client is the class that mounts resources and is not one. Sorted rather than first
+    # found, because file order is not a fact about the SDK, and every such class is walked
+    # rather than one chosen: this emission writes exactly one, and picking among several by a
+    # rule nothing here has seen would be the guessing the split exists to avoid.
+    roots = sorted(
         key
-        for key, value in classes.items()
-        if key not in resources and any(target in resources for target in value.mounts.values())
-    ]
+        for key, resolved in mounts.items()
+        if key not in resources and any(target in resources for target in resolved.values())
+    )
     if not roots:
         raise UnrecognisedSdkShape(
             f"{GENERATOR}: {len(resources)} classes extend {_RESOURCE_BASE} under {root} and no "
@@ -359,20 +498,25 @@ def extract_symbols(source_root: Path) -> tuple[ExtractedOperation, ...]:
         )
 
     extracted: dict[str, ExtractedOperation] = {}
-    queue: list[tuple[tuple[str, str], tuple[str, ...]]] = [(roots[0], ())]
+    # Breadth-first from each root, carrying the chain each mount was reached by. The visited set
+    # is per path rather than global: a resource mounted twice is two symbols a customer can
+    # write, and both resolve to the same operations.
+    queue: list[tuple[_ClassKey, tuple[str, ...], frozenset[_ClassKey]]] = [
+        (key, (), frozenset()) for key in roots
+    ]
     while queue:
-        key, chain = queue.pop(0)
-        resource = classes.get(key)
-        if resource is None:
+        key, chain, visited = queue.pop(0)
+        read = classes.get(key)
+        if read is None:
             continue
-        for method_name, (verb, route) in resource.operations.items():
+        for method_name, (verb, route) in read.operations.items():
             symbol = ".".join([*chain, method_name])
             extracted.setdefault(
                 symbol, ExtractedOperation(symbol=symbol, http_method=verb, path=route)
             )
-        for attribute, target in resource.mounts.items():
-            if attribute not in chain:
-                queue.append((target, (*chain, attribute)))
+        for attribute, target in mounts[key].items():
+            if target not in visited:
+                queue.append((target, (*chain, attribute), visited | {key}))
 
     return tuple(extracted[symbol] for symbol in sorted(extracted))
 
@@ -382,10 +526,14 @@ def report_extraction(
 ) -> ExtractionReport:
     """Extract, then check every route against the specification that names the SDK.
 
-    The same check the Python flavour runs, over the same normalisation: a parameter segment is
-    reduced to a placeholder on both sides, because this SDK writes `${modelID}` where the
+    The same check the Python flavour runs, over one further normalisation: a parameter segment
+    is reduced to a placeholder on both sides, because this SDK writes `${modelID}` where the
     specification writes `{model_id}` and a cross-check firing on that trains a reader to ignore
     it. The extracted path keeps the SDK's own spelling.
+
+    The denominator is counted after that reduction, so it is the number of distinct routes the
+    comparison can actually be made against rather than the number of entries the specification
+    happens to list.
     """
     declared = {_comparable(method, path) for method, path in spec_operations}
     operations = extract_symbols(source_root)
@@ -397,9 +545,9 @@ def report_extraction(
     reached = {
         _comparable(operation.http_method, operation.path) for operation in operations
     } & declared
-    return ExtractionReport(
+    return TypeScriptExtractionReport(
         operations=operations,
-        spec_operation_count=len(spec_operations),
+        spec_operation_count=len(declared),
         unknown_to_spec=unknown,
         covered_count=len(reached),
     )
