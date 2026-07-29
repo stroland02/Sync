@@ -118,7 +118,7 @@ class MutationPair(BaseModel):
     unreachable: tuple[str, ...] = ()
 
 
-def generate_pair(
+def generate_pair(  # lint-dead-links: allow - the scorer that consumes these pairs is the next task; `binding.py` takes labels and nothing yet feeds it
     sources: Mapping[str, str],
     change: VendorChange,
     sites: Sequence[CallSite],
@@ -195,7 +195,7 @@ def generate_pair(
     )
 
 
-def depends_on_change(
+def depends_on_change(  # lint-dead-links: allow - the audit half of the generator above, wired when its scorer is
     sources: Mapping[str, str], change: VendorChange, site: CallSite
 ) -> bool:
     """Whether one call site in one tree carries the dependency `change` removes.
