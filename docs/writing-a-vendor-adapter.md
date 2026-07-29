@@ -101,3 +101,98 @@ a public machine-readable specification, versioned in git, with a generated SDK 
 `twilio` is a harder one and its module docstrings record where the two diverge. `mcp_server`
 watches a server's advertised tools rather than a specification, and shows what `fetch_changes`
 means for a vendor with no versions at all.
+
+## The other plugin points
+
+`VendorAdapter` is the one most people write, but it is one of five protocols in
+`sync.core.protocols`, and four of them have a conformance kit. This section covers the two
+whose kits are least obvious. `Remediator` has `check_remediator`, whose one interesting rule is
+that a patch is what is on disk rather than what the diff says is on disk. `RequestCorrelator`
+has no kit; its single guarantee is `operation_for_symbol`'s, addressed by URL path instead of by
+symbol.
+
+### A language adapter
+
+A `LanguageAdapter` turns a repository into call sites and stands between a proposed patch and
+the customer's repository. The kit needs a real checkout to say anything at all:
+
+```python
+from sync.core.conformance import check_language_adapter
+
+check_language_adapter(
+    MyAdapter(...),
+    RepoRef(repo_id="demo", url=..., local_path="/path/to/a/clean/clone", head_sha=...),
+    installed_dependency="node_modules/mysdk/package.json",  # omit if you install nothing
+)
+```
+
+It runs your real toolchain against that clone, so it is as slow as an install and a compiler
+are. Hand it a *clean* checkout: `prepare` runs against it, and an adapter that measures a
+typecheck baseline is right to refuse a tree with uncommitted changes in it.
+
+**A call site's path is repository-relative and spelled with forward slashes.** Everything
+downstream opens it as `Path(repo.local_path) / site.path`, and pathlib discards the left-hand
+side when the right one is absolute — silently, so the remediator edits a file outside the clone
+rather than failing. A backslash path is the same bug with a delay: it passes every test on the
+machine that produced it and names no file on the customer's CI.
+
+**`matches` answers for every repository, including ones it does not own.** Every registered
+adapter is asked about every repository before any of them is chosen, so one that raises on a
+tree with no manifest in it takes down the selection loop and the traceback names the wrong
+adapter. Return a `bool` rather than the thing you matched on — a manifest path is truthy for
+every repository that has one at all, which is how an adapter comes to claim another language's
+work.
+
+**Indexing twice over an unchanged checkout produces the same call sites.** INDEX is a pipeline
+stage and every stage here is idempotent. One that is not leaves the graph holding whichever run
+happened last, and no query can tell which run that was.
+
+**`static_verify` returns a `VerifyResult`, and a failing one carries diagnostics.** That string
+is the entire input to the next patch attempt. A failure carrying none spends an agent run to
+arrive back where it started.
+
+Three properties of `static_verify` are load-bearing and the kit reaches one and a half of them,
+which is worth saying plainly rather than leaving to be discovered:
+
+| Property | What the kit checks |
+|---|---|
+| It measures the tree a push would carry, holding untracked and ignored files out of the compile | Only the restore: a file the verification moved has to come back. Whether the *verdict* excluded it needs a source file that fails to compile, which only you can write |
+| It subtracts a pre-existing baseline, so errors the checkout already had do not fail a patch | Nothing. It needs a checkout that already fails to compile, committed in that state before `prepare` measures it — the kit will not commit to your repository |
+| It refuses a patch that edited an installed dependency | Checked, but only if you pass `installed_dependency`. The kit has no language-agnostic way to find one |
+
+That last one matters more than it sounds. An edit inside an installed dependency satisfies a
+gate the customer's CI will not: no checkout of the branch contains that file, because the
+install is theirs. Refusing by raising is as good as returning a failure.
+
+### A detector
+
+A `Detector` queries the graph and emits findings. The kit takes one already constructed, holding
+whatever store or fixture it queries — the five in this repository take a store, a specification,
+a repository id and a set of thresholds between them, and no signature would fit all of them.
+
+```python
+from sync.core.conformance import check_detector
+
+check_detector(MyDetector(store, repo_id="demo"))
+```
+
+Construct it over input that actually reaches its thresholds. The kit insists on at least one
+finding, because every other rule is vacuous against a scan that emits nothing — and that is not
+a hypothetical: the first run of this kit against `StatusRateDetector` reported conformance while
+the detector emitted nothing, on a fixture a hundred and twenty calls short of its floor.
+
+**Two scans of an unchanged graph produce the same findings.** DETECT is a pipeline stage, and a
+detector whose answer depends on how many times it has been asked makes the graph a record of run
+ordering.
+
+**Two findings from one scan may not share `(detector, call_site_id, vendor_change_id)`.** That
+triple is how the graph identifies a finding, and the insert is `ON CONFLICT DO NOTHING`. So a
+detector saying two different things about one call site under one change keeps whichever it
+emitted first, and the second is discarded at the store without a warning. If you have two things
+to say, either say them in one finding or attach them to different vendor changes.
+
+**Every finding names its call site and carries your `detector_id`.** A finding addresses its
+location by `call_site_id` and by nothing else, so one carrying an empty string has no line to
+report and no file to patch — drop it and count it instead. And `detector` is what attributes a
+false positive back to the code that raised it; a finding signed with a name nothing answers to
+cannot be attributed to anything.

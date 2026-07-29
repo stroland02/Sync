@@ -13,20 +13,45 @@ adapters ourselves, and the interface therefore has to be good enough that vendo
 write them. The interface is the product, and until now an outside author had no way to find
 out whether theirs was correct.
 
-The invariants below were harvested from the docstrings of the five adapters in this
+The invariants below were harvested from the docstrings of the implementations in this
 repository, where they were stated as prose an outside author would never see.
 
+Four of the five protocols have a kit: `VendorAdapter`, `Remediator`, `LanguageAdapter` and
+`Detector`. `RequestCorrelator` has none, and the reason is that its one guarantee -- an
+uncorrelatable request returns None rather than a guess -- is `operation_for_symbol`'s rule
+addressed by path instead of by symbol, and nobody has written a second correlator to state it
+against.
+
+Two things a kit of this shape cannot reach, said here rather than left to be discovered:
+
+- **A precondition failing is not the same as a rule passing.** Several checks need a case from
+  the author -- a symbol that resolves, a repository with call sites in it, a detector whose
+  input reaches its thresholds. Each of those is checked and named, because a case that
+  exercises nothing passes everything. That is not hypothetical: probing this kit against the
+  five detectors here, `StatusRateDetector` passed every rule while emitting no findings at
+  all, on a fixture a hundred and twenty calls short of its floor.
+- **Behaviour that needs a language-specific artifact stays prose.** Whether `static_verify`
+  subtracts a pre-existing baseline correctly needs a checkout that already fails to compile,
+  committed in that state; the kit will not commit to somebody's repository and cannot author a
+  compile error in a language it does not know. `_check_static_verify` says which of that
+  method's three documented properties are checked and which is not.
+
 **This module imports nothing outside `sync.core`,** because it ships with the SDK. A
-conformance kit that needs `sync.graph` is not a kit, it is an integration test.
+conformance kit that needs `sync.graph` is not a kit, it is an integration test. The one place
+that bites is `_check_findings_do_not_collide`, which is about a natural key `sync.graph`
+owns: the triple is restated here rather than imported, and if the store's key ever changes
+this is the second place to change.
 """
 
 from __future__ import annotations
 
 import inspect
 import os
+import tempfile
+from pathlib import Path, PurePosixPath, PureWindowsPath
 from typing import Any
 
-from sync.core.models import OperationRef
+from sync.core.models import CallSite, Finding, OperationRef, Patch, RepoRef, VerifyResult
 
 
 class ConformanceFailure(AssertionError):
@@ -182,9 +207,7 @@ def _check_propose_touches_the_clone(
     the tree alone -- writing identical bytes still updates an mtime, and a tool that touches
     files it decided not to edit is one nobody trusts near a working tree.
     """
-    from pathlib import Path as _Path
-
-    target = _Path(repo.local_path) / site.path
+    target = Path(repo.local_path) / site.path
     if not target.exists():
         _fail(
             "the supplied call site must exist in the supplied repository.",
@@ -233,3 +256,447 @@ def _check_propose_touches_the_clone(
             "An empty diff means no patch. Writing anyway -- even identical bytes -- updates an "
             "mtime and edits a file the remediator decided to leave alone.",
         )
+
+
+# The file the kit leaves in the clone to find out whether verification puts back what it moved.
+# Named rather than random so an interrupted run leaves something an author can recognise and
+# delete, and dot-prefixed so a source scan does not pick it up as a file to index.
+_UNTRACKED_MARKER = ".sync-conformance-untracked"
+
+_NO_PATCH = Patch(
+    diff="",
+    strategy="codemod",
+    rationale="the conformance kit verifying an unmodified checkout",
+)
+
+
+def check_language_adapter(
+    adapter: Any,
+    repo: Any,
+    *,
+    installed_dependency: str | None = None,
+) -> None:
+    """Check `adapter` against every guarantee `LanguageAdapter` states but cannot enforce.
+
+    `repo` is a `RepoRef` for a checkout the adapter is expected to own and find call sites in
+    -- an author's own example, since the kit has no fixtures of its own and must run outside
+    this repository. It must be a clean checkout: `prepare` runs against it, and an adapter that
+    measures a typecheck baseline is right to refuse a tree with uncommitted changes in it.
+
+    `installed_dependency` is a repository-relative path to a file the adapter's `prepare`
+    installed -- `node_modules/stripe/index.d.ts` and its equivalents. Supplying it is what turns
+    on the dependency-edit rule; an adapter for a language that installs nothing has none to
+    supply, and the rule is skipped rather than passed.
+
+    This runs the author's real toolchain against their real checkout, so it is slow in the way
+    an install and a compiler are slow. That is the point: the rules below are about what those
+    tools were pointed at.
+
+    Raises `ConformanceFailure` naming the broken rule. Returns None when the adapter conforms.
+    """
+    _check_language_id(adapter)
+    _check_matches(adapter, repo)
+    _check_index(adapter, repo)
+    _check_prepare_is_repeatable(adapter, repo)
+    _check_discard_reports_what_it_did(adapter, repo)
+    _check_static_verify(adapter, repo)
+    if installed_dependency is not None:
+        _check_static_verify_refuses_a_doctored_dependency(adapter, repo, installed_dependency)
+
+
+def _check_language_id(adapter: Any) -> None:
+    language_id = getattr(adapter, "language_id", None)
+    if not isinstance(language_id, str) or not language_id:
+        _fail(
+            "language_id must be a non-empty string.",
+            "It selects the adapter for a repository, it is the axis `operation_for_symbol` is "
+            "given so one vendor's two SDKs can spell a symbol differently, and it is recorded "
+            f"as `language` on every migration outcome. Got {language_id!r}.",
+        )
+
+
+def _check_matches(adapter: Any, repo: Any) -> None:
+    """`matches` is dispatch, and it is asked of every adapter before any of them is chosen."""
+    claimed = adapter.matches(repo)
+    if not isinstance(claimed, bool):
+        _fail(
+            "matches must return a bool.",
+            "The caller writes `if adapter.matches(repo)`, so a manifest path or a match object "
+            "returned instead of a decision is truthy for every repository that has one at all: "
+            f"the adapter claims another language's repositories. Got {type(claimed).__name__}.",
+        )
+    if not claimed:
+        _fail(
+            "matches must claim the repository the kit was handed.",
+            "Everything below is measured against it, and an adapter that does not own it would "
+            "make every rule after this one vacuous. Either the matcher is wrong or the case "
+            "handed to the kit is; the kit cannot tell which.",
+        )
+
+    with tempfile.TemporaryDirectory() as empty:
+        stranger = RepoRef(
+            repo_id="conformance-empty", url="", local_path=empty, head_sha="0" * 40
+        )
+        try:
+            answer = adapter.matches(stranger)
+        except Exception as exc:  # noqa: BLE001 - the point is that nothing may escape
+            _fail(
+                "matches must answer for a repository it does not own, not raise.",
+                "Every registered adapter is asked about every repository, before any of them is "
+                "chosen. One that raises on a tree with no manifest in it takes down the "
+                f"selection loop, and the traceback names the wrong adapter. Raised {exc!r}.",
+            )
+        if answer:
+            _fail(
+                "matches must not claim an empty directory.",
+                "There is nothing in it to index and no manifest to have read, so a claim here is "
+                "a matcher that claims everything -- which makes selection depend on registration "
+                "order rather than on what the repository contains.",
+            )
+
+
+def _check_index(adapter: Any, repo: Any) -> None:
+    first = _indexed(adapter, repo)
+    if not first:
+        _fail(
+            "the repository handed to the kit must contain at least one call site.",
+            "Every rule about what `index` emits is vacuous against a repository it finds "
+            "nothing in, and a kit that passes vacuously is worse than no kit. Fix the case "
+            "handed to the kit, or the indexer -- the kit cannot tell which.",
+        )
+
+    root = Path(repo.local_path)
+    for site in first:
+        if not isinstance(site, CallSite):
+            _fail(
+                "index must yield CallSite objects.",
+                f"Got {type(site).__name__}. Everything downstream reads typed attributes off "
+                "these, so another shape fails at the first field somebody names.",
+            )
+        if PurePosixPath(site.path).is_absolute() or PureWindowsPath(site.path).is_absolute():
+            _fail(
+                "a call site's path must be repository-relative.",
+                f"Got {site.path!r}. Every consumer opens it as `Path(repo.local_path) / path`, "
+                "and pathlib discards the left-hand side when the right one is absolute -- "
+                "silently, so the remediator edits a file outside the clone rather than failing.",
+            )
+        if "\\" in site.path:
+            _fail(
+                "a call site's path must be spelled with forward slashes.",
+                f"Got {site.path!r}. It is stored, put in a pull request and opened by the "
+                "customer's CI, which is not the machine the adapter was written on. A backslash "
+                "path passes every test its author runs and names no file there.",
+            )
+        if not (root / site.path).exists():
+            _fail(
+                "a call site's path must exist in the repository it was indexed from.",
+                f"{site.path!r} is not in {root}. A finding against it has no file to patch, and "
+                "the failure arrives at the remediator rather than here.",
+            )
+        if site.repo_id != repo.repo_id:
+            _fail(
+                "a call site must carry the repo_id of the repository it was found in.",
+                f"Got {site.repo_id!r} for {repo.repo_id!r}. It is half the call site's identity "
+                "in the graph, so a wrong one files the row under a repository nobody indexed.",
+            )
+
+    if _site_keys(first) != _site_keys(_indexed(adapter, repo)):
+        _fail(
+            "two indexing passes over an unchanged checkout must produce the same call sites.",
+            "INDEX is a pipeline stage and every stage here is idempotent: re-running it "
+            "converges on the same rows. One that does not leaves the graph holding whichever "
+            "run happened last, and no query can tell which run that was.",
+        )
+
+
+def _indexed(adapter: Any, repo: Any) -> list:
+    produced = adapter.index(repo)
+    try:
+        iter(produced)
+    except TypeError:
+        _fail(
+            "index must return an iterable of CallSite, never None.",
+            "The caller writes `for site in adapter.index(repo)`, and None is the shape that "
+            f"crashes that loop. Got {type(produced).__name__}.",
+        )
+    return list(produced)
+
+
+def _site_keys(sites: list) -> list:
+    """What makes two indexing passes the same, and nothing incidental.
+
+    `id` and `indexed_at` are excluded: the graph derives the row id itself and stamps the
+    timestamp, so neither is the adapter's contribution and a difference in either says nothing.
+    Compared as a sorted collection rather than a sequence, because nothing downstream depends
+    on the order call sites arrive in and pinning it would fail on a filesystem walk order.
+    """
+    return sorted(
+        (
+            site.repo_id, site.path, site.line, site.col, site.vendor_id, site.operation_id,
+            site.symbol, tuple(site.args_keys), tuple(site.response_fields_read),
+            site.sdk_version, site.content_hash, site.loop_depth,
+        )
+        for site in sites
+    )
+
+
+def _check_prepare_is_repeatable(adapter: Any, repo: Any) -> None:
+    adapter.prepare(repo)
+    try:
+        adapter.prepare(repo)
+    except Exception as exc:  # noqa: BLE001 - the point is that nothing may escape
+        _fail(
+            "prepare must tolerate being called again on the same checkout.",
+            "One clone serves every finding in a run, and the driver reaches `prepare` again for "
+            "each of them. An adapter that only survives being prepared once abandons every "
+            f"finding after the first, on a repository where nothing is wrong. Raised {exc!r}.",
+        )
+
+
+def _check_discard_reports_what_it_did(adapter: Any, repo: Any) -> None:
+    removed = adapter.discard_contaminated_dependencies(repo)
+    if not isinstance(removed, bool):
+        _fail(
+            "discard_contaminated_dependencies must return a bool.",
+            f"Got {type(removed).__name__}. The return value is read as a decision about whether "
+            "the next finding pays for a reinstall.",
+        )
+    if removed:
+        _fail(
+            "discard_contaminated_dependencies claimed a removal when nothing was contaminated.",
+            "Nothing has patched this checkout: `prepare` has just run and no remediator has "
+            "touched it. Returning True here is a reinstall per finding, and the one signal an "
+            "operator has that a dependency was doctored now fires for every run.",
+        )
+
+
+def _check_static_verify(adapter: Any, repo: Any) -> None:
+    """The gate between a patch and a customer's repository, checked as far as a kit can reach.
+
+    Three properties of `static_verify` are load-bearing, and only one of them is mechanically
+    checkable without knowing the language:
+
+    - It measures the tree a push would carry, holding the agent's untracked and ignored files
+      out of the compile. The half of that a kit can check is the restore: a file the
+      verification moved has to come back. Whether the *verdict* excluded it needs a source file
+      that fails to compile, which is language-specific and which only the author can write.
+    - It subtracts a pre-existing baseline, so errors the checkout already had do not fail a
+      patch. Checking that needs a checkout that already fails to compile, committed in that
+      state before `prepare` measures it. The kit will not commit to somebody's repository, and
+      cannot author a compile error in a language it does not know. This one stays prose.
+    - It refuses a patch that edited an installed dependency. That is checkable, and it is
+      `_check_static_verify_refuses_a_doctored_dependency` -- but only when the author says
+      where an installed dependency is, because the kit has no language-agnostic way to find one.
+
+    What is checked here is the shape of the answer and the state of the tree afterwards.
+    """
+    marker = Path(repo.local_path) / _UNTRACKED_MARKER
+    marker.write_text("left here by the conformance kit\n", encoding="utf-8")
+    expected = marker.read_bytes()
+    try:
+        result = adapter.static_verify(repo, _NO_PATCH)
+
+        if not isinstance(result, VerifyResult):
+            _fail(
+                "static_verify must return a VerifyResult.",
+                f"Got {type(result).__name__}. The caller reads `.ok` and `.diagnostics` off it "
+                "several nodes away, so a bool fails there as an AttributeError about a field "
+                "rather than here as a statement about the adapter.",
+            )
+        if not result.ok and not result.diagnostics.strip():
+            _fail(
+                "a failed verification must carry diagnostics.",
+                "The diagnostics string is the entire input to the next patch attempt. A failure "
+                "carrying none spends an agent run to arrive back where it started, and routing "
+                "cannot tell an unverifiable patch from a toolchain that did not run.",
+            )
+        if not marker.exists() or marker.read_bytes() != expected:
+            _fail(
+                "static_verify must put back every file it held out of the compile.",
+                "Measuring the tree a push would carry means moving the agent's untracked and "
+                "ignored files aside. Doing that without restoring them destroys work the next "
+                "attempt needed, and reports a verdict while doing it.",
+            )
+    finally:
+        marker.unlink(missing_ok=True)
+
+
+def _check_static_verify_refuses_a_doctored_dependency(
+    adapter: Any, repo: Any, installed_dependency: str
+) -> None:
+    """An edit inside an installed dependency satisfies a gate the customer's CI will not.
+
+    No checkout of the branch contains that file: the install is theirs, and `git add -u` stages
+    nothing under it. So a verification that compiles against the doctored copy delivers a green
+    verdict about a tree that will never exist.
+
+    Refusing by raising is as good as returning a failure and is what `TypeScriptAdapter` does,
+    on the argument that the edit cannot be undone without a reinstall and every later attempt
+    would meet the same doctored file. The rule is only that the answer is not `ok`.
+    """
+    target = Path(repo.local_path) / installed_dependency
+    if not target.exists():
+        _fail(
+            "the supplied installed dependency must exist in the supplied repository.",
+            f"{target} is not there after `prepare`, so this check cannot observe whether "
+            "static_verify refuses an edit to it. Fix the case handed to the kit, not the "
+            "adapter.",
+        )
+
+    original = target.read_bytes()
+    stat = target.stat()
+    try:
+        target.write_bytes(original + b"\nedited by the conformance kit\n")
+        # An edit under an installed tree is found by comparing mtimes against the install, and
+        # a filesystem records mtimes far more coarsely than the clock -- a write landing inside
+        # the same tick as the install leaves the timestamp equal to it, and "later than the
+        # install" is then false for an edit that really happened. Moved forward explicitly, so
+        # this check does not depend on which tick the write landed in.
+        written = target.stat()
+        os.utime(target, ns=(written.st_atime_ns, written.st_mtime_ns + 10_000_000_000))
+
+        try:
+            result = adapter.static_verify(repo, _NO_PATCH)
+        except Exception:  # noqa: BLE001 - refusing by raising is permitted; see the docstring
+            return
+        if getattr(result, "ok", False):
+            _fail(
+                "static_verify approved a patch that edited an installed dependency.",
+                f"{installed_dependency} was changed after the install and the verification "
+                "passed anyway. The compiler was resolving a file no checkout of the branch "
+                "contains, so the verdict describes a tree nobody will ever have.",
+            )
+    finally:
+        target.write_bytes(original)
+        os.utime(target, ns=(stat.st_atime_ns, stat.st_mtime_ns))
+
+
+def check_detector(detector: Any) -> None:
+    """Check `detector` against the guarantees `Detector` states but cannot enforce.
+
+    The detector arrives already constructed, holding whatever graph or fixture it queries --
+    the five in this repository take a store, a specification, a repository id and a set of
+    thresholds between them, and no signature the kit could impose would fit all of them. What
+    it must be handed is a detector whose input does not change while the kit runs, because two
+    of the rules below are about asking the same question twice.
+
+    Raises `ConformanceFailure` naming the broken rule. Returns None when the detector conforms.
+    """
+    _check_detector_id(detector)
+    first = _scanned(detector)
+    if not first:
+        _fail(
+            "the detector handed to the kit must find at least one finding.",
+            "Every rule about what `scan` emits is vacuous against a scan that emits nothing, "
+            "and a kit that passes vacuously is worse than no kit. Either the input this "
+            "detector was constructed over reaches none of its thresholds, or the detector "
+            "finds nothing it should -- the kit cannot tell which.",
+        )
+    _check_findings_are_usable(detector, first)
+    _check_findings_do_not_collide(first)
+    _check_scans_agree(first, _scanned(detector))
+
+
+def _check_detector_id(detector: Any) -> None:
+    detector_id = getattr(detector, "detector_id", None)
+    if not isinstance(detector_id, str) or not detector_id:
+        _fail(
+            "detector_id must be a non-empty string.",
+            "It is stamped on every finding and it is what attributes a false positive back to "
+            f"the code that raised it. Got {detector_id!r}.",
+        )
+
+
+def _scanned(detector: Any) -> list:
+    produced = detector.scan()
+    try:
+        iter(produced)
+    except TypeError:
+        _fail(
+            "scan must return an iterable of Finding, never None.",
+            "The caller writes `for finding in detector.scan()`, and None is the shape that "
+            f"crashes that loop. Got {type(produced).__name__}.",
+        )
+    return list(produced)
+
+
+def _check_findings_are_usable(detector: Any, findings: list) -> None:
+    detector_id = detector.detector_id
+    for finding in findings:
+        if not isinstance(finding, Finding):
+            _fail(
+                "scan must yield Finding objects.",
+                f"Got {type(finding).__name__}. One remediation pipeline consumes every "
+                "detector's output, and it reads typed attributes off what arrives.",
+            )
+        if finding.detector != detector_id:
+            _fail(
+                "a finding must carry the detector_id of the detector that raised it.",
+                f"Got {finding.detector!r} from a detector calling itself {detector_id!r}. That "
+                "field is how a false positive is attributed back to the code that produced it, "
+                "and a finding signed with a name nothing answers to cannot be attributed.",
+            )
+        if not isinstance(finding.call_site_id, str) or not finding.call_site_id:
+            _fail(
+                "a finding must name the call site it is about.",
+                "A finding addresses its location by call_site_id and by nothing else, so one "
+                f"carrying {finding.call_site_id!r} has no line to report and no file to patch. "
+                "A detector that cannot establish the id should drop the finding and count it.",
+            )
+
+
+def _check_findings_do_not_collide(findings: list) -> None:
+    """Two findings the graph cannot tell apart are one row, and nobody is told which one.
+
+    A finding's identity is `(detector, call_site_id, vendor_change_id)` and the insert is
+    ON CONFLICT DO NOTHING. So a detector that says two different things about one call site
+    under one change keeps whichever it emitted first: the second is dropped silently, at the
+    store, after the detector has already decided both were worth raising.
+
+    Emitting the same finding twice is not that. Identical rows collapse to the identical row,
+    which loses nothing, so only findings that *disagree* under one key are reported here.
+    """
+    seen: dict[tuple, Any] = {}
+    for finding in findings:
+        key = (finding.detector, finding.call_site_id, finding.vendor_change_id or "")
+        earlier = seen.get(key)
+        if earlier is None:
+            seen[key] = finding
+            continue
+        if (earlier.severity, earlier.rationale, earlier.status) == (
+            finding.severity, finding.rationale, finding.status
+        ):
+            continue
+        _fail(
+            "two findings from one scan share the same natural key.",
+            "The graph identifies a finding by (detector, call_site_id, vendor_change_id) and "
+            f"inserts ON CONFLICT DO NOTHING, so only one of these is stored:\n    "
+            f"{earlier.rationale}\n    {finding.rationale}\n  Give them different vendor change "
+            "ids, or say both things in one finding.",
+        )
+
+
+def _check_scans_agree(first: list, second: list) -> None:
+    if _finding_keys(first) != _finding_keys(second):
+        _fail(
+            "two scans of an unchanged graph must produce the same findings.",
+            "DETECT is a pipeline stage and every stage here is idempotent: re-running it over "
+            "the same input converges on the same rows. A detector whose answer depends on how "
+            "many times it has been asked makes the graph a record of run ordering.",
+        )
+
+
+def _finding_keys(findings: list) -> list:
+    """What makes two scans the same, and nothing incidental.
+
+    `id` and `created_at` are excluded: the graph derives the row id from the natural key and
+    stamps the timestamp itself, so neither is the detector's contribution. Sorted, because
+    nothing downstream depends on the order findings are emitted in.
+    """
+    return sorted(
+        (
+            finding.detector, finding.call_site_id, finding.vendor_change_id or "",
+            finding.severity, finding.rationale, finding.status,
+        )
+        for finding in findings
+    )

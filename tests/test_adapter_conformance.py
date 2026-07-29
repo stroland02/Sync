@@ -15,8 +15,25 @@ import pytest
 
 from pathlib import Path
 
-from sync.core import CallSite, Finding, OperationRef, Patch, RepoRef, VendorAdapter, VendorChange
-from sync.core.conformance import ConformanceFailure, check_remediator, check_vendor_adapter
+from sync.core import (
+    CallSite,
+    Detector,
+    Finding,
+    LanguageAdapter,
+    OperationRef,
+    Patch,
+    RepoRef,
+    VendorAdapter,
+    VendorChange,
+    VerifyResult,
+)
+from sync.core.conformance import (
+    ConformanceFailure,
+    check_detector,
+    check_language_adapter,
+    check_remediator,
+    check_vendor_adapter,
+)
 
 
 class _Correct:
@@ -199,3 +216,497 @@ def _remediation_case(tmp_path):
     )
     repo = RepoRef(repo_id="r", url="u", local_path=str(tmp_path), head_sha="0" * 40)
     return finding, change, site, repo
+
+
+# --- LanguageAdapter --------------------------------------------------------------
+
+DEPENDENCY = "deps/example-sdk/types.d"
+
+
+class _CorrectLanguage:
+    """The shape every `LanguageAdapter` invariant is stated against.
+
+    Small enough to read in one screen, and faithful in the three ways the rules are about: it
+    records what the install wrote, it notices when a later edit contradicted that record, and
+    it leaves alone the files it was never asked about.
+    """
+
+    language_id = "example"
+
+    def __init__(self, dependency: str | None = None) -> None:
+        self._dependency = dependency
+        self._installed: dict[str, bytes] = {}
+
+    def matches(self, repo) -> bool:
+        return (Path(repo.local_path) / "example.manifest").exists()
+
+    def index(self, repo):
+        root = Path(repo.local_path)
+        for source in sorted(root.rglob("*.ex")):
+            yield CallSite(
+                repo_id=repo.repo_id,
+                path=source.relative_to(root).as_posix(),
+                line=1, col=0, vendor_id="example", operation_id="PostCharges",
+                symbol="example.charges.create", args_keys=["amount"], response_fields_read=[],
+                sdk_version="1.0.0", content_hash="h",
+            )
+
+    def prepare(self, repo) -> None:
+        if self._dependency is not None:
+            self._installed[self._dependency] = (
+                Path(repo.local_path) / self._dependency
+            ).read_bytes()
+
+    def discard_contaminated_dependencies(self, repo) -> bool:
+        return False
+
+    def static_verify(self, repo, patch) -> VerifyResult:
+        for name, installed in self._installed.items():
+            if (Path(repo.local_path) / name).read_bytes() != installed:
+                return VerifyResult(ok=False, diagnostics=f"{name} was edited after the install")
+        return VerifyResult(ok=True)
+
+
+def test_a_correct_language_adapter_passes(tmp_path):
+    check_language_adapter(
+        _CorrectLanguage(dependency=DEPENDENCY),
+        _language_case(tmp_path),
+        installed_dependency=DEPENDENCY,
+    )
+
+
+def test_a_language_adapter_without_a_language_id_fails(tmp_path):
+    class Anonymous(_CorrectLanguage):
+        language_id = ""
+
+    with pytest.raises(ConformanceFailure, match="language_id"):
+        check_language_adapter(Anonymous(), _language_case(tmp_path))
+
+
+def test_a_matcher_that_raises_on_an_unfamiliar_repository_fails(tmp_path):
+    """Every registered adapter is asked about every repository, before any of them is chosen.
+
+    One that raises on a tree it does not recognise takes down the selection loop, and the
+    traceback names the adapter that was asked rather than the one that owns the repository.
+    """
+
+    class Explodes(_CorrectLanguage):
+        def matches(self, repo) -> bool:
+            manifest = Path(repo.local_path) / "example.manifest"
+            return manifest.read_text(encoding="utf-8").startswith("example-sdk")
+
+    assert isinstance(Explodes(), LanguageAdapter), "isinstance must still pass, or this proves nothing"
+    with pytest.raises(ConformanceFailure, match="must answer for a repository it does not own"):
+        check_language_adapter(Explodes(), _language_case(tmp_path))
+
+
+def test_a_matcher_that_returns_a_truthy_non_bool_fails(tmp_path):
+    """`matches` is dispatch. Returning the thing it matched on instead of a decision reads as
+    True for every repository that has a path at all, so the adapter claims repositories in
+    another language and the one that owns them never gets asked.
+    """
+
+    class ReturnsThePath(_CorrectLanguage):
+        def matches(self, repo):
+            return Path(repo.local_path) / "example.manifest"
+
+    with pytest.raises(ConformanceFailure, match="must return a bool"):
+        check_language_adapter(ReturnsThePath(), _language_case(tmp_path))
+
+
+def test_a_matcher_that_disowns_the_supplied_repository_fails(tmp_path):
+    """A precondition, not an adapter rule, and the message says so. Every check below is
+    measured against this repository, so an adapter that does not claim it would pass the rest
+    of the kit vacuously.
+    """
+
+    class ClaimsNothing(_CorrectLanguage):
+        def matches(self, repo) -> bool:
+            return False
+
+    with pytest.raises(ConformanceFailure, match="must claim the repository the kit was handed"):
+        check_language_adapter(ClaimsNothing(), _language_case(tmp_path))
+
+
+def test_a_matcher_that_claims_every_repository_fails(tmp_path):
+    """A matcher that claims a directory with nothing in it claims everything, and selection
+    then depends on which adapter was registered first rather than on the repository.
+    """
+
+    class ClaimsEverything(_CorrectLanguage):
+        def matches(self, repo) -> bool:
+            return True
+
+    with pytest.raises(ConformanceFailure, match="must not claim an empty directory"):
+        check_language_adapter(ClaimsEverything(), _language_case(tmp_path))
+
+
+def test_a_repository_with_no_call_sites_in_it_fails(tmp_path):
+    """The lesson from the remediator kit, restated as a rule. A case that exercises nothing
+    passes every rule about what `index` emits, and reports a floor it never measured.
+    """
+
+    class FindsNothing(_CorrectLanguage):
+        def index(self, repo):
+            return iter(())
+
+    with pytest.raises(ConformanceFailure, match="at least one call site"):
+        check_language_adapter(FindsNothing(), _language_case(tmp_path))
+
+
+def test_an_index_that_yields_something_other_than_a_call_site_fails(tmp_path):
+    class Tuples(_CorrectLanguage):
+        def index(self, repo):
+            yield ("src/billing.ex", 1)
+
+    with pytest.raises(ConformanceFailure, match="must yield CallSite"):
+        check_language_adapter(Tuples(), _language_case(tmp_path))
+
+
+def test_an_index_that_files_a_site_under_another_repository_fails(tmp_path):
+    """`repo_id` is half a call site's identity in the graph. A wrong one files the row under a
+    repository nobody indexed, where no finding will ever reach it.
+    """
+
+    class WrongRepo(_CorrectLanguage):
+        def index(self, repo):
+            for site in super().index(repo):
+                yield site.model_copy(update={"repo_id": "somebody-elses-repo"})
+
+    with pytest.raises(ConformanceFailure, match="must carry the repo_id"):
+        check_language_adapter(WrongRepo(), _language_case(tmp_path))
+
+
+def test_an_index_that_returns_none_fails(tmp_path):
+    class ReturnsNone(_CorrectLanguage):
+        def index(self, repo):
+            return None
+
+    with pytest.raises(ConformanceFailure, match="index must return an iterable"):
+        check_language_adapter(ReturnsNone(), _language_case(tmp_path))
+
+
+def test_an_index_that_reports_an_absolute_path_fails(tmp_path):
+    """`Path(repo.local_path) / site.path` is how every consumer opens the file. An absolute
+    right-hand side discards the left one silently — pathlib's documented behaviour — so the
+    remediator edits a file outside the clone, or the patch agent is handed a path the
+    customer's CI does not have.
+    """
+
+    class Absolute(_CorrectLanguage):
+        def index(self, repo):
+            for site in super().index(repo):
+                yield site.model_copy(update={"path": str(Path(repo.local_path) / site.path)})
+
+    with pytest.raises(ConformanceFailure, match="repository-relative"):
+        check_language_adapter(Absolute(), _language_case(tmp_path))
+
+
+def test_an_index_that_reports_a_windows_separator_fails(tmp_path):
+    """An adapter written on Windows that spells a path with backslashes passes every test its
+    author runs and fails on the customer's CI, where the path names no file.
+    """
+
+    class Backslashes(_CorrectLanguage):
+        def index(self, repo):
+            for site in super().index(repo):
+                yield site.model_copy(update={"path": site.path.replace("/", "\\")})
+
+    with pytest.raises(ConformanceFailure, match="forward slashes"):
+        check_language_adapter(Backslashes(), _language_case(tmp_path))
+
+
+def test_an_index_that_reports_a_file_that_is_not_there_fails(tmp_path):
+    class Invents(_CorrectLanguage):
+        def index(self, repo):
+            for site in super().index(repo):
+                yield site.model_copy(update={"path": "src/does-not-exist.ex"})
+
+    with pytest.raises(ConformanceFailure, match="must exist in the repository"):
+        check_language_adapter(Invents(), _language_case(tmp_path))
+
+
+def test_an_index_that_does_not_converge_fails(tmp_path):
+    """INDEX is a pipeline stage and every stage here is idempotent: re-running it over an
+    unchanged checkout converges on the same rows. One that does not leaves the graph carrying
+    whichever run happened last, and no query can tell which.
+    """
+
+    class Drifts(_CorrectLanguage):
+        def __init__(self, dependency=None) -> None:
+            super().__init__(dependency)
+            self._runs = 0
+
+        def index(self, repo):
+            self._runs += 1
+            for site in super().index(repo):
+                yield site.model_copy(update={"line": self._runs})
+
+    with pytest.raises(ConformanceFailure, match="same call sites"):
+        check_language_adapter(Drifts(), _language_case(tmp_path))
+
+
+def test_a_prepare_that_cannot_run_twice_fails(tmp_path):
+    """One clone serves every finding in a run, and the driver reaches `prepare` again for each
+    of them. An adapter that only tolerates being prepared once abandons every finding after
+    the first, on a repository where nothing is wrong.
+    """
+
+    class OnceOnly(_CorrectLanguage):
+        def __init__(self, dependency=None) -> None:
+            super().__init__(dependency)
+            self._prepared = False
+
+        def prepare(self, repo) -> None:
+            if self._prepared:
+                raise RuntimeError("already prepared")
+            self._prepared = True
+
+    with pytest.raises(ConformanceFailure, match="prepare must tolerate being called again"):
+        check_language_adapter(OnceOnly(), _language_case(tmp_path))
+
+
+def test_a_discard_that_always_claims_it_removed_something_fails(tmp_path):
+    """The return value is the only signal an operator gets that the next finding will pay for
+    a reinstall. One that always says yes costs an install per finding and tells nobody why.
+    """
+
+    class AlwaysTrue(_CorrectLanguage):
+        def discard_contaminated_dependencies(self, repo) -> bool:
+            return True
+
+    with pytest.raises(ConformanceFailure, match="nothing was contaminated"):
+        check_language_adapter(AlwaysTrue(), _language_case(tmp_path))
+
+
+def test_a_discard_that_answers_with_something_other_than_a_bool_fails(tmp_path):
+    class ReturnsThePaths(_CorrectLanguage):
+        def discard_contaminated_dependencies(self, repo):
+            return []
+
+    with pytest.raises(ConformanceFailure, match="must return a bool"):
+        check_language_adapter(ReturnsThePaths(), _language_case(tmp_path))
+
+
+def test_an_installed_dependency_that_is_not_there_fails(tmp_path):
+    """A precondition, and the one the remediator kit learned to state. If the path the author
+    named does not exist, the doctoring below writes a file nothing reads and the rule passes
+    without ever having been exercised.
+    """
+
+    with pytest.raises(ConformanceFailure, match="installed dependency must exist"):
+        check_language_adapter(
+            _CorrectLanguage(),
+            _language_case(tmp_path),
+            installed_dependency="deps/example-sdk/never-installed",
+        )
+
+
+def test_a_static_verify_that_returns_a_bare_bool_fails(tmp_path):
+    """`if result.ok` on a bool raises AttributeError inside the graph, several nodes from here."""
+
+    class ReturnsBool(_CorrectLanguage):
+        def static_verify(self, repo, patch):
+            return True
+
+    with pytest.raises(ConformanceFailure, match="must return a VerifyResult"):
+        check_language_adapter(ReturnsBool(), _language_case(tmp_path))
+
+
+def test_a_failed_verification_with_no_diagnostics_fails(tmp_path):
+    """`diagnostics` is the entire input to the next patch attempt. A failure carrying none
+    spends an agent run to arrive back where it started, and the routing that reads the result
+    cannot tell an unverifiable patch from a broken toolchain.
+    """
+
+    class Silent(_CorrectLanguage):
+        def static_verify(self, repo, patch):
+            return VerifyResult(ok=False)
+
+    with pytest.raises(ConformanceFailure, match="diagnostics"):
+        check_language_adapter(Silent(), _language_case(tmp_path))
+
+
+def test_a_static_verify_that_loses_a_file_it_was_not_asked_about_fails(tmp_path):
+    """Verification measures the tree a push would carry, which means holding the agent's
+    untracked and ignored files out of the compile — and putting them back. One that does the
+    first half destroys work the next attempt needed and reports a clean verdict while doing it.
+    """
+
+    class LosesFiles(_CorrectLanguage):
+        def static_verify(self, repo, patch) -> VerifyResult:
+            for stray in Path(repo.local_path).glob(".sync-conformance-*"):
+                stray.unlink()
+            return VerifyResult(ok=True)
+
+    with pytest.raises(ConformanceFailure, match="must put back every file"):
+        check_language_adapter(LosesFiles(), _language_case(tmp_path))
+
+
+def test_a_static_verify_that_approves_a_doctored_dependency_fails(tmp_path):
+    """An edit inside an installed dependency satisfies a gate the customer's CI will not: no
+    checkout of the branch contains that file. Approving it produces a green verdict about a
+    tree nobody will ever have.
+    """
+
+    class IgnoresDependencies(_CorrectLanguage):
+        def static_verify(self, repo, patch) -> VerifyResult:
+            return VerifyResult(ok=True)
+
+    with pytest.raises(ConformanceFailure, match="installed dependency"):
+        check_language_adapter(
+            IgnoresDependencies(dependency=DEPENDENCY),
+            _language_case(tmp_path),
+            installed_dependency=DEPENDENCY,
+        )
+
+
+def _language_case(tmp_path):
+    """A checkout the adapter is expected to match, index and verify.
+
+    Written under a `clone` subdirectory rather than at `tmp_path` itself, so the kit's own
+    scratch — the empty directory it asks `matches` about — cannot land inside it.
+    """
+    clone = tmp_path / "clone"
+    (clone / "src").mkdir(parents=True, exist_ok=True)
+    (clone / "example.manifest").write_text("example-sdk 1.0.0\n", encoding="utf-8")
+    (clone / "src" / "billing.ex").write_text("charges.create(amount=100)\n", encoding="utf-8")
+    (clone / "deps" / "example-sdk").mkdir(parents=True, exist_ok=True)
+    (clone / DEPENDENCY).write_text("declare charges\n", encoding="utf-8")
+    return RepoRef(repo_id="r", url="u", local_path=str(clone), head_sha="0" * 40)
+
+
+# --- Detector ---------------------------------------------------------------------
+
+
+class _CorrectDetector:
+    """One finding per affected call site, and the same ones every time it is asked."""
+
+    detector_id = "example-detector"
+
+    def scan(self):
+        for call_site_id in ("cs1", "cs2"):
+            yield Finding(
+                detector=self.detector_id,
+                call_site_id=call_site_id,
+                vendor_change_id="vc1",
+                severity="breaking",
+                rationale="amount was removed from the request body",
+            )
+
+
+def test_a_correct_detector_passes():
+    check_detector(_CorrectDetector())
+
+
+def test_a_detector_without_an_id_fails():
+    class Anonymous(_CorrectDetector):
+        detector_id = ""
+
+    with pytest.raises(ConformanceFailure, match="detector_id"):
+        check_detector(Anonymous())
+
+
+def test_a_scan_that_returns_none_fails():
+    class ReturnsNone(_CorrectDetector):
+        def scan(self):
+            return None
+
+    assert isinstance(ReturnsNone(), Detector), "isinstance must still pass, or this proves nothing"
+    with pytest.raises(ConformanceFailure, match="scan must return an iterable"):
+        check_detector(ReturnsNone())
+
+
+def test_a_detector_that_finds_nothing_fails():
+    """The same precondition `index` has, and it caught the same mistake. Probing the real
+    detectors with this kit, `StatusRateDetector` passed every rule while emitting nothing --
+    a fixture that reached no threshold, reported as conformance.
+    """
+
+    class Silent(_CorrectDetector):
+        def scan(self):
+            return iter(())
+
+    with pytest.raises(ConformanceFailure, match="at least one finding"):
+        check_detector(Silent())
+
+
+def test_a_detector_that_emits_something_other_than_a_finding_fails():
+    class Dicts(_CorrectDetector):
+        def scan(self):
+            yield {"detector": self.detector_id, "call_site_id": "cs1"}
+
+    with pytest.raises(ConformanceFailure, match="must yield Finding"):
+        check_detector(Dicts())
+
+
+def test_a_detector_that_signs_its_findings_with_another_name_fails():
+    """`Finding.detector` is what attributes a false positive back to the code that raised it.
+    A finding signed with a name no detector answers to cannot be attributed to anything.
+    """
+
+    class Mislabels(_CorrectDetector):
+        def scan(self):
+            for finding in super().scan():
+                yield finding.model_copy(update={"detector": "something-else"})
+
+    with pytest.raises(ConformanceFailure, match="detector_id of the detector that raised it"):
+        check_detector(Mislabels())
+
+
+def test_a_finding_with_no_call_site_fails():
+    """A `Finding` addresses its call site by id and nothing else. One carrying none has no
+    location to report, no file to patch and no row to reference.
+    """
+
+    class Unlocated(_CorrectDetector):
+        def scan(self):
+            for finding in super().scan():
+                yield finding.model_copy(update={"call_site_id": ""})
+
+    with pytest.raises(ConformanceFailure, match="call_site_id"):
+        check_detector(Unlocated())
+
+
+def test_two_findings_that_collide_on_the_graph_key_fails():
+    """The graph keys a finding on `(detector, call_site_id, vendor_change_id)` and inserts
+    `ON CONFLICT DO NOTHING`. Two findings sharing that triple are one row, and the second one
+    is discarded without a warning — so a detector saying two things about one call site says
+    whichever of them it happened to emit first.
+    """
+
+    class TwoClaimsOneKey(_CorrectDetector):
+        def scan(self):
+            for rationale in ("called inside a loop", "the same call repeated 40 times"):
+                yield Finding(
+                    detector=self.detector_id,
+                    call_site_id="cs1",
+                    severity="info",
+                    rationale=rationale,
+                )
+
+    with pytest.raises(ConformanceFailure, match="same natural key"):
+        check_detector(TwoClaimsOneKey())
+
+
+def test_a_second_scan_that_disagrees_with_the_first_fails():
+    """DETECT is a pipeline stage and every stage here is idempotent. A detector whose answer
+    depends on how many times it has been asked makes the graph a record of run ordering.
+    """
+
+    class Drifts(_CorrectDetector):
+        def __init__(self) -> None:
+            self._runs = 0
+
+        def scan(self):
+            self._runs += 1
+            yield Finding(
+                detector=self.detector_id,
+                call_site_id="cs1",
+                vendor_change_id="vc1",
+                severity="breaking",
+                rationale=f"seen on scan {self._runs}",
+            )
+
+    with pytest.raises(ConformanceFailure, match="same findings"):
+        check_detector(Drifts())
