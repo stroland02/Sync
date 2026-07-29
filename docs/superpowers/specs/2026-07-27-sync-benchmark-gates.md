@@ -57,8 +57,16 @@ binding precision will divide into. Each reports its sample size, and an axis wi
 reports a null rather than a zero, which is the distinction the Verification section below
 demands.
 
-**What remains blocked is the gate, not the computation.** The corpus holds no rows, because no
-real pipeline run has yet produced one, so every axis currently reports zero samples. Nothing is
+**What remains blocked is the gate, not the computation.** The corpus holds no rows from a real
+pipeline run, because none has yet produced one, so against a deployment's own database every
+axis reports zero samples. Confirmed against the running Postgres on 2026-07-29 rather than
+inferred from the tree — `docs/superpowers/reports/2026-07-29-database-state.md` has the counts.
+That measurement qualifies the sentence in one way worth knowing before reading an axis: a
+database the test suite has been pointed at is not empty. `tests/test_pipeline_composes.py`
+drives the real remediation graph and writes three attempts against one finding, and a pinned
+database is deliberately not truncated afterwards, so `sync benchmark` aimed at a developer's own
+database reports three samples of a fixture rather than the null this section describes. Nothing
+is
 wired into `.github/workflows/ci.yml` and no threshold is asserted anywhere, per the tier C rule
 below. Binding precision and recall are no longer uncomputable for want of arithmetic —
 `src/sync/benchmark/binding.py` scores them and splits both by the rung the binding came from,
