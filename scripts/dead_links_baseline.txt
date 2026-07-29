@@ -35,3 +35,14 @@ src/sync/route/templates.py:omit_property_at
 # Whoever wires intake deletes both lines in that commit.
 src/sync/signals/registry_tier/directory.py:parse_directory
 src/sync/signals/registry_tier/directory.py:versions_after
+
+# The labelled-pair generator, built and not yet scored against. `generate_pair` mutates a real
+# repository into a broken one plus the ground truth of which call sites the change genuinely
+# breaks; `depends_on_change` is the predicate that ground truth is derived from. Its own brief
+# deferred the consumer deliberately -- `sync.benchmark.binding.compute_binding_accuracy` already
+# exists and already takes labels, and feeding it is a separate task, because a generator and a
+# scorer built together would be one artifact agreeing with itself.
+#
+# These two lines leave when something scores a generated pair.
+src/sync/benchmark/mutate.py:generate_pair
+src/sync/benchmark/mutate.py:depends_on_change
