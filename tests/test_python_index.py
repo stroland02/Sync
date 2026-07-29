@@ -395,6 +395,125 @@ def test_a_syntax_error_is_reported_as_such_rather_than_as_a_missing_gate(tmp_pa
     assert "syntax" in broken.lower()
 
 
+# --- what the syntax gate must and must not call broken -----------------------------
+
+VALID_SOURCE = "import stripe\n\n\ndef charge():\n    return stripe.charges.create(amount=1)\n"
+
+
+def _source_repo(tmp_path, name: str, source: bytes) -> RepoRef:
+    """A project declaring Stripe whose one source file is exactly these bytes.
+
+    Bytes rather than text, because every case below is a question about how the file is
+    encoded, and writing it through a str would answer that question before the gate saw it.
+    """
+    root = tmp_path / name
+    (root / "src").mkdir(parents=True)
+    (root / "pyproject.toml").write_text(
+        '[project]\nname = "billing"\ndependencies = ["stripe>=12.0.0"]\n', encoding="utf-8"
+    )
+    (root / "src" / "billing.py").write_bytes(source)
+    return RepoRef(
+        repo_id=name, url=f"https://example.invalid/{name}",
+        local_path=str(root), head_sha="0" * 40,
+    )
+
+
+def test_a_byte_order_mark_on_source_is_not_a_syntax_error(tmp_path):
+    """The gate called a file broken that Python compiles.
+
+    A `.py` file may begin with a UTF-8 byte-order mark -- the tokenizer strips it, and
+    `py_compile` accepts the file. Reading it as text and handing `ast.parse` the resulting str
+    leaves the `\\ufeff` in place, and `ast.parse` rejects it as `invalid non-printable character
+    U+FEFF`. So `static_verify` reported a file the patch never touched as one the patch broke,
+    which is the strongest verdict this gate can give and it was wrong.
+    """
+    repo = _source_repo(tmp_path, "bom_source", VALID_SOURCE.encode("utf-8-sig"))
+
+    assert _adapter(tmp_path)._syntax_errors(repo) == []
+
+
+def test_a_coding_declaration_is_honoured_rather_than_overruled(tmp_path):
+    """The same defect with a second cause, and the one `utf-8-sig` alone does not fix.
+
+    PEP 263 lets a file declare its own encoding, and the interpreter reads the declaration
+    before it decodes the rest. A file declaring `latin-1` and written in it compiles; decoding
+    it as UTF-8 first raises `UnicodeDecodeError` and the gate reported that as the file being
+    broken.
+    """
+    source = ("# -*- coding: latin-1 -*-\n" + VALID_SOURCE + 'CAFE = "café"\n').encode("latin-1")
+    repo = _source_repo(tmp_path, "declared_latin1", source)
+
+    assert _adapter(tmp_path)._syntax_errors(repo) == []
+
+
+def test_source_that_declares_nothing_and_is_not_utf8_is_still_broken(tmp_path):
+    """The gate must not have been widened. These are the same bytes as the case above with the
+    declaration removed, which is what makes the pair a discrimination rather than two
+    assertions: CPython rejects this one, so the gate has to as well."""
+    source = (VALID_SOURCE + 'CAFE = "café"\n').encode("latin-1")
+    repo = _source_repo(tmp_path, "undeclared_latin1", source)
+
+    broken = _adapter(tmp_path)._syntax_errors(repo)
+
+    assert [entry.split(":")[0] for entry in broken] == ["src/billing.py"]
+
+
+def test_a_utf16_source_file_is_reported_rather_than_raising(tmp_path):
+    """`ast.parse` over bytes answers this one with `ValueError`, not `SyntaxError` -- "source
+    code string cannot contain null bytes" -- so a chain catching only `SyntaxError` would let it
+    out of the gate as a crash rather than a verdict. Asserted here because the reason the gate
+    catches `ValueError` at all is invisible from the code.
+    """
+    repo = _source_repo(tmp_path, "utf16_source", VALID_SOURCE.encode("utf-16"))
+
+    broken = _adapter(tmp_path)._syntax_errors(repo)
+
+    assert len(broken) == 1
+    assert broken[0].startswith("src/billing.py:")
+
+
+def test_the_gate_agrees_with_py_compile_on_every_shape(tmp_path):
+    """The property the three cases above are instances of, stated once against the authority.
+
+    `_syntax_errors` exists to answer "is this valid Python", and its docstring says the
+    interpreter's own parser is what decides. So the test is whether it agrees with the
+    interpreter, file by file, rather than whether it produces any particular message.
+    """
+    import py_compile
+
+    cases = {
+        "plain": VALID_SOURCE.encode("utf-8"),
+        "bom": VALID_SOURCE.encode("utf-8-sig"),
+        # The accented line is what makes this case latin-1 at all: `VALID_SOURCE` is ASCII, and
+        # latin-1 of ASCII is ASCII, so without it the declaration is never exercised.
+        "declared_latin1": (
+            "# -*- coding: latin-1 -*-\n" + VALID_SOURCE + 'CAFE = "café"\n'
+        ).encode("latin-1"),
+        "utf8_accented": (VALID_SOURCE + 'CAFE = "café"\n').encode("utf-8"),
+        "broken": b"def charge(:\n    return 1\n",
+        "undeclared_latin1": (VALID_SOURCE + 'CAFE = "café"\n').encode("latin-1"),
+        "utf16": VALID_SOURCE.encode("utf-16"),
+    }
+
+    disagreements = []
+    for name, source in cases.items():
+        repo = _source_repo(tmp_path, f"agree_{name}", source)
+        gate_says_broken = bool(_adapter(tmp_path)._syntax_errors(repo))
+        try:
+            py_compile.compile(
+                str(Path(repo.local_path) / "src" / "billing.py"), cfile=None, doraise=True
+            )
+            cpython_says_broken = False
+        except py_compile.PyCompileError:
+            cpython_says_broken = True
+        if gate_says_broken != cpython_says_broken:
+            disagreements.append(
+                f"{name}: gate broken={gate_says_broken}, CPython broken={cpython_says_broken}"
+            )
+
+    assert disagreements == []
+
+
 def test_a_configured_typechecker_is_reported_as_unused_rather_than_claimed(tmp_path):
     """A project configuring mypy has a gate this adapter does not run. Saying so is the
     difference between a limitation someone can close and one they have to rediscover -- and

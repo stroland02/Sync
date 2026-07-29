@@ -74,12 +74,10 @@ _MYPY_CONFIG_FILES = ("mypy.ini", ".mypy.ini", "setup.cfg")
 # so the guards around these reads still do their work and a UTF-16 manifest is still refused
 # rather than decoded into mojibake.
 #
-# Manifests only, and the limit is a known gap rather than a judgement. `_syntax_errors` reads
-# customer source as plain `utf-8`, and a `.py` file with a mark is valid Python -- the tokenizer
-# strips it -- while `ast.parse` over a string that still carries it does not: measured as
-# `src/billing.py: invalid non-printable character U+FEFF`. So `static_verify` reports a file the
-# patch never broke as broken. That is a verification-gate answer rather than a manifest one and
-# is left for a change that can measure the gate.
+# Manifests only, and customer *source* is not read as text at all -- `_syntax_errors` hands
+# `ast.parse` the bytes and lets the tokenizer decide, because a `.py` file may declare its own
+# encoding and may begin with a mark, and both are the interpreter's business rather than this
+# module's. A manifest cannot declare anything, which is why it needs an answer chosen here.
 _MANIFEST_ENCODING = "utf-8-sig"
 _VERSION_DELIMITERS = "=<>!~ ;[#"
 
@@ -713,16 +711,35 @@ class PythonAdapter:
         error and reports a tree, which is what makes it right for indexing a half-written file
         and wrong for answering whether the file is valid Python. The interpreter's own parser
         is the authority on that.
+
+        **Bytes, and that is the whole of deferring to it.** Deciding a file's encoding is part
+        of parsing Python, not something to settle first and hand over the result: the tokenizer
+        strips a byte-order mark and honours a PEP 263 `coding:` declaration. Reading the file as
+        text with an encoding chosen here bypassed exactly the part of the interpreter this gate
+        claims to defer to, and it called two kinds of compilable file broken -- a `.py` beginning
+        with a mark, as `invalid non-printable character U+FEFF`, and a file declaring `latin-1`
+        and written in it, as a decode failure. Measured against `py_compile` over seven files:
+        bytes agrees with it on all seven, a `utf-8` read disagrees on two.
+
+        A file that genuinely cannot be read is still reported, which is the half that must not
+        move: undeclared non-UTF-8 bytes and a UTF-16 file are both rejected by CPython and both
+        are rejected here.
         """
         root = Path(repo.local_path)
         broken: list[str] = []
         for file_path in self._source_files(repo):
+            relative = file_path.relative_to(root).as_posix()
             try:
-                ast.parse(file_path.read_text(encoding="utf-8"))
+                ast.parse(file_path.read_bytes())
             except SyntaxError as exc:
-                broken.append(f"{file_path.relative_to(root).as_posix()}: {exc.msg}")
-            except UnicodeDecodeError as exc:
-                broken.append(f"{file_path.relative_to(root).as_posix()}: {exc}")
+                broken.append(f"{relative}: {exc.msg}")
+            except ValueError as exc:
+                # Not every unparseable file is a `SyntaxError` once the source is bytes. A
+                # UTF-16 file raises `ValueError: source code string cannot contain null bytes`
+                # from before the tokenizer, and uncaught that leaves the gate as a traceback
+                # rather than a verdict -- the failure `matches` had against the same file twice.
+                # `UnicodeDecodeError` is a `ValueError` too, so nothing needs its own clause.
+                broken.append(f"{relative}: {exc}")
         return broken
 
     def _configured_typechecker(self, repo: RepoRef) -> str | None:

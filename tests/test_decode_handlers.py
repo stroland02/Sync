@@ -290,16 +290,6 @@ def _drive_requirement_lines_requirements(root: Path) -> None:
     assert _python_adapter(root).matches(_repo(root)) is False
 
 
-def _drive_syntax_errors(root: Path) -> None:
-    from sync.core import Patch
-
-    (root / "billing.py").write_bytes(UTF16)
-    result = _python_adapter(root).static_verify(
-        _repo(root), Patch(diff="", strategy="codemod", rationale="r")
-    )
-    assert result.ok is False and "billing.py" in result.diagnostics
-
-
 def _drive_configured_typechecker(root: Path) -> None:
     from sync.core import Patch
 
@@ -407,10 +397,9 @@ def _drive_ts_manifest(root: Path) -> None:
 DRIVERS: dict[str, Callable[[Path], None]] = {
     "sync/benchmark/checkout.py:81": _drive_checkout,
     "sync/forge/webhook.py:97": _drive_webhook,
-    "sync/index/python_lang.py:237": _drive_requirement_lines_pyproject,
-    "sync/index/python_lang.py:251": _drive_requirement_lines_requirements,
-    "sync/index/python_lang.py:724": _drive_syntax_errors,
-    "sync/index/python_lang.py:735": _drive_configured_typechecker,
+    "sync/index/python_lang.py:235": _drive_requirement_lines_pyproject,
+    "sync/index/python_lang.py:249": _drive_requirement_lines_requirements,
+    "sync/index/python_lang.py:752": _drive_configured_typechecker,
     "sync/index/typescript.py:206": _drive_ts_manifest,
     "sync/remediate/literal_swap.py:84": _drive_literal_swap,
     "sync/remediate/parameters.py:77": _drive_parameters,
