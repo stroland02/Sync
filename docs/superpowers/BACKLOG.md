@@ -12,37 +12,32 @@ item that cannot say what evidence closes it is not ready to dispatch.
 
 ## Ready
 
-### B52 — The hold_back selection rule can pick a site the binder is unable to hold back
+### B55 — Adapter selection declines a repository silently where intake explains itself
 
-B50 measured this rather than reasoning about it. `scripts/build_corpus_specs.py` chooses a
-same-operation site to hold back so precision has a candidate it can fail on. It carries no clause
-stopping it from choosing a site that shares an enclosing scope *and* a result name with a site it
-still targets. When it does, `_response_fields` credits the guard's field read to both assignments —
-the binder cannot tell which assignment produced the value being read, because that is data flow and
-tree-sitter does not do data flow — so the held-back site is genuinely dependent and the label
-calling it a negative is false.
+Two paths read the same customer manifest and one of them says nothing. Measured with a control on
+a UTF-16 `requirements.txt`:
 
-Measured on `furever` `PostPaymentIntents-response`:
-`app/api/setup_accounts/create_charges/route.ts` declares `let paymentIntent;` at line 78 and
-assigns it from `stripe.paymentIntents.create` at both 104 and 154. Holding back 104 while targeting
-154 gave precision 0.9615 at n=26 — one false positive, and the false thing was the label.
+    plain UTF-8 (control)   PythonAdapter.matches() True    intake reason: (none)
+    UTF-16, undecodable     PythonAdapter.matches() False   intake reason: names the file and the byte
 
-**The binder's behaviour here is correct and is not what needs changing.** Crediting both
-assignments is the conservative direction, which is the right direction for a tool whose failure
-mode is a missed break. A worker who reads this as a binder defect and tries to make the binder
-answer a data-flow question has misread it.
+`src/sync/cli.py:203` is the whole of it — `if adapter.matches(repo):`. So "this repository does not
+use the SDK" and "we could not read the file that would have told us" are the same observable, and
+only one of them is a defect in the customer's repository rather than in ours. Adapter selection is
+the gate every later stage sits behind, so a silent decline costs the index, the finding and the
+remediation with no record of why.
 
-`turbo` is the contrast that makes the rule legible rather than arbitrary: its two sites sit in
-different files (`arnsPurchaseQuote.ts:223` held back, `topUp.ts:299` targeted), so no scope is
-shared, no cross-crediting happens, and the `hold_back` is sound. It was adopted; `furever` was
-declined.
+B51 ranked this first among its leave-behinds on the grounds that a crash gets fixed, an accurate
+reason is actionable, and a wrong answer with no reason is the one nobody finds.
 
-Until the clause exists, a fresh generation proposes the unsound `hold_back` again and the committed
-corpus stays a deliberate superset of what the rule proposes rather than equal to it.
+**The design is decided rather than left open:** report at the selection site using the reason
+`intake.read_declared_dependencies` already computes. `LanguageAdapter.matches` is a published
+plugin protocol asserted on by `src/sync/core/conformance.py:394`, and the `unverifiable_reason`
+precedent (`python_lang.py:150`, read in `remediate/nodes.py:143`) is a *static* attribute for a
+general limitation, so overloading it with a per-repository fact would give one name two meanings.
 
-**Closes when:** the selection rule refuses a `hold_back` whose site shares an enclosing scope and
-result name with a targeted site on the same operation, a fresh generation stops proposing `furever`
-`PostPaymentIntents-response`, and all four gate figures are unchanged by the rule change.
+**Closes when:** an unreadable manifest is distinguishable from a clean manifest declaring nothing,
+with a control proving a legitimate silent decline stays silent, `LanguageAdapter` and the
+conformance kit unchanged, and four gates green.
 
 ### B54 — A UTF-8 byte-order mark makes four manifest readers answer wrongly
 
@@ -100,11 +95,8 @@ recorded with which change broke it.
 
 ## In flight
 
-- **B52** — `task_15860306d7c7`, worktree `sync-solo-a`. Its commit `34789db` leaves the suite
-  red: `hold_back` gained a required `root: Path` and five two-argument callers in
-  `tests/test_corpus_hold_back.py` were not updated. Reproduced at clean `34789db` in a throwaway
-  branch — `5 failed, 10 passed`. Sent back to fix before it lands.
 - **B54** — `task_1ea8ea5094a0`, worktree `sync-solo-b`.
+- **B55** — `task_e03a2a5bb93f`, worktree `sync-solo-a`.
 
 **Briefs go in a file now, not in the dispatch spec.** Long message bodies are being truncated in
 delivery — three briefs today, and B52 received a correction paragraph while the four numbered
@@ -645,3 +637,22 @@ is what a reviewer needs and duplicating it here would let the two copies drift.
   `typescript.py:200`, so it genuinely enters the arm rather than passing beside it.
 
   Left behind and now B54: a BOM'd manifest, which decodes fine and defeats four readers instead.
+
+- Refuse a hold-back whose site shares a scope and a result name with a target. Landed `9812313`,
+  with the five callers `hold_back`'s new required `root` broke fixed at `0dfd09f`. A fresh
+  generation now leaves `furever-PostPaymentIntents-response` without the unsound hold_back, which
+  was the deliverable, and the four figures are unchanged: precision 1.0000 n=26, recall 1.0000
+  n=26, falsifiable negatives 7, pairs scored 17, `Every floor cleared.`
+
+  Probed in both directions, because a clause that refuses everything is as wrong as one that
+  refuses nothing. Disabling the refusal fails `test_a_site_sharing_a_scope_and_a_name_with_a_target_is_refused`;
+  dropping the path out of the scope identity — so two files holding the same text compare equal —
+  fails `test_sites_in_different_files_are_still_held_back`, which is the case the docstring argues
+  for. Regenerating the whole set changes one other file, and only its hand-written commentary:
+  zero non-comment lines, `hold_back` key intact.
+
+  **The worker did not land this itself.** It went silent for 53 minutes across two messages, and
+  something reset its tree onto a stale main and orphaned `34789db` — 300 insertions reachable from
+  no branch. Caught within a minute and preserved as `unreviewed/b52-hold-back-scope`, then
+  finished here. Two habits earned from that: stage by explicit path, and run
+  `git log --oneline main..HEAD` before any `git reset --hard`.
