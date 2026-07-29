@@ -548,6 +548,12 @@ class _TwoFindingStore:
         self._sites = {site.id: site for site in sites}
         self._change = change
         self.statuses: list[tuple[str, str]] = []
+        self.outcomes: list = []
+
+    def record_migration_outcome(self, outcome) -> None:
+        """`make_recorder` states this contract at construction, so a store without it fails
+        `build_graph`. This stub drives the real graph and so owes the real write."""
+        self.outcomes.append(outcome)
 
     @contextmanager
     def transaction(self):

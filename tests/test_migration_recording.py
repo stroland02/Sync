@@ -25,6 +25,7 @@ import pytest
 from langgraph.checkpoint.memory import InMemorySaver
 
 from sync.core import CallSite, Finding, MigrationOutcome, Patch, RepoRef, VendorChange, VerifyResult
+from sync.remediate.corpus import CorpusWriterMissing
 from sync.remediate.graph import build_graph
 from sync.remediate.tiered import CannotPatch, TerminalTier, TieredRemediator
 
@@ -337,17 +338,28 @@ def test_a_corpus_write_that_raises_is_visible_in_the_logs(caplog):
     assert any("migration_outcome" in record.getMessage() for record in caplog.records)
 
 
-def test_a_store_with_no_corpus_method_does_not_fail_the_run():
-    """The store is a protocol boundary, and an older one is a missing row rather than a
-    crashed pipeline."""
+def test_a_store_with_no_corpus_method_fails_before_the_run_starts():
+    """This asserted the opposite until the contract moved, and the reasoning it carried --
+    "an older store is a missing row rather than a crashed pipeline" -- is what turned out to
+    be the problem rather than the answer.
 
+    A missing row is not the cost. The write is the single call every benchmark axis reads
+    from, so a store that cannot record produces a run that looks entirely successful and
+    leaves every axis reporting null with a sample size of zero -- indistinguishable from a
+    pipeline that simply has not run yet. The warning that used to stand in for this scrolls
+    past in a log nobody is reading.
+
+    Nothing is lost by failing: `build_graph` calls `make_recorder` before any node runs, so
+    there is no run in flight to destroy. The protection that mattered stays where it was --
+    a write that fails mid-run is still swallowed, which the test below pins.
+    """
     class OldStore:
         def get_call_site(self, _id): return SITE
         def get_vendor_change(self, _id): return CHANGE
         def set_finding_status(self, _id, status): pass
 
-    state, _ = _run(store=OldStore())
-    assert state["outcome"] == "opened"
+    with pytest.raises(CorpusWriterMissing, match="record_migration_outcome"):
+        _run(store=OldStore())
 
 
 # --- the salt, which must never be a published constant ---------------------------
