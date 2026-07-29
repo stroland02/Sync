@@ -36,27 +36,40 @@ when, which is why it is recorded here rather than dispatched.
 **Closes when:** one `sync run` produces a CI-green pull request again, or the failure is
 recorded with which change broke it.
 
-### B25 — No shipped adapter is asserted against the conformance kit
+### B28 — The routing row still has nowhere durable to land
 
-The kit covers all five protocols and every rule is proved able to fail, but almost every one of
-those proofs runs against a stub written for the purpose. `StripeAdapter` and `TwilioAdapter` are
-what `sync.signals.registry` registers and what a customer's run loads, and neither is asserted
-against `check_vendor_adapter` anywhere. The one exception is Stripe's correlator, added with
-`check_request_correlator` in `tests/test_span_correlation.py`.
+`_decide_tier` computes the decision-table row in the `locate` node and stores it on `RunState`;
+`TieredRemediator` asks the same table again; the report node names it in its reason. Nothing
+persists it. `migration_outcome` has no column for it, `sync.remediate.corpus` takes no such
+argument, and `on_route` has no caller anywhere in `src/`.
 
-A kit whose own project never runs it against its own adapters is a kit nobody has evidence works
-on real code, and the plugin story rests on it.
+Routing accuracy is one of the five quality axes, and it is the one that answers "was tier 0
+wrong for this change kind". Without the row it is an archaeology project rather than a query,
+and it stays that way however much corpus data arrives.
 
-**Closes when:** every implementation the registry holds is asserted against its protocol's check,
-with the list derived from the registry rather than restated, failing loudly for a registered
-vendor that has no fixture rather than skipping it.
+**Closes when:** the row a run actually routed on is queryable from the outcome it produced.
 
 ## In flight
+
+- **B26** — `task_90be59456e23`, in `sync-solo-b`. Moves the two vacuous-pass holes out of the
+  caller and into the kit, so an outside adapter author stops getting a false pass.
+- **B27** — `task_b777f003fa9f`, in `sync-solo-a`. Freezes a specimen corpus and measures whether
+  binding precision is actually deterministic, which is the precondition for the only tier C gate
+  that is safe without the statistics research that never completed.
 
 - **B24** — `task_8e675882a386`, in `sync-solo-b`. Builds B25's closing condition. Redispatched:
   the first worker held the task for half an hour without starting and did not answer two nudges.
 
 ## Done
+
+- **B24** — nineteen shipped implementations are now asserted against the conformance kit, with
+  every list derived from the registry rather than restated and a registered implementation that
+  has no case failing **by name** rather than being skipped. Landed `52303b6`. No shipped
+  implementation failed, and the worker did the more valuable thing: it asked why everything
+  passed, and found **two checks that pass without exercising anything** — `check_vendor_adapter`
+  certifies an adapter resolving no symbol when `known_symbol` is `None`, and `check_remediator`
+  reads an empty diff as a decline. Both confirmed independently. B26 moves those fixes into the
+  kit, where outside authors will actually meet them.
 
 - **The flaky database failures were never flaky.** Measured with a sampler through one full
   suite: peak **105** concurrent connections, mean 67.6, against the postgres default ceiling of
