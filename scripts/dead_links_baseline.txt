@@ -24,7 +24,6 @@ src/sync/index/python_lang.py:PythonAdapter
 src/sync/signals/datadog/shapes.py:DatadogShapeReader
 src/sync/signals/generated/adapter.py:GeneratedSpecAdapter
 src/sync/signals/sentry/shapes.py:SentryShapeReader
-src/sync/signals/twilio/adapter.py:TwilioAdapter
 
 
 # The public change feed: built, unpublished, with no keypair and no hosting.

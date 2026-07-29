@@ -16,6 +16,7 @@ from langgraph.checkpoint.postgres import PostgresSaver
 
 from sync.benchmark.report import render_report
 from sync.core import CallSite, Finding, RepoRef, VendorChange
+from sync.core.protocols import RequestCorrelator
 from sync.detect.efficiency import EfficiencyDetector
 from sync.detect.observed_drift import DeclaredField, ObservedDriftDetector
 from sync.detect.parameter_deprecation import ParameterDeprecationDetector
@@ -41,8 +42,13 @@ from sync.signals.deprecations import (
     http_fetch,
     parse_parameter_deprecations,
 )
-from sync.signals.stripe.adapter import StripeAdapter, fetch_sdk_spec, fetch_spec
-from sync.signals.stripe.symbols import build_symbol_map
+from sync.signals.registry import (
+    SYMBOL_MAP_FILENAME,
+    VendorContext,
+    available_vendors,
+    load_vendor,
+    prepare_vendor,
+)
 from sync.telemetry import ingest_payload
 
 DEFAULT_DSN = "postgresql://sync:sync@localhost:5433/sync"
@@ -349,6 +355,52 @@ def _declared_response_fields(document: dict) -> dict[str, list[DeclaredField]]:
     return declared
 
 
+def _declared_fields(documents: Sequence[dict]) -> dict[str, list[DeclaredField]]:
+    """The declared response fields across every document a vendor published.
+
+    One vendor publishes one specification and another publishes one per product, and the drift
+    detector asks a question about the vendor rather than about a document. The merge is on
+    `operation_id` because that, with the vendor, is what the graph and the detector both key
+    on.
+
+    **An operation two documents both declare is dropped rather than resolved.** Nothing Twilio
+    publishes promises its ids are unique across 61 products -- the adapter records the source
+    document in `raw` for exactly that reason -- and a plain merge settles the clash in favour
+    of whichever was read last. The cost of settling it is not a wrong number: the detector
+    would compare one product's observed traffic against the other product's declarations, and
+    report every field the observed product really does return as one the vendor never
+    declared. That is a confident false finding in the detector whose entire justification is
+    precision over recall.
+
+    Dropping costs findings for that operation instead, because `ObservedDriftDetector.scan`
+    iterates the declared map and never examines an operation absent from it. A missed finding
+    costs one incident; a false one costs the reviewer's willingness to read the next.
+
+    It is printed, never silent. An operation that quietly stops being checked is
+    indistinguishable from a detector finding nothing, which is the confusion the per-detector
+    counts in `_scan` exist to end.
+    """
+    declared: dict[str, list[DeclaredField]] = {}
+    collided: set[str] = set()
+
+    for document in documents:
+        for operation_id, fields in _declared_response_fields(document).items():
+            if operation_id in declared or operation_id in collided:
+                collided.add(operation_id)
+                declared.pop(operation_id, None)
+                continue
+            declared[operation_id] = fields
+
+    if collided:
+        print(
+            "observed-drift: "
+            f"{', '.join(sorted(collided))} declared by more than one document; "
+            "dropped rather than compared against the wrong product's declarations",
+            file=sys.stderr,
+        )
+    return declared
+
+
 def _page(url: str, destination: Path, fetch: Callable[[str], str]) -> str:
     """A vendor page, from cache when it is recent enough and from the network otherwise."""
     if destination.exists() and destination.stat().st_size > 0:
@@ -486,7 +538,7 @@ def _literal_call_sites(repo: RepoRef) -> list[CallSite]:
 def _detector_suite(
     store: GraphStore,
     *,
-    spec_document: dict,
+    spec_documents: Sequence[dict],
     call_sites: Sequence[CallSite],
     deprecations: Sequence[ParameterDeprecation],
     vendor_id: str,
@@ -516,7 +568,11 @@ def _detector_suite(
     return [
         ("vendor_change", VendorChangeDetector(store)),
         ("parameter-deprecation", ParameterDeprecationDetector(deprecations, call_sites)),
-        ("observed-drift", ObservedDriftDetector(store, _declared_response_fields(spec_document), vendor_id)),
+        # Several documents rather than one: a vendor that publishes per product declares its
+        # response fields across all of them, and taking only the first would report every field
+        # in every other product as undeclared -- the detector's loudest finding, raised from
+        # this file having read less than the vendor published.
+        ("observed-drift", ObservedDriftDetector(store, _declared_fields(spec_documents), vendor_id)),
         *[
             (f"model-deprecation:{vendor}", VendorChangeDetector(store, vendor_id=vendor))
             for vendor in deprecation_vendors
@@ -561,23 +617,14 @@ def run(args: argparse.Namespace) -> int:
     cache = Path(args.cache)
     cache.mkdir(parents=True, exist_ok=True)
 
-    fetch_spec(args.from_version, cache / f"{args.from_version}.json")
-    head_spec = fetch_spec(args.to_version, cache / f"{args.to_version}.json")
-
-    # Stripe's generator input names the SDK method for each operation, which is
-    # where the symbol map's verbs come from when it is available. A tag that
-    # publishes none degrades to the HTTP-verb derivation rather than abandoning
-    # the run, so `sdk_spec` stays None here instead of raising.
-    sdk_spec_path = fetch_sdk_spec(args.to_version, cache / f"{args.to_version}.sdk.json")
-    sdk_spec = json.loads(sdk_spec_path.read_text(encoding="utf-8")) if sdk_spec_path else None
-
-    symbol_map_path = cache / "symbols.json"
-    symbol_map_path.write_text(
-        json.dumps(build_symbol_map(json.loads(head_spec.read_text(encoding="utf-8")), sdk_spec)),
-        encoding="utf-8",
-    )
-
-    vendor = StripeAdapter(spec_dir=cache, symbol_map_path=symbol_map_path)
+    # Which adapter serves `--vendor` is the registry's answer, not a name written here. Staging
+    # is the same call, because what a vendor needs downloaded and derived before a scan differs
+    # per vendor -- one specification at a git tag for one of them, a directory of them for
+    # another -- and every one of those shapes is knowledge this file is not allowed to hold.
+    prepared = prepare_vendor(args.vendor, VendorContext(
+        cache_dir=cache, from_version=args.from_version, to_version=args.to_version,
+    ))
+    vendor = prepared.adapter
     adapter = TypeScriptAdapter(vendor_adapter=vendor)
 
     store = GraphStore(args.dsn)
@@ -587,7 +634,11 @@ def run(args: argparse.Namespace) -> int:
         repo = _clone(args.repo, Path(workdir) / "repo")
 
         if not adapter.matches(repo):
-            print(f"{args.repo} does not depend on the Stripe SDK", file=sys.stderr)
+            # What the indexer looks for, not what `--vendor` selected. `TypeScriptAdapter`
+            # matches one hardcoded SDK package, so selection is data at the signal stage and
+            # is not yet data at the index stage -- and a message naming `args.vendor` would
+            # report a check that did not happen.
+            print(f"{args.repo} declares no SDK the TypeScript indexer recognises", file=sys.stderr)
             return 2
 
         # One transaction for the whole ingest. It holds an ACCESS EXCLUSIVE
@@ -637,7 +688,7 @@ def run(args: argparse.Namespace) -> int:
             findings = _scan(
                 _detector_suite(
                     store,
-                    spec_document=json.loads(head_spec.read_text(encoding="utf-8")),
+                    spec_documents=prepared.documents,
                     call_sites=call_sites,
                     deprecations=deprecations,
                     vendor_id=args.vendor,
@@ -730,10 +781,29 @@ def ingest(args: argparse.Namespace) -> int:
     to carry between hosts and a second one they can silently lose.
     """
     cache = Path(args.cache)
-    symbol_map_path = cache / "symbols.json"
+    symbol_map_path = cache / SYMBOL_MAP_FILENAME
     if not symbol_map_path.exists():
         print(
             f"no symbol map at {symbol_map_path}; run `sync run` against this cache first",
+            file=sys.stderr,
+        )
+        return 2
+
+    # `load_vendor` rather than `prepare_vendor`: this reads a cache a previous run staged and
+    # must reach no network to do it.
+    vendor = load_vendor(args.vendor, VendorContext(
+        cache_dir=cache, from_version="", to_version="",
+    ))
+    if not isinstance(vendor, RequestCorrelator):
+        # A real divergence between adapters, reported rather than crashed on.
+        # `RequestCorrelator` is deliberately separate from `VendorAdapter` -- a vendor whose
+        # traffic nobody instruments has no reason to implement it -- so an adapter can be
+        # complete and still have no way to turn an observed request back into an operation.
+        # Discovering that as an `AttributeError` mid-fold would report a missing method where
+        # the answer is that this vendor has no correlation story yet.
+        print(
+            f"the {args.vendor} adapter cannot correlate an observed request to an operation, "
+            f"so this payload has nothing to be folded against",
             file=sys.stderr,
         )
         return 2
@@ -742,8 +812,6 @@ def ingest(args: argparse.Namespace) -> int:
         payload = json.load(sys.stdin)
     else:
         payload = json.loads(Path(args.payload).read_text(encoding="utf-8"))
-
-    vendor = StripeAdapter(spec_dir=cache, symbol_map_path=symbol_map_path)
 
     store = GraphStore(args.dsn)
     store.apply_schema()
@@ -785,7 +853,7 @@ def main() -> int:
     sub = parser.add_subparsers(dest="command", required=True)
 
     run_parser = sub.add_parser("run", help="detect and remediate vendor changes in a repository")
-    run_parser.add_argument("--vendor", default="stripe", choices=["stripe"])
+    run_parser.add_argument("--vendor", default="stripe", choices=available_vendors())
     run_parser.add_argument("--from-version", dest="from_version", required=True)
     run_parser.add_argument("--to-version", dest="to_version", required=True)
     run_parser.add_argument("--repo", required=True, help="git URL of the repository to scan")
@@ -799,7 +867,7 @@ def main() -> int:
     ingest_parser = sub.add_parser(
         "ingest", help="fold a captured OTLP/JSON payload into the observed-call graph"
     )
-    ingest_parser.add_argument("--vendor", default="stripe", choices=["stripe"])
+    ingest_parser.add_argument("--vendor", default="stripe", choices=available_vendors())
     ingest_parser.add_argument("--payload", required=True,
                                help="path to an OTLP/JSON export request, or - for stdin")
     ingest_parser.add_argument("--repo-id", dest="repo_id", required=True,
