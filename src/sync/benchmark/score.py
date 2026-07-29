@@ -75,6 +75,7 @@ from sync.benchmark.mutate import MutationPair, depends_on_change, generate_pair
 from sync.core import BindingRung, CallSite, RepoRef, VendorChange
 from sync.detect.vendor_change import VendorChangeDetector
 from sync.graph.store import GraphStore
+from sync.signals.oasdiff import changed_path
 
 # The rung a statically indexed call site's finding carries; see the module docstring.
 INDEXED_RUNG: BindingRung = "static"
@@ -151,6 +152,63 @@ class ScoredPair(BaseModel):
     affected_sites: int
     unaffected_sites: int
     unreachable_targets: tuple[str, ...]
+    # Of the negatives, the ones the detector could have fired on. Precision is 1.0 for two very
+    # different reasons -- a binder that declined correctly, and a corpus that never asked -- and
+    # this is the only number that separates them. Zero here means the precision beside it is a
+    # constant, so a directional floor gated on it would gate nothing.
+    falsifiable_negatives: tuple[str, ...] = ()
+
+
+def falsifiable_negatives(
+    labels: Sequence[BindingLabel], sites: Mapping[str, CallSite], change: VendorChange
+) -> tuple[str, ...]:
+    """The labelled negatives this change gave the detector any chance of firing on.
+
+    Precision's false-positive term needs candidates, and a negative is only a candidate if the
+    detector both reaches it and has something to judge it by. Two filters, and each corresponds
+    to a place `VendorChangeDetector.scan` declines before any property of the binder is
+    consulted: `call_sites_for_operation` never returns a site on another operation, and
+    `_deepest_match` over an empty list returns None whatever the change.
+
+    So a site failing either test is not a lenient negative, it is not a negative the binder
+    passed -- it is a negative that was never asked. Counting it in a denominator reports a
+    coverage the corpus does not have, which is the failure this function exists to make
+    visible rather than to fix.
+
+    The side read follows the kind, because that is the branch the detector takes: a request
+    change is judged against what the call passes and a response change against what it reads.
+    A kind naming neither side, or one whose field cannot be placed, degrades to an
+    operation-match-only finding that fires on every same-operation site -- so every
+    same-operation negative is at risk there and the field list is not consulted at all.
+
+    A label naming a site the index does not hold is skipped rather than raised over.
+    `DisplacedLabel` already refuses that pair by name, and an error here would replace a
+    message listing every displaced site with one about the first.
+    """
+    path = changed_path(change)
+    at_risk: list[str] = []
+
+    for label in labels:
+        if label.affected:
+            continue
+        site = sites.get(label.call_site_id)
+        if site is None or site.operation_id != change.operation_id:
+            continue
+
+        if path is None:
+            judged_by = None
+        elif change.kind.startswith("request-"):
+            judged_by = site.args_keys
+        elif change.kind.startswith("response-"):
+            judged_by = site.response_fields_read
+        else:
+            judged_by = None
+
+        if judged_by is None or judged_by:
+            at_risk.append(label.call_site_id)
+
+    # Sorted, because the corpus is scored twice and the two documents compared byte for byte.
+    return tuple(sorted(at_risk))
 
 
 def materialise(sources: Mapping[str, str], root: Path) -> None:
@@ -252,6 +310,7 @@ def score_pair(
         affected_sites=affected,
         unaffected_sites=len(pair.labels) - affected,
         unreachable_targets=pair.unreachable,
+        falsifiable_negatives=falsifiable_negatives(pair.labels, indexed, change),
     )
 
 
