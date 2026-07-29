@@ -1,0 +1,9 @@
+# The oasdiff release every checkout of this project runs. `scripts/bootstrap_tools.sh` and
+# `.github/workflows/ci.yml` both read this file, and neither names a version of its own.
+#
+# Pinned deliberately. oasdiff's rule identifiers are Sync's `VendorChange.kind` domain, so a
+# floating version would silently change the set of kinds the pipeline can see.
+#
+# Moving it is a measurement rather than an edit. `docs/superpowers/reports/2026-07-29-one-oasdiff-pin.md`
+# says which corpora a bump has to be re-run against first, and which one has never been re-run at all.
+1.26.1

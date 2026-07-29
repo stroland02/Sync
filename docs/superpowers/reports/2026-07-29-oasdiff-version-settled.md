@@ -283,6 +283,11 @@ short-circuiting on presence, and decide what a developer holding the other vers
 measurements in §5 say the change is safe to make on the numbers — the generated-vendor corpus is
 identical across the two versions — so the cost is the mechanism, not a re-measurement.
 
+**Done.** `docs/superpowers/reports/2026-07-29-one-oasdiff-pin.md` carries it. `.oasdiff-version` is
+the single pin, both installers read it, and a checkout holding another build is refused rather than
+upgraded — the third question above, answered against replacement, because an upgrade in place would
+overwrite the bytes §4 of this report is built out of.
+
 **One instance of the same claim is left uncorrected.**
 `docs/superpowers/reports/2026-07-29-depth-measurement.md:32` says *"`oasdiff version 1.26.0`, the
 binary in `tools/`"* — the same sentence shape, carrying the same unstated assumption that `tools/`

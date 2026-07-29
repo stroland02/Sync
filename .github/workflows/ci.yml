@@ -33,10 +33,6 @@ jobs:
       # A service container has the port to itself, so the default DSN is overridden
       # rather than the mapping reproduced.
       SYNC_DSN: postgresql://sync:sync@localhost:5432/sync
-      # Pinned deliberately. oasdiff's rule identifiers are Sync's `VendorChange.kind`
-      # domain, so a floating version would silently change the set of kinds the
-      # pipeline can see.
-      OASDIFF_VERSION: 1.26.1
 
     steps:
       - uses: actions/checkout@v4
@@ -46,13 +42,24 @@ jobs:
         with:
           enable-cache: true
 
+      # `.oasdiff-version` is the pin, and `scripts/bootstrap_tools.sh` reads that same file, so
+      # a job here and a developer's checkout cannot drift apart. The last three lines assert
+      # rather than print: a version that is only echoed is a version nobody checks, which is
+      # how a pinned job and seven working copies came to run two different builds.
       - name: Install oasdiff
         run: |
+          version="$(grep -m1 -Ev '^[[:space:]]*(#|$)' .oasdiff-version)"
+          version="${version//[[:space:]]/}"
           mkdir -p tools
           curl -fsSL -o /tmp/oasdiff.tar.gz \
-            "https://github.com/oasdiff/oasdiff/releases/download/v${OASDIFF_VERSION}/oasdiff_${OASDIFF_VERSION}_linux_amd64.tar.gz"
+            "https://github.com/oasdiff/oasdiff/releases/download/v${version}/oasdiff_${version}_linux_amd64.tar.gz"
           tar -xzf /tmp/oasdiff.tar.gz -C tools oasdiff
-          tools/oasdiff --version
+          installed="$(tools/oasdiff --version)"
+          if [ "$installed" != "oasdiff version ${version}" ]; then
+            echo "pinned v${version} in .oasdiff-version, installed '${installed}'" >&2
+            exit 1
+          fi
+          echo "$installed"
 
       - name: Sync dependencies
         run: uv sync --all-extras --dev

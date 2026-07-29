@@ -97,17 +97,26 @@ from scripts.symbol_map_pin import PIN, read_pin
 # commit that added this file. `benchmark/corpus/recorded/2026-07-29-held-back-negatives.txt` is
 # the recording. These are the corpus's own answers, not round numbers chosen near them.
 #
-#   binding precision     1.0000    n=16
-#   binding recall        1.0000    n=16
-#   falsifiable negatives  4
-#   pairs scored          12
+#                         was            now
+#   binding precision     1.0000 n=16    1.0000 n=18
+#   binding recall        1.0000 n=16    1.0000 n=18
+#   falsifiable negatives  4              5
+#   pairs scored          12             13
+#
+# Restated on 2026-07-29 because the corpus grew, which is the only reason a floor may move
+# upward without an argument attached. `virtual-lab-GetProductsId-response-property-removed` is
+# the corpus's first Python pair: two labelled positives, both found, two findings and no false
+# one, and one held-back negative the detector could have fired on and did not. Neither rate
+# changed -- both denominators did, and the falsifiable count with them.
 #
 # Lowering one is a claim that the pipeline got worse on purpose, and it belongs in the same
-# commit as the change that made it worse, with the reason in the commit body.
+# commit as the change that made it worse, with the reason in the commit body. Two Python pairs
+# were refused rather than landed a few hours before this, for exactly that reason: they would
+# have forced this recall floor to 0.8889 to accommodate ground truth already proved wrong.
 PRECISION_FLOOR = 1.0
 RECALL_FLOOR = 1.0
-FALSIFIABLE_NEGATIVES_FLOOR = 4
-PAIRS_SCORED_FLOOR = 12
+FALSIFIABLE_NEGATIVES_FLOOR = 5
+PAIRS_SCORED_FLOOR = 13
 
 
 @dataclass(frozen=True)
