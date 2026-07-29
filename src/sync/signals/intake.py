@@ -145,6 +145,13 @@ class IntakeReport:
     `unreadable` is not an error channel. A manifest that does not parse is a fact a customer
     needs, because a repository whose manifest is unreadable is not a repository with no
     dependencies -- and reported as the latter it reads as a clean scan of an empty project.
+
+    It holds every input that would not read, not only the manifests. The vendor catalogue is one
+    of them: a directory entry `parse_directory` declined is a package this report will call
+    not-watchable for a reason that has nothing to do with the package, which is the same narrowing
+    under a different name. They share the key rather than getting one each -- the three manifest
+    readers already share it and tell themselves apart by the prefix on each string, so a reader
+    needs one rule for this fact and not one per input.
     """
 
     assessments: tuple[Assessment, ...]
@@ -438,6 +445,7 @@ def assess_repository(
     bindings: Mapping[str, Mapping[str, Mapping[str, str]]] | None = None,
     configured_repos: Mapping[str, str] | None = None,
     registry_entries: Sequence[RegistryEntry] = (),
+    registry_unreadable: Sequence[str] = (),
     registry_apis: Mapping[str, str] | None = None,
     registry_moved_since: str | None = None,
 ) -> IntakeReport:
@@ -447,6 +455,12 @@ def assess_repository(
     actually has. That is what keeps the classification testable against committed fixtures and
     keeps the network out: `generator_manifests` is evidence somebody gathered, not something
     this function goes and looks up.
+
+    `registry_unreadable` is the other half of what `parse_directory` returns, and it arrives with
+    the entries because a report built from a catalogue that partly would not read has to say so.
+    It defaults empty beside `registry_entries` rather than being required: a deployment that
+    passed no directory has no directory faults, so empty is the truth there rather than a silent
+    claim.
     """
     declared, unreadable = read_declared_dependencies(Path(root))
     resolved_bindings = vendor_sdk_bindings() if bindings is None else bindings
@@ -461,4 +475,6 @@ def assess_repository(
         _classify(dependency, packages[dependency.ecosystem], resolved_repos, evidence, registry)
         for dependency in declared
     )
-    return IntakeReport(assessments=assessments, unreadable=unreadable)
+    return IntakeReport(
+        assessments=assessments, unreadable=(*unreadable, *registry_unreadable)
+    )

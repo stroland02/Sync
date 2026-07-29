@@ -1574,9 +1574,9 @@ def intake(args: argparse.Namespace) -> int:
     # The directory is a document somebody fetched, parsed here rather than downloaded: this
     # command reports what the deployment already knows, and a fetch inside it would make a
     # report of what is on disk quietly online.
-    directory = (
-        parse_directory(json.loads(Path(args.registry_directory).read_text(encoding="utf-8")))[0]
-        if args.registry_directory else []
+    directory, directory_unreadable = (
+        parse_directory(json.loads(Path(args.registry_directory).read_text(encoding="utf-8")))
+        if args.registry_directory else ([], ())
     )
     registry_apis = (
         read_registry_apis(Path(args.registry_evidence)) if args.registry_evidence else {}
@@ -1585,6 +1585,7 @@ def intake(args: argparse.Namespace) -> int:
         Path(args.repo),
         generator_manifests=evidence,
         registry_entries=directory,
+        registry_unreadable=directory_unreadable,
         registry_apis=registry_apis,
         registry_moved_since=args.registry_moved_since,
     )
@@ -1609,8 +1610,10 @@ def intake(args: argparse.Namespace) -> int:
 
     for problem in report.unreadable:
         # To stderr, and never silently. A manifest that would not parse is not a repository
-        # with no dependencies, and reported as one it reads as a clean scan of an empty project.
-        print(f"unreadable manifest: {problem}", file=sys.stderr)
+        # with no dependencies, and reported as one it reads as a clean scan of an empty project;
+        # a declined catalogue entry is the same narrowing arriving from a different file. The
+        # prefix names neither, because each problem already names its own source.
+        print(f"unreadable: {problem}", file=sys.stderr)
     return 0
 
 

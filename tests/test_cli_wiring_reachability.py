@@ -246,7 +246,9 @@ def test_intake_ranked_puts_an_unreadable_manifest_in_the_artifact_and_not_only_
     payload = json.loads(captured.out)
     assert payload["rows"] == []
     assert any("package.json" in problem for problem in payload["unreadable"])
-    assert "unreadable manifest:" in captured.err
+    # The prefix names no source, because the list holds faults from several and each string
+    # already names its own -- `package.json` here, a declined catalogue entry elsewhere.
+    assert "unreadable: package.json" in captured.err
 
 
 # --- sync benchmark scores --------------------------------------------------------------
