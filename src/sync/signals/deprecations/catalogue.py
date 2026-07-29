@@ -34,6 +34,20 @@ _ROW = re.compile(r"^\|(?P<cells>.+)\|\s*$")
 _NOT_BEFORE = re.compile(r"not sooner than\s+(?P<date>.+)$", re.I)
 _SEPARATOR = re.compile(r"^[\s|:-]+$")
 
+_HEADING = re.compile(r"^\s{0,3}#{1,6}\s+(?P<text>.+?)\s*$")
+_BULLET = re.compile(r"^\s*[-*+]\s+(?P<text>.+?)\s*$")
+
+# A date sitting inside a heading's prose rather than filling a cell. Deliberately loose: every
+# candidate is handed to `_parse_date`, so `_DATE_FORMATS` stays the one place that decides
+# which spellings are accepted.
+_DATE_IN_TEXT = re.compile(r"\d{4}-\d{2}-\d{2}|[A-Za-z]{3,9}\.?\s+\d{1,2},\s+\d{4}")
+
+_ARROW = re.compile(r"-{1,2}>|\u2192")
+
+# A markdown escape is a backslash before punctuation -- the page writes `\-->`. Left in, the
+# backslash survives `_strip_code` and rides into the model id.
+_ESCAPED = re.compile(r"\\([^A-Za-z0-9\s])")
+
 _STATES = ("active", "legacy", "deprecated", "retired")
 
 # Vendors write dates for humans. Only formats actually observed are accepted; an unrecognised
@@ -98,12 +112,21 @@ def _looks_like_a_model_id(text: str) -> bool:
     produces a finding that can never bind to a call site.
 
     A markdown link written into source is worse than a wrong model name: it is a bracketed URL
-    inside a string, which no vendor would accept. A model id is identifier-shaped, so anything
-    carrying a path separator, brackets, or whitespace is something else.
+    inside a string, which no vendor would accept.
+
+    The separator alone cannot decide it. "A model id has no slash" held for the first two
+    vendors and is not a fact about model ids: Cloudflare names every Workers AI model
+    `@cf/meta/llama-3.1-8b-instruct`, and that whole string is the literal a customer writes.
+    What separates the two is the leading character -- a path starts at the root, a namespaced
+    id does not -- so a slash disqualifies a cell only when nothing namespaces it.
     """
     if not text:
         return False
-    return not any(character in text for character in "/()[] \t")
+    if any(character in text for character in "()[] \t"):
+        return False
+    if "/" in text:
+        return text.startswith("@")
+    return True
 
 
 def _is_placeholder(text: str) -> bool:
@@ -164,6 +187,63 @@ def _parse_announcements(markdown: str) -> dict[str, tuple[str | None, date | No
         announcements[deprecated] = (replacement, shutdown)
 
     return announcements
+
+
+def _date_in(text: str) -> date | None:
+    """The first date a heading carries, or None when it carries none.
+
+    A heading is prose -- "Models deprecated on May 30, 2026" -- so the date sits inside a
+    sentence. `_parse_date` matches a whole string and rejects every one of them.
+    """
+    for candidate in _DATE_IN_TEXT.findall(text):
+        parsed = _parse_date(candidate)
+        if parsed is not None:
+            return parsed
+    return None
+
+
+def _parse_dated_lists(markdown: str) -> list[tuple[str, str | None, date]]:
+    """Model, replacement and retirement date from bulleted lists under a dated heading.
+
+    A third published shape. The first two vendors both write pipe tables, which made the row
+    regex look like a fact about deprecation pages; Cloudflare publishes no table at all, and
+    puts the date in the heading that introduces the list.
+
+    **The heading is what bounds the list, and that is the whole safety of this shape.** An
+    undated heading closes the section, because the same page lists "Variants that remain
+    active" in the same bullet shape directly beneath the retirements. Read as part of the
+    preceding list, those six become breaking findings against models the vendor has just
+    promised to keep.
+
+    A replacement rides on the bullet behind an arrow rather than in a third column, and only
+    one row of eighteen carries one.
+    """
+    found: list[tuple[str, str | None, date]] = []
+    retirement: date | None = None
+
+    for line in markdown.splitlines():
+        heading = _HEADING.match(line)
+        if heading:
+            retirement = _date_in(heading.group("text"))
+            continue
+
+        bullet = _BULLET.match(line)
+        if retirement is None or not bullet:
+            continue
+
+        parts = _ARROW.split(_ESCAPED.sub(r"\1", bullet.group("text")), maxsplit=1)
+
+        model_id = _strip_code(parts[0])
+        if _is_placeholder(model_id) or not _looks_like_a_model_id(model_id):
+            continue
+
+        replacement = _strip_code(parts[1]) if len(parts) > 1 else ""
+        if _is_placeholder(replacement) or not _looks_like_a_model_id(replacement):
+            replacement = None
+
+        found.append((model_id, replacement, retirement))
+
+    return found
 
 
 def _parse_replacements(markdown: str) -> dict[str, str]:
@@ -264,12 +344,23 @@ def parse_deprecation_table(
         )
         stated.add(model_id)
 
-    # Vendors that publish no lifecycle table are described entirely by their announcements.
-    # Anything already carrying a stated lifecycle is left alone: an explicit column knows
+    # Vendors that publish no lifecycle table are described entirely by what they announce:
+    # an announcement table, or a list under a dated heading. Both give the same three facts
+    # and neither gives a lifecycle, so both are read the same way and the date decides.
+    # Anything already carrying a stated lifecycle is left alone -- an explicit column knows
     # things a date cannot, such as a model deprecated before any retirement date exists.
-    for model_id, (replacement, shutdown) in _parse_announcements(markdown).items():
+    derived = [
+        (model_id, replacement, shutdown)
+        for model_id, (replacement, shutdown) in _parse_announcements(markdown).items()
+    ]
+    derived.extend(_parse_dated_lists(markdown))
+
+    for model_id, replacement, shutdown in derived:
+        # A model named twice is one row. Two would give the graph two retirement dates for one
+        # string, with nothing downstream able to say which is current.
         if model_id in stated:
             continue
+        stated.add(model_id)
         rows.append(
             ModelDeprecation(
                 vendor_id=vendor_id,

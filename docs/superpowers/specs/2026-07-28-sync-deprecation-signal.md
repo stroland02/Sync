@@ -137,7 +137,8 @@ system refuses to make.
 | When | What |
 |---|---|
 | Done | Catalogue, adapter with cache, literal index, migration rules, tier-0 remediator, tiering, `TieredRemediator` in the CLI, parameter deprecations end to end, and `DeprecationAdapter` constructed in the CLI — which is what turns a retired model into a `VendorChange` the tier-0 swap can repair |
-| Next | A third vendor, as the next test of whether the parser is still shaped by its first two |
+| Done | A third vendor. Cloudflare publishes Workers AI retirements as a bulleted list under a dated heading and names models `@cf/meta/llama-3.1-8b-instruct`, so two rules were facts about the first two pages rather than about deprecation pages: the pipe-table row shape, and "a model id has no path separator". Seven further rules the third page never exercises are recorded as untested rather than as confirmed. `docs/superpowers/reports/2026-07-29-third-deprecation-vendor.md` measures each one |
+| Next | Wiring it. `DEPRECATION_SOURCES` is a tuple in `cli.py`, so a source added to the adapter module is importable and tested but reaches no scan — the same defect `sync.signals.registry` was written to fix for adapters. It also feeds the parameter parser and the model parser from one list, which Cloudflare breaks: its page carries retirements and no parameter table |
 
 ## Verification
 

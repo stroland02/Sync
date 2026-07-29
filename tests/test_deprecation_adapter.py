@@ -18,7 +18,14 @@ from pathlib import Path
 import pytest
 
 from sync.core.protocols import VendorAdapter
-from sync.signals.deprecations.adapter import ANTHROPIC, OPENAI, DeprecationAdapter
+from sync.signals.deprecations.adapter import (
+    ANTHROPIC,
+    CLOUDFLARE,
+    OPENAI,
+    DeprecationAdapter,
+)
+
+FIXTURES = Path(__file__).parent / "fixtures" / "deprecations"
 
 PAGE = """\
 | API model name | Current state | Deprecated   | Tentative retirement date |
@@ -169,7 +176,7 @@ def test_a_page_that_parses_to_nothing_does_not_overwrite_a_good_cache(tmp_path:
 # --- the shipped sources ---------------------------------------------------------
 
 
-@pytest.mark.parametrize("source", [ANTHROPIC, OPENAI])
+@pytest.mark.parametrize("source", [ANTHROPIC, CLOUDFLARE, OPENAI])
 def test_the_shipped_sources_are_complete(source):
     assert source.vendor_id
     assert source.url.startswith("https://")
@@ -182,3 +189,25 @@ def test_the_prefixes_cover_the_models_the_vendor_actually_names(tmp_path: Path)
     finding exists and points at nothing."""
     changes = list(_adapter(Fetcher(), tmp_path / "c.md").fetch_changes("a", "b"))
     assert all(c.operation_id.startswith(ANTHROPIC.prefixes) for c in changes)
+
+
+def test_a_third_vendor_needs_no_adapter_change(tmp_path: Path):
+    """The structure held. A vendor publishing a shape neither of the first two used is still
+    a `DeprecationSource` and a `DeprecationAdapter`, with nothing in this module aware of it.
+
+    The page is the committed capture of the real one, read rather than fetched.
+    """
+    page = (FIXTURES / "cloudflare-workers-ai.md").read_text(encoding="utf-8")
+    adapter = DeprecationAdapter(
+        CLOUDFLARE,
+        fetch=Fetcher(body=page),
+        cache_path=tmp_path / "cf.md",
+        today=date(2026, 7, 29),
+    )
+
+    changes = list(adapter.fetch_changes("a", "b"))
+
+    assert adapter.vendor_id == "cloudflare"
+    assert len(changes) == 18
+    assert all(c.severity == "breaking" for c in changes)
+    assert all(c.operation_id.startswith(CLOUDFLARE.prefixes) for c in changes)
