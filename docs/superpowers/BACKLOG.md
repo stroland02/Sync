@@ -36,28 +36,38 @@ when, which is why it is recorded here rather than dispatched.
 **Closes when:** one `sync run` produces a CI-green pull request again, or the failure is
 recorded with which change broke it.
 
-### B22 — Nothing validates the vendor configuration we actually ship
+### B25 — No shipped adapter is asserted against the conformance kit
 
-`generated-vendors.yaml` is the file that makes vendors configuration rather than code, and no
-test reads it. `tests/test_dependency_intake.py` points `SYNC_GENERATED_VENDORS` at fixtures, so
-every assertion is about the loader and none can fail because of a defect in the shipped file.
+The kit covers all five protocols and every rule is proved able to fail, but almost every one of
+those proofs runs against a stub written for the purpose. `StripeAdapter` and `TwilioAdapter` are
+what `sync.signals.registry` registers and what a customer's run loads, and neither is asserted
+against `check_vendor_adapter` anywhere. The one exception is Stripe's correlator, added with
+`check_request_correlator` in `tests/test_span_correlation.py`.
 
-That gap has already produced one defect, found by a person reading code rather than by a gate:
-`vercel` is configured against a Speakeasy manifest and no Speakeasy symbol extractor exists, so
-its specification is diffable while its call sites can never be bound. Five components on this
-project have now reached that built-and-unreachable state.
+A kit whose own project never runs it against its own adapters is a kit nobody has evidence works
+on real code, and the plugin story rests on it.
 
-**Closes when:** the shipped file is asserted against directly — every row carries the four
-documented fields, every manifest name maps to a parser in `_PARSERS`, every language in
-`sdk_bindings` has an indexer, and every (generator, language) pair either has a symbol extractor
-or appears in a named pending list that fails in both directions, as
-`scripts/dead_links_baseline.txt` does.
+**Closes when:** every implementation the registry holds is asserted against its protocol's check,
+with the list derived from the registry rather than restated, failing loudly for a registered
+vendor that has no fixture rather than skipping it.
 
 ## In flight
 
-- **B22** — `task_509370a00e28`, in `sync-solo-b`.
+- **B24** — `task_a02b14f23778`, in `sync-solo-a`. Builds B25's closing condition.
 
 ## Done
+
+- **B23** — the conformance kit covers all five protocols. `check_request_correlator` guards a
+  privacy boundary rather than a correctness one: an observed path carries a live customer
+  identifier and what comes back must address the operation with the vendor's published template.
+  Verified by isolating the rule — a correlator returning the raw path is rejected, one returning
+  `/v1/charges/{charge}` is accepted. Landed `ec080ee`. Two corrections from that worker, both
+  right: the `cli.py` guards are at 1032 and 1102, and they should NOT call the kit, because the
+  check needs a resolving request and its identifier that the ingest entry point cannot know.
+- **B22** — the shipped `generated-vendors.yaml` is now gated. Its stale-exemption test fired
+  against a real event within the hour: `symbols_speakeasy.py` landed, the one pending entry
+  stopped describing anything, and the test named both the pair and the remedy. `PENDING_EXTRACTORS`
+  is now empty. Landed `e5ee571`.
 
 - **B21** — an existing database now gains columns added after it was created. `apply_schema`
   derives each table's columns from `schema.sql` and issues `ADD COLUMN IF NOT EXISTS` for
