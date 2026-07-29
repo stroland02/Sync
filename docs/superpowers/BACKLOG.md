@@ -64,9 +64,20 @@ rate it is spent.
 score will move whatever you do — a brief implying otherwise would send someone hunting a
 measurement that cannot exist.
 
+Two forms to check explicitly, from the worker that measured this:
+
+- **Annotated assignment** — `charge: Charge = client.charges.create(...)` — is the same binding
+  wearing a different node, and a walk keyed on the plain assignment node will miss it.
+- **Augmented assignment** — `charge += ...` — is *not* a result binding and must stay empty. It
+  is exactly what a widening pass picks up by accident.
+
+That worker verified Python's *behaviour*, not its grammar node names, so treat the above as where
+to look rather than as the answer.
+
 **Closes when:** a fixture reproduces the false attribution, the fix makes it record `[]` for the
-wrapped form while leaving the bare form at `['id', 'status']`, and the transparent-wrapper
-boundary is stated as deliberately as B33 stated it for TypeScript.
+wrapped form while leaving the bare form at `['id', 'status']`, annotated assignment is covered and
+augmented assignment stays empty, and the transparent-wrapper boundary is stated as deliberately as
+B33 stated it for TypeScript.
 
 ### B30 — `_score_corpus` cannot read a real repository
 
