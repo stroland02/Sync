@@ -1,0 +1,8 @@
+# Two watched servers, for the wiring tests. Neither is a real endpoint: these are
+# committed captures, and nothing here reaches a network.
+
+- server_id: example-docs
+  snapshot_dir: docs
+
+- server_id: example-search
+  snapshot_dir: search
