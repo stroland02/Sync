@@ -26,6 +26,7 @@ import pytest
 from langgraph.checkpoint.memory import InMemorySaver
 
 from sync.core import CallSite, Finding, Patch, RepoRef, VendorChange, VerifyResult
+from sync.forge.github import PullRequest
 from sync.remediate.graph import build_graph
 from sync.remediate.state import MAX_STATIC_ATTEMPTS
 
@@ -146,9 +147,11 @@ class StubForge:
     def await_ci(self, repo, branch) -> tuple[bool, str]:
         return True, "https://github.com/o/r/actions/runs/1"
 
-    def open_pull_request(self, repo, branch, evidence) -> str:
+    # Returns what the forge created, number and URL, since the merge webhook joins a
+    # delivery to a corpus row by number and nothing else durable links the two.
+    def open_pull_request(self, repo, branch, evidence) -> PullRequest:
         self.pr_url = "https://github.com/o/r/pull/1"
-        return self.pr_url
+        return PullRequest(number=1, url=self.pr_url)
 
     def delete_branch(self, repo, branch) -> tuple[bool, str]:
         self.deleted.append(branch)

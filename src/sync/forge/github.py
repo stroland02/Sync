@@ -12,6 +12,7 @@ import json
 import shutil
 import subprocess
 import time
+from dataclasses import dataclass
 from pathlib import Path
 
 from sync.core import Evidence, Patch, RepoRef
@@ -29,6 +30,23 @@ NON_BLOCKING_CONCLUSIONS = frozenset({"skipped", "neutral"})
 # values below are module constants, never caller- or vendor-supplied.
 COMMIT_AUTHOR_NAME = "Sync"
 COMMIT_AUTHOR_EMAIL = "sync@users.noreply.github.com"
+
+
+@dataclass(frozen=True)
+class PullRequest:
+    """What opening a pull request produced: its number and its URL.
+
+    Both, rather than the URL alone, because the two are wanted by different readers and only
+    one of them can be derived from the other honestly. A human follows the URL; the merge
+    webhook joins on the number, which is the only durable link between a delivery and a
+    corpus row -- the row carries no branch and the delivery carries no finding.
+
+    Here rather than in `sync.core`: this is what one forge returns, not a contract a vendor
+    adapter implements, and `sync.core` is the surface a third party depends on.
+    """
+
+    number: int
+    url: str
 
 
 def _gh() -> str:
@@ -518,12 +536,24 @@ class GitHubForge:
             return False, f"CI for {head[:12]} was still running at the {self._timeout}s deadline"
         return False, f"CI for {head[:12]} completed without a confirmed green verdict within {self._timeout}s"
 
-    def open_pull_request(self, repo: RepoRef, branch: str, evidence: Evidence) -> str:
+    def open_pull_request(self, repo: RepoRef, branch: str, evidence: Evidence) -> PullRequest:
         """Open the PR against `repo.url`, not whatever `gh` would infer from
         the clone's remotes. On a forked clone that inference resolves to the
-        fork's parent — a repository Sync does not own and must not write to."""
+        fork's parent — a repository Sync does not own and must not write to.
+
+        Returns the number as well as the URL, because `migration_outcome` is joined to a
+        merge webhook by number and nothing else durable links the two: the row carries no
+        branch and the delivery carries no finding. Until this returned one, every row held a
+        null and a correctly verified delivery matched nothing.
+
+        The number is asked of GitHub rather than read out of the URL. A regular expression
+        over `pull/41` is a second implementation of what this method already knows, and its
+        failure mode is the bad one: a changed URL shape yields a plausible number rather than
+        an error, and a plausible number attaches somebody else's merge to this attempt. Two
+        calls buy an answer that cannot be wrong without `gh` being wrong.
+        """
         path = Path(repo.local_path)
-        return self._run(
+        url = self._run(
             [_gh(), "pr", "create",
              "--repo", repo.url,
              "--title", f"fix: {evidence.changelog_entry[:60]}",
@@ -531,3 +561,20 @@ class GitHubForge:
              "--head", branch],
             path,
         )
+        return PullRequest(number=self._pull_request_number(repo, url), url=url)
+
+    def _pull_request_number(self, repo: RepoRef, url: str) -> int:
+        """The number GitHub gave the pull request at `url`.
+
+        Resolved server-side from the URL `gh pr create` just printed, so it names the pull
+        request this call created and cannot name another. A response without a number raises
+        rather than defaulting: a zero or a `None` here would be written into the corpus as a
+        row nothing can ever match, which is the silent half of the failure this replaces.
+        """
+        raw = self._run(
+            [_gh(), "pr", "view", url, "--repo", repo.url, "--json", "number"], Path(repo.local_path)
+        )
+        number = json.loads(raw).get("number")
+        if not isinstance(number, int):
+            raise RuntimeError(f"gh pr view returned no number for {url}: {raw}")
+        return number

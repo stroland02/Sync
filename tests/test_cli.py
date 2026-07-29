@@ -33,6 +33,7 @@ from sync.cli import (
     run,
 )
 from sync.core import CallSite, Finding, Patch, RepoRef, VendorChange, VerifyResult
+from sync.forge.github import PullRequest
 from sync.core.protocols import Detector
 from sync.forge.github import GitHubForge
 from sync.graph.store import GraphStore
@@ -677,7 +678,8 @@ def test_two_findings_in_one_run_produce_branches_that_share_no_commits(tmp_path
             return True, "https://ci.invalid/run/1"
 
         def open_pull_request(self, repo, branch, evidence):
-            return f"https://github.invalid/pull/{branch}"
+            # Number and URL together: the corpus is joined to a merge delivery by number.
+            return PullRequest(number=1, url=f"https://github.invalid/pull/{branch}")
 
     _stub_vendor_selection(monkeypatch, cli)
     monkeypatch.setattr(cli, "GraphStore", lambda dsn: store)

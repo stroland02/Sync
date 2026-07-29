@@ -9,6 +9,7 @@ from __future__ import annotations
 from typing import Protocol, runtime_checkable
 
 from sync.core import CallSite, Evidence, Patch, RepoRef, VendorChange
+from sync.forge.github import PullRequest
 from sync.remediate import corpus
 from sync.remediate.state import MAX_CI_ATTEMPTS, MAX_STATIC_ATTEMPTS, RunState
 from sync.remediate.tiered import routing_facts
@@ -19,7 +20,12 @@ from sync.route.matrix import NO_PATCH, route
 class Forge(Protocol):
     def push_branch(self, repo: RepoRef, patch: Patch) -> str: ...
     def await_ci(self, repo: RepoRef, branch: str) -> tuple[bool, str]: ...
-    def open_pull_request(self, repo: RepoRef, branch: str, evidence: Evidence) -> str: ...
+    # Returns what it created rather than only where it lives. The number is what the merge
+    # webhook joins a delivery to a corpus row by, and it is the forge's to answer: deriving
+    # it from the URL here would be a second implementation of knowledge this call already has.
+    def open_pull_request(
+        self, repo: RepoRef, branch: str, evidence: Evidence
+    ) -> PullRequest: ...
     def delete_branch(self, repo: RepoRef, branch: str) -> tuple[bool, str]: ...
 
 
@@ -549,16 +555,28 @@ def make_open_pr(forge: Forge, record=None):
             ci_run_url=state.get("ci_url", ""),
         )
         try:
-            url = forge.open_pull_request(state["repo"], state["branch"], evidence)
+            pull_request = forge.open_pull_request(state["repo"], state["branch"], evidence)
         except Exception as exc:
             # No row here: the attempt has not ended, it has failed on its way out, and
             # `abandon` is the node that closes it.
             return {"fatal": True, "diagnostics": _describe(exc)}
 
         if record is not None:
-            record(state, terminal_status="opened")
+            # Passed rather than read off `state`, and that is what holds the grain. This node
+            # closes one attempt -- the one that opened the pull request -- and every other
+            # `record` call site omits the number, so a retried attempt keeps a null by
+            # construction rather than by the order two writes happen to run in. A merge
+            # written against every row of a run would inflate the numerator of the axis this
+            # whole chain exists to compute, and inflate it silently.
+            record(state, terminal_status="opened", pr_number=pull_request.number)
 
-        return {"evidence": evidence, "pr_url": url, "outcome": "opened", "fatal": False}
+        return {
+            "evidence": evidence,
+            "pr_url": pull_request.url,
+            "pr_number": pull_request.number,
+            "outcome": "opened",
+            "fatal": False,
+        }
 
     return open_pr
 

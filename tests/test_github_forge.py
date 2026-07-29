@@ -638,6 +638,11 @@ def _forge_recording(remote_tip: str | None = None) -> tuple[GitHubForge, list[l
         # else would have `push_branch` refuse its own branch here.
         if args[:2] == ["git", "log"]:
             return COMMIT_AUTHOR_EMAIL
+        # `open_pull_request` asks GitHub for the number of the pull request it just
+        # created, rather than parsing it back out of the URL. A stub answering the empty
+        # string would make that call fail as a JSON decode error rather than exercising it.
+        if args[1:3] == ["pr", "view"]:
+            return '{"number": 41}'
         return ""
 
     forge._run = fake_run
@@ -1325,13 +1330,19 @@ def test_open_pull_request_issues_the_expected_gh_invocation():
     the remote unless told otherwise, which for a fork resolves to the fork's
     parent, not the repository Sync pushed to."""
     forge, calls, cwds = _forge_recording()
-    forge.open_pull_request(REPO, "sync/x", EVIDENCE)
+    pull_request = forge.open_pull_request(REPO, "sync/x", EVIDENCE)
 
+    # Two invocations now, and the second is part of the contract rather than an
+    # implementation detail: the number is asked of GitHub because parsing it out of the URL
+    # would be a second implementation of what `gh` already knows, failing by producing a
+    # plausible wrong number rather than an error.
     assert calls == [
         [_gh(), "pr", "create",
          "--repo", REPO.url,
          "--title", f"fix: {EVIDENCE.changelog_entry[:60]}",
          "--body", render_pr_body(EVIDENCE),
          "--head", "sync/x"],
+        [_gh(), "pr", "view", "", "--repo", REPO.url, "--json", "number"],
     ]
-    assert cwds == [Path(REPO.local_path)]
+    assert cwds == [Path(REPO.local_path), Path(REPO.local_path)]
+    assert pull_request.number == 41
