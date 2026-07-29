@@ -215,6 +215,40 @@ def test_intake_ranking_carries_no_threshold_and_no_score(monkeypatch, capsys, c
         assert not any(key in row for key in ("score", "risk", "weight", "priority", "threshold"))
 
 
+@pytest.fixture()
+def broken_checkout(tmp_path: Path) -> Path:
+    """A manifest truncated mid-object, so nothing it declares reaches the report."""
+    root = tmp_path / "broken"
+    root.mkdir()
+    (root / "package.json").write_text('{"dependencies": {"stripe": "^18.0.0"', encoding="utf-8")
+    return root
+
+
+def test_intake_ranked_puts_an_unreadable_manifest_in_the_artifact_and_not_only_on_stderr(
+    monkeypatch, capsys, broken_checkout, store
+):
+    """stdout is what a caller keeps.
+
+    The JSON is what gets redirected to a file, committed, diffed between runs and fed to
+    something else; a terminal nobody kept is not a record. Both surfaces have to carry the
+    fault, so this asserts neither of them lost it -- and the ranked path is the one an operator
+    reaches for when they care enough to join intake against a real index, which is exactly when
+    a silently narrowed answer costs the most.
+    """
+    monkeypatch.setattr(sys, "argv", [
+        "sync", "intake", "--repo", str(broken_checkout),
+        "--rank-by-repo-id", "r1", "--dsn", DSN,
+    ])
+    code = main()
+    captured = capsys.readouterr()
+
+    assert code == 0
+    payload = json.loads(captured.out)
+    assert payload["rows"] == []
+    assert any("package.json" in problem for problem in payload["unreadable"])
+    assert "unreadable manifest:" in captured.err
+
+
 # --- sync benchmark scores --------------------------------------------------------------
 
 
