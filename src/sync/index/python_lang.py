@@ -201,6 +201,13 @@ class PythonAdapter:
         nothing" rather than raising: the caller already has a path for a repository that does
         not demonstrably depend on the SDK, and a `TOMLDecodeError` out of `run()` is a
         traceback where that answer belongs.
+
+        Unreadable has two spellings and both files can be either. A manifest that does not
+        parse is the obvious one; a manifest that does not decode is the one found in the wild,
+        because a `requirements.txt` beginning `ff fe` is a UTF-16 file and every text call here
+        reads UTF-8. Neither is decoded leniently: `errors="replace"` would turn that file into
+        requirement strings nothing in it declares, which is worse than the traceback it
+        replaces.
         """
         root = Path(repo.local_path)
         requirements: list[str] = []
@@ -219,7 +226,11 @@ class PythonAdapter:
 
         text_manifest = root / "requirements.txt"
         if text_manifest.exists():
-            for line in text_manifest.read_text(encoding="utf-8").splitlines():
+            try:
+                declared_lines = text_manifest.read_text(encoding="utf-8").splitlines()
+            except UnicodeDecodeError:
+                declared_lines = []
+            for line in declared_lines:
                 stripped = line.split("#", 1)[0].strip()
                 if stripped and not stripped.startswith("-"):
                     requirements.append(stripped)
