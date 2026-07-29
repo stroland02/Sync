@@ -36,31 +36,46 @@ when, which is why it is recorded here rather than dispatched.
 **Closes when:** one `sync run` produces a CI-green pull request again, or the failure is
 recorded with which change broke it.
 
-### B12 — `operation_for_symbol` cannot tell one SDK language from another
+### B13 — M3's MCP adapter is the one milestone item nobody has started
 
-`VendorAdapter.operation_for_symbol(symbol)` takes a symbol and nothing else, and a symbol is
-not unique across SDK languages: `twilio-python` exposes `call_summaries` where `twilio-node`
-exposes `callSummaries` — same vendor, same operation, two spellings. A failure to resolve
-produces no finding, so a polyglot repository loses half its bindings silently.
+The design document argues an MCP server is a *structurally easier* adapter than a REST
+vendor — it exposes its tool schemas on request, so there is no specification to locate, no
+changelog to parse, and no SDK symbol map to derive — and calls it a strong candidate for an
+early adapter rather than a distant one. Nothing has been built.
 
-This was theoretical until the second language adapter landed. `src/sync/index/` now holds
-`language_id = "typescript"` and `language_id = "python"`, so the graph can hold call sites
-from both. The asymmetry that makes it a bug rather than a gap: `MigrationOutcome` already
-records `language` as a first-class field, and `CallSite` does not.
+Not to be confused with `src/sync/mcp/`, which is Sync exposing its *own* graph as MCP tools
+to an agent. That is the opposite direction and the name collision is a trap.
 
-Evidenced by the Twilio adapter's report, which recorded the needed signature change rather
-than making it, because `protocols.py` is shared.
+**Closes when:** two committed `tools/list` snapshots produce real `VendorChange` rows, and
+the report answers whether "structurally easier" survived contact — specifically what
+`fetch_changes(since)` means for a server that has no versions, only a current state.
 
-**Closes when:** a symbol from the wrong language stops resolving, or one that could not
-resolve starts, with a test that fails without the change. A `language` column nothing reads
-does not close it.
+### B14 — M2 says a change in 4xx/5xx rate is a finding, and nothing reads a status code
+
+`observed_call.spans` records `{"status": <int|null>}` per span. No detector reads it. M2's
+sentence is half-built: the contract-violation half exists as `observed_drift`, the rate half
+does not exist at all.
+
+The hard part is not the query. "A change in rate" needs two periods, and the table has
+`first_seen`/`last_seen` on a per-trace grain with no window column and no rollup. A defensible
+subset — a sustained rate above a floor — may be all the data supports, and that is an
+acceptable answer if argued.
+
+**Closes when:** a rate finding fires on real committed spans with a justified denominator and
+sample floor, or the honest subset ships with a precise statement of what the change-over-time
+version would need.
 
 ## In flight
 
-- **B12** — `task_d14dd41aac3c`. Spans `core/protocols.py`, `core/models.py`, both vendor
-  adapters, `index/`, and the `call_site` table — deliberately, and nobody else is in them.
+- **B13** — `task_f7f6d9556146`, `m2-parsing`. New `src/sync/signals/mcp_server/`.
+- **B14** — `task_90cf8b0bd92e`, `m1-forge`. New `src/sync/detect/status_rate.py`.
 
 ## Done
+
+- A language axis on the binding path. Landed `19834b6`. Every Twilio map key is snake_case
+  (`twilio-python`), so a TypeScript call site could never resolve and failed silently. A
+  mismatched spelling now refuses rather than being rewritten into a match. Written by the
+  coordinator after the dispatched worker never started.
 
 - The efficiency detector, M1's second half. Landed via `cb0ee3e`. Three findings — calls in a
   loop, uncached repeats, retry storms — and deliberately **no dollar figure**: a call count is
