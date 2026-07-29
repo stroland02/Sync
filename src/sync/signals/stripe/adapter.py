@@ -19,11 +19,15 @@ SPEC_PATH_IN_REPO = "openapi/spec3.json"
 SDK_SPEC_PATH_IN_REPO = "openapi/spec3.sdk.json"
 
 # A new value in a response enum breaks only an exhaustive switch, and it is
-# four fifths of what oasdiff reports on a Stripe release -- 86,368 of 107,396
-# records between v2320 and v2330. Carrying that volume through the graph to
-# produce findings nobody asked for is the wrong default. It lives here rather
-# than in core because it is a judgement about one vendor's release habits,
-# not a fact about API changes.
+# the large majority of what oasdiff reports on a Stripe release. This comment
+# used to name a count -- 86,368 of 107,396 between v2320 and v2330 -- and that
+# number is withdrawn rather than corrected: `2026-07-29-depth-measurement.md`
+# re-ran the same command nine times on hash-verified inputs and got nine
+# different totals, from 29,768 records to 1,375,504. The proportion is what
+# reproduced across those runs; the absolute count was a fact about one run.
+# Carrying that volume through the graph to produce findings nobody asked for
+# is the wrong default. It lives here rather than in core because it is a
+# judgement about one vendor's release habits, not a fact about API changes.
 NOISE_KINDS = frozenset({"response-property-enum-value-added"})
 
 
