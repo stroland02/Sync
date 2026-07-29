@@ -64,8 +64,24 @@ vendor that has no fixture rather than skipping it.
   Over the ceiling the failure is a `psycopg.OperationalError` on connect, landing on whichever
   database-touching test was running, which is why it moved between runs and never reproduced
   under a soak. Both coordinators lost time to it. `fba1f6e` raises the ceiling to 300 and takes
-  effect on the next `docker compose up -d`, so it is landed but not yet active.
-  **Reading rule while it is inactive: an assertion failure is real, a connection failure is not.**
+  effect on the next `docker compose up -d`. **The container was recreated and the ceiling is now
+  live at 300**, confirmed against the running server.
+
+  Re-measured after the recreate, same machine, same suite:
+
+  | | before | after |
+  |---|---|---|
+  | result | 1 failed, 13 errors | **1851 passed** |
+  | wall clock | 187s | **103s** |
+  | peak connections | 105 of 100 | 75 of 300 |
+  | sampler connections refused | 16 of 322 | 0 |
+
+  The halved runtime was not expected and is the part worth remembering: exhausting the ceiling
+  was costing refused connections and retries throughout the run, not only the visible failures.
+  A resource limit read as both a flaky test *and* a slow suite, and neither symptom pointed at it.
+
+  Peak 75 against 300 leaves real headroom, but that was one suite alone. Nobody has yet measured
+  the peak with two or three concurrent suites, which is the case that broke the old ceiling.
 
 - **B23** — the conformance kit covers all five protocols. `check_request_correlator` guards a
   privacy boundary rather than a correctness one: an observed path carries a live customer
