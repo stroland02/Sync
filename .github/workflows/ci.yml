@@ -88,3 +88,33 @@ jobs:
       # line count.
       - name: Coverage (recorded, not gated)
         run: uv run pytest -q --cov=sync --cov-report=term-missing:skip-covered || true
+
+      # The first gate on a quality number rather than on correctness, and the only one
+      # `2026-07-27-sync-benchmark-gates.md` allows today: a directional floor on a
+      # deterministic axis. The floors are not here. They are in `scripts/gate_corpus.py`,
+      # beside the figure each one guards and the argument for guarding it, because a floor in
+      # a workflow file is a string a reader meets without the number it came from and lowering
+      # one is a config tweak rather than a reviewable act.
+      #
+      # No `|| true`. The coverage step above is recorded and this is gated, and the difference
+      # between them is the whole of what this step adds.
+      - name: Fetch the frozen corpus
+        run: uv run python scripts/fetch_corpus_repositories.py
+
+      # A database of its own. `score_corpus.py` truncates the graph once per pair, so pointing
+      # it at the one the suite used would delete what a later step might read.
+      - name: Score the frozen corpus
+        run: |
+          uv run python -c "
+          import psycopg
+          from psycopg import sql
+          with psycopg.connect('postgresql://sync:sync@localhost:5432/postgres', autocommit=True) as c:
+              c.execute(sql.SQL('DROP DATABASE IF EXISTS {} WITH (FORCE)').format(sql.Identifier('sync_benchmark')))
+              c.execute(sql.SQL('CREATE DATABASE {}').format(sql.Identifier('sync_benchmark')))
+          "
+          uv run python scripts/score_corpus.py \
+            --score-dsn postgresql://sync:sync@localhost:5432/sync_benchmark \
+            --json corpus-score.json
+
+      - name: Binding floors over the frozen corpus (gated)
+        run: uv run python scripts/gate_corpus.py --score corpus-score.json
