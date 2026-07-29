@@ -68,28 +68,32 @@ back. `generate_pair` needs no change, since the caller already names its target
 **Closes when:** that trade is decided and, if taken, precision is recomputed with
 `falsifiable_negatives` non-zero and recall's new denominator stated beside it.
 
-### B29 — The binding score's response axis has never had a sample
+### B33 — The binder is blind to a result assigned rather than declared
 
-Every `response-property-removed` pair in the frozen corpus scored **0 affected and 0 findings**,
-and eleven labels landed in `unreachable`. The corpus's twelve labelled positives are all
-request-side, so binding precision and recall are computed **entirely over the request side** and
-the response half cannot move either number. That is why 1.0000 at n=12 is a narrower result than
-it reads.
+`sync.index.typescript._response_fields` walks up to a `variable_declarator` and returns `[]` for
+anything else. So an SDK result assigned to a variable declared earlier records **no response
+fields at all**, and no response-side change can ever be detected against it.
 
-Two causes, and the second compounds the first rather than being independent of it.
+Reproduced directly, identical guard, only the binding form differing:
 
-`mutate.py`'s `_result_binding` only recognises `const`/`let` declarations. Extending it to a
-plain assignment and to a returned call converts the eleven unreachable targets into labelled
-positives. It changes a generator, not the pipeline, so it moves the corpus without moving the
-score's meaning.
+```
+const intent = await client.paymentIntents.create({...})   ->  ['amount_details', 'id']
+intent = await client.paymentIntents.create({...})         ->  []
+```
 
-`upsert_call_site` keys call-site identity on line and column, so a mutation that inserts lines
-renames every call site below it in that file. The response-side mutation inserts a three-line
-guard, so two pairs were refused as `displaced-label`. The refusal is correct — it is the feature,
-not a bug — but it means a file with several calls can never carry a response-side pair.
+**This is the first production defect the benchmark has caught**, and it is why the response axis
+now reads recall 0.8000 at n=20 rather than the 1.0000 at n=12 it reported while the corpus shared
+the binder's blind spot. Four of the twenty labelled positives are missed and all four are
+response-side. A missed break is the failure the product exists to prevent.
 
-**Closes when:** the response axis reports a number over a non-zero sample, with the displaced-label
-interaction either resolved or stated as the reason a given file cannot carry a pair.
+**Whoever takes this must not also change the corpus.** The corpus is what measures the fix, and
+B29 declined to fix it for exactly that reason — a worker changing both would have destroyed the
+evidence. Measure against the frozen corpus at
+`benchmark/corpus/recorded/2026-07-29-response-axis.json`, sha256
+`8d5b39830546b2d5958f72f310cc358aa97eeb0807f3dff731a1a2ebde0e11ff`.
+
+**Closes when:** recall over that unchanged corpus rises above 0.8000, with the new value and its
+denominator recorded beside the old one.
 
 ### B30 — `_score_corpus` cannot read a real repository
 
@@ -115,6 +119,20 @@ pre-filtering step, and the count of skipped files is reported rather than silen
   the first worker held the task for half an hour without starting and did not answer two nudges.
 
 ## Done
+
+- **B29** — the response half of the corpus now measures something, and it immediately caught a
+  production defect. Landed `4a00841`. Two causes, not the one diagnosed: `_result_binding` reading
+  only `const`/`let` accounted for 4 of 11 unreachable targets, and the larger cause was the guard
+  occupying three lines, which displaced every call below it. Appending the guard to the statement
+  it follows removed the interaction rather than trading one failure for another — **zero**
+  `displaced-label` exclusions afterwards, where the naive fix would have created more.
+
+  12 pairs scored, none excluded. Precision 1.0000 n=16, **recall 0.8000 n=20** — down from 1.0000
+  n=12, and not a regression: all twelve request-side positives are still found and all four misses
+  are response-side. See B33.
+
+  The worker declined to fix the defect it found, because the corpus is what measures the fix and
+  it was changing the corpus. That judgement is the most valuable thing in the task.
 
 - **B28** — the decision-table row a run routed on now reaches `migration_outcome`. Landed
   `47cca19`, written by the coordinator after its worker went silent with no edits across two
