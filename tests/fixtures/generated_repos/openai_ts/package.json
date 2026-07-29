@@ -1,0 +1,5 @@
+{
+  "name": "customer-app",
+  "private": true,
+  "dependencies": { "openai": "^4.104.0" }
+}

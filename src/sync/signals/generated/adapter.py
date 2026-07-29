@@ -61,6 +61,44 @@ VENDOR_PUBLISHED = "vendor"
 GENERATOR_MIRROR = "generator-mirror"
 
 
+def bindings_for(
+    vendor_id: str, declared: Mapping[str, Mapping[str, str]] | None
+) -> dict[str, dict[str, str]]:
+    """Which package a customer imports to reach this vendor, per language.
+
+    A configured vendor whose bindings nobody wrote still gets a guess derived from its id, and
+    a configured vendor who declared any binding gets exactly what was declared.
+
+    **The fallback is defensible because a wrong derivation fails to resolve rather than
+    resolving wrongly.** The manifest declares no package by the guessed name, the match returns
+    false, and nothing binds. It cannot bind to the wrong vendor, because a symbol rooted at the
+    wrong name is in no vendor's map. That is what keeps the coverage argument intact -- adding
+    a vendor costs a configuration line -- without the guess being able to produce a confident
+    wrong answer.
+
+    **A vendor that declared bindings has spoken completely, and a declared mapping missing a
+    language yields no binding for that language.** Topping one up would restore the guess one
+    level above where it was removed, and the vendor with a `@scope/name` package is exactly the
+    vendor for whom the guess is wrong. Anthropic is that case in one vendor: its PyPI
+    distribution is `anthropic`, so a derivation resolves, and its npm package is
+    `@anthropic-ai/sdk`, so the same derivation fails. A binding is per-language, and a default
+    that is right for one language and wrong for the other cannot be rescued by being cleverer
+    about deriving it.
+
+    The per-language shape belongs to the language adapter that reads it rather than to a schema
+    stated here, which is why this copies rather than validates -- see
+    `StripeAdapter.sdk_bindings`. TypeScript needs one npm name, which is both the manifest key
+    and the import specifier; Python needs two, because a distribution name and a module name
+    are different strings in general.
+    """
+    if declared:
+        return {language: dict(fields) for language, fields in declared.items()}
+    return {
+        "typescript": {"package": vendor_id},
+        "python": {"distribution": vendor_id, "module": vendor_id},
+    }
+
+
 def http_fetch(url: str, timeout: float = 60.0) -> str:
     """A plain GET returning decoded text. The default `Fetch` for real runs.
 
@@ -87,16 +125,35 @@ class GeneratedSpecAdapter:
         fetch: Fetch,
         cache_dir: Path | str,
         vendor_spec_urls: Mapping[str, str] | None = None,
+        sdk_bindings: Mapping[str, Mapping[str, str]] | None = None,
     ) -> None:
         self._vendor_id = vendor_id
         self._sources = sources
         self._fetch = fetch
         self._cache_dir = Path(cache_dir)
         self._vendor_spec_urls = vendor_spec_urls or {}
+        self._sdk_bindings = bindings_for(vendor_id, sdk_bindings)
 
     @property
     def vendor_id(self) -> str:
         return self._vendor_id
+
+    @property
+    def sdk_bindings(self) -> dict[str, dict[str, str]]:
+        """Read by `sync.index` through `getattr`, which is why this is not a protocol member.
+
+        Until it existed the four vendors `generated-vendors.yaml` configures resolved through
+        the registry and matched nothing in a customer's repository: their specifications were
+        diffable and their call sites were not. `bindings_for` carries the rule that decides
+        what this holds.
+
+        It makes a repository *match* this vendor and makes the indexer look for its client. It
+        does not make a call site resolve: `operation_for_symbol` answers `None` by design, and
+        both indexers skip a call whose symbol resolves to nothing. A configured vendor still
+        needs a symbol scheme from somewhere before it yields a finding, and that is the next
+        gap rather than this one.
+        """
+        return self._sdk_bindings
 
     def operation_for_symbol(
         self, symbol: str, *, language: str | None = None
