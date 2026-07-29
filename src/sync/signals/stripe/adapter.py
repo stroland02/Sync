@@ -181,8 +181,30 @@ class StripeAdapter:
     def operation_for_symbol(
         self, symbol: str, *, language: str | None = None
     ) -> OperationRef | None:
+        """The operation an SDK call site addressed, or None if the map cannot place it.
+
+        `language` is which SDK the call site was written against, and this vendor needs it for
+        the mirror of the reason Twilio does (`19834b6`). Stripe's map was built from the
+        TypeScript SDK, so every key was camelCase and `stripe.payment_intents.create` -- what
+        every Python program writes -- resolved to nothing. `build_symbol_map` now records both
+        spellings and which language writes each.
+
+        A spelling that is not the named language's refuses rather than being rewritten into a
+        match. `stripe.paymentIntents.create` under `python` is not a Python call site with
+        unusual punctuation; it is a TypeScript call site that arrived with the wrong language,
+        and resolving it would bind a finding to code in a file that does not contain that call.
+
+        An entry with no `languages` is unconstrained. `symbol_map_path` names a staged artifact
+        and a deployment's copy predates this change, so a stale map resolves exactly as it did
+        rather than becoming a vendor that silently binds nothing. An unknown language resolves
+        for the same reason Twilio's does: a third SDK nobody has characterised is better served
+        by a lookup that may miss than by one that cannot succeed.
+        """
         entry = self._symbols.get(symbol)
         if entry is None:
+            return None
+        languages = entry.get("languages")
+        if language is not None and languages is not None and language not in languages:
             return None
         return OperationRef(
             operation_id=entry["operation_id"],

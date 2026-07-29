@@ -239,7 +239,14 @@ def test_the_sdk_document_changes_exactly_one_symbol_across_a_whole_release():
     assert len(sdk["paths"]) == 381
     assert set(after) - set(before) == {"stripe.subscriptions.cancel"}
     assert set(before) - set(after) == {"stripe.subscriptions.del"}
-    assert len(after) == len(before) == 179
+    # Counted per language rather than over the map, since B39. The claim this pins is unchanged
+    # -- consulting the vendor corrects one symbol out of 179 -- but 179 is now the size of each
+    # SDK's spelling of the map rather than of the map itself, which holds 272: the 86 symbols
+    # both SDKs spell alike, plus 93 each where they differ.
+    for mapping in (before, after):
+        assert sum("typescript" in e["languages"] for e in mapping.values()) == 179
+        assert sum("python" in e["languages"] for e in mapping.values()) == 179
+    assert len(after) == len(before)
     assert {e["path"] for e in after.values()} == {e["path"] for e in before.values()}
 
 
@@ -522,3 +529,106 @@ def test_fetch_sdk_spec_returns_the_cached_file_without_invoking_gh(tmp_path, mo
 
     assert adapter_module.fetch_sdk_spec("v2330", dest) == dest
     assert calls == []
+
+
+# --- the language axis, added by B39 ------------------------------------------------
+
+
+def _adapter(tmp_path, mapping=None) -> StripeAdapter:
+    (tmp_path / "map.json").write_text(
+        json.dumps(build_symbol_map(SPEC) if mapping is None else mapping), encoding="utf-8"
+    )
+    return StripeAdapter(spec_dir=FIXTURES, symbol_map_path=tmp_path / "map.json")
+
+
+def test_the_python_spelling_reaches_the_same_operation_as_the_typescript_one():
+    """`stripe.payment_intents.create` is what every Python program writes, and it resolved to
+    nothing: the map is built from Stripe's TypeScript SDK and `paymentIntents` was the only
+    spelling in it.
+
+    The two spellings are the same operation, so they carry the same entry rather than two
+    entries that could drift apart.
+    """
+    mapping = build_symbol_map(SPEC)
+
+    assert "stripe.payment_intents.create" in mapping
+    assert (
+        mapping["stripe.payment_intents.create"]["operation_id"]
+        == mapping["stripe.paymentIntents.create"]["operation_id"]
+        == "PostPaymentIntents"
+    )
+
+
+def test_the_map_records_which_language_spells_each_symbol():
+    """Not a transformation applied at lookup time but a fact recorded at build time, because
+    the two spellings come from different places: the snake_case one is the specification's own
+    path segment, and the camelCase one is what `_camel` makes of it."""
+    mapping = build_symbol_map(SPEC)
+
+    assert mapping["stripe.payment_intents.create"]["languages"] == ["python"]
+    assert mapping["stripe.paymentIntents.create"]["languages"] == ["typescript"]
+
+
+def test_a_resource_both_sdks_spell_alike_serves_both_languages():
+    """`charges` is one word, so both SDKs write `stripe.charges.create` and there is one key.
+    Emitting two identical keys would be the same entry twice; recording both languages against
+    one is what says the spelling is shared rather than TypeScript's alone."""
+    mapping = build_symbol_map(SPEC)
+
+    assert sorted(mapping["stripe.charges.create"]["languages"]) == ["python", "typescript"]
+
+
+def test_the_python_spelling_resolves_through_the_adapter(tmp_path):
+    ref = _adapter(tmp_path).operation_for_symbol(
+        "stripe.payment_intents.create", language="python"
+    )
+
+    assert ref is not None
+    assert ref.operation_id == "PostPaymentIntents"
+    assert ref.path == "/v1/payment_intents"
+
+
+def test_a_typescript_spelling_offered_as_python_refuses(tmp_path):
+    """The refusal `19834b6` established for Twilio, facing the other way.
+
+    `stripe.paymentIntents.create` under `python` is not a Python call site with unusual
+    punctuation; it is a TypeScript call site that arrived with the wrong language, and
+    resolving it would bind a finding to code in a file that does not contain that call.
+    """
+    assert (
+        _adapter(tmp_path).operation_for_symbol(
+            "stripe.paymentIntents.create", language="python"
+        )
+        is None
+    )
+
+
+def test_typescript_resolution_is_exactly_what_it_was(tmp_path):
+    """Twelve corpus pairs and the gate's recorded floors depend on this not moving."""
+    adapter = _adapter(tmp_path)
+
+    ref = adapter.operation_for_symbol("stripe.paymentIntents.create", language="typescript")
+    assert ref is not None and ref.operation_id == "PostPaymentIntents"
+
+    without_language = adapter.operation_for_symbol("stripe.paymentIntents.create")
+    assert without_language is not None and without_language.operation_id == "PostPaymentIntents"
+
+
+def test_a_map_staged_before_the_language_axis_still_resolves(tmp_path):
+    """`symbol_map_path` names a staged artifact, and a deployment's copy predates this change.
+
+    An entry with no `languages` key is unconstrained rather than broken: it resolves for any
+    language, which is exactly the behaviour that deployment had before. Refusing instead would
+    turn a stale cache into a vendor that silently binds nothing.
+    """
+    stale = {
+        "stripe.paymentIntents.create": {
+            "operation_id": "PostPaymentIntents",
+            "http_method": "post",
+            "path": "/v1/payment_intents",
+        }
+    }
+    adapter = _adapter(tmp_path, stale)
+
+    assert adapter.operation_for_symbol("stripe.paymentIntents.create", language="python")
+    assert adapter.operation_for_symbol("stripe.paymentIntents.create", language="typescript")

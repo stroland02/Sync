@@ -20,6 +20,42 @@ def _camel(segment: str) -> str:
     return head + "".join(part.capitalize() for part in rest)
 
 
+def _spellings(segment: str, method_name: str) -> dict[str, list[str]]:
+    """Each SDK's name for one operation, as symbol to the languages that write it.
+
+    **The snake_case spelling is read and the camelCase one is derived, not the other way
+    round.** `segment` is the specification's own path segment -- `/v1/payment_intents` gives
+    `payment_intents` -- and that string is verbatim what `stripe-python` exposes:
+    `StripeClient.payment_intents` is declared in `stripe/_v1_services.py`, a file whose own
+    header says it is generated from Stripe's OpenAPI specification. Checked against v2330
+    rather than assumed: of the 34 multi-word segments this pattern reaches, 31 are accessor
+    names in that file letter for letter. So this is the same kind of reading `x-stableId` gets
+    for method names, not a rule invented about one vendor's punctuation.
+
+    That direction is the whole point. Recovering `payment_intents` by un-camelling
+    `paymentIntents` would be a guess that fails silently -- `_camel` is not injective, and
+    `GeneratedSpecAdapter.operation_for_symbol` refuses exactly that class of transformation
+    because an unresolvable symbol yields no finding and nobody learns the convention was
+    wrong. Here nothing has to be inverted: the source spelling was in hand all along and the
+    map was throwing it away.
+
+    The three segments that are not top-level `stripe-python` accessors -- `external_accounts`,
+    `link_account_sessions` and `linked_accounts` -- are nested under another resource in that
+    SDK. They still get a Python key, because it names the operation the vendor's own path
+    names and no Python program writes it either way; what they do not get is a claim that the
+    accessor was verified, which is why they are listed here rather than silently included.
+
+    One key when the two SDKs agree. `charges` is one word, so both write `stripe.charges.list`
+    and emitting it twice would be one entry wearing two names; the languages list is what says
+    the spelling is shared rather than TypeScript's alone.
+    """
+    python = f"stripe.{segment}.{method_name}"
+    typescript = f"stripe.{_camel(segment)}.{method_name}"
+    if python == typescript:
+        return {python: ["python", "typescript"]}
+    return {python: ["python"], typescript: ["typescript"]}
+
+
 def _addresses_one_resource(operations: dict[str, Any]) -> bool:
     """Whether a path without an id segment still addresses a single resource.
 
@@ -155,18 +191,19 @@ def build_symbol_map(
             operation_id = operation.get("operationId")
             if not operation_id:
                 continue
-            symbol = f"stripe.{resource}.{method_name}"
-            existing = mapping.get(symbol)
-            if existing is not None:
-                raise SymbolCollision(
-                    f"{symbol} derives from two operations: "
-                    f"{existing['operation_id']} ({existing['http_method'].upper()} {existing['path']}) "
-                    f"and {operation_id} ({http_method.upper()} {path})"
-                )
-            mapping[symbol] = {
-                "operation_id": operation_id,
-                "http_method": http_method.lower(),
-                "path": path,
-            }
+            for symbol, languages in _spellings(resource_segment, method_name).items():
+                existing = mapping.get(symbol)
+                if existing is not None:
+                    raise SymbolCollision(
+                        f"{symbol} derives from two operations: "
+                        f"{existing['operation_id']} ({existing['http_method'].upper()} {existing['path']}) "
+                        f"and {operation_id} ({http_method.upper()} {path})"
+                    )
+                mapping[symbol] = {
+                    "operation_id": operation_id,
+                    "http_method": http_method.lower(),
+                    "path": path,
+                    "languages": languages,
+                }
 
     return mapping
