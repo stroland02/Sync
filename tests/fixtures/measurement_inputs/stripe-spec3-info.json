@@ -1,0 +1,38 @@
+{
+  "634a4b329a8e6f0d1dd13373d9f92458d0e6ee6d": {
+    "contact": {
+      "email": "dev-platform@stripe.com",
+      "name": "Stripe Dev Platform Team",
+      "url": "https://stripe.com"
+    },
+    "description": "The Stripe REST API. Please see https://stripe.com/docs/api for more details.",
+    "termsOfService": "https://stripe.com/us/terms/",
+    "title": "Stripe API",
+    "version": "2026-06-24.dahlia",
+    "x-stripeSpecFilename": "spec3"
+  },
+  "7546a97be72fbadc9bdb1bae3cd561286b8c5ecd": {
+    "contact": {
+      "email": "dev-platform@stripe.com",
+      "name": "Stripe Dev Platform Team",
+      "url": "https://stripe.com"
+    },
+    "description": "The Stripe REST API. Please see https://stripe.com/docs/api for more details.",
+    "termsOfService": "https://stripe.com/us/terms/",
+    "title": "Stripe API",
+    "version": "2026-02-25.clover",
+    "x-stripeSpecFilename": "spec3"
+  },
+  "c5d6078dd0b1392623a0d0c7a579f828ccb3a1f3": {
+    "contact": {
+      "email": "dev-platform@stripe.com",
+      "name": "Stripe Dev Platform Team",
+      "url": "https://stripe.com"
+    },
+    "description": "The Stripe REST API. Please see https://stripe.com/docs/api for more details.",
+    "termsOfService": "https://stripe.com/us/terms/",
+    "title": "Stripe API",
+    "version": "2026-05-27.dahlia",
+    "x-stripeSpecFilename": "spec3"
+  }
+}

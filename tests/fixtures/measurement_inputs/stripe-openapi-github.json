@@ -1,0 +1,468 @@
+{
+  "repos/stripe/openapi/contents/openapi/spec3.json?ref=v2200": {
+    "_links": {
+      "git": "https://api.github.com/repos/stripe/openapi/git/blobs/7546a97be72fbadc9bdb1bae3cd561286b8c5ecd",
+      "html": "https://github.com/stripe/openapi/blob/v2200/openapi/spec3.json",
+      "self": "https://api.github.com/repos/stripe/openapi/contents/openapi/spec3.json?ref=v2200"
+    },
+    "content": "",
+    "download_url": "https://raw.githubusercontent.com/stripe/openapi/v2200/openapi/spec3.json",
+    "encoding": "none",
+    "git_url": "https://api.github.com/repos/stripe/openapi/git/blobs/7546a97be72fbadc9bdb1bae3cd561286b8c5ecd",
+    "html_url": "https://github.com/stripe/openapi/blob/v2200/openapi/spec3.json",
+    "name": "spec3.json",
+    "path": "openapi/spec3.json",
+    "sha": "7546a97be72fbadc9bdb1bae3cd561286b8c5ecd",
+    "size": 7598844,
+    "type": "file",
+    "url": "https://api.github.com/repos/stripe/openapi/contents/openapi/spec3.json?ref=v2200"
+  },
+  "repos/stripe/openapi/contents/openapi/spec3.json?ref=v2300": {
+    "_links": {
+      "git": "https://api.github.com/repos/stripe/openapi/git/blobs/c5d6078dd0b1392623a0d0c7a579f828ccb3a1f3",
+      "html": "https://github.com/stripe/openapi/blob/v2300/openapi/spec3.json",
+      "self": "https://api.github.com/repos/stripe/openapi/contents/openapi/spec3.json?ref=v2300"
+    },
+    "content": "",
+    "download_url": "https://raw.githubusercontent.com/stripe/openapi/v2300/openapi/spec3.json",
+    "encoding": "none",
+    "git_url": "https://api.github.com/repos/stripe/openapi/git/blobs/c5d6078dd0b1392623a0d0c7a579f828ccb3a1f3",
+    "html_url": "https://github.com/stripe/openapi/blob/v2300/openapi/spec3.json",
+    "name": "spec3.json",
+    "path": "openapi/spec3.json",
+    "sha": "c5d6078dd0b1392623a0d0c7a579f828ccb3a1f3",
+    "size": 7830636,
+    "type": "file",
+    "url": "https://api.github.com/repos/stripe/openapi/contents/openapi/spec3.json?ref=v2300"
+  },
+  "repos/stripe/openapi/contents/openapi/spec3.json?ref=v2320": {
+    "_links": {
+      "git": "https://api.github.com/repos/stripe/openapi/git/blobs/c5d6078dd0b1392623a0d0c7a579f828ccb3a1f3",
+      "html": "https://github.com/stripe/openapi/blob/v2320/openapi/spec3.json",
+      "self": "https://api.github.com/repos/stripe/openapi/contents/openapi/spec3.json?ref=v2320"
+    },
+    "content": "",
+    "download_url": "https://raw.githubusercontent.com/stripe/openapi/v2320/openapi/spec3.json",
+    "encoding": "none",
+    "git_url": "https://api.github.com/repos/stripe/openapi/git/blobs/c5d6078dd0b1392623a0d0c7a579f828ccb3a1f3",
+    "html_url": "https://github.com/stripe/openapi/blob/v2320/openapi/spec3.json",
+    "name": "spec3.json",
+    "path": "openapi/spec3.json",
+    "sha": "c5d6078dd0b1392623a0d0c7a579f828ccb3a1f3",
+    "size": 7830636,
+    "type": "file",
+    "url": "https://api.github.com/repos/stripe/openapi/contents/openapi/spec3.json?ref=v2320"
+  },
+  "repos/stripe/openapi/contents/openapi/spec3.json?ref=v2330": {
+    "_links": {
+      "git": "https://api.github.com/repos/stripe/openapi/git/blobs/634a4b329a8e6f0d1dd13373d9f92458d0e6ee6d",
+      "html": "https://github.com/stripe/openapi/blob/v2330/openapi/spec3.json",
+      "self": "https://api.github.com/repos/stripe/openapi/contents/openapi/spec3.json?ref=v2330"
+    },
+    "content": "",
+    "download_url": "https://raw.githubusercontent.com/stripe/openapi/v2330/openapi/spec3.json",
+    "encoding": "none",
+    "git_url": "https://api.github.com/repos/stripe/openapi/git/blobs/634a4b329a8e6f0d1dd13373d9f92458d0e6ee6d",
+    "html_url": "https://github.com/stripe/openapi/blob/v2330/openapi/spec3.json",
+    "name": "spec3.json",
+    "path": "openapi/spec3.json",
+    "sha": "634a4b329a8e6f0d1dd13373d9f92458d0e6ee6d",
+    "size": 7866866,
+    "type": "file",
+    "url": "https://api.github.com/repos/stripe/openapi/contents/openapi/spec3.json?ref=v2330"
+  },
+  "repos/stripe/openapi/contents/openapi/spec3.json?ref=v2331": {
+    "_links": {
+      "git": "https://api.github.com/repos/stripe/openapi/git/blobs/634a4b329a8e6f0d1dd13373d9f92458d0e6ee6d",
+      "html": "https://github.com/stripe/openapi/blob/v2331/openapi/spec3.json",
+      "self": "https://api.github.com/repos/stripe/openapi/contents/openapi/spec3.json?ref=v2331"
+    },
+    "content": "",
+    "download_url": "https://raw.githubusercontent.com/stripe/openapi/v2331/openapi/spec3.json",
+    "encoding": "none",
+    "git_url": "https://api.github.com/repos/stripe/openapi/git/blobs/634a4b329a8e6f0d1dd13373d9f92458d0e6ee6d",
+    "html_url": "https://github.com/stripe/openapi/blob/v2331/openapi/spec3.json",
+    "name": "spec3.json",
+    "path": "openapi/spec3.json",
+    "sha": "634a4b329a8e6f0d1dd13373d9f92458d0e6ee6d",
+    "size": 7866866,
+    "type": "file",
+    "url": "https://api.github.com/repos/stripe/openapi/contents/openapi/spec3.json?ref=v2331"
+  },
+  "repos/stripe/openapi/contents/openapi/spec3.json?ref=v2340": {
+    "_links": {
+      "git": "https://api.github.com/repos/stripe/openapi/git/blobs/634a4b329a8e6f0d1dd13373d9f92458d0e6ee6d",
+      "html": "https://github.com/stripe/openapi/blob/v2340/openapi/spec3.json",
+      "self": "https://api.github.com/repos/stripe/openapi/contents/openapi/spec3.json?ref=v2340"
+    },
+    "content": "",
+    "download_url": "https://raw.githubusercontent.com/stripe/openapi/v2340/openapi/spec3.json",
+    "encoding": "none",
+    "git_url": "https://api.github.com/repos/stripe/openapi/git/blobs/634a4b329a8e6f0d1dd13373d9f92458d0e6ee6d",
+    "html_url": "https://github.com/stripe/openapi/blob/v2340/openapi/spec3.json",
+    "name": "spec3.json",
+    "path": "openapi/spec3.json",
+    "sha": "634a4b329a8e6f0d1dd13373d9f92458d0e6ee6d",
+    "size": 7866866,
+    "type": "file",
+    "url": "https://api.github.com/repos/stripe/openapi/contents/openapi/spec3.json?ref=v2340"
+  },
+  "repos/stripe/openapi/contents/openapi/spec3.json?ref=v2345": {
+    "_links": {
+      "git": "https://api.github.com/repos/stripe/openapi/git/blobs/634a4b329a8e6f0d1dd13373d9f92458d0e6ee6d",
+      "html": "https://github.com/stripe/openapi/blob/v2345/openapi/spec3.json",
+      "self": "https://api.github.com/repos/stripe/openapi/contents/openapi/spec3.json?ref=v2345"
+    },
+    "content": "",
+    "download_url": "https://raw.githubusercontent.com/stripe/openapi/v2345/openapi/spec3.json",
+    "encoding": "none",
+    "git_url": "https://api.github.com/repos/stripe/openapi/git/blobs/634a4b329a8e6f0d1dd13373d9f92458d0e6ee6d",
+    "html_url": "https://github.com/stripe/openapi/blob/v2345/openapi/spec3.json",
+    "name": "spec3.json",
+    "path": "openapi/spec3.json",
+    "sha": "634a4b329a8e6f0d1dd13373d9f92458d0e6ee6d",
+    "size": 7866866,
+    "type": "file",
+    "url": "https://api.github.com/repos/stripe/openapi/contents/openapi/spec3.json?ref=v2345"
+  },
+  "repos/stripe/openapi/contents/openapi/spec3.sdk.json?ref=v2200": {
+    "_links": {
+      "git": "https://api.github.com/repos/stripe/openapi/git/blobs/7e9f58a636a51357885a575b1f58ed3476d4f6d7",
+      "html": "https://github.com/stripe/openapi/blob/v2200/openapi/spec3.sdk.json",
+      "self": "https://api.github.com/repos/stripe/openapi/contents/openapi/spec3.sdk.json?ref=v2200"
+    },
+    "content": "",
+    "download_url": "https://raw.githubusercontent.com/stripe/openapi/v2200/openapi/spec3.sdk.json",
+    "encoding": "none",
+    "git_url": "https://api.github.com/repos/stripe/openapi/git/blobs/7e9f58a636a51357885a575b1f58ed3476d4f6d7",
+    "html_url": "https://github.com/stripe/openapi/blob/v2200/openapi/spec3.sdk.json",
+    "name": "spec3.sdk.json",
+    "path": "openapi/spec3.sdk.json",
+    "sha": "7e9f58a636a51357885a575b1f58ed3476d4f6d7",
+    "size": 9641538,
+    "type": "file",
+    "url": "https://api.github.com/repos/stripe/openapi/contents/openapi/spec3.sdk.json?ref=v2200"
+  },
+  "repos/stripe/openapi/contents/openapi/spec3.sdk.json?ref=v2300": {
+    "_links": {
+      "git": "https://api.github.com/repos/stripe/openapi/git/blobs/17b96b8111498636fa1c7f59415fb85b82b6bdb8",
+      "html": "https://github.com/stripe/openapi/blob/v2300/openapi/spec3.sdk.json",
+      "self": "https://api.github.com/repos/stripe/openapi/contents/openapi/spec3.sdk.json?ref=v2300"
+    },
+    "content": "",
+    "download_url": "https://raw.githubusercontent.com/stripe/openapi/v2300/openapi/spec3.sdk.json",
+    "encoding": "none",
+    "git_url": "https://api.github.com/repos/stripe/openapi/git/blobs/17b96b8111498636fa1c7f59415fb85b82b6bdb8",
+    "html_url": "https://github.com/stripe/openapi/blob/v2300/openapi/spec3.sdk.json",
+    "name": "spec3.sdk.json",
+    "path": "openapi/spec3.sdk.json",
+    "sha": "17b96b8111498636fa1c7f59415fb85b82b6bdb8",
+    "size": 10008504,
+    "type": "file",
+    "url": "https://api.github.com/repos/stripe/openapi/contents/openapi/spec3.sdk.json?ref=v2300"
+  },
+  "repos/stripe/openapi/contents/openapi/spec3.sdk.json?ref=v2320": {
+    "_links": {
+      "git": "https://api.github.com/repos/stripe/openapi/git/blobs/17b96b8111498636fa1c7f59415fb85b82b6bdb8",
+      "html": "https://github.com/stripe/openapi/blob/v2320/openapi/spec3.sdk.json",
+      "self": "https://api.github.com/repos/stripe/openapi/contents/openapi/spec3.sdk.json?ref=v2320"
+    },
+    "content": "",
+    "download_url": "https://raw.githubusercontent.com/stripe/openapi/v2320/openapi/spec3.sdk.json",
+    "encoding": "none",
+    "git_url": "https://api.github.com/repos/stripe/openapi/git/blobs/17b96b8111498636fa1c7f59415fb85b82b6bdb8",
+    "html_url": "https://github.com/stripe/openapi/blob/v2320/openapi/spec3.sdk.json",
+    "name": "spec3.sdk.json",
+    "path": "openapi/spec3.sdk.json",
+    "sha": "17b96b8111498636fa1c7f59415fb85b82b6bdb8",
+    "size": 10008504,
+    "type": "file",
+    "url": "https://api.github.com/repos/stripe/openapi/contents/openapi/spec3.sdk.json?ref=v2320"
+  },
+  "repos/stripe/openapi/contents/openapi/spec3.sdk.json?ref=v2330": {
+    "_links": {
+      "git": "https://api.github.com/repos/stripe/openapi/git/blobs/3e278ec902d488bf3aa41eb0294b8c1fd15ddc14",
+      "html": "https://github.com/stripe/openapi/blob/v2330/openapi/spec3.sdk.json",
+      "self": "https://api.github.com/repos/stripe/openapi/contents/openapi/spec3.sdk.json?ref=v2330"
+    },
+    "content": "",
+    "download_url": "https://raw.githubusercontent.com/stripe/openapi/v2330/openapi/spec3.sdk.json",
+    "encoding": "none",
+    "git_url": "https://api.github.com/repos/stripe/openapi/git/blobs/3e278ec902d488bf3aa41eb0294b8c1fd15ddc14",
+    "html_url": "https://github.com/stripe/openapi/blob/v2330/openapi/spec3.sdk.json",
+    "name": "spec3.sdk.json",
+    "path": "openapi/spec3.sdk.json",
+    "sha": "3e278ec902d488bf3aa41eb0294b8c1fd15ddc14",
+    "size": 10059776,
+    "type": "file",
+    "url": "https://api.github.com/repos/stripe/openapi/contents/openapi/spec3.sdk.json?ref=v2330"
+  },
+  "repos/stripe/openapi/contents/openapi/spec3.sdk.json?ref=v2331": {
+    "_links": {
+      "git": "https://api.github.com/repos/stripe/openapi/git/blobs/3e278ec902d488bf3aa41eb0294b8c1fd15ddc14",
+      "html": "https://github.com/stripe/openapi/blob/v2331/openapi/spec3.sdk.json",
+      "self": "https://api.github.com/repos/stripe/openapi/contents/openapi/spec3.sdk.json?ref=v2331"
+    },
+    "content": "",
+    "download_url": "https://raw.githubusercontent.com/stripe/openapi/v2331/openapi/spec3.sdk.json",
+    "encoding": "none",
+    "git_url": "https://api.github.com/repos/stripe/openapi/git/blobs/3e278ec902d488bf3aa41eb0294b8c1fd15ddc14",
+    "html_url": "https://github.com/stripe/openapi/blob/v2331/openapi/spec3.sdk.json",
+    "name": "spec3.sdk.json",
+    "path": "openapi/spec3.sdk.json",
+    "sha": "3e278ec902d488bf3aa41eb0294b8c1fd15ddc14",
+    "size": 10059776,
+    "type": "file",
+    "url": "https://api.github.com/repos/stripe/openapi/contents/openapi/spec3.sdk.json?ref=v2331"
+  },
+  "repos/stripe/openapi/contents/openapi/spec3.sdk.json?ref=v2340": {
+    "_links": {
+      "git": "https://api.github.com/repos/stripe/openapi/git/blobs/3e278ec902d488bf3aa41eb0294b8c1fd15ddc14",
+      "html": "https://github.com/stripe/openapi/blob/v2340/openapi/spec3.sdk.json",
+      "self": "https://api.github.com/repos/stripe/openapi/contents/openapi/spec3.sdk.json?ref=v2340"
+    },
+    "content": "",
+    "download_url": "https://raw.githubusercontent.com/stripe/openapi/v2340/openapi/spec3.sdk.json",
+    "encoding": "none",
+    "git_url": "https://api.github.com/repos/stripe/openapi/git/blobs/3e278ec902d488bf3aa41eb0294b8c1fd15ddc14",
+    "html_url": "https://github.com/stripe/openapi/blob/v2340/openapi/spec3.sdk.json",
+    "name": "spec3.sdk.json",
+    "path": "openapi/spec3.sdk.json",
+    "sha": "3e278ec902d488bf3aa41eb0294b8c1fd15ddc14",
+    "size": 10059776,
+    "type": "file",
+    "url": "https://api.github.com/repos/stripe/openapi/contents/openapi/spec3.sdk.json?ref=v2340"
+  },
+  "repos/stripe/openapi/contents/openapi/spec3.sdk.json?ref=v2345": {
+    "_links": {
+      "git": "https://api.github.com/repos/stripe/openapi/git/blobs/3e278ec902d488bf3aa41eb0294b8c1fd15ddc14",
+      "html": "https://github.com/stripe/openapi/blob/v2345/openapi/spec3.sdk.json",
+      "self": "https://api.github.com/repos/stripe/openapi/contents/openapi/spec3.sdk.json?ref=v2345"
+    },
+    "content": "",
+    "download_url": "https://raw.githubusercontent.com/stripe/openapi/v2345/openapi/spec3.sdk.json",
+    "encoding": "none",
+    "git_url": "https://api.github.com/repos/stripe/openapi/git/blobs/3e278ec902d488bf3aa41eb0294b8c1fd15ddc14",
+    "html_url": "https://github.com/stripe/openapi/blob/v2345/openapi/spec3.sdk.json",
+    "name": "spec3.sdk.json",
+    "path": "openapi/spec3.sdk.json",
+    "sha": "3e278ec902d488bf3aa41eb0294b8c1fd15ddc14",
+    "size": 10059776,
+    "type": "file",
+    "url": "https://api.github.com/repos/stripe/openapi/contents/openapi/spec3.sdk.json?ref=v2345"
+  },
+  "repos/stripe/openapi/git/ref/tags/v2200": {
+    "node_id": "MDM6UmVmODUwMDUxMTE6cmVmcy90YWdzL3YyMjAw",
+    "object": {
+      "sha": "db058069ca0841765918426f049d55dd7cb003fb",
+      "type": "tag",
+      "url": "https://api.github.com/repos/stripe/openapi/git/tags/db058069ca0841765918426f049d55dd7cb003fb"
+    },
+    "ref": "refs/tags/v2200",
+    "url": "https://api.github.com/repos/stripe/openapi/git/refs/tags/v2200"
+  },
+  "repos/stripe/openapi/git/ref/tags/v2300": {
+    "node_id": "MDM6UmVmODUwMDUxMTE6cmVmcy90YWdzL3YyMzAw",
+    "object": {
+      "sha": "c723bd19512e97d115b4bca02a910fa644d7d524",
+      "type": "tag",
+      "url": "https://api.github.com/repos/stripe/openapi/git/tags/c723bd19512e97d115b4bca02a910fa644d7d524"
+    },
+    "ref": "refs/tags/v2300",
+    "url": "https://api.github.com/repos/stripe/openapi/git/refs/tags/v2300"
+  },
+  "repos/stripe/openapi/git/ref/tags/v2320": {
+    "node_id": "MDM6UmVmODUwMDUxMTE6cmVmcy90YWdzL3YyMzIw",
+    "object": {
+      "sha": "0c6e73b515ea840f3e11511e20a386a09944f480",
+      "type": "tag",
+      "url": "https://api.github.com/repos/stripe/openapi/git/tags/0c6e73b515ea840f3e11511e20a386a09944f480"
+    },
+    "ref": "refs/tags/v2320",
+    "url": "https://api.github.com/repos/stripe/openapi/git/refs/tags/v2320"
+  },
+  "repos/stripe/openapi/git/ref/tags/v2330": {
+    "node_id": "MDM6UmVmODUwMDUxMTE6cmVmcy90YWdzL3YyMzMw",
+    "object": {
+      "sha": "c4140d25e94fb405077860429f3e3dc93df1f3af",
+      "type": "tag",
+      "url": "https://api.github.com/repos/stripe/openapi/git/tags/c4140d25e94fb405077860429f3e3dc93df1f3af"
+    },
+    "ref": "refs/tags/v2330",
+    "url": "https://api.github.com/repos/stripe/openapi/git/refs/tags/v2330"
+  },
+  "repos/stripe/openapi/git/ref/tags/v2331": {
+    "node_id": "MDM6UmVmODUwMDUxMTE6cmVmcy90YWdzL3YyMzMx",
+    "object": {
+      "sha": "c17323aceb5494f4ba53a91e810b2475b1a2a27f",
+      "type": "tag",
+      "url": "https://api.github.com/repos/stripe/openapi/git/tags/c17323aceb5494f4ba53a91e810b2475b1a2a27f"
+    },
+    "ref": "refs/tags/v2331",
+    "url": "https://api.github.com/repos/stripe/openapi/git/refs/tags/v2331"
+  },
+  "repos/stripe/openapi/git/ref/tags/v2340": {
+    "node_id": "MDM6UmVmODUwMDUxMTE6cmVmcy90YWdzL3YyMzQw",
+    "object": {
+      "sha": "5e73719eb65f20195635efc8fb10165db284333f",
+      "type": "tag",
+      "url": "https://api.github.com/repos/stripe/openapi/git/tags/5e73719eb65f20195635efc8fb10165db284333f"
+    },
+    "ref": "refs/tags/v2340",
+    "url": "https://api.github.com/repos/stripe/openapi/git/refs/tags/v2340"
+  },
+  "repos/stripe/openapi/git/ref/tags/v2345": {
+    "node_id": "MDM6UmVmODUwMDUxMTE6cmVmcy90YWdzL3YyMzQ1",
+    "object": {
+      "sha": "86b6ae4db114ff06968dcc191ff4a898e9b5db7c",
+      "type": "commit",
+      "url": "https://api.github.com/repos/stripe/openapi/git/commits/86b6ae4db114ff06968dcc191ff4a898e9b5db7c"
+    },
+    "ref": "refs/tags/v2345",
+    "url": "https://api.github.com/repos/stripe/openapi/git/refs/tags/v2345"
+  },
+  "repos/stripe/openapi/git/tags/0c6e73b515ea840f3e11511e20a386a09944f480": {
+    "message": "This release only includes changes to the private preview spec.\n",
+    "node_id": "TA_kwDOBRETN9oAKDBjNmU3M2I1MTVlYTg0MGYzZTExNTExZTIwYTM4NmEwOTk0NGY0ODA",
+    "object": {
+      "sha": "c5dcebd5209b9d34974a4101a3de604998f88558",
+      "type": "commit",
+      "url": "https://api.github.com/repos/stripe/openapi/git/commits/c5dcebd5209b9d34974a4101a3de604998f88558"
+    },
+    "sha": "0c6e73b515ea840f3e11511e20a386a09944f480",
+    "tag": "v2320",
+    "tagger": {
+      "date": "2026-06-19T10:32:24Z",
+      "email": "105521251+stripe-openapi[bot]@users.noreply.github.com",
+      "name": "Stripe OpenAPI"
+    },
+    "url": "https://api.github.com/repos/stripe/openapi/git/tags/0c6e73b515ea840f3e11511e20a386a09944f480",
+    "verification": {
+      "payload": null,
+      "reason": "unsigned",
+      "signature": null,
+      "verified": false,
+      "verified_at": null
+    }
+  },
+  "repos/stripe/openapi/git/tags/5e73719eb65f20195635efc8fb10165db284333f": {
+    "message": "This release only includes changes to the private preview spec.\n",
+    "node_id": "TA_kwDOBRETN9oAKDVlNzM3MTllYjY1ZjIwMTk1NjM1ZWZjOGZiMTAxNjVkYjI4NDMzM2Y",
+    "object": {
+      "sha": "635a63d3abcfa7fef32c3788451e5a5c1caaaa03",
+      "type": "commit",
+      "url": "https://api.github.com/repos/stripe/openapi/git/commits/635a63d3abcfa7fef32c3788451e5a5c1caaaa03"
+    },
+    "sha": "5e73719eb65f20195635efc8fb10165db284333f",
+    "tag": "v2340",
+    "tagger": {
+      "date": "2026-07-02T03:12:05Z",
+      "email": "105521251+stripe-openapi[bot]@users.noreply.github.com",
+      "name": "Stripe OpenAPI"
+    },
+    "url": "https://api.github.com/repos/stripe/openapi/git/tags/5e73719eb65f20195635efc8fb10165db284333f",
+    "verification": {
+      "payload": null,
+      "reason": "unsigned",
+      "signature": null,
+      "verified": false,
+      "verified_at": null
+    }
+  },
+  "repos/stripe/openapi/git/tags/c17323aceb5494f4ba53a91e810b2475b1a2a27f": {
+    "message": "This release only includes changes to the private preview spec.\n",
+    "node_id": "TA_kwDOBRETN9oAKGMxNzMyM2FjZWI1NDk0ZjRiYTUzYTkxZTgxMGIyNDc1YjFhMmEyN2Y",
+    "object": {
+      "sha": "b9e97324c782479a93798fbe7c0ce110439c051b",
+      "type": "commit",
+      "url": "https://api.github.com/repos/stripe/openapi/git/commits/b9e97324c782479a93798fbe7c0ce110439c051b"
+    },
+    "sha": "c17323aceb5494f4ba53a91e810b2475b1a2a27f",
+    "tag": "v2331",
+    "tagger": {
+      "date": "2026-06-25T19:23:21Z",
+      "email": "105521251+stripe-openapi[bot]@users.noreply.github.com",
+      "name": "Stripe OpenAPI"
+    },
+    "url": "https://api.github.com/repos/stripe/openapi/git/tags/c17323aceb5494f4ba53a91e810b2475b1a2a27f",
+    "verification": {
+      "payload": null,
+      "reason": "unsigned",
+      "signature": null,
+      "verified": false,
+      "verified_at": null
+    }
+  },
+  "repos/stripe/openapi/git/tags/c4140d25e94fb405077860429f3e3dc93df1f3af": {
+    "message": "This release only includes changes to the private preview spec.\n",
+    "node_id": "TA_kwDOBRETN9oAKGM0MTQwZDI1ZTk0ZmI0MDUwNzc4NjA0MjlmM2UzZGM5M2RmMWYzYWY",
+    "object": {
+      "sha": "62d4d7c732ca9603130284866b00ba267bf93a10",
+      "type": "commit",
+      "url": "https://api.github.com/repos/stripe/openapi/git/commits/62d4d7c732ca9603130284866b00ba267bf93a10"
+    },
+    "sha": "c4140d25e94fb405077860429f3e3dc93df1f3af",
+    "tag": "v2330",
+    "tagger": {
+      "date": "2026-06-25T19:11:23Z",
+      "email": "105521251+stripe-openapi[bot]@users.noreply.github.com",
+      "name": "Stripe OpenAPI"
+    },
+    "url": "https://api.github.com/repos/stripe/openapi/git/tags/c4140d25e94fb405077860429f3e3dc93df1f3af",
+    "verification": {
+      "payload": null,
+      "reason": "unsigned",
+      "signature": null,
+      "verified": false,
+      "verified_at": null
+    }
+  },
+  "repos/stripe/openapi/git/tags/c723bd19512e97d115b4bca02a910fa644d7d524": {
+    "message": "This release only includes changes to the private preview spec.\n",
+    "node_id": "TA_kwDOBRETN9oAKGM3MjNiZDE5NTEyZTk3ZDExNWI0YmNhMDJhOTEwZmE2NDRkN2Q1MjQ",
+    "object": {
+      "sha": "a7e607228d9579adf9f0367128bb5539a793827d",
+      "type": "commit",
+      "url": "https://api.github.com/repos/stripe/openapi/git/commits/a7e607228d9579adf9f0367128bb5539a793827d"
+    },
+    "sha": "c723bd19512e97d115b4bca02a910fa644d7d524",
+    "tag": "v2300",
+    "tagger": {
+      "date": "2026-06-12T17:28:52Z",
+      "email": "105521251+stripe-openapi[bot]@users.noreply.github.com",
+      "name": "Stripe OpenAPI"
+    },
+    "url": "https://api.github.com/repos/stripe/openapi/git/tags/c723bd19512e97d115b4bca02a910fa644d7d524",
+    "verification": {
+      "payload": null,
+      "reason": "unsigned",
+      "signature": null,
+      "verified": false,
+      "verified_at": null
+    }
+  },
+  "repos/stripe/openapi/git/tags/db058069ca0841765918426f049d55dd7cb003fb": {
+    "message": "This release only includes changes to the beta and/or private preview specs.\n",
+    "node_id": "TA_kwDOBRETN9oAKGRiMDU4MDY5Y2EwODQxNzY1OTE4NDI2ZjA0OWQ1NWRkN2NiMDAzZmI",
+    "object": {
+      "sha": "a62576f6c21328289aec64935b6fd3cb81118ed6",
+      "type": "commit",
+      "url": "https://api.github.com/repos/stripe/openapi/git/commits/a62576f6c21328289aec64935b6fd3cb81118ed6"
+    },
+    "sha": "db058069ca0841765918426f049d55dd7cb003fb",
+    "tag": "v2200",
+    "tagger": {
+      "date": "2026-03-13T17:34:27Z",
+      "email": "105521251+stripe-openapi[bot]@users.noreply.github.com",
+      "name": "Stripe OpenAPI"
+    },
+    "url": "https://api.github.com/repos/stripe/openapi/git/tags/db058069ca0841765918426f049d55dd7cb003fb",
+    "verification": {
+      "payload": null,
+      "reason": "unsigned",
+      "signature": null,
+      "verified": false,
+      "verified_at": null
+    }
+  }
+}
