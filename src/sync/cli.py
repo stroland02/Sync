@@ -8,7 +8,7 @@ import re
 import subprocess
 import sys
 import tempfile
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Callable, Iterator, Sequence
 
@@ -40,6 +40,7 @@ from sync.signals.deprecations import (
     DeprecationSource,
     ParameterDeprecation,
     http_fetch,
+    parameters_to_vendor_changes,
     parse_parameter_deprecations,
 )
 from sync.signals.registry import (
@@ -450,11 +451,34 @@ def _parameter_deprecations(
     return deprecations
 
 
+def _parameter_changes(
+    rows: Sequence[ParameterDeprecation], today: date
+) -> list[VendorChange]:
+    """Parameter deprecations as `VendorChange` rows.
+
+    `parameters_to_vendor_changes` was finished, tested, and called by nothing, so the remedy
+    and the vendor's own wording never reached a remediator that keys on
+    `kind == "deprecation/parameter"`. This is that call site.
+
+    The version range is the honest part. A deprecation happens on a date and not across a
+    release, so there is no range to record -- and borrowing the run's Stripe window would file
+    an Anthropic parameter under `v2320..v2330`, a provenance the row does not have. Both ends
+    carry the date the vendor's page was read instead: equal because there is no span, and a
+    date because that is the only coordinate this artifact actually has.
+
+    `today` is passed rather than read here, so two halves of one scan cannot disagree about
+    what day it is and a test is not a fact about when the suite ran.
+    """
+    stamp = today.isoformat()
+    return parameters_to_vendor_changes(list(rows), from_version=stamp, to_version=stamp)
+
+
 def _model_deprecations(
     cache_dir: Path,
     from_version: str,
     to_version: str,
     fetch: Callable[[str], str] | None = None,
+    today: date | None = None,
 ) -> list[VendorChange]:
     """Every vendor's retired models as `VendorChange` rows, skipping a vendor that is unreachable.
 
@@ -491,6 +515,9 @@ def _model_deprecations(
             fetch=fetch,
             cache_path=cache_dir / f"{source.vendor_id}-deprecations.md",
             max_age=DEPRECATION_MAX_AGE,
+            # Injected rather than left to the adapter's own clock, so one scan measures every
+            # vendor's urgency from one day and a test asserting a number stays true next year.
+            today=today,
         )
         try:
             changes.extend(adapter.fetch_changes(from_version, to_version))
@@ -613,7 +640,11 @@ def _scan(detectors: Sequence[tuple[str, object]], store: GraphStore) -> list[Fi
     return findings
 
 
-def run(args: argparse.Namespace) -> int:
+def run(args: argparse.Namespace, today: date | None = None) -> int:
+    # The one clock read in the deprecation signal, taken here because this is the entry point
+    # and a scan should measure every vendor's deadlines from one day. Injectable so a test
+    # asserting a number of days stays true next year rather than being deleted.
+    today = today or date.today()
     cache = Path(args.cache)
     cache.mkdir(parents=True, exist_ok=True)
 
@@ -662,9 +693,12 @@ def run(args: argparse.Namespace) -> int:
         # graph tables, and two vendor pages behind a slow network would hold it for the length
         # of the download rather than the length of the write.
         deprecations = _parameter_deprecations(cache)
+        parameter_changes = _parameter_changes(deprecations, today)
         # After the parameter half, which leaves each vendor's page in the cache the adapter
         # reads: one download per vendor serves both halves of the signal.
-        model_deprecations = _model_deprecations(cache, args.from_version, args.to_version)
+        model_deprecations = _model_deprecations(
+            cache, args.from_version, args.to_version, today=today
+        )
 
         with store.transaction():
             store.truncate_all()
@@ -680,7 +714,11 @@ def run(args: argparse.Namespace) -> int:
             for change in vendor.fetch_changes(args.from_version, args.to_version):
                 store.upsert_vendor_change(change)
 
-            for change in model_deprecations:
+            # Both halves of the deprecation signal. The parameter rows join against
+            # `CallSite.args_keys` rather than `operation_id`, so they raise no finding through
+            # `VendorChangeDetector` -- `ParameterDeprecationDetector` does that -- and they
+            # are stored because a finding addresses the change it came from by id.
+            for change in model_deprecations + parameter_changes:
                 store.upsert_vendor_change(change)
 
             # Persist findings before running the graph: `scan()` returns unsaved
