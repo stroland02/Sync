@@ -12,24 +12,41 @@ item that cannot say what evidence closes it is not ready to dispatch.
 
 ## Ready
 
-### B47 — Regenerate the Python pairs now the generator is honest
+### B50 — A hold_back the binder now earns, which would trade two positives for two negatives
 
-`openbraininstitute/virtual-lab-api` is pinned and indexed. B46 made the generator require identity
-rather than containment, so the two targets that produced mislabelled pairs are now `unreachable`
-rather than wrong. What the corpus does not yet have is an **honest** Python pair.
+B49 found two committed specs whose content differs from a fresh generation: `furever` and `turbo`
+`PostPaymentIntents-response` would now earn a `hold_back`, because B34's change to what the binder
+records made a second site on those operations bindable.
 
-The obstacle is no longer correctness — it is whether that repository contains a call whose result
-is bound directly. Its two candidate operations bind through `list(...auto_paging_iter())`, which is
-exactly what the stricter rule now refuses.
+It deliberately did not adopt it, and the reason is the sharpest distinction in the corpus's
+accounting: **every other difference moved a denominator, this one would move a rate.** Adopting it
+trades two labelled positives for two falsifiable negatives — recall's denominator falls by two
+while precision gains two candidates it could fail on.
 
-**This may have no answer in that repository**, and finding that out is the task. If no operation in
-it binds a result directly, say so with the counts and the corpus stays at twelve pairs — the
-repository is still worth its pin, because it is the thing that will measure Python the moment a
-qualifying call site exists.
+Neither direction is obviously right. More falsifiable negatives make precision a stronger claim,
+which is the axis that was a constant until this morning. Fewer positives make recall a weaker one,
+and recall is the axis whose failure the product exists to prevent.
 
-**Closes when:** either a Python pair scores honestly and Python precision and recall are reported
-with their sample sizes, or it is established with evidence that this repository cannot produce one
-and why.
+**Closes when:** the trade is decided with the argument written down, and if taken, both rates are
+recomputed with the old and new denominators side by side.
+
+### B51 — Coverage marks these decode handlers covered without ever entering them
+
+From the other coordinator's M3-W87. `_read_npm` catches `JSONDecodeError` and `UnicodeDecodeError`
+**on one line**, so a fixture exercising the JSON arm marks the line covered while the decode arm has
+never run. Two of the three decode handlers in `sync/signals/intake.py` were invisible to the metric
+that would have been used to find them.
+
+That matters beyond one module: this repository has hit the same defect class four times today —
+`_requirement_lines`, `_read_npm`, and the two `tomllib` pairs — and coverage is exactly the tool
+someone would reach for to find the rest. **It will report them as already tested.**
+
+Also worth keeping, from the same worker: build a non-UTF-8 fixture *in code* rather than committing
+one. A committed non-UTF-8 file is silently repaired by anything that round-trips it as text, after
+which the test passes against a valid file while appearing to cover the decode handler.
+
+**Closes when:** the decode arms are separated from their co-caught siblings, or a check exists that
+does not rely on line coverage to tell whether they have been entered.
 
 ### B7 — The M0 acceptance run has not executed since the pipeline changed underneath it
 
@@ -60,6 +77,54 @@ recorded with which change broke it.
 _Nothing._
 
 ## Done
+
+- **B49** — the corpus is now a **superset** of what the rule proposes rather than equal to it. The
+  four differences were classified before anything moved: one genuine addition
+  (`virtual-lab-GetBalance`, filling a response slot nothing occupied) and **three substitutions** —
+  and all four were added while none was replaced, so nothing measured was discarded.
+
+  Floors all moved **up**: precision and recall **n=18 to n=27**, falsifiable negatives 5 to 6,
+  pairs scored 13 to 17. Symbol map digest unmoved. Byte-identical across two clean databases.
+
+  The rates held at 1.0000 over half again as many labelled positives, which is the part worth more
+  than the count — a perfect rate at n=18 and a perfect rate at n=27 are different amounts of
+  evidence for the same claim.
+
+- **B48** — operation selection now follows the change's own side. An operation qualifies on
+  `args_keys` for a request pair and `response_fields_read` for a response one, through a shared
+  `_judged_by` that `hold_back` also calls.
+
+  The diagnosis in one line: **selection was the only clause that never followed the side**, which
+  is why response coverage had been a side effect of request coverage.
+
+  The closing condition was met exactly — the rule proposes `GetProductsId` for `virtual-lab`, and
+  the specification it writes is *identical in parsed payload* to the pair that had to be
+  hand-written: same field `created`, same held-back position. Ten tests cover the symmetry in both
+  directions, including that an object argument does **not** qualify an operation for a response
+  pair, so it did not swap one blindness for another.
+
+  No floor moved and `benchmark/corpus/` is byte-untouched, which was the constraint: the four
+  differences it would propose for the TypeScript repositories were measured into a scratch
+  directory and left there. See B49.
+
+- **B47 — the corpus measures Python.** `virtual-lab-GetProductsId-response-property-removed`:
+  two labelled positives, both found, no false finding, and one held-back site the detector could
+  have fired on and did not.
+
+  **Every floor moved up**, which is the only direction that needs no argument: precision and
+  recall n=16 to **n=18**, falsifiable negatives 4 to **5**, pairs scored 12 to **13**, symbol map
+  digest unmoved. Byte-identical across two clean databases.
+
+  The question it was sent to answer was whether an honest pair could exist at all. Of 21 call
+  sites, **five** bind a result directly — the other sixteen bind through
+  `list(...auto_paging_iter())`, a comprehension, a `for` header, or nothing, and are correctly
+  unreachable. Three of the five sit on one operation, which is what makes it a *pair* rather than
+  merely a reachable site: two targets and one held back, so it contributes a falsifiable negative
+  rather than only denominators.
+
+  It also had to restate the gate's own tests, which asserted the old floors — the same lesson as
+  the symbol-map re-pin: when a floor moves, everything that records it moves with it. See B48 for
+  why the pair had to be written by hand.
 
 - **B44** — a Python repository is pinned and **none of the pairs it would have produced were
   written**. `openbraininstitute/virtual-lab-api`, Apache-2.0, 563 files, digest validating. Twelve

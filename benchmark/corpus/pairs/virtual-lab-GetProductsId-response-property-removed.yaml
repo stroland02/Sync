@@ -1,0 +1,34 @@
+# 3 indexed call site(s) on GetProductsId in virtual-lab, pinned at a2577bb15dd004d170a5a454c2bc850061a06d7a.
+# Field chosen by the rule in scripts/build_corpus_specs.py: the alphabetically first
+# property of this operation in v2330 that no call site in this repository already uses.
+# Held back from targets by the rule in the same script: the first call site on this
+# operation by position, which the mutation therefore never edits. It is the negative
+# binding precision is measured against, and a site binding recall no longer measures.
+#
+# The first Python pair in the corpus, and written by hand rather than by the generator
+# because the generator's operation rule would never have proposed it. That rule takes the
+# two operations with the most call sites where at least one passes an object argument,
+# which is a request-side condition: all three of these calls are
+# `product = client.products.retrieve(cfg.product_id)`, a positional argument and no
+# keyword, so `args_keys` is empty and the operation is invisible to it. There is also no
+# request pair to write here at all -- GET /v1/products/{id} has no request body, the same
+# reason furever/GetCharges and fireship-server/GetPaymentMethods produced only one kind.
+#
+# What makes it the right operation is the half that rule does not look at: all three
+# results are bound directly to a name, which after B46 is what a response guard requires.
+# Of the repository's twenty-one call sites only five bind that way, and three of those
+# five are these. The two candidate operations B45 proposed both bound through
+# `list(...auto_paging_iter())` and were refused for it.
+cache: .cache/specs
+change:
+  field: created
+  kind: response-property-removed
+  operation: GetProductsId
+from_version: v2320
+hold_back:
+- col: 14
+  line: 264
+  path: scripts/migrate_to_tax_billing.py
+repo: .cache/corpus/virtual-lab
+to_version: v2330
+vendor: stripe

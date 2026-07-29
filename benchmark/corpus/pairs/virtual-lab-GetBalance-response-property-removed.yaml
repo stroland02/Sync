@@ -1,0 +1,12 @@
+# 1 indexed call site(s) on GetBalance in virtual-lab, pinned at a2577bb15dd004d170a5a454c2bc850061a06d7a.
+# Field chosen by the rule in scripts/build_corpus_specs.py: the alphabetically first
+# property of this operation in v2330 that no call site in this repository already uses.
+cache: .cache/specs
+change:
+  field: available
+  kind: response-property-removed
+  operation: GetBalance
+from_version: v2320
+repo: .cache/corpus/virtual-lab
+to_version: v2330
+vendor: stripe

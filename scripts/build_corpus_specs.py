@@ -12,14 +12,23 @@ selection is executable and the score is whatever it produces, including the pai
 then refuses. The rule, in full:
 
   - **Which repositories.** Every entry in `benchmark/corpus/repositories.yaml`.
-  - **Which operations.** Per repository, the two operations with the most indexed call sites
-    where at least one call passes an object argument, ties broken by operation id ascending. An
-    operation whose calls take no object argument is excluded because neither mutation can attach
-    to one -- `stripe.customers.retrieve(id)` has nowhere to put a property.
-  - **Which kinds.** `request-property-removed` and `response-property-removed` for each, which
-    are the two mechanically different inversions `sync.benchmark.mutate` implements. The third
-    supported kind, `request-parameter-removed`, mutates identically to the first and would add
-    pairs without adding information.
+  - **Which kinds.** `request-property-removed` and `response-property-removed`, which are the
+    two mechanically different inversions `sync.benchmark.mutate` implements. The third supported
+    kind, `request-parameter-removed`, mutates identically to the first and would add pairs
+    without adding information.
+  - **Which operations.** Per repository *and per kind*, the two operations with the most indexed
+    call sites where at least one site carries a non-empty field list **on the side that kind's
+    change is judged on** -- `args_keys` for a request change, `response_fields_read` for a
+    response one -- ties broken by operation id ascending.
+
+    Per kind, because the two mutations need different things and asking one question for both
+    answered it wrong in both directions. A request-property mutation needs a call passing an
+    object argument, so `stripe.customers.retrieve(id)` has nowhere to put a property and must
+    not acquire a request pair. A response-property mutation needs a call binding a result
+    something reads a field off, and that operation was excluded for the wrong reason: the rule
+    asked the request question of it. `virtual-lab-GetProductsId` is the pair that cost --
+    three positional `client.products.retrieve(cfg.product_id)` calls, two of them reading
+    fields off the result, unproposable and written by hand.
   - **Which field.** The alphabetically first property of that operation in the pinned
     specification that no indexed call site in the repository already passes, for a request
     change, or already reads, for a response change. Real properties of the real operation, so
@@ -114,6 +123,56 @@ def _index(name: str, dsn: str):
     return by_operation, adapter.language_id
 
 
+def _judged_by(site, kind: str) -> list[str]:
+    """The field list `VendorChangeDetector.scan` judges this call site on, for this kind.
+
+    One function because two clauses need the same answer and had drifted apart: the hold-back
+    already followed the side the change is on, and the selection above it did not.
+    """
+    return site.args_keys if kind.startswith("request-") else site.response_fields_read
+
+
+def operations_for(by_operation: dict, kind: str, limit: int = OPERATIONS_PER_REPOSITORY):
+    """The operations this repository contributes a pair of `kind` over, most call sites first.
+
+    An operation qualifies on the field list the change's own side is judged on, and the two
+    sides are asked separately. The rule used to ask one question for both: the operations with
+    the most call sites where at least one passes an object argument, then a request pair and a
+    response pair over each. That condition is request-side, so response coverage was a side
+    effect of request coverage -- every response pair the corpus holds is there because its
+    operation also happened to qualify on the other side.
+
+    `virtual-lab-GetProductsId` is what that cost and why this changed. Three call sites, all
+    `client.products.retrieve(cfg.product_id)`, so `args_keys` is empty at every one and no
+    number of them could make it a candidate; two of the three read fields off the result, which
+    is everything a response pair needs. It is the strongest pair in the corpus and it had to be
+    written by hand.
+
+    **Per side rather than either side.** Qualifying an operation on evidence from the other half
+    and then generating both kinds is the defect running the other way: a request pair over calls
+    passing no object argument has nowhere to write the mutation, so every target comes back
+    unreachable and the pair contributes no positive while still moving `pairs_scored` and its
+    floor. The cap is therefore per kind, which leaves the ceiling where it was -- two operations
+    times two kinds -- while letting the four slots fall on up to four different operations.
+
+    **Non-empty rather than "the result is bound".** A bound result the repository reads nothing
+    off is a site the response mutation could still attach a guard to, so this is the stricter
+    of the two available readings. It is the one that can be asked: `CallSite` records the fields
+    read and not whether a name received the call, and the alternative -- asking
+    `sync.benchmark.mutate` which sites it can break -- would make the corpus select exactly what
+    the generator can currently mutate. A generator regression would then shrink the corpus
+    silently instead of arriving as the refused pairs `score_corpus.py` counts and names.
+    """
+    candidates = [
+        (operation, sites) for operation, sites in by_operation.items()
+        if operation and any(_judged_by(site, kind) for site in sites)
+    ]
+    # Most call sites first, because a pair over one site has the least room to hide a miss;
+    # ties by operation id ascending, so the choice is not the dictionary's insertion order.
+    candidates.sort(key=lambda item: (-len(item[1]), item[0]))
+    return candidates[:limit]
+
+
 def hold_back(sites: list, kind: str) -> list[dict]:
     """The call sites this specification declares held out of the mutation, as positions.
 
@@ -145,8 +204,7 @@ def hold_back(sites: list, kind: str) -> list[dict]:
     if len(sites) < 2:
         return []
     first = min(sites, key=lambda site: (site.path, site.line, site.col))
-    judged_by = first.args_keys if kind.startswith("request-") else first.response_fields_read
-    if not judged_by:
+    if not _judged_by(first, kind):
         return []
     return [{"path": first.path, "line": first.line, "col": first.col}]
 
@@ -193,20 +251,15 @@ def build(dsn: str) -> list[Path]:
         name = entry["name"]
         by_operation, language = _index(name, dsn)
 
-        candidates = [
-            (operation, sites) for operation, sites in by_operation.items()
-            if operation and any(site.args_keys for site in sites)
-        ]
-        candidates.sort(key=lambda item: (-len(item[1]), item[0]))
-        chosen = candidates[:OPERATIONS_PER_REPOSITORY]
-
         passed = {key.split(".")[0] for sites in by_operation.values()
                   for site in sites for key in site.args_keys or ()}
         read = _read_fields(CORPUS / name, language)
 
-        for operation, sites in chosen:
-            request_properties, response_properties = schemas.get(operation, ([], []))
-            for kind in KINDS:
+        # Kind first, because the candidate set is now a property of the kind rather than one
+        # list both kinds are taken over.
+        for kind in KINDS:
+            for operation, sites in operations_for(by_operation, kind):
+                request_properties, response_properties = schemas.get(operation, ([], []))
                 available = request_properties if kind.startswith("request") else response_properties
                 taken = passed if kind.startswith("request") else read
                 field = next((p for p in available if p not in taken), None)

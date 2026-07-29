@@ -1,0 +1,12 @@
+# 1 indexed call site(s) on DeleteSubscriptionsSubscriptionExposedId in fireship-server, pinned at d4a5fc4b376d25f6d9fe875b672a26a90ed662a7.
+# Field chosen by the rule in scripts/build_corpus_specs.py: the alphabetically first
+# property of this operation in v2330 that no call site in this repository already uses.
+cache: .cache/specs
+change:
+  field: application
+  kind: response-property-removed
+  operation: DeleteSubscriptionsSubscriptionExposedId
+from_version: v2320
+repo: .cache/corpus/fireship-server
+to_version: v2330
+vendor: stripe
