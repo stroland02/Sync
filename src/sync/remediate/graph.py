@@ -30,6 +30,11 @@ def build_graph(store, adapter, remediator, forge, checkpointer, catalogue=None)
     builder.add_node("prepare", nodes.make_prepare(adapter))
     builder.add_node("patch", nodes.make_patch(remediator, record))
     builder.add_node("static_verify", nodes.make_static_verify(adapter))
+    # Between the typechecker and CI, which is where the spec puts it: it exercises runtime
+    # behaviour against the new response shape, which `tsc` cannot, and it costs a sandboxed
+    # process rather than a CI run. The store is passed for the observed baseline the mock
+    # prefers over the specification.
+    builder.add_node("replay", nodes.make_replay(store))
     builder.add_node("push_branch", nodes.make_push_branch(forge))
     builder.add_node("await_ci", nodes.make_await_ci(forge))
     builder.add_node("open_pr", nodes.make_open_pr(forge, record))
@@ -56,9 +61,23 @@ def build_graph(store, adapter, remediator, forge, checkpointer, catalogue=None)
         {"static_verify": "static_verify", "patch": "patch", "abandon": "abandon"},
     )
 
+    # The one place a router's decision and its destination differ, and deliberately. A passing
+    # typecheck still decides "push_branch" -- the name is the decision, the path that ends in
+    # a push -- and that path now begins with replay. Renaming the decision instead would have
+    # reached into `sync.mcp.propose`, which reads the same string to establish that a patch is
+    # verified without ever building a node to push from.
     builder.add_conditional_edges(
         "static_verify",
         nodes.route_after_static,
+        {"patch": "patch", "push_branch": "replay", "abandon": "abandon"},
+    )
+
+    # A replay failure is a patch that is wrong, so it re-enters the same retry loop a failed
+    # typecheck does. A replay that could not run is not a failure and does not: it reaches
+    # the push path carrying the fact that this run was not replay-verified.
+    builder.add_conditional_edges(
+        "replay",
+        nodes.route_after_replay,
         {"patch": "patch", "push_branch": "push_branch", "abandon": "abandon"},
     )
 

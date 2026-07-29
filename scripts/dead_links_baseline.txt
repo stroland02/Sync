@@ -47,16 +47,3 @@ src/sync/signals/generated/manifest.py:SpecSource.has_cheap_change_trigger
 # consequences -- and it has no spread guard. Wiring it would be an off-by-one and a
 # collapsed distinction, which is worse than a baselined line.
 src/sync/route/templates.py:omit_property_at
-
-# The replay tier, now complete as three steps and reached by nothing. `synthesize_mock_response`
-# left this list when `replay_from_specification` started calling it, which is the shape the
-# rule intends: the line went when the caller arrived, in the commit that added it.
-#
-# What remains is the tier's own entry point. `replay_call_path` is not here because
-# `replay_from_specification` calls it; this is the one symbol above them both. It leaves when
-# `src/sync/cli.py` runs replay between `static_verify` and the CI wait, which needs three
-# things this task could not supply from outside `cli.py`: the new operation's schema, the
-# observed rows for it, and the name of the export that encloses the patched call. The third is
-# the real blocker -- `CallSite` records the call's file, line and symbol and not the function
-# containing it, so resolving it means walking the module in `sync.index`.
-src/sync/verify/replay.py:replay_from_specification
