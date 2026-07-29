@@ -70,13 +70,13 @@ comparison.
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
+from pathlib import Path
 
 from ast_grep_py import SgRoot
 from pydantic import BaseModel
 
 from sync.benchmark.binding import BindingLabel
 from sync.core import CallSite, VendorChange
-from sync.route.templates import language_for
 from sync.signals.oasdiff import changed_field
 
 # oasdiff's own kind names, taken from its catalogue rather than invented, and narrowed to the
@@ -94,6 +94,41 @@ MUTATION_LITERAL = "'sync-benchmark'"
 _STATEMENT_KINDS = frozenset({
     "lexical_declaration", "variable_declaration", "expression_statement", "return_statement",
 })
+
+# Which suffixes this generator can parse and edit, and it is deliberately not the router's
+# table. `sync.route.templates.language_for` answers a different question -- *can a codemod patch
+# this file* -- and its own docstring says the routing decision and the edit have to agree on it.
+# Teaching that table `.py` would tell `remediate.tiered` a Python finding can be codemodded and
+# `remediate.property_omit` that it can patch one, and both match TypeScript's `object` literal
+# where Python has `dictionary`: the finding routes to a tier that produces an empty diff and
+# abandons as "the remediator produced no change", which is the exact failure that docstring
+# exists to prevent, arriving through a fix for something else.
+#
+# One function cannot answer both, and a flag on it would be the same coupling spelled with an
+# argument -- a caller who omits it gets the wrong answer silently. So the generator owns what
+# the generator can do. The TypeScript half started as a copy of the router's, so nothing that
+# was mutable before is mutable differently now; `.py` is what this file adds.
+_MUTABLE_LANGUAGES = {
+    ".ts": "typescript", ".tsx": "tsx", ".mts": "typescript", ".cts": "typescript",
+    ".js": "javascript", ".jsx": "javascript", ".mjs": "javascript", ".cjs": "javascript",
+    ".py": "python",
+}
+
+# Node kinds per language, for the places where only the grammar differs. Where the *syntax* of
+# an edit differs -- how a request field is written, what a guard looks like -- the functions
+# below branch, because a table of format strings would hide which language a bug is in.
+_CALL_KIND = {"python": "call"}
+_MAPPING_KIND = {"python": "dictionary"}
+# Binder kind -> the field holding the name, and the field holding the value.
+_BINDING_FORMS = {
+    "python": {"assignment": ("left", "right"), "named_expression": ("name", "value")},
+}
+_PYTHON_STATEMENTS = frozenset({"expression_statement", "return_statement"})
+
+# How a field read off a name is spelled, as the node kind and the field holding the property.
+# ast-grep refuses a kind the grammar does not have rather than matching nothing, so this cannot
+# be one search over both spellings.
+_READS = {"python": ("attribute", "attribute")}
 
 
 class UnsupportedChangeKind(ValueError):
@@ -152,7 +187,7 @@ def generate_pair(  # lint-dead-links: allow - the scorer that consumes these pa
     unreachable: list[str] = []
 
     for site in sites:
-        language = language_for(site.path)
+        language = _language_for(site.path)
         if language is None:
             continue
         if _already_depends(mutated[site.path], change, site, field, language):
@@ -165,7 +200,7 @@ def generate_pair(  # lint-dead-links: allow - the scorer that consumes these pa
     # holding two targets comes out byte-identical rather than merely equivalent.
     for site_id in sorted(set(targets)):
         site = by_id[site_id]
-        language = language_for(site.path)
+        language = _language_for(site.path)
         if language is None:
             unreachable.append(site_id)
             continue
@@ -207,7 +242,7 @@ def depends_on_change(  # lint-dead-links: allow - the audit half of the generat
     and cannot say which sites an operation change affects.
     """
     field = changed_field(change)
-    language = language_for(site.path)
+    language = _language_for(site.path)
     if not field or language is None:
         return False
     return _already_depends(sources[site.path], change, site, field, language)
@@ -217,19 +252,24 @@ def _already_depends(
     source: str, change: VendorChange, site: CallSite, field: str, language: str
 ) -> bool:
     root = SgRoot(source, language).root()
-    call = _call_at(root, site.line, site.col)
+    call = _call_at(root, site.line, site.col, language)
     if call is None:
         return False
 
     if change.kind in REQUEST_KINDS:
-        argument = _object_argument(call)
-        return argument is not None and field in _declared_keys(argument)
+        argument = _object_argument(call, language)
+        if argument is not None and field in _declared_keys(argument):
+            return True
+        # Python's ordinary spelling. A keyword argument names a request field exactly as an
+        # entry in a literal does, and the indexer records both, so both have to be checked or a
+        # site already passing the field would be labelled from a mutation that did not make it.
+        return language == "python" and field in _keyword_names(call)
 
-    binding = _result_binding(call)
+    binding = _result_binding(call, language)
     if binding is None:
         return False
     name, statement = binding
-    return _reads_field(statement.parent() or statement, name, field)
+    return _reads_field(statement.parent() or statement, name, field, language)
 
 
 def _mutate(
@@ -242,36 +282,59 @@ def _mutate(
     as a target it did not break rather than abandoning the whole tree.
     """
     root = SgRoot(source, language).root()
-    call = _call_at(root, site.line, site.col)
+    call = _call_at(root, site.line, site.col, language)
     if call is None:
         return None
 
     if change.kind in REQUEST_KINDS:
-        return _insert_property(source, call, field)
-    return _insert_response_guard(source, call, field)
+        return _insert_property(source, call, field, language)
+    return _insert_response_guard(source, call, field, language)
 
 
-def _insert_property(source: str, call, field: str) -> str | None:
+def _insert_property(source: str, call, field: str, language: str = "typescript") -> str | None:
     """`field` written into the call's object argument, as its first entry.
 
     First rather than last because a trailing entry has to reason about whether the object
     already ends with a comma, and the repair this inverts -- `omit_argument_at` -- takes the
     pair with its following separator, so a leading insertion is the one it removes exactly.
     """
-    argument = _object_argument(call)
+    argument = _object_argument(call, language)
     if argument is None:
-        return None
+        return _insert_keyword_argument(source, call, field) if language == "python" else None
 
     span = argument.range()
     entries = [child for child in argument.children() if child.kind() == "pair"
                or child.kind() == "shorthand_property_identifier"]
     opening = span.start.index + 1
+    key = f'"{field}"' if language == "python" else field
     if entries:
-        return f"{source[:opening]} {field}: {MUTATION_LITERAL},{source[opening:]}"
-    return f"{source[:opening]} {field}: {MUTATION_LITERAL} {source[opening:]}"
+        return f"{source[:opening]} {key}: {MUTATION_LITERAL},{source[opening:]}"
+    return f"{source[:opening]} {key}: {MUTATION_LITERAL} {source[opening:]}"
 
 
-def _insert_response_guard(source: str, call, field: str) -> str | None:
+def _insert_keyword_argument(source: str, call, field: str) -> str | None:
+    """`field` written into a Python call as its first keyword argument.
+
+    Python has no object literal at most call sites: request fields are keyword arguments, which
+    is what `sync.index.python_lang` records and therefore what a break has to be written as. A
+    mutation into a dict literal would produce a dependency the indexer reads and the SDK does
+    not accept, and one the repair primitives could not invert.
+
+    First rather than last, for the reason the literal insertion gives: a trailing entry has to
+    reason about the trailing comma, and a leading one does not.
+    """
+    arguments = call.field("arguments")
+    if arguments is None:
+        return None
+    span = arguments.range()
+    opening = span.start.index + 1
+    existing = [child for child in arguments.children()
+                if child.kind() not in ("(", ")", ",")]
+    separator = ", " if existing else ""
+    return f"{source[:opening]}{field}={MUTATION_LITERAL}{separator}{source[opening:]}"
+
+
+def _insert_response_guard(source: str, call, field: str, language: str = "typescript") -> str | None:
     """A guard reading `field` off the call's result, appended to the statement binding it.
 
     A response property is depended upon by being read, and the shortest realistic read is the
@@ -290,12 +353,18 @@ def _insert_response_guard(source: str, call, field: str) -> str | None:
     The key belongs to `sync.graph` and every stage depends on it; a benchmark that needed the
     production key changed in order to score itself would be measuring a pipeline nobody runs.
     """
-    binding = _result_binding(call)
+    binding = _result_binding(call, language)
     if binding is None:
         return None
     name, statement = binding
 
     end = statement.range().end.index
+    if language == "python":
+        # `;` joins two simple statements on one line, and `assert` is a simple statement --
+        # which is what keeps this off a new line without reasoning about indentation at all. A
+        # Python guard written as an `if` would have to be indented to match the block it lands
+        # in, and getting that wrong is a syntax error rather than a shorter diff.
+        return f"{source[:end]}; assert {name}.{field} is not None{source[end:]}"
     # A statement the grammar ends without a semicolon was terminated by a newline, and appending
     # to that line would splice the guard onto the expression instead of following it.
     separator = "" if source[:end].rstrip().endswith(";") else ";"
@@ -303,7 +372,17 @@ def _insert_response_guard(source: str, call, field: str) -> str | None:
     return source[:end] + guard + source[end:]
 
 
-def _call_at(root, line: int, col: int):
+def _language_for(path: str) -> str | None:
+    """The language this generator can build a pair in, or None.
+
+    See `_MUTABLE_LANGUAGES`. This is not `sync.route.templates.language_for` and must not become
+    it: that one is the router's answer to whether a codemod can patch a file, and the two
+    questions have different answers for Python.
+    """
+    return _MUTABLE_LANGUAGES.get(Path(path).suffix)
+
+
+def _call_at(root, line: int, col: int, language: str = "typescript"):
     """The call expression the indexer recorded at this position.
 
     An exact start match only. `sync.route.templates._call_at` accepts a merely-containing call
@@ -312,29 +391,56 @@ def _call_at(root, line: int, col: int):
     would put the label on a site nobody chose.
     """
     matches = [
-        call for call in root.find_all(kind="call_expression")
+        call for call in root.find_all(kind=_CALL_KIND.get(language, "call_expression"))
         if call.range().start.line + 1 == line and call.range().start.column == col
     ]
     if not matches:
         return None
     return max(matches, key=lambda call: (
-        _object_argument(call) is not None,
+        _object_argument(call, language) is not None,
         call.range().end.index - call.range().start.index,
     ))
 
 
-def _object_argument(call):
+def _object_argument(call, language: str = "typescript"):
+    """The literal carrying this call's request fields, if it passes one.
+
+    `object` in TypeScript and `dictionary` in Python. Python usually passes keyword arguments
+    instead and then there is no literal at all, which is why the request path below has a second
+    branch rather than treating `None` here as "cannot mutate".
+    """
     arguments = call.field("arguments")
     if arguments is None:
         return None
+    wanted = _MAPPING_KIND.get(language, "object")
     for child in arguments.children():
-        if child.kind() == "object":
+        if child.kind() == wanted:
             return child
     return None
 
 
+def _keyword_names(call) -> set[str]:
+    """Every keyword argument a Python call names."""
+    arguments = call.field("arguments")
+    if arguments is None:
+        return set()
+    names: set[str] = set()
+    for child in arguments.children():
+        if child.kind() != "keyword_argument":
+            continue
+        name = child.field("name")
+        if name is not None:
+            names.add(name.text())
+    return names
+
+
 def _declared_keys(argument) -> set[str]:
-    """Every key the object literal names, in either of JavaScript's two spellings."""
+    """Every key the mapping literal names, across both grammars.
+
+    JavaScript spells an entry `pair` or `shorthand_property_identifier`; Python spells it `pair`
+    with a string key. Only a literal key counts in either -- a computed one names no field
+    anyone can compare against.
+    """
     keys: set[str] = set()
     for child in argument.children():
         if child.kind() == "shorthand_property_identifier":
@@ -346,7 +452,7 @@ def _declared_keys(argument) -> set[str]:
     return keys
 
 
-def _result_binding(call):
+def _result_binding(call, language: str = "typescript"):
     """The identifier a call's result is bound to, with the statement doing the binding.
 
     Two forms, and a declaration is only the more obvious one. `intent = await stripe
@@ -363,6 +469,9 @@ def _result_binding(call):
     vendor's change breaks. Five of the corpus's eleven unreachable targets are the first, two are
     the second.
     """
+    if language == "python":
+        return _python_result_binding(call)
+
     node = call
     while node is not None and node.kind() not in _STATEMENT_KINDS:
         node = node.parent()
@@ -390,16 +499,44 @@ def _result_binding(call):
     return None
 
 
-def _reads_field(scope, name: str, field: str) -> bool:
+def _python_result_binding(call):
+    """The name a Python call's result is bound to, with the statement holding the binding.
+
+    Two binders and the walrus is the second. `sync.index.python_lang` records reads through
+    both, so a shape the binder can find and this cannot break would be a labelled negative that
+    is really a gap. The walk climbs to the binder and then to the statement, because the guard
+    is appended to the statement rather than to the expression -- `charge := create(...)` sits
+    inside a condition, and splicing after the expression would land inside it.
+    """
+    node = call
+    while node is not None:
+        form = _BINDING_FORMS["python"].get(node.kind())
+        if form is not None:
+            name_field, value_field = form
+            target = node.field(name_field)
+            if target is None or target.kind() != "identifier":
+                return None
+            statement = node
+            while statement is not None and statement.kind() not in _PYTHON_STATEMENTS:
+                statement = statement.parent()
+            return (target.text(), statement) if statement is not None else None
+        if node.kind() in _PYTHON_STATEMENTS:
+            return None
+        node = node.parent()
+    return None
+
+
+def _reads_field(scope, name: str, field: str, language: str = "typescript") -> bool:
     """Whether anything in `scope` reads `name.field`.
 
     Scoped to the statement's own parent -- the function body holding the call -- rather than to
     the file. A different function reading the same field off its own result is a different call
     site's dependency, and counting it here would refuse a tree that is perfectly usable.
     """
-    for member in scope.find_all(kind="member_expression"):
+    kind, property_field = _READS.get(language, ("member_expression", "property"))
+    for member in scope.find_all(kind=kind):
         target = member.field("object")
-        property_node = member.field("property")
+        property_node = member.field(property_field)
         if target is None or property_node is None:
             continue
         if target.text() == name and property_node.text() == field:
