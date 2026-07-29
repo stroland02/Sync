@@ -48,10 +48,15 @@ src/sync/signals/generated/manifest.py:SpecSource.has_cheap_change_trigger
 # collapsed distinction, which is worse than a baselined line.
 src/sync/route/templates.py:omit_property_at
 
-# Landed after this baseline was measured, and accepted for the reason the entries above are:
-# one stage of a pipeline whose remaining stages are not built.
+# The replay tier, now complete as three steps and reached by nothing. `synthesize_mock_response`
+# left this list when `replay_from_specification` started calling it, which is the shape the
+# rule intends: the line went when the caller arrived, in the commit that added it.
 #
-# `synthesize_mock_response` is step 1 of the replay tier's three steps. Steps 2 and 3 execute
-# customer code in a sandbox and were deliberately out of scope, so nothing consumes the mock
-# yet. It leaves when the execution step exists.
-src/sync/verify/mock_response.py:synthesize_mock_response
+# What remains is the tier's own entry point. `replay_call_path` is not here because
+# `replay_from_specification` calls it; this is the one symbol above them both. It leaves when
+# `src/sync/cli.py` runs replay between `static_verify` and the CI wait, which needs three
+# things this task could not supply from outside `cli.py`: the new operation's schema, the
+# observed rows for it, and the name of the export that encloses the patched call. The third is
+# the real blocker -- `CallSite` records the call's file, line and symbol and not the function
+# containing it, so resolving it means walking the module in `sync.index`.
+src/sync/verify/replay.py:replay_from_specification
