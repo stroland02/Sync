@@ -13,6 +13,11 @@ not mention.** No real pipeline run has produced a corpus row anywhere on this s
 test suite writes real rows through the real writers, and a database it has been pointed at is
 not empty — which matters because that is a developer's own database, not a hypothetical.
 
+The developer default was measured twice, either side of a crash and a repair that happened
+mid-task: stale-but-populated schema with both tables at zero beforehand, and a bare database
+with no tables at all afterwards. Both confirm the claim. §1 keeps them apart rather than
+letting the survivor stand in for the other.
+
 One spec sentence was corrected. Four documents needed no edit. §6 says which and why.
 
 ## 1. The two states measured
@@ -40,11 +45,40 @@ three separate schema additions and `apply_schema` has not been run against it s
 the three, which is the defect `2026-07-29` schema-convergence work fixed for columns going
 forward.
 
-**This database no longer exists in the state described above.** During the incident in §5 it
-became an invalid database — `datconnlimit = -2`, the marker Postgres leaves when a
-`DROP DATABASE` is interrupted — and can no longer be connected to. The counts above were taken
-before that and are the record of what it held; they cannot now be re-read. I did not drop it and
-did not truncate it; the only databases I created or dropped are the three named `sync_w73*`.
+**Those counts are of a state that no longer exists, and this report keeps the two apart.**
+Shortly after they were taken the shared server crashed and recovered (§5), and `sync` was
+afterwards found invalid — `datconnlimit = -2`, connections refused. A coordinator then dropped
+and recreated it, because three tasks' suites were failing against it. So:
+
+| | pre-repair, measured 2026-07-29 before the crash | post-repair, measured after |
+|---|---|---|
+| schema | present but stale — no `observed_call`, no `loop_depth`, no `claim` | **no tables at all** |
+| `migration_outcome` | **0** | no such table |
+| `observed_shape` | **0** | no such table |
+
+The pre-repair figures are the historically interesting ones and they are recoverable only
+because they happened to be taken before the crash; the post-repair database is a bare
+`CREATE DATABASE` against which `apply_schema` has not been run, so it answers the fresh-checkout
+question and nothing about history. **Both confirm the claim, by different routes.** Neither is
+presented as the other.
+
+**On the cause, deliberately less than the evidence seems to offer.** `datconnlimit = -2` is the
+marker Postgres leaves for a `DROP DATABASE` that did not finish, and it is tempting to read it
+as somebody having dropped the shared database instead of using their own `SYNC_DSN`. That
+reading fits, and it is not the only thing that fits: a crash mid-recovery leaves the same marker
+with nobody having issued a drop at all, and the crash is independently reported by two sides. So
+what this report records is that **the database was found invalid after a crash and recovery of
+the shared server**, and no more than that.
+
+One observation worth keeping as a fact, and worth not over-reading: every per-worker database
+checked at the same moment was healthy at `datconnlimit = -1` — `sync_w1`, `sync_w2`, `sync_w31`,
+`sync_w35`, `sync_w41`, `sync_w69` and others — while only the shared default was invalid. That
+is consistent with the shared one simply being the database under constant load from every suite
+run, and a crash sparing databases nothing was touching. It is not evidence of anyone's
+misbehaviour and is not offered as any.
+
+I did not drop or truncate `sync`. The only databases I created or dropped are the three named
+`sync_w73*`, and they are dropped.
 
 ### Whatever the suite leaves behind
 
@@ -152,8 +186,13 @@ chase: `FATAL: sorry, too many clients already`, `INTERNALERROR> KeyError: <Work
 and isolated detector failures that pass on re-run — `test_status_rate_detector.py` failed in a
 full run and all 27 tests passed serially a minute later.
 
-The `sync` database going invalid (§1) happened in that window. A drop that was in flight when the
-server went down leaves exactly that marker.
+The `sync` database was found invalid after that window (§1). What produced the marker is not
+established and this report does not claim it.
+
+The count has since fallen sharply — **137 databases, 2 invalid** when this report was finished,
+against 314 and 178 during the incident. Somebody cleaned up. The underlying condition has not
+changed: `pytest_unconfigure` drops a per-run database only when the run reaches it, so every
+killed run still leaves one behind, and nothing sweeps them on a schedule.
 
 **The totals from the sweep are a lower bound, not a measurement**, because 182 of the 293
 databases enumerated at the time were unreachable. They are recorded here only as context:
@@ -191,7 +230,11 @@ direction that matters. The edit qualifies it and changes no part of the argumen
 ## 7. Commands, so a reader can re-run this
 
 ```bash
-# The developer default. (This database is now invalid; see §1.)
+# The developer default. Since the repair in §1 this database carries no tables at all, so the
+# query below errors rather than returning zeros -- which is itself the fresh-checkout answer.
+# Run `sync run` or GraphStore.apply_schema() against it first if you want the tables.
+psql postgresql://sync:sync@localhost:5433/sync -c "
+  SELECT table_name FROM information_schema.tables WHERE table_schema = 'public';"
 psql postgresql://sync:sync@localhost:5433/sync -c "
   SELECT 'migration_outcome' t, count(*) FROM migration_outcome
   UNION ALL SELECT 'observed_shape', count(*) FROM observed_shape;"
