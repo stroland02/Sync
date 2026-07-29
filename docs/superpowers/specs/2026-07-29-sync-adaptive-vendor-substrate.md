@@ -1,0 +1,210 @@
+# Sync — the adaptive vendor substrate
+
+**Date:** 2026-07-29
+**Status:** Draft for review
+**Question it answers:** how does Sync support the long tail of third-party APIs without a human writing an adapter per vendor?
+
+## The claim this document has to defend
+
+Sync's moat is coverage. A live codebase calls dozens of third-party APIs; the design document
+states plainly that we cannot write dozens of adapters ourselves, which is the entire argument
+for open core. But "someone else will write them" is a hope, not a mechanism, and a plugin SDK
+with ten adapters in it is a plugin SDK nobody adopts.
+
+The mechanism has to be that **most vendors need no adapter at all**.
+
+That is not a new idea here. `2026-07-27-sync-adapter-targets.md` already argues it, and one
+sentence in the design document already states the principle: *the scaling unit is the artifact
+tier, not the vendor*. What follows is that argument taken to its conclusion, checked against
+what is actually built, and turned into a sequence.
+
+## What is already true
+
+Verified against the tree at `9247d41`, not recalled:
+
+**Discovery from generator manifests is built.** `sync.signals.generated` reads Stainless's
+`.stats.yml` and Speakeasy's `.speakeasy/workflow.yaml`, both of which name the specification the
+SDK was generated from. The module docstring states the reason this is reliable and it is the
+strongest sentence in the codebase on this subject: the generator writes the manifest *for its
+own reasons* — reproducible regeneration — so **no vendor has to cooperate and no agreement can
+be withdrawn.**
+
+**Vendor routing is data, not code.** `sync.signals.registry` maps a vendor id to an adapter, and
+its docstring records why: `cli.py` once constructed `StripeAdapter` by name in two places, so a
+second adapter existed and could never be reached. What was unreachable was not a feature but the
+claim the project rests on.
+
+**The protocol has been tested against a genuinely different vendor.** Twilio proved
+`VendorAdapter`'s change half is a real plugin surface and its symbol half was not — that half
+had exactly one implementation, and a protocol with one implementation is a description of that
+implementation.
+
+**A conformance kit exists** so an outside author can find out they are wrong before the pipeline
+tells them, badly.
+
+## The bottleneck, and it is not where the effort has been going
+
+`src/sync/index/typescript.py:29`:
+
+```python
+_SDK_PACKAGE = "stripe"
+```
+
+The indexer resolves call sites for exactly one vendor. It checks `package.json` for `stripe`, it
+resolves identifiers bound to `new Stripe(...)`, and it emits symbols shaped `stripe.<chain>`.
+
+So the two halves of the system have generalised asymmetrically. **SIGNAL can already discover a
+specification for any vendor a generator serves. INDEX can only find call sites for Stripe.** A
+vendor whose spec we can diff perfectly still produces zero findings, because nothing in the
+customer's code is ever bound to it.
+
+Every adapter written under the current shape inherits this. Twilio's adapter can map
+`twilio.insights.v1.calls.fetch` onto an operation, and no indexer will ever hand it that symbol.
+
+That is the highest-value defect in the system and it is invisible from the test suite, because
+every indexer test uses a Stripe fixture.
+
+## The architecture: four tiers, and vendors are configuration
+
+Order by *how the specification is found*, not by who the vendor is. Each tier is one piece of
+code serving every vendor in it.
+
+| Tier | How the spec is found | Per-vendor cost | Status |
+|---|---|---|---|
+| **0 — Generator-discovered** | The SDK repository commits a manifest naming its spec | Zero. A vendor is a row. | Built |
+| **1 — Registry-discovered** | A public directory of OpenAPI definitions | Zero | Not started |
+| **2 — Vendor-published** | Configured location, versioned by tag or filename | One configuration entry | Built (Stripe, Twilio) |
+| **3 — Synthesised** | No specification exists; the contract is inferred | Real work, and honest about it | Partial |
+
+Tier 1 is the gap worth taking next on the signal side. [APIs.guru's
+openapi-directory](https://github.com/APIs-guru/openapi-directory) is a machine-readable
+directory of API definitions with a REST API over it, and
+[Speakeasy maintains a fork](https://github.com/speakeasy-api/openapi-directory) of the same
+data. One adapter that reads a registry covers every vendor in it, on exactly the same terms as
+tier 0: no vendor cooperation, no agreement to withdraw.
+
+Tier 3 is where the runtime signal earns its place. `observed_call` already records what the
+customer's code actually calls, and `observed_shape` records the shape of what came back. A
+vendor with no published specification still has an *observed* contract, and drift against it is
+already detectable — `ObservedDriftDetector` exists. The synthesised tier is not speculative; it
+is the tier we accidentally built first.
+
+## Making INDEX symmetric, which is the actual work
+
+The indexer must do for the customer's dependency manifest what tier 0 does for a vendor's SDK
+repository: **read it, and ask what is watchable.**
+
+```
+package.json / pyproject.toml
+        │
+        ▼
+  every declared dependency          ← today: filtered to one hardcoded name
+        │
+        ▼
+  which of these does a tier serve?  ← registry lookup, not a hardcoded name
+        │
+        ▼
+  index call sites for each          ← today: one vendor's import and construction rules
+```
+
+Two things have to change, and only one of them is hard.
+
+**The easy half: stop filtering to one package.** `matches`, `_sdk_version` and
+`_client_identifiers` all take the package name as a constant. Taking it as a parameter, driven by
+the registry, is mechanical.
+
+**The hard half: the shape of a call site is per-SDK, not per-vendor.** `stripe.charges.create`
+and `twilio.insights.v1.calls.fetch` are both member chains rooted at a client, which is the
+common case and generalises. But `openai.chat.completions.create` nests differently, some SDKs
+expose free functions, and Python's `import stripe` binds a module rather than a variable — the
+Python adapter's docstring already records that as a deliberate difference.
+
+This is the same wall the design document names as the part that resists templating, and it is
+where the honest answer is that one derivation strategy will not carry a catalogue.
+
+## Where an agent belongs, and where it does not
+
+The temptation is to have a model read an SDK and write an adapter. That inverts this project's
+central discipline. Everything here is built on **nothing reaches a pull request unverified**, and
+a generated adapter is a generated *guess* about a contract.
+
+The rule that keeps it honest is the one already stated for symbol mapping: **failing to resolve
+is recoverable, resolving incorrectly is not.** An unresolved symbol is visibly unresolved and
+countable. A wrongly resolved one produces a pull request against code that never made the call,
+and nobody learns it was wrong.
+
+So an agent may **propose**, and only where a mechanical check can **refute**:
+
+- **Proposing a symbol map from an SDK's own type definitions.** Refutable: every proposed symbol
+  is checked against the specification's operation set, and the map's coverage is measured. The
+  Twilio work established the measurement discipline — state the denominator, and reject a source
+  that raises apparent coverage while being wrong.
+- **Proposing which declared dependency is a watchable API client.** Refutable: the proposal is
+  a package name, and either a tier resolves a spec for it or none does.
+- **Proposing a client-construction rule for an unfamiliar SDK.** Refutable: run the proposed rule
+  over the customer's repository and count resolved call sites. A rule that resolves nothing is
+  rejected without a human reading it.
+
+And where it does not belong: an agent must never author the *change* interpretation. `oasdiff`
+is authoritative on what changed; the changelog only enriches. That constraint is in the risk
+register and it should survive this document unchanged.
+
+## What the market does, and what nobody does
+
+Software composition analysis already solves half of this. [SCA
+tools](https://www.mend.io/blog/best-software-composition-analysis-sca-tools-top-solutions/) scan
+a codebase and enumerate every open-source dependency, known and unknown, and the mature ones add
+[reachability analysis](https://cycode.com/blog/top-enterprise-sca-tools/) to distinguish a
+dependency that is merely present from one whose vulnerable path is actually called. That is the
+same question as "which of these dependencies is a *live* API client", and it is solved.
+
+[API discovery tools](https://www.stackhawk.com/blog/best-api-discovery-tools/) solve the other
+half from traffic, cataloguing internal, external and third-party APIs by observation.
+
+**Neither joins the two to the vendor's own published contract.** SCA tells you that you depend on
+`stripe@18`; it does not know Stripe removed a field. API discovery tells you that you call
+`POST /v1/charges`; it does not know that endpoint's request schema changed last Tuesday. The
+join — dependency graph, vendor artifact, runtime evidence, one remediation pipeline — is the
+thing this project already has and the market does not.
+
+The strategic conclusion: **do not build SCA.** Consume its shape. The reachability idea in
+particular is worth stealing outright, because "declared but never called" is exactly the noise
+that would otherwise flood a coverage-driven system.
+
+## Sequence
+
+Ordered by what unblocks the most, and each step is verifiable on its own.
+
+**1. Un-hardcode the indexer.** Take the SDK package as a parameter driven by the registry rather
+than as a module constant. Nothing else on this list matters until a second vendor's call sites
+can be found at all. *Closes when a Twilio call site in a fixture repository resolves to a Twilio
+operation end to end.*
+
+**2. Dependency intake.** Read the customer's manifest, ask the registry which declared
+dependencies a tier can serve, and report the answer as a first-class artifact: watched, watchable
+but unconfigured, and not watchable. That report is a sales asset as much as an engineering one.
+*Closes when a repository declaring five third-party SDKs produces a correct three-way split.*
+
+**3. Registry tier.** One adapter over a public OpenAPI directory. *Closes when a vendor nobody
+configured produces a real `VendorChange` from two registry versions.*
+
+**4. Proposed symbol maps, refutable by construction.** An agent proposes; coverage is measured
+against the spec's operation set; a proposal that resolves nothing is rejected mechanically.
+*Closes when a vendor with no hand-written map reaches measured coverage, with the denominator
+stated.*
+
+**5. Reachability.** Rank by call sites actually indexed, not by dependencies declared.
+
+## What this document does not claim
+
+It does not claim the symbol map problem is solved. Step 4 is the only speculative item, it is
+sequenced last deliberately, and the measurement discipline around it matters more than the
+mechanism.
+
+It does not claim tier 0 covers the market. It covers vendors served by two generators, which is
+a real and growing set and not a majority.
+
+And it does not claim the indexer change is small because it is mechanical. Making `matches`
+take a parameter is mechanical; deciding what a call site *looks like* in an unfamiliar SDK is
+the same hard problem in a new place, and the honest position is that tiers 0 to 2 buy time to
+answer it with evidence rather than guesses.
