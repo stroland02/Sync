@@ -26,6 +26,29 @@ no URL at all. `SpecSource.is_fetchable` reports that, and such a vendor yields 
 logged rather than raising: it still needs a hand-written adapter, and it must not abort a scan
 across every other vendor. It is not an error, and it is not silence either.
 
+A second shape reaches the same wall from the other side. A manifest may name a live, unversioned
+endpoint -- the location the generator resolved when it ran -- and a vendor serving its current
+specification there publishes the same string in every commit. Both ends of a version pair then
+fetch the same bytes, so the differ compares a document against itself and reports nothing however
+much the vendor shipped. That is a coverage failure wearing the costume of a clean bill of health,
+and `2026-07-29-vercel-observability.md` measured it: two fetches of one such endpoint three
+seconds apart returned identical bytes and diffed to zero records.
+
+Not looking is not the same as finding nothing
+----------------------------------------------
+Those two, plus a version whose manifest did not parse, are three ways of answering `fetch_changes`
+with an empty list that mean "we could not look" -- and an unmoved hash is a fourth that means "we
+looked and nothing moved". A caller holding only the list cannot tell them apart, which is exactly
+the silent-vendor failure `_spec` refuses to accept from a fetch outage, arriving instead from the
+shape of our own return value. `observability` is where that question is answered, and it carries a
+reason because the three are three different repairs.
+
+**The condition is a property of the locations, never of the vendor or the generator that wrote
+them.** Speakeasy names a live endpoint for one vendor and a tagged registry revision for another;
+a Stainless manifest whose `openapi_spec_url` stopped rotating would be in the same position and is
+reported the same way. A vendor id in this path is the knowledge the plugin boundary exists to keep
+out, and it would also be wrong -- the vendor is not what makes the pair unobservable.
+
 Which artifact the diff was taken from
 --------------------------------------
 `openapi_spec_url` points at the generator's own storage rather than the vendor's host. That is
@@ -57,6 +80,7 @@ all of them. `tests/test_generated_adapter_noise.py` holds the decision.
 from __future__ import annotations
 
 import logging
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable, Iterable, Mapping
 
@@ -98,6 +122,32 @@ oasdiff's own record rather than in it."""
 
 VENDOR_PUBLISHED = "vendor"
 GENERATOR_MIRROR = "generator-mirror"
+
+NO_MANIFEST = "no-manifest"
+NO_SPECIFICATION = "no-specification"
+ONE_DOCUMENT = "one-document"
+
+
+@dataclass(frozen=True)
+class Observability:
+    """Whether a version pair can be compared at all, and what stopped it if not.
+
+    `fetch_changes` answers with an empty list for four unrelated reasons, three of which mean
+    "we could not look" and one of which means "we looked and nothing moved". A caller holding
+    only the list cannot tell them apart -- which is the silent-vendor failure `_spec` refuses
+    to accept from a fetch outage, arriving instead from the shape of our own return value.
+
+    The three reasons are three different repairs, which is why the code is carried rather than
+    a bare boolean: `NO_MANIFEST` wants a version that parses, `NO_SPECIFICATION` wants a
+    hand-written adapter, and `ONE_DOCUMENT` wants a versioned location per version.
+    """
+
+    observable: bool
+    reason: str | None = None
+    detail: str = ""
+
+
+OBSERVABLE = Observability(observable=True)
 
 
 def bindings_for(
@@ -291,28 +341,64 @@ class GeneratedSpecAdapter:
             self._symbols = {operation.symbol: operation for operation in extracted}
         return self._symbols
 
-    def fetch_changes(self, from_version: str, to_version: str) -> Iterable[VendorChange]:
+    def observability(self, from_version: str, to_version: str) -> Observability:
+        """Whether this pair can be compared, asked before anything is downloaded.
+
+        The order is the argument. A hash agreeing on both sides is positive evidence that the
+        specification did not move, and evidence is an answer: that pair was examined and found
+        unchanged, however few documents back it. Only once the cheap trigger has failed to
+        settle the question does where the documents live start to matter.
+
+        The location check is asked of what a run will actually fetch rather than of what the
+        manifest said, so a deployment supplying a versioned URL per version restores a vendor
+        its manifest cannot describe -- with no code change and no entry naming that vendor.
+        """
         base = self._sources.get(from_version)
         head = self._sources.get(to_version)
 
         if base is None or head is None:
             missing = from_version if base is None else to_version
-            log.info(
-                "%s: no manifest parsed for %s, so there is nothing to compare",
-                self._vendor_id, missing,
+            return Observability(
+                False, NO_MANIFEST,
+                f"no manifest parsed for {missing}, so there is nothing to compare",
             )
-            return []
 
         if not (base.is_fetchable and head.is_fetchable):
             # Cloudflare and Orb publish an endpoint count and no URL. That is a coverage gap
             # this approach does not close, and it is reported rather than discarded: the vendor
             # still needs a hand-written adapter and still contributes a coverage denominator.
-            log.info(
-                "%s: manifest names no spec to fetch (%s endpoints configured); "
-                "this vendor needs a hand-written adapter",
-                self._vendor_id, head.endpoint_count,
+            return Observability(
+                False, NO_SPECIFICATION,
+                f"manifest names no spec to fetch ({head.endpoint_count} endpoints configured); "
+                f"this vendor needs a hand-written adapter",
             )
+
+        if not head.changed_from(base):
+            return OBSERVABLE
+
+        base_url, _ = self._spec_url(from_version, base)
+        head_url, _ = self._spec_url(to_version, head)
+        if base_url == head_url:
+            return Observability(
+                False, ONE_DOCUMENT,
+                f"both {from_version} and {to_version} resolve to {head_url}, so a diff would "
+                f"compare that document against itself and report nothing whatever the vendor "
+                f"shipped; supply a versioned specification URL per version to observe it",
+            )
+
+        return OBSERVABLE
+
+    def fetch_changes(self, from_version: str, to_version: str) -> Iterable[VendorChange]:
+        verdict = self.observability(from_version, to_version)
+        if not verdict.observable:
+            # Logged rather than raised, and never as an empty success. A vendor outside this
+            # adapter's reach is a coverage gap and one such vendor must not abort a scan across
+            # every other -- `observability` is where a caller asks which of them this was.
+            log.info("%s: %s", self._vendor_id, verdict.detail)
             return []
+
+        base = self._sources[from_version]
+        head = self._sources[to_version]
 
         if not head.changed_from(base):
             # The whole economic argument. Two identical hashes mean the specification did not

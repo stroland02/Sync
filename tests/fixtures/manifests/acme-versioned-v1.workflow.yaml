@@ -1,0 +1,15 @@
+workflowVersion: 1.0.0
+speakeasyVersion: latest
+sources:
+    acme-OAS:
+        inputs:
+            - location: https://specs.acme.test/openapi/2026-06-18.json
+        overlays:
+            - location: overlay-title.yaml
+        output: acme-spec.json
+        registry:
+            location: registry.speakeasyapi.dev/acme/acme/acme-oas
+targets:
+    acme:
+        target: typescript
+        source: acme-OAS
