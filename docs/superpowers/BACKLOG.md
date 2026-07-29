@@ -36,41 +36,41 @@ when, which is why it is recorded here rather than dispatched.
 **Closes when:** one `sync run` produces a CI-green pull request again, or the failure is
 recorded with which change broke it.
 
-### B13 — M3's MCP adapter is the one milestone item nobody has started
+### B16 — The conformance kit covers one protocol of five
 
-The design document argues an MCP server is a *structurally easier* adapter than a REST
-vendor — it exposes its tool schemas on request, so there is no specification to locate, no
-changelog to parse, and no SDK symbol map to derive — and calls it a strong candidate for an
-early adapter rather than a distant one. Nothing has been built.
+`sync.core.conformance` shipped with `check_vendor_adapter` and nothing else. `protocols.py`
+declares five: `LanguageAdapter`, `VendorAdapter`, `RequestCorrelator`, `Detector`, `Remediator`.
+Four are unchecked, and each has real implementations — two language adapters, five detectors,
+four remediators.
 
-Not to be confused with `src/sync/mcp/`, which is Sync exposing its *own* graph as MCP tools
-to an agent. That is the opposite direction and the name collision is a trap.
+The invariant most worth checking has already shipped broken twice: **a remediator must apply
+its edit to the clone, not merely return a diff describing it.** Nothing downstream applies
+`patch.diff`, so a remediator that computes the right edit and does not write produces an empty
+commit and reports success. It shipped in `literal_swap` and again in both parameter
+remediators, caught the second time only because one worker read another's fix.
 
-**Closes when:** two committed `tools/list` snapshots produce real `VendorChange` rows, and
-the report answers whether "structurally easier" survived contact — specifically what
-`fetch_changes(since)` means for a server that has no versions, only a current state.
-
-### B14 — M2 says a change in 4xx/5xx rate is a finding, and nothing reads a status code
-
-`observed_call.spans` records `{"status": <int|null>}` per span. No detector reads it. M2's
-sentence is half-built: the contract-violation half exists as `observed_drift`, the rate half
-does not exist at all.
-
-The hard part is not the query. "A change in rate" needs two periods, and the table has
-`first_seen`/`last_seen` on a per-trace grain with no window column and no rollup. A defensible
-subset — a sustained rate above a floor — may be all the data supports, and that is an
-acceptable answer if argued.
-
-**Closes when:** a rate finding fires on real committed spans with a justified denominator and
-sample floor, or the honest subset ships with a precise statement of what the change-over-time
-version would need.
+**Closes when:** the kit checks the other protocols, every rule has a deliberately broken example
+proving it fires, and every existing implementation has been run against it — with failures
+reported rather than fixed, since a real implementation failing a new rule means one of the two
+is wrong and that judgement is the coordinator's.
 
 ## In flight
 
-- **B13** — `task_f7f6d9556146`, `m2-parsing`. New `src/sync/signals/mcp_server/`.
-- **B14** — `task_90cf8b0bd92e`, `m1-forge`. New `src/sync/detect/status_rate.py`.
+- **B16** — `task_ac1724b883c9`, `m2-parsing`.
 
 ## Done
+
+- An MCP vendor adapter, M3's last unstarted item. Landed via `28b0772`.
+- The status-rate detector, M2's missing half. Landed via `28b0772`. It reports a *level* rather
+  than a change, because `cli.py` truncates `observed_call` every run so "earlier" means earlier
+  within one ingested window — and said so rather than quoting a trend it does not have.
+- A language axis on the binding path. Landed `19834b6`.
+- Efficiency findings state that a cost is shared across call sites rather than counted once
+  each. Landed `0f980da`.
+- The plugin SDK conformance kit and authoring guide. Landed `bb425ba`. Running it against the
+  real adapters disproved one of its own rules within a minute.
+- The orchestration archive: 147 worker reports, escalations and decisions, exported before the
+  terminals were cleaned up. Landed `aef675a`.
 
 - A language axis on the binding path. Landed `19834b6`. Every Twilio map key is snake_case
   (`twilio-python`), so a TypeScript call site could never resolve and failed silently. A
