@@ -90,6 +90,16 @@ POSITIONAL = {
     )
 }
 
+POSITIONAL_ARGUMENT = (
+    "import stripe\n"
+    "\n"
+    'client = stripe.StripeClient("sk_test")\n'
+    "\n"
+    "def look_up(customer_id):\n"
+    "    result = client.customers.create(customer_id)\n"
+    "    return result.id\n"
+)
+
 UNBOUND = {
     "src/billing.py": (
         "import stripe\n"
@@ -142,6 +152,23 @@ def test_a_call_already_passing_the_field_is_refused() -> None:
 
     with pytest.raises(ValueError, match="cs1"):
         generate_pair(sources, _change("request-property-removed"), [site], targets=["cs1"])
+
+
+def test_a_call_with_a_positional_argument_stays_valid_python() -> None:
+    """A keyword argument may not precede a positional one -- that is a SyntaxError, not a style
+    preference -- and `stripe.customers.retrieve(customer_id)` is an ordinary shape. The break is
+    written last for this reason, and the mutated tree is parsed to prove it."""
+    import ast
+
+    sources = {"src/billing.py": POSITIONAL_ARGUMENT}
+    change = _change("request-property-removed")
+    site = _site(sources, "cs1", "src/billing.py", "client.customers.create")
+
+    pair = generate_pair(sources, change, [site], targets=["cs1"])
+
+    assert pair.unreachable == ()
+    ast.parse(pair.sources["src/billing.py"])
+    assert depends_on_change(pair.sources, change, site) is True
 
 
 # --- the response half ---------------------------------------------------------------
