@@ -87,6 +87,28 @@ def test_a_python_repository_produces_call_sites(tmp_path: Path) -> None:
     assert [(s.path, s.operation_id) for s in sites] == [("src/billing.py", "PostCharges")]
 
 
+def test_a_python_repository_written_with_aliases_produces_call_sites(tmp_path: Path) -> None:
+    """The same reachability question for the forms `tests/test_python_aliases.py` covers at the
+    adapter. Aliasing an import is ordinary Python and the branches reading it had never run, so
+    until now nothing said whether a repository written that way reaches the indexer at all --
+    and since `PythonAdapter` was wired in, a call site that goes unmatched costs a finding
+    rather than nothing.
+
+    `client_alias.py` calls `charges.retrieve`, which this vendor stub does not resolve, so two
+    of the fixture's three files are expected here rather than all three.
+    """
+    repo = _repo(tmp_path, "py/aliased")
+
+    adapter = select_language_adapter(repo, _Vendor())
+    sites = list(adapter.index(repo))
+
+    assert adapter.language_id == "python"
+    assert sorted((s.path, s.operation_id) for s in sites) == [
+        ("src/module_alias.py", "PostCharges"),
+        ("src/positional_dict.py", "PostCharges"),
+    ]
+
+
 def test_a_typescript_repository_still_produces_call_sites(tmp_path: Path) -> None:
     """The regression that matters. A selector resolving everything to Python passes the test
     above and loses the language Sync already supported."""
