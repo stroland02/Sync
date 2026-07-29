@@ -8,8 +8,12 @@
         "description": "Every page in one space.",
         "inputSchema": {
           "type": "object",
-          "properties": ["space"],
-          "required": ["space"]
+          "properties": [
+            "space"
+          ],
+          "required": [
+            "space"
+          ]
         }
       },
       {
@@ -23,7 +27,9 @@
             },
             "title": true
           },
-          "required": ["page_id"]
+          "required": [
+            "page_id"
+          ]
         }
       },
       {
@@ -33,14 +39,17 @@
           "type": "object",
           "properties": {
             "format": {
+              "type": "string",
               "anyOf": [
                 {
-                  "type": "string"
+                  "const": "json"
                 }
               ]
             }
           },
-          "required": ["format"]
+          "required": [
+            "format"
+          ]
         }
       },
       {
@@ -53,7 +62,24 @@
               "description": "Which pages this covers."
             }
           },
-          "required": ["scope"]
+          "required": [
+            "scope"
+          ]
+        }
+      },
+      {
+        "name": "find_pages",
+        "description": "Search page titles.",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "query": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "query"
+          ]
         }
       }
     ]

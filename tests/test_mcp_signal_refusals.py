@@ -19,8 +19,8 @@ The fixture pair is one fictional server captured twice, four tools, one refusal
 - `list_pages` sends `properties` as an array, which no flat read can walk.
 - `rename_page` sends `title: true`, a boolean subschema -- valid JSON Schema since draft 6 and
   still not a table of arguments.
-- `export_page` moves `format`'s type behind `anyOf`, so the type is stated somewhere this
-  reader does not look.
+- `export_page` keeps `format`'s `type` and adds an `anyOf` beside it, so the type on show is no
+  longer the whole of what the server accepts.
 - `archive_page` drops `scope`'s `type` entirely, leaving a subschema that names no type at all.
 
 `rename_page`'s description carries an em dash and three accented characters, and it is the only
@@ -118,14 +118,22 @@ def test_a_refused_table_becomes_a_row_the_caller_can_count():
 # --------------------------------------------------------------------------------------------
 
 
-def test_a_composed_subschema_yields_no_types_rather_than_refusing_the_table():
+def test_a_composed_subschema_yields_no_types_even_when_it_names_one():
     """`arguments.py:89`. The argument is still read; only its types are not.
 
     Presence and required-ness live at the top level and survive a subschema that composes, so
     refusing the whole table here would lose two readable facts to buy nothing. `types` is
     `None` rather than empty because empty would read as "accepts nothing".
+
+    The subschema names a `type` *and* composes, which is the only shape that makes this
+    statement matter. A subschema that composes and names no type falls through to the same
+    `None` one line further down, so a fixture without the `type` would pass whether or not this
+    branch existed. Here the composition can only narrow what `type` allows -- `anyOf` is an
+    intersection with it -- so reading `"string"` off the top would be a confident wrong answer
+    rather than an incomplete one.
     """
-    table = read_arguments({"type": "object", "properties": {"format": {"anyOf": [{"type": "string"}]}}})
+    subschema = {"type": "string", "anyOf": [{"const": "json"}]}
+    table = read_arguments({"type": "object", "properties": {"format": subschema}})
 
     assert table is not None
     assert table.arguments["format"].types is None
@@ -159,18 +167,56 @@ def test_an_argument_whose_types_became_unreadable_produces_no_row_at_all():
     assert _rows("archive_page") == []
 
 
-def test_only_the_two_refused_tables_produce_rows():
+def test_only_the_refused_tables_produce_rows():
     """Asserted over the whole pair, so an emission from either silent refusal fails here.
 
-    Written as an exhaustive comparison rather than four separate absence checks: an absence
+    Written as an exhaustive comparison rather than several separate absence checks: an absence
     check passes when the differ stops emitting entirely, and this does not.
     """
     changes = list(_adapter().fetch_changes(BEFORE, AFTER))
 
     assert sorted((c.operation_id, c.kind) for c in changes) == [
+        ("find_pages", SCHEMA_NOT_COMPARABLE),
         ("list_pages", SCHEMA_NOT_COMPARABLE),
         ("rename_page", SCHEMA_NOT_COMPARABLE),
     ]
+
+
+# --------------------------------------------------------------------------------------------
+# A `required` that is not a list, which was read rather than refused.
+# --------------------------------------------------------------------------------------------
+
+
+def test_a_required_that_is_not_a_list_is_refused():
+    """The third malformed shape in `read_arguments`, which used to be coerced instead.
+
+    `properties` that is not an object and a subschema that is not an object are both refused.
+    A `required` that is not an array was read as an empty set, which is not "we could not read
+    this" but "this server requires nothing" -- a confident claim about the one fact besides
+    presence that this module says it reads.
+    """
+    schema = {"type": "object", "properties": {"query": {"type": "string"}}, "required": "query"}
+
+    assert read_arguments(schema) is None
+
+
+def test_a_server_that_only_corrected_its_required_spelling_breaks_nobody():
+    """The defect the refusal above closes, stated as the row a caller used to get.
+
+    `find_pages` requires `query` in both captures. The first spells `required` as a string,
+    which is malformed JSON Schema, and the second spells it as an array. Nothing about what the
+    server accepts changed. Read rather than refused, the first capture says nothing is required
+    and the second says `query` is, so the differ emitted
+    `mcp-tool-required-argument-added` at `breaking` -- a fabricated breaking change telling a
+    customer to start passing an argument they were already passing, and one that would drive a
+    remediation pull request against working code.
+
+    An `info` row naming the tool as unreadable is the answer that is true: the schema did change
+    and this differ cannot say what it means.
+    """
+    rows = _rows("find_pages")
+
+    assert [(c.kind, c.severity) for c in rows] == [(SCHEMA_NOT_COMPARABLE, "info")]
 
 
 # --------------------------------------------------------------------------------------------

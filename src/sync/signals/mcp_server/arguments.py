@@ -69,7 +69,12 @@ def read_arguments(input_schema: dict[str, Any]) -> ArgumentTable | None:
         return None
 
     declared = input_schema.get("required", [])
-    required = set(declared) if isinstance(declared, list) else set()
+    if not isinstance(declared, list):
+        # Read as an empty set this says the server requires nothing, which is a claim about the
+        # one fact besides presence that this module reads, and the reverse edit reports every
+        # argument as newly required.
+        return None
+    required = set(declared)
 
     arguments: dict[str, Argument] = {}
     for name, subschema in properties.items():
