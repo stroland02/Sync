@@ -1,3 +1,4 @@
+from sync.core.keys import DEVELOPMENT_FEED_PUBLIC_KEY
 from sync.core.models import (
     BindingRung,
     CallSite,
@@ -30,6 +31,7 @@ __all__ = [
     "CallSite",
     "ChangeSource",
     "ClientSpan",
+    "DEVELOPMENT_FEED_PUBLIC_KEY",
     "Detector",
     "Evidence",
     "Finding",
