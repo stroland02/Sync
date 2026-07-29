@@ -82,6 +82,13 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+# Run as `uv run python scripts/gate_corpus.py`, Python puts `scripts/` on the path and not the
+# repository root, so the sibling module below is unimportable by the name the tests use. Adding
+# the root rather than importing it as a bare sibling keeps one spelling for both callers.
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from scripts.symbol_map_pin import PIN, read_pin
+
 # Every figure below was produced by
 #
 #     uv run python scripts/score_corpus.py --score-dsn <a database of its own>
@@ -163,6 +170,21 @@ def check(score: dict[str, Any]) -> list[Failure]:
             f"constant and stops being able to fire at all",
         ))
 
+    # The corpus's second frozen input. `score_corpus.py` refuses to produce a number over a
+    # map that does not match the pin, and this refuses to judge a number that does not say which
+    # map produced it -- a score JSON is a file, and a file can arrive from a scorer that predates
+    # the pin or from a hand edit. Every floor below is a figure measured against one specific
+    # resolution, so judging a score taken against another is comparing two different corpora.
+    recorded_map = score.get("symbol_map_digest") or ""
+    pinned_map = read_pin(PIN)["digest"]
+    if recorded_map != pinned_map:
+        failures.append(Failure(
+            "symbol map",
+            f"the score names {recorded_map[:16] or 'no symbol map'} and this corpus is pinned to "
+            f"{pinned_map[:16]}; the floors below were measured against the pinned one, so this "
+            f"score is a number over a different corpus",
+        ))
+
     scored = score.get("pairs_scored", 0)
     if scored < PAIRS_SCORED_FLOOR:
         failures.append(Failure(
@@ -200,6 +222,8 @@ def render(score: dict[str, Any], failures: list[Failure]) -> str:
         f"  {'falsifiable negatives':<24}{len(score.get('falsifiable_negatives', [])):>12}"
         f"{FALSIFIABLE_NEGATIVES_FLOOR:>10}",
         f"  {'pairs scored':<24}{score.get('pairs_scored', 0):>12}{PAIRS_SCORED_FLOOR:>10}",
+        f"  {'symbol map':<24}{(score.get('symbol_map_digest') or 'unrecorded')[:12]:>12}"
+        f"{read_pin(PIN)['digest'][:12]:>10}",
         "",
     ]
 
