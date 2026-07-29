@@ -1,0 +1,50 @@
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "result": {
+    "tools": [
+      {
+        "name": "search_docs",
+        "description": "Full-text search across every space in the workspace.",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "query": {
+              "type": "string"
+            }
+          },
+          "required": ["query"]
+        }
+      },
+      {
+        "name": "get_page",
+        "description": "Fetch one page by id.",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "page_id": {
+              "type": "string"
+            }
+          },
+          "required": ["page_id"]
+        }
+      },
+      {
+        "name": "search_docs",
+        "description": "The same name, a second definition, and no way to tell which is live.",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "query": {
+              "type": "string"
+            },
+            "space_id": {
+              "type": "string"
+            }
+          },
+          "required": ["query", "space_id"]
+        }
+      }
+    ]
+  }
+}
