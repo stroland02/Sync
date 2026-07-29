@@ -97,8 +97,17 @@ recorded with which change broke it.
 
 ## In flight
 
-- **B55** — `task_e03a2a5bb93f`, worktree `sync-solo-a`.
-- **B56** — `task_e07b696d699d`, worktree `sync-solo-b`.
+- **B56** — `task_e07b696d699d`, working in `sync-solo-a` rather than the `sync-solo-b` it was
+  given. Left in place rather than moved: it had 142 uncommitted insertions and moving a worker
+  mid-task is how work gets lost. Told to commit where it is.
+- **B55** — re-dispatched as `task_3746257e4c0a` into `sync-solo-b`. The first attempt
+  (`task_e03a2a5bb93f`) produced nothing in 94 minutes and was stood down.
+
+**Workers keep landing in the wrong worktree.** Three times today a worker has written into a tree
+its brief did not name, twice into one another worker already held. The brief names the path and
+`dispatch.py` picks whichever terminal is free, and nothing ties those two together — so the
+assignment is advisory and the terminal's own working directory wins. Assume any tree may hold
+someone else's work: stage by explicit path, and check `git status` before any reset.
 
 **Briefs go in a file now, not in the dispatch spec.** Long message bodies are being truncated in
 delivery — three briefs today, and B52 received a correction paragraph while the four numbered
