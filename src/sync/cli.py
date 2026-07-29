@@ -20,6 +20,7 @@ from sync.core.protocols import RequestCorrelator
 from sync.detect.efficiency import EfficiencyDetector
 from sync.detect.observed_drift import DeclaredField, ObservedDriftDetector
 from sync.detect.parameter_deprecation import LinkedDeprecation, ParameterDeprecationDetector
+from sync.detect.status_rate import StatusRateDetector
 from sync.detect.vendor_change import VendorChangeDetector
 from sync.forge.github import GitHubForge
 from sync.graph.store import GraphStore
@@ -630,6 +631,7 @@ def _detector_suite(
             (f"model-deprecation:{vendor}", VendorChangeDetector(store, vendor_id=vendor))
             for vendor in deprecation_vendors
         ],
+        ("status-rate", StatusRateDetector(store, repo_id=repo_id, vendor_id=vendor_id)),
         ("efficiency", EfficiencyDetector(store, repo_id=repo_id, vendor_id=vendor_id)),
     ]
 

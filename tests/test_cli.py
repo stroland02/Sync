@@ -1019,7 +1019,7 @@ def test_the_suite_runs_every_detector(tmp_path):
     )
 
     assert [name for name, _ in suite] == [
-        "vendor_change", "parameter-deprecation", "observed-drift", "efficiency",
+        "vendor_change", "parameter-deprecation", "observed-drift", "status-rate", "efficiency",
     ]
     assert all(isinstance(detector, Detector) for _, detector in suite)
 
