@@ -285,6 +285,38 @@ def test_a_source_publishing_only_parameters_reaches_only_the_parameter_scan(mon
     assert "stop_seq" in {row.parameter for row in rows}
 
 
+def test_the_run_report_omits_a_vendor_that_publishes_no_retirements(monkeypatch, tmp_path):
+    """The drift the shared accessor exists to prevent, made observable.
+
+    Line 859 and `_model_deprecations` must name the same set. Today every shipped source
+    publishes retirements, so reading the unfiltered list there is accidentally correct and a
+    mutation removing the filter changes nothing -- the survival that sent this test here. A
+    source carrying only parameters separates them: unfiltered, it gets a `VendorChangeDetector`
+    scoped to a vendor with no retirement rows in the graph, which reports a healthy zero
+    forever.
+    """
+    from sync.signals.deprecations import adapter
+
+    pages = _Pages()
+    pages.bodies[PARAMETERS_ONLY.url] = PARAMETER_TABLE
+    monkeypatch.setattr(adapter, "DEPRECATION_SOURCES", (*DEPRECATION_SOURCES, PARAMETERS_ONLY))
+
+    recorded: dict = {}
+    real_suite = cli._detector_suite
+
+    def recording(*args, **kwargs):
+        recorded.update(kwargs)
+        return real_suite(*args, **kwargs)
+
+    _stub_run(monkeypatch, pages)
+    monkeypatch.setattr(cli, "_detector_suite", recording)
+
+    assert cli.run(_run_args(tmp_path)) == 0
+
+    assert "paramsonly" not in recorded["deprecation_vendors"]
+    assert set(recorded["deprecation_vendors"]) == {"anthropic", "openai", "cloudflare"}
+
+
 # --- a fourth source added in one place and missed in another ----------------------
 
 
