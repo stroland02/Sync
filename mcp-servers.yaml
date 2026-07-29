@@ -1,0 +1,33 @@
+# MCP servers this deployment watches.
+#
+# MCP is a protocol rather than a vendor, so there is no single `mcp` vendor to register: every
+# server watched is a separate catalogue with its own tools, and one entry here is one of them.
+# `docs/superpowers/specs/2026-07-25-sync-mcp-drift-measurement.md` is why that is worth doing --
+# measured, MCP servers carry breaking changes in roughly half their release transitions, which
+# is a higher rate than any REST vendor in this repository.
+#
+# Two fields, and neither is knowledge about what the server advertises:
+#
+#   server_id     the identity this deployment gives the server. `--vendor` selects
+#                 `mcp:<server_id>`, and every row the server produces is keyed by it.
+#   snapshot_dir  optional. Where this server's `tools/list` captures are kept. Defaults to
+#                 `<cache>/mcp-snapshots/<server_id>`.
+#
+# **The id is declared here rather than derived from the server.** A server has no version and no
+# published identity a second party could compute, so nothing about it -- URL, host, the name it
+# gives itself -- decides what its rows are keyed by. That is what makes a server changing address
+# a move rather than an amnesia: the endpoint changes, the id does not, and the history stays
+# joined. It also means a repeated `server_id` is refused, since two catalogues writing one
+# history cannot be separated again afterwards.
+#
+# **No server is configured, and that is not an omission.** A watched server is watched by holding
+# its captures, and nothing in this repository takes one yet -- `McpServerAdapter` reads captures
+# some other step wrote. Every entry in `generated-vendors.yaml` was confirmed by fetching the
+# path and committing the response; there is no equivalent confirmation available here, and an
+# entry nobody can capture for would register a vendor that is offered on the command line and
+# fails on first use. The mechanism is exercised by `tests/fixtures/mcp_servers/`, whose captures
+# are committed.
+#
+# A deployment with its own set points `SYNC_MCP_SERVERS` at another file.
+
+[]

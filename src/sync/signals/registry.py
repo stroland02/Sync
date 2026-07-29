@@ -58,6 +58,7 @@ import yaml
 from sync.core.protocols import VendorAdapter
 from sync.signals.generated.adapter import GeneratedSpecAdapter, http_fetch
 from sync.signals.generated.manifest import SpecSource, parse_manifest
+from sync.signals.mcp_server.adapter import VENDOR_ID_PREFIX, McpServerAdapter
 from sync.signals.stripe.adapter import StripeAdapter, fetch_sdk_spec, fetch_spec
 from sync.signals.stripe.symbols import build_symbol_map as build_stripe_symbols
 from sync.signals.twilio.adapter import ProductDocument, TwilioAdapter
@@ -83,6 +84,20 @@ GENERATED_VENDORS_FILE = Path(__file__).resolve().parents[3] / "generated-vendor
 # uses, and for the same reason: the committed default is right for this repository and wrong to
 # impose on a deployment that has its own vendors.
 GENERATED_VENDORS_VARIABLE = "SYNC_GENERATED_VENDORS"
+
+# Which MCP servers this deployment watches. Configuration for the same reason generated vendors
+# are: MCP is a protocol rather than a vendor, so every server watched is a separate catalogue
+# and a builder keyed `mcp` would have to name one particular server -- the vendor knowledge this
+# module exists to keep out. A file lets a deployment declare as many as it watches and lets this
+# module know none of their names.
+MCP_SERVERS_FILE = Path(__file__).resolve().parents[3] / "mcp-servers.yaml"
+MCP_SERVERS_VARIABLE = "SYNC_MCP_SERVERS"
+
+# Where a watched server's captures live when an entry does not say. Under the cache because it
+# is the directory a deployment already stages artifacts in, and per server id because two
+# servers' captures share a filename -- `tools_list_<capture>.json` -- and would otherwise
+# overwrite each other.
+MCP_SNAPSHOT_DIRNAME = "mcp-snapshots"
 
 # The two network calls the generated path makes, held as module attributes so a test can replace
 # either without replacing the other. They are separate because the distinction is the economic
@@ -163,6 +178,103 @@ def _generated_vendors() -> dict[str, GeneratedVendor]:
             f"{path}: every entry needs vendor_id, repo and manifest ({exc})"
         ) from None
     return {vendor.vendor_id: vendor for vendor in configured}
+
+
+@dataclass(frozen=True)
+class WatchedServer:
+    """One MCP server this deployment watches, and nothing about what it advertises.
+
+    Two fields. `server_id` is the identity the operator declares, and `snapshot_dir` is where
+    that server's captures are kept.
+
+    **The id is declared, never derived.** Nothing about the server produces it -- not the URL,
+    not the host, not the name the server gives itself in its own initialise response. That is
+    what makes it survive the server moving: an endpoint change is not an identity change, and
+    a vendor id derived from a URL would silently orphan every row written before the move.
+    Two servers cannot collide into one id because a repeated id is refused rather than resolved.
+
+    There is no endpoint here, and its absence is the honest state of this path rather than an
+    oversight. Nothing in this repository captures a `tools/list` yet; the adapter reads captures
+    something else took. A field naming where to reach a server would be configuration nothing
+    reads, and the capture step that needs it will know what shape it wants.
+    """
+
+    server_id: str
+    snapshot_dir: str | None = None
+
+
+def _read_mcp_servers(path: Path) -> dict[str, WatchedServer]:
+    """Every watched server a file declares, keyed by the vendor id it resolves to.
+
+    Keyed by the prefixed id -- `mcp:<server_id>` -- because that is what `--vendor` selects and
+    what every row is keyed by. The prefix comes from the adapter, so this module composes an id
+    it never spells: `VENDOR_ID_PREFIX` is a fact about the protocol and lives with the code that
+    knows the protocol.
+    """
+    entries = yaml.safe_load(path.read_text(encoding="utf-8")) or []
+    if not isinstance(entries, list):
+        raise ValueError(f"{path} does not hold a list of watched MCP servers")
+
+    servers: dict[str, WatchedServer] = {}
+    for entry in entries:
+        try:
+            declared = entry.get("snapshot_dir")
+            server = WatchedServer(
+                server_id=entry["server_id"],
+                # Relative to the file that declared it, not to whatever directory the process
+                # happens to be started in. A deployment keeps its captures beside its
+                # configuration, and a path resolved against the working directory would mean
+                # something different for `sync run` in a repository and for the same
+                # configuration read by a scheduled job.
+                snapshot_dir=str(path.parent / declared) if declared else None,
+            )
+        except (KeyError, TypeError) as exc:
+            raise ValueError(f"{path}: every entry needs a server_id ({exc})") from None
+
+        vendor_id = VENDOR_ID_PREFIX + server.server_id
+        if vendor_id in servers:
+            # Two catalogues writing one history, with the later entry silently winning. Every
+            # row is keyed by vendor id, so nothing downstream could separate them again.
+            raise ValueError(f"{path}: server_id '{server.server_id}' is declared twice")
+        servers[vendor_id] = server
+    return servers
+
+
+def _mcp_servers() -> dict[str, WatchedServer]:
+    """The configured servers, from the deployment's file or the shipped one.
+
+    An absent file is zero watched servers, which is a legitimate deployment and is what the
+    shipped file describes: watching a server means holding its captures, and nothing here takes
+    them yet.
+    """
+    path = Path(os.environ.get(MCP_SERVERS_VARIABLE) or MCP_SERVERS_FILE)
+    if not path.exists():
+        return {}
+    return _read_mcp_servers(path)
+
+
+def _load_mcp_server(server: WatchedServer, context: VendorContext) -> VendorAdapter:
+    """Build over captures already on disk. Nothing is fetched, here or in `prepare`.
+
+    A watched server inverts what preparation means everywhere else. For a REST vendor, staging
+    downloads the artifact a scan reads; here the artifact is a capture something else took, and
+    it cannot be re-fetched at all -- a server answers for its present state and has no way to
+    say what it advertised in June. So both entry points build the same adapter, and neither
+    reaches a network.
+    """
+    snapshot_dir = (
+        Path(server.snapshot_dir)
+        if server.snapshot_dir
+        else context.cache_dir / MCP_SNAPSHOT_DIRNAME / server.server_id
+    )
+    return McpServerAdapter(snapshot_dir=snapshot_dir, server_id=server.server_id)
+
+
+def _prepare_mcp_server(server: WatchedServer, context: VendorContext) -> PreparedVendor:
+    """No documents. `documents` carries a parsed specification for the drift detector, and a
+    server publishes none -- what it advertises is a tool list, which is not the same artifact
+    and is not what that detector compares against."""
+    return PreparedVendor(adapter=_load_mcp_server(server, context), documents=())
 
 
 def _spec_source(vendor: GeneratedVendor, ref: str) -> SpecSource:
@@ -364,7 +476,7 @@ def available_vendors() -> tuple[str, ...]:
     configured vendor the parser refuses is registered and unreachable, which is the shape of
     defect this whole path exists to close.
     """
-    return tuple(sorted({*_BUILDERS, *_generated_vendors()}))
+    return tuple(sorted({*_BUILDERS, *_generated_vendors(), *_mcp_servers()}))
 
 
 def _builders(vendor_id: str) -> tuple[Callable, Callable]:
@@ -384,6 +496,13 @@ def _builders(vendor_id: str) -> tuple[Callable, Callable]:
         return (
             lambda context: _prepare_generated(vendor, context),
             lambda context: _load_generated(vendor, context),
+        )
+
+    server = _mcp_servers().get(vendor_id)
+    if server is not None:
+        return (
+            lambda context: _prepare_mcp_server(server, context),
+            lambda context: _load_mcp_server(server, context),
         )
 
     raise KeyError(
