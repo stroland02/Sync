@@ -12,6 +12,42 @@ item that cannot say what evidence closes it is not ready to dispatch.
 
 ## Ready
 
+### B50 — A hold_back the binder now earns, which would trade two positives for two negatives
+
+B49 found two committed specs whose content differs from a fresh generation: `furever` and `turbo`
+`PostPaymentIntents-response` would now earn a `hold_back`, because B34's change to what the binder
+records made a second site on those operations bindable.
+
+It deliberately did not adopt it, and the reason is the sharpest distinction in the corpus's
+accounting: **every other difference moved a denominator, this one would move a rate.** Adopting it
+trades two labelled positives for two falsifiable negatives — recall's denominator falls by two
+while precision gains two candidates it could fail on.
+
+Neither direction is obviously right. More falsifiable negatives make precision a stronger claim,
+which is the axis that was a constant until this morning. Fewer positives make recall a weaker one,
+and recall is the axis whose failure the product exists to prevent.
+
+**Closes when:** the trade is decided with the argument written down, and if taken, both rates are
+recomputed with the old and new denominators side by side.
+
+### B51 — Coverage marks these decode handlers covered without ever entering them
+
+From the other coordinator's M3-W87. `_read_npm` catches `JSONDecodeError` and `UnicodeDecodeError`
+**on one line**, so a fixture exercising the JSON arm marks the line covered while the decode arm has
+never run. Two of the three decode handlers in `sync/signals/intake.py` were invisible to the metric
+that would have been used to find them.
+
+That matters beyond one module: this repository has hit the same defect class four times today —
+`_requirement_lines`, `_read_npm`, and the two `tomllib` pairs — and coverage is exactly the tool
+someone would reach for to find the rest. **It will report them as already tested.**
+
+Also worth keeping, from the same worker: build a non-UTF-8 fixture *in code* rather than committing
+one. A committed non-UTF-8 file is silently repaired by anything that round-trips it as text, after
+which the test passes against a valid file while appearing to cover the decode handler.
+
+**Closes when:** the decode arms are separated from their co-caught siblings, or a check exists that
+does not rely on line coverage to tell whether they have been entered.
+
 ### B7 — The M0 acceptance run has not executed since the pipeline changed underneath it
 
 `tests/test_e2e_stripe.py::test_one_command_produces_one_green_pull_request` is the
@@ -42,8 +78,10 @@ _Nothing._
 
 ## Done
 
-- **B49** — the corpus and the rule that should produce it now agree, and **all four differences
-  were additions**, which was the outcome to prefer: nothing measured was discarded to get there.
+- **B49** — the corpus is now a **superset** of what the rule proposes rather than equal to it. The
+  four differences were classified before anything moved: one genuine addition
+  (`virtual-lab-GetBalance`, filling a response slot nothing occupied) and **three substitutions** —
+  and all four were added while none was replaced, so nothing measured was discarded.
 
   Floors all moved **up**: precision and recall **n=18 to n=27**, falsifiable negatives 5 to 6,
   pairs scored 13 to 17. Symbol map digest unmoved. Byte-identical across two clean databases.
