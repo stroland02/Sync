@@ -281,11 +281,183 @@ def route_after_static(state: RunState) -> str:
         return "abandon"
     # `ok`, not whether diagnostics happens to be non-empty: a real tsc
     # failure can exit non-zero with nothing on either stream.
+    #
+    # Still "push_branch" now that replay sits between the two, because this
+    # name is a decision and not a destination: it means the typecheck passed
+    # and the run proceeds down the path that ends in a push. `graph.py` maps
+    # it to `replay`, and `sync.mcp.propose` reads the same string to decide a
+    # patch is verified without ever building a node to push from.
     if state.get("verify_ok"):
         return "push_branch"
     if state.get("static_attempts", 0) >= MAX_STATIC_ATTEMPTS:
         return "abandon"
     return "patch"
+
+
+# Replay verdicts that describe the patch. Everything else -- `declined`,
+# `not-attempted` -- describes replay, and a fact about replay is not evidence
+# about a patch, so it must not spend a retry or block the push.
+_REPLAY_FAILURES = frozenset({"threw", "unsatisfied", "timed-out"})
+
+
+def _replay_feedback(outcome: str, reason: str) -> str:
+    """What the next patch attempt is told, naming the stage that rejected it.
+
+    The same problem `_static_feedback` solves: the agent is handed feedback
+    from more than one stage and nothing in a bare error message says which.
+    A `TypeError` out of a call path reads exactly like one out of anything
+    else, and the agent needs to know it came from executing the patched call
+    against the new response rather than from a compiler.
+    """
+    if outcome == "unsatisfied":
+        return (
+            "The patched call path ran against the new response shape and read fields it no "
+            f"longer carries: {reason}"
+        )
+    if outcome == "timed-out":
+        return f"The patched call path did not return when replayed: {reason}"
+    return (
+        "The patched call path threw when replayed against the new response shape:\n\n"
+        f"{reason}"
+    )
+
+
+def _replay_evidence(outcome: str, reason: str, operation_id: str) -> str:
+    """The sentence a reviewer reads, which must claim exactly what happened.
+
+    The spec promises "the patched path was executed against the new response shape and
+    consumed it cleanly". That is the passing case and it is the ceiling: replay exercises one
+    call path against a mock, so it says nothing about whether the application works, and the
+    line must not be readable as though it did. A run replay could not execute says so
+    outright rather than staying silent, because silence beside three other green gates reads
+    as a fourth.
+    """
+    if outcome == "passed":
+        return (
+            f"The patched call path was executed against a mocked {operation_id} response "
+            "built from the new specification and consumed it cleanly. This exercises that "
+            "call path only; it is not a test of the application."
+        )
+    if outcome in _REPLAY_FAILURES:
+        return f"The patched call path failed replay against the new response shape: {reason}"
+    return (
+        "Not verified by replay: the patched call path was not executed, so nothing here "
+        f"says how it behaves against the new response shape ({reason})."
+    )
+
+
+def make_replay(store=None):
+    """Execute the patched call path against a mock of the new response.
+
+    Between `tsc` and CI, which is where the spec puts it: stronger than typechecking because
+    it exercises runtime behaviour against the new shape, and cheaper and earlier than a CI
+    run. It closes the gap that a green CI run proves little when no test covers the patched
+    call, which is most customers.
+
+    It runs on nothing the compiler already rejected. `route_after_static` reaches this only
+    on a passing typecheck, so a sandboxed process is never spent discovering what `tsc` said
+    for free.
+
+    The observed baseline is read here rather than passed in, because `build_graph` already
+    holds the store and a second argument would be a second thing a caller can forget. A store
+    with no reader for it, or a lookup that raises, leaves the baseline empty -- which is the
+    ordinary case anyway, since the shape store cannot be backfilled.
+    """
+    from sync.verify.replay import replay_from_specification
+
+    def replay(state: RunState) -> RunState:
+        site = state["site"]
+        plan = state.get("replay_plan") or {}
+        if not plan.get("export"):
+            return _declined(
+                "not-attempted",
+                "no replay plan was supplied for this run",
+                site.operation_id,
+            )
+
+        try:
+            result = replay_from_specification(
+                state["repo"],
+                site,
+                plan.get("schema") or {},
+                _observed(store, site),
+                export=plan["export"],
+                vendor_packages=tuple(plan.get("vendor_packages", ())),
+                arguments=tuple(plan.get("arguments", ())),
+                credential_env=tuple(plan.get("credential_env", ())),
+            )
+        except Exception as exc:
+            # Replay itself broke. That is a fact about the tier and not about the
+            # patch, so it declines rather than spending an attempt on a patch no
+            # evidence has been gathered against.
+            return _declined("declined", _describe(exc), site.operation_id)
+
+        failed = result.outcome in _REPLAY_FAILURES
+        return {
+            "replay_outcome": result.outcome,
+            "replay_reason": result.reason,
+            "replay_ok": result.ok,
+            "replay_evidence": _replay_evidence(
+                result.outcome, result.reason, site.operation_id
+            ),
+            "replay_shapes": [shape.model_dump(mode="json") for shape in result.shapes],
+            # Names the stage, because this becomes `abandon_reason` and a bare
+            # `TypeError` there says nothing about which gate rejected the patch --
+            # the operator-facing half of what `_replay_feedback` does for the agent.
+            "diagnostics": (
+                f"replay ({result.outcome}): {result.reason}" if failed else ""
+            ),
+            "feedback": _replay_feedback(result.outcome, result.reason) if failed else "",
+        }
+
+    return replay
+
+
+def _declined(outcome: str, reason: str, operation_id: str) -> RunState:
+    """A run replay could not verify, which is not a run replay passed.
+
+    `diagnostics` and `feedback` stay untouched: they are the routing and retry channel for
+    a stage that reached a verdict, and writing a decline into them would hand the next patch
+    attempt a note about Sync's own plumbing to act on.
+    """
+    return {
+        "replay_outcome": outcome,
+        "replay_reason": reason,
+        "replay_ok": False,
+        "replay_evidence": _replay_evidence(outcome, reason, operation_id),
+        "replay_shapes": [],
+    }
+
+
+def _observed(store, site: CallSite) -> tuple:
+    if store is None or not hasattr(store, "observed_shapes"):
+        return ()
+    try:
+        return tuple(store.observed_shapes(site.vendor_id, site.operation_id))
+    except Exception:
+        # An empty baseline is the ordinary case and the mock falls back to the
+        # specification's shape, so a store that cannot answer costs fidelity
+        # rather than the run.
+        return ()
+
+
+def route_after_replay(state: RunState) -> str:
+    """A replay failure is a verification failure, not an abandonment.
+
+    It means this patch is wrong, which is what the retry loop exists for, so it spends the
+    same static-attempt budget a failed typecheck does. The two gates reject for different
+    reasons and the budget is one because it bounds patch attempts, not compiler runs.
+
+    Everything replay could not establish routes on to the push path. Replay is an additional
+    tier and not a precondition: blocking every finding whose call path replay cannot execute
+    would stop the pipeline on the population it was built to serve, and the run already
+    carries `replay_outcome` saying it was not verified here.
+    """
+    if state.get("replay_outcome") in _REPLAY_FAILURES:
+        if state.get("static_attempts", 0) >= MAX_STATIC_ATTEMPTS:
+            return "abandon"
+        return "patch"
+    return "push_branch"
 
 
 def make_push_branch(forge: Forge):

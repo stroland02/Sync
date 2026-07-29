@@ -37,6 +37,42 @@ class RunState(TypedDict, total=False):
     # stream (e.g. a silent npx fetch failure), which would otherwise read as
     # success.
     verify_ok: bool
+    # What replay established, and what it could not. `replay_outcome` is the whole answer and
+    # `replay_ok` is shorthand for one value of it, kept beside it for the same reason
+    # `verify_ok` exists: a router must branch on a boolean a node set deliberately rather
+    # than infer a verdict from the shape of a string.
+    #
+    # The distinction that has to survive is `declined` and `not-attempted` against `passed`.
+    # Replay cannot always run -- no resolvable export, a language it cannot execute, a file
+    # the index has outlived -- and none of those is a verdict on the patch. They must never
+    # read as "the patched path was executed", because that sentence goes in front of a
+    # reviewer. `route_after_replay` lets them through to the push path, so replay is an
+    # additional tier rather than a precondition, and the run carries the fact that it was
+    # not replay-verified.
+    replay_outcome: str
+    replay_reason: str
+    replay_ok: bool
+    # The sentence a pull request body can carry. Here rather than on `Evidence`, which lives
+    # in `sync.core` and is not this package's to widen; a caller that renders the body reads
+    # it from the finished run until that field exists.
+    replay_evidence: str
+    # `source='replay'` rows the run offers and does not write. Plain dicts rather than
+    # `ObservedShape`, because `serde.CHECKPOINTED_TYPES` is the allowlist a checkpoint
+    # reconstructs models from and adding to it means editing a module this task does not own.
+    #
+    # Not written at all, and that is a decision rather than an omission: they describe the
+    # mock the code was exercised against, not traffic a vendor sent. Filed in the store
+    # beside real observations they would leave the drift detector comparing reality against a
+    # mock Sync itself built, which is worse than an empty baseline.
+    replay_shapes: list[dict]
+    # Everything replay needs that neither the finding nor the clone supplies: the new
+    # operation's response schema, the export that encloses the patched call, the vendor's
+    # package name, and the arguments to call it with. Seeded by whoever starts the run.
+    #
+    # Absent means replay cannot run, which is recorded rather than treated as a pass. Nothing
+    # in `src/` seeds it yet -- `sync.cli` is where the specification and the adapter are both
+    # in hand -- so every run today records `not-attempted`.
+    replay_plan: dict
     # Set only when prepare or static_verify raises rather than returning a
     # normal result -- an environment fault (broken registry, lockfile out of
     # sync with package.json), not something a different patch could fix.
