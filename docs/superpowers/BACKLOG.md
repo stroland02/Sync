@@ -12,18 +12,24 @@ item that cannot say what evidence closes it is not ready to dispatch.
 
 ## Ready
 
-### B44 — Pin the Python repository B42 found (blocked on B43)
+### B47 — Regenerate the Python pairs now the generator is honest
 
-`openbraininstitute/virtual-lab-api`, Apache-2.0, **21 call sites over 12 operations**, three of
-them carrying enough sites for the hold-back rule to fire. It clears every bar B37 set.
+`openbraininstitute/virtual-lab-api` is pinned and indexed. B46 made the generator require identity
+rather than containment, so the two targets that produced mislabelled pairs are now `unreachable`
+rather than wrong. What the corpus does not yet have is an **honest** Python pair.
 
-**B43 has landed, so this is now dispatchable.** Today it would add pairs scoring zero affected and zero
-findings — moving `pairs_scored` and its floor while contributing nothing to either rate. A Python
-repository in the corpus that measures no Python is worse than no Python repository, because the
-gate would then be defending a number that describes nothing.
+The obstacle is no longer correctness — it is whether that repository contains a call whose result
+is bound directly. Its two candidate operations bind through `list(...auto_paging_iter())`, which is
+exactly what the stricter rule now refuses.
 
-**Closes when:** it is pinned, its pairs score, and Python binding precision and recall are
-reported with their sample sizes — whatever they turn out to be.
+**This may have no answer in that repository**, and finding that out is the task. If no operation in
+it binds a result directly, say so with the counts and the corpus stays at twelve pairs — the
+repository is still worth its pin, because it is the thing that will measure Python the moment a
+qualifying call site exists.
+
+**Closes when:** either a Python pair scores honestly and Python precision and recall are reported
+with their sample sizes, or it is established with evidence that this repository cannot produce one
+and why.
 
 ### B7 — The M0 acceptance run has not executed since the pipeline changed underneath it
 
@@ -54,6 +60,21 @@ recorded with which change broke it.
 _Nothing._
 
 ## Done
+
+- **B44** — a Python repository is pinned and **none of the pairs it would have produced were
+  written**. `openbraininstitute/virtual-lab-api`, Apache-2.0, 563 files, digest validating. Twelve
+  pair specs unchanged, all four floors clear, symbol map digest unmoved.
+
+  It set out to give Python its first measurement and instead caught the corpus about to certify a
+  number about itself. Its rule produced two pairs; both mutated
+  `customers = list(client.customers.list().auto_paging_iter())` into an assertion on
+  `customers.has_more`, which is an `AttributeError` on a list. Removing `has_more` from that
+  response cannot break that code, so the binder was right to record nothing and right to emit
+  nothing.
+
+  **It refused to land them rather than lower `RECALL_FLOOR` from 1.0000 to 0.8889 to accommodate
+  ground truth it had proved wrong** — the act the gate exists to prevent. Python precision and
+  recall stay `null` over `n=0`: unmeasured, not zero. See B47.
 
 - **B46** — the generator now requires the value to **be** the call rather than merely contain it,
   matching both binders. `customers = list(client.customers.list().auto_paging_iter())` no longer
