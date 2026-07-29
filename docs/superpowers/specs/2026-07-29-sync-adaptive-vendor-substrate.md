@@ -241,11 +241,34 @@ So the model's role shrinks from *authoring a contract* to *finding where a cont
 down*, which is the difference between a guess nobody can check and a search whose result is
 checkable by running it.
 
-This also aligns the two halves of the architecture. The vendors whose specs tier 0 discovers
-from a generator manifest are, by construction, the vendors whose SDKs are generated — the same
-set. **The tier that gives us the specification for free is the tier that gives us the symbol map
-for free.** That is not a coincidence; both fall out of the generator having written things down
-for its own reproducibility.
+This aligns the two halves of the architecture: the vendors whose specs tier 0 discovers from a
+generator manifest are, by construction, the vendors whose SDKs are generated. Same set. Both
+facts fall out of the generator having written things down for its own reproducibility.
+
+**But "free" was an overclaim, and checking three generators disproved it.** The mapping is
+present in all three and stated differently in each:
+
+| Generator | Example | HTTP verb | Path |
+|---|---|---|---|
+| Stripe's own | `stripe-node` | `_makeRequest('GET', …)` — first argument | `'/v1/charges'` — plain string, second argument |
+| Stainless | `openai-node` | the method name itself: `this._client.get(…)` | `` path`/models/${model}` `` — tagged template |
+| Speakeasy | `vercel/sdk` | `method: "POST"` — object property | `pathToFunc("/v11/projects")()` — helper call |
+
+All three are mechanically extractable and none of them is extractable by the *same* rule. An
+extractor written against `stripe-node` finds nothing in `openai-node`, because Stainless puts
+the verb in the method name and the path inside a tagged template.
+
+So the cost does not vanish, it changes what it scales with. **One extraction rule per generator,
+serving every vendor that generator produces** — and there are a handful of generators against
+hundreds of vendors. That is the same argument tier 0 already makes for specifications, and it is
+strong enough without being overstated: not free, but paid once per generator rather than once
+per vendor.
+
+Two consequences worth stating plainly. A hand-written SDK has no generator rule to write, and
+falls back to measured coverage with a stated denominator like any tier 2 vendor. And an
+extraction rule is a per-generator artifact that can rot when a generator changes its emitted
+shape — so a rule needs its own regression fixture pinned to a real SDK version, exactly as the
+vendor adapters pin specification fixtures.
 
 Where it does not reach: a hand-written SDK, where extraction has no pattern to find. That is the
 honest boundary, it is the same boundary tier 2 already has, and the answer there is the same as
