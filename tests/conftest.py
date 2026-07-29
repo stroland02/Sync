@@ -70,6 +70,22 @@ _pattern` holds the SQL half and `test_a_pinned_development_database_is_not_matc
 one, so neither drifts on its own.
 """
 
+_OWNER_PID = re.compile(r"_p(\d+)(?=_|$)")
+"""Every `_p<pid>` segment a name carries, naming a process that uses that database.
+
+The leading pid in `sync_test_<pid>` is the pid of whichever process *generated* the name, and
+under xdist that is the controller for every worker's database too -- `pytest_configure` exports
+`SYNC_DSN` before any worker is spawned, so a worker subdivides the controller's name and its own
+pid appears nowhere. Measured: a two-worker suite whose workers had pids 15944 and 34508 created
+`sync_test_30080_gw0` and `sync_test_30080_gw1`.
+
+That made the sweep's liveness test ask about a process which is not the one using the database.
+It is right whenever the controller outlives its workers, which is every ordinary run, and wrong
+exactly when it does not -- and a plain `DROP DATABASE` does not close the gap, because it
+refuses only a database with an open connection. An idle one is dropped without complaint,
+measured directly.
+"""
+
 _created_dbname: str | None = None
 _admin_dsn: str | None = None
 
@@ -136,6 +152,19 @@ def _windows_pid_is_running(pid: int) -> bool:
         kernel32.CloseHandle(handle)
 
 
+def pids_in_name(name: str) -> list[int] | None:
+    """Every process a name claims, or None when the name is not one this file creates.
+
+    Two kinds of pid and they answer different questions. The leading one says which process
+    generated the name; the `_p<pid>` ones say which process is using the database. A worker's
+    database has both and they are different processes.
+    """
+    match = _LEAKED_NAME.match(name)
+    if match is None:
+        return None
+    return [int(match.group(1)), *(int(pid) for pid in _OWNER_PID.findall(name))]
+
+
 def leaked_database_names(
     candidates: Iterable[str],
     *,
@@ -143,6 +172,16 @@ def leaked_database_names(
     exclude: str | None = None,
 ) -> list[str]:
     """Which of `candidates` belong to a run that is no longer alive.
+
+    **Every pid in the name has to be dead**, not only the leading one. A database whose
+    controller was killed while its workers kept running is named for a dead process and is in
+    active use, and dropping it is what produced `database "sync_test_28096_gw2" does not exist`
+    in a live worker.
+
+    This can only spare, never reach further: a name it declines is one the leading-pid rule
+    would have dropped, and no name becomes newly eligible. The cost is in the direction the file
+    already chose -- a recycled pid anywhere in a name leaves one database behind until a later
+    run, where the other error drops a database out from under a suite that is using it.
 
     `exclude` is the name the caller is about to create. Inside `pytest_configure` the risk of
     sweeping it is small -- this process picks its name from its own live pid -- but the guard is
@@ -152,16 +191,21 @@ def leaked_database_names(
     for name in candidates:
         if name == exclude:
             continue
-        match = _LEAKED_NAME.match(name)
-        if match is None:
+        pids = pids_in_name(name)
+        if pids is None:
             continue
-        if is_running(int(match.group(1))):
+        if any(is_running(pid) for pid in pids):
             continue
         dead.append(name)
     return sorted(dead)
 
 
-def sweep_leaked_databases(admin_dsn: str, *, exclude: str | None = None) -> list[str]:
+def sweep_leaked_databases(
+    admin_dsn: str,
+    *,
+    exclude: str | None = None,
+    is_running: Callable[[int], bool] = pid_is_running,
+) -> list[str]:
     """Drop the databases killed runs left behind, and return what was dropped.
 
     A killed run cannot run its own finalizer, so the next run cleans up after it. This is called
@@ -172,6 +216,12 @@ def sweep_leaked_databases(admin_dsn: str, *, exclude: str | None = None) -> lis
     `FORCE` kills the connections of whatever is using it. Letting the server enforce that is
     stronger than checking first, because a snapshot of live connections is stale the moment
     another suite starts.
+
+    `is_running` is injectable so a test can name its fixture databases for its own live pid and
+    still have them treated as dead. Without that a test has to create a database named for a
+    genuinely dead pid, which any suite sweeping the same server in that window will correctly
+    drop -- and the test then fails on its own next connection with `database ... does not
+    exist`, which is the failure this investigation started from.
 
     **Nothing here may fail the run.** Cleanup that breaks a suite is worse than the leak it
     fixes, so every drop is attempted on its own and a refusal is skipped rather than raised. An
@@ -188,7 +238,9 @@ def sweep_leaked_databases(admin_dsn: str, *, exclude: str | None = None) -> lis
                 ).fetchall()
             ]
             dropped = []
-            for name in leaked_database_names(candidates, exclude=exclude):
+            for name in leaked_database_names(
+                candidates, is_running=is_running, exclude=exclude
+            ):
                 try:
                     conn.execute(
                         sql.SQL("DROP DATABASE IF EXISTS {}").format(sql.Identifier(name))
@@ -215,7 +267,13 @@ def database_for(pinned_dsn: str | None, worker: str | None, pid: int) -> str | 
     # Not `pinned_dsn or DEFAULT_DSN`: an unpinned worker has to stay distinct
     # from the same worker id in a suite someone else launched at the same time,
     # and its own pid is the only thing here that separates them.
-    return f"{conninfo_to_dict(pinned_dsn)['dbname'] if pinned_dsn else own}_{worker}"
+    base = conninfo_to_dict(pinned_dsn)["dbname"] if pinned_dsn else own
+    name = f"{base}_{worker}"
+    # The worker's own pid, so the sweep can ask about the process that uses this database rather
+    # than only about the one that named it. Appended only to a name this file generated: a
+    # database an operator pinned by hand is outside the swept pattern entirely, and a pid in it
+    # would be noise in a name nobody sweeps.
+    return f"{name}_p{pid}" if _LEAKED_NAME.match(base) else name
 
 
 def pytest_configure(config) -> None:
