@@ -74,6 +74,19 @@ Git warns `LF will be replaced by CRLF` on every commit. That is expected. Do no
 
 Run the focused test while iterating; run the full suite once before committing.
 
+**Never detect a write by comparing against a live mtime.** Filesystems record modification times
+far more coarsely than the clock, so a write that changes no bytes usually leaves `st_mtime_ns`
+untouched — measured here at 184 of 200 identical-byte rewrites. A check written that way fires
+only when the write happens to land across a tick boundary, which reads as a flaky test and is
+actually a detector that mostly does not detect. Either backdate the baseline before the operation,
+so any write moves the timestamp forward from a value no write could have produced, or make the
+content differ.
+
+This rule is here rather than in a docstring because a docstring did not stop it. The same defect
+shipped twice in one day — once in `sync.index.dependency_edits.mark_installed`, then hours later
+in the adapter conformance check — by the same person, who had written the explanation the first
+time.
+
 ## Model configuration
 
 Always `claude-opus-5`, always adaptive thinking, always `xhigh` effort. **The two surfaces spell that differently, and they are not interchangeable.**
