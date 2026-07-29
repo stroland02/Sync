@@ -30,6 +30,21 @@ a committed non-UTF-8 file is one that anything round-tripping it as text silent
 after which the test passes against a valid file while appearing to cover the handler.
 `.encode("utf-16")` writes the byte-order mark, so these bytes begin `ff fe` exactly as the
 repository that found this defect does.
+
+**`DRIVERS` is keyed by `path:line`, so any edit above a handler breaks this file by position
+rather than by behaviour.** Adding a comment to a module in `src/` is enough. That is the price
+of reading the inventory out of the source instead of maintaining a list here: a positional key
+is what lets a handler added tomorrow be in scope without anyone registering it, and there is no
+stable identity to key on instead -- a handler has no name, and two in one file can catch the
+same exceptions.
+
+The cost is real and worth stating rather than rediscovering. In one afternoon it re-anchored
+seven keys when one change added comment blocks above them, three more within a single commit,
+and one key twice in an hour. None of those was a defect in `src/`.
+
+It is cheap to fix and does not need counting by hand: the failure prints the key it expected
+beside the key it observed, so re-anchor to what it reports and re-run. Treat a stale key as
+this file asking where a handler went, not as a test to silence.
 """
 
 from __future__ import annotations
