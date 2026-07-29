@@ -54,9 +54,32 @@ proving it fires, and every existing implementation has been run against it — 
 reported rather than fixed, since a real implementation failing a new rule means one of the two
 is wrong and that judgement is the coordinator's.
 
+### B17 — The indexer finds call sites for one vendor, starving every adapter since
+
+`src/sync/index/typescript.py:29` is `_SDK_PACKAGE = "stripe"`, a module constant. `matches`
+checks `package.json` for that one name, `_client_identifiers` only treats an import as an SDK
+import if the specifier is that name, and the symbol is built as `f"{_SDK_PACKAGE}.{chain}"`.
+
+The two halves of the system generalised asymmetrically. SIGNAL can discover a specification for
+any vendor a generator serves — `sync.signals.generated` reads Stainless and Speakeasy manifests,
+`registry.py` routes vendor to adapter as data. INDEX finds Stripe and nothing else. The Twilio
+adapter can map `twilio.insights.v1.calls.fetch` onto an operation and no indexer will ever hand
+it that symbol.
+
+Invisible from the test suite, because every indexer test uses a Stripe fixture. That is why it
+survived, and it is as much what the tests have to fix as the code.
+
+Argument in `docs/superpowers/specs/2026-07-29-sync-adaptive-vendor-substrate.md`, which names it
+the highest-value defect in the system and step 1 of the sequence.
+
+**Closes when:** a second vendor's call site in a fixture repository resolves to that vendor's
+operation end to end, the Stripe path still passes unchanged, and a mutation reverting the
+parameter to a constant fails a test.
+
 ## In flight
 
-- **B16** — `task_ac1724b883c9`, `m2-parsing`.
+- **B16** — `task_ac1724b883c9`, `m2-parsing`. Conformance kit beyond `VendorAdapter`.
+- **B17** — `task_41d2ba9defb9`, `m1-forge`. Un-hardcoding the indexer.
 
 ## Done
 
