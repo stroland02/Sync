@@ -344,29 +344,20 @@ def parse_deprecation_table(
         )
         stated.add(model_id)
 
-    # Vendors that publish no lifecycle table are described entirely by their announcements.
-    # Anything already carrying a stated lifecycle is left alone: an explicit column knows
+    # Vendors that publish no lifecycle table are described entirely by what they announce:
+    # an announcement table, or a list under a dated heading. Both give the same three facts
+    # and neither gives a lifecycle, so both are read the same way and the date decides.
+    # Anything already carrying a stated lifecycle is left alone -- an explicit column knows
     # things a date cannot, such as a model deprecated before any retirement date exists.
-    for model_id, (replacement, shutdown) in _parse_announcements(markdown).items():
-        if model_id in stated:
-            continue
-        stated.add(model_id)
-        rows.append(
-            ModelDeprecation(
-                vendor_id=vendor_id,
-                model_id=model_id,
-                state=_derived_state(shutdown, today),
-                replacement=replacement,
-                deprecated_date=None,
-                retirement_date=shutdown,
-                not_before=None,
-            )
-        )
+    derived = [
+        (model_id, replacement, shutdown)
+        for model_id, (replacement, shutdown) in _parse_announcements(markdown).items()
+    ]
+    derived.extend(_parse_dated_lists(markdown))
 
-    # And vendors that publish neither, describing a retirement as a list under a dated
-    # heading. Last for the same reason announcements are: anything a table already stated
-    # keeps the lifecycle it stated, and a model named twice yields one row rather than two.
-    for model_id, replacement, shutdown in _parse_dated_lists(markdown):
+    for model_id, replacement, shutdown in derived:
+        # A model named twice is one row. Two would give the graph two retirement dates for one
+        # string, with nothing downstream able to say which is current.
         if model_id in stated:
             continue
         stated.add(model_id)
