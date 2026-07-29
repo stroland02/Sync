@@ -138,3 +138,46 @@ asks it for.
 Until then a directional floor on binding precision would be gating a constant, which
 `docs/superpowers/specs/2026-07-27-sync-benchmark-gates.md` names as the failure that is worse
 than having no gate at all.
+
+## The response axis exists now, and recall fell when it did
+
+`recorded/2026-07-29-response-axis.txt` and `.json` are the run after the response mutation
+stopped moving the calls below it and learned to attach to a result bound by assignment.
+Byte-identical across two runs from two clean databases
+(`8d5b39830546b2d5958f72f310cc358aa97eeb0807f3dff731a1a2ebde0e11ff`).
+
+```
+  pairs scored          12          was 10
+  binding precision     1.0000  n=16    was 1.0000  n=12
+  binding recall        0.8000  n=20    was 1.0000  n=12
+  call sites affected   20          was 12
+```
+
+**Recall's denominator moved, so the two numbers are not comparable and the fall is not a
+regression.** Eight response-side positives entered a corpus that had none: four from targets the
+mutation can now attach to, and four from the two pairs that were previously refused outright as
+`displaced-label`. No pair is excluded now.
+
+The four misses are all response-side and they are a real finding about the binder rather than
+about the corpus. `sync.index.typescript._response_fields` walks up to a `variable_declarator` and
+returns nothing otherwise, so a call whose result is assigned to a variable declared earlier
+records an empty `response_fields_read` — measured directly: the same guard after
+`const intent = await …` records `['amount_details', 'id']` and after `intent = await …` records
+`[]`. **No response-side vendor change can be detected on that shape at all**, which is the same
+limitation the generator had until this change, on the other side of the pipeline.
+
+Seven targets remain unreachable and are correctly labelled unaffected. Five discard the result
+outright and two return it out of the function; neither reads a response field, so neither is
+broken by a response property being removed. They are not a sample the corpus is missing.
+
+## Which files can carry a response-side pair
+
+All of them, now. The guard is appended to the statement it follows rather than occupying lines of
+its own, so a mutation no longer renames the calls below it and a file with several calls is no
+longer disqualified.
+
+One narrower case survives and is deliberately left: two calls **sharing a line**. The guard adds
+characters before the second call's column, `upsert_call_site` keys identity on the column too, and
+the pair is refused as `displaced-label` — correctly. `tests/test_binding_score.py` asserts the
+refusal against exactly that shape, because a refusal whose common case has disappeared is no
+longer being tested.
