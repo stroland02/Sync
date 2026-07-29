@@ -36,27 +36,6 @@ when, which is why it is recorded here rather than dispatched.
 **Closes when:** one `sync run` produces a CI-green pull request again, or the failure is
 recorded with which change broke it.
 
-### B35 — The walrus binds a result the binder does not record
-
-`charge := client.charges.create(...)` genuinely binds the call's own result, and
-`python_lang._response_fields` does not walk through `named_expression`, so fields read off
-`charge` are recorded as nothing. That is a missed break of the same class B33 fixed for
-TypeScript.
-
-It was found during B34 and **deliberately left**, which was the right call: B34 was a precision
-task, and adding a form makes the walk report *more*. A recall improvement taken as a side effect
-of a precision fix arrives with no evidence of its own and no way to tell which change moved what.
-
-Small and self-contained: one node kind added to the wrapper set, with a fixture proving the
-walrus form now records what it reads and the wrapped-walrus form
-(`charge := dict(create(...))`) still records nothing.
-
-**No corpus number will move** — all four corpus repositories are TypeScript. State the evidence
-in the fixture, not in a score.
-
-**Closes when:** the walrus form records its reads, the wrapped-walrus form still records nothing,
-and no other form's output changes.
-
 ### B30 — `_score_corpus` cannot read a real repository
 
 It reads every file under the checkout with `read_text(encoding="utf-8")`, so one PNG ends the run.
@@ -81,6 +60,22 @@ pre-filtering step, and the count of skipped files is reported rather than silen
   the first worker held the task for half an hour without starting and did not answer two nudges.
 
 ## Done
+
+- **B35** — a walrus-bound result is now credited to the call that produced it. Landed with B34's
+  work. Verified across `if` and `while`, with the wrapped form (`charge := dict(create(...))`)
+  still recording nothing, so B34's fix is not reopened.
+
+  **The brief was wrong and two workers caught it independently.** It said to add
+  `named_expression` to the transparent-wrapper set. A wrapper is something a result passes
+  *through* on its way to a name further up the tree; the walrus is where the name already is. As a
+  wrapper the walk steps over it and climbs to whatever assignment encloses the `if` — a false
+  attribution, which is exactly the defect B34 had just removed. B34's worker predicted this from
+  the grammar; B35's worker measured it as a silent no-op before writing anything, with all four
+  recall tests staying red.
+
+  Also caught: B34's "recording more would be wrong" reasoning is disqualifying for a precision
+  task and is the *point* of a recall one. A worker carrying that sentence across unexamined would
+  have done nothing at all.
 
 - **B34** — the Python binder no longer credits a call with fields read off whatever wrapped it.
   Landed `a11c3be`, with its report. Two false attributions removed, six correct cases
