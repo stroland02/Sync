@@ -188,17 +188,101 @@ but unconfigured, and not watchable. That report is a sales asset as much as an 
 **3. Registry tier.** One adapter over a public OpenAPI directory. *Closes when a vendor nobody
 configured produces a real `VendorChange` from two registry versions.*
 
-**4. Proposed symbol maps, refuted by a second artifact.** An agent proposes from the SDK's own
-type definitions; the proposal is checked against the specification's operation set, which are
-two independently derived artifacts rather than one and its own output. Coverage is measured with
-the denominator stated. A proposed map carries the rung `proposed`, and until the cross-check
-exists it is evidence for a human rather than an input to the pipeline — see the threat-model
-paragraph above for why coverage alone cannot refute a plausible-but-wrong mapping.
-*Closes when a vendor with no hand-written map reaches measured coverage, stated against a named
-denominator, and a deliberately wrong mapping is caught by the cross-check rather than by a
-reviewer.*
+**4. Extract symbol maps from the SDK, do not generate them.** A generated SDK states the HTTP
+method and path in the source that makes the call, so the map is read rather than proposed — see
+the section above. Cross-check the extracted map against the specification's operation set, and
+confirm against `observed_call` where traffic exists. A model is used only where extraction finds
+no pattern, and then only to locate one; its output is refutable by running the extractor it
+implies. *Closes when a vendor with no hand-written map reaches measured coverage against a named
+denominator, and a deliberately corrupted SDK source is caught by the spec cross-check rather than
+by a reviewer.*
 
 **5. Reachability.** Rank by call sites actually indexed, not by dependencies declared.
+
+## The symbol map does not need a model, and that resolves the hole
+
+The audit below found that coverage cannot refute a plausible-but-wrong mapping. The fix is not
+a better metric. It is to stop generating the mapping in the first place.
+
+**A generated SDK contains the mapping literally, in the source the customer executes.** Verified
+against `stripe-node`'s `src/resources/Charges.ts`:
+
+```typescript
+list(params?: ChargeListParams, options?: RequestOptions): ApiListPromise<Charge> {
+  return this._makeRequest('GET', '/v1/charges', params, options, {
+    methodType: 'list',
+  }) as any;
+}
+```
+
+That is `stripe.charges.list → GET /v1/charges`, stated by the artifact that makes the call.
+It is not an inference from URL shape, not a companion manifest, and not a model's proposal.
+
+This matters because of what the artifact *is*. A specification describes what the vendor says
+the API does. A model's proposal describes what the model believes. **The SDK source describes
+what the customer's process will actually send, and it cannot be wrong about that, because it is
+the thing that sends it.** Where the SDK and the specification disagree, the SDK is what runs.
+
+The consequence for step 4 is that its ordering inverts:
+
+1. **Extract** from the SDK's own source where the SDK is generated. Deterministic, auditable,
+   re-runnable per SDK version, and free of model cost entirely.
+2. **Cross-check** the extracted map against the specification's operation set. Two independently
+   derived artifacts agreeing is real refutation; a symbol that resolves to an operation no spec
+   declares is a defect in one of them and worth surfacing either way.
+3. **Confirm against traffic** where it exists. `observed_call` records the operation and
+   `url_template` of requests that actually happened, which is a third independent artifact and
+   the only one derived from reality rather than from a document.
+4. **Propose with a model only where extraction fails**, and then only to locate the calling
+   pattern in an unfamiliar SDK's source — a proposal that is itself refutable, because an
+   extractor built on it either resolves symbols against the spec or does not.
+
+So the model's role shrinks from *authoring a contract* to *finding where a contract is written
+down*, which is the difference between a guess nobody can check and a search whose result is
+checkable by running it.
+
+This aligns the two halves of the architecture: the vendors whose specs tier 0 discovers from a
+generator manifest are, by construction, the vendors whose SDKs are generated. Same set. Both
+facts fall out of the generator having written things down for its own reproducibility.
+
+**But "free" was an overclaim, and checking three generators disproved it.** The mapping is
+present in all three and stated differently in each:
+
+| Generator | Example | HTTP verb | Path |
+|---|---|---|---|
+| Stripe's own | `stripe-node` | `_makeRequest('GET', …)` — first argument | `'/v1/charges'` — plain string, second argument |
+| Stainless | `openai-node` | the method name itself: `this._client.get(…)` | `` path`/models/${model}` `` — tagged template |
+| Speakeasy | `vercel/sdk` | `method: "POST"` — object property | `pathToFunc("/v11/projects")()` — helper call |
+
+All three are mechanically extractable and none of them is extractable by the *same* rule. An
+extractor written against `stripe-node` finds nothing in `openai-node`, because Stainless puts
+the verb in the method name and the path inside a tagged template.
+
+So the cost does not vanish, it changes what it scales with. **One extraction rule per generator,
+serving every vendor that generator produces** — and there are a handful of generators against
+hundreds of vendors. That is the same argument tier 0 already makes for specifications, and it is
+strong enough without being overstated: not free, but paid once per generator rather than once
+per vendor.
+
+Two consequences worth stating plainly. A hand-written SDK has no generator rule to write, and
+falls back to measured coverage with a stated denominator like any tier 2 vendor. And an
+extraction rule is a per-generator artifact that can rot when a generator changes its emitted
+shape — so a rule needs its own regression fixture pinned to a real SDK version, exactly as the
+vendor adapters pin specification fixtures.
+
+Where it does not reach: a hand-written SDK, where extraction has no pattern to find. That is the
+honest boundary, it is the same boundary tier 2 already has, and the answer there is the same as
+it has always been — measure the coverage, state the denominator, and let the gap be countable
+rather than filled with guesses.
+
+The wider literature is worth knowing but does not change this. The generic problem of
+[validating LLM-generated mappings](https://cloudsecurityalliance.org/blog/2026/07/02/validating-llm-generated-control-mappings-beyond-aggregate-accuracy)
+is hard precisely because there is no ground truth to check against, and the usual mitigations —
+[cross-validation between models](https://arxiv.org/pdf/2502.07036),
+[differential testing](https://dl.acm.org/doi/10.1145/3735637) — are consensus mechanisms rather
+than correctness ones. Our case is easier than the literature's and it would be a mistake to
+adopt the literature's answer: **we have ground truth, so agreement between models is the wrong
+tool.**
 
 ## Checked against the documents that bind this
 
