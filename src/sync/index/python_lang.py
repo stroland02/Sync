@@ -88,6 +88,24 @@ def _path(segments: Iterable[str]) -> str:
 class PythonAdapter:
     language_id = "python"
 
+    unverifiable_reason = (
+        "Python has no equivalent of tsc present in every project, so no patch to this "
+        "repository can be verified and none is attempted"
+    )
+    """Why `static_verify` fails closed, stated where a router can read it before a run starts.
+
+    The verdict was always knowable in advance and was previously discovered the expensive way:
+    a finding reached `patch`, spent an agent run, failed verification, retried, spent another,
+    and abandoned. `route_after_prepare` reads this and reports instead, which is the same
+    mechanism tier -1 uses for a change no edit resolves.
+
+    An adapter that does not declare this is taken to verify. That keeps every existing adapter
+    unchanged and needs no widening of the `LanguageAdapter` protocol, which this module does
+    not own -- and the default is the safe direction, because an adapter wrongly assumed to
+    verify still meets a real gate at `static_verify`, while one wrongly assumed not to would
+    silently stop repairing a language Sync can repair.
+    """
+
     def __init__(self, vendor_adapter: VendorAdapter) -> None:
         self._vendor = vendor_adapter
 

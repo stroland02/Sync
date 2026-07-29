@@ -78,6 +78,20 @@ class RunState(TypedDict, total=False):
     # sync with package.json), not something a different patch could fix.
     # Routes straight to abandon, bypassing the static-attempt retry budget.
     prepare_ok: bool
+    # Whether this repository's language adapter can verify a patch at all, set by `prepare`
+    # from the adapter it already holds. Python cannot -- `static_verify` fails closed and
+    # always will -- so a finding there is reported rather than attempted.
+    #
+    # A boolean is what routes and the string beside it is what the report says, which is the
+    # same split `verify_ok` and `diagnostics` already make. Branching on whether the string is
+    # empty would be routing on the incidental shape of an output, which is the discipline
+    # `route_after_static` exists to model.
+    #
+    # Decided before the branch out of `prepare` rather than caught inside `patch`: catching it
+    # there would leave `patch` in the executed node sequence and record an attempt that should
+    # never have started, which is the defect the tier -1 work fixed for lifecycle changes.
+    verifiable: bool
+    verify_gap: str
     static_fatal: bool
     # The same rule for the nodes whose failures are neither an adapter's nor a
     # remediator's: a store lookup that raised, a rejected push, a CI poll that

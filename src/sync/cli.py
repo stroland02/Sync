@@ -24,6 +24,7 @@ from sync.detect.vendor_change import VendorChangeDetector
 from sync.forge.github import GitHubForge
 from sync.graph.store import GraphStore
 from sync.index.literals import index_operation_literals
+from sync.index.python_lang import PythonAdapter
 from sync.index.typescript import TypeScriptAdapter
 from sync.remediate.agent_patch import AgentRemediator
 from sync.remediate.corpus import corpus_salt
@@ -129,6 +130,58 @@ def build_remediator(catalogue: dict[str, dict] | None = None) -> TieredRemediat
             TerminalTier(AgentRemediator()),
         ],
         catalogue=catalogue,
+    )
+
+
+# Every language adapter a repository is offered to, in the order it is offered. A table
+# rather than a branch, for the reason `sync.signals.registry` exists: a chain on a file
+# extension here would be language knowledge living in the entry point, which is the shape
+# that made a second vendor adapter unreachable until the registry replaced it. Each adapter
+# answers `matches` from the repository's own manifest, so this module decides nothing about
+# any language -- it only asks, in order.
+#
+# TypeScript leads, and the order is load-bearing for exactly one case: a repository declaring
+# the SDK in both languages resolves to TypeScript, which is what every run did before Python
+# existed. Changing that would move repositories from a language Sync can verify to one it
+# cannot, silently.
+#
+# Registering a third is a line here, the same readable diff `_BUILDERS` takes. Discovery is
+# deliberately absent until an adapter ships from outside this repository.
+def language_adapters() -> tuple[Callable[..., Any], ...]:
+    """The table, resolved on every call rather than bound at import.
+
+    A module-level tuple would capture the class objects when this module is imported, which is
+    the hazard `_parameter_deprecations` already records for its fetch default: a test replacing
+    `cli.TypeScriptAdapter` replaced something the tuple had already captured, and every run
+    that believed it had stubbed the indexer was resolving the real one. Ten tests said so.
+    """
+    return (TypeScriptAdapter, PythonAdapter)
+
+
+def select_language_adapter(repo: RepoRef, vendor_adapter: Any) -> Any:
+    """The `LanguageAdapter` for this repository, or a refusal naming what was tried.
+
+    `matches` is the whole of the decision and it belongs to each adapter: TypeScript reads
+    `package.json`, Python reads `pyproject.toml` and `requirements.txt`, and neither fact is
+    one this module should hold.
+
+    An unmatched repository raises rather than defaulting, which is the registry's rule and for
+    its reason. A silent fallback would index a Python project with a TypeScript indexer, find
+    nothing, and report a clean scan -- a run that appears to work and establishes nothing.
+    """
+    for build in language_adapters():
+        adapter = build(vendor_adapter=vendor_adapter)
+        if adapter.matches(repo):
+            return adapter
+
+    # `getattr`, because this runs on the path where nothing matched and a message that raised
+    # would replace a clear refusal with an AttributeError about the refusal.
+    tried = ", ".join(sorted(
+        str(getattr(build, "language_id", getattr(build, "__name__", build)))
+        for build in language_adapters()
+    ))
+    raise LookupError(
+        f"{repo.url} declares no SDK any indexer recognises; tried: {tried}"
     )
 
 
@@ -682,7 +735,6 @@ def run(args: argparse.Namespace, today: date | None = None) -> int:
         cache_dir=cache, from_version=args.from_version, to_version=args.to_version,
     ))
     vendor = prepared.adapter
-    adapter = TypeScriptAdapter(vendor_adapter=vendor)
 
     store = GraphStore(args.dsn)
     store.apply_schema()
@@ -690,12 +742,13 @@ def run(args: argparse.Namespace, today: date | None = None) -> int:
     with tempfile.TemporaryDirectory() as workdir:
         repo = _clone(args.repo, Path(workdir) / "repo")
 
-        if not adapter.matches(repo):
-            # What the indexer looks for, not what `--vendor` selected. `TypeScriptAdapter`
-            # matches one hardcoded SDK package, so selection is data at the signal stage and
-            # is not yet data at the index stage -- and a message naming `args.vendor` would
-            # report a check that did not happen.
-            print(f"{args.repo} declares no SDK the TypeScript indexer recognises", file=sys.stderr)
+        try:
+            # Selection is now data at the index stage as well as the signal stage: the
+            # repository's own manifest decides, through each adapter's `matches`, and this
+            # module names no language.
+            adapter = select_language_adapter(repo, vendor)
+        except LookupError as exc:
+            print(str(exc), file=sys.stderr)
             return 2
 
         # One transaction for the whole ingest. It holds an ACCESS EXCLUSIVE
