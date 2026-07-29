@@ -39,37 +39,36 @@ general limitation, so overloading it with a per-repository fact would give one 
 with a control proving a legitimate silent decline stays silent, `LanguageAdapter` and the
 conformance kit unchanged, and four gates green.
 
-### B56 — Static verification calls a file broken that Python compiles fine
+### B57 — One customer-source read decodes leniently, which three other modules refuse by name
 
-`PythonAdapter._syntax_errors` (`src/sync/index/python_lang.py:709`) reads customer source with
-`read_text(encoding="utf-8")` and hands the string to `ast.parse`. A `.py` file beginning with a
-UTF-8 byte-order mark decodes cleanly, so the mark arrives as the first character and `ast.parse`
-rejects it. Measured with a control:
+`_deprecation_call_sites` (`src/sync/cli.py:672`) reads every customer `.ts` file with
+`read_text(encoding="utf-8", errors="replace")`. That never fails, so a cp1252 file becomes a
+string full of U+FFFD and is handed to `index_operation_literals` — call sites derived from a
+corrupted view of the source, with nothing reporting that it happened. Measured: the lenient read
+contains U+FFFD where the strict read raises `UnicodeDecodeError`.
 
-    plain UTF-8, valid Python   _syntax_errors -> none
-    same file with a BOM        _syntax_errors -> ['billing.py: invalid non-printable character U+FEFF']
-    the same BOM'd file         py_compile     -> compiles fine
+**It is an inconsistency with the project's own written position rather than an open question.**
+Three modules face the identical choice and refuse it, each with the reason recorded:
+`benchmark/checkout.py:57`, `index/typescript.py:193`, `index/python_lang.py:224`. All three say
+some version of *`errors="replace"` would hand the indexer mojibake, and a table invented from it
+is worse than the traceback it replaces.*
 
-The docstring is what makes it a defect rather than a preference: it chooses `ast.parse` over the
-tree-sitter grammar because "the interpreter's own parser is the authority on that", and CPython
-strips a BOM when reading a *file* — so decoding it ourselves defeats the argument the method rests
-on.
+Scope is the hard part and most of the surrounding code is right. A scan finds 23 text reads in
+`src/` with no decode-capable handler, and sampling shows nearly all are internal — `schema.sql`
+through `importlib.resources`, a cache this code wrote, a generated artifact. CLAUDE.md says to
+validate at boundaries and trust internal code, so guarding those would add error paths for
+conditions that cannot occur. Two more that look similar are also fine: the
+`.decode("utf-8", errors="replace")` calls on tree-sitter node byte ranges slice already-validated
+source and cannot invent a file.
 
-**This is the first of the family that fails in the dangerous direction.** It is consumed at
-`python_lang.py:770` as part of static verification, the gate the project's central invariant rests
-on. The earlier BOM defects made Sync miss a dependency — a missed finding. This one reports that a
-patch broke a file the patch never wrote, so a correct fix fails verification and the finding is
-abandoned, and the run names our own output as the thing at fault.
+One genuine decision is left to the worker: skip the file or refuse the repository. `checkout.py`
+skips and records what it skipped, which is the closest precedent, but `_deprecation_call_sites`
+returns a bare list with nowhere to put that record — so choosing skip means deciding where the
+record goes, and a skip nobody can see is the same silent wrong answer in different clothes.
 
-Carries a second, smaller deliverable: `tests/test_decode_handlers.py` keys `DRIVERS` by
-`path:line` and its docstring never says so, though it explains at length why *entry* is attributed
-by exception type rather than by line. Two people hit that in one hour — seven handlers moved out
-from under their drivers by one worker's comment blocks, and a key re-anchored 201 to 206 by the
-coordinator. Document the trade; do not redesign the keying.
-
-**Closes when:** a BOM'd but valid `.py` file is no longer reported as a syntax error, a plain UTF-8
-file with a real syntax error still is, a genuinely undecodable file still reports through the
-`UnicodeDecodeError` arm, `DRIVERS` is re-anchored from what the gate reports, and four gates green.
+**Closes when:** a non-UTF-8 `.ts` file no longer contributes call sites built from replacement
+characters, a valid file still produces exactly what it produces today, the unreadable file is
+visible somewhere, and four gates green.
 
 ### B7 — The M0 acceptance run has not executed since the pipeline changed underneath it
 
@@ -97,9 +96,7 @@ recorded with which change broke it.
 
 ## In flight
 
-- **B56** — `task_e07b696d699d`, working in `sync-solo-a` rather than the `sync-solo-b` it was
-  given. Left in place rather than moved: it had 142 uncommitted insertions and moving a worker
-  mid-task is how work gets lost. Told to commit where it is.
+- **B57** — `task_995f44570ba2`, worktree `sync-solo-a`.
 - **B55** — re-dispatched as `task_3746257e4c0a` into `sync-solo-b`. The first attempt
   (`task_e03a2a5bb93f`) produced nothing in 94 minutes and was stood down.
 
@@ -685,3 +682,22 @@ is what a reviewer needs and duplicating it here would let the two copies drift.
   `utf-8-sig` read *and* main's `UnicodeDecodeError` clause. Its report said B53's fix was missing
   from `origin/main`; that was its stale base showing, not origin — `bdabe9c` is in origin's
   ancestry and the clause is there at line 201.
+
+- Let the tokenizer decide a source file's encoding. Landed `b3fe71b`. **The worker refused the fix
+  the brief prescribed and was right to.** The brief said `utf-8-sig`; it passed the file's *bytes*
+  to `ast.parse` instead, on the argument the method's own docstring already made — deciding a
+  file's encoding is part of parsing Python, so choosing one at the read bypasses the very authority
+  the gate defers to. `utf-8-sig` fixes a byte-order mark and still fails a file that declares
+  `latin-1` under PEP 263; bytes fixes both. Measured against `py_compile` over seven files: bytes
+  agrees on all seven, the old `utf-8` read disagreed on two.
+
+  Verified here across six shapes — valid, BOM'd, declared latin-1, undeclared non-UTF-8, UTF-16,
+  and a real syntax error — with the gate and `py_compile` agreeing on every one, and the gate still
+  rejecting two, so it discriminates rather than passing everything. Reverting the read to `utf-8`
+  fails three tests including the property test that compares the two file by file.
+
+  It also removed a clause and its driver rather than re-anchoring them: once the source is bytes,
+  `UnicodeDecodeError` is unreachable because it is a `ValueError` subclass and a UTF-16 file raises
+  `ValueError: source code string cannot contain null bytes` before the tokenizer. Deleting a driver
+  is the right move when the handler is genuinely gone; the assertion moved to
+  `tests/test_python_index.py` rather than disappearing.
