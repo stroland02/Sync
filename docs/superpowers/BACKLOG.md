@@ -25,6 +25,37 @@ gate would then be defending a number that describes nothing.
 **Closes when:** it is pinned, its pairs score, and Python binding precision and recall are
 reported with their sample sizes — whatever they turn out to be.
 
+### B46 — The generator labels a dependency the binder is right to ignore
+
+One word apart, and it manufactures false ground truth:
+
+```
+mutate._result_binding      climbs to an assignment whose value CONTAINS the call
+python_lang._result_target  requires the value to BE the call
+```
+
+Containment versus identity. The generator is the more permissive of the two, so it attaches a
+response guard to a name that never held the response. The shape that separates them, found in a
+real repository:
+
+```python
+customers = list(self.client.customers.list(params={...}).auto_paging_iter())
+assert customers.has_more is not None      # <- the mutation the generator wrote
+```
+
+`customers` is a Python list built from the pager. `customers.has_more` is an `AttributeError`, and
+removing `has_more` from the `GetCustomers` response cannot break that code. **The binder is right
+twice — right to record nothing, and right to emit nothing.**
+
+Caught by B44, which refused to land the two pairs it produced rather than lower `RECALL_FLOOR`
+from 1.0000 to 0.8889 to accommodate them. A floor lowered to fit a bad label is worse than no
+floor, because every later score is then compared against a number that certified a mislabel.
+
+**Closes when:** `_result_binding` requires identity rather than containment, matching
+`_result_target`; the two targets in `openbraininstitute/virtual-lab-api` become `unreachable`
+rather than labelled; and the pairs can be regenerated honestly. Python precision and recall stay
+`null` over `n=0` until then — unmeasured, not zero.
+
 ### B7 — The M0 acceptance run has not executed since the pipeline changed underneath it
 
 `tests/test_e2e_stripe.py::test_one_command_produces_one_green_pull_request` is the
