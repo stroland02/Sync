@@ -116,26 +116,6 @@ confidently instead of refusing.
 
 ## Ready
 
-### B69 — CLAUDE.md's verification non-negotiable describes a gap that `aeecde4` closed
-
-The "Non-negotiables" section still ends its first qualification with *"The gap left is that
-`git add -u` never stages a new file, so a patch that needs one fails verification rather than
-pushing a branch without it."* `aeecde4` closed that on 2026-07-28 — the patch agent stages the
-files it added, and that staging is the assertion. `sync.index.shipped_tree`'s docstring already
-describes the post-fix behaviour ("the index, plus tracked modifications"); CLAUDE.md describes
-the pre-fix one, and it is the file every agent reads first.
-
-Carries an audit of the file's other checkable claims — the two commit shas it names, the
-`ClaudeAgentOptions` field list said to be verified against the installed package, the HTTP 400
-parameters, and the toolchain table. Environment measurements (the 184-of-200 mtime figure,
-`corepack` needing elevation) are records rather than claims and stay untouched.
-
-Dispatched to `m2-depth`. Carries a pointer to `m1-forge`'s untracked
-`docs/superpowers/reports/b1-new-file-staging.md` — the finished report from the `aeecde4` work,
-which measured that `_UNSHIPPED` is exactly `{"??", "!!"}` and a staged new path reports `A `, so
-nothing ever held it aside. Written against `9b13cce`, so it is a lead to re-derive rather than an
-answer to quote.
-
 ### B7 — The M0 acceptance run has not executed since the pipeline changed underneath it
 
 `tests/test_e2e_stripe.py::test_one_command_produces_one_green_pull_request` is the
@@ -182,6 +162,22 @@ Entries stay under **Ready** above with their full reasoning until they land, be
 is what a reviewer needs and duplicating it here would let the two copies drift.
 
 ## Done
+
+- **B69** — CLAUDE.md described a gap `aeecde4` had closed. Landed by the coordinator after four
+failed dispatches. The stale sentence claimed `git add -u` never stages a new file, so a patch
+needing one could not ship. Re-derived rather than taken from the earlier report: `_UNSHIPPED` is
+`frozenset({"??", "!!"})` and a staged addition reports `A `, so `shipped_tree` never holds it
+aside; and in a scratch repository `git add -u` followed by `git checkout -B` preserved a staged
+new file, which the commit then carried. The gap did not vanish so much as change shape, and the
+replacement says so: a created file ships only if the agent staged it, an unstaged one fails the
+gate, and that staging is deliberately the only route because nothing can separate a module a fix
+requires from a byproduct beside it. **The audit of the file's other claims found nothing else
+stale** — all seven `ClaudeAgentOptions` fields present with no `output_config` and no
+`max_tokens`, both named shas still describing what the text says, yarn genuinely absent while npm
+and pnpm resolve, Postgres on 5433, and `python3` resolving to the WindowsApps shim. The HTTP 400
+claim for `temperature`/`top_p`/`budget_tokens` was not checked: verifying it costs a model API
+call.
+
 
 - **B70** — the core wheel ships the licence it asserts, and a page worth landing on. Landed
 `e249247`. `dist-info/licenses/LICENSE` is present, `METADATA` carries `License-File: LICENSE` and
