@@ -221,6 +221,11 @@ def test_the_speakeasy_flavour_loses_no_operation_to_a_route_no_literal_states()
     That is what makes the response-URL pattern a two-artifact finding rather than a three-artifact
     one, and it is worth pinning: the day a Speakeasy vendor returns a route in a response, this
     goes red and the class has a second generator in it.
+
+    `test_the_fifteen_committed_request_modules_are_all_reached` already asserts the symbol count
+    against the literal 15. This ties it to the filesystem instead, which is the stronger form for
+    this question: a sixteenth request module whose route the rule cannot read leaves the extraction
+    at 15, so that assertion still passes and this one does not.
     """
     report = _report(symbols_speakeasy, SPEAKEASY_SDK, VERCEL_SPEC)
     staged = list((SPEAKEASY_SDK / "funcs").glob("*.ts"))
