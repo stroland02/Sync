@@ -318,13 +318,96 @@ Harness at `%TEMP%\w100_mutate.py`, not committed. It runs
 
     uv run pytest -q --color=no -p no:randomly -n0 --no-header -p no:cacheprovider
 
-over the six affected test files, 130 tests. Each mutation string must match **exactly once**, the
-mutated text is `compile()`d before pytest is invoked, the verdict is read from the summary
-*counts* rather than from line prefixes, and the baseline is asserted green at the same count
-before the first mutation and after the last:
-`restored baseline: exit 0, counts {'passed': 130, 'skipped': 2}`.
+over the six affected test files. Each mutation string must match **exactly once**, the mutated
+text is `compile()`d before pytest is invoked, the verdict is read from the summary *counts* rather
+than from line prefixes, and the baseline is asserted green at the same count before the first
+mutation and after the last — `restored baseline: exit 0, counts {'passed': 130, 'skipped': 2}` on
+the first pass over 130 tests, and `{'passed': 131, 'skipped': 2}` on the re-runs, after the test
+M16 called for was added.
 
-MUTATION_TABLE_PLACEHOLDER
+**Twenty-one real mutations, twenty killed.** One control, which is not counted among them.
+
+### The denominator
+
+| # | File | Mutation | Verdict | Tests killed |
+|---|---|---|---|---|
+| M1 | `symbols.py` | `declared_operation_count=len(comparable)` — the old count restored under the new name | KILLED, 5 failed | `…retired_name_is_gone…`, `…operation_count_is_the_number_this_sdks_own_manifest_publishes`, `…ratio_is_taken_against_the_keys_it_is_counted_in`, plus 2 existing |
+| M2 | `symbols_typescript.py` | the same, on the flavour W96 measured | KILLED, 7 failed | `…no_longer_deflate_the_denominator`, `…collision_is_a_number_in_the_line…`, `…manifest_publishes`, plus 4 existing |
+| M3 | `symbols.py` | `read_spec_operations` reduces at the read again, `_route` per entry | KILLED, 8 failed | the three above, `…beta_query_marker_is_not_mistaken…`, plus 4 existing |
+| M4 | `symbols.py` | `coverage_ratio`'s zero guard tests `declared_operation_count` | **SURVIVED** — the mutation is at fault; see below | — |
+| M5 | `symbols.py` | the ratio divides by `declared_operation_count`, the mixed-unit denominator | KILLED, 3 failed | `…ratio_is_taken_against_the_keys…`, `…collision_is_a_number…`, `…still_reduce_to_one_key` |
+| M6 | `symbols.py` | `indistinct_operation_count` answers `0` always | KILLED, 4 failed | both collision tests in each file |
+| M7 | `symbols.py` | the render clause naming the gap is dropped | KILLED, 2 failed | `…collision_is_a_number…`, `…still_reduce_to_one_key` |
+
+### The decline channel
+
+| # | File | Mutation | Verdict | Tests killed |
+|---|---|---|---|---|
+| M8 | `symbols.py` | the walk collects no class's records | KILLED, 5 failed | all four Python decline tests plus the adapter's default path |
+| M9 | `symbols.py` | the mount discriminator asks `resource_classes` rather than `declared_classes`, so the eleven wrappers are recorded | KILLED, 2 failed | `…wrapper_mounts_every_stainless_client_writes_are_not_recorded`, `…records_its_two_real_losses` |
+| M10 | `symbols.py` | an unreadable annotation records nothing | KILLED, 1 failed | `…annotation_names_no_class_this_rule_can_read…` |
+| M11 | `symbols.py` | an unreadable route records nothing | KILLED, 2 failed | `…route_this_rule_cannot_read_is_recorded`, `…two_real_losses` |
+| M12 | `symbols.py` | `_operation_in` always answers `None` for the helper, so no route decline is distinguishable from a method that sends nothing | KILLED, 2 failed | the same two — after the first form of the mutation did not apply; see below |
+| M13 | `symbols_typescript.py` | the mount discriminator drops `named in aliases`, so the real `new WeakMap()` is recorded | KILLED, 1 failed | `…field_holding_something_this_sdk_does_not_declare_is_not_a_mount` |
+| M14 | `symbols_typescript.py` | the walk collects no unresolved mount | KILLED, 2 failed | `…mount_whose_module_is_not_here`, `…beta_resources_the_fixture_omits` |
+| M15 | `symbols_typescript.py` | an unreadable route records nothing | KILLED, 3 failed | `…records_a_route_it_could_not_read`, `…beta_resources…`, `…count_travels_in_the_line…` |
+| M16 | `symbols_speakeasy.py` | the mount discriminator drops `imported is not None` | KILLED, 1 failed — **SURVIVED first**; the test was at fault, see below | `…speakeasy_getter_constructing_a_class_it_never_imported_is_not_a_mount` |
+| M17 | `symbols_speakeasy.py` | a delegation reaching no request module records nothing | KILLED, 2 failed | `…truncated_fixture_leaves_out`, `…states_the_count_once…` |
+| M18 | `symbols_speakeasy.py` | the walk collects no unresolved mount | KILLED, 2 failed | the same two |
+| M19 | `symbols.py` | the render clause naming the count is dropped | KILLED, 1 failed | `…count_travels_in_the_line_an_operator_reads` |
+
+### The adapter
+
+| # | File | Mutation | Verdict | Tests killed |
+|---|---|---|---|---|
+| M20 | `adapter.py` | each record warns and the count does not, the balance this deliberately rejected | KILLED, 2 failed | both adapter tests |
+| M21 | `adapter.py` | the adapter never surfaces the channel at all | KILLED, 2 failed | both adapter tests |
+
+### Control
+
+| # | File | Mutation | Verdict |
+|---|---|---|---|
+| C1 | `symbols.py` | an unclosed parenthesis | DID-NOT-COMPILE (`'(' was never closed`), pytest never invoked |
+
+### The one survival, and the two the ordering caught
+
+The brief's ordering held all three times: **suspect the mutation, then the test, then the code.**
+The fault was outside the production code every time, which is now the eighth task in a row on
+this project to report that.
+
+**M12 was a faulty mutation, and the harness said so rather than lying.** Its match string carried
+the wrong indentation, so it matched zero times and the run reported
+`MUTATION-DID-NOT-APPLY (matched 0 times)` instead of substituting nothing and calling the result
+a survival. Re-run with the correct string it kills two tests. The exactly-once assertion is what
+turned a silent false survival into a named non-event.
+
+**M16 was a missing test, and it was the second half of a discriminator that already had one.**
+`elif imported is not None:` is the Speakeasy guard that keeps a `new` naming something the file
+never imported from being recorded as a lost mount — the same distinction the TypeScript flavour
+draws for `new WeakMap()`. The mutation is real: on that input the mutated code writes a record
+and the original does not. But no fixture carried the input. The TypeScript equivalent had one and
+M13 died on it; this one was unfalsifiable. The committed `vercel/sdk` tree cannot supply it either,
+because every mount in it already declines by design, so a hand-written four-file SDK was added and
+M16 now kills it. Commit `363b945`.
+
+**M4 is a survival whose fault is the mutation, and no fixture can kill it.** It rewrites
+`coverage_ratio`'s guard from `comparable_key_count == 0` to `declared_operation_count == 0`. Those
+two conditions are **provably equivalent for every report this module can construct**: each
+flavour builds its comparable set as a comprehension over `spec_operations`, and a set comprehension
+over an empty set is empty while one over a non-empty set is not. So the mutation cannot change any
+answer, which is the "redundant in the forward direction" result M3-W95 recorded for
+`twilio:141-142` and M3-W97 for the two dead `None` guards.
+
+Killing it would mean constructing an `ExtractionReport` by hand with inconsistent counts — declared
+zero and comparable five, or the reverse — a report no `report_extraction` can produce.
+`ExtractionReport(` appears at exactly three call sites, all in `src/`, and none of them can build
+one. That is the manufactured path the brief and both earlier tasks say not to build, so nobody
+should go looking for the fixture that kills M4. There isn't one.
+
+**The guard stays written against `comparable_key_count` even so**, and the reason is worth stating
+because the mutation makes it look arbitrary: the next line divides by `comparable_key_count`, so
+the guard should test the value it protects. Guarding on the other field would make the code correct
+by a theorem about how the two are built rather than by the expression in front of it.
 
 ## All four false-verdict modes, and which were live
 
@@ -366,7 +449,29 @@ and neither is true.
 
 ## Gates
 
-GATES_PLACEHOLDER
+Run on the final tree, branch `stroland02/m1-nodes` with `origin/main` merged at `1631514`.
+
+| Gate | Exit | Result |
+|---|---|---|
+| `uv run pytest -q` | 0 | 2486 passed, 4 skipped in 234.79s. Run unpiped with its exit code read directly, so the status is pytest's own and not a pipe's |
+| `uv run python scripts/lint_encoding.py src scripts tests` | 0 | clean |
+| `PYTHONIOENCODING=utf-8 uv run lint-imports` | 0 | 95 files, 201 dependencies, 1 contract kept, 0 broken |
+| `uv run python scripts/lint_dead_links.py src --baseline scripts/dead_links_baseline.txt` | 0 | clean |
+
+`git diff --name-only origin/main...HEAD` outside `docs/` is four production files and six test
+files, all of them this task's to modify. `tests/golden/` and `benchmark/corpus/` are byte-identical
+to `origin/main`.
+
+**Twenty-five tests added, all in one new file, and no test deleted anywhere.** The five existing
+files this touched hold the same count as `origin/main` does — 19, 35, 23, 15 and 15 — so every
+change to them rewrote an assertion or a docstring rather than removing a test. Three were rewritten
+in place because they asserted the defect: two in `test_parameter_reduction.py`, which pinned the
+deflated denominator and the absence of a decline field, and one in `test_extracted_symbols.py`,
+which asserted that the reader stripped the query marker.
+
+`SYNC_DSN` was left unset throughout,
+which is what makes `tests/conftest.py` derive a database name from this process's own pid rather
+than sharing one with another task's run, and drop only the database it created.
 
 ## What this leaves for the next task
 
