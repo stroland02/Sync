@@ -679,8 +679,8 @@ def _model_deprecations(
     return changes
 
 
-def _literal_call_sites(repo: RepoRef) -> list[CallSite]:
-    """Call sites for the model ids named as string literals in the repository.
+def _literal_call_sites(repo: RepoRef) -> tuple[list[CallSite], list[str]]:
+    """Call sites for the model ids named as string literals, and the paths it could not read.
 
     `typescript.py` finds SDK member chains, which is the right shape for `stripe.charges.create`
     and the wrong one for a model id: no member chain leads to a string in an options object.
@@ -713,12 +713,20 @@ def _literal_call_sites(repo: RepoRef) -> list[CallSite]:
 
     What that costs is real and is the trade `read_checkout` already argued: a valid `.ts` file in
     a legacy encoding holds model literals this no longer indexes, where leniency did recover
-    them. Telling such a file from a binary cheaply is not possible, so the paths are printed
-    rather than counted -- a reader who sees `src/legacy.ts` knows to look, and silently
-    recovering some of its literals out of mojibake told them nothing at all.
+    them. Telling such a file from a binary cheaply is not possible, so the paths are named -- a
+    reader who sees `src/legacy.ts` knows to look, and silently recovering some of its literals
+    out of mojibake told them nothing at all.
+
+    **Those paths are returned rather than printed, so the run can count them.** The reason is
+    the one `sync.benchmark.score` states about `skipped_files`: whoever read the tree knows what
+    it could not read, and nothing further down can recover it. A warning printed per file said a
+    file was missed without ever saying how much was, which is not a coverage figure -- and a run
+    that cannot state its coverage reports the same `0 finding(s)` over a repository it read and
+    one it mostly could not.
     """
     root = Path(repo.local_path)
     sites: list[CallSite] = []
+    unread: list[str] = []
 
     for file_path in root.rglob("*.ts"):
         if "node_modules" in file_path.parts or file_path.name.endswith(".d.ts"):
@@ -726,13 +734,12 @@ def _literal_call_sites(repo: RepoRef) -> list[CallSite]:
         relative = file_path.relative_to(root).as_posix()
         try:
             source = file_path.read_text(encoding="utf-8")
-        except UnicodeDecodeError as exc:
-            # One unreadable file must not empty the index, which is the property
-            # `index_operation_literals` already keeps for a file that does not parse.
-            print(
-                f"model-deprecation: {relative} is not UTF-8 and was not indexed ({exc})",
-                file=sys.stderr,
-            )
+        except UnicodeDecodeError:
+            # Returned rather than printed here, and counted by the caller. One unreadable file
+            # must not empty the index -- the property `index_operation_literals` already keeps
+            # for a file that does not parse -- and a per-file warning is not a coverage figure:
+            # it says a file was missed without ever saying how much was.
+            unread.append(relative)
             continue
         for vendor in DEPRECATION_SOURCES:
             sites.extend(
@@ -742,7 +749,29 @@ def _literal_call_sites(repo: RepoRef) -> list[CallSite]:
                 )
             )
 
-    return sites
+    return sites, unread
+
+
+def _coverage_lines(unread: Sequence[str]) -> list[str]:
+    """What a run could not read, or nothing at all when it read everything.
+
+    Nothing at all rather than a zero, which is `sync.benchmark.report._skipped_block`'s reasoning
+    and holds here for the same reason: a heading that prints on every run is a heading the next
+    reader learns to skip, and this one matters exactly when it appears.
+
+    Worded to echo that block deliberately, and duplicated rather than shared. `sync.benchmark` is
+    a harness and this is the run path; importing the harness to phrase a run's report would put
+    the benchmark on the pipeline's import graph to save six lines. The two saying the same thing
+    is the property worth having, and the wording is what carries it.
+    """
+    if not unread:
+        return []
+    return [
+        f"{len(unread)} path(s) could not be read as source and were not indexed",
+        "  A binary is nothing an indexer wanted; a source file in a legacy encoding is a call",
+        "  site this run does not cover. Telling the two apart cheaply is not possible.",
+        *[f"  {path}" for path in unread],
+    ]
 
 
 def _detector_suite(
@@ -890,8 +919,9 @@ def run(args: argparse.Namespace, today: date | None = None) -> int:
             # Kept as well as stored: `ParameterDeprecationDetector` takes call sites directly,
             # and the store answers `call_sites_for_operation` rather than "all of them". The id
             # comes back from the upsert, and a finding addresses its call site by id.
+            literal_sites, unread = _literal_call_sites(repo)
             call_sites = []
-            for site in list(adapter.index(repo)) + _literal_call_sites(repo):
+            for site in list(adapter.index(repo)) + literal_sites:
                 site.id = store.upsert_call_site(site)
                 call_sites.append(site)
 
@@ -935,6 +965,11 @@ def run(args: argparse.Namespace, today: date | None = None) -> int:
                 ),
                 store,
             )
+
+        # Before the finding count, because it qualifies it. A reader who sees the number first
+        # has already drawn a conclusion from it.
+        for line in _coverage_lines(unread):
+            print(line)
 
         print(f"{len(findings)} finding(s)")
         if not findings:

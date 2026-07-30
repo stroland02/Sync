@@ -179,6 +179,46 @@ def test_the_scan_joins_retirements_for_every_deprecation_vendor(tmp_path):
     assert any("openai" in name for name in names)
 
 
+def test_a_run_says_how_many_paths_it_could_not_read(monkeypatch, tmp_path, capsys):
+    """A run's whole report was `N finding(s)`, which is the same sentence whether it read the
+    repository or a third of it.
+
+    `2026-07-27-sync-benchmark-gates.md` is explicit that silent exclusion turns a biased sample
+    into an unqualified number, and the benchmark harness has printed a counted, named block of
+    unread paths since a PNG first ended a corpus run. A customer's run said nothing at all, so
+    "0 finding(s)" over a repository whose sources are in a legacy encoding is indistinguishable
+    from "0 finding(s)" over a repository that genuinely calls nothing.
+
+    Asserted from `run()` rather than from the helper, because a coverage report the run does not
+    print is the defect rather than a smaller version of it.
+    """
+    store = _RecordingStore()
+    _stub_collaborators(monkeypatch, store)
+    monkeypatch.setattr(
+        cli, "_literal_call_sites",
+        lambda repo: ([], ["src/legacy.ts", "assets/clip.ts"]),
+    )
+
+    assert run(_run_args(tmp_path)) == 0
+
+    out = capsys.readouterr().out
+    assert "2" in out
+    assert "src/legacy.ts" in out
+    assert "assets/clip.ts" in out
+
+
+def test_a_run_that_read_everything_says_nothing_about_coverage(monkeypatch, tmp_path, capsys):
+    """Nothing at all rather than a zero, which is the reasoning `_skipped_block` already carries:
+    a heading that prints on every run is a heading the next reader learns to skip, and this one
+    matters exactly when it appears."""
+    store = _RecordingStore()
+    _stub_collaborators(monkeypatch, store)
+
+    assert run(_run_args(tmp_path)) == 0
+
+    assert "could not read" not in capsys.readouterr().out
+
+
 def test_a_vendor_page_that_cannot_be_fetched_costs_only_its_own_changes(tmp_path, capsys):
     """One vendor being unreachable must not take the other's retirements with it, and must not
     report as a quiet zero -- an empty answer is indistinguishable from a healthy vendor with
@@ -423,7 +463,7 @@ def _stub_collaborators(monkeypatch, store) -> None:
     # download per vendor. Left live against a fetch returning nothing, it would seed an empty
     # page and the model half would read that instead of what this test injects.
     monkeypatch.setattr(cli, "_parameter_deprecations", lambda cache: [])
-    monkeypatch.setattr(cli, "_literal_call_sites", lambda repo: [])
+    monkeypatch.setattr(cli, "_literal_call_sites", lambda repo: ([], []))
     monkeypatch.setattr(
         cli, "_clone",
         lambda url, dest: RepoRef(repo_id="repo", url=url, local_path=str(dest), head_sha="0" * 40),

@@ -394,7 +394,7 @@ def _drive_literal_call_sites(root: Path) -> None:
     from sync.cli import _literal_call_sites
 
     (root / "models.ts").write_bytes(UTF16)
-    assert _literal_call_sites(_repo(root)) == []
+    assert _literal_call_sites(_repo(root))[0] == []
 
 
 def _drive_ts_manifest(root: Path) -> None:
@@ -477,7 +477,7 @@ DRIVERS: dict[str, Callable[[Path], None]] = {
     "sync/index/python_lang.py:258": _drive_requirement_lines_pyproject,
     "sync/index/python_lang.py:271": _drive_requirement_lines_requirements,
     "sync/index/python_lang.py:839": _drive_configured_typechecker,
-    "sync/cli.py:729": _drive_literal_call_sites,
+    "sync/cli.py:737": _drive_literal_call_sites,
     "sync/index/typescript.py:232": _drive_ts_manifest,
     "sync/remediate/literal_swap.py:84": _drive_literal_swap,
     "sync/remediate/parameters.py:77": _drive_parameters,

@@ -201,7 +201,7 @@ def test_the_literal_indexer_receives_every_sources_prefixes(tmp_path: Path):
         local_path=str(tmp_path), head_sha="0" * 40,
     )
 
-    indexed = {site.operation_id for site in _literal_call_sites(repo)}
+    indexed = {site.operation_id for site in _literal_call_sites(repo)[0]}
 
     assert "@cf/meta/llama-3.1-8b-instruct" in indexed
     assert "@hf/google/gemma-7b-it" in indexed
@@ -245,10 +245,11 @@ def test_a_ts_file_that_is_not_utf8_indexes_no_mangled_model_id(tmp_path: Path):
     """
     (tmp_path / "models.ts").write_bytes('const m = "claude-3-caf\xe9";\n'.encode("cp1252"))
 
-    sites = _literal_call_sites(_repo_at(tmp_path))
+    sites, unread = _literal_call_sites(_repo_at(tmp_path))
 
     assert [site.operation_id for site in sites if "�" in site.operation_id] == []
     assert sites == []
+    assert unread == ["models.ts"]
 
 
 def test_a_transport_stream_named_ts_produces_no_phantom_call_site(tmp_path: Path):
@@ -257,20 +258,24 @@ def test_a_transport_stream_named_ts_produces_no_phantom_call_site(tmp_path: Pat
     sites. This stage read the same bytes leniently and recorded one."""
     (tmp_path / "clip.ts").write_bytes(TRANSPORT_STREAM)
 
-    assert _literal_call_sites(_repo_at(tmp_path)) == []
+    assert _literal_call_sites(_repo_at(tmp_path)) == ([], ["clip.ts"])
 
 
-def test_a_file_it_cannot_read_is_named_rather_than_silently_skipped(tmp_path, capsys):
-    """Skipping is only honest if it is visible. A legacy-encoded `.ts` file holds real model
-    literals this stage no longer indexes, and the cost of refusing to guess is that somebody has
-    to be told which file to look at -- the mitigation `read_checkout` already argues for, where
-    the alternative was a count nobody could act on.
+def test_a_file_it_cannot_read_is_returned_rather_than_silently_skipped(tmp_path):
+    """Skipping is only honest if it is visible, and visible to the caller rather than only to a
+    log. A legacy-encoded `.ts` file holds real model literals this stage no longer indexes, and
+    the cost of refusing to guess is that somebody has to be told which file to look at.
+
+    Returned rather than printed since B60, for the reason `sync.benchmark.score` states about
+    `skipped_files`: whoever read the tree is the only one who knows, and a warning per file said
+    a file was missed without ever saying how much was.
     """
     (tmp_path / "legacy.ts").write_bytes(CP1252_SOURCE)
 
-    _literal_call_sites(_repo_at(tmp_path))
+    sites, unread = _literal_call_sites(_repo_at(tmp_path))
 
-    assert "legacy.ts" in capsys.readouterr().err
+    assert sites == []
+    assert unread == ["legacy.ts"]
 
 
 def test_one_unreadable_file_does_not_cost_the_readable_ones(tmp_path: Path):
@@ -280,7 +285,7 @@ def test_one_unreadable_file_does_not_cost_the_readable_ones(tmp_path: Path):
     (tmp_path / "legacy.ts").write_bytes(CP1252_SOURCE)
     (tmp_path / "models.ts").write_text(MODEL_LITERALS, encoding="utf-8")
 
-    indexed = {site.operation_id for site in _literal_call_sites(_repo_at(tmp_path))}
+    indexed = {site.operation_id for site in _literal_call_sites(_repo_at(tmp_path))[0]}
 
     assert "claude-opus-4-1-20250805" in indexed
     assert "gpt-5-2025-08-07" in indexed
@@ -510,7 +515,7 @@ def _stub_run(monkeypatch, pages) -> None:
     # Stubbed whole rather than through the fetch: this test is about which vendors reach the
     # detector suite, and the parameter half upserts changes of its own on the way there.
     monkeypatch.setattr(cli, "_parameter_deprecations", lambda cache: [])
-    monkeypatch.setattr(cli, "_literal_call_sites", lambda repo: [])
+    monkeypatch.setattr(cli, "_literal_call_sites", lambda repo: ([], []))
     monkeypatch.setattr(
         cli, "_clone",
         lambda url, dest: RepoRef(repo_id="repo", url=url, local_path=str(dest), head_sha="0" * 40),

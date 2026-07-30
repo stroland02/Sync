@@ -209,9 +209,7 @@ def test_every_copy_of_the_node_reader_decodes_the_same_way(reader) -> None:
         reader(_Slice(0, 3), b"a\xfbb")
 
 
-def test_literal_indexing_skips_a_file_it_cannot_decode(
-    tmp_path: Path, capsys: pytest.CaptureFixture[str]
-) -> None:
+def test_literal_indexing_skips_a_file_it_cannot_decode(tmp_path: Path) -> None:
     """The third reader of the customer's source, and the one that said `errors="replace"` outright.
 
     `_literal_call_sites` feeds the parameter-deprecation detector, whose rows carry a model id and
@@ -231,7 +229,9 @@ def test_literal_indexing_skips_a_file_it_cannot_decode(
         local_path=str(tmp_path), head_sha="0" * 40,
     )
 
-    sites = _literal_call_sites(repo)
+    sites, unread = _literal_call_sites(repo)
 
     assert [s.path for s in sites] == ["clean.ts"]
-    assert "legacy.ts" in capsys.readouterr().err
+    # Returned rather than logged since B60: the run counts these into its coverage report, and a
+    # message printed here was a file named without the total it belonged to.
+    assert unread == ["legacy.ts"]
