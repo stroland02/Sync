@@ -12,28 +12,31 @@ item that cannot say what evidence closes it is not ready to dispatch.
 
 ## Ready
 
-### B61 — The coverage figure counts one pass, and the language indexers skip most
+### B63 — Key the decode-handler drivers by scope, not by line number
 
-B60 landed a coverage block: a run now prints a counted, named list of what it could not read, and
-prints nothing when it read everything. It counts only the narrow literal pass. Measured on main:
+`tests/test_decode_handlers.py` keys `DRIVERS` by `path:line`, so any edit above a handler
+invalidates the key and the check fails by position rather than behaviour. Counted this run: seven
+keys re-anchored when one change added comment blocks above them, three more inside a single
+commit, one key twice within an hour, and a fifth occurrence flagged by the last worker to touch
+the file. **None was a defect in `src/`.** Two workers reported it unprompted.
 
-    _literal_call_sites   -> tuple[list[CallSite], list[str]]   reports what it skipped
-    LanguageAdapter.index -> Iterable[CallSite]                 no channel at all
+The file's docstring claims *"there is no stable identity to key on instead"*. Measured over `src/`,
+that is false:
 
-The two language indexers are the main indexing path, they do skip unreadable files, and they
-record them in `self._undecodable` — private instance state nothing exposes. So a reader can see
-`0 path(s) could not be read` while the adapters skipped most of the repository, which is the same
-partial-answer-with-the-right-shape the block was added to prevent, now wearing the block's
-authority.
+    decode handlers in src/      : 18
+    distinct scope+caught keys   : 18
+    collisions under that scheme : 0
 
-**Design decided:** do not widen `LanguageAdapter.index`, a published protocol asserted on by
-`core/conformance.py`. Use the precedent set twice — `unverifiable_reason` and B55's
-`decline_reason` are read with `getattr`, so an adapter that has never heard of the member keeps
-working and reports nothing.
+keying by file, enclosing scope and caught exception names.
 
-**Closes when:** an unreadable Python or TypeScript source is counted in the block, a clean
-repository still prints no block, an adapter lacking the member neither breaks the run nor the
-report, `LanguageAdapter` and the conformance kit unchanged, and four gates green.
+**A previous brief told a worker explicitly not to redesign this and to document the cost instead.**
+That was right at two occurrences and wrong at five, and the reversal is recorded here rather than
+quietly made. The reason it matters beyond annoyance: a check that cries wolf gets silenced, and
+this one has caught two real omissions this run — both a new decode handler landing with no driver.
+
+**Closes when:** keys survive an unrelated edit above a handler, a collision is refused loudly
+naming both, the two real failure modes still fire, the docstring paragraph asserting the opposite
+is corrected, and four gates green.
 
 ### B62 — Re-indexing a repository that changed leaves ghost call sites in the graph forever
 
@@ -92,7 +95,8 @@ recorded with which change broke it.
 ## In flight
 
 - **B61** — `task_12ccee12fd98`, worktree `sync-solo-b`.
-- **B62** — `task_a22295d1afa5`, worktree `sync-solo-a`.
+- **B62** — `task_a22295d1afa5`, worktree `sync-solo-b` (moved; B61 held solo-a).
+- **B63** — `task_ae3a48b3d14d`, worktree `sync-solo-a`.
 - **B55** — re-dispatched as `task_3746257e4c0a` into `sync-solo-b`. The first attempt
   (`task_e03a2a5bb93f`) produced nothing in 94 minutes and was stood down.
 
@@ -770,3 +774,16 @@ is what a reviewer needs and duplicating it here would let the two copies drift.
   `errors="replace"` — every occurrence left in those files is a docstring explaining the removal.
   And it reported two suite skips; only one reproduced here. The conclusion it drew was right for a
   different reason, and that reason is B61.
+
+- Count the language indexers' skips in a run's coverage figure. Landed `116d1f6`. B60's figure
+  counted only the literal pass over `*.ts`, while both indexers walk every source file and recorded
+  their skips in `self._undecodable` where nothing read it. **Structurally blind, not merely
+  partial:** over a Python tree with one PEP 263 cp1252 module the adapter had `['src/legacy.py']`,
+  the literal pass had `[]`, and the run reported it could not read *zero* paths having skipped a
+  module the interpreter runs fine.
+
+  The two reports overlap on a TypeScript tree, so the worker unioned rather than summed them —
+  "an over-count is its own wrong number, and the one a reader trusts for being larger". Read
+  through `getattr` so the protocol is untouched; verified here that an adapter lacking the member
+  returns `[]` and breaks nothing, that a clean repository still reports none, and that a latin-1
+  module now appears. It also corrected two docstrings that earlier tasks had falsified.
