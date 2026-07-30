@@ -28,6 +28,7 @@ from sync.core import (
     VendorChange,
     VerifyResult,
 )
+from sync.core.models import UNATTRIBUTED
 from sync.core.conformance import (
     ConformanceFailure,
     check_detector,
@@ -637,7 +638,13 @@ def _language_case(tmp_path):
 
 
 class _CorrectDetector:
-    """One finding per affected call site, and the same ones every time it is asked."""
+    """One finding per affected call site, and the same ones every time it is asked.
+
+    The rung is `static` because this example reads a vendor change against the static index and
+    nothing else is load-bearing -- a wrong static binding is what would make its claim wrong. It
+    was absent until the kit gained a rule about it, which means the kit's own example of a
+    conforming detector was emitting findings `GraphStore.insert_finding` would have refused.
+    """
 
     detector_id = "example-detector"
 
@@ -650,6 +657,7 @@ class _CorrectDetector:
                 vendor_change_id="vc1",
                 severity="breaking",
                 rationale="amount was removed from the request body",
+                binding_rung="static",
             )
 
 
@@ -726,6 +734,44 @@ def test_a_finding_with_no_call_site_fails():
         check_detector(Unlocated())
 
 
+def test_a_detector_whose_findings_name_no_rung_fails():
+    """The store refuses these at the first write, and the kit exists to say so before that.
+
+    `GraphStore.insert_finding` raises on `unattributed`, so a detector certified without this rule
+    is one the kit calls conforming and production rejects on its first finding -- the worst
+    ordering there is for somebody working from the published SDK. `CLAUDE.md` requires the rung of
+    every artifact derived from a binding, because a false positive that cannot be attributed to a
+    rung cannot be fixed.
+    """
+
+    class Forgetful(_CorrectDetector):
+        def scan(self):
+            for finding in super().scan():
+                yield finding.model_copy(update={"binding_rung": UNATTRIBUTED})
+
+    assert isinstance(Forgetful(), Detector), "isinstance must still pass, or this proves nothing"
+    with pytest.raises(ConformanceFailure, match="binding rung"):
+        check_detector(Forgetful())
+
+
+def test_one_finding_out_of_two_naming_no_rung_fails():
+    """A rule that read only the first finding would certify this, and the store would not.
+
+    A detector attributing most of its findings and forgetting on one path is likelier than one
+    that never attributes at all -- the forgetful path is usually the branch with the fewest
+    fixtures behind it. So the rule is over every finding, and this is what says so.
+    """
+
+    class ForgetsOnTheSecond(_CorrectDetector):
+        def scan(self):
+            first, second = super().scan()
+            yield first
+            yield second.model_copy(update={"binding_rung": UNATTRIBUTED})
+
+    with pytest.raises(ConformanceFailure, match="binding rung"):
+        check_detector(ForgetsOnTheSecond())
+
+
 def test_two_findings_that_collide_on_the_graph_key_fails():
     """The graph keys a finding on `(detector, call_site_id, vendor_change_id, claim)` and
     inserts `ON CONFLICT DO NOTHING`. Two findings sharing that key are one row, and the second
@@ -747,6 +793,10 @@ def test_two_findings_that_collide_on_the_graph_key_fails():
                     call_site_id="cs1",
                     severity="info",
                     rationale=rationale,
+                    # Broken in one way only. The rung rule runs before this one, so a fixture
+                    # that omitted it would be rejected for the wrong reason and this test would
+                    # pass without exercising the key at all.
+                    binding_rung="static",
                 )
 
     with pytest.raises(ConformanceFailure, match="same natural key"):
@@ -771,6 +821,8 @@ def test_a_second_scan_that_disagrees_with_the_first_fails():
                 vendor_change_id="vc1",
                 severity="breaking",
                 rationale=f"seen on scan {self._runs}",
+                # As above: broken only in the way this test is about.
+                binding_rung="static",
             )
 
     with pytest.raises(ConformanceFailure, match="same findings"):

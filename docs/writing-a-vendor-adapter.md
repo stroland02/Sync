@@ -185,11 +185,23 @@ the detector emitted nothing, on a fixture a hundred and twenty calls short of i
 detector whose answer depends on how many times it has been asked makes the graph a record of run
 ordering.
 
-**Two findings from one scan may not share `(detector, call_site_id, vendor_change_id)`.** That
-triple is how the graph identifies a finding, and the insert is `ON CONFLICT DO NOTHING`. So a
-detector saying two different things about one call site under one change keeps whichever it
-emitted first, and the second is discarded at the store without a warning. If you have two things
-to say, either say them in one finding or attach them to different vendor changes.
+**Every finding names the binding rung it rests on.** `Finding.binding_rung` defaults to
+`unattributed`, which the graph reserves for rows written before the column existed —
+`GraphStore.insert_finding` refuses that value, so a detector that leaves the field alone is
+rejected on the first finding it ever raises. The kit checks that a rung was named and never which
+one: the rung names the binding whose wrongness would make the finding wrong, so a claim read off
+the static index is `static`, and one resting on a span-to-operation correlation carries the
+correlator's own rung through — including `unresolved`, when nothing correlated. That is your
+judgement about your detector, and a false positive nobody can attribute to a rung is one nobody
+can fix.
+
+**Two findings from one scan may not share `(detector, call_site_id, vendor_change_id, claim)`.**
+That quadruple is how the graph identifies a finding, and the insert is `ON CONFLICT DO NOTHING`.
+So a detector saying two different things about one call site under one change and one claim keeps
+whichever it emitted first, and the second is discarded at the store without a warning. If you have
+two things to say, give them claims that name the two different things, or say both in one finding.
+`claim` joined that key after the rule was written, and this paragraph named the triple until B67
+noticed it still did.
 
 **Every finding names its call site and carries your `detector_id`.** A finding addresses its
 location by `call_site_id` and by nothing else, so one carrying an empty string has no line to
