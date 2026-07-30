@@ -130,7 +130,11 @@ Carries an audit of the file's other checkable claims — the two commit shas it
 parameters, and the toolchain table. Environment measurements (the 184-of-200 mtime figure,
 `corepack` needing elevation) are records rather than claims and stay untouched.
 
-Dispatched to `m1-forge`.
+Dispatched to `m2-parsing`. Carries a pointer to `m1-forge`'s untracked
+`docs/superpowers/reports/b1-new-file-staging.md` — the finished report from the `aeecde4` work,
+which measured that `_UNSHIPPED` is exactly `{"??", "!!"}` and a staged new path reports `A `, so
+nothing ever held it aside. Written against `9b13cce`, so it is a lead to re-derive rather than an
+answer to quote.
 
 ### B70 — the `sync-core` wheel asserts Apache-2.0 and ships no licence text
 
@@ -148,7 +152,7 @@ PyPI does not accept a re-upload for an existing version.
 
 Publishing stays the user's call; this makes the wheel correct and proves it locally.
 
-Dispatched to `m2-parsing`.
+Dispatched to `m1-forge`.
 
 ### B7 — The M0 acceptance run has not executed since the pipeline changed underneath it
 
