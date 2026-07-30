@@ -203,8 +203,8 @@ def test_the_dropped_deprecation_is_observable() -> None:
     )
     list(detector.scan())
 
-    assert len(detector.unlinked) == 1
-    assert "temperature" in detector.unlinked[0]
+    assert len(detector.declined) == 1
+    assert "temperature" in detector.declined[0]
 
 
 def test_an_established_link_is_not_reported_as_dropped() -> None:
@@ -213,7 +213,24 @@ def test_an_established_link_is_not_reported_as_dropped() -> None:
     detector = ParameterDeprecationDetector(_linked(store), [_site()])
     list(detector.scan())
 
-    assert detector.unlinked == []
+    assert detector.declined == []
+
+
+def test_the_drop_counter_resets_rather_than_accumulating_across_scans() -> None:
+    """The reset, asserted against a scan that actually drops something.
+
+    `test_scanning_twice_gives_the_same_answer` reads as though it held this and does not: its
+    deprecation is linked, so the counter is empty either way and deleting the reset leaves it
+    green. A mutation removing `self.declined = []` survived until this existed.
+    """
+    detector = ParameterDeprecationDetector(
+        [LinkedDeprecation(deprecation=OMIT, vendor_change_id="")], [_site()]
+    )
+
+    list(detector.scan())
+    list(detector.scan())
+
+    assert len(detector.declined) == 1
 
 
 # --- the pairing itself -----------------------------------------------------------

@@ -859,6 +859,10 @@ def _scan(detectors: Sequence[tuple[str, object]], store: GraphStore) -> list[Fi
     forever is indistinguishable from one that is broken, and that confusion is what this exists
     to end -- so a failure prints too, rather than being reported as a quiet zero.
 
+    A detector carrying a `declined` channel gets its count printed beside the findings, and a
+    detector without one is not reported as having declined nothing. Zero would be a claim it
+    never made, and the distinction is the same one `report.unreadable` draws below.
+
     Every finding is inserted here, through the one path. Two detectors writing findings two ways
     is how they end up with two notions of what a finding is, and the architecture rests on one
     `Finding` type reaching one remediation pipeline.
@@ -875,7 +879,9 @@ def _scan(detectors: Sequence[tuple[str, object]], store: GraphStore) -> list[Fi
         for finding in produced:
             finding.id = store.insert_finding(finding)
         findings.extend(produced)
-        print(f"{name}: {len(produced)} finding(s)")
+        declined = getattr(detector, "declined", None)
+        note = f", {len(declined)} declined" if declined is not None else ""
+        print(f"{name}: {len(produced)} finding(s){note}")
 
     return findings
 

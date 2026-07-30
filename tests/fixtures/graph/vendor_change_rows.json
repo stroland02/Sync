@@ -1,0 +1,38 @@
+{
+  "_comment": [
+    "Rows as `SELECT * FROM vendor_change` returns them, column for column against",
+    "src/sync/graph/schema.sql. `detected_at` is written as ISO-8601 here and parsed to a",
+    "datetime by the loader, because psycopg hands GraphStore a datetime and the point of these",
+    "rows is to be what GraphStore.get_vendor_change actually receives.",
+    "",
+    "`severity` is TEXT NOT NULL in the schema with no CHECK constraint, and `Severity` in the",
+    "model is a five-member Literal. That gap is what `off-literal-severity` occupies: a row the",
+    "database accepts and the model refuses."
+  ],
+  "readable": {
+    "id": "vc-readable",
+    "vendor_id": "stripe",
+    "from_version": "2026-05-01",
+    "to_version": "2026-11-01",
+    "kind": "response-property-removed",
+    "operation_id": "PostCharges",
+    "path_ptr": "/v1/charges",
+    "severity": "breaking",
+    "source": "oasdiff",
+    "raw": {"text": "removed the optional property `status`"},
+    "detected_at": "2026-07-28T05:00:00+00:00"
+  },
+  "off-literal-severity": {
+    "id": "vc-off-literal-severity",
+    "vendor_id": "stripe",
+    "from_version": "2026-05-01",
+    "to_version": "2026-11-01",
+    "kind": "response-property-removed",
+    "operation_id": "PostCharges",
+    "path_ptr": "/v1/charges",
+    "severity": "catastrophic",
+    "source": "oasdiff",
+    "raw": {"text": "removed the optional property `status`"},
+    "detected_at": "2026-07-28T05:00:00+00:00"
+  }
+}

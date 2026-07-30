@@ -136,6 +136,17 @@ class EfficiencyDetector:
         self._loop_threshold = loop_threshold
         self._repeat_threshold = repeat_threshold
         self._resend_threshold = resend_threshold
+        self.declined: list[str] = []
+        """Cost claims this scan computed and did not raise, each naming its subject and cause.
+
+        One decline reaches it: a claim whose operation nothing indexed resolves to. It is the
+        quietest skip in the package -- there is no statement for coverage to have missed,
+        because an empty `reachable` list just does not enter the loop below.
+
+        A row belonging to another vendor is deliberately not here. That decline is correct
+        scoping and loses nothing, and counting it would put a number on every run that says
+        the repository calls more than one API.
+        """
 
     def scan(self) -> Iterable[Finding]:
         """One finding per claim per call site, quoting the worst unit of work that made it.
@@ -150,7 +161,13 @@ class EfficiencyDetector:
         Which trace gets quoted is decided rather than left to arrive: the largest magnitude,
         with the trace id breaking ties so two scans of an unchanged graph choose the same one.
         The worst unit of work is also the one worth showing.
+
+        A list rather than a generator, because `declined` is only true once the scan has run
+        and a generator nobody finished consuming would leave the count describing part of the
+        work.
         """
+        self.declined = []
+        findings: list[Finding] = []
         strongest: dict[tuple[str, str], tuple[ObservedCall, _Claim]] = {}
 
         for call in self._store.observed_calls(self._repo_id):
@@ -180,11 +197,19 @@ class EfficiencyDetector:
                 self._vendor_id, operation_id, repo_id=self._repo_id
             )
             reachable = [site for site in sites if site.id is not None]
+            if not reachable:
+                self.declined.append(
+                    f"{operation_id}: a {claim.kind} claim over {claim.magnitude} in trace "
+                    f"{call.trace_id} resolves to no indexed call site, so it has no location "
+                    f"to report"
+                )
+                continue
+
             shared_note = (
                 f", shared across {len(reachable)} call sites" if len(reachable) > 1 else ""
             )
             for site in reachable:
-                yield Finding(
+                findings.append(Finding(
                     detector=self.detector_id,
                     # The correlator's rung, not `static`. A perfect static binding still
                     # yields a wrong claim if this span was correlated to the wrong operation,
@@ -215,7 +240,9 @@ class EfficiencyDetector:
                         f"{claim.rationale} ({site.path}:{site.line}"
                         f"{shared_note})"
                     ),
-                )
+                ))
+
+        return findings
 
     def _claims(self, call: ObservedCall) -> list[_Claim]:
         """Every efficiency claim this one unit of work supports.

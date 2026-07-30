@@ -55,21 +55,26 @@ class ParameterDeprecationDetector:
     ) -> None:
         self._deprecations = list(deprecations)
         self._call_sites = list(call_sites)
-        self.unlinked: list[str] = []
-        """Deprecations dropped because no `VendorChange` id was established for them.
+        self.declined: list[str] = []
+        """Findings this scan did not raise, each naming its subject and its cause.
 
         Counted rather than merely skipped. A row this pipeline discards in silence is the
         defect that keeps being found by hand here, and a number is what makes it answerable
         later without re-reading a run's output.
+
+        One decline reaches it here -- a deprecation with no `VendorChange` id established for
+        it. The name is the general one because `cli._scan` prints this channel by name for
+        every detector that carries it, and a per-detector name table in that file would put
+        knowledge of each detector's vocabulary in the one place that must not hold it.
         """
 
     def scan(self) -> Iterable[Finding]:
         """Every finding, as a list rather than a generator.
 
-        Eager because `unlinked` is only true once the scan has run, and a generator nobody
+        Eager because `declined` is only true once the scan has run, and a generator nobody
         finished consuming would leave the count describing part of the work.
         """
-        self.unlinked = []
+        self.declined = []
         findings: list[Finding] = []
 
         for site in self._call_sites:
@@ -124,7 +129,7 @@ class ParameterDeprecationDetector:
             f"`{deprecation.parameter}` is passed at {site.path}:{site.line} and no vendor "
             f"change was established for it, so no finding was raised"
         )
-        self.unlinked.append(reason)
+        self.declined.append(reason)
         log.warning("parameter-deprecation: %s", reason)
 
     def _rationale(self, deprecation: ParameterDeprecation, site: CallSite) -> str:

@@ -166,6 +166,7 @@ def test_scanning_twice_gives_the_same_answer():
     )
     first = [f.rationale for f in detector.scan()]
     assert [f.rationale for f in detector.scan()] == first
-    # The drop counter is part of the answer now, so it has to reset per scan rather than
-    # accumulate across them.
-    assert detector.unlinked == []
+    # These deprecations are all linked, so this says the counter stays empty and says nothing
+    # about the reset -- `test_the_drop_counter_resets_rather_than_accumulating_across_scans`
+    # is where that lives, because it needs a scan that drops something.
+    assert detector.declined == []

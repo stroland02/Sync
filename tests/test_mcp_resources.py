@@ -16,6 +16,7 @@ the golden file plays for tools: a contract change has to be typed out on purpos
 
 from __future__ import annotations
 
+import hashlib
 import io
 import json
 from pathlib import Path
@@ -28,6 +29,7 @@ from sync.mcp.resources import FEED_URI_TEMPLATE, resource_templates_as_data
 from sync.mcp.server import serve
 from sync.mcp.tools import GraphSurface
 from sync.signals.feed import FeedCache, FeedSignatureError
+from sync.signals.registry import available_vendors
 
 FIXTURES = Path(__file__).parent / "fixtures" / "feed"
 GOLDEN = Path(__file__).parent / "golden" / "tool_schemas.json"
@@ -277,7 +279,129 @@ def test_no_read_path_serves_a_vendor_the_cache_does_not_hold():
     assert "GetCharges" not in json.dumps(response)
 
 
+# --- a server configured with no cache at all ---------------------------------------
+
+
+def test_a_server_with_no_feed_cache_advertises_nothing():
+    """`serve` takes the cache as an argument and defaults to none, so a graph surface with no
+    feed configured is a deployment and not a broken state. It offers no resource rather than
+    offering one whose read would fail.
+    """
+    (response,) = _talk(_req(1, "resources/list"))
+
+    assert response["result"]["resources"] == []
+
+
+def test_no_cache_and_an_empty_cache_advertise_the_same_nothing():
+    """The one place this module conflates two states on purpose. `read`'s own comment settles
+    it: a cache holding nothing for a vendor and a server with no cache are the same fact to a
+    client, and the repair for both is a fetch. The listing says it the same way.
+    """
+    (absent,) = _talk(_req(1, "resources/list"))
+    (empty,) = _talk(_req(1, "resources/list"), feed=_cache())
+
+    assert absent["result"] == empty["result"] == {"resources": []}
+
+
+def test_a_server_with_no_cache_advertises_nothing_and_serves_nothing():
+    """Both halves of the listing's promise, on the configuration that holds no snapshot at
+    all: nothing is offered, and every registered vendor refuses with the reason that names the
+    repair. Advertising the registered vendors here would hand a client six URIs that all fail.
+    """
+    (listing,) = _talk(_req(1, "resources/list"))
+
+    assert listing["result"]["resources"] == []
+    for vendor_id in available_vendors():
+        assert _read(f"sync://feed/{vendor_id}", None)["error"]["data"]["reason"] == "not_fetched"
+
+
+def test_the_listing_and_the_read_agree_about_every_registered_vendor():
+    """A client that trusts a listing has no reason to handle a listed resource being absent,
+    so the listing has to be exactly the set that reads. Checked in both directions rather than
+    asserted on the one vendor a snapshot happens to be held for.
+    """
+    feed = _cache(stripe=(SIGNED, SIGNATURE))
+    (listing,) = _talk(_req(1, "resources/list"), feed=feed)
+    advertised = {entry["uri"] for entry in listing["result"]["resources"]}
+
+    for vendor_id in available_vendors():
+        uri = f"sync://feed/{vendor_id}"
+        assert ("result" in _read(uri, feed)) == (uri in advertised), uri
+
+
+# --- a uri this server does not serve at all ----------------------------------------
+
+
+def test_a_uri_outside_the_feed_scheme_is_refused_with_its_own_reason():
+    """The fourth outcome, and the only refusal on this surface that says what it is. A client
+    that asked for something this server does not serve gets `unknown_resource` and the uri
+    back, which is a different repair from either feed refusal.
+    """
+    response = _read("file:///etc/passwd", _cache(stripe=(SIGNED, SIGNATURE)))
+
+    assert "result" not in response
+    assert response["error"]["data"]["reason"] == "unknown_resource"
+    assert response["error"]["data"]["uri"] == "file:///etc/passwd"
+
+
+def test_an_unknown_resource_is_not_an_unknown_vendor():
+    """Three refusals, three repairs, told apart by `reason` rather than by wording. Asking
+    this server for a resource it does not have is fixed by asking for a different resource;
+    asking for a feed nothing registers is fixed by fixing the vendor id.
+    """
+    outside = _read("sync://graph/stripe", _cache(stripe=(SIGNED, SIGNATURE)))
+    vendor = _read("sync://feed/nosuchvendor", _cache(stripe=(SIGNED, SIGNATURE)))
+
+    assert outside["error"]["data"]["reason"] == "unknown_resource"
+    assert vendor["error"]["data"]["reason"] == "unknown_vendor"
+
+
+def test_a_read_with_no_uri_is_refused_rather_than_defaulted():
+    """`resources/read` with no `uri` reaches this module as the empty string, because the
+    transport passes `params.get("uri") or ""`. An empty string must not prefix-match its way
+    to a vendor id of `""`, which would answer a question the client did not ask.
+    """
+    (response,) = _talk(_req(1, "resources/read", {}), feed=_cache(stripe=(SIGNED, SIGNATURE)))
+
+    assert response["error"]["data"]["reason"] == "unknown_resource"
+    assert response["error"]["data"]["uri"] == ""
+
+
+@pytest.mark.parametrize(
+    "uri", ["sync://feeds/stripe", "sync://feed", "SYNC://FEED/stripe", "sync:/feed/stripe", "stripe"]
+)
+def test_a_uri_that_only_resembles_the_feed_prefix_is_outside_it(uri: str):
+    """A prefix match and nothing looser. Each of these is one character away from the real
+    template, and answering any of them would mean guessing which resource was meant.
+    """
+    assert _read(uri, _cache(stripe=(SIGNED, SIGNATURE)))["error"]["data"]["reason"] == "unknown_resource"
+
+
+def test_the_prefix_boundary_is_exact_in_the_other_direction_too():
+    """`sync://feed/` is inside the scheme with an empty vendor id, which is an unknown vendor
+    and not an unknown resource. The pair fixes where the boundary is: one character decides
+    which of two repairs a client is told about.
+    """
+    assert _read("sync://feed", _cache())["error"]["data"]["reason"] == "unknown_resource"
+    assert _read("sync://feed/", _cache())["error"]["data"]["reason"] == "unknown_vendor"
+
+
 # --- the frozen tools -------------------------------------------------------------
+
+
+def test_the_published_tool_contract_is_byte_stable():
+    """The golden file pinned by digest as well as by equality.
+
+    `schemas_as_data() == json.loads(...)` catches a schema that changed. This catches the
+    golden file itself moving -- a regenerated expectation is the one edit that makes the other
+    test pass while the published contract has in fact changed. Normalised before hashing so a
+    checkout's line endings are not what is being pinned.
+    """
+    canonical = json.dumps(json.loads(GOLDEN.read_text(encoding="utf-8")), sort_keys=True).encode()
+
+    assert hashlib.sha256(canonical).hexdigest() == (
+        "b69c020883a894c2e4174b5a2c6a7bc68a93eb3fdfb3175950631acf26b36352"
+    )
 
 
 def test_adding_a_resource_leaves_all_four_tool_schemas_untouched():

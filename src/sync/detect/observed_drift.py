@@ -72,9 +72,14 @@ class DeclaredField:
     """What the vendor's published specification says about one response field.
 
     Addressed by JSON Pointer, the same form `ObservedShape.field_path` uses, so the two sides
-    compare without a translation nobody can verify. This lives here rather than in `sync.core`
-    because nothing in the repository parses a response schema yet; the first component that
-    does should own the type and this module should import it.
+    compare without a translation nobody can verify.
+
+    The component that parses a specification into these is `cli._declared_response_fields`,
+    which sits above this module: a detector importing a CLI symbol inverts the dependency, so
+    a parser existing is not on its own a reason to move the type. The home that would serve
+    both is `sync.core`, and that is a published contract a third party writing a vendor
+    adapter depends on -- putting a detector's type into it is a decision about that contract,
+    and it has not been made.
     """
 
     field_path: str
@@ -109,8 +114,31 @@ class ObservedDriftDetector:
         # Which repository this scan is about. None means every one of them.
         # `GraphStore.call_sites_for_operation` carries what that cost and why it stays available.
         self._repo_id = repo_id
+        self.declined: list[str] = []
+        """Divergences this scan did not report, each naming its subject and its cause.
+
+        Three reach it: a baseline no indexed call site resolves to, a divergence under the
+        sample floor, and a divergence in a field no call site reads. The second is the whole
+        of this detector's output today -- the live baseline holds one row carrying one sample
+        -- and a number is what makes that answerable without lowering `MIN_SAMPLES` and
+        re-running a scan.
+
+        An operation the specification declares and traffic has never touched is not here. That
+        branch fires once per declared operation, so counting it would report the size of the
+        vendor's specification on every run, and it cannot distinguish an operation the
+        customer calls and has no traffic for from one the customer never calls -- separating
+        those needs the call-site query the branch exists to avoid running.
+        """
 
     def scan(self) -> Iterable[Finding]:
+        """Every finding, as a list rather than a generator.
+
+        Eager because `declined` is only true once the scan has run, and a generator nobody
+        finished consuming would leave the count describing part of the work.
+        """
+        self.declined = []
+        findings: list[Finding] = []
+
         for operation_id, declared_fields in self._spec.items():
             shapes = self._store.observed_shapes(self._vendor_id, operation_id)
             if not shapes:
@@ -122,6 +150,10 @@ class ObservedDriftDetector:
                 self._vendor_id, operation_id, repo_id=self._repo_id
             )
             if not sites:
+                self.declined.append(
+                    f"{operation_id}: {len(shapes)} observed shape(s) and no indexed call site "
+                    f"resolves to the operation, so a divergence has no location to report"
+                )
                 continue
 
             declared = {field.field_path: field for field in declared_fields}
@@ -130,21 +162,38 @@ class ObservedDriftDetector:
                 by_path[shape.field_path].append(shape)
 
             for shape in shapes:
-                if shape.sample_count < MIN_SAMPLES:
-                    continue
-
                 field = declared.get(shape.field_path)
-                if field is None:
-                    yield from self._undeclared(shape, sites, operation_id)
+                # Computed before the floor is applied, because whether a thin shape was a
+                # finding the floor cost is exactly what the count below has to know.
+                divergence = None if field is None else self._divergence(shape, field)
+
+                if shape.sample_count < MIN_SAMPLES:
+                    if field is None or divergence is not None:
+                        self.declined.append(
+                            f"{operation_id} {shape.field_path}: "
+                            f"{divergence or 'is not described by the specification'}, seen "
+                            f"{shape.sample_count} time(s) against a floor of {MIN_SAMPLES}"
+                        )
                     continue
 
-                divergence = self._divergence(shape, field)
+                if field is None:
+                    findings.extend(self._undeclared(shape, sites, operation_id))
+                    continue
+
                 if divergence is None:
                     continue
 
-                yield from self._diverged(
+                reported = list(self._diverged(
                     shape, field, divergence, by_path[shape.field_path], sites, operation_id
-                )
+                ))
+                if not reported:
+                    self.declined.append(
+                        f"{operation_id} {shape.field_path}: {divergence}, and no indexed call "
+                        f"site reads the field"
+                    )
+                findings.extend(reported)
+
+        return findings
 
     def _divergence(self, shape: ObservedShape, field: DeclaredField) -> str | None:
         """How this shape disagrees with what the vendor declared, or `None` if it does not.

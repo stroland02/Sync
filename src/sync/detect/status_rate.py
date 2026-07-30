@@ -174,10 +174,16 @@ def _statused(row: ObservedCall) -> int:
 
 
 def _leading_block(rows: Sequence[ObservedCall], floor: int) -> int | None:
-    """How many rows from the front it takes to reach `floor` statused requests, or `None`.
+    """How many rows from the front it takes to reach `floor` statused requests.
 
     A count rather than a tally, because the caller needs to know whether the front block and
     the back block share a row before either is worth folding.
+
+    `None` cannot arrive at the only caller there is. `scan` reaches `_periods` only once the
+    same rows have cleared the same floor under the same predicate, so the running total gets
+    there on the forward pass and on the reversed one. It stays in the signature because a
+    caller measuring against a floor the gate did not would need it, and because deleting it
+    makes `leading > len(rows) - trailing` a `TypeError` rather than a refusal.
     """
     seen = 0
     for index, row in enumerate(rows):
@@ -221,19 +227,61 @@ class StatusRateDetector:
         self._vendor_id = vendor_id
         self._floor = min_statused_calls
         self._threshold = error_rate_threshold
+        self.declined: list[str] = []
+        """Rates this scan did not state, each naming its population and its cause.
+
+        Three reach it: a failing population under the sample floor, a failing population
+        under the rate threshold, and a rate that resolves to no indexed call site. The first
+        two are the two numbers this module admits it cannot calibrate, and this is what makes
+        the traffic they silence reviewable without re-running a scan.
+
+        A population that returned no failures at all is not here, and neither is another
+        vendor's. Neither lost a finding: the channel is a claim that one was, not a tally of
+        every group the loop looked at.
+        """
 
     def scan(self) -> Iterable[Finding]:
+        """Every finding, as a list rather than a generator.
+
+        Eager because `declined` is only true once the scan has run, and a generator nobody
+        finished consuming would leave the count describing part of the work.
+        """
+        self.declined = []
+        findings: list[Finding] = []
+
         for (operation_id, server_address, method), rows in self._populations().items():
+            where = f"{method.upper()} {operation_id} at {server_address}"
             overall = _tally(rows)
             if overall is None or overall.statused < self._floor:
+                # Only a population that actually failed is a finding this declined. One that
+                # returned nothing but successes -- or nothing that carried a status at all --
+                # had no rate worth stating, so counting it would report the shape of the
+                # traffic rather than the work the floor cost.
+                if overall is not None and overall.errors:
+                    self.declined.append(
+                        f"{where}: {overall.errors} of {overall.statused} request(s) returned "
+                        f"4xx or 5xx ({overall.rate:.1%}), under the floor of {self._floor} "
+                        f"statused request(s) at which a rate is stated at all"
+                    )
                 continue
             if overall.rate < self._threshold:
+                if overall.errors:
+                    self.declined.append(
+                        f"{where}: {overall.errors} of {overall.statused} request(s) returned "
+                        f"4xx or 5xx ({overall.rate:.1%}), under the {self._threshold:.0%} "
+                        f"threshold at which this is reported"
+                    )
                 continue
 
             sites = self._store.call_sites_for_operation(
                 self._vendor_id, operation_id, repo_id=self._repo_id
             )
             if not sites:
+                self.declined.append(
+                    f"{where}: {overall.errors} of {overall.statused} request(s) returned 4xx "
+                    f"or 5xx ({overall.rate:.1%}) and no indexed call site resolves to the "
+                    f"operation, so the rate has no location to report"
+                )
                 continue
 
             earlier, later = self._periods(rows)
@@ -246,7 +294,7 @@ class StatusRateDetector:
             for site in sites:
                 if site.id is None:
                     continue
-                yield Finding(
+                findings.append(Finding(
                     detector=self.detector_id,
                     # The correlator's rung rather than `static`, for the reason
                     # `sync.detect.efficiency` gives: a perfect static binding still yields a
@@ -270,7 +318,9 @@ class StatusRateDetector:
                         f"{self._history(earlier, later, rose)} {self._caveat()} "
                         f"({site.path}:{site.line})"
                     ),
-                )
+                ))
+
+        return findings
 
     def _populations(self) -> Mapping[tuple[str, str, str], list[ObservedCall]]:
         """Rows grouped into the thing a rate is quoted about, ordered oldest first.
@@ -304,13 +354,18 @@ class StatusRateDetector:
     def _periods(
         self, rows: Sequence[ObservedCall]
     ) -> tuple[_Tally | None, _Tally | None]:
-        """The earliest and latest samples large enough to be rates, if two exist.
+        """The earliest and latest samples large enough to be rates, when they do not overlap.
 
         Each side must reach the floor on its own and they must share no row. Anything less is a
         rate compared against an impression, and this detector would rather say a level than a
         trend it cannot support. Rows between the two blocks belong to neither: they are the
         middle of the stream, and including them in either side would make the comparison depend
         on where the split fell rather than on what the two ends observed.
+
+        Overlap is the only way that happens. Two blocks always exist, because the gate and the
+        split measure the same floor over the same rows, so the absent-block return below is
+        unreachable from `scan` and the question this function really answers is whether the
+        two ends are disjoint.
         """
         leading = _leading_block(rows, self._floor)
         trailing = _leading_block(list(reversed(rows)), self._floor)
