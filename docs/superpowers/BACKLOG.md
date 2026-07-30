@@ -12,63 +12,30 @@ item that cannot say what evidence closes it is not ready to dispatch.
 
 ## Ready
 
-### B55 — Adapter selection declines a repository silently where intake explains itself
+### B58 — The indexer decodes a vendor's SDK strictly and the customer's own code leniently
 
-Two paths read the same customer manifest and one of them says nothing. Measured with a control on
-a UTF-16 `requirements.txt`:
+`python_lang.py:98` and `typescript.py:63` turn a tree-sitter node's byte range into text with
+`.decode("utf-8", errors="replace")`, for **customer** source. `symbols_speakeasy.py:172` does the
+identical job for a **vendor's** SDK and decodes strictly, with a docstring that says a lenient
+decode "would turn one of them into a route or a class name that silently differs from what the
+file says". That argument is exactly as true of customer code, which is the untrusted side — so the
+repository is strict where it controls the input and lenient where it does not.
 
-    plain UTF-8 (control)   PythonAdapter.matches() True    intake reason: (none)
-    UTF-16, undecodable     PythonAdapter.matches() False   intake reason: names the file and the byte
+**A brief of mine asserted these two were safe** because they "slice already-validated source and
+cannot invent a file". That was wrong: nothing validates the file first, the indexer hands
+tree-sitter bytes, and this slice is the only decode. B57 refused the claim, which is why the task
+exists. Measured consequence: an accented byte inside a matched literal recorded as
+`claude-3-caf�`, and for a literal call site that value *is* the `operation_id`, the key a
+retirement joins on.
 
-`src/sync/cli.py:203` is the whole of it — `if adapter.matches(repo):`. So "this repository does not
-use the SDK" and "we could not read the file that would have told us" are the same observable, and
-only one of them is a defect in the customer's repository rather than in ours. Adapter selection is
-the gate every later stage sits behind, so a silent decline costs the index, the finding and the
-remediation with no record of why.
+It is a task rather than a two-line change because fixing it means deciding, at `index()` level,
+what to do when a file fails to decode **mid-parse** — the main indexing path, where call sites may
+already have been emitted from the file. That can move a corpus denominator, so the four gate
+figures must be measured either side.
 
-B51 ranked this first among its leave-behinds on the grounds that a crash gets fixed, an accurate
-reason is actionable, and a wrong answer with no reason is the one nobody finds.
-
-**The design is decided rather than left open:** report at the selection site using the reason
-`intake.read_declared_dependencies` already computes. `LanguageAdapter.matches` is a published
-plugin protocol asserted on by `src/sync/core/conformance.py:394`, and the `unverifiable_reason`
-precedent (`python_lang.py:150`, read in `remediate/nodes.py:143`) is a *static* attribute for a
-general limitation, so overloading it with a per-repository fact would give one name two meanings.
-
-**Closes when:** an unreadable manifest is distinguishable from a clean manifest declaring nothing,
-with a control proving a legitimate silent decline stays silent, `LanguageAdapter` and the
-conformance kit unchanged, and four gates green.
-
-### B57 — One customer-source read decodes leniently, which three other modules refuse by name
-
-`_deprecation_call_sites` (`src/sync/cli.py:672`) reads every customer `.ts` file with
-`read_text(encoding="utf-8", errors="replace")`. That never fails, so a cp1252 file becomes a
-string full of U+FFFD and is handed to `index_operation_literals` — call sites derived from a
-corrupted view of the source, with nothing reporting that it happened. Measured: the lenient read
-contains U+FFFD where the strict read raises `UnicodeDecodeError`.
-
-**It is an inconsistency with the project's own written position rather than an open question.**
-Three modules face the identical choice and refuse it, each with the reason recorded:
-`benchmark/checkout.py:57`, `index/typescript.py:193`, `index/python_lang.py:224`. All three say
-some version of *`errors="replace"` would hand the indexer mojibake, and a table invented from it
-is worse than the traceback it replaces.*
-
-Scope is the hard part and most of the surrounding code is right. A scan finds 23 text reads in
-`src/` with no decode-capable handler, and sampling shows nearly all are internal — `schema.sql`
-through `importlib.resources`, a cache this code wrote, a generated artifact. CLAUDE.md says to
-validate at boundaries and trust internal code, so guarding those would add error paths for
-conditions that cannot occur. Two more that look similar are also fine: the
-`.decode("utf-8", errors="replace")` calls on tree-sitter node byte ranges slice already-validated
-source and cannot invent a file.
-
-One genuine decision is left to the worker: skip the file or refuse the repository. `checkout.py`
-skips and records what it skipped, which is the closest precedent, but `_deprecation_call_sites`
-returns a bare list with nowhere to put that record — so choosing skip means deciding where the
-record goes, and a skip nobody can see is the same silent wrong answer in different clothes.
-
-**Closes when:** a non-UTF-8 `.ts` file no longer contributes call sites built from replacement
-characters, a valid file still produces exactly what it produces today, the unreadable file is
-visible somewhere, and four gates green.
+**Closes when:** customer source that is not UTF-8 produces no call site carrying U+FFFD, valid
+source produces exactly what it produces today, the four corpus figures are quoted before and
+after, and four gates green.
 
 ### B7 — The M0 acceptance run has not executed since the pipeline changed underneath it
 
@@ -96,7 +63,7 @@ recorded with which change broke it.
 
 ## In flight
 
-- **B57** — `task_995f44570ba2`, worktree `sync-solo-a`.
+- **B58** — `task_7d27047a705a`, worktree `sync-solo-b`.
 - **B55** — re-dispatched as `task_3746257e4c0a` into `sync-solo-b`. The first attempt
   (`task_e03a2a5bb93f`) produced nothing in 94 minutes and was stood down.
 
@@ -701,3 +668,29 @@ is what a reviewer needs and duplicating it here would let the two copies drift.
   `ValueError: source code string cannot contain null bytes` before the tokenizer. Deleting a driver
   is the right move when the handler is genuinely gone; the assertion moved to
   `tests/test_python_index.py` rather than disappearing.
+
+- Skip and name a `.ts` file that does not decode. Landed `2b2c29b`. The read used
+  `errors="replace"` and fed the result to the literal indexer, where `operation_id` *is* the
+  literal's value. **The phantom is the finding**: `.ts` is MPEG transport stream as well as
+  TypeScript, so under leniency a binary file parsed into a call site. Reproduced here — a binary
+  `.ts` carrying an embedded literal yielded `vendor=anthropic operation_id='claude-3-opus'
+  path=video.ts`, and zero after the fix. My first probe found no phantom because random bytes
+  happen to contain no vendor prefix; the anecdote needed a matching literal to show, which is
+  worth remembering before dismissing one.
+
+  The worker priced its own change rather than hiding it: a valid `.ts` in a legacy encoding holds
+  literals leniency recovered and this no longer indexes, and telling that file from a binary
+  cheaply is impossible. `read_checkout` had already argued the same and chosen the same way.
+
+- Adapter selection stops blaming the repository for a binding we never declared. Landed `7290bc6`.
+  The load-bearing finding was that the old message was **false**, not merely vague: four of six
+  registered vendors are served by `GeneratedSpecAdapter` and declare no `sdk_bindings`, so a
+  repository genuinely importing `@anthropic-ai/sdk` was told its own manifest was at fault.
+  Verified both branches here — an undecodable manifest now says so and names the byte, a clean
+  manifest says `declares 1 dependency and 'stripe' is not one of them`.
+
+  It reached main the hard way. The worker wrote into the *other coordinator's* worktree and
+  committed onto their branch, 86 commits behind main, re-fixing a defect B53 had already landed.
+  Preserved as `unreviewed/b55-decline-reason`, then cherry-picked with five conflict hunks —
+  every one resolved as "keep both halves", its reason-reporting over main's newer encodings — and
+  five `DRIVERS` keys re-anchored from what the gate reported.
