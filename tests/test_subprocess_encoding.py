@@ -294,6 +294,45 @@ def load_baseline(path: Path = BASELINE) -> set[str]:
     }
 
 
+# The gate's three decisions, as functions over their inputs rather than as assertions about
+# this repository. Held apart deliberately: a test whose only input is `src/` as it stands can
+# fail only when the tree is dirty, so it never demonstrates that it detects anything, and
+# mutating the decision out of it leaves it green. Four mutations survived exactly that way
+# before these were extracted. The tests below drive both -- synthetic input to show each
+# decision fires, then the real tree.
+
+
+def unbaselined(calls: list[SubprocessCall], baseline: set[str]) -> list[SubprocessCall]:
+    """Violations the baseline does not already account for."""
+    return [call for call in calls if not call.satisfied and call.key not in baseline]
+
+
+def stale_entries(calls: list[SubprocessCall], baseline: set[str]) -> list[str]:
+    """Baseline entries that have stopped describing a violation."""
+    return sorted(baseline - {call.key for call in calls if not call.satisfied})
+
+
+def entries_without_a_retiring_task(text: str) -> list[str]:
+    """Baseline entries with no `M<n>-W<n>` in the comment block above them.
+
+    The block is what precedes the entry back to the last blank line, so one comment can own
+    several entries the way a module's calls belong to one follow-up.
+    """
+    unowned: list[str] = []
+    block: list[str] = []
+    for line in text.splitlines():
+        stripped = line.strip()
+        if not stripped:
+            block = []
+            continue
+        if stripped.startswith("#"):
+            block.append(stripped)
+            continue
+        if not re.search(r"\bM\d+-W\d+\b", "\n".join(block)):
+            unowned.append(stripped)
+    return unowned
+
+
 # --- the rule itself, measured rather than asserted -------------------------------
 #
 # Without these the check above is a style rule. With them it has a reproduced defect behind it.
@@ -458,6 +497,43 @@ def build():
     return subprocess.run(["git", "log"], capture_output=True, encoding="utf-8")
 """
 
+_ENV_WITHOUT_PYTHONIOENCODING = """
+import subprocess
+
+def build():
+    return subprocess.run(
+        ["npm", "ci"], capture_output=True, text=True, encoding="utf-8",
+        env={"YARN_IGNORE_PATH": "1"},
+    )
+"""
+
+_EXEMPT_ON_A_LATER_LINE = """
+import subprocess
+
+def build():
+    return subprocess.run(
+        ["git", "ls-files", "-z"],  # subprocess-encoding: allow - git emits utf-8 paths
+        capture_output=True, text=True, encoding="utf-8",
+    )
+"""
+
+_EXEMPT_BELOW_THE_CALL = """
+import subprocess
+
+def build():
+    return subprocess.run(
+        ["git", "ls-files", "-z"], capture_output=True, text=True, encoding="utf-8",
+    )
+    # subprocess-encoding: allow - too far from the call to excuse it
+"""
+
+_COMPUTED_TEXT_FLAG = """
+import subprocess
+
+def build(as_text):
+    return subprocess.run(["git", "log"], capture_output=True, text=as_text)
+"""
+
 _TWO_IN_ONE_FUNCTION = """
 import subprocess
 
@@ -479,6 +555,17 @@ def build():
         # `encoding=` alone puts subprocess into text mode. A check keyed on `text=True` would
         # call this one bytes and let the defect straight through.
         ("encoding= with no text=", _ENCODING_ONLY, False),
+        # The documented limit of route 3: `env=` is not itself a defence. `deps.py` passed one
+        # for an unrelated reason and would have read as satisfied.
+        ("env= that does not name PYTHONIOENCODING", _ENV_WITHOUT_PYTHONIOENCODING, False),
+        # The marker is read from any line the call spans, which is what lets it sit beside the
+        # argument that provoked it rather than only on the opening line.
+        ("exemption on a later line of the call", _EXEMPT_ON_A_LATER_LINE, True),
+        # But not from beyond the call. A marker that far away excuses nothing a reader can see.
+        ("exemption below the call", _EXEMPT_BELOW_THE_CALL, False),
+        # A flag no static reader can evaluate is read as text: the conservative direction, since
+        # reading it as bytes would exempt the call by making the check unable to judge it.
+        ("computed text= flag", _COMPUTED_TEXT_FLAG, False),
     ],
 )
 def test_the_check_answers_each_route_correctly(label: str, source: str, satisfied: bool) -> None:
@@ -530,21 +617,41 @@ def test_the_inventory_finds_every_call_a_textual_scan_finds() -> None:
     )
 
 
-def test_every_decoding_subprocess_call_states_a_defence() -> None:
-    baseline = load_baseline()
-    new = [call for call in scan_tree() if not call.satisfied and call.key not in baseline]
+def test_the_gate_reports_a_violation_the_baseline_does_not_cover() -> None:
+    """The gate detects something. Without this, `new = []` passes and nothing notices."""
+    violating = subprocess_calls(_UNDEFENDED, "m.py")
+    assert [c.key for c in unbaselined(violating, set())] == ["m.py:build"]
+    assert unbaselined(violating, {"m.py:build"}) == [], "a baselined key must be absorbed"
+    assert unbaselined(subprocess_calls(_ERRORS, "m.py"), set()) == []
+
+
+def test_the_gate_reports_a_baseline_entry_that_has_stopped_violating() -> None:
+    """What makes the baseline shrink rather than rot, shown on input that shrank."""
+    repaired = subprocess_calls(_ERRORS, "m.py")
+    assert stale_entries(repaired, {"m.py:build"}) == ["m.py:build"]
+    still_violating = subprocess_calls(_UNDEFENDED, "m.py")
+    assert stale_entries(still_violating, {"m.py:build"}) == []
+
+
+def test_the_gate_reports_a_baseline_entry_with_no_retiring_task() -> None:
+    owned = "# Retired by M3-W98/c, which owns this.\nsync/a.py:f\n"
+    unowned = "# Somebody should look at this one day.\nsync/a.py:f\n"
+    assert entries_without_a_retiring_task(owned) == []
+    assert entries_without_a_retiring_task(unowned) == ["sync/a.py:f"]
+    # A blank line ends a block, so the second entry is not covered by the first one's owner.
+    split = "# Retired by M3-W98/c.\nsync/a.py:f\n\nsync/b.py:g\n"
+    assert entries_without_a_retiring_task(split) == ["sync/b.py:g"]
+
+
+def test_every_decoding_subprocess_call_in_src_states_a_defence() -> None:
+    new = unbaselined(scan_tree(), load_baseline())
     assert not new, "\n  " + "\n  ".join(
         f"{call.path}:{call.line} ({call.key}) {call.complaint}" for call in new
     )
 
 
 def test_no_baseline_entry_has_stopped_describing_a_violation() -> None:
-    """What makes the baseline shrink rather than rot.
-
-    A repaired call fails this until its line is deleted, in the commit that repaired it.
-    """
-    violating = {call.key for call in scan_tree() if not call.satisfied}
-    stale = sorted(load_baseline() - violating)
+    stale = stale_entries(scan_tree(), load_baseline())
     assert not stale, (
         f"these entries in {BASELINE.name} no longer describe a violation; delete them in the "
         "commit that fixed them:\n  " + "\n  ".join(stale)
@@ -557,18 +664,8 @@ def test_every_baseline_entry_names_the_task_that_retires_it() -> None:
     An exemption is the mechanism for something nobody will ever fix, and it lives in `src/`
     beside the call with its reason. A line here says instead that somebody is going to look.
     """
-    if not BASELINE.exists():
-        return
-    text = BASELINE.read_text(encoding="utf-8")
-    unowned = []
-    for line in text.splitlines():
-        entry = line.strip()
-        if not entry or entry.startswith("#"):
-            continue
-        preceding = text.split(line)[0]
-        block = preceding.rsplit("\n\n", 1)[-1]
-        if not re.search(r"\bM\d+-W\d+\b", block):
-            unowned.append(entry)
+    assert BASELINE.exists(), f"{BASELINE} is missing; the gate would scan no entries and pass"
+    unowned = entries_without_a_retiring_task(BASELINE.read_text(encoding="utf-8"))
     assert not unowned, (
         "these baseline entries name no retiring task in the comment block above them:\n  "
         + "\n  ".join(unowned)
