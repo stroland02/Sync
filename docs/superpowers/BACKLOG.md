@@ -12,32 +12,6 @@ item that cannot say what evidence closes it is not ready to dispatch.
 
 ## Ready
 
-### B63 — Key the decode-handler drivers by scope, not by line number
-
-`tests/test_decode_handlers.py` keys `DRIVERS` by `path:line`, so any edit above a handler
-invalidates the key and the check fails by position rather than behaviour. Counted this run: seven
-keys re-anchored when one change added comment blocks above them, three more inside a single
-commit, one key twice within an hour, and a fifth occurrence flagged by the last worker to touch
-the file. **None was a defect in `src/`.** Two workers reported it unprompted.
-
-The file's docstring claims *"there is no stable identity to key on instead"*. Measured over `src/`,
-that is false:
-
-    decode handlers in src/      : 18
-    distinct scope+caught keys   : 18
-    collisions under that scheme : 0
-
-keying by file, enclosing scope and caught exception names.
-
-**A previous brief told a worker explicitly not to redesign this and to document the cost instead.**
-That was right at two occurrences and wrong at five, and the reversal is recorded here rather than
-quietly made. The reason it matters beyond annoyance: a check that cries wolf gets silenced, and
-this one has caught two real omissions this run — both a new decode handler landing with no driver.
-
-**Closes when:** keys survive an unrelated edit above a handler, a collision is refused loudly
-naming both, the two real failure modes still fire, the docstring paragraph asserting the opposite
-is corrected, and four gates green.
-
 ### B62 — Retract ghost call sites without destroying findings
 
 A call site's identity is its position, so a call that moves gains a row and the old one is never
@@ -118,8 +92,6 @@ recorded with which change broke it.
 
 - **B61** — `task_12ccee12fd98`, worktree `sync-solo-b`.
 - **B62** — second attempt, `task_aeec9ef29534`, worktree `sync-solo-b`.
-- **B63** — re-dispatched, `task_2750adb3575e`, worktree `sync-solo-a`. The first attempt
-  produced nothing.
 - **B55** — re-dispatched as `task_3746257e4c0a` into `sync-solo-b`. The first attempt
   (`task_e03a2a5bb93f`) produced nothing in 94 minutes and was stood down.
 
@@ -810,3 +782,16 @@ is what a reviewer needs and duplicating it here would let the two copies drift.
   through `getattr` so the protocol is untouched; verified here that an adapter lacking the member
   returns `[]` and breaks nothing, that a clean repository still reports none, and that a latin-1
   module now appears. It also corrected two docstrings that earlier tasks had falsified.
+
+- Key the decode-handler drivers by scope rather than by line. Landed `229a242`. The positional key
+  cost five re-anchorings in one run, none of them a defect in `src/`, and the docstring justifying
+  it claimed no stable identity existed — measured false: 18 handlers, 18 distinct
+  `path::scope::caught` keys, zero collisions. Verified by the probe that matters: inserting a
+  comment above a decode handler, the exact edit that broke keys five times, leaves all 25 tests
+  green; removing a driver still fails and now names
+  `sync/signals/intake.py::_read_npm::JSONDecodeError+UnicodeDecodeError`. The line survives in the
+  failure message while leaving the key, which is the split that makes both properties hold.
+
+  **Two agents worked this in one worktree and both errors were the coordinator's.** The original
+  was stood down on the evidence that its assigned tree was clean; it had never been in that tree.
+  The all-worktree scan is now the only liveness check worth running.
