@@ -10,6 +10,110 @@ An item is only **Done** once it is on `main` with all three gates green
 Every item states what is wrong, why it matters, and what evidence would close it. An
 item that cannot say what evidence closes it is not ready to dispatch.
 
+## Milestone status
+
+Percentages are judgement over measured facts, not a burndown. Each says what it counted. The
+milestone names come from
+[the design document](specs/2026-07-25-sync-self-maintaining-apis-design.md); the mapping below is
+by content, because items were never tagged with a milestone as they landed.
+
+| | Milestone | % | The one sentence that matters |
+|---|---|---|---|
+| **M0** | Walking skeleton, one real PR | **~90%** | Every component exists; the proof is ~200 commits stale |
+| **M1** | Runtime signals, efficiency detector | **~85%** | Built; the dollar estimate is deliberately unbuilt |
+| **M2** | Production error detector | **~85%** | Built; never exercised against real telemetry |
+| **M3** | Multi-vendor, MCP, plugin SDK | **~95%** | Packaging closed 2026-07-30; nothing structural left |
+| **M4** | Hosted control plane (**the front end**) | **0%** | Not started, and has no plan file yet |
+| **M5** | Integration layer | **~35%** | Sources exist; the correlation join does not |
+| **M6** | Show it, rather than describe it | **0%** | Needs a UI to film |
+
+### M0 — Walking skeleton, one real pull request · ~90%
+
+**Done.** Stripe adapter, TypeScript indexer, vendor-change detector, LangGraph remediation graph and
+GitHub forge all ship. The verification path is the part that got hardened most: a push lease that
+refuses a tip Sync did not author, refusal to discard any non-Sync commit rather than only one at the
+tip, branch deletion on abandonment, a guard catching a patch that edited an installed dependency,
+support for a patch that must create a file, dependency-tree discarding, checkpoint serialiser
+registration, and the tier cascade.
+
+**Remaining — one item, and it is a decision rather than a build.** `B7`, the acceptance run.
+`tests/test_e2e_stripe.py` is `@pytest.mark.e2e` and deselected by `addopts`, so it has not executed
+since roughly two hundred commits landed underneath it. It opens a real pull request against a real
+repository and spends `xhigh` model time, so it needs the user's go-ahead. **It is also the only
+thing that gives three of the five quality axes their first sample** — `migration_outcome` holds 3
+rows and **0** carry a `pr_number`.
+
+### M1 — Runtime signals and the efficiency detector · ~85%
+
+**Done.** The span store (`observed_call`), OTLP ingest, correlation behind a `RequestCorrelator`
+protocol, loop context on `call_site` as a depth rather than a flag, and the efficiency detector
+itself — calls in a loop, absent caching, retry storms via `resend_count`. Efficiency findings state
+that a cost is shared across call sites rather than counted once per site.
+
+**Remaining.** The design document says these findings carry a dollar estimate. They do not, and
+`detect/efficiency.py` says why in its own docstring: a saving is a call count times a price per
+call, and no table here holds a price. That is a data-sourcing decision, not missing code, and
+inventing a price would be worse than reporting none.
+
+### M2 — Production error detector · ~85%
+
+**Done.** `status_rate.py` reports a level rather than a bare rate; `observed_drift.py` catches a
+response that no longer matches the indexed specification; `observed_shape` stores what was actually
+seen. A Sentry source exists, which the design document calls the fastest route to this milestone.
+
+**Remaining.** None of it has run against real telemetry, so the detectors are correct by
+construction and unproven in the field. Same root as M0: no real run has happened.
+
+### M3 — Multi-vendor, MCP, and the public plugin SDK · ~95%
+
+**Done.** Twilio as the second adapter — the first real second implementation of
+`operation_for_symbol`, which inverted an assumption the symbol map was built around. A Python
+language adapter. An MCP vendor adapter. A generated-SDK adapter family with the Stripe symbol map
+derived from `x-stableId` rather than URL shape. The conformance kit covering **all five protocols**
+against nineteen shipped implementations, with each rule proved able to fail — it has caught itself
+three times, most recently certifying its own reference detector.
+
+And the last structural piece: **`sync-core` is now a second distribution.** An adapter author
+installs six packages instead of eighty-one, with psycopg, LangGraph, mcp, the Claude Agent SDK and
+the tree-sitter grammars all demonstrably absent. CLAUDE.md's first non-negotiable is now true at the
+packaging level, not only the import level.
+
+**Remaining.** Publishing `sync-core` anywhere is public and irreversible and is the user's call. The
+wheel builds and installs; nobody has uploaded it.
+
+### M4 — Hosted control plane · 0% — **this is where the front end lives**
+
+Nothing started. No plan file exists either: every other milestone got a spec before it got built,
+and M4 has only its design-document section.
+
+**Nothing in the engine blocks starting it.** What is missing is data: a dashboard renders findings,
+runs and merge outcomes, and today every panel would read zero. `B7` is what changes that.
+
+### M5 — The integration layer · ~35%
+
+**Done.** Sentry and Datadog sources, the signed public change feed with its consumer and cache, the
+vendor registry and its tiering, and the deprecations catalogue.
+
+**Remaining.** The correlation join itself — the thing the milestone is actually for. Nothing yet
+joins a Sentry spike to a deploy to a vendor change to the call sites affected. That is a build, not
+a defect, which is why nothing here is queued.
+
+### M6 — Show it, rather than describe it · 0%
+
+Remotion videography of the product working. Needs a working UI to film, so it sits behind M4.
+
+### Measurement, which cuts across all of them
+
+Two of five quality axes are measured: **binding precision and recall, both 1.0000 at n=26** over a
+frozen corpus of 17 pairs across 5 repositories, gated by four floors that have each been proved able
+to fire. Merge rate, routing accuracy and cost per merged patch have **never had a sample**.
+
+Most of the `Done` list below is this: the corpus, the binder defects it caught, the rung a finding
+carries, and a long family of encoding defects that all shared one shape — a text read that answered
+confidently instead of refusing.
+
+---
+
 ## Ready
 
 ### B7 — The M0 acceptance run has not executed since the pipeline changed underneath it
