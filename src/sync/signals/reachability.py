@@ -71,10 +71,19 @@ database and no file, and a test asserts that on its imports rather than trustin
 `call_site_counts` and `observed_call_counts` are aggregators over rows a caller already holds,
 not queries -- which is what keeps the ordering testable against fixtures with nothing running.
 
-Sourcing those rows for a whole repository is the one thing this cannot do from here.
-`GraphStore` exposes call sites only per operation, so counting a repository's indexed surface
-needs a reader it does not have; that gap is recorded rather than papered over, and until it is
-closed the counts come from whatever the caller was already holding.
+Sourcing those rows for a whole repository is the one thing this cannot do from here, and there
+are now two ways in depending on what the caller is holding. A caller that has just indexed --
+`sync run` -- already holds `CallSite` rows and aggregates them here, reaching no database.
+A caller that has not, `sync intake --rank-by-repo-id`, reads `GraphStore.call_site_counts`,
+which is the same count expressed as one `GROUP BY` because rows for a whole repository are not
+otherwise in hand.
+
+Two expressions of one count is a real cost and it is the lesser one: the alternative was for
+this module to open a connection, which would have made the ordering untestable without a
+database and put a query in the one place that must stay pure. Both carry the same two contract
+sentences -- one row is one call site rather than one dependency, and a vendor with no call
+sites is absent rather than zero -- because a caller that believed either differently would
+misread the ranking, and they are the sentences to keep in step if a third caller appears.
 """
 
 from __future__ import annotations
