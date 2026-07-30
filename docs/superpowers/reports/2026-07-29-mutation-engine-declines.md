@@ -112,6 +112,32 @@ established here; the timeout itself elapses with or without it, so the timing i
 > run could not make its own database, and continuing unisolated would put a run's writes into
 > whatever `SYNC_DSN` already pointed at.
 
+> **Second correction, 2026-07-30, by M3-W102. The retraction above is itself wrong on one point:
+> the class-identity mechanism does exist.** It is real, it is reproducible in 3.27 s with neither
+> coverage nor pytest involved, and the paragraph it retracted was closer to right than the
+> retraction was. What nobody had isolated is that the behaviour depends on the **form** of the
+> `--cov` argument, which is why two careful parties measured opposite answers and both were
+> correct.
+>
+> A **dotted** `--cov=<module>` whose import reaches psycopg — `--cov=sync.benchmark.mutate`, the
+> command this report ran — makes `coverage.inorout` import that module inside
+> `coverage.misc.sys_modules_saved()`, whose `restore()` then deletes all 77 psycopg modules from
+> `sys.modules`. On the next import `psycopg/errors.py` re-executes and builds a second set of the
+> exception classes, while `psycopg_binary._psycopg` is cached by the interpreter below
+> `sys.modules`, is not re-executed, and keeps raising the first. Bare `--cov`, `--cov=sync` (what
+> CI runs) and any path form are unaffected, because they name no package to import.
+>
+> So this report's `same_class = False` was a true measurement, and its consequence stands. Where it
+> went wrong was only in placing the second set inside the C extension — the extension exports no
+> exception classes at all — and its `sys.modules` check could not have told the two hypotheses
+> apart, because a re-execution replaces the entry rather than adding one.
+>
+> The unguarded create block named above is real and worth fixing, but it is **not** what this
+> report observed: the failure here was one red test inside a running suite, not a session dying
+> before collection, and it is now reproduced under this report's own command for its own stated
+> reason. `docs/superpowers/reports/2026-07-29-psycopg-error-identity.md` carries the measurements,
+> the reconciliation of the two earlier readings, and what changed in `tests/conftest.py`.
+
 **Two consequences, and the second is the one that matters.** The red test is cosmetic — it asserts
 exactly this contract, so it is doing its job. But `sweep_leaked_databases` is also called from
 `pytest_configure` (`conftest.py:311`), where an escaping exception takes the **whole session**
