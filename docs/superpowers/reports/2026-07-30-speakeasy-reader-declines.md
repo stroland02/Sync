@@ -34,14 +34,20 @@ Before, at `6b01f04` (`origin/main`):
 The brief quoted 2639; `origin/main` had advanced by two tests. The eleven missing statements are
 exactly as the brief quoted them.
 
-After:
+After, on the merged tree:
 
     src\sync\signals\generated\symbols_speakeasy.py   245    5   98%   309, 344, 392, 399, 539
-    2655 passed, 2 skipped in 131.84s
+    2671 passed, 2 skipped in 153.40s
 
 Two statements were added — the escape guard — so the line numbers move by seven from
 `_string_literal` onward and not at all before it. The five that remain are the five judged
 unreachable: `302→309`, `337→344`, `385→392`, `392→399`, `532→539`.
+
+The suite total moved for two reasons and only one of them is this branch's: fourteen tests added
+here, and whatever `origin/main` gained between `6b01f04` and `6dc33fb`, which was merged in before
+these figures were taken. **Six statements covered, and the five that remain are the five argued
+unreachable below** — that is the number this task is answerable for, and it does not depend on the
+suite total at all.
 
 ## The eleven
 
@@ -76,11 +82,37 @@ route it produced rather than on its absence:
 
 Two symbols, one route, and the route is real. That is the difference from M3-W91's case, where the
 truncated route `/v1/a` was declared by nothing: here the truncation lands on a route the vendor
-publishes, so every check this module has stays silent. `unknown_to_spec` is empty. `covered_count`
-does not move — the reduced key was already reached by `listAliases`. `extracted_count` does not
-move either, because the symbol is still produced. Nothing in the pipeline distinguishes the two
-symbols, and a vendor change to `GET /v4/aliases` would raise a finding against every call site that
-calls `getAlias`, which sends `/v4/aliases/{idOrAlias}` and is unaffected.
+publishes, so every check this module has stays silent.
+
+Measured rather than reasoned — the same tree read twice, once with the escape guard removed and
+once with it:
+
+| | Guard removed (the defect live) | Guard present (today) |
+|---|---|---|
+| `aliases.getAlias` | `('GET', '/v4/aliases')` | absent |
+| `aliases.listAliases` | `('GET', '/v4/aliases')` | `('GET', '/v4/aliases')` |
+| `unknown_to_spec` | `()` | `()` |
+| `covered_count` | 14 | 14 |
+| `len(unreached)` | 345 | 345 |
+| `extracted_count` | 15 | 14 |
+
+**Four of the six numbers do not move at all.** `unknown_to_spec` is empty in both, because the
+route the SDK appears to send is one the specification declares. `covered_count` does not move
+because the reduced key was already reached by `listAliases`. `unreached` does not move because
+`/v4/aliases/{idOrAlias}` goes unreached either way — under the defect because no symbol carries it,
+under the fix because the symbol is gone. So the wrong binding and the honest decline are
+**indistinguishable in every number this report carries except the symbol count**, and a bare count
+of 15 is what a clean read of this fixture also produces.
+
+Nothing in the pipeline distinguishes the two symbols, and a vendor change to `GET /v4/aliases`
+would raise a finding against every call site that calls `getAlias`, which sends
+`/v4/aliases/{idOrAlias}` and is unaffected.
+
+One number does move in the other direction, and it is the fixture's doing rather than the code's:
+`len(unreadable)` goes from 48 to **49** under the fix, because on this truncated checkout the
+method that loses its route also reaches an absent wrapper module and so records a decline. Stage
+that module — a complete checkout — and the 49 becomes 48 again. That is the finding two sections
+below, arriving here first.
 
 The verb case is the milder half: `method: "\u0047ET"` read as `ET`, and `(ET, /v4/aliases/{…})` is
 a key no specification declares, so the cross-check would have reported it. Both are fixed by the
@@ -417,13 +449,19 @@ Guarded by construction, and which of them actually fired:
 | A non-1 exit with no `FAILED` lines | any exit outside {0, 1} is UNREADABLE | No. Every run exited 0 or 1 |
 | A `SyntaxError` arriving as `ERROR` | every mutation is `compile()`d first | Yes — control **C1**, reported without pytest being invoked |
 | Exit 0 at a passing count other than the baseline | UNREADABLE, because the test set moved | No |
-| Not-applied: an anchor absent or ambiguous | every anchor must match exactly once | NOT_APPLIED_FIRED |
-| Anchor-missed: an LF anchor against a CRLF file | `symbols_speakeasy.py` **is** CRLF in the working copy, so every multi-line anchor is translated to `\r\n` before matching | ANCHOR_MISSED_FIRED |
+| Not-applied: an anchor absent or ambiguous | every anchor must match exactly once | **Yes.** `P392` reported `NOT-APPLIED: anchor occurs 0 times`, because the committed file no longer held the `return read` it anchors on. That message is what led to finding the captured mutation |
+| Anchor-missed: an LF anchor against a CRLF file | `symbols_speakeasy.py` **is** CRLF in the working copy, so every multi-line anchor is translated to `\r\n` before matching | **Yes, counterfactually, on 11 of the 12 mutations.** Measured: 11 of the 12 anchors span lines, and for all 11 the LF form matches the file zero times |
 | A decode error on the reader thread | `PYTHONIOENCODING=utf-8` in the child environment, `errors="replace"` harness-side | No. This module and the twelve test files are pure ASCII |
 | A skipped test reading as a pass | the pass count is compared to the baseline, not just the exit code | No |
 | A mutation captured by a commit taken during the window | none, by construction — see below | **Yes**, in `827eee0`, and it was misdiagnosed first |
 
-ANCHOR_MISSED_PROSE
+The anchor-missed row is the one worth keeping. `symbols_speakeasy.py` is checked out CRLF, 11 of
+the 12 mutation anchors span lines, and the LF spelling of every one of those 11 matches the file
+**zero** times. So an LF-anchored harness reports NOT-APPLIED for 11 of 12 mutations — and a harness
+that did not separate NOT-APPLIED from SURVIVED would report eleven survivals against a module with
+one real defect in it. Both guards were exercised directly rather than assumed: an absent anchor is
+rejected at `anchor occurs 0 times`, and an ambiguous one — `        return None`, which occurs 5
+times — is rejected too.
 
 ### A sixth false-verdict mode: a mutation captured by a snapshot, and a wrong diagnosis of it
 
@@ -478,12 +516,27 @@ the mutated text is `compile()`d first, each anchor must match exactly once and 
 CRLF before matching, the exit code is read directly, and any exit outside {0, 1} — or exit 0 at a
 count other than the baseline — is UNREADABLE rather than a verdict.
 
-PROBE_TABLE_PLACEHOLDER
+| Probe | Statement | Verdict |
+|---|---|---|
+| P309 | `309` — `_helper_path`, `continue` when a `call_expression` states no `function` or `arguments` | **UNREACHED**, exit 0, `{'passed': 2671, 'skipped': 2}` |
+| P344 | `344` — `_builder_verb`, `continue` when a `pair` states no `key` or `value` | **UNREACHED**, exit 0, same counts |
+| P392 | `392` — `_read_class`, `return read` when a `class_declaration` states no `body` | **UNREACHED**, exit 0, same counts |
+| P399 | `399` — `_read_class`, `continue` when a `method_definition` states no `name` | **UNREACHED**, exit 0, same counts |
+| P539 | `539` — the breadth-first walk, `continue` when a queued key is absent from `classes` | **UNREACHED**, exit 0, same counts |
+
+Baseline `exit 0, {'passed': 2671, 'skipped': 2}` before the first probe and
+`restored baseline: exit 0, counts {'passed': 2671, 'skipped': 2}` after the last, so a green run is
+distinguishable from a harness that had stopped running anything. Five probes, five greens, and the
+module was verified byte-identical to `HEAD` afterwards by `git diff --exit-code` rather than by
+trusting the harness's own restore — which is the guard the section above says this task did not
+have the first time.
 
 ## What changed
 
-`src/sync/signals/generated/symbols_speakeasy.py`: two statements and a docstring paragraph. Nothing
-else in `src/` was touched, and none of the forbidden files was opened for writing.
+`src/sync/signals/generated/symbols_speakeasy.py`: two statements and a docstring paragraph — that
+is the whole production diff, and `git diff a3306a4 HEAD -- src/` is empty, so nothing the probe runs
+did to that file survives. Nothing else in `src/` was touched, and none of the forbidden files was
+opened for writing.
 `tests/golden/` and `benchmark/corpus/` are byte-identical to `origin/main` —
 `git diff --name-only origin/main -- tests/golden benchmark/corpus` is empty.
 
@@ -500,7 +553,34 @@ No test here calls a vendor API or a model API.
 
 ## Gates
 
-GATES_PLACEHOLDER
+`pytest` was run unpiped and its own exit code read; `lint-imports` unredirected with
+`PYTHONIOENCODING=utf-8`.
+
+| Gate | Exit | Result |
+|---|---|---|
+| `uv run pytest -q` | **0** | 2671 passed, 2 skipped in 153.40s. Run unpiped, so this is pytest's own status and not a wrapper's |
+| `uv run python scripts/lint_encoding.py src scripts tests` | **0** | clean |
+| `PYTHONIOENCODING=utf-8 uv run lint-imports` | **0** | 95 files, 201 dependencies, `sync.core depends on nothing KEPT`, 1 contract kept, 0 broken. Run unredirected |
+| `uv run python scripts/lint_dead_links.py src --baseline scripts/dead_links_baseline.txt` | **0** | clean |
+
+Taken at `fb18bed` with only this report uncommitted, and this report is markdown that no gate
+reads. The branch is `stroland02/m1-static-gate`; `origin/main` was merged at `d0df4d7`, so these
+are figures for the tree that lands rather than for the tree the work started on.
+
+| SHA | Subject |
+|---|---|
+| `a3306a4` | `fix: decline a route literal an escape has split, rather than reading its prefix` |
+| `827eee0` | `wip: preserve M3-W111's Speakeasy reader work` — the coordinator's snapshot, left unamended |
+| `d0df4d7` | merge of `origin/main` |
+| `563554c` | `docs: trace the escape defect to the copy it came from, and price the split it grew in` |
+| `65229ba` | `fix: restore the class-body guard a mid-probe snapshot replaced with a raise` |
+| `a9c47e9` | `docs: name the two harness failures this task hit, both outside pytest's output` |
+| `ab28dab` | `docs: correct the diagnosis of the captured mutation, and keep the wrong one visible` |
+| `9353663` | `style: wrap two over-long lines in the Speakeasy decline tests` |
+| `fb18bed` | `docs: renumber the statement references in the decline tests to the post-fix file` |
+
+`SYNC_DSN` was left unset throughout, so `tests/conftest.py` derives a database name from each run's
+own pid rather than sharing one with another task, and drops only what it created.
 
 ## What this leaves for the next task
 
