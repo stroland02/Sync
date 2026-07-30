@@ -40,6 +40,25 @@ without running anything.
 """
 
 
+def test_template_dsn_prefers_the_pin_then_the_server_then_the_default():
+    """The selection order the child below depends on.
+
+    `SYNC_TEST_SERVER` exists for exactly one caller: a parent test that must launch an
+    *unpinned* child -- pinning would hide the defect the child reproduces, because a pinned
+    serial run creates no database of its own -- on whatever server the parent actually
+    reached. Without it the child falls back to `DEFAULT_DSN`, which names this machine's
+    5433 mapping and no CI runner's.
+    """
+    from tests import conftest
+
+    assert conftest.template_dsn("postgresql://u:p@h:1/pin") == "postgresql://u:p@h:1/pin"
+    assert (
+        conftest.template_dsn(None, server="postgresql://u:p@h:2/any")
+        == "postgresql://u:p@h:2/any"
+    )
+    assert conftest.template_dsn(None, server=None) == conftest.DEFAULT_DSN
+
+
 def test_a_serial_run_does_not_sweep_away_its_own_database():
     """The whole point of the child, and it fails today without the `exclude` on those two sweeps.
 
@@ -47,6 +66,14 @@ def test_a_serial_run_does_not_sweep_away_its_own_database():
     `sync_test_32080 is the database this run is using and a sweep in this file took it`.
     """
     env = {**os.environ, "PYTHONIOENCODING": "utf-8"}
+    # The parent's DSN names the one server this run has actually reached, wherever the suite
+    # is executing. The child must not inherit it as a *pin* -- a pinned serial run creates no
+    # database of its own, which hides the exact defect this test reproduces -- so the server
+    # travels via SYNC_TEST_SERVER and the pin is stripped. Without this, the child falls back
+    # to DEFAULT_DSN, which names this machine's 5433 mapping and no CI runner's.
+    parent_dsn = env.get("SYNC_DSN")
+    if parent_dsn:
+        env["SYNC_TEST_SERVER"] = parent_dsn
     for inherited in (
         "SYNC_DSN",
         "PYTEST_XDIST_WORKER",

@@ -342,6 +342,25 @@ def entries_without_a_retiring_task(text: str) -> list[str]:
 NON_ASCII = "café —"
 CHILD = "import sys; sys.stdout.write({!r} + chr(10))".format(NON_ASCII)
 
+# The three measured tests below reproduce a defect whose premise is that a Python child with no
+# PYTHONIOENCODING writes the locale codepage and the locale codepage is not utf-8. That is a
+# fact about the machine, not the code: true here (cp1252), false on a UTF-8 Linux runner and on
+# a Windows box opted into the UTF-8 codepage, where the child writes utf-8 and nothing can be
+# reproduced. The guard is the premise itself rather than `sys.platform`, because platform is a
+# proxy that is wrong in both directions. The static inventory above is not guarded: it reads
+# call sites, not executions, and holds on every platform.
+import locale
+
+_locale_is_utf8 = (locale.getpreferredencoding(False) or "").lower().replace("-", "") == "utf8"
+_needs_non_utf8_locale = pytest.mark.skipif(
+    _locale_is_utf8,
+    reason=(
+        "this machine's locale codepage is utf-8, so a Python child emits utf-8 and the "
+        "cp1252 defect these tests measure cannot be reproduced here; the rule they pin is "
+        "held by the static inventory, which runs everywhere"
+    ),
+)
+
 
 def _child_env(**overrides: str) -> dict[str, str]:
     """A child environment with `PYTHONIOENCODING` removed unless an override puts it back.
@@ -357,6 +376,7 @@ def _child_env(**overrides: str) -> dict[str, str]:
     return env
 
 
+@_needs_non_utf8_locale
 def test_a_python_child_writes_the_locale_codepage_and_not_utf_8() -> None:
     """The premise. Read as bytes, so nothing about the parent's decoding is involved."""
     result = subprocess.run(
@@ -371,6 +391,7 @@ def test_a_python_child_writes_the_locale_codepage_and_not_utf_8() -> None:
         result.stdout.decode("utf-8")
 
 
+@_needs_non_utf8_locale
 def test_the_old_form_loses_stdout_on_a_child_that_chooses_its_own_encoding() -> None:
     """`text=True, encoding="utf-8"` and nothing else: exit 0, no exception, `stdout` is `None`.
 
@@ -415,6 +436,7 @@ def test_pythonioencoding_in_the_child_env_is_what_makes_that_call_correct() -> 
     assert result.stdout is not None and result.stdout.rstrip("\r\n") == NON_ASCII
 
 
+@_needs_non_utf8_locale
 def test_errors_replace_survives_the_decode_but_does_not_preserve_the_bytes() -> None:
     """Route 2, and why the check does not demand it everywhere.
 

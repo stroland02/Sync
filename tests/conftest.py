@@ -289,6 +289,19 @@ def database_for(pinned_dsn: str | None, worker: str | None, pid: int) -> str | 
     return f"{name}_p{pid}" if _LEAKED_NAME.match(base) else name
 
 
+def template_dsn(pinned: str | None, server: str | None = None) -> str:
+    """The DSN this run derives its databases from: the pin, then the server, then the default.
+
+    `server` is `SYNC_TEST_SERVER`, and it is a template rather than a pin: it names where to
+    create this run's own database without naming which database to borrow. It exists for one
+    caller -- `test_serial_run_isolation` launches a child that must stay unpinned, because a
+    pinned serial run creates no database of its own and that hides the defect the child
+    reproduces -- while still reaching whatever server the parent actually reached, which
+    `DEFAULT_DSN` only names on the machine whose port mapping it describes.
+    """
+    return pinned or server or DEFAULT_DSN
+
+
 def pytest_configure(config) -> None:
     global _created_dbname, _admin_dsn
 
@@ -298,7 +311,7 @@ def pytest_configure(config) -> None:
     if dbname is None:
         return
 
-    template = pinned or DEFAULT_DSN
+    template = template_dsn(pinned, server=os.environ.get("SYNC_TEST_SERVER"))
     admin_dsn = dsn_for(ADMIN_DBNAME, template)
     try:
         conn = psycopg.connect(admin_dsn, autocommit=True)
