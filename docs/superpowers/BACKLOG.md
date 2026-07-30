@@ -35,6 +35,36 @@ working and reports nothing.
 repository still prints no block, an adapter lacking the member neither breaks the run nor the
 report, `LanguageAdapter` and the conformance kit unchanged, and four gates green.
 
+### B62 — Re-indexing a repository that changed leaves ghost call sites in the graph forever
+
+A call site's identity is its position, so a call that moves gains a second row and the old one is
+never retracted. Measured on main, one Python file with one Stripe call:
+
+    initial index                      rows=1 at lines [5]
+    after the customer adds a line     rows=2 at lines [5, 6]
+
+Re-indexing *unchanged* input does converge — three runs, one row throughout, and `apply_schema` is
+idempotent too — so the rule CLAUDE.md states is kept for the case it names. What is missing is
+reconciliation of a repository that changed: `cli.py:925` loops `upsert_call_site` over what the
+indexer found, and there is no prune, delete or retraction anywhere in `cli.py` or `graph/store.py`.
+Every re-index adds ghosts and removes none, over exactly the usage the product exists for.
+
+`call_site` is the table every detector joins against, so a ghost is a call site the repository does
+not have: a finding can be raised where nothing is called, and remediation's `locate` step then
+works on the wrong line.
+
+**The hazard shapes the fix.** `finding.call_site_id REFERENCES call_site (id) ON DELETE CASCADE`,
+so deleting a stale call site deletes its findings — and abandoned runs are data. A naive
+delete-then-reinsert would destroy the record of what was already concluded, invisibly, which is a
+worse defect than the one being fixed. `call_site.indexed_at` already exists and offers a
+retract-by-absence answer that deletes nothing; the alternative is deleting only unreferenced rows,
+which makes the graph's contents depend on whether a finding happened to be raised.
+
+**Closes when:** a re-index stops asserting a call site at a position the call no longer occupies, an
+unchanged repository still converges exactly as it does today, a finding raised against a call site
+that later moved still exists afterwards, the four corpus figures are quoted either side, and four
+gates green.
+
 ### B7 — The M0 acceptance run has not executed since the pipeline changed underneath it
 
 `tests/test_e2e_stripe.py::test_one_command_produces_one_green_pull_request` is the
@@ -62,6 +92,7 @@ recorded with which change broke it.
 ## In flight
 
 - **B61** — `task_12ccee12fd98`, worktree `sync-solo-b`.
+- **B62** — `task_a22295d1afa5`, worktree `sync-solo-a`.
 - **B55** — re-dispatched as `task_3746257e4c0a` into `sync-solo-b`. The first attempt
   (`task_e03a2a5bb93f`) produced nothing in 94 minutes and was stood down.
 
