@@ -315,7 +315,7 @@ def test_two_claims_about_one_call_site_survive_being_stored(store):
     The graph derives a finding's id from its identity fields and inserts ON CONFLICT DO
     NOTHING, so two findings the key cannot tell apart are one row and nobody is told which
     one was dropped. One unit of work that calls the same target LOOP_THRESHOLD times is both
-    a loop and an absent cache -- the two claims `_rationales` documents as not being mutually
+    a loop and an absent cache -- the two claims `_claims` documents as not being mutually
     exclusive -- with different fixes, so losing either loses a repair a reviewer would act on.
     """
     _site(store)
@@ -336,7 +336,7 @@ def test_one_claim_evidenced_by_two_traces_is_one_finding(store):
     A trace is unbounded: a busy repository produces one `observed_call` row per request, and
     every one of them looping over the same call site supports the same claim. Emitting a
     finding each would put thousands of rows in front of a reviewer for one piece of work --
-    `_rationales` already argues that N findings assert N savings that do not exist -- so the
+    `scan` already argues that N findings assert N savings that do not exist -- so the
     trace is evidence rather than identity, and the detector says it once and quotes the
     worst unit of work it saw.
     """
