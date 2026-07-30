@@ -1,13 +1,25 @@
--- Grain: one row per call site, per repository, at the revision last indexed. Not per revision:
--- this table carries no history, and `GraphStore.replace_call_sites` converges one repository on
--- the revision it just read, deleting the rows that revision no longer has.
+-- Grain: one row per position a call site has ever been indexed at, per repository. The rows
+-- with `retracted_at IS NULL` are the ones the repository has at the revision last indexed, and
+-- that set -- never the whole table -- is what a detector, a count or a rank is about. A query
+-- here that omits the predicate reads positions the code no longer occupies.
 --
 -- Identity is (repo_id, path, symbol, line, col) and position is in it deliberately -- the same
 -- SDK method called twice in one file is two call sites and would otherwise collapse into one
 -- row. The consequence is that a call which merely shifted down the file is a *new* row, so a
--- re-index that only inserts leaves the old position behind forever, with whatever findings were
--- raised against it. That is what the delete exists for, and why an upsert alone is not
--- convergence for this table.
+-- re-index that only inserts leaves the old position asserted forever, with whatever findings
+-- were raised against it. `GraphStore.replace_call_sites` is what closes that, and why an upsert
+-- alone is not convergence for this table.
+--
+-- It retracts rather than deletes, and the foreign key is the whole reason:
+-- `finding.call_site_id REFERENCES call_site (id) ON DELETE CASCADE`, so deleting a stale row
+-- deletes what a run concluded about it. A ghost row is something a reader can notice and a
+-- finding that vanished is not, and abandoned runs are data. So a call site that a pass stopped
+-- finding keeps its row, keeps its findings, and stops being current.
+--
+-- The cost is that this table only grows: one row per position a call has ever occupied, and
+-- nothing prunes it. That is deliberate -- a retention rule is a decision about how long a
+-- conclusion stays explainable, and it is not made by whoever needed the disk. A hosted control
+-- plane will have to make it.
 --
 -- Every query that answers about one customer must say so. `call_sites_for_operation` filters on
 -- `repo_id` only when asked, and a detector that forgets finds every repository's rows.
@@ -30,7 +42,17 @@ CREATE TABLE IF NOT EXISTS call_site (
     -- which is why this is not interchangeable with a count from `observed_call`. A query
     -- that treats a non-zero depth as proof of volume is wrong -- it is proof of shape.
     loop_depth           INTEGER NOT NULL DEFAULT 0,
-    indexed_at           TIMESTAMPTZ NOT NULL DEFAULT now()
+    indexed_at           TIMESTAMPTZ NOT NULL DEFAULT now(),
+    -- When a pass over this repository stopped finding the call at this position. NULL means the
+    -- revision last indexed has it. Nullable and with no default because that is the only shape
+    -- `apply_schema` can add to a table that already has rows, and every row it would be added
+    -- to is a call site the last pass did find.
+    --
+    -- The first absence rather than the latest: `replace_call_sites` only stamps rows that are
+    -- still current, so a row already retracted keeps the timestamp it got. "When did the graph
+    -- stop seeing this call" is answerable; "which was the most recent pass that did not see it"
+    -- is not, and is a question about the scan schedule rather than about the code.
+    retracted_at         TIMESTAMPTZ
 );
 
 CREATE INDEX IF NOT EXISTS call_site_operation_idx ON call_site (vendor_id, operation_id);

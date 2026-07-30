@@ -929,6 +929,12 @@ def run(args: argparse.Namespace, today: date | None = None) -> int:
         # finding attached, and the only thing that had ever cleared those was a
         # truncate of the whole database -- which erases every other repository's
         # rows, exactly what a hosted control plane must never do.
+        #
+        # Converged by retraction rather than by deletion, which is not a detail:
+        # `finding.call_site_id` cascades, so deleting the stale row deletes what
+        # the previous scan concluded about it. `replace_call_sites` carries the
+        # argument and `open_findings` is what keeps a retracted site out of the
+        # remediation path.
         # Finding ids are stable hashes of (detector, call_site_id, vendor_change_id),
         # so a re-inserted finding gets the same id its checkpoint thread already
         # used -- checkpoint coordinates survive the truncate.
@@ -955,9 +961,10 @@ def run(args: argparse.Namespace, today: date | None = None) -> int:
             # and the store answers `call_sites_for_operation` rather than "all of them". The id
             # comes back from the write, and a finding addresses its call site by id.
             #
-            # One call rather than a loop, because the delete is half of it: `replace_call_sites`
-            # converges this repository on the revision just indexed and removes the rows it no
-            # longer has. A loop of upserts cannot, and left a ghost per call site that moved.
+            # One call rather than a loop, because the retraction is half of it:
+            # `replace_call_sites` converges this repository on the revision just indexed and stops
+            # asserting the positions it no longer has. A loop of upserts cannot, and left a ghost
+            # per call site that moved.
             literal_sites, literal_unread = _literal_call_sites(repo)
             call_sites = list(adapter.index(repo)) + literal_sites
             for site, site_id in zip(

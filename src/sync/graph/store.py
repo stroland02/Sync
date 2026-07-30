@@ -226,10 +226,15 @@ class GraphStore:
         # in the same file can share a symbol (the same SDK method called twice), and
         # without a position component they'd hash to one id and silently collapse.
         # This means a call site that merely shifts down the file (no other content
-        # change) becomes a new row rather than an update to the old one. That is
-        # safe at M0 only because cli.py truncates the whole graph at the start of
-        # every run, so no stale row ever survives to be orphaned; M2's incremental
-        # indexing will need a different identity scheme that tolerates line drift.
+        # change) becomes a new row rather than an update to the old one, which is
+        # why an upsert on its own never converges a repository that changed:
+        # `replace_call_sites` retracts what this pass did not find, and a caller
+        # looping over this method instead leaves every old position asserted.
+        #
+        # `retracted_at = NULL` on conflict because a call that comes back to a
+        # position it once occupied -- the comment above it deleted again -- is
+        # current, not a resurrected ghost. The row is the same row; what changed is
+        # whether the repository has it.
         site_id = _stable_id(site.repo_id, site.path, site.symbol, str(site.line), str(site.col))
         self._connect().execute(
             """
@@ -246,7 +251,8 @@ class GraphStore:
                 sdk_version = EXCLUDED.sdk_version,
                 content_hash = EXCLUDED.content_hash,
                 loop_depth = EXCLUDED.loop_depth,
-                indexed_at = now()
+                indexed_at = now(),
+                retracted_at = NULL
             """,
             (
                 site_id, site.repo_id, site.path, site.line, site.col, site.vendor_id,
@@ -270,23 +276,36 @@ class GraphStore:
         must not be able to erase another's rows, and a graph holding two repositories is the
         state a hosted control plane is entirely made of.
 
-        Delete after upsert, in one transaction, so no window exists where a live call site is
-        absent -- a reader between the two would see a repository that calls nothing.
+        **Retracted, not deleted, and the foreign key is why.** `finding.call_site_id` cascades on
+        delete, so removing the stale row removes what a run concluded about it -- with no error
+        and nothing left to notice. Measured on the first attempt at this: the ghost row went and
+        the finding went with it, one row to zero. So the row stays, `retracted_at` is stamped, and
+        every query that speaks for the current revision excludes it. The record survives; nothing
+        acts on it. `open_findings` is where the second half of that lives.
+
+        Stamped inside one transaction with the upserts, and only over rows still current, so a
+        reader either sees the revision before this pass or the revision after it, and a row that
+        went absent two passes ago keeps the timestamp of the pass that lost it.
 
         The empty sequence is a real answer rather than a guard: a customer who removed their last
         call to a vendor has zero call sites, and declining to write that would leave the graph
-        claiming an integration that is gone.
+        claiming an integration that is gone. `id <> ALL('{}')` is true of every row, so that case
+        needs no branch here.
 
-        Findings go with the rows, through `finding.call_site_id ON DELETE CASCADE`. That is
-        deliberate rather than incidental -- a finding is a claim about a call site, and it cannot
-        outlive the thing it describes. `migration_outcome` does not cascade and must not: it
-        records attempts, which stay queryable after the code they touched has moved on, and
-        `CLAUDE.md` puts abandoned runs among the data this system learns routing from.
+        What this does not do is match an old row to a new one and move the finding across. A call
+        at line 13 where there used to be one at line 12 may be the same call shifted or a
+        different call written where the old one was deleted, and nothing at this layer can tell
+        those apart. A wrong guess reattributes a conclusion to a call nobody drew it about, which
+        is a quieter defect than the two this method exists to avoid.
         """
         with self.transaction():
             ids = [self.upsert_call_site(site) for site in sites]
             self._connect().execute(
-                "DELETE FROM call_site WHERE repo_id = %s AND id <> ALL(%s::text[])",
+                """
+                UPDATE call_site
+                   SET retracted_at = now()
+                 WHERE repo_id = %s AND retracted_at IS NULL AND id <> ALL(%s::text[])
+                """,
                 (repo_id, ids),
             )
         return ids
@@ -341,7 +360,13 @@ class GraphStore:
     def call_sites_for_operation(
         self, vendor_id: str, operation_id: str, *, repo_id: str | None = None
     ) -> list[CallSite]:
-        """Every call site on one vendor operation, in one repository or in all of them.
+        """Call sites the code currently has on one vendor operation, in one repository or in all.
+
+        Retracted rows are excluded and there is no parameter to include them. A detector asking
+        this question is asking what to raise a finding against, and a position the code no longer
+        occupies is not one -- that is the whole point of retracting instead of deleting, and an
+        opt-in flag here would be an invitation to hand a detector the history. Reading a retracted
+        site is `get_call_site`, by the id a finding already holds.
 
         `repo_id` is optional and its absence means every repository, which is a real query for an
         aggregate across customers. It is not a sensible default for a detector: a scan runs against
@@ -359,7 +384,8 @@ class GraphStore:
             vendor_id, operation_id, repo_id
         )
         rows = self._connect().execute(
-            f"SELECT * FROM call_site WHERE vendor_id = %s AND operation_id = %s{clause} "
+            f"SELECT * FROM call_site "
+            f"WHERE vendor_id = %s AND operation_id = %s AND retracted_at IS NULL{clause} "
             f"ORDER BY path, line",
             parameters,
         ).fetchall()
@@ -383,12 +409,17 @@ class GraphStore:
         Scoped to a repository for the reason `observed_calls` is: it is the unit a finding is
         raised against, and a count that leaked another customer's call sites in would rank the
         wrong code.
+
+        Retracted rows are excluded for the same reason and it matters more here than it looks: a
+        count over the whole table grows every time a file is edited above a call, so ranking would
+        promote whichever repository had been re-indexed most rather than whichever calls the vendor
+        most.
         """
         rows = self._connect().execute(
             """
             SELECT vendor_id, count(*) AS sites
               FROM call_site
-             WHERE repo_id = %s
+             WHERE repo_id = %s AND retracted_at IS NULL
              GROUP BY vendor_id
             """,
             (repo_id,),
@@ -396,6 +427,13 @@ class GraphStore:
         return {row["vendor_id"]: row["sites"] for row in rows}
 
     def get_call_site(self, call_site_id: str) -> CallSite:
+        """One call site by id, retracted or not.
+
+        Unfiltered on purpose. A finding holds a call site id and stays queryable after the call
+        moved, so this is what makes an old conclusion explainable -- `retracted_at` on the returned
+        model is how a caller asks whether the code still has it. `open_findings` is what keeps a
+        retracted site out of the remediation path; this is not that gate.
+        """
         row = self._connect().execute(
             "SELECT * FROM call_site WHERE id = %s", (call_site_id,)
         ).fetchone()
@@ -418,8 +456,26 @@ class GraphStore:
         return [VendorChange(**row) for row in rows]
 
     def open_findings(self) -> list[Finding]:
+        """Findings still to act on: open status, and a call site the code still has.
+
+        The join is the other half of retraction. A finding whose call site was retracted names a
+        position the code no longer occupies, so `make_locate` would send an agent to a line that
+        moved -- and that hazard is what made deleting the stale row tempting, at the cost of
+        deleting the finding with it. Filtering here instead keeps the row queryable and stops
+        anything from working on it.
+
+        `status` is not touched, and that is deliberate. It tracks what remediation did --
+        'open', 'patched', 'abandoned' -- and rewriting it here would say a run reached a conclusion
+        it never reached. Whether the code still has the call site is a fact about the graph, so it
+        is read from the graph.
+        """
         rows = self._connect().execute(
-            "SELECT * FROM finding WHERE status = 'open' ORDER BY created_at"
+            """
+            SELECT finding.* FROM finding
+              JOIN call_site ON call_site.id = finding.call_site_id
+             WHERE finding.status = 'open' AND call_site.retracted_at IS NULL
+             ORDER BY finding.created_at
+            """
         ).fetchall()
         return [Finding(**row) for row in rows]
 

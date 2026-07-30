@@ -20,6 +20,15 @@ was written:
 `.claude/rules/graph-grain.md`: "Re-running a stage must converge, not accumulate." The idempotence
 already tested is over *identical* input, which converges through the natural key. Convergence over
 a repository that changed is what nothing tested and nothing implemented.
+
+A fourth fact, measured after the first three had been acted on and the reason this file was
+rewritten: making the stale row go away by deleting it takes the finding with it. One row, one
+finding, a comment added above the call -- the ghost went and the finding count went to zero, with
+no error. So the convergence asserted here is over what the graph *asserts*, not over what it
+stores: a retracted row stays, keeps whatever was concluded about it, and is excluded from every
+query that speaks for the revision last indexed. Which is why the helpers below read
+`retracted_at IS NULL` rather than the whole table -- a test that asserted an empty table would
+have been asserting the defect.
 """
 
 from __future__ import annotations
@@ -57,10 +66,38 @@ def _site(**over) -> CallSite:
     return CallSite(**fields)
 
 
-def _positions(store: GraphStore) -> list[tuple[str, str, int]]:
+def _positions(store: GraphStore, *, retracted: bool = False) -> list[tuple[str, str, int]]:
+    """The positions the graph asserts, or the ones it has retracted. Never both.
+
+    Two calls rather than one query returning a flag, because every assertion in this file is
+    about one of the two sets and a test that mixed them would pass on either.
+    """
+    predicate = "IS NOT NULL" if retracted else "IS NULL"
     with store._connect().cursor() as cur:
-        cur.execute("SELECT repo_id, path, line FROM call_site ORDER BY repo_id, path, line")
+        cur.execute(
+            f"SELECT repo_id, path, line FROM call_site WHERE retracted_at {predicate} "
+            f"ORDER BY repo_id, path, line"
+        )
         return [(r["repo_id"], r["path"], r["line"]) for r in cur.fetchall()]
+
+
+def _retracted_at(store: GraphStore, path: str, line: int):
+    with store._connect().cursor() as cur:
+        cur.execute(
+            "SELECT retracted_at FROM call_site WHERE path = %s AND line = %s", (path, line)
+        )
+        return cur.fetchone()["retracted_at"]
+
+
+def _findings_in_table(store: GraphStore) -> list[str]:
+    """Every finding row, whatever its status and whatever became of its call site.
+
+    Deliberately not `open_findings`: this asks whether the record is still there, and the
+    record being there while nothing acts on it is the property this file exists to hold apart.
+    """
+    with store._connect().cursor() as cur:
+        cur.execute("SELECT id FROM finding ORDER BY id")
+        return [r["id"] for r in cur.fetchall()]
 
 
 _CHANGE = VendorChange(
@@ -75,15 +112,21 @@ _CHANGE = VendorChange(
 # --- convergence over a repository that changed -----------------------------------------
 
 
-def test_a_call_site_that_moved_leaves_no_row_where_it_used_to_be(store) -> None:
-    """The reproduction, and the whole of the defect: one blank line added above the call."""
+def test_a_call_site_that_moved_is_no_longer_asserted_where_it_used_to_be(store) -> None:
+    """The reproduction, and the whole of the defect: one blank line added above the call.
+
+    Both sets are asserted because only the pair says what happened. The graph stops claiming line
+    12 -- which is what a detector, a rank and `make_locate` all read -- and the row is still there
+    to hold the findings raised while it was current.
+    """
     store.replace_call_sites("repo-a", [_site(line=12)])
     store.replace_call_sites("repo-a", [_site(line=13)])
 
     assert _positions(store) == [("repo-a", "src/billing.ts", 13)]
+    assert _positions(store, retracted=True) == [("repo-a", "src/billing.ts", 12)]
 
 
-def test_a_call_site_that_was_deleted_leaves_no_row(store) -> None:
+def test_a_call_site_that_was_deleted_is_no_longer_asserted(store) -> None:
     """A call the customer removed is not a call site, and a detector cannot tell a row for one
     from a row for a call that is still there."""
     store.replace_call_sites(
@@ -92,9 +135,10 @@ def test_a_call_site_that_was_deleted_leaves_no_row(store) -> None:
     store.replace_call_sites("repo-a", [_site(line=12)])
 
     assert _positions(store) == [("repo-a", "src/billing.ts", 12)]
+    assert _positions(store, retracted=True) == [("repo-a", "src/billing.ts", 40)]
 
 
-def test_a_repository_that_now_calls_nothing_keeps_no_rows(store) -> None:
+def test_a_repository_that_now_calls_nothing_asserts_no_call_sites(store) -> None:
     """The empty set is a real answer, not a no-op guard. A customer who removed their last call
     to a vendor has zero call sites, and a convergence that declined to write that would leave the
     graph claiming an integration that is gone."""
@@ -102,30 +146,75 @@ def test_a_repository_that_now_calls_nothing_keeps_no_rows(store) -> None:
     store.replace_call_sites("repo-a", [])
 
     assert _positions(store) == []
+    assert _positions(store, retracted=True) == [("repo-a", "src/billing.ts", 12)]
 
 
-def test_the_row_that_goes_takes_its_findings_with_it(store) -> None:
-    """`finding.call_site_id` is `ON DELETE CASCADE`, which is what makes this safe to do at all.
+def test_a_call_that_comes_back_to_its_old_position_is_current_again(store) -> None:
+    """The comment above the call gets deleted too, and then the call is back at line 12.
 
-    A finding pointing at a position the code no longer has is worse than a missing one: it reads
-    as a live defect, and `make_locate` would send an agent to a line that moved.
+    Identity is positional, so this is the row that was retracted rather than a new one. A
+    retraction that could not be undone would leave the graph denying a call the code makes, which
+    is the original defect with the sign flipped -- and it would be the same row denying it.
+    """
+    store.replace_call_sites("repo-a", [_site(line=12)])
+    store.replace_call_sites("repo-a", [_site(line=13)])
+    store.replace_call_sites("repo-a", [_site(line=12)])
+
+    assert _positions(store) == [("repo-a", "src/billing.ts", 12)]
+    assert _positions(store, retracted=True) == [("repo-a", "src/billing.ts", 13)]
+
+
+def test_retraction_records_the_pass_that_lost_the_call_not_the_latest_one(store) -> None:
+    """`retracted_at` answers when the graph stopped seeing a call, so re-stamping would break it.
+
+    A row already retracted is left alone by later passes. Asserting the value is unchanged rather
+    than asserting what it is: the fact under test is stability, and the timestamp itself is
+    whatever the clock said.
+    """
+    store.replace_call_sites("repo-a", [_site(line=12)])
+    store.replace_call_sites("repo-a", [_site(line=13)])
+    first = _retracted_at(store, "src/billing.ts", 12)
+    # Two nulls compare equal, so without this the assertion below holds over a store that never
+    # retracted anything at all -- stability asserted where there is nothing to be stable.
+    assert first is not None
+
+    store.replace_call_sites("repo-a", [_site(line=13)])
+
+    assert _retracted_at(store, "src/billing.ts", 12) == first
+
+
+def test_a_finding_outlives_the_call_site_it_names_moving(store) -> None:
+    """Retraction keeps the record and stops acting on it. Both halves, in one test.
+
+    `finding.call_site_id` is `ON DELETE CASCADE`, so deleting a stale call site deletes what was
+    concluded about it -- silently, and `CLAUDE.md` puts what a run concluded among the data this
+    system learns routing from. A ghost row is something a reader can notice; a finding that
+    vanished is not, which is why the first attempt at this brief traded down rather than up.
+
+    The other half is why deleting was tempting: a finding pointing at a position the code no
+    longer has reads as live, and `make_locate` would send an agent to a line that moved. So the
+    row stays and stops being open. Nothing acts on it, and it is still there to be asked about.
     """
     stale = store.replace_call_sites("repo-a", [_site(line=12)])[0]
-    store.insert_finding(Finding(
+    finding_id = store.insert_finding(Finding(
         id="", detector="vendor_change", claim="response-field", call_site_id=stale,
         vendor_change_id=None, severity="breaking", rationale="PostCharges dropped status",
     ))
 
     store.replace_call_sites("repo-a", [_site(line=13)])
 
+    assert _findings_in_table(store) == [finding_id]
     assert store.open_findings() == []
 
 
 def test_replacing_with_the_same_sites_changes_no_identity(store) -> None:
-    """Idempotence, which the natural key already gave and the delete must not take away.
+    """Idempotence, which the natural key already gave and the retraction must not take away.
 
     `graph-grain.md` asks for exactly this assertion: run the stage twice against one fixture and
-    check the row count and every row identity are unchanged.
+    check the row count and every row identity are unchanged. The retracted set being empty is the
+    other half -- a second pass over an unchanged repository must retract nothing, and one that
+    stamped and un-stamped the same rows would pass a row count while making the timestamp mean
+    nothing.
     """
     sites = [_site(line=12), _site(line=40, content_hash="h2")]
 
@@ -134,6 +223,7 @@ def test_replacing_with_the_same_sites_changes_no_identity(store) -> None:
 
     assert first == second
     assert len(_positions(store)) == 2
+    assert _positions(store, retracted=True) == []
 
 
 def test_re_indexing_one_repository_leaves_another_alone(store) -> None:
@@ -151,7 +241,53 @@ def test_re_indexing_one_repository_leaves_another_alone(store) -> None:
     ]
 
 
-# --- the clause the wipe was standing in for --------------------------------------------
+# --- what reads "current", and what does not --------------------------------------------
+
+
+def test_a_detector_raises_nothing_against_a_call_site_that_moved(store) -> None:
+    """Retraction downstream. Without this the writer is the only thing that changed.
+
+    The same vendor change, the same operation, and the only call site the graph has for it is one
+    the last pass stopped finding. A finding here would name a line the code does not have, and
+    `make_locate` would work on it.
+    """
+    store.replace_call_sites("repo-a", [_site(line=12)])
+    store.replace_call_sites("repo-a", [])
+    store.upsert_vendor_change(_CHANGE)
+
+    findings = list(VendorChangeDetector(store, vendor_id="stripe", repo_id="repo-a").scan())
+
+    assert findings == []
+
+
+def test_a_retracted_call_site_is_still_readable_by_the_id_a_finding_holds(store) -> None:
+    """The other side of that: excluded from what a detector asks, present for a reader.
+
+    A finding raised while the call site was current outlives it, and explaining that finding means
+    answering where the call was and when the graph stopped seeing it. `get_call_site` is unfiltered
+    for exactly this, and `retracted_at` on the model is how a caller can tell.
+    """
+    stale = store.replace_call_sites("repo-a", [_site(line=12)])[0]
+    store.replace_call_sites("repo-a", [_site(line=13)])
+
+    site = store.get_call_site(stale)
+
+    assert site.line == 12
+    assert site.retracted_at is not None
+
+
+def test_ranking_counts_the_calls_the_code_has_and_not_the_ones_it_had(store) -> None:
+    """`call_site_counts` feeds a rank, and a rank over the whole table measures editing.
+
+    One call, moved twice, is one call. Counting rows instead would say three, and would say more
+    every time a line is added above it -- ranking the repository that changed most rather than the
+    one that calls the vendor most.
+    """
+    store.replace_call_sites("repo-a", [_site(line=12)])
+    store.replace_call_sites("repo-a", [_site(line=13)])
+    store.replace_call_sites("repo-a", [_site(line=14)])
+
+    assert store.call_site_counts("repo-a") == {"stripe": 1}
 
 
 def test_the_store_answers_for_one_repository_when_asked(store) -> None:
