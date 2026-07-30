@@ -57,6 +57,20 @@ a vendor that genuinely does not offer that route.
 
 Coverage travels with its denominator. "Extracted 180 operations" says nothing; the Stripe map's
 105 of 414 means something only because the second number is there.
+
+Two denominators, and a channel for what was not read
+-----------------------------------------------------
+**Two**, because a comparison reduces both sides and a reduction is not free. The number of
+operations the specification declares is the API's size; the number of keys those reduce to is what
+this comparison can resolve; and the gap is the operations it cannot separate. Reporting one as the
+other was a real defect -- 121 keys called 131 operations -- and a ratio taken against the larger
+number would divide routes by operations.
+
+**And a channel**, because a construct this rule met and could not read used to lower a number and
+say nothing else. A smaller map with no explanation is indistinguishable from a smaller SDK, which
+is the false negative the whole approach exists to avoid. Only losses are recorded: a method that
+sends no request and a wrapper class this rule excludes on purpose are declined on every run of
+every SDK, and a channel carrying those is one nobody reads.
 """
 
 from __future__ import annotations
