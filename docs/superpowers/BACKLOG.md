@@ -34,6 +34,38 @@ two cases distinguishably — and a concurrent regeneration is shown not to prod
 failure. Do not fix it by widening the skip; skipping on mismatch would retire the check this test
 exists to be.
 
+### B65 — A persisted finding cannot be attributed to the rung that produced it
+
+CLAUDE.md: *"Every binding carries the rung it came from — `static`, `resolved`, or `observed` — and
+so does every artifact derived from it. A false positive that cannot be attributed to a rung cannot
+be fixed."*
+
+Measured on main, exactly one table keeps a rung:
+
+    schema.sql:258   observed_call.binding_rung TEXT NOT NULL
+
+`call_site` has none, `finding` has none, `migration_outcome` has none — zero matches for the word.
+`Finding`'s fields are `id, detector, claim, call_site_id, vendor_change_id, severity, rationale,
+status, created_at`, so there is nothing to carry the rung and nothing to join through: a finding
+references a call site, and the call site does not know either.
+
+**So the rule holds for `observed` and fails for `static` and `resolved` — the two the M0 pipeline
+actually runs on.**
+
+`sync.benchmark.binding` already splits precision and recall by rung and argues the case in its
+docstring: an aggregate precision of 0.7 is a real number and a useless one, if nothing says which
+binder produced the wrong claims. That analysis works over the corpus, in memory, during a scoring
+run. It does not work for the graph. The first real findings will land in a table that cannot answer
+the question the rule exists to keep answerable — and the rung cannot be backfilled afterwards,
+because the information is gone once the run ends.
+
+Timing is why this is queued now rather than later: the acceptance run is one decision away, and it
+is what creates the rows.
+
+**Closes when:** a persisted call site carries its rung, a finding is attributable to one by a query
+that can be written down, `observed_call.binding_rung` is unchanged, the four corpus figures are
+quoted either side, and four gates green.
+
 ### B7 — The M0 acceptance run has not executed since the pipeline changed underneath it
 
 `tests/test_e2e_stripe.py::test_one_command_produces_one_green_pull_request` is the
@@ -62,6 +94,7 @@ recorded with which change broke it.
 
 - **B61** — `task_12ccee12fd98`, worktree `sync-solo-b`.
 - **B64** — `task_49e1d009fb9d`, worktree `sync-solo-a`.
+- **B65** — `task_7fd551b327aa`, worktree `sync-solo-b`.
 - **B55** — re-dispatched as `task_3746257e4c0a` into `sync-solo-b`. The first attempt
   (`task_e03a2a5bb93f`) produced nothing in 94 minutes and was stood down.
 
