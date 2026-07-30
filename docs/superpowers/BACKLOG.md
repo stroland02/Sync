@@ -12,30 +12,32 @@ item that cannot say what evidence closes it is not ready to dispatch.
 
 ## Ready
 
-### B58 — The indexer decodes a vendor's SDK strictly and the customer's own code leniently
+### B60 — A run never says how much of the repository it could not read
 
-`python_lang.py:98` and `typescript.py:63` turn a tree-sitter node's byte range into text with
-`.decode("utf-8", errors="replace")`, for **customer** source. `symbols_speakeasy.py:172` does the
-identical job for a **vendor's** SDK and decodes strictly, with a docstring that says a lenient
-decode "would turn one of them into a route or a class name that silently differs from what the
-file says". That argument is exactly as true of customer code, which is the untrusted side — so the
-repository is strict where it controls the input and lenient where it does not.
+Today's tasks correctly stopped the indexer decoding customer source leniently. That changed what
+an unreadable file costs: it used to contribute a corrupt row, it now contributes nothing, and the
+only trace is one log line per file. Measured on a repository of four Python sources, three of them
+cp1252:
 
-**A brief of mine asserted these two were safe** because they "slice already-validated source and
-cannot invent a file". That was wrong: nothing validates the file first, the indexer hands
-tree-sitter bytes, and this slice is the only decode. B57 refused the claim, which is why the task
-exists. Measured consequence: an accented byte inside a matched literal recorded as
-`claude-3-caf�`, and for a literal call site that value *is* the `operation_id`, the key a
-retirement joins on.
+    4 source files, 3 undecodable  ->  1 call site indexed
+      warnings emitted via logging : 3
+      any total or summary of skips: no
 
-It is a task rather than a two-line change because fixing it means deciding, at `index()` level,
-what to do when a file fails to decode **mid-parse** — the main indexing path, where call sites may
-already have been emitted from the file. That can move a corpus denominator, so the four gate
-figures must be measured either side.
+So a customer whose repository is three-quarters unreadable gets a run that reads a quarter of it,
+reports no error, and produces a finding count shaped like a real answer. **This is the family's
+failure mode one level up:** each earlier defect was a wrong answer nobody could see, and this is a
+*partial* answer nobody can see — harder to notice, because the output has the right shape. It also
+sits on the product's claim, which is that every dependent call site is found.
 
-**Closes when:** customer source that is not UTF-8 produces no call site carrying U+FFFD, valid
-source produces exactly what it produces today, the four corpus figures are quoted before and
-after, and four gates green.
+The skips do not agree on a channel either: the two indexers use `log.warning`, `cli.py:733` uses
+`print(file=sys.stderr)` for the same event class in the same run.
+
+**Explicitly not a threshold.** Report the figure; do not gate on it. A gate at an invented number
+either fires constantly and gets disabled or never fires and gives false assurance.
+
+**Closes when:** a run states how many source files it could not read out of how many it looked at,
+the two channels agree, a repository with nothing unreadable says nothing extra, and four gates
+green.
 
 ### B7 — The M0 acceptance run has not executed since the pipeline changed underneath it
 
@@ -63,7 +65,7 @@ recorded with which change broke it.
 
 ## In flight
 
-- **B58** — `task_7d27047a705a`, worktree `sync-solo-b`.
+- **B60** — `task_f3c42654f325`, worktree `sync-solo-a`.
 - **B55** — re-dispatched as `task_3746257e4c0a` into `sync-solo-b`. The first attempt
   (`task_e03a2a5bb93f`) produced nothing in 94 minutes and was stood down.
 
@@ -694,3 +696,32 @@ is what a reviewer needs and duplicating it here would let the two copies drift.
   Preserved as `unreviewed/b55-decline-reason`, then cherry-picked with five conflict hunks —
   every one resolved as "keep both halves", its reason-reporting over main's newer encodings — and
   five `DRIVERS` keys re-anchored from what the gate reported.
+
+- Let Stripe's symbol map skip a malformed path item, as Twilio's already does. Landed `4c13681`.
+  Stripe reached `.get` on whatever `paths` held, so one malformed entry cost the **entire** map —
+  every call site for the vendor unresolved for one bad key — while Twilio skipped the path and
+  built the rest. Verified across four shapes (null, list, string, number): the two now agree on
+  all four, a well-formed document still yields its entries, and a mixed document keeps its good
+  one. The pinned symbol-map digest is unchanged at `5f71dcd3bec1302c` and the corpus gate clears,
+  which was the constraint that could have made this a much larger change.
+
+  **The verdict was already in the repository.** `tests/test_symbol_map_declines.py` had recorded
+  this exact drift and said the raise was the worse answer, because a path key names which document
+  is bad and a type name does not. The worker inverted that test from asserting disagreement to
+  asserting agreement, keeping it as a comparison because agreement is the property and the two
+  halves can only drift again by one changing alone.
+
+- The indexer read the customer's code more loosely than the vendor's. Landed `49a4a09`. Four copies
+  of one node reader existed: the two over a vendor's SDK decoded strictly, the two over the
+  customer's repository passed `errors="replace"`. **The measurement is the finding** — leniency
+  recorded `response_fields_read` of `['st']` for a field spelled with an a-circumflex, truncated at
+  the bad byte rather than marked, so the graph carried a dependency on a field that does not exist,
+  which `ObservedDriftDetector` reads and `PropertyOmitRemediator` patches against.
+
+  Landing it needed three corrections. It committed onto the other coordinator's branch 96 commits
+  behind main (preserved as `unreviewed/b58-strict-node-decode`); it duplicated B57's `cli.py` fix,
+  so main's landed version was kept with B58's two measured consequences grafted into the docstring;
+  and it added two decode handlers without drivers, which the gate caught. Writing those drivers,
+  the control caught the coordinator twice — first a driver with no manifest, so `index()` returned
+  `[]` regardless of encoding and the assertion passed for the wrong reason, then a wrong call shape.
+  Both are the exact failure every brief here warns about.
