@@ -323,6 +323,14 @@ the machine.
 fix belongs in `tests/test_leaked_database_sweep.py` rather than in `conftest.py`, and it wants its
 own failing test first.
 
+**Settled by M3-W105 — `docs/superpowers/reports/2026-07-30-n0-is-broken.md`.** The hypothesis
+above was right, including where the fix belongs, and `exclude` on those two call sites is what
+fixes it. The missing piece was that under `-n auto` the run's own database carries a *second*
+pid — the controller's — which the same probe reports alive; there is no controller pid under
+`-n0` to be spared by. The `exclude` experiment that failed here was taken under the full-suite
+dotted `--cov=sync.benchmark.mutate` configuration rather than under the 33 s recipe, so the two
+are not compared, for the reason this report gives.
+
 ## What is still open
 
 **The split defeats any `except psycopg.X` in a dotted coverage run, not only this file.** There
