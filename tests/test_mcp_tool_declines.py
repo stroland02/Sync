@@ -52,10 +52,14 @@ def _site(site_id: str = "cs1") -> CallSite:
     )
 
 
-def _finding(finding_id: str, change_id: str | None, detector: str = "vendor-change") -> Finding:
+def _finding(
+    finding_id: str, change_id: str | None, detector: str = "vendor-change",
+    binding_rung: str = "static",
+) -> Finding:
     return Finding(
         id=finding_id, detector=detector, claim="response-field", call_site_id="cs1",
         vendor_change_id=change_id, severity="breaking", rationale="status was removed",
+        binding_rung=binding_rung,
     )
 
 
@@ -212,6 +216,34 @@ def test_an_unreadable_change_is_not_reported_as_a_tool_error():
         result = _call(graph, "sync_whats_at_risk")["result"]
         assert result["isError"] is False
         assert "error" not in result
+
+
+# --- a second thing the surface flattens ----------------------------------------------
+
+
+@pytest.mark.parametrize("rung", ["static", "resolved", "observed", "unresolved"])
+def test_every_answer_reports_binding_source_static_whatever_rung_the_finding_names(rung: str):
+    """`binding_rung` is now enforced at the write and the surface still reports a constant.
+
+    `GraphStore.insert_finding` refuses a finding whose rung is `unattributed`, so every finding
+    the graph holds names a real rung -- and `_envelope` answers `binding_source: "static"` for
+    all four of them. `CLAUDE.md` requires that every artifact derived from a binding carry the
+    rung it came from, and a tool response is one.
+
+    Pinned rather than repaired: the rung is per finding and `binding_source` is per response, so
+    carrying it honestly means a field on the row, which is a change to the shape of a published
+    surface. `docs/superpowers/reports/2026-07-30-mcp-tool-surface-declines.md` carries the
+    argument. This is what turns that repair red on purpose when someone makes it.
+    """
+    graph = RowBackedGraph(
+        [_finding("f", "vc-readable", detector="observed-drift", binding_rung=rung)],
+        {"vc-readable": _row("readable")},
+    )
+
+    payload = _call(graph, "sync_whats_at_risk")["result"]["structuredContent"]
+
+    assert payload["binding_source"] == "static"
+    assert "binding_rung" not in payload["items"][0]
 
 
 # --- the same swallow, on the evidence a reviewer reads --------------------------------
