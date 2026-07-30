@@ -50,7 +50,7 @@ def _symbols(root: Path) -> dict[str, tuple[str, str]]:
     """The resulting symbol map, which is what a decline is visible in or absent from."""
     return {
         operation.symbol: (operation.http_method, operation.path)
-        for operation in extract_symbols(root)
+        for operation in extract_symbols(root)[0]
     }
 
 
@@ -233,7 +233,8 @@ def test_an_empty_specification_yields_a_zero_ratio_and_says_so_in_the_line():
     operations were reached both answer `0.0`, and this asserts that they are equal rather than
     implying otherwise. What distinguishes them is the module's own rule that coverage travels
     with its denominator -- `render()` writes `0 of 0` against `0 of 1`, so the sentinel is
-    legible in the only artifact that exposes the ratio at all.
+    legible in the only artifact that exposes the ratio at all. M3-W100 put a second denominator
+    in that line and this is what holds the first one legible beside it.
     """
     empty = report_extraction(SDK, set())
     missed = report_extraction(SDK, {("GET", "/a/route/this/sdk/does/not/send")})
@@ -242,8 +243,8 @@ def test_an_empty_specification_yields_a_zero_ratio_and_says_so_in_the_line():
     assert missed.coverage_ratio == 0.0
     assert empty.coverage_ratio == missed.coverage_ratio
 
-    assert "0 of 0 specification operations (0.0%)" in empty.render()
-    assert "0 of 1 specification operations (0.0%)" in missed.render()
+    assert "0 of 0 comparable routes (0.0%)" in empty.render()
+    assert "0 of 1 comparable routes (0.0%)" in missed.render()
     assert empty.render() != missed.render()
 
 

@@ -108,6 +108,10 @@ class _RecordingStore:
 
     def __init__(self):
         self.calls: list[str] = []
+        # Which tables a scan asked to survive the wipe. Recorded rather than ignored because
+        # `call_site` surviving is what makes convergence by retraction reachable at all: a scan
+        # that truncated it would take every finding with it and there would be nothing to retract.
+        self.kept: tuple[str, ...] = ()
 
     @contextmanager
     def transaction(self):
@@ -118,8 +122,13 @@ class _RecordingStore:
     def apply_schema(self):
         self.calls.append("apply_schema")
 
-    def truncate_all(self):
+    def truncate_all(self, keep=()):
         self.calls.append("truncate_all")
+        self.kept = tuple(keep)
+
+    def replace_call_sites(self, repo_id, sites):
+        self.calls.append("replace_call_sites")
+        return [f"cs-{index}" for index, _ in enumerate(sites)]
 
     def upsert_call_site(self, site):
         self.calls.append("upsert_call_site")
@@ -138,11 +147,13 @@ class _RecordingDetector:
 
     `vendor_id` is accepted because the real detector has always taken it and the suite now
     builds one per deprecation vendor as well as one for Stripe. A stub narrower than the thing
-    it stands for fails on a correct call, which is what this one did."""
+    it stands for fails on a correct call, which is what this one did. `repo_id` is accepted for
+    the same reason: a scan names the repository it is about, or it finds every customer's rows."""
 
-    def __init__(self, store, vendor_id: str = "stripe"):
+    def __init__(self, store, vendor_id: str = "stripe", repo_id: str | None = None):
         self._store = store
         self._vendor_id = vendor_id
+        self._repo_id = repo_id
 
     def scan(self):
         self._store.calls.append("scan")
@@ -239,8 +250,12 @@ def test_the_graph_is_truncated_after_apply_schema_and_before_the_scan(monkeypat
     assert store.calls[:3] == ["apply_schema", "begin", "truncate_all"]
     assert store.calls[-1] == "commit"
     assert store.calls.index("truncate_all") < store.calls.index("scan")
-    assert store.calls.index("upsert_call_site") < store.calls.index("scan")
+    assert store.calls.index("replace_call_sites") < store.calls.index("scan")
     assert store.calls.index("upsert_vendor_change") < store.calls.index("scan")
+    # And the wipe spares the one table a scan converges instead of clearing. Without this the
+    # ordering above would pass just as well against a truncate that emptied `call_site` too --
+    # which is what it used to do, and which deleted every finding the previous scan raised.
+    assert store.kept == ("call_site",)
 
 
 EQUIVALENT_URLS = [
@@ -563,8 +578,11 @@ class _TwoFindingStore:
     def apply_schema(self):
         pass
 
-    def truncate_all(self):
+    def truncate_all(self, keep=()):
         pass
+
+    def replace_call_sites(self, repo_id, sites):
+        return [site.id for site in sites]
 
     def upsert_call_site(self, site):
         return site.id
@@ -650,11 +668,12 @@ def test_two_findings_in_one_run_produce_branches_that_share_no_commits(tmp_path
     store = _TwoFindingStore(sites, _STUB_VENDOR_CHANGE)
 
     class _TwoFindingDetector:
-        def __init__(self, store, vendor_id: str = "stripe"):
+        def __init__(self, store, vendor_id: str = "stripe", repo_id: str | None = None):
             # Scoped like the real detector. The suite builds one of these per deprecation
             # vendor too, and a stub that ignored `vendor_id` would answer the same two Stripe
             # findings three times over -- six findings in a test about two.
             self._vendor_id = vendor_id
+            self._repo_id = repo_id
 
         def scan(self):
             if self._vendor_id != "stripe":

@@ -101,15 +101,24 @@ def _deepest_match(site_paths: list[str], change_segments: list[str]) -> str | N
 class VendorChangeDetector:
     detector_id = "vendor_change"
 
-    def __init__(self, store: GraphStore, vendor_id: str = "stripe") -> None:
+    def __init__(
+        self, store: GraphStore, vendor_id: str = "stripe", repo_id: str | None = None
+    ) -> None:
         self._store = store
         self._vendor_id = vendor_id
+        # Which repository this scan is about. None means every one of them, which is what this
+        # detector effectively did before the parameter existed: a graph holding two repositories
+        # produced a finding per repository from one scan, and a finding is what a pull request is
+        # opened from. `GraphStore.call_sites_for_operation` carries why the unscoped form stays.
+        self._repo_id = repo_id
 
     def scan(self) -> list[Finding]:
         findings: list[Finding] = []
 
         for change in self._store.all_vendor_changes(self._vendor_id):
-            sites = self._store.call_sites_for_operation(self._vendor_id, change.operation_id)
+            sites = self._store.call_sites_for_operation(
+                self._vendor_id, change.operation_id, repo_id=self._repo_id
+            )
             if not sites:
                 continue
 

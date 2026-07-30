@@ -181,7 +181,10 @@ class _CollectingStore:
 
         return _Nothing()
 
-    def truncate_all(self) -> None: ...
+    def truncate_all(self, keep=()) -> None: ...
+
+    def replace_call_sites(self, repo_id, sites) -> list[str]:
+        return [f"cs-{index}" for index, _ in enumerate(sites)]
 
     def upsert_call_site(self, site) -> str:
         return "cs-1"

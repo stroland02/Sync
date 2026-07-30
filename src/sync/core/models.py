@@ -68,6 +68,13 @@ class CallSite(BaseModel):
     # a loop that never runs still counts here, and a runtime count belongs in `observed_call`.
     loop_depth: int = 0
     indexed_at: datetime = Field(default_factory=_now)
+    # When a pass over the repository stopped finding this call at this position. None means the
+    # revision last indexed has it. A call site is never deleted, because a finding addresses one
+    # by id and deleting the row would delete what was concluded about it; `schema.sql` carries
+    # that argument. A retracted site is still a real object to hand to a reader explaining an
+    # old finding, which is why this is a field on the model rather than a filter applied before
+    # one is built.
+    retracted_at: datetime | None = None
 
 
 class VendorChange(BaseModel):

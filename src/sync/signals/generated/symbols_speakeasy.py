@@ -439,12 +439,17 @@ def _source_files(root: Path) -> list[Path]:
     )
 
 
-def extract_symbols(source_root: Path) -> tuple[ExtractedOperation, ...]:
-    """Every operation the SDK's source states, keyed by the chain a customer writes.
+def extract_symbols(source_root: Path) -> tuple[tuple[ExtractedOperation, ...], tuple[str, ...]]:
+    """Every operation the SDK's source states, and every construct it states unreadably.
+
+    The same pair both Stainless flavours return: what was read, then what could not be, present
+    and empty on a clean read.
 
     Raises `UnrecognisedSdkShape` at the three points this emission can be absent: nothing
     extending `ClientSDK`, no candidate mounting another, or no route readable from any module a
-    mounted class delegates to.
+    mounted class delegates to. Those refusals stand -- the channel is for a partial loss, and a
+    checkout carrying classes without their request modules is exactly the total one the third
+    raise exists for.
     """
     root = Path(source_root).resolve()
     parser = Parser(_TS_LANGUAGE)
@@ -472,15 +477,30 @@ def extract_symbols(source_root: Path) -> tuple[ExtractedOperation, ...]:
     # the importing file's own import map is what says which class is meant. A name no import
     # reaches is left unresolved rather than matched against a class of that name elsewhere --
     # the same refusal the rest of this module makes.
+    # An unresolved mount is recorded only where the source named the module the class should be
+    # in. Speakeasy imports every mounted class by name, so a mount whose name is in the import
+    # map and whose target is not a candidate is a file this checkout does not carry; a `new`
+    # naming something the file never imported states no module and is not a mount this rule
+    # missed. The same distinction the TypeScript flavour draws, against a different import form.
     mounts: dict[_ClassKey, dict[str, _ClassKey]] = {}
+    unresolved: dict[_ClassKey, list[str]] = {}
     for key, read in classes.items():
-        module = key[0]
+        module, name = key
         resolved: dict[str, _ClassKey] = {}
+        missing: list[str] = []
         for attribute, class_name in read.mounts.items():
-            declaring = modules[module].imports.get(class_name, module)
+            imported = modules[module].imports.get(class_name)
+            declaring = imported if imported is not None else module
             if (declaring, class_name) in candidates:
                 resolved[attribute] = (declaring, class_name)
+            elif imported is not None:
+                missing.append(
+                    f"{GENERATOR}: {module}: {name}.{attribute} mounts {class_name!r} from "
+                    f"{imported!r}, which this checkout does not contain, so that resource and "
+                    f"every operation under it is absent"
+                )
         mounts[key] = resolved
+        unresolved[key] = missing
 
     mounted = {target for resolved in mounts.values() for target in resolved.values()}
     # The root mounts another candidate and is nothing else's mount. Every class here extends the
@@ -495,6 +515,10 @@ def extract_symbols(source_root: Path) -> tuple[ExtractedOperation, ...]:
         )
 
     extracted: dict[str, ExtractedOperation] = {}
+    # Recorded for the classes the walk actually reaches, and keyed so a resource mounted twice
+    # records its losses once. A class nothing mounts contributes no symbol either, so a decline
+    # from it would name a loss the map never stood to have.
+    unreadable: dict[str, None] = {}
     # Breadth-first from each root, carrying the chain each mount was reached by. The visited set
     # is per path rather than global: a resource mounted twice is two symbols a customer can
     # write, and both resolve to the same operations.
@@ -506,6 +530,7 @@ def extract_symbols(source_root: Path) -> tuple[ExtractedOperation, ...]:
         read = classes.get(key)
         if read is None:
             continue
+        unreadable.update(dict.fromkeys(unresolved[key]))
         for method_name, delegated in read.delegations.items():
             found = next(
                 (
@@ -517,6 +542,24 @@ def extract_symbols(source_root: Path) -> tuple[ExtractedOperation, ...]:
                 None,
             )
             if found is None:
+                # A method delegating only to functions this checkout imports from files it does
+                # not carry is an operation lost to staging. One delegating to modules that are
+                # all present and none of which builds a request is not an operation at all --
+                # which is most methods of most classes -- and is not recorded.
+                absent = sorted(
+                    {
+                        target
+                        for name in delegated
+                        if (target := modules[key[0]].imports.get(name)) is not None
+                        and target not in modules
+                    }
+                )
+                if absent:
+                    joined = ", ".join(repr(target) for target in absent)
+                    unreadable[
+                        f"{GENERATOR}: {key[0]}: {key[1]}.{method_name} reaches no request module "
+                        f"-- {joined} are not in this checkout -- so it contributes no symbol"
+                    ] = None
                 continue
             symbol = ".".join([*chain, method_name])
             extracted.setdefault(
@@ -535,7 +578,7 @@ def extract_symbols(source_root: Path) -> tuple[ExtractedOperation, ...]:
             f"coverage number attached rather than a measurement"
         )
 
-    return tuple(extracted[symbol] for symbol in sorted(extracted))
+    return tuple(extracted[symbol] for symbol in sorted(extracted)), tuple(unreadable)
 
 
 def report_extraction(
@@ -544,24 +587,27 @@ def report_extraction(
     """Extract, then check every route against the specification the SDK's manifest names.
 
     The same check both Stainless flavours run, over the same parameter reduction the TypeScript
-    one adds. The denominator is counted after that reduction, so it is the number of distinct
-    routes the comparison can actually be made against rather than the number of entries the
-    specification happens to list -- which for `vercel/sdk` is the same 359 either way, because
-    Speakeasy spells its parameters exactly as the document it generated from does.
+    one adds. The ratio's denominator is counted after that reduction and the specification's
+    operation count before it, and for `vercel/sdk` the two are the same 359 -- Speakeasy spells
+    its parameters exactly as the document it generated from does, so nothing is absorbed. That
+    equality is a fact about this vendor and not a property of the code; the day an overlay
+    renames a parameter the two counts come apart and the line says by how much.
     """
-    declared = {_comparable(method, path) for method, path in spec_operations}
-    operations = extract_symbols(source_root)
+    comparable = {_comparable(method, path) for method, path in spec_operations}
+    operations, unreadable = extract_symbols(source_root)
     unknown = tuple(
         operation
         for operation in operations
-        if _comparable(operation.http_method, operation.path) not in declared
+        if _comparable(operation.http_method, operation.path) not in comparable
     )
     reached = {
         _comparable(operation.http_method, operation.path) for operation in operations
-    } & declared
+    } & comparable
     return SpeakeasyExtractionReport(
         operations=operations,
-        spec_operation_count=len(declared),
+        declared_operation_count=len(spec_operations),
+        comparable_key_count=len(comparable),
         unknown_to_spec=unknown,
         covered_count=len(reached),
+        unreadable=unreadable,
     )

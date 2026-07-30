@@ -176,7 +176,9 @@ class EfficiencyDetector:
                     strongest[key] = (call, claim)
 
         for (operation_id, _), (call, claim) in sorted(strongest.items()):
-            sites = self._store.call_sites_for_operation(self._vendor_id, operation_id)
+            sites = self._store.call_sites_for_operation(
+                self._vendor_id, operation_id, repo_id=self._repo_id
+            )
             reachable = [site for site in sites if site.id is not None]
             shared_note = (
                 f", shared across {len(reachable)} call sites" if len(reachable) > 1 else ""

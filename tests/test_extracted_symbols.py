@@ -39,6 +39,7 @@ from sync.signals.generated.symbols import (
     GENERATOR,
     ExtractedOperation,
     UnrecognisedSdkShape,
+    _route,
     extract_symbols,
     read_spec_operations,
     report_extraction,
@@ -50,7 +51,7 @@ SPEC_OPERATIONS = FIXTURES / "anthropic_spec_operations.json"
 
 
 def _extracted() -> dict[str, ExtractedOperation]:
-    return {operation.symbol: operation for operation in extract_symbols(SDK)}
+    return {operation.symbol: operation for operation in extract_symbols(SDK)[0]}
 
 
 # --- what the source says --------------------------------------------------------------
@@ -126,7 +127,7 @@ def test_coverage_is_reported_against_the_specifications_operation_count():
     Of those, **121** are distinct routes once the `?beta=true` marker is dropped, and 121 is
     what an extracted route can be matched against. Both numbers are asserted, because they
     measure different things and quoting one as the other is how a denominator stops meaning
-    anything.
+    anything. Until M3-W100 the report carried only the second and called it the first.
 
     The numerator is what this committed fixture contains: the non-beta resource modules. The
     `beta/` tree is not committed, and it carries most of the specification, so this is a floor
@@ -142,7 +143,8 @@ def test_coverage_is_reported_against_the_specifications_operation_count():
     report = report_extraction(SDK, read_spec_operations(SPEC_OPERATIONS))
 
     assert len(published) == 131
-    assert report.spec_operation_count == 121
+    assert report.declared_operation_count == 131
+    assert report.comparable_key_count == 121
     assert report.extracted_count == 11
     assert report.covered_count == 10
     assert 0 < report.coverage_ratio < 1
@@ -153,7 +155,7 @@ def test_the_denominator_is_the_specification_and_not_the_extraction():
     shape of measurement the audit found could not refute a wrong mapping."""
     report = report_extraction(SDK, read_spec_operations(SPEC_OPERATIONS))
 
-    assert report.spec_operation_count > report.extracted_count
+    assert report.comparable_key_count > report.extracted_count
 
 
 # --- the cross-check, which is what makes the result refutable --------------------------
@@ -206,6 +208,11 @@ def test_a_beta_query_marker_is_not_mistaken_for_a_different_route():
     SDK writes the path without one. Reading the suffix as part of the route would report every
     beta operation as unknown to the spec -- a cross-check that fires on a difference in how two
     artifacts spell the same thing is worse than none, because it trains a reader to ignore it.
+
+    The marker survives the read and is dropped by the comparison, which is where M3-W100 moved
+    it. Dropping it at the read is what made the published operation count unrecoverable: the
+    ten routes listed both with and without the marker arrived as ten members instead of twenty,
+    and the report's denominator was 121 for a specification declaring 131.
     """
     operations = read_spec_operations(SPEC_OPERATIONS)
 
@@ -213,7 +220,11 @@ def test_a_beta_query_marker_is_not_mistaken_for_a_different_route():
     assert sum(1 for entry in published if "?beta=true" in entry["path"]) == 120
 
     assert ("GET", "/v1/models") in operations
-    assert not [path for _, path in operations if "?" in path]
+    assert ("GET", "/v1/models?beta=true") in operations
+    assert len({_route(method, path) for method, path in operations}) == 121
+
+    report = report_extraction(SDK, read_spec_operations(SPEC_OPERATIONS))
+    assert report.unknown_to_spec == ()
 
 
 # --- an unrecognised shape fails loudly -------------------------------------------------
@@ -338,7 +349,8 @@ def test_the_adapter_cross_checks_when_a_specification_is_staged(caplog):
 
     logged = " ".join(record.getMessage() for record in caplog.records)
     assert "11 symbols extracted" in logged, logged
-    assert "10 of 121 specification operations" in logged, logged
+    assert "10 of 121 comparable routes" in logged, logged
+    assert "the specification declares 131 operations" in logged, logged
     assert GENERATOR in logged
 
 
