@@ -175,6 +175,14 @@ def build_symbol_map(
         match = re.match(r"^/v1/([a-z_]+)(/\{[^}]+\})?/?$", path)
         if not match:
             continue
+        # A vendor document is a boundary, so the shape is checked rather than trusted.
+        # `_addresses_one_resource` reaches `.get` on this immediately, so without the guard one
+        # malformed path item cost the entire map with an `AttributeError` naming a builtin type
+        # -- every call site for the vendor unresolved, for one bad key. Twilio's builder guards
+        # the same layer, and `tests/test_symbol_map_declines.py` is where the two are held to
+        # the same answer.
+        if not isinstance(operations, dict):
+            continue
         resource_segment, instance_suffix = match.group(1), match.group(2)
         is_instance = instance_suffix is not None or _addresses_one_resource(operations)
         resource = _camel(resource_segment)

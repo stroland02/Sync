@@ -293,6 +293,23 @@ def test_a_path_item_key_whose_value_is_not_an_object_is_skipped():
     assert set(method_key_holding_a_string) == {"stripe.charges.create"}
 
 
+def test_a_stripe_path_whose_body_is_not_an_object_leaves_its_siblings_resolving():
+    """The path-item level, which is a layer above the method-key guard just asserted.
+
+    Stripe reached `.get` on whatever `paths` held, through `_addresses_one_resource`, before any
+    method key was looked at -- so a single malformed path item cost the *entire* map with an
+    `AttributeError` naming a builtin type. That is a far larger answer than the input deserves:
+    every call site for the vendor goes unresolved, which this file's own preamble calls the
+    worst-shaped false negative the system has, arriving by traceback instead of by silence.
+
+    Twilio guarded the same layer from the start. This is the assertion that says both do now,
+    and it is pinned in the load-bearing direction: the good path still resolves.
+    """
+    mapping = _stripe({"/v1/charges": {"get": {"operationId": "GetCharges"}}, "/v1/broken": []})
+
+    assert set(mapping) == {"stripe.charges.list"}
+
+
 def test_an_operation_with_no_operation_id_yields_no_symbol_however_the_verb_was_read():
     """A symbol with no operation behind it is unresolvable in the other direction.
 
@@ -351,25 +368,24 @@ def test_a_declined_operation_leaves_no_trace_either_map_s_caller_could_count():
     assert stripe_with == stripe_without
 
 
-def test_the_two_maps_answer_a_malformed_path_item_differently():
-    """Drift, pinned so that it is visible in the suite rather than only in a report.
+def test_the_two_maps_answer_a_malformed_path_item_the_same_way():
+    """The drift this file recorded, closed, and pinned in the direction it was closed.
 
-    Both builders iterate `spec["paths"]`. Twilio guards the path body and skips a non-object;
-    Stripe does not, and `_addresses_one_resource` reaches `.get` on it. Same malformed input,
-    same layer, two answers -- a skipped path against an `AttributeError` naming a type.
+    Both builders iterate `spec["paths"]`. Twilio guarded the path body from the start; Stripe
+    did not, and `_addresses_one_resource` reached `.get` on it, so the same malformed input at
+    the same layer produced a skipped path from one vendor and an `AttributeError` naming a
+    builtin type from the other. The earlier version of this test asserted that disagreement and
+    said which answer was worse: the raise, because it costs the whole map for one bad key and
+    names neither the vendor nor the path.
 
-    Neither vendor publishes such a document, so this is not a live defect for either. It is
-    recorded because a vendor document is a system boundary and the two adapters disagree about
-    whether this boundary is one, and because the raise is the less useful of the two answers: a
-    path key would name which document is bad and the type name does not.
+    Asserted as a comparison rather than twice in each vendor's own file, because agreement is
+    the property -- the two can only drift apart again by one of these halves changing alone.
     """
-    malformed = {"/v1/charges": {"get": {"operationId": "GetCharges"}}, "/v1/broken": []}
+    stripe = _stripe({"/v1/charges": {"get": {"operationId": "GetCharges"}}, "/v1/broken": []})
+    twilio = _twilio({"/v1/Charges": {"get": {"operationId": "ListCharge"}}, "/v1/Broken": []})
 
-    assert set(_twilio({"/v1/Charges": {"get": {"operationId": "ListCharge"}}, "/v1/Broken": []})) == {
-        "twilio.insights.v1.charges.list"
-    }
-    with pytest.raises(AttributeError):
-        _stripe(malformed)
+    assert set(stripe) == {"stripe.charges.list"}
+    assert set(twilio) == {"twilio.insights.v1.charges.list"}
 
 
 def test_only_twilio_declines_an_unrecognised_verb_and_only_stripe_has_a_fallback():
