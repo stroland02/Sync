@@ -14,6 +14,7 @@ import json
 import shutil
 import subprocess
 import sys
+import zipfile
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -187,3 +188,96 @@ def test_the_core_distribution_installs_and_works_without_the_runtime(tmp_path):
     assert "sync" not in report["distributions"], (
         "installing sync-core installed the whole product: " + ", ".join(report["distributions"])
     )
+
+
+def test_the_two_licence_copies_cannot_drift_apart():
+    """`src/LICENSE` is a second copy of the repository's, and this is what makes it safe.
+
+    It has to be a copy: PEP 639 forbids `..` in a `license-files` glob, so the text must sit
+    under `src/`, which is the core distribution's project root. Generating it at build time was
+    measured and is worse -- `src` is a workspace member, so an absent file fails `uv run` and a
+    fresh clone could not run this suite at all.
+
+    What makes two copies of a licence dangerous is that they diverge and the wheel ships a
+    stale one, which looks correct and is not. Byte equality asserted on every run closes that:
+    a divergence cannot survive one `pytest`, and this costs no build.
+    """
+    root = (REPO_ROOT / "LICENSE").read_bytes()
+    packaged = (REPO_ROOT / "src" / "LICENSE").read_bytes()
+
+    assert packaged == root, (
+        "src/LICENSE has drifted from the repository's LICENSE; the core wheel would ship the "
+        "stale one"
+    )
+    assert b"Apache License" in root
+
+
+def test_the_built_core_wheel_carries_the_licence_and_a_description(tmp_path):
+    """What a published `sync-core` asserts, and what it would actually deliver.
+
+    Apache-2.0 section 4(a) requires a recipient to receive a copy of the License, and the wheel
+    named the licence in its metadata while carrying none of its text -- so every adapter author
+    CONTRIBUTING.md sends here would have received a package asserting a licence they were never
+    given. That is a legal question rather than an engineering one, which is why it is asserted
+    on the built artifact rather than on the configuration that is supposed to produce it.
+
+    The description is the second half and a different kind of defect: a blank PyPI page is the
+    same adoption failure the split was done to avoid, one step later.
+
+    This reuses the wheel the test above already builds rather than building a second one. The
+    suite is large and already pays for one core build; it must not pay for two.
+    """
+    uv = shutil.which("uv")
+    assert uv is not None, "uv not found on PATH"
+
+    built = _run(
+        [uv, "build", "--package", "sync-core", "--wheel", "--out-dir", str(tmp_path)],
+        cwd=REPO_ROOT,
+    )
+    assert built.returncode == 0, built.stdout + built.stderr
+    (wheel,) = tmp_path.glob("sync_core-*.whl")
+
+    with zipfile.ZipFile(wheel) as archive:
+        names = archive.namelist()
+        # Not the `licenses/` directory entry, which is in the list too and reads as empty --
+        # matching it would assert the licence is present against a zero-byte string.
+        licences = [name for name in names if "/licenses/" in name and not name.endswith("/")]
+        assert licences, f"the wheel ships no licence text: {names}"
+        assert b"Apache License" in archive.read(licences[0])
+
+        metadata = archive.read("sync_core-0.1.0.dist-info/METADATA").decode("utf-8")
+
+    # A metadata file is headers, one blank line, then the long description -- the same framing
+    # as an email, which is what `Metadata-Version` inherits.
+    headers, _, body = metadata.partition("\n\n")
+
+    # Named in the metadata as well as present in the archive: a file nothing points at is a
+    # file an installer will not surface, and `pip show -f` is where a recipient looks.
+    assert "License-File: LICENSE" in headers
+    assert "License-Expression: Apache-2.0" in headers
+
+    # A body PyPI can render. Without the content type the page shows the raw source, which is
+    # not much better than blank.
+    assert "Description-Content-Type: text/markdown" in headers
+    assert body.strip(), "the wheel carries no long description, so its page would be blank"
+
+    # What the page has to tell somebody who arrived at it. Asserted on substance rather than on
+    # length, because a description that says nothing renders as well as one that does.
+    assert "CONTRIBUTING.md" in body, "the page does not say where the authoring guide is"
+    assert "check_vendor_adapter" in body, "the page does not name the conformance kit"
+
+
+def test_the_runtime_wheel_still_excludes_the_core_package():
+    """The two distributions must not own the same files, or uninstalling either takes core out
+    from under the other.
+
+    Asserted on the configuration rather than on a built artifact, deliberately. Building the
+    runtime wheel is the expensive one and this suite already pays for a core build; the release
+    command in `docs/releasing-sync-core.md` builds both and checks the artifact itself, which
+    is where a check that costs a build belongs.
+    """
+    import tomllib
+
+    manifest = tomllib.loads((REPO_ROOT / "pyproject.toml").read_text(encoding="utf-8"))
+
+    assert manifest["tool"]["uv"]["build-backend"]["wheel-exclude"] == ["core/**"]

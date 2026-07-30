@@ -12,7 +12,24 @@ authors = [
     { name = "Sebastian", email = "165098826+stroland02@users.noreply.github.com" }
 ]
 requires-python = ">=3.12"
+# The page an adapter author lands on, and deliberately not the repository's README. That one
+# describes a self-maintaining pull-request pipeline; a reader who installed this package came
+# for the four protocols and would learn nothing about them from it.
+readme = "README.md"
 license = "Apache-2.0"
+# Apache-2.0 section 4(a) requires that a recipient of the work receives a copy of the License,
+# and `License-Expression` alone ships none of its text. Without this the wheel names a licence
+# it does not carry, which is the one defect in this repository that is a legal question.
+#
+# `src/LICENSE` is a copy of the repository's, and that duplication is deliberate rather than
+# overlooked. PEP 639 forbids `..` in these globs -- uv rejects it as "the parent directory
+# operator (`..`) at position 0 is not allowed" -- so the text has to sit under this project
+# root, which `src/` has to be for the reason the comment at the top of this file gives.
+# Generating it at build time instead was measured and is worse: `src` is a workspace member, so
+# a missing file here fails `uv run` outright and a fresh clone could not run its own test
+# suite. `tests/test_core_distribution.py` asserts the two files are byte-identical, which is
+# the divergence a second copy is otherwise guilty of.
+license-files = ["LICENSE"]
 keywords = ["api", "openapi", "plugin", "sdk", "developer-tools"]
 classifiers = [
     "Development Status :: 2 - Pre-Alpha",
