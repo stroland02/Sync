@@ -389,7 +389,7 @@ def _read_class(node: Node, source: bytes) -> _Class:
 
     body = node.child_by_field_name("body")
     if body is None:
-        return read
+        raise AssertionError("P392 reached")
 
     for member in body.named_children:
         if member.type != "method_definition":

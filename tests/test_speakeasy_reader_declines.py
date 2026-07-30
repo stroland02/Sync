@@ -202,7 +202,7 @@ def test_a_request_object_carrying_members_that_are_not_pairs_still_yields_its_v
 
     Vercel's own emission holds none of these inside `_createRequest`'s object, so nothing in the
     committed tree reaches this statement. It holds one directly next door: the object handed to
-    `client._do` carries a shorthand `context`, which line 326 declines before this loop sees it.
+    `client._do` carries a shorthand `context`, which the `_createRequest` check at 333 declines before this loop sees it.
     """
     root = _copy(tmp_path)
     _edit(
@@ -257,7 +257,7 @@ def test_a_mount_imported_from_outside_the_checkout_is_dropped_without_a_record(
     not recorded, so the mount's class name is looked for in the mounting file itself, is not a
     candidate there, and the mount is not an edge. Six symbols go.
 
-    **And nothing is recorded**, because the decline at 495 requires `imported is not None` --
+    **And nothing is recorded**, because the decline at 503 requires `imported is not None` --
     the source has to have named a module for the rule to say which file is missing. The control
     below is the same absent class named by an in-tree specifier: identical loss, and that one is
     reported. So the record is not about whether the resource was lost, it is about whether the
