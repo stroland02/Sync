@@ -44,8 +44,9 @@ an answer. Keeping it out of `BindingRung` is what stops a binder returning it.
 
 `Finding.binding_rung` defaults to it too, which is a weaker position than requiring the field
 and was chosen knowing that: see the field's own docstring for what the requirement would have
-cost and what the default leaves open. `unattributed` on a row written after this shipped is
-still a bug -- it is just one the type no longer catches.
+cost. `unattributed` on a row written after the column shipped would still be a bug, so no row is
+written that way -- `GraphStore.insert_finding` refuses one, which puts the check at a boundary
+`CLAUDE.md` names rather than on the published model.
 """
 
 
@@ -165,13 +166,18 @@ class Finding(BaseModel):
     the table double-counts exactly the findings whose attribution got better.
 
     **Defaulted rather than required, and what that costs.** Requiring it would make a detector
-    that forgets fail at construction, which is the stronger guard; it also made every existing
-    `Finding` fixture in the suite invalid -- 32 test files, 153 failures -- and the mechanical
-    repair would have written a rung into fixtures that do not reason about one, which is a
-    committed value nobody established. So the default stands and the guard is weaker: each of
-    the five detectors has a test asserting what it attributes, but a *sixth* detector added
-    later could omit the field and write `unattributed` silently. That is the gap this default
-    leaves, and it is a detector-conformance test rather than a type that would close it.
+    that forgets fail at construction, which is the stronger guard; `Finding` is exported from
+    `sync.core`, though, which `CLAUDE.md` calls the published plugin SDK, so a required field
+    breaks every detector a third party has written -- and inside this repository alone it made
+    every existing fixture invalid: 32 test files, 153 failures. So the default stands.
+
+    **What the default no longer leaves open is the write.** `GraphStore.insert_finding` refuses a
+    finding whose rung is `unattributed`, naming the detector, because the column defaults to that
+    value and a row written without a rung is therefore indistinguishable from every row that
+    predates the column -- no later query can separate a detector that forgot from history that
+    could not know. Constructing one is still legal and still means nothing was attributed; a
+    sixth detector that forgets fails at the write instead of shipping findings nobody can
+    attribute.
     """
 
     call_site_id: str

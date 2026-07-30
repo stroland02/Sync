@@ -148,6 +148,9 @@ def _seed(store: GraphStore, repo: RepoRef, path: str) -> Finding:
             call_site_id=site.id, vendor_change_id=change_id,
             severity="breaking",
             rationale=f"{CHANGE.kind} on {RETIRED}: retired, replaced by {REPLACEMENT}",
+            # What `ParameterDeprecationDetector` attributes. This fixture stands in for a real
+            # finding travelling the real graph, so it carries the rung the real one would.
+            binding_rung="static",
         )
         finding.id = store.insert_finding(finding)
     return finding
