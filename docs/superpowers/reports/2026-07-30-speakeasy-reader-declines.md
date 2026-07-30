@@ -421,30 +421,18 @@ Guarded by construction, and which of them actually fired:
 | Anchor-missed: an LF anchor against a CRLF file | `symbols_speakeasy.py` **is** CRLF in the working copy, so every multi-line anchor is translated to `\r\n` before matching | ANCHOR_MISSED_FIRED |
 | A decode error on the reader thread | `PYTHONIOENCODING=utf-8` in the child environment, `errors="replace"` harness-side | No. This module and the twelve test files are pure ASCII |
 | A skipped test reading as a pass | the pass count is compared to the baseline, not just the exit code | No |
-| A second harness instance mutating the same file | none, by construction — see below | **Yes**, on the probe run |
-| A mutation captured by a commit taken during the window | none, by construction — see below | **Yes**, in `827eee0` |
+| A mutation captured by a commit taken during the window | none, by construction — see below | **Yes**, in `827eee0`, and it was misdiagnosed first |
 
 ANCHOR_MISSED_PROSE
 
-### Two more false-verdict modes, neither of them in any brief, both hit on this task
+### A sixth false-verdict mode: a mutation captured by a snapshot, and a wrong diagnosis of it
 
-Both are about the *harness's* relationship to the working tree rather than about reading pytest's
-output, which is why no amount of exit-code discipline catches either.
+This one is not a way of misreading pytest's output, which is what the five modes above all are. It
+is the working tree ceasing to describe the committed content, and no amount of exit-code discipline
+reaches it.
 
-**A second harness instance, mutating the same file.** A probe run was interrupted mid-flight and a
-second was started later against the same module. Both were alive at once. Each restores the file
-from its own copy of the original bytes after every probe, which is correct in isolation and
-guarantees corruption in pairs: the file was observed carrying **two** markers simultaneously,
-`P344` and `P392`, and one harness reported `NOT-APPLIED: anchor occurs 0 times` because the other
-had already rewritten the region it was looking for.
-
-The `NOT-APPLIED` guard is what surfaced it. A harness with only KILLED and SURVIVED would have
-recorded the interleaved runs as ordinary verdicts. **Every verdict from both runs was discarded**
-and the probe table below is a single clean run with nothing else alive — checked by command line,
-not by assumption, because `python.exe` on this machine is also every other worktree's test runner.
-
-**A mutation committed by a concurrent snapshot.** While a probe held the module mutated, the work
-in progress was committed. `827eee0` therefore carries
+**What happened.** A probe run was interrupted while it held the module mutated, and the work in
+progress was committed at that moment. `827eee0` therefore carries, in `src/`:
 
 ```diff
      body = node.child_by_field_name("body")
@@ -453,16 +441,35 @@ in progress was committed. `827eee0` therefore carries
 +        raise AssertionError("P392 reached")
 ```
 
-in `src/`, and **the whole suite stayed green through it** — 2,671 passed. That is the probe's own
-result arriving by accident: nothing reaches that statement, so nothing could notice a raise there.
-Reverted in `65229ba`, which restores the module byte-identical to `a3306a4`.
+**The whole suite stayed green through it** — 2,671 passed on the merged tree. That is the probe's
+own result arriving by accident: nothing reaches that statement, so nothing could notice a raise
+standing in for the return. Reverted in `65229ba`, which restores the module byte-identical to
+`a3306a4`. **A passing suite says nothing about a tree it was not run against**, and a `git add`
+inside a mutation window commits something the suite is structurally unable to report.
 
-The lesson is specific and worth stating in those terms: **a mutation harness makes the working tree
-temporarily untrue, and every green signal over that window is meaningless in both directions.** A
-suite that passes proves nothing about the committed content, and a `git add` during the window
-commits a lie the suite is structurally unable to report. The guard is to restore before committing
-and to diff the mutated file against its last good revision rather than trusting the harness's
-`finally` — the `finally` ran, and it ran after the commit.
+**The symptoms, and the diagnosis that was wrong.** The next run showed the module carrying **two**
+markers at once, `P344` and `P392`, and reported `NOT-APPLIED: anchor occurs 0 times`. Both were
+recorded here as evidence of a second harness instance racing the first. **That was wrong, and it is
+recorded rather than quietly corrected**, because the wrong answer was the more interesting-sounding
+one and it survived until the process table was actually read.
+
+One cause explains both symptoms. The harness reads `ORIGINAL` once at start-up, and at start-up the
+file already contained `P392` — from the commit. So applying `P344` to `ORIGINAL` produced a file
+carrying both, and `P392`'s own anchor (`return read`) genuinely occurred zero times, because the
+committed content no longer had that line. `Get-CimInstance Win32_Process` then showed a single
+process chain — `uv.exe` → venv `python.exe` → `python.exe`, one parent each, one `pytest.exe` — so
+there was never a second harness.
+
+**What this cost and what it did not.** Every verdict from the contaminated runs was discarded and
+the table below is a fresh run against `65229ba`. Discarding was right and the reasoning behind it
+was not: the runs were invalid because their baseline was a mutated file, not because two writers
+raced. The two guards that did their jobs are the ones worth keeping — `NOT-APPLIED` surfaced the
+anchor rather than scoring it as a verdict, and restoring from `git` rather than from the harness's
+own buffer is what recovered the file. The guard this task did not have, and the one to add, is to
+diff the mutated file against its last good revision before committing anything: the harness's
+`finally` did run, and it ran after the commit.
+
+## Unreachability probes, over the whole suite
 
 Each guard's `continue` or `return` replaced by `raise AssertionError`, whole suite, default
 scheduler (`-n auto`), on the merged tree. A green run means no test in this repository reaches the
