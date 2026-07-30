@@ -36,17 +36,3 @@ sync/cli.py:_git
 # same measured exemption `sync/index/shipped_tree.py` now carries, not `errors="replace"`.
 # Retired by M3-W98/b, which owns `sync/index/typescript.py`.
 sync/index/typescript.py:TypeScriptAdapter._baseline
-
-# **`git diff HEAD` is the one call in `src/` whose defect is reproduced rather than reasoned
-# about.** `git diff` copies file content onto the pipe verbatim, so a customer source file in
-# cp1252 makes git emit bytes that are not UTF-8. Measured on 2026-07-29 against a repository
-# holding one such file: exit 0, `UnicodeDecodeError` on the reader thread, and `stdout` came
-# back `None` -- after which `return result.stdout` hands `None` on as the patch's diff, and the
-# `TypeError` arrives somewhere that does not name this call. Neither route is obviously right:
-# a diff is data, so `errors="replace"` would corrupt the patch, and there is nothing to exempt
-# because the child genuinely does emit non-UTF-8. Reading the diff as bytes, or refusing the
-# file the way `sync.cli._literal_call_sites` refuses one it cannot decode, is the shape of the
-# answer. Retired by M3-W98/c, which owns `sync/remediate/`; this is the entry to dispatch
-# first, and the only one of the five with a measurement rather than a suspicion behind it.
-sync/remediate/agent_patch.py:_git_diff
-sync/remediate/agent_patch.py:_unstaged_additions

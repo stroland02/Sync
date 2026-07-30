@@ -1,5 +1,6 @@
 import os
 import subprocess
+import threading
 from pathlib import Path
 
 import pytest
@@ -580,3 +581,236 @@ def test_an_agent_that_changed_nothing_at_all_is_still_reported_as_changing_noth
 
     assert patch.diff.strip() == ""
     assert patch.strategy == "agent"
+
+
+# --- a customer file that is not UTF-8 --------------------------------------------
+#
+# `git diff` copies file content onto the pipe verbatim, so a source file in a legacy
+# encoding makes the child emit bytes that are not UTF-8. Read with `text=True,
+# encoding="utf-8"` that decode happens on a reader thread, where the `UnicodeDecodeError`
+# is swallowed: the call returns exit 0 with `stdout` set to `None`, and `None` travels on
+# as the patch's diff until something concatenates it. Measured against a clone holding one
+# cp1252 file, and recorded in
+# `docs/superpowers/reports/2026-07-29-a-diff-that-does-not-decode.md`.
+
+# cp1252 for `café` and `montréal`. Written as bytes, never as a committed fixture: anything
+# that round-trips a non-UTF-8 file as text repairs it, and the test then passes against a
+# valid file. 0xe9 is `é` in cp1252 and an invalid continuation byte in UTF-8.
+CP1252_SOURCE = b'export const caf\xe9 = "montr\xe9al";\n'
+
+# The same two words as genuine UTF-8. An accented identifier is not the defect and must not
+# become a casualty of the fix.
+UTF8_SOURCE = 'export const café = "montréal";\n'.encode("utf-8")
+
+
+def _rewrite(name: str, content: bytes):
+    """A stand-in for the agent editing one tracked file, byte-exactly."""
+    def work(path: Path) -> None:
+        (path / name).write_bytes(content)
+
+    return work
+
+
+def test_a_diff_that_is_not_utf_8_refuses_the_patch_and_names_the_file(clone, monkeypatch):
+    """The reproduction, as a test. Before the fix this raises nothing here at all: the
+    decode fails on `subprocess`'s reader thread, `_git_diff` returns `None`, and
+    `Patch(diff=None)` fails pydantic validation or -- had it not -- reaches
+    `nodes.py`'s `proposed.diff.strip()` as an `AttributeError` that names no subprocess.
+
+    What the refusal has to carry is the file. The defect's whole cost is that it names
+    neither the file nor the call, so an operator sees a `TypeError` about `NoneType`
+    somewhere in the graph and has no path back to a customer source file.
+    """
+    with pytest.raises(RuntimeError) as raised:
+        _propose_after(clone, monkeypatch, _rewrite("src/billing.ts", CP1252_SOURCE))
+
+    reason = str(raised.value)
+    assert "src/billing.ts" in reason, f"the refusal must name the file; got {reason!r}"
+    assert "git diff HEAD" in reason, f"the refusal must name the call; got {reason!r}"
+    assert "f-42" in reason and "acme-billing" in reason
+
+
+def test_the_refusal_arrives_at_the_caller_and_not_on_a_reader_thread(clone, monkeypatch):
+    """The half of the measurement that makes this a defect rather than a preference.
+
+    `threading.excepthook` is installed for the same reason
+    `tests/test_subprocess_encoding.py` installs one: it is what proves *where* the failure
+    happens. Before the fix the `UnicodeDecodeError` is raised on `Thread-N (_readerthread)`
+    where no caller can catch it. After it, nothing is raised on any thread and the failure
+    is an exception at the call site.
+    """
+    raised_on_a_thread: list[BaseException] = []
+    original = threading.excepthook
+    threading.excepthook = lambda args: raised_on_a_thread.append(args.exc_value)
+    try:
+        with pytest.raises(RuntimeError):
+            _propose_after(clone, monkeypatch, _rewrite("src/billing.ts", CP1252_SOURCE))
+    finally:
+        threading.excepthook = original
+
+    assert raised_on_a_thread == [], (
+        f"the decode still happens where no caller can catch it: {raised_on_a_thread!r}"
+    )
+
+
+def test_an_ordinary_ascii_diff_is_byte_identical_to_what_git_produced(clone, monkeypatch):
+    """Without this a fix that mangles every patch passes. Compared against the child's
+    own bytes rather than against a substring, because the diff *is* the data.
+    """
+    edited = "export const charge = () => 1;\n"
+    patch = _propose_after(clone, monkeypatch, _rewrite("src/billing.ts", edited.encode("ascii")))
+
+    expected = subprocess.run(
+        ["git", "diff", "HEAD"], cwd=clone, capture_output=True, check=True,
+    ).stdout
+    assert patch.diff.encode("utf-8") == expected
+    assert edited in patch.diff
+
+
+def test_a_diff_carrying_legitimate_non_ascii_utf_8_comes_through_intact(clone, monkeypatch):
+    """An accented identifier in a UTF-8 file is not the defect. This is the assertion
+    that rules out `errors="replace"`: it would return `caf��` here and the patch
+    would apply something the customer did not write.
+    """
+    patch = _propose_after(clone, monkeypatch, _rewrite("src/billing.ts", UTF8_SOURCE))
+
+    assert "café" in patch.diff
+    assert "montréal" in patch.diff
+    assert "�" not in patch.diff, "a replacement character means the patch was corrupted"
+    expected = subprocess.run(
+        ["git", "diff", "HEAD"], cwd=clone, capture_output=True, check=True,
+    ).stdout
+    assert patch.diff.encode("utf-8") == expected
+
+
+def test_the_file_named_is_the_one_whose_bytes_do_not_decode(clone, monkeypatch):
+    """Naming the first changed file, or the repository, would satisfy the test above while
+    sending a reader to a file that is perfectly valid.
+    """
+    def work(path: Path) -> None:
+        (path / "src" / "clean.ts").write_bytes(b"export const clean = 1;\n")
+        (path / "src" / "legacy.ts").write_bytes(CP1252_SOURCE)
+        _git("add", "src/clean.ts", "src/legacy.ts", cwd=path)
+
+    with pytest.raises(RuntimeError) as raised:
+        _propose_after(clone, monkeypatch, work)
+
+    reason = str(raised.value)
+    assert "src/legacy.ts" in reason
+    assert "src/clean.ts" not in reason, f"named a file that decodes cleanly: {reason!r}"
+
+
+# --- `_undecodable_path`, driven directly ------------------------------------------
+
+_DIFF_HEADERS = (
+    b"diff --git a/src/one.ts b/src/one.ts\n"
+    b"--- a/src/one.ts\n"
+    b"+++ b/src/one.ts\n"
+    b"@@ -1 +1 @@\n"
+    b"-const a = 1;\n"
+    b"+const a = 2;\n"
+    b"diff --git a/src/two.ts b/src/two.ts\n"
+    b"--- a/src/two.ts\n"
+    b"+++ b/src/two.ts\n"
+    b"@@ -1 +1 @@\n"
+    b"-const b = 1;\n"
+    b"+const b = \xe9;\n"
+)
+
+
+def test_the_named_path_is_the_last_header_before_the_offending_byte():
+    assert agent_patch._undecodable_path(_DIFF_HEADERS, _DIFF_HEADERS.index(b"\xe9")) == "src/two.ts"
+    assert agent_patch._undecodable_path(_DIFF_HEADERS, _DIFF_HEADERS.index(b"const a = 2")) == "src/one.ts"
+
+
+def test_a_plus_plus_plus_line_inside_a_hunk_is_not_read_as_a_header():
+    """A customer repository that keeps patch files under version control has these. An
+    added line whose content is `++ b/elsewhere.ts` renders in the diff as `+++ b/elsewhere.ts`
+    -- git's `+` for an added line, then the content's own two -- and a scan for the last
+    `+++ ` line would name a file that is not in this diff at all. Requiring a `--- ` line
+    immediately above is what tells a header from content.
+
+    The three characters are load-bearing and the first draft of this test had two, which
+    matched nothing and left the guard unexercised: dropping it from `_undecodable_path`
+    survived mutation. Hence the assertion below on the fixture itself.
+    """
+    content = b"++ b/elsewhere.ts"
+    diff = (
+        b"diff --git a/patches/fix.patch b/patches/fix.patch\n"
+        b"--- a/patches/fix.patch\n"
+        b"+++ b/patches/fix.patch\n"
+        b"@@ -0,0 +1,2 @@\n"
+        b"+" + content + b"\n"
+        b"+const b = \xe9;\n"
+    )
+    assert b"\n+++ b/elsewhere.ts\n" in diff, (
+        "this fixture does not contain the collision it exists to describe, so it cannot "
+        "distinguish a guarded scan from a naive one"
+    )
+    assert agent_patch._undecodable_path(diff, diff.index(b"\xe9")) == "patches/fix.patch"
+
+
+def test_a_deleted_file_is_named_from_the_side_that_still_has_a_path():
+    """`+++ /dev/null` on a deletion, so the destination header names no file and the
+    content whose bytes reached the pipe came off the `---` side.
+    """
+    diff = (
+        b"diff --git a/src/gone.ts b/src/gone.ts\n"
+        b"--- a/src/gone.ts\n"
+        b"+++ /dev/null\n"
+        b"@@ -1 +0,0 @@\n"
+        b"-const b = \xe9;\n"
+    )
+    assert agent_patch._undecodable_path(diff, diff.index(b"\xe9")) == "src/gone.ts"
+
+
+# --- `_unstaged_additions`: the measurement behind its exemption -------------------
+
+
+@pytest.mark.parametrize("quotepath", ["true", "false"])
+def test_git_cannot_hand_this_call_a_path_that_is_not_utf_8(clone, quotepath):
+    """Why `_unstaged_additions` takes a measured exemption where `_git_diff` takes a fix.
+
+    `git diff HEAD` copies content; this call reports paths, and git owns their encoding at
+    both settings of `core.quotepath`. With it at its default a non-ASCII path is octal-escaped
+    into pure ASCII; with it off the path arrives as the UTF-8 git stores internally, converted
+    from NTFS's UTF-16. Neither is a byte sequence that is not UTF-8, which is the claim the
+    exemption on the call makes -- and this test is what establishes it rather than asserting it.
+
+    The audit measured `git ls-files -z`, where `core.quotepath` is ignored entirely. This call
+    passes no `-z`, so the setting is live and both values had to be checked.
+    """
+    _git("config", "core.quotepath", quotepath, cwd=clone)
+    (clone / "src" / "café.ts").write_bytes(b"export const x = 1;\n")
+
+    listed = subprocess.run(
+        ["git", "ls-files", "--others", "--exclude-standard"], cwd=clone,
+        capture_output=True, check=True,
+    ).stdout
+
+    assert listed, "git listed nothing, so this measures no path at all"
+    listed.decode("utf-8")  # raises UnicodeDecodeError if git ever emits something else
+    if quotepath == "true":
+        assert listed.isascii(), f"quotepath was expected to escape this to ascii: {listed!r}"
+        assert b"caf\\303\\251.ts" in listed
+    else:
+        assert not listed.isascii()
+        assert b"caf\xc3\xa9.ts" in listed
+
+
+def test_the_unstaged_guard_still_names_a_path_git_reported_with_escapes(clone, monkeypatch):
+    """M3-W82's guard decides the same thing over a non-ASCII path as over any other:
+    the patch is refused and the path is named. What git hands back at
+    `core.quotepath`'s default is the escaped spelling, which is what the message carries.
+    """
+    _git("config", "core.quotepath", "true", cwd=clone)
+
+    def work(path: Path) -> None:
+        (path / "src" / "café.ts").write_bytes(b"export const x = 1;\n")
+
+    with pytest.raises(RuntimeError) as raised:
+        _propose_after(clone, monkeypatch, work)
+
+    reason = str(raised.value)
+    assert "caf\\303\\251.ts" in reason
+    assert "git add" in reason
