@@ -64,6 +64,8 @@ Git warns `LF will be replaced by CRLF` on every commit. That is expected. Do no
 
 `subprocess` is the easy one to forget, and it fails worse than the others. A decode error there is raised on the reader thread and never propagates: the call returns with `stdout` set to `None`, and the next line that concatenates it raises `TypeError` somewhere unrelated. Task 6 shipped exactly this — one accented identifier anywhere in a typechecked project crashed the verification gate instead of failing it. Task 4 hit the plain `read_text` form twice.
 
+**`encoding="utf-8"` on the call is not enough when the child chooses its own encoding.** It says how to decode the bytes, not which bytes arrive. Run a Python child on this machine and it emits cp1252, so `subprocess.run(..., text=True, encoding="utf-8")` still raises `UnicodeDecodeError` on the reader thread the moment the child prints a non-ASCII byte — an em dash in a source line pytest echoes back is enough. Set `PYTHONIOENCODING=utf-8` in the child's environment as well, and pass `errors="replace"` where the output is diagnostic rather than data. Measured while mutation-testing two modules whose docstrings carry em dashes: the run returned exit 1 with no output at all, which a harness reads as either a survival or a kill depending on how it counts, and neither is true.
+
 ## How we work
 
 **Test first, always.** Write the failing test, run it, watch it fail for the reason you expect, then implement. A test that has never failed has never been shown to test anything.
