@@ -31,6 +31,7 @@ import os
 from datetime import datetime, timedelta, timezone
 
 import pytest
+from pydantic import ValidationError
 
 from sync.core import CallSite, Finding, ObservedCall, ObservedShape
 from sync.detect.efficiency import LOOP_THRESHOLD, EfficiencyDetector
@@ -234,14 +235,23 @@ def test_a_finding_built_without_a_call_site_id_is_refused_rather_than_stored(st
     `Finding.call_site_id` is `str` with no default. So the alternative to guarding is not a
     finding that resolves to nothing -- it is a `ValidationError` at the moment of construction.
     `vendor_change.scan` passes `site.id` straight through on that basis and is correct to.
+
+    The second half is the control. A test that only watches a constructor raise passes when the
+    constructor is broken for some other reason, so the same call with an id has to succeed.
     """
-    with pytest.raises(Exception) as raised:
+    with pytest.raises(ValidationError) as raised:
         Finding(
             detector="observed-drift", claim="shape-drift:/data/status", call_site_id=None,
             severity="info", rationale="r",
         )
 
     assert "call_site_id" in str(raised.value)
+
+    accepted = Finding(
+        detector="observed-drift", claim="shape-drift:/data/status", call_site_id="cs1",
+        severity="info", rationale="r",
+    )
+    assert accepted.call_site_id == "cs1"
 
 
 # --- the coupling that makes status_rate's two remaining declines dead --------------
