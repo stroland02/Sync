@@ -23,12 +23,12 @@ INDEXED = datetime(2026, 7, 28, 6, 0, tzinfo=timezone.utc)
 FETCHED = datetime(2026, 7, 28, 7, 0, tzinfo=timezone.utc)
 
 
-def _site(site_id, path="src/pay.ts", line=12, op="PostCharges", vendor="stripe"):
+def _site(site_id, path="src/pay.ts", line=12, op="PostCharges", vendor="stripe", indexed_at=INDEXED):
     return CallSite(
         id=site_id, repo_id="r", path=path, line=line, col=4, vendor_id=vendor,
         operation_id=op, symbol="stripe.charges.create",
         args_keys=["amount", "currency"], response_fields_read=["status"],
-        sdk_version="18.0.0", content_hash="h", indexed_at=INDEXED,
+        sdk_version="18.0.0", content_hash="h", indexed_at=indexed_at,
     )
 
 
@@ -220,6 +220,46 @@ def test_answers_drawn_from_the_index_report_when_it_was_built(call: str):
     }[call]()
 
     assert result["indexed_at"] == INDEXED.isoformat()
+
+
+@pytest.mark.parametrize("order", [("new", "old"), ("old", "new")])
+def test_a_page_reports_the_newest_index_time_it_drew_on(order):
+    """`indexed_at` on a list is a claim about the page, so it is the newest of the sites the
+    page was built from and not whichever was read last.
+
+    Both orderings, because either "keep the first" or "keep the last" answers one of them
+    correctly by accident. Understating a page's freshness sends an agent back to files the
+    graph already knew about, which is the cost the whole surface exists to avoid.
+    """
+    older = datetime(2026, 7, 20, 6, 0, tzinfo=timezone.utc)
+    newer = datetime(2026, 7, 27, 6, 0, tzinfo=timezone.utc)
+    stamps = {"new": newer, "old": older}
+    surface = _surface(
+        findings=[_finding(f"f{n}", f"cs-{name}", "vc1") for n, name in enumerate(order)],
+        sites=[_site(f"cs-{name}", indexed_at=stamps[name]) for name in order],
+        changes=[_change("vc1")],
+    )
+
+    assert surface.whats_at_risk()["indexed_at"] == newer.isoformat()
+
+
+def test_a_call_site_always_carries_an_index_time():
+    """The premise the page timestamp rests on, asserted where the consequence lives.
+
+    `CallSite.indexed_at` is a non-optional `datetime`, so the one caller that folds site
+    timestamps together cannot be handed a null candidate and its null branch is unreachable.
+    `docs/superpowers/reports/2026-07-30-mcp-tool-surface-declines.md` records that branch as
+    redundant rather than removing it; this is what stops the premise from changing silently.
+    Making `indexed_at` optional fails here, beside the code that would then need the branch.
+    """
+    with pytest.raises(ValueError):
+        CallSite(
+            id="cs1", repo_id="r", path="src/pay.ts", line=12, col=4, vendor_id="stripe",
+            operation_id="PostCharges", symbol="stripe.charges.create",
+            sdk_version="18.0.0", content_hash="h", indexed_at=None,
+        )
+
+    assert _site("cs1").indexed_at == INDEXED
 
 
 def test_whats_changed_reports_no_index_time_because_it_reads_no_index():
