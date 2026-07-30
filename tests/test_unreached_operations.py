@@ -89,6 +89,11 @@ def test_every_entry_is_an_operation_the_specification_declares_as_it_declares_i
     operator can look one up in the document. A reduced key would not be findable there, and the
     two Anthropic flavours reduce differently, so the identities would stop being comparable
     between the readers -- which is the one property this measurement exists to compare.
+
+    Ordered, and that is a pipeline rule rather than a nicety. `spec_operations` is a set, so
+    leaving the entries in iteration order makes them depend on string hashing -- randomised per
+    process by default -- and two extractions over identical bytes would then produce different
+    records. Convergence on the same input is required of every stage, and this is a record.
     """
     for flavour, root, spec in ARTIFACTS:
         declared = read_spec_operations(spec)
@@ -96,6 +101,7 @@ def test_every_entry_is_an_operation_the_specification_declares_as_it_declares_i
 
         assert set(report.unreached) <= declared, flavour.GENERATOR
         assert len(set(report.unreached)) == len(report.unreached), flavour.GENERATOR
+        assert list(report.unreached) == sorted(report.unreached), flavour.GENERATOR
 
 
 def test_an_unreached_key_makes_every_operation_behind_it_unreached():
