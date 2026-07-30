@@ -397,6 +397,39 @@ def _drive_literal_call_sites(root: Path) -> None:
     assert _literal_call_sites(_repo(root)) == []
 
 
+def _drive_git_diff(root: Path) -> None:
+    """A clone whose tracked source file is not UTF-8, which the patch path refuses.
+
+    The one child in `src/` that genuinely hands back bytes that are not UTF-8: `git diff`
+    copies file content onto the pipe verbatim. Read with `text=True, encoding="utf-8"` the
+    decode happened on `subprocess`'s reader thread, where the `UnicodeDecodeError` is
+    swallowed and `stdout` comes back `None`. This handler is what turns that into a refusal
+    naming the file, so the driver has to reach it through real git rather than a stub.
+
+    cp1252 rather than the UTF-16 the other drivers use: this is a source file somebody edits
+    in a legacy encoding, and the byte git copies onto the pipe is a lone 0xe9.
+    """
+    import os
+    import subprocess
+
+    from sync.remediate.agent_patch import _git_diff
+
+    def git(*args: str) -> None:
+        subprocess.run(
+            ["git", *args], cwd=root, capture_output=True, check=True,
+            env={**os.environ, "GIT_CONFIG_GLOBAL": os.devnull, "GIT_CONFIG_SYSTEM": os.devnull},
+        )
+
+    git("init")
+    (root / "billing.ts").write_bytes(b"export const legacy = 1;\n")
+    git("add", "billing.ts")
+    git("-c", "user.name=Seed", "-c", "user.email=seed@example.com", "commit", "-m", "seed")
+    (root / "billing.ts").write_bytes(b'export const caf\xe9 = "montr\xe9al";\n')
+
+    with pytest.raises(RuntimeError, match="billing.ts"):
+        _git_diff(root, "finding=f-1 repo=r1")
+
+
 def _drive_ts_manifest(root: Path) -> None:
     from sync.index.typescript import TypeScriptAdapter
     from sync.signals.stripe.adapter import StripeAdapter
@@ -431,6 +464,7 @@ DRIVERS: dict[str, Callable[[Path], None]] = {
     "sync/index/python_lang.py:790": _drive_configured_typechecker,
     "sync/cli.py:725": _drive_literal_call_sites,
     "sync/index/typescript.py:213": _drive_ts_manifest,
+    "sync/remediate/agent_patch.py:240": _drive_git_diff,
     "sync/remediate/literal_swap.py:84": _drive_literal_swap,
     "sync/remediate/parameters.py:77": _drive_parameters,
     "sync/remediate/property_omit.py:93": _drive_property_omit,
