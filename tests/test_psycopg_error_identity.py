@@ -41,7 +41,7 @@ for name in evicted:
 
 import psycopg  # noqa: F811
 
-print("SPLIT" if psycopg.errors.ConnectionTimeout is not before else "NOSPLIT")
+print("SPLIT=%s" % (psycopg.errors.ConnectionTimeout is not before))
 
 # After the eviction, so the handler binds the classes a coverage run would leave it --
 # coverage evicts at plugin-load time, before conftest is imported.
@@ -74,7 +74,8 @@ def test_the_sweep_survives_psycopg_classes_being_split_in_two(tmp_path: Path) -
         timeout=180,
     )
 
-    assert "SPLIT" in done.stdout, f"the split did not reproduce, so nothing was tested: {done!r}"
-    assert "NOSPLIT" not in done.stdout
+    assert (
+        "SPLIT=True" in done.stdout
+    ), f"the split did not reproduce, so nothing was tested: {done!r}"
     assert done.returncode == 0, f"the sweep raised instead of returning: {done.stderr}"
     assert "RETURNED []" in done.stdout, done.stdout
