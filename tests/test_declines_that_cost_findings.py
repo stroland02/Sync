@@ -224,20 +224,6 @@ def test_a_foreign_vendor_s_traffic_is_declined_without_being_counted(store):
     assert without == [] and louder.declined == []
 
 
-def test_scanning_twice_reports_the_same_declines(store):
-    """Idempotence, held to the standard every other stage is. A channel that accumulated
-    across scans would report twice the work on the second run and the conformance kit's
-    two-scan comparison would be the only thing that noticed."""
-    _observe_call(store, _spans(LOOP_THRESHOLD))
-    detector = _efficiency(store)
-
-    list(detector.scan())
-    first = list(detector.declined)
-    list(detector.scan())
-
-    assert detector.declined == first and first != []
-
-
 # --- observed_drift: a baseline nothing calls, a floor, and a field nobody reads -----
 
 
@@ -445,3 +431,27 @@ def test_a_foreign_vendor_s_population_is_declined_without_being_counted(store):
 
     assert list(detector.scan()) == []
     assert detector.declined == []
+
+
+# --- the channel across all three ---------------------------------------------------
+
+
+def test_every_channel_reports_the_same_declines_on_a_second_scan(store):
+    """Idempotence, held to the standard every other stage is.
+
+    A channel that accumulated across scans would report twice the work on the second run, and
+    the number would be wrong in the direction that looks like more diligence. Asserted for all
+    three detectors rather than one, because the reset is per-detector and three separate
+    omissions are three separate defects.
+    """
+    _site(store, operation_id="Other")
+    _observe_call(store, _spans(LOOP_THRESHOLD))
+    _observe_call(store, _statuses(_mix(FLOOR, AT_THRESHOLD), prefix="sr"), trace_id="t2")
+    _observe_shape(store)
+
+    for detector in (_efficiency(store), _rate(store), _drift(store)):
+        list(detector.scan())
+        first = list(detector.declined)
+        list(detector.scan())
+
+        assert first != [] and detector.declined == first
