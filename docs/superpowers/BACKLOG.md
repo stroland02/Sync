@@ -12,33 +12,28 @@ item that cannot say what evidence closes it is not ready to dispatch.
 
 ## Ready
 
-### B66 — Nothing refuses a finding that names no rung, and the store is where it should
+### B67 — The conformance kit certifies a detector whose findings the store will refuse
 
-B65 landed the rung column and every detector attributes correctly. What it did not land is the
-enforcement, and it said so plainly rather than hiding it — `FindingRung`'s docstring reads
-*"`unattributed` on a row written after this shipped is still a bug -- it is just one the type no
-longer catches."* Nothing else catches it either.
+B66 made `GraphStore.insert_finding` refuse a finding whose `binding_rung` is `unattributed`,
+naming the detector. Right place, and verified: it refuses and leaves no row. But it fires at
+runtime, on the first finding a detector ever raises.
 
-The history matters, because two positions were already tried. Requiring the field on the model was
-ruled and then reversed: `Finding` is exported from `sync.core.__init__`, so it is the published
-plugin SDK, and a required field breaks every detector a third party has written. Measured cost of
-that route: **153 failed, 120 errors across 32 files.** The reversal put enforcement at
-`GraphStore.insert_finding` instead — a boundary, which is where CLAUDE.md says validation belongs —
-and that half was never built.
+`sync.core.conformance.check_detector` exists to catch exactly that earlier, and has no rule about
+the rung. Its four rules are `_check_detector_id`, `_check_findings_are_usable`,
+`_check_findings_do_not_collide` and `_check_scans_agree`; the usable one checks the result is a
+`Finding` carrying the right `detector_id` and stops. The only mentions of a rung in that module
+are in `check_request_correlator`, a different protocol.
 
-**Its cost is measured too.** I prototyped the guard and ran it: `14 failed, 2523 passed`. Every
-failure is an existing test that persists a `Finding` without a rung. That is a fourteenth of the
-model route and touches no published contract, since `sync.graph` is internal — but it is fourteen
-tests that must each say which rung they mean, and blanket-pasting `static` across them would be
-worse than leaving the gap.
+**So the kit certifies a detector every one of whose findings the store will reject.** For a third
+party writing against the published SDK that is the worst possible ordering — the kit says
+conforming, production says no.
 
-A prototype guard, its test, and the exact failure list are recoverable from this coordinator's
-session; the shape that worked raised `ValueError` naming the detector, and the fourteen tests are
-in `tests/test_graph_store.py` and its neighbours.
+Newly checkable rather than long-missed: until B65 there was nowhere to put a rung, and until B66
+nothing rejected its absence.
 
-**Closes when:** a finding persisted without a rung is refused at the write, naming the detector;
-each of the fourteen tests states the rung it means rather than being blanket-edited;
-`Finding`'s constructor is unchanged so the SDK contract holds; and four gates green.
+**Closes when:** a detector whose findings name no rung fails `check_detector` with a
+`ConformanceFailure`, a correct one passes, the five shipped detectors still conform, `sync.core`
+still imports nothing from a sibling, and four gates green.
 
 ### B7 — The M0 acceptance run has not executed since the pipeline changed underneath it
 
@@ -833,3 +828,24 @@ is what a reviewer needs and duplicating it here would let the two copies drift.
   Two coordinator errors it corrected: my preservation commit still called the work "unreviewed, not
   gated" after that stopped being true, and its schema comment still described the required field I
   had already reversed. It amended both. The enforcement half of that reversal is B66.
+
+- Refuse to persist a finding that names no rung. Landed `f2c8275`. `insert_finding` raises
+  `ValueError` naming the detector when `binding_rung` is `unattributed`, before the insert, with
+  the argument for the placement in its own docstring — the check is at the store because `Finding`
+  is exported from `sync.core` and a required field there breaks every third-party detector.
+
+  Verified here: it refuses, names the detector, and **leaves no row behind** — the worker's second
+  mutation existed specifically to prove that a write-then-check implementation would be caught, and
+  it is the only test that catches it. The fourteen tests it had to touch each state the rung their
+  detector attributes (four `observed`, three `static`, the efficiency fixtures commented as taking
+  the correlated case) rather than a blanket value.
+
+  It also closed the question B65 was asked and never answered: `insert_finding` is the only route
+  that can set a rung. Two `INSERT INTO finding` exist — the store, and one test deliberately
+  omitting the column to prove history reads back — `set_finding_status` writes status alone, there
+  is no `COPY` or `executemany`, `psycopg.connect` appears in `src/` only in `store.py`, and
+  `sync.benchmark` never persists a finding at all. That last fact is also why the corpus figures
+  cannot move, and both sides measured 1.0000, 1.0000, 7, 17.
+
+  `CLAUDE.md`'s rung bullet now names the mechanism, including why the check is not on `Finding` —
+  the worker left that file to the coordinator deliberately, which was right.
