@@ -1,0 +1,46 @@
+# The plugin SDK, built as its own distribution so an adapter author installs pydantic and
+# nothing else. `src/` is the project root rather than somewhere tidier because uv_build refuses
+# a module root outside the project it is building -- "Module root must be inside the project" --
+# and `src/` is the only directory that both contains `sync/core` and is not already the `sync`
+# project root. A backend that does accept a path outside the project builds a wheel and then an
+# sdist with no source in it, which is worse than an odd location.
+[project]
+name = "sync-core"
+version = "0.1.0"
+description = "The plugin SDK for Sync: the protocols, models and conformance kit a vendor adapter is written against."
+authors = [
+    { name = "Sebastian", email = "165098826+stroland02@users.noreply.github.com" }
+]
+requires-python = ">=3.12"
+license = "Apache-2.0"
+keywords = ["api", "openapi", "plugin", "sdk", "developer-tools"]
+classifiers = [
+    "Development Status :: 2 - Pre-Alpha",
+    "Intended Audience :: Developers",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+]
+# The whole point of the split, and `tests/test_import_boundary.py` is what keeps this list
+# honest: it fails if `sync.core` grows a second third-party import.
+dependencies = [
+    "pydantic>=2.13.4",
+]
+
+[project.urls]
+Homepage = "https://github.com/stroland02/sync"
+Repository = "https://github.com/stroland02/sync"
+Documentation = "https://github.com/stroland02/sync/blob/main/CONTRIBUTING.md"
+Issues = "https://github.com/stroland02/sync/issues"
+
+[build-system]
+requires = ["uv_build>=0.11.19,<0.12.0"]
+build-backend = "uv_build"
+
+[tool.uv.build-backend]
+module-root = ""
+module-name = "sync.core"
+# `sync` is a regular package in this repository and a namespace package in this distribution.
+# This wheel ships `sync/core/` and no `sync/__init__.py`, so an environment holding only it
+# resolves `sync.core` without owning the `sync` name -- which is what lets the runtime
+# distribution add its own subpackages alongside.
+namespace = true
