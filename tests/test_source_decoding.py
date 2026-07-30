@@ -1,12 +1,18 @@
 """How the indexer decodes the customer's own source, and why it must decode it the way it
 decodes a vendor's.
 
-There are four copies of one three-line helper in this repository. The two over a vendor's SDK
-source -- `signals.generated.symbols_typescript._text` and `symbols_speakeasy._text` -- slice
-tree-sitter's byte offsets and decode strictly. The two over the customer's repository --
-`index.typescript._text` and `index.python_lang._text` -- passed `errors="replace"`. Same helper,
-same parser, opposite discipline, and the lenient half was the one pointed at somebody else's
-code. All four are strict now; the four parametrised cases below are what holds them level.
+There were four copies of one three-line helper in this repository. The two over a vendor's SDK
+source -- `symbols_typescript._text` and `symbols_speakeasy._text` -- sliced tree-sitter's byte
+offsets and decoded strictly. The two over the customer's repository -- `index.typescript._text`
+and `index.python_lang._text` -- passed `errors="replace"`. Same helper, same parser, opposite
+discipline, and the lenient half was the one pointed at somebody else's code. All of them are
+strict now; the parametrised cases below are what holds them level.
+
+There are three copies as of M3-W115. The two over a vendor's SDK are one function,
+`signals.generated.typescript_grammar.node_text`, because a copy of a parser fact is how a fix
+reaches one reader and not the other -- which had already happened to the helper next to it. The
+two over the customer's repository are a different tree and stay separate; what this file asserts
+is that every reader of tree-sitter bytes in this repository raises on the same input.
 
 `benchmark.read_checkout` already settled the argument for the corpus, and its wording is the
 brief for this: "Skipped rather than decoded leniently. `errors="replace"` would hand the indexer
@@ -42,7 +48,7 @@ import pytest
 from sync.cli import _literal_call_sites
 from sync.core import OperationRef, RepoRef
 from sync.index import python_lang, typescript
-from sync.signals.generated import symbols_speakeasy, symbols_typescript
+from sync.signals.generated import typescript_grammar
 
 
 class _Vendor:
@@ -223,16 +229,15 @@ class _Slice:
     [
         pytest.param(typescript._text, id="index.typescript"),
         pytest.param(python_lang._text, id="index.python_lang"),
-        pytest.param(symbols_typescript._text, id="signals.symbols_typescript"),
-        pytest.param(symbols_speakeasy._text, id="signals.symbols_speakeasy"),
+        pytest.param(typescript_grammar.node_text, id="signals.typescript_grammar"),
     ],
 )
 def test_every_copy_of_the_node_reader_decodes_the_same_way(reader) -> None:
     """The asymmetry, stated where it lives.
 
-    Four copies of one helper, two over a vendor's SDK and two over a customer's repository. A
+    Three copies of one helper now, one over a vendor's SDK and two over a customer's repository. A
     reader that substitutes rather than raising cannot be told from one that read the file
-    correctly, so the strict pair is the one both halves have to agree on -- and raising here is
+    correctly, so the strict half is the one both sides have to agree on -- and raising here is
     what holds the callers to filtering undecodable bytes out before this is reached.
     """
     with pytest.raises(UnicodeDecodeError):
