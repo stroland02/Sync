@@ -238,6 +238,118 @@ def test_scanning_twice_reports_the_same_declines(store):
     assert detector.declined == first and first != []
 
 
+# --- observed_drift: a baseline nothing calls, a floor, and a field nobody reads -----
+
+
+DECLARED_STRING = DeclaredField(
+    field_path="/data/status", json_types=frozenset({"string"}), required=True, nullable=False,
+)
+
+
+def _observe_shape(store: GraphStore, **over) -> None:
+    fields = dict(
+        vendor_id="stripe", operation_id="GetAccount", field_path="/data/status",
+        json_type="number", source="replay", sample_count=MIN_SAMPLES,
+        first_seen=SEEN, last_seen=SEEN,
+    )
+    fields.update(over)
+    store.record_observed_shape(ObservedShape(**fields))
+
+
+def _drift(store: GraphStore, declared=(DECLARED_STRING,)) -> ObservedDriftDetector:
+    return ObservedDriftDetector(
+        store, spec={"GetAccount": list(declared)}, vendor_id="stripe", repo_id="r"
+    )
+
+
+def test_a_baseline_no_indexed_call_site_resolves_to_is_counted(store):
+    """Traffic was observed, the shape disagrees with the specification, and there is nowhere
+    to report it. The one half of `if not shapes` / `if not sites` that is unambiguously a
+    lost finding: the divergence exists and the detector had it."""
+    _observe_shape(store)
+    detector = _drift(store)
+
+    assert list(detector.scan()) == []
+    assert len(detector.declined) == 1
+    assert "GetAccount" in detector.declined[0]
+    assert "call site" in detector.declined[0]
+
+
+def test_an_operation_with_no_observed_shape_at_all_is_not_counted(store):
+    """The half deliberately left out, and the discrimination that makes the count readable.
+
+    `if not shapes` fires once per operation the specification declares, so counting it would
+    report the size of the vendor's specification on every run. What it cannot distinguish --
+    an operation the customer calls and has no traffic for, from one the customer never calls
+    -- needs the call-site query this branch exists to avoid running.
+    """
+    detector = _drift(store)
+
+    assert list(detector.scan()) == []
+    assert detector.declined == []
+
+
+def test_a_divergence_under_the_sample_floor_is_counted(store):
+    """Today this is every divergence there is: the live baseline holds one row carrying one
+    sample, twenty-nine short of the floor. A number is what makes that answerable without
+    lowering the floor and re-running a scan."""
+    _site(store)
+    _observe_shape(store, sample_count=MIN_SAMPLES - 1)
+    detector = _drift(store)
+
+    assert list(detector.scan()) == []
+    assert len(detector.declined) == 1
+    assert str(MIN_SAMPLES) in detector.declined[0]
+    assert "/data/status" in detector.declined[0]
+
+
+def test_an_undescribed_field_under_the_sample_floor_is_counted(store):
+    """The other finding the floor silences. `_undeclared` applies no read filter, so a thin
+    undescribed field is a finding lost to the floor alone."""
+    _site(store)
+    _observe_shape(store, field_path="/data/livemode", json_type="boolean",
+                   sample_count=MIN_SAMPLES - 1)
+    detector = _drift(store)
+
+    assert list(detector.scan()) == []
+    assert len(detector.declined) == 1
+    assert "/data/livemode" in detector.declined[0]
+
+
+def test_a_thin_shape_that_matches_the_specification_is_not_counted(store):
+    """The control the floor decline rests on. A shape below the floor that agrees with what
+    the vendor published lost no finding, and counting it would make the number a count of
+    sparse observations rather than of divergences the floor silenced."""
+    _site(store)
+    _observe_shape(store, json_type="string", sample_count=MIN_SAMPLES - 1)
+    detector = _drift(store)
+
+    assert list(detector.scan()) == []
+    assert detector.declined == []
+
+
+def test_a_divergence_no_call_site_reads_is_counted(store):
+    """The read filter. A call site that never touches the field cannot be broken by it, which
+    is the right call and is also a divergence the vendor really is shipping."""
+    _site(store, reads=("data.id",))
+    _observe_shape(store)
+    detector = _drift(store)
+
+    assert list(detector.scan()) == []
+    assert len(detector.declined) == 1
+    assert "reads" in detector.declined[0]
+
+
+def test_a_divergence_a_call_site_reads_is_not_counted_as_declined(store):
+    """So none of the three counters can be satisfied by one that always reports."""
+    _site(store)
+    _observe_shape(store)
+    detector = _drift(store)
+
+    assert len(list(detector.scan())) == 1
+    assert detector.declined == []
+
+
 # --- status_rate: three gates, and what each one costs ------------------------------
 
 
