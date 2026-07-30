@@ -12,29 +12,6 @@ item that cannot say what evidence closes it is not ready to dispatch.
 
 ## Ready
 
-### B67 — The conformance kit certifies a detector whose findings the store will refuse
-
-B66 made `GraphStore.insert_finding` refuse a finding whose `binding_rung` is `unattributed`,
-naming the detector. Right place, and verified: it refuses and leaves no row. But it fires at
-runtime, on the first finding a detector ever raises.
-
-`sync.core.conformance.check_detector` exists to catch exactly that earlier, and has no rule about
-the rung. Its four rules are `_check_detector_id`, `_check_findings_are_usable`,
-`_check_findings_do_not_collide` and `_check_scans_agree`; the usable one checks the result is a
-`Finding` carrying the right `detector_id` and stops. The only mentions of a rung in that module
-are in `check_request_correlator`, a different protocol.
-
-**So the kit certifies a detector every one of whose findings the store will reject.** For a third
-party writing against the published SDK that is the worst possible ordering — the kit says
-conforming, production says no.
-
-Newly checkable rather than long-missed: until B65 there was nowhere to put a rung, and until B66
-nothing rejected its absence.
-
-**Closes when:** a detector whose findings name no rung fails `check_detector` with a
-`ConformanceFailure`, a correct one passes, the five shipped detectors still conform, `sync.core`
-still imports nothing from a sibling, and four gates green.
-
 ### B7 — The M0 acceptance run has not executed since the pipeline changed underneath it
 
 `tests/test_e2e_stripe.py::test_one_command_produces_one_green_pull_request` is the
@@ -849,3 +826,28 @@ is what a reviewer needs and duplicating it here would let the two copies drift.
 
   `CLAUDE.md`'s rung bullet now names the mechanism, including why the check is not on `Finding` —
   the worker left that file to the coordinator deliberately, which was right.
+
+- The conformance kit refuses what the store would. Landed `850854f`. `check_detector` gains a
+  fifth rule, `_check_findings_name_a_rung`, rejecting `unattributed` and never asserting *which*
+  rung is right — that is the detector author's judgement, and the kit cannot know it.
+
+  **The accepting half caught what the failing half could not: `_CorrectDetector`, the kit's own
+  published example of conformance, set no rung.** The kit was shipping an example whose findings
+  the store would refuse. That is the third time this kit has been found certifying something it
+  should not — `check_vendor_adapter` once passed an adapter resolving no symbol, and
+  `check_remediator` read an empty diff as a decline — and the first time the miss was in its own
+  reference implementation.
+
+  Three mutations, each caught by a different test: removing the rule reddens both new tests,
+  truncating to `findings[:1]` is seen only by the two-finding test, and inverting the predicate is
+  caught by the accepting one. Verified here independently: two real rungs conform, no rung is
+  refused naming the detector.
+
+  It declined to check membership in `BindingRung`, correctly — the field is typed, so `banana`
+  raises `ValidationError` at construction and never reaches a scan, leaving `unattributed` as the
+  only member that is not a binder's rung. CLAUDE.md forbids validating conditions that cannot
+  occur, and it applied that rather than adding a rule that could never fire.
+
+  Two things beyond the ask: two fixtures had to name a rung because the new rule runs before the
+  rule they exercise, and `docs/writing-a-vendor-adapter.md` still called the finding key a triple
+  after `claim` had joined it.
