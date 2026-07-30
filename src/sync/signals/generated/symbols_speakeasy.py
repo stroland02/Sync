@@ -276,9 +276,16 @@ def _string_literal(node: Node, source: bytes) -> str | None:
     """The text of a plain string literal.
 
     The fragment rather than the quoted text, so an empty string reads as absent rather than as a
-    value, and an escape this does not interpret cannot be mistaken for one.
+    value. A literal carrying an escape is declined whole, for the reason
+    `symbols_typescript.py:_plain_route` states against the same grammar: it splits a string at
+    every escape, so the first fragment is a prefix of what the source says. `"/v4/aliases\\/{id}"`
+    reads as `/v4/aliases`, which is a route this SDK sends from a different method -- so the
+    truncation does not lose a binding, it makes a second one to a declared operation, and the
+    cross-check cannot contradict a route the specification declares.
     """
     if node.type != "string":
+        return None
+    if any(child.type == "escape_sequence" for child in node.children):
         return None
     for child in node.children:
         if child.type == "string_fragment":
