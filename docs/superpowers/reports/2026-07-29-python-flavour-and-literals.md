@@ -399,7 +399,7 @@ Run on the final tree, branch `stroland02/m1-nodes`, based on `2b2c29b`.
 
 | Gate | Exit | Result |
 |---|---|---|
-| `uv run pytest -q` | PYTEST-EXIT | PYTEST-RESULT |
+| `uv run pytest -q` | 0 | 2358 passed, 2 skipped in 146.06s. Random ordering left enabled, so this is a different order from the coverage run above and both are green |
 | `uv run python scripts/lint_encoding.py src scripts tests` | 0 | clean |
 | `PYTHONIOENCODING=utf-8 uv run lint-imports` | 0 | 95 files, 201 dependencies, 1 contract kept, 0 broken |
 | `uv run python scripts/lint_dead_links.py src --baseline scripts/dead_links_baseline.txt` | 0 | clean |
