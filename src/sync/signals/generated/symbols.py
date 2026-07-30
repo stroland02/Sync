@@ -159,6 +159,28 @@ class ExtractionReport:
 
     unknown_to_spec: tuple[ExtractedOperation, ...]
 
+    unreached: tuple[tuple[str, str], ...]
+    """Declared operations no extracted symbol reaches, spelled as the specification spells them.
+
+    The other direction of the same cross-check `unknown_to_spec` reports, and the one that carries
+    the false negative: a symbol the map lacks is a call site that binds to nothing, so a vendor
+    change to that operation finds no call site and the scan reports clean. Its size is what a
+    coverage ratio cannot state, because the ratio's denominator is comparable routes and this is
+    the surface a vendor moves in operations.
+
+    **Counted in declared operations, where `covered_count` refused to be, and the asymmetry is
+    why.** A comparable key two declared operations sit behind cannot be attributed as covered:
+    reaching it proves one of them is sent and says nothing about the other. The complement carries
+    no such ambiguity -- the reduction only ever merges, so a key no symbol reaches is a key none
+    of the operations behind it is sent through. Every entry here is certainly unreached, which
+    makes this count exact where the reached one would be a range.
+
+    Spelled as declared rather than reduced, so an operator can find the entry in the document and
+    so the two Anthropic flavours -- which reduce differently -- state their losses in one
+    vocabulary. Two readers agreeing about a loss is only checkable if their verdicts are
+    comparable.
+    """
+
     @property
     def extracted_count(self) -> int:
         return len(self.operations)
@@ -209,12 +231,14 @@ class ExtractionReport:
     def render(self) -> str:
         """One line an operator can read, with every number's denominator attached to it.
 
-        Four counts, because they answer different questions and none substitutes. The symbol
+        Five counts, because they answer different questions and none substitutes. The symbol
         count is what a call site can resolve against; the comparable-route count is what the
         cross-check can be made against and is the ratio's denominator; the declared-operation
         count is the vendor's API size, which is the only one of the three a vendor publishes
-        independently; and the number of constructs this rule could not read is what says whether
-        a small extraction is a small SDK or a rule meeting an emission it does not know.
+        independently; the number of declared operations no symbol reaches is the surface a vendor
+        change can move without any call site being found; and the number of constructs this rule
+        could not read is what says whether a small extraction is a small SDK or a rule meeting an
+        emission it does not know.
         """
         return (
             f"{GENERATOR}: {self.extracted_count} symbols extracted, reaching "
@@ -223,6 +247,8 @@ class ExtractionReport:
             f"{self.declared_operation_count} operations"
             + (f", {self.indistinct_operation_count} of them not separately comparable"
                if self.indistinct_operation_count else "")
+            + (f"; {len(self.unreached)} declared operations no symbol reaches"
+               if self.unreached else "")
             + (f"; {len(self.unknown_to_spec)} extracted operations the specification does not "
                f"declare" if self.unknown_to_spec else "")
             + (f"; {len(self.unreadable)} constructs this rule could not read"
@@ -494,6 +520,11 @@ def report_extraction(
     independently derived artifacts agreeing is refutation. An operation the specification does
     not declare is reported rather than dropped, because a misread source and a vendor that
     genuinely lacks a route are different facts and only one of them is a defect here.
+
+    The disagreement runs both ways and both directions are reported. An operation the
+    specification declares that no symbol reaches is where a vendor change finds no call site,
+    which is the failure this whole approach exists to avoid, and it is the direction the coverage
+    ratio states only as a percentage of a reduced denominator.
     """
     comparable = {_route(method, path) for method, path in spec_operations}
     operations, unreadable = extract_symbols(source_root)
@@ -510,6 +541,13 @@ def report_extraction(
         declared_operation_count=len(spec_operations),
         comparable_key_count=len(comparable),
         unknown_to_spec=unknown,
+        unreached=tuple(
+            sorted(
+                operation
+                for operation in spec_operations
+                if _route(*operation) not in reached
+            )
+        ),
         covered_count=len(reached),
         unreadable=unreadable,
     )
