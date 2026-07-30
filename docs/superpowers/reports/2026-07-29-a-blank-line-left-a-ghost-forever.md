@@ -174,11 +174,16 @@ that cannot fail.
 The four gates:
 
 ```
-uv run pytest                                             2479 passed, 1 skipped in 167.08s
+uv run pytest                                             2482 passed, 1 skipped in 151.77s
 uv run lint-imports                                       Contracts: 1 kept, 0 broken
 uv run python scripts/lint_encoding.py src scripts tests  exit 0
 uv run python scripts/lint_dead_links.py src --baseline …  exit 0
 ```
+
+Run after merging `main` at `1631514`, which is three tests further along than the 2479 this
+change was gated at on its own. The merge is clean: main's four newer commits touch
+`signals/reachability.py`, `tests/test_decode_handlers.py` and three documents, none of which this
+change goes near.
 
 `lint_encoding` is silent when it passes, so it was shown to fail first: pointed at a file holding
 `Path("x").read_text()` it exits 1 and names the line.
@@ -195,9 +200,10 @@ into this worktree, then the same worktree with this change restored:
   symbol map            5f71dcd3bec1    5f71dcd3bec1
 ```
 
-`gate_corpus.py` prints "Every floor cleared" on both, exit 0. That the figures are identical is the
-expected result rather than a lucky one: `sync.benchmark.score` truncates its own database per pair,
-so no pair ever re-indexes a repository and no retraction happens during scoring.
+`gate_corpus.py` prints "Every floor cleared" on both, exit 0. Both were taken before the merge
+described above, so the only difference between the two columns is this change. That the figures are
+identical is the expected result rather than a lucky one: `sync.benchmark.score` truncates its own
+database per pair, so no pair ever re-indexes a repository and no retraction happens during scoring.
 
 **Two gates were red in this worktree before any of this work, for environmental reasons, and both
 are worth recording because either could be mistaken for a regression.** `.cache/specs/symbols.json`
