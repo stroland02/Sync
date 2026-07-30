@@ -245,6 +245,100 @@ def test_a_collision_is_reported_nowhere(tmp_path):
     assert not hasattr(report, "declined")
 
 
+# --- the residual path the earlier report named, and what it actually costs -----------------
+
+
+def test_the_intended_absorption_and_the_residual_path_are_one_shape():
+    """Why this is not repairable in `_comparable`, stated as the two inputs rather than argued.
+
+    `${modelID}` against the specification's `{model_id}` is the difference the reduction exists to
+    absorb. `${this.channel}` against `{api_version}` is an SDK interpolating a value that is not a
+    path parameter into a position where the specification writes one -- the residual path
+    `2026-07-29-typescript-symbol-reader.md` named. Both are a brace span in the same position, and
+    they reduce to the same key.
+
+    Separating them means deciding which brace spans hold parameter names, which is a rule about a
+    vendor's SDK conventions and belongs in an adapter rather than in a reduction two generators
+    share. So the reduction cannot be narrowed here without guessing, and the residual path is a
+    documented cost rather than a defect with a fix in this module.
+    """
+    intended = symbols_typescript._comparable("get", "/v1/models/{modelID}")
+    residual = symbols_typescript._comparable("get", "/v1/models/{this.channel}")
+    declared = symbols_typescript._comparable("GET", "/v1/models/{model_id}")
+
+    assert intended == declared
+    assert residual == declared
+
+
+def test_an_sdk_interpolating_a_non_parameter_is_affirmed_by_the_cross_check(tmp_path):
+    """The residual path constructed. `${this.channel}` is a segment chosen at runtime, not a path
+    parameter, and the reduction makes it equal to the specification's `{api_version}`.
+
+    What that costs is the cross-check's verdict on this route, and the verdict is the wrong one:
+    the specification declares no route the SDK sends, and `unknown_to_spec` says it declares one.
+    `symbols.py` calls the cross-check "what makes the result refutable", and this is the input on
+    which it stops refuting -- silently, because affirmation is the quiet answer.
+    """
+    root = _sdk(tmp_path, "  pinned() { return this._client.get(path`/v1/${this.channel}/models`, {}); }")
+    spec = _spec(tmp_path, ("GET", "/v1/models"), ("GET", "/v1/{api_version}/models"))
+
+    report = symbols_typescript.report_extraction(root, read_spec_operations(spec))
+
+    assert {operation.symbol: operation.path for operation in report.operations} == {
+        "models.list": "/v1/models",
+        "models.pinned": "/v1/{this.channel}/models",
+    }
+    assert report.unknown_to_spec == ()
+    assert report.covered_count == 2
+
+
+def test_the_same_route_is_reported_when_the_specification_parameterises_nothing(tmp_path):
+    """The control, and it is what makes the test above mean something.
+
+    The identical SDK against a specification that writes no parameter in that position reports the
+    route. So the affirmation is produced by the reduction meeting a parameterised specification
+    route, not by `/v1/{this.channel}/models` being a route the cross-check finds unremarkable.
+    """
+    root = _sdk(tmp_path, "  pinned() { return this._client.get(path`/v1/${this.channel}/models`, {}); }")
+    spec = _spec(tmp_path, ("GET", "/v1/models"))
+
+    report = symbols_typescript.report_extraction(root, read_spec_operations(spec))
+
+    assert [operation.symbol for operation in report.unknown_to_spec] == ["models.pinned"]
+
+
+def test_the_reduction_is_not_on_the_path_a_call_site_resolves_through(tmp_path):
+    """And the reason none of this is a wrong binding, asserted at the place a binding is made.
+
+    `operation_for_symbol` builds its `OperationRef` from `ExtractedOperation.path`, which is the
+    SDK's route verbatim -- the reduction is applied only inside `report_extraction`, to decide
+    membership of a set. So the colliding key never reaches a `call_site` row: the symbol resolves
+    to what the SDK sends, which is what the whole extraction argument rests on.
+
+    This is what narrows the earlier report's claim. A collision costs a measurement and a
+    cross-check verdict; it cannot attach a vendor change to a call site that does not call it.
+    """
+    from sync.signals.generated.adapter import GeneratedSpecAdapter
+
+    root = _sdk(tmp_path, "  pinned() { return this._client.get(path`/v1/${this.channel}/models`, {}); }")
+    spec = _spec(tmp_path, ("GET", "/v1/models"), ("GET", "/v1/{api_version}/models"))
+    adapter = GeneratedSpecAdapter(
+        vendor_id="anthropic", sources={}, fetch=_never_fetch, cache_dir=tmp_path,
+        sdk_source=root, sdk_spec_operations=spec,
+        sdk_source_generator=symbols_typescript.GENERATOR,
+    )
+
+    reference = adapter.operation_for_symbol("anthropic.models.pinned", language="typescript")
+
+    assert reference is not None
+    assert reference.path == "/v1/{this.channel}/models"
+    assert reference.operation_id == "GET /v1/{this.channel}/models"
+
+
+def _never_fetch(url: str) -> str:
+    raise AssertionError("symbol extraction must not reach a network")
+
+
 def _sdk(tmp_path: Path, *methods: str) -> Path:
     """Three files of the shape the Stainless TypeScript rule reads, with `models.list` readable.
 
