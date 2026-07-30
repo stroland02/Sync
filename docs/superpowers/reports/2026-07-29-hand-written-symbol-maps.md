@@ -229,6 +229,19 @@ reason to keep it and the reason no mutation that *deletes* it can ever be infor
 Neither was removed. Removing them is a refactor with no defect behind it, and in the Twilio case
 it would make the loop's contract implicit at the exact place the two vendors already disagree.
 
+`2026-07-29-typescript-symbol-reader.md` (M3-W91) reached the same verdict on two clauses of the
+generated TypeScript reader, independently and on the same day: recorded, not deleted, because it is
+a production change no test proves necessary and because the clause makes the code's assumption true
+by construction rather than by accident. Three modules, three tasks, one answer.
+
+**One difference from theirs is worth keeping straight, because it changes what a later reader
+should try.** Both of M3-W91's survivals were also test weaknesses — a better fixture made both
+falsifiable, and both tests were strengthened. Neither of the two here can be made falsifiable by
+any fixture. For `twilio:142`, reaching `body.items()` with a non-object body requires getting past
+145, which the same input has already stopped; for `stripe:143-144`, Python's implicit `None` is
+indistinguishable from the explicit one for every input there is. So nobody should go looking for
+the fixture that kills these two. There isn't one.
+
 One statement outside the eleven carries a dead sub-condition, noted because it is the same
 species: `_version_prefix` returns `f"/{segments[0]}" if segments and segments[0] else ""`, and
 `str.split("/")` never returns an empty list — `"".split("/")` is `[""]` — so `segments and` can
