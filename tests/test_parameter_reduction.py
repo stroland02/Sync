@@ -335,6 +335,113 @@ def test_the_reduction_is_not_on_the_path_a_call_site_resolves_through(tmp_path)
     assert reference.operation_id == "GET /v1/{this.channel}/models"
 
 
+# --- the absorption the reduction exists for still works ------------------------------------
+
+
+def test_a_parameter_spelled_differently_on_each_side_still_covers_its_operation():
+    """The other direction, and the guard against over-correcting this.
+
+    `symbols_typescript`'s reason for existing is that Stainless writes `${modelID}` where the
+    specification writes `{model_id}`. Five of this fixture's twelve symbols carry a parameter and
+    they reach four distinct comparable keys, and every one of those keys must be counted as covered
+    -- a reduction narrowed until it declined a colliding key would decline all four, and the
+    cross-check would report the SDK disagreeing with the document it was generated from on a third
+    of its symbols.
+    """
+    spec = read_spec_operations(ANTHROPIC_SPEC)
+    report = symbols_typescript.report_extraction(FIXTURES / "anthropic_typescript", spec)
+    parameterised = [
+        operation for operation in report.operations if "{" in operation.path
+    ]
+    keys = {
+        symbols_typescript._comparable(operation.http_method, operation.path)
+        for operation in parameterised
+    }
+
+    assert len(parameterised) == 5
+    assert len(keys) == 4
+    assert keys <= {symbols_typescript._comparable(method, route) for method, route in spec}
+    assert report.unknown_to_spec == ()
+    assert report.covered_count == 10
+
+
+# --- the Speakeasy flavour's reduction is inert, and stays measured ------------------------
+
+
+def test_the_speakeasy_reduction_changes_no_verdict(monkeypatch):
+    """`_PARAMETER`'s comment in `symbols_speakeasy.py` claims this from a measurement taken once
+    against one checkout of one SDK, and nothing held it.
+
+    Inert means inert *in outcome*, not unused: the reduction rewrites eight of this SDK's fifteen
+    routes and 258 of the specification's 359. What makes it inert is that Speakeasy writes the
+    document's own parameter names through unchanged, so reducing both sides moves no route into or
+    out of the declared set. Disabling it therefore has to produce the same four numbers, and the
+    day this generator's spelling stops agreeing with the document it generated from is the day this
+    goes red -- which is the condition the comment keeps it for.
+    """
+    spec = read_spec_operations(VERCEL_SPEC)
+    with_reduction = symbols_speakeasy.report_extraction(VERCEL_SDK, spec)
+
+    monkeypatch.setattr(symbols_speakeasy, "_PARAMETER", re.compile(r"(?!)"))
+    without_reduction = symbols_speakeasy.report_extraction(VERCEL_SDK, spec)
+
+    assert without_reduction.spec_operation_count == with_reduction.spec_operation_count == 359
+    assert without_reduction.covered_count == with_reduction.covered_count == 15
+    assert without_reduction.unknown_to_spec == with_reduction.unknown_to_spec == ()
+    assert without_reduction.operations == with_reduction.operations
+
+
+def test_the_speakeasy_reduction_is_inert_rather_than_unreached():
+    """The non-vacuity of the test above, and the thing that makes it a measurement.
+
+    A reduction that matched nothing would satisfy every assertion there while proving nothing. It
+    fires on most of both artifacts, and the verdicts still agree, which is the claim.
+    """
+    operations = symbols_speakeasy.extract_symbols(VERCEL_SDK)
+    rewritten = [
+        operation
+        for operation in operations
+        if symbols_speakeasy._comparable(operation.http_method, operation.path)
+        != _route(operation.http_method, operation.path)
+    ]
+    declared = _spec_entries(VERCEL_SPEC)
+    rewritten_declared = [
+        (method, route)
+        for method, route in declared
+        if symbols_speakeasy._comparable(method, route) != _route(method, route)
+    ]
+
+    assert len(rewritten) == 8
+    assert len(rewritten_declared) == 258
+
+
+def test_the_overlay_the_speakeasy_reduction_is_kept_for_is_declared_by_this_vendor():
+    """Whether the condition the reduction is kept for is a real one for this generator.
+
+    It is. `vercel/sdk`'s own workflow applies an overlay to the specification before generating, so
+    the document this cross-check reads is not the document the SDK was generated from, and an
+    overlay renaming a path parameter would put every affected route on the wrong side of the
+    comparison. The mechanism is declared here rather than imagined for the generator.
+
+    What the overlay actually does is not readable from what is committed -- only `workflow.yaml` is,
+    and its filename is the only thing that says "title". The evidence that it renames no path
+    parameter is the agreement itself, held by the test above: all fifteen routes resolve to routes
+    the fetched document declares. So the case is reachable in mechanism and unexercised in effect.
+    """
+    import yaml
+
+    manifest = yaml.safe_load(
+        (FIXTURES / "vercel_typescript.workflow.yaml").read_text(encoding="utf-8")
+    )
+    overlays = [
+        entry["location"]
+        for source in manifest["sources"].values()
+        for entry in source.get("overlays", ())
+    ]
+
+    assert overlays == ["overlay-title.yaml"]
+
+
 def _never_fetch(url: str) -> str:
     raise AssertionError("symbol extraction must not reach a network")
 
