@@ -362,6 +362,13 @@ rather than from line prefixes, and the file is restored from the original *byte
 Baseline asserted green at 241 before the first mutation and after the last:
 `restored baseline: exit 0, counts {'passed': 241}`.
 
+**Taken before `origin/main` was merged, and still describing the tree that lands.** The merge
+(`d0df4d7`) added two test files, `tests/test_core_distribution.py` and
+`tests/test_severity_vocabulary.py`, and changed nothing under `src/sync/signals/` —
+`git diff --name-only 827eee0 HEAD -- tests/ src/sync/signals/` is exactly those two names. Neither
+is in the blast radius, so the baseline of 241 and every verdict below are unchanged by it. The
+whole-suite figures elsewhere in this report were re-taken after the merge and are not.
+
 | # | Mutation | Verdict | Tests killed |
 |---|---|---|---|
 | M1 | the escape guard is removed, so a split literal reads its first fragment again | KILLED, 3 failed | `…route_literal_carrying_an_escape_is_declined_whole`, `…verb_literal_carrying_an_escape…`, `…fourteen_other_symbols_are_the_control…` |
@@ -410,20 +417,59 @@ Guarded by construction, and which of them actually fired:
 | A non-1 exit with no `FAILED` lines | any exit outside {0, 1} is UNREADABLE | No. Every run exited 0 or 1 |
 | A `SyntaxError` arriving as `ERROR` | every mutation is `compile()`d first | Yes — control **C1**, reported without pytest being invoked |
 | Exit 0 at a passing count other than the baseline | UNREADABLE, because the test set moved | No |
-| Not-applied: an anchor absent or ambiguous | every anchor must match exactly once | Yes, twice while building the table. Both were rejected rather than run |
-| Anchor-missed: an LF anchor against a CRLF file | `symbols_speakeasy.py` **is** CRLF in the working copy, so every multi-line anchor is translated to `\r\n` before matching, and the LF form is reported separately if it would also have missed | Would have fired on every multi-line mutation. Nine of the twelve span lines |
+| Not-applied: an anchor absent or ambiguous | every anchor must match exactly once | NOT_APPLIED_FIRED |
+| Anchor-missed: an LF anchor against a CRLF file | `symbols_speakeasy.py` **is** CRLF in the working copy, so every multi-line anchor is translated to `\r\n` before matching | ANCHOR_MISSED_FIRED |
 | A decode error on the reader thread | `PYTHONIOENCODING=utf-8` in the child environment, `errors="replace"` harness-side | No. This module and the twelve test files are pure ASCII |
 | A skipped test reading as a pass | the pass count is compared to the baseline, not just the exit code | No |
+| A second harness instance mutating the same file | none, by construction — see below | **Yes**, on the probe run |
+| A mutation captured by a commit taken during the window | none, by construction — see below | **Yes**, in `827eee0` |
 
-The anchor-missed row is the one worth keeping: this file is checked out CRLF, so an LF-anchored
-harness would have reported NOT-APPLIED for nine of twelve mutations, and a harness that did not
-distinguish NOT-APPLIED from SURVIVED would have reported nine survivals against a module with one
-real defect in it.
+ANCHOR_MISSED_PROSE
 
-## Unreachability probes, over the whole suite
+### Two more false-verdict modes, neither of them in any brief, both hit on this task
+
+Both are about the *harness's* relationship to the working tree rather than about reading pytest's
+output, which is why no amount of exit-code discipline catches either.
+
+**A second harness instance, mutating the same file.** A probe run was interrupted mid-flight and a
+second was started later against the same module. Both were alive at once. Each restores the file
+from its own copy of the original bytes after every probe, which is correct in isolation and
+guarantees corruption in pairs: the file was observed carrying **two** markers simultaneously,
+`P344` and `P392`, and one harness reported `NOT-APPLIED: anchor occurs 0 times` because the other
+had already rewritten the region it was looking for.
+
+The `NOT-APPLIED` guard is what surfaced it. A harness with only KILLED and SURVIVED would have
+recorded the interleaved runs as ordinary verdicts. **Every verdict from both runs was discarded**
+and the probe table below is a single clean run with nothing else alive — checked by command line,
+not by assumption, because `python.exe` on this machine is also every other worktree's test runner.
+
+**A mutation committed by a concurrent snapshot.** While a probe held the module mutated, the work
+in progress was committed. `827eee0` therefore carries
+
+```diff
+     body = node.child_by_field_name("body")
+     if body is None:
+-        return read
++        raise AssertionError("P392 reached")
+```
+
+in `src/`, and **the whole suite stayed green through it** — 2,671 passed. That is the probe's own
+result arriving by accident: nothing reaches that statement, so nothing could notice a raise there.
+Reverted in `65229ba`, which restores the module byte-identical to `a3306a4`.
+
+The lesson is specific and worth stating in those terms: **a mutation harness makes the working tree
+temporarily untrue, and every green signal over that window is meaningless in both directions.** A
+suite that passes proves nothing about the committed content, and a `git add` during the window
+commits a lie the suite is structurally unable to report. The guard is to restore before committing
+and to diff the mutated file against its last good revision rather than trusting the harness's
+`finally` — the `finally` ran, and it ran after the commit.
 
 Each guard's `continue` or `return` replaced by `raise AssertionError`, whole suite, default
-scheduler. Baseline `exit 0, {'passed': 2655, 'skipped': 2}`.
+scheduler (`-n auto`), on the merged tree. A green run means no test in this repository reaches the
+statement; a red one would name what does. Harness at `%TEMP%\w111_probes_full.py`, not committed:
+the mutated text is `compile()`d first, each anchor must match exactly once and is translated to
+CRLF before matching, the exit code is read directly, and any exit outside {0, 1} — or exit 0 at a
+count other than the baseline — is UNREADABLE rather than a verdict.
 
 PROBE_TABLE_PLACEHOLDER
 
@@ -466,10 +512,19 @@ GATES_PLACEHOLDER
    two means `_specifier_target` returning why rather than only `None`, which is a signature change
    shared with `symbols_typescript.py`, where the identical handler sits at lines 198-201. Both
    modules, one argument.
-3. **The escape decline could become a decode, and only for tree-sitter's readers.** M3-W97's steer
-   was to align towards decoding. Doing it means interpreting JavaScript escape sequences from
-   `escape_sequence` nodes, in a helper both TypeScript readers would share — which is the first
-   thing in this package that would justify the shared module the Speakeasy docstring argues against
-   for everything else, because what differs underneath it would be nothing at all. It converts two
-   false negatives into two correct bindings and it is the only one of these three that adds a
-   symbol rather than a sentence.
+3. **One literal reader, shared by the two tree-sitter rules — and it is the one place the
+   duplication argument does not reach.** This is the task the provenance section above argues for,
+   and it has two halves that should be taken together. The first is to stop the same defect
+   arriving a third time: `_plain_route` and `_string_literal` were the same function, so the
+   escape guard is a parser fact with no generator content, and today nothing connects them. The
+   second is M3-W97's steer — align towards decoding rather than declining — which means
+   interpreting `escape_sequence` nodes (`\/`, `\n`, `\xNN`, `\uNNNN`, `\u{…}`, line
+   continuations) instead of refusing them, and turns two false negatives into two correct
+   bindings. It is the only one of these three that adds a symbol rather than a sentence.
+
+   The scope to hold it to: **one function, over one node type, with no parameters and no
+   rule-specific behaviour.** That is deliberately not the shared walker the Speakeasy docstring
+   refuses, and the distinction is the docstring's own — a walker has to be parameterised over
+   four differences between the rules, and this has none, which is why `_route` was imported and
+   this was not. If the change starts growing a `generator` argument, it has stopped being this
+   task.
