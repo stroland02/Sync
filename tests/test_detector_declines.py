@@ -173,10 +173,11 @@ def test_another_vendor_s_louder_trace_never_displaces_the_quoted_one(store):
 def test_a_declined_observation_leaves_no_trace_the_caller_could_count(store):
     """The invisibility, asserted rather than described.
 
-    Every surface examined this way but one has answered the same, and the exception is the
-    mutation engine, whose `unreachable` list reaches a per-pair column in the score JSON. This
-    one is no exception: a graph holding a foreign vendor's traffic produces findings equal to a
-    graph that never held it, field for field. No count, no list, no log line, no exception.
+    A graph holding a foreign vendor's traffic produces findings equal to a graph that never
+    held it, field for field. The detector has carried a `declined` channel since M3-W106 and
+    this decline is deliberately kept out of it: correct vendor scoping loses no finding, and
+    counting it would report every other API the repository calls on every run.
+    `test_a_foreign_vendor_s_traffic_is_declined_without_being_counted` holds that half.
     """
     _site(store, vendor_id="stripe")
     _observe_call(store, _spans(LOOP_THRESHOLD, prefix="st"))

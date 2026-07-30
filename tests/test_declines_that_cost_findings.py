@@ -115,3 +115,124 @@ def test_a_detector_with_no_channel_claims_nothing_about_its_declines(capsys):
     out = capsys.readouterr().out
     assert "vendor_change: 0 finding(s)" in out
     assert "declined" not in out
+
+
+# --- the graph the detectors read ---------------------------------------------------
+
+
+@pytest.fixture()
+def store():
+    s = GraphStore(DSN)
+    s.apply_schema()
+    s.truncate_all()
+    return s
+
+
+def _site(
+    store: GraphStore,
+    operation_id: str = "GetAccount",
+    reads: tuple[str, ...] = ("data.status",),
+    vendor_id: str = "stripe",
+) -> str:
+    return store.upsert_call_site(
+        CallSite(
+            repo_id="r", path="src/billing.ts", line=12, col=4, vendor_id=vendor_id,
+            operation_id=operation_id, symbol=f"{vendor_id}.accounts.retrieve",
+            args_keys=["limit"], response_fields_read=list(reads),
+            sdk_version="18.0.0", content_hash=f"h-{vendor_id}",
+        )
+    )
+
+
+def _spans(count: int, prefix: str = "t", status: int | None = 200) -> dict:
+    return {
+        f"{prefix}span{index}": {"target": f"{prefix}target{index}", "status": status, "resend": 0}
+        for index in range(count)
+    }
+
+
+def _statuses(spans: list[int | None], prefix: str = "t") -> dict:
+    return {
+        f"{prefix}span{index}": {"target": f"{prefix}target{index}", "status": status, "resend": 0}
+        for index, status in enumerate(spans)
+    }
+
+
+def _observe_call(store: GraphStore, spans: dict, **over) -> None:
+    fields = dict(
+        repo_id="r", vendor_id="stripe", operation_id="GetAccount",
+        binding_rung="observed", server_address="api.stripe.com", http_method="get",
+        trace_id="t1", url_template="/v1/accounts", spans=spans,
+        first_seen=SEEN, last_seen=SEEN,
+    )
+    fields.update(over)
+    store.record_observed_call(ObservedCall(**fields))
+
+
+def _efficiency(store: GraphStore, vendor_id: str = "stripe") -> EfficiencyDetector:
+    return EfficiencyDetector(store=store, repo_id="r", vendor_id=vendor_id)
+
+
+# --- efficiency: a cost claim with nowhere to report it -----------------------------
+
+
+def test_a_cost_claim_with_no_indexed_call_site_is_counted(store):
+    """The quietest decline in the package.
+
+    There is no `continue` here for coverage to have missed -- `reachable` is empty and the
+    loop below it simply does not run -- so the only way this one becomes visible is by being
+    counted. The claim was computed and thrown away.
+    """
+    _observe_call(store, _spans(LOOP_THRESHOLD))
+    detector = _efficiency(store)
+
+    assert list(detector.scan()) == []
+    assert len(detector.declined) == 1
+    assert "GetAccount" in detector.declined[0]
+    assert "loop" in detector.declined[0]
+
+
+def test_a_cost_claim_that_reaches_a_call_site_is_not_counted_as_declined(store):
+    """So the counter above cannot be satisfied by one that always reports."""
+    _site(store)
+    _observe_call(store, _spans(LOOP_THRESHOLD))
+    detector = _efficiency(store)
+
+    assert len(list(detector.scan())) == 1
+    assert detector.declined == []
+
+
+def test_a_foreign_vendor_s_traffic_is_declined_without_being_counted(store):
+    """The decline that costs nothing, held out of the channel deliberately.
+
+    A row belonging to another vendor is declined because this detector is scoped to one, and
+    the finding it would have produced belongs to an instance scoped to the other. Counting it
+    would put a number on every run that says "this repository calls more than one API", which
+    is the noise that would make the rest of the channel unreadable.
+    """
+    _site(store)
+    _observe_call(store, _spans(LOOP_THRESHOLD, prefix="st"))
+    detector = _efficiency(store)
+    list(detector.scan())
+    without = list(detector.declined)
+
+    _observe_call(store, _spans(LOOP_THRESHOLD * 5, prefix="tw"), vendor_id="twilio",
+                  server_address="api.twilio.com", trace_id="t2")
+    louder = _efficiency(store)
+    list(louder.scan())
+
+    assert without == [] and louder.declined == []
+
+
+def test_scanning_twice_reports_the_same_declines(store):
+    """Idempotence, held to the standard every other stage is. A channel that accumulated
+    across scans would report twice the work on the second run and the conformance kit's
+    two-scan comparison would be the only thing that noticed."""
+    _observe_call(store, _spans(LOOP_THRESHOLD))
+    detector = _efficiency(store)
+
+    list(detector.scan())
+    first = list(detector.declined)
+    list(detector.scan())
+
+    assert detector.declined == first and first != []
