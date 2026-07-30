@@ -12,43 +12,6 @@ item that cannot say what evidence closes it is not ready to dispatch.
 
 ## Ready
 
-### B68 — The import boundary is enforced and the packaging boundary is not
-
-CLAUDE.md's first non-negotiable says a third party writing a vendor adapter *"depends on
-`sync.core` alone; a single sibling import drags Postgres into their dependency tree."* The import
-half holds — `tests/test_import_boundary.py` and `lint-imports` both pass on every run. The
-packaging half does not exist. Measured:
-
-    installing `sync`                 12 runtime dependencies, including psycopg[binary],
-                                      langgraph, langgraph-checkpoint-postgres,
-                                      claude-agent-sdk and three tree-sitter packages
-    third-party imports in sync.core  pydantic
-
-`pyproject.toml` declares one distribution, so there is no way to depend on `sync.core` alone. An
-adapter author following CONTRIBUTING.md — which promises an adapter "does not inherit Postgres,
-LangGraph, or anything else in this repository's dependency tree" — installs all of it to write a
-class with two methods. **The sentence the boundary exists to make true is false today, for exactly
-the person it was written for.**
-
-The rule is not wrong and the import test is not wasted: the boundary is what makes the split
-possible, and it has simply never been cashed in. M3's deliverable is *publish `sync.core` as the
-open plugin SDK*; the documentation exists and the packaging does not. It is also cheapest to do now,
-while `sync.core` has exactly one third-party import.
-
-**Explicitly not publishing.** Uploading anywhere is public, irreversible and the user's decision.
-This makes the package installable on its own and proves it.
-
-**The guard half landed separately** as `50f808a`: `tests/test_import_boundary.py` now pins
-`sync.core`'s third-party imports at exactly `{pydantic}`. That is the fact the split rests on, and
-it was closing silently — `lint-imports` keeps core out of *sibling* packages and would pass a
-direct `import psycopg` without complaint, which is the promise CONTRIBUTING.md actually makes.
-Mutation-proved: with that import added, `lint-imports` passes and the new test fails naming it.
-
-**Closes when:** an environment holding only the core distribution can `import sync.core`, reach the
-four plugin protocols and run `sync.core.conformance`, with evidence that psycopg, langgraph and the
-tree-sitter grammars are absent from it; `uv sync` and the suite are unchanged for this repository;
-and the import boundary test still passes untouched.
-
 ### B7 — The M0 acceptance run has not executed since the pipeline changed underneath it
 
 `tests/test_e2e_stripe.py::test_one_command_produces_one_green_pull_request` is the
@@ -75,8 +38,6 @@ recorded with which change broke it.
 
 ## In flight
 
-- **B68** — re-dispatched as `task_bacf21de7db2`, worktree `sync-solo-b`. The first dispatch
-  never started: no heartbeat, no edits in any worktree after one nudge.
 
 - **B61** — `task_12ccee12fd98`, worktree `sync-solo-b`.
 - **B55** — re-dispatched as `task_3746257e4c0a` into `sync-solo-b`. The first attempt
@@ -891,3 +852,30 @@ is what a reviewer needs and duplicating it here would let the two copies drift.
   Two things beyond the ask: two fixtures had to name a rung because the new rule runs before the
   rule they exercise, and `docs/writing-a-vendor-adapter.md` still called the finding key a triple
   after `claim` had joined it.
+
+- Make `sync.core` installable without the runtime. Landed `cf6031d`. `sync-core` is now a second
+  distribution — a workspace member that `sync` depends on at `==0.1.0` — so an adapter author
+  installs pydantic and nothing else. Verified independently rather than from the report, in a
+  clean virtualenv holding only the built wheel:
+
+      annotated-types, pydantic, pydantic-core, sync-core, typing-extensions, typing-inspection
+      psycopg absent · langgraph absent · tree_sitter absent · mcp absent
+      claude_agent_sdk absent · ast_grep_py absent
+      sync.core imports, conformance kit reachable
+
+  **Six packages against the eighty-one a checkout installs.** CLAUDE.md's first non-negotiable is
+  now true in fact rather than in aspiration: it was enforced at the import level by `lint-imports`
+  and false at the packaging level, which is the level the promise was made at.
+
+  The worker took the hardest of the three shapes offered and documented the awkward part rather
+  than hiding it: `src/` is the distribution's project root because `uv_build` refuses a module root
+  outside the project it builds, and a backend that accepts one produces a wheel plus an sdist with
+  no source in it. That reason is what stops the next person tidying it.
+
+  `uv sync` still exits 0 for this repository and the suite is `2643 passed, 1 skipped`, which were
+  the controls that mattered — a split that quietly changes what a developer here gets is not a win.
+
+  Two coordinator near-misses worth recording. Diffed against a moved `main` the commit showed 506
+  deletions including a whole test file; against its real base it is 449 insertions and zero
+  deletions. And the first cherry-pick took only `HEAD`, which was the docs commit, missing the
+  feature entirely — the six-file diff is what caught it.
