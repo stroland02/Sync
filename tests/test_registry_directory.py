@@ -119,7 +119,7 @@ GOOD = {"1forge.com", "stripe.com"}
 
 
 def test_an_entry_whose_body_is_not_an_object_is_skipped():
-    """`directory.py:78`. The directory is one object keyed by api id, and a key whose value is
+    """`directory.py:112`. The directory is one object keyed by api id, and a key whose value is
     not an object cannot be an entry -- `body.get` would raise on it."""
     document = _document()
     document["scalar.com"] = "2020-01-01T00:00:00.000Z"
@@ -129,7 +129,7 @@ def test_an_entry_whose_body_is_not_an_object_is_skipped():
 
 
 def test_a_version_whose_detail_is_not_an_object_is_skipped_without_costing_the_entry():
-    """`directory.py:86`. One bad version, and the entry keeps the rest.
+    """`directory.py:122`. One bad version, and the entry keeps the rest.
 
     This is the finer grain of the same rule one level down: the skip is scoped to the version,
     so an API with one malformed version is still discovered through its good ones. Asserting the
@@ -145,7 +145,7 @@ def test_a_version_whose_detail_is_not_an_object_is_skipped_without_costing_the_
 
 
 def test_a_version_with_no_spec_url_or_no_timestamp_is_skipped():
-    """`directory.py:90`. Both halves of the condition, and both are load-bearing.
+    """`directory.py:126` and `directory.py:133`, which W93 read as one condition.
 
     Without `swaggerUrl` there is nothing to download, so the entry cannot serve the only purpose
     the tier has. Without a timestamp there is nothing to compare against a watermark, which is
@@ -221,9 +221,9 @@ def test_a_timestamp_that_is_an_empty_string_is_unusable_rather_than_a_value_to_
 
 
 def test_an_entry_whose_every_version_was_skipped_is_skipped_in_turn():
-    """`directory.py:99`. The entry survived its own check and lost all of its versions anyway.
+    """`directory.py:146`. The entry survived its own check and lost all of its versions anyway.
 
-    Distinct from the `versions` map being absent or empty, which line 81 catches before any
+    Distinct from the `versions` map being absent or empty, which line 116 catches before any
     version is read. This is the case where the map was a non-empty object and nothing in it
     parsed, so the entry reaches the end holding no versions -- and `RegistryEntry` with an empty
     map would be read downstream as an API with nothing to watch rather than as one we could not
