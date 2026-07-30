@@ -158,6 +158,23 @@ class ExtractionReport:
     are routes to cover, and could exceed the denominator outright.
     """
 
+    unreadable: tuple[str, ...]
+    """A construct the source states and this rule could not read, one prose string each.
+
+    `IntakeReport.unreadable`'s key and shape, for the reason recorded there and carried into
+    `ReachabilityRanking` and `parse_directory` before this: a reader parsing several artifacts
+    needs one rule, not one per artifact. Present and empty on a clean read, and required at
+    construction rather than defaulted, so a flavour that records nothing cannot pass for one
+    that found nothing.
+
+    **Not every decline.** Every SDK declares methods that send no request and classes that are
+    not resources, and every Stainless client mounts wrappers this rule excludes on purpose --
+    eleven of them in the committed Anthropic tree. Those are declined on every run and are
+    correct, so recording them would bury the few that mean an operation or a whole resource
+    subtree is missing from the map. Two kinds are recorded: a mount whose target this rule
+    cannot reach, and a request whose route it cannot read.
+    """
+
     @property
     def indistinct_operation_count(self) -> int:
         """Declared operations the comparison cannot tell apart from another.
@@ -194,6 +211,8 @@ class ExtractionReport:
                if self.indistinct_operation_count else "")
             + (f"; {len(self.unknown_to_spec)} extracted operations the specification does not "
                f"declare" if self.unknown_to_spec else "")
+            + (f"; {len(self.unreadable)} constructs this rule could not read"
+               if self.unreadable else "")
         )
 
 
@@ -245,13 +264,21 @@ def _path_literal(argument: ast.expr) -> str | None:
     return None
 
 
-def _operation_in(function: ast.FunctionDef | ast.AsyncFunctionDef) -> tuple[str, str] | None:
-    """The verb and path a method sends, from the first request helper it calls.
+def _operation_in(
+    function: ast.FunctionDef | ast.AsyncFunctionDef,
+) -> tuple[tuple[str, str] | None, str | None]:
+    """The verb and path a method sends, and the helper it sends through if that could not be read.
 
     First rather than every one: Stainless emits a method with a single request, and an
     overloaded signature repeats the same call under each overload. Taking the first keeps one
     operation per method, which is the grain the specification counts in.
+
+    The second half of the pair is what separates a method this rule declined from a method that
+    is not an operation. A method calling no request helper at all is neither, and answering
+    `(None, None)` for it is what keeps the decline channel about losses rather than about every
+    method an SDK declares.
     """
+    unread: str | None = None
     for node in ast.walk(function):
         if not isinstance(node, ast.Call):
             continue
@@ -262,24 +289,41 @@ def _operation_in(function: ast.FunctionDef | ast.AsyncFunctionDef) -> tuple[str
         if verb is None or not isinstance(callee.value, ast.Name) or callee.value.id != "self":
             continue
         if not node.args:
+            unread = unread or callee.attr
             continue
         path = _path_literal(node.args[0])
         if path is not None:
-            return verb, path
-    return None
+            return (verb, path), None
+        unread = unread or callee.attr
+    return None, unread
 
 
 @dataclass
 class _Resource:
-    """One class, as the two things this rule reads out of it."""
+    """One class, as the two things this rule reads out of it and what it could not read."""
 
     mounts: dict[str, str]
     operations: dict[str, tuple[str, str]]
+    unreadable: list[str]
 
 
-def _read_class(node: ast.ClassDef, resource_classes: set[str]) -> _Resource:
+def _read_class(
+    node: ast.ClassDef, resource_classes: set[str], declared_classes: set[str], where: str
+) -> _Resource:
+    """What one class contributes, and what it states that this rule could not use.
+
+    **A mount naming a class this checkout declares is not recorded.** Every Stainless client
+    mounts `*WithRawResponse` and `*WithStreamingResponse` through a `cached_property`, and the
+    base-class rule excludes them without naming their spelling -- which is the point, and a
+    channel recording them would report eleven expected losses per Anthropic extraction. A name
+    nothing here declares is the other case: the file was not staged, the resource is gone, and
+    that is one repair. The annotation is the only evidence this language offers, so this is the
+    sharpest question available to it; the TypeScript flavours have the module too and ask a
+    better one.
+    """
     mounts: dict[str, str] = {}
     operations: dict[str, tuple[str, str]] = {}
+    unreadable: list[str] = []
 
     for member in node.body:
         if not isinstance(member, (ast.FunctionDef, ast.AsyncFunctionDef)):
@@ -288,42 +332,70 @@ def _read_class(node: ast.ClassDef, resource_classes: set[str]) -> _Resource:
             mounted = _annotation_name(member.returns)
             if mounted in resource_classes:
                 mounts[member.name] = mounted
+            elif mounted is None:
+                unreadable.append(
+                    f"{GENERATOR}: {where}: {node.name}.{member.name} is a {_MOUNT_DECORATOR} "
+                    f"whose return annotation names no class this rule can read, so the resource "
+                    f"it mounts and every operation under it is absent"
+                )
+            elif mounted not in declared_classes:
+                unreadable.append(
+                    f"{GENERATOR}: {where}: {node.name}.{member.name} mounts {mounted!r}, which "
+                    f"this checkout does not declare, so that resource and every operation under "
+                    f"it is absent"
+                )
             continue
-        found = _operation_in(member)
+        found, unread_helper = _operation_in(member)
         if found is not None:
             operations[member.name] = found
+        elif unread_helper is not None:
+            unreadable.append(
+                f"{GENERATOR}: {where}: {node.name}.{member.name} calls self.{unread_helper} with "
+                f"no route this rule can read, so it contributes no symbol"
+            )
 
-    return _Resource(mounts=mounts, operations=operations)
+    return _Resource(mounts=mounts, operations=operations, unreadable=unreadable)
 
 
 def _source_files(root: Path) -> list[Path]:
     return sorted(path for path in Path(root).rglob("*.py") if "__pycache__" not in path.parts)
 
 
-def extract_symbols(source_root: Path) -> tuple[ExtractedOperation, ...]:
-    """Every operation the SDK's source states, keyed by the chain a customer writes.
+def extract_symbols(source_root: Path) -> tuple[tuple[ExtractedOperation, ...], tuple[str, ...]]:
+    """Every operation the SDK's source states, and every construct it states unreadably.
+
+    The pair `read_declared_dependencies` and `parse_directory` already return: what was read,
+    then what could not be. The second half is present and empty on a clean read, because an
+    absent channel does not distinguish a clean read from a reader that records nothing.
 
     Raises `UnrecognisedSdkShape` when the source does not carry the shape this rule reads --
-    no client class, or a client with no resources reachable from it.
+    no client class, or a client with no resources reachable from it. That refusal stands: this
+    channel is for a partial loss, and a total one is not something to report a count for.
     """
-    files = _source_files(source_root)
+    root = Path(source_root)
+    files = _source_files(root)
     trees = {path: ast.parse(path.read_text(encoding="utf-8")) for path in files}
 
     classes: dict[str, ast.ClassDef] = {}
+    where: dict[str, str] = {}
     client_name: str | None = None
     resource_classes: set[str] = set()
+    declared_classes: set[str] = set()
 
-    for tree in trees.values():
+    for path, tree in trees.items():
         for node in ast.walk(tree):
             if not isinstance(node, ast.ClassDef):
                 continue
+            declared_classes.add(node.name)
             bases = _base_names(node)
             if _RESOURCE_BASE in bases:
                 resource_classes.add(node.name)
                 classes[node.name] = node
+                where[node.name] = path.relative_to(root).as_posix()
             elif _CLIENT_BASE in bases and client_name is None:
                 client_name = node.name
                 classes[node.name] = node
+                where[node.name] = path.relative_to(root).as_posix()
 
     if client_name is None:
         raise UnrecognisedSdkShape(
@@ -337,9 +409,16 @@ def extract_symbols(source_root: Path) -> tuple[ExtractedOperation, ...]:
             f"{_RESOURCE_BASE} under {source_root}, so no operation is reachable from it"
         )
 
-    read = {name: _read_class(node, resource_classes) for name, node in classes.items()}
+    read = {
+        name: _read_class(node, resource_classes, declared_classes, where[name])
+        for name, node in classes.items()
+    }
 
     extracted: dict[str, ExtractedOperation] = {}
+    # Recorded for the classes the walk actually reaches, and keyed so a resource mounted twice
+    # records its losses once. A class nothing mounts contributes no symbol either, so a decline
+    # from it would name a loss the map never stood to have.
+    unreadable: dict[str, None] = {}
     # Breadth-first from the client, carrying the chain each mount was reached by. `seen` is per
     # path rather than global: a resource mounted twice is two symbols a customer can write, and
     # both resolve to the same operations.
@@ -349,6 +428,7 @@ def extract_symbols(source_root: Path) -> tuple[ExtractedOperation, ...]:
         resource = read.get(class_name)
         if resource is None:
             continue
+        unreadable.update(dict.fromkeys(resource.unreadable))
         for method_name, (verb, path) in resource.operations.items():
             symbol = ".".join([*chain, method_name])
             extracted.setdefault(
@@ -358,7 +438,7 @@ def extract_symbols(source_root: Path) -> tuple[ExtractedOperation, ...]:
             if mounted not in chain:
                 queue.append((mounted, (*chain, attribute)))
 
-    return tuple(extracted[symbol] for symbol in sorted(extracted))
+    return tuple(extracted[symbol] for symbol in sorted(extracted)), tuple(unreadable)
 
 
 def _route(http_method: str, path: str) -> tuple[str, str]:
@@ -402,7 +482,7 @@ def report_extraction(
     genuinely lacks a route are different facts and only one of them is a defect here.
     """
     comparable = {_route(method, path) for method, path in spec_operations}
-    operations = extract_symbols(source_root)
+    operations, unreadable = extract_symbols(source_root)
     unknown = tuple(
         operation
         for operation in operations
@@ -417,4 +497,5 @@ def report_extraction(
         comparable_key_count=len(comparable),
         unknown_to_spec=unknown,
         covered_count=len(reached),
+        unreadable=unreadable,
     )

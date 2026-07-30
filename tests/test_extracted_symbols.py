@@ -51,7 +51,7 @@ SPEC_OPERATIONS = FIXTURES / "anthropic_spec_operations.json"
 
 
 def _extracted() -> dict[str, ExtractedOperation]:
-    return {operation.symbol: operation for operation in extract_symbols(SDK)}
+    return {operation.symbol: operation for operation in extract_symbols(SDK)[0]}
 
 
 # --- what the source says --------------------------------------------------------------

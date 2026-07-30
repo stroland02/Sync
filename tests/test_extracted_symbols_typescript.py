@@ -66,7 +66,7 @@ PYTHON_MANIFEST = Path(__file__).parent / "fixtures" / "manifests" / "anthropic.
 
 
 def _extracted() -> dict[str, object]:
-    return {operation.symbol: operation for operation in extract_symbols(SDK)}
+    return {operation.symbol: operation for operation in extract_symbols(SDK)[0]}
 
 
 # --- what the source says --------------------------------------------------------------
@@ -700,7 +700,7 @@ def _hand_built(
 def _map(root: Path) -> dict[str, tuple[str, str]]:
     return {
         operation.symbol: (operation.http_method, operation.path)
-        for operation in extract_symbols(root)
+        for operation in extract_symbols(root)[0]
     }
 
 

@@ -321,6 +321,10 @@ class GeneratedSpecAdapter:
         specification says; discarding it would make a misread source indistinguishable from a
         vendor that genuinely lacks that route, which is the distinction the check exists to
         draw. What the log gives an operator is the pair to go and reconcile.
+
+        A construct the rule could not read is surfaced on **both** paths, because a decline is a
+        property of the source rather than of whether a specification was staged, and without a
+        specification there is no coverage line for it to travel in.
         """
         if self._sdk_source is None:
             return None
@@ -335,11 +339,37 @@ class GeneratedSpecAdapter:
                         "%s: %s reads %s %s, which the specification does not declare",
                         self._vendor_id, operation.symbol, operation.http_method, operation.path,
                     )
-                extracted = report.operations
+                extracted, unreadable = report.operations, report.unreadable
             else:
-                extracted = self._extractor.extract_symbols(self._sdk_source)
+                extracted, unreadable = self._extractor.extract_symbols(self._sdk_source)
+            self._report_unreadable(unreadable)
             self._symbols = {operation.symbol: operation for operation in extracted}
         return self._symbols
+
+    def _report_unreadable(self, unreadable: tuple[str, ...]) -> None:
+        """The count once at warning, each record one level below it.
+
+        A decline means the map is smaller than the SDK, which is the false negative this whole
+        approach exists to avoid, so silence is wrong. Warning **per record** is also wrong: the
+        committed `vercel/sdk` tree produces 48 on every extraction because it is a deliberately
+        partial checkout, and a vendor emitting 48 warnings per scan is how a reader learns to
+        filter this logger out. So the count is one warning an operator cannot miss and the
+        records are `info`, where whoever goes looking will find them.
+
+        That is deliberately the opposite balance from `unknown_to_spec`, which warns per entry.
+        That channel reports two independently derived artifacts disagreeing -- evidence one of
+        them is wrong, and each entry is its own reconciliation. This one reports a limit of our
+        own rule against a checkout, where the count is the finding and the records are the
+        detail.
+        """
+        if not unreadable:
+            return
+        log.warning(
+            "%s: %d constructs the %s rule could not read",
+            self._vendor_id, len(unreadable), self._extractor.GENERATOR,
+        )
+        for record in unreadable:
+            log.info("%s: %s", self._vendor_id, record)
 
     def observability(self, from_version: str, to_version: str) -> Observability:
         """Whether this pair can be compared, asked before anything is downloaded.

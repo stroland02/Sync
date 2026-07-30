@@ -403,7 +403,7 @@ def test_the_speakeasy_reduction_is_inert_rather_than_unreached():
     A reduction that matched nothing would satisfy every assertion there while proving nothing. It
     fires on most of both artifacts, and the verdicts still agree, which is the claim.
     """
-    operations = symbols_speakeasy.extract_symbols(VERCEL_SDK)
+    operations, _ = symbols_speakeasy.extract_symbols(VERCEL_SDK)
     rewritten = [
         operation
         for operation in operations

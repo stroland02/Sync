@@ -85,7 +85,7 @@ SPEC_OPERATIONS = FIXTURES / "vercel_spec_operations.json"
 def _by_symbol() -> dict[str, tuple[str, str]]:
     return {
         operation.symbol: (operation.http_method, operation.path)
-        for operation in extract_symbols(SDK)
+        for operation in extract_symbols(SDK)[0]
     }
 
 
@@ -337,8 +337,8 @@ def test_both_stainless_flavours_still_read_their_own_sdks():
     from sync.signals.generated import symbols as stainless_python
     from sync.signals.generated import symbols_typescript as stainless_typescript
 
-    assert stainless_python.extract_symbols(FIXTURES / "anthropic_python")
-    assert stainless_typescript.extract_symbols(FIXTURES / "anthropic_typescript")
+    assert stainless_python.extract_symbols(FIXTURES / "anthropic_python")[0]
+    assert stainless_typescript.extract_symbols(FIXTURES / "anthropic_typescript")[0]
 
 
 def test_a_stainless_sdk_handed_to_this_rule_fails_loudly():

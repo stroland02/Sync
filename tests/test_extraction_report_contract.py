@@ -211,10 +211,475 @@ def test_the_golden_tool_schemas_did_not_move():
     assert schemas_as_data() == golden
 
 
+# --- the decline channel: what it records, and what it deliberately does not ----------------
+
+
+def test_the_channel_is_the_second_half_of_the_pair_and_present_when_empty(tmp_path):
+    """`IntakeReport.unreadable`'s shape, carried here rather than a fourth one invented.
+
+    `read_declared_dependencies` returns `(declared, unreadable)` and `parse_directory` returns
+    `(entries, faults)`; `extract_symbols` now returns `(operations, unreadable)`. A tuple of
+    prose strings, second in the pair, present and empty on a clean read.
+    """
+    root = _python_sdk(
+        tmp_path,
+        """
+        class Models(SyncAPIResource):
+            def list(self):
+                return self._get_api_list("/v1/models")
+
+        class Acme(SyncAPIClient):
+            @cached_property
+            def models(self) -> Models:
+                ...
+        """,
+    )
+
+    operations, unreadable = symbols.extract_symbols(root)
+
+    assert [operation.symbol for operation in operations] == ["models.list"]
+    assert unreadable == ()
+
+
+def test_a_mount_whose_annotation_names_no_class_this_rule_can_read_is_recorded(tmp_path):
+    """`-> Optional[Messages]`. `_annotation_name` declines a subscript rather than mounting its
+    base, which is right -- guessing would mount a resource under a chain the customer may not be
+    able to write -- and until now the whole subtree simply vanished.
+
+    The blast radius is what makes this worth a record: `messages.create` is absent from the map,
+    every call site on it resolves to nothing, and no finding can be raised against it however
+    breaking the vendor's change.
+    """
+    root = _python_sdk(
+        tmp_path,
+        """
+        class Messages(SyncAPIResource):
+            def create(self):
+                return self._post("/v1/messages")
+
+        class Acme(SyncAPIClient):
+            @cached_property
+            def messages(self) -> Optional[Messages]:
+                ...
+        """,
+    )
+
+    operations, unreadable = symbols.extract_symbols(root)
+
+    assert operations == ()
+    assert unreadable == (
+        "stainless-python: _client.py: Acme.messages is a cached_property whose return "
+        "annotation names no class this rule can read, so the resource it mounts and every "
+        "operation under it is absent",
+    )
+
+
+def test_a_mount_naming_a_class_this_checkout_does_not_declare_is_recorded(tmp_path):
+    """The annotation names a class and no file here declares one by that name. A different
+    repair from the one above -- that one wants the rule taught a spelling, this one wants the
+    file staged -- so it is a different message.
+
+    `models` is readable beside it, so the extraction still roots and the assertion cannot pass
+    because the whole SDK failed to parse.
+    """
+    root = _python_sdk(
+        tmp_path,
+        """
+        class Models(SyncAPIResource):
+            def list(self):
+                return self._get_api_list("/v1/models")
+
+        class Acme(SyncAPIClient):
+            @cached_property
+            def models(self) -> Models:
+                ...
+
+            @cached_property
+            def messages(self) -> Messages:
+                ...
+        """,
+    )
+
+    operations, unreadable = symbols.extract_symbols(root)
+
+    assert [operation.symbol for operation in operations] == ["models.list"]
+    assert unreadable == (
+        "stainless-python: _client.py: Acme.messages mounts 'Messages', which this checkout does "
+        "not declare, so that resource and every operation under it is absent",
+    )
+
+
+def test_an_operation_whose_route_this_rule_cannot_read_is_recorded(tmp_path):
+    """`self._post(**kwargs)` -- the verb stated, the route not.
+
+    Declining is right and M3-W97 argued why: the route is the first positional argument and
+    there is no second source, so recording the verb alone would put a symbol in the map with no
+    route to match a vendor change against. What was missing is that the method contributing no
+    symbol reached nobody, while the operation beside it kept the coverage number plausible.
+    """
+    root = _python_sdk(
+        tmp_path,
+        """
+        class Messages(SyncAPIResource):
+            def create(self, **kwargs):
+                return self._post(**kwargs)
+
+            def count_tokens(self):
+                return self._post("/v1/messages/count_tokens")
+
+        class Acme(SyncAPIClient):
+            @cached_property
+            def messages(self) -> Messages:
+                ...
+        """,
+    )
+
+    operations, unreadable = symbols.extract_symbols(root)
+
+    assert [operation.symbol for operation in operations] == ["messages.count_tokens"]
+    assert unreadable == (
+        "stainless-python: _client.py: Messages.create calls self._post with no route this rule "
+        "can read, so it contributes no symbol",
+    )
+
+
+def test_the_wrapper_mounts_every_stainless_client_writes_are_not_recorded(tmp_path):
+    """The bound on what the channel holds, and it is what makes the channel worth reading.
+
+    `Anthropic.with_raw_response -> AnthropicWithRawResponse` is a `cached_property` mounting a
+    class that does not derive `SyncAPIResource`, so the mount is not an edge -- which is right
+    and is the module docstring's own argument: the wrappers are the same operations reached
+    differently and counting them would inflate coverage. The committed Anthropic tree writes
+    **eleven** of them across its five files, so a channel recording every unresolved mount would
+    put eleven expected entries in front of the one that matters.
+
+    What separates them is asked of the source rather than of a naming convention: a wrapper is a
+    class this checkout **declares**, and an unstaged resource is a name nothing here declares at
+    all. Naming the wrapper suffixes instead would put a generator's spelling in the rule that
+    the base-class check deliberately excludes them without needing.
+    """
+    root = _python_sdk(
+        tmp_path,
+        """
+        class Messages(SyncAPIResource):
+            def create(self):
+                return self._post("/v1/messages")
+
+            def _validate(self, payload):
+                return bool(payload)
+
+        class AsyncMessages(AsyncAPIResource):
+            def create(self):
+                return self._post("/v1/messages")
+
+        class AcmeWithRawResponse:
+            def __init__(self, client):
+                self._client = client
+
+        class Acme(SyncAPIClient):
+            @cached_property
+            def messages(self) -> Messages:
+                ...
+
+            @cached_property
+            def with_raw_response(self) -> AcmeWithRawResponse:
+                ...
+        """,
+    )
+
+    operations, unreadable = symbols.extract_symbols(root)
+
+    assert [operation.symbol for operation in operations] == ["messages.create"]
+    assert unreadable == ()
+
+
+def test_the_committed_anthropic_tree_records_its_two_real_losses():
+    """Both kinds, on real vendor source, and neither was visible before.
+
+    **The uncommitted `beta/` tree.** `Anthropic.beta` is annotated `-> Beta` and no file here
+    declares that class, because the fixture leaves the tree out -- it carries 113 of the SDK's
+    131 operations. The README states that in prose; nothing in the extraction said it.
+
+    **`messages.batches.results`.** The vendor writes
+    `self._get(path_template(batch.results_url, ...))`, so the route comes from a field of an
+    earlier response and no literal states it. Declining is right -- there is no second source
+    for a route -- but the specification *does* declare
+    `GET /v1/messages/batches/{message_batch_id}/results`, so the map is missing a symbol for an
+    operation both artifacts agree exists, and the coverage line read as a smaller SDK.
+    """
+    operations, unreadable = symbols.extract_symbols(PYTHON_SDK)
+
+    assert len(operations) == 11
+    assert unreadable == (
+        "stainless-python: _client.py: Anthropic.beta mounts 'Beta', which this checkout does not "
+        "declare, so that resource and every operation under it is absent",
+        "stainless-python: resources/messages/batches.py: Batches.results calls self._get with no "
+        "route this rule can read, so it contributes no symbol",
+    )
+
+
+def test_the_typescript_flavour_records_a_route_it_could_not_read(tmp_path):
+    """`this._client.get()` -- a client call handed no arguments, which M3-W91 tabled at line 305
+    and found silent. One symbol short, and the same rule the Python flavour applies."""
+    root = _sdk(tmp_path, "  ping() { return this._client.get(); }")
+
+    operations, unreadable = symbols_typescript.extract_symbols(root)
+
+    assert [operation.symbol for operation in operations] == ["models.list"]
+    assert unreadable == (
+        "stainless-typescript: resources/models: Models.ping calls this._client.get with no "
+        "route this rule can read, so it contributes no symbol",
+    )
+
+
+def test_the_typescript_flavour_records_a_mount_whose_module_is_not_here(tmp_path):
+    """A mount reached through an alias naming a file this checkout does not contain, which is
+    what the committed Anthropic tree does thirteen times under `Beta`.
+
+    The mount is not an edge, which is right -- an unresolved name matched against a class of that
+    name somewhere else is the wrong answer that resolves. What is new is a record naming the
+    class and the module it was looked for in.
+
+    `models` resolves beside it, so the extraction still roots: a mount decline that removed the
+    last edge raises `UnrecognisedSdkShape` instead, and this channel is for the partial loss.
+    """
+    root = _sdk(
+        tmp_path,
+        client=(
+            "import * as API from './resources/index';\n"
+            "import * as BetaAPI from './resources/beta/beta';\n"
+            "\n"
+            "export class Anthropic extends BaseAnthropic {\n"
+            "  models: API.Models = new API.Models(this);\n"
+            "  beta: BetaAPI.Beta = new BetaAPI.Beta(this);\n"
+            "}\n"
+        ),
+    )
+
+    operations, unreadable = symbols_typescript.extract_symbols(root)
+
+    assert [operation.symbol for operation in operations] == ["models.list"]
+    assert unreadable == (
+        "stainless-typescript: client: Anthropic.beta mounts 'Beta' through "
+        "'resources/beta/beta', which declares no class of that name in this checkout, so that "
+        "resource and every operation under it is absent",
+    )
+
+
+def test_the_typescript_flavour_records_the_beta_resources_the_fixture_omits():
+    """The same two kinds on the committed tree, where `resources/beta/beta.ts` is present and
+    the fourteen resources it mounts are not.
+
+    `Batches.results` is here too, and that is the more interesting half: the Python and
+    TypeScript SDKs lose the same operation for the same reason, one flavour reading
+    `path_template(batch.results_url, ...)` and the other the tagged-template equivalent. Two
+    independent rules agreeing about a loss is what makes it a fact about the vendor's SDK rather
+    than about either reader.
+    """
+    operations, unreadable = symbols_typescript.extract_symbols(TYPESCRIPT_SDK)
+
+    mounts = [record for record in unreadable if " mounts " in record]
+
+    assert len(operations) == 12
+    assert len(mounts) == 14
+    assert len(unreadable) == 15
+    assert (
+        "stainless-typescript: resources/beta/beta: Beta.skills mounts 'Skills' through "
+        "'resources/beta/skills/skills', which declares no class of that name in this checkout, "
+        "so that resource and every operation under it is absent"
+    ) in mounts
+    assert (
+        "stainless-typescript: resources/messages/batches: Batches.results calls "
+        "this._client.get with no route this rule can read, so it contributes no symbol"
+    ) in unreadable
+
+
+def test_a_field_holding_something_this_sdk_does_not_declare_is_not_a_mount(tmp_path):
+    """The other bound, and it is a real emission rather than a hypothetical.
+
+    `client.ts` in the committed Anthropic tree writes
+    `#requestAuthFlags = new WeakMap<...>()` -- a field initialised with `new`, holding a global,
+    reached by exactly the code path a mount is. A channel recording every `new` it could not
+    resolve to a class would report that on every extraction of every Stainless TypeScript SDK.
+
+    What separates it from a missing resource is the module: an unstaged resource is looked for in
+    a file this checkout does not contain, and `WeakMap` is looked for in a file it does contain
+    and which declares no such class. TypeScript states the module at the mount, so this flavour
+    asks the sharper question; the Python flavour has only a class name in an annotation and asks
+    the weaker one.
+    """
+    root = _sdk(tmp_path, client_field="  private flags = new WeakMap();\n")
+
+    operations, unreadable = symbols_typescript.extract_symbols(root)
+
+    assert [operation.symbol for operation in operations] == ["models.list"]
+    assert unreadable == ()
+
+
+def test_the_speakeasy_flavour_records_what_the_truncated_fixture_leaves_out():
+    """The committed `vercel/sdk` tree is deliberately partial: `sdk/sdk.ts` is whole with all 41
+    of its mounts and eleven of its own delegations, while three of the resource classes and one
+    of the eleven request modules are committed.
+
+    Its README states that in prose -- "coverage measured against this fixture is a floor rather
+    than the SDK's real figure" -- and until now nothing in the extraction said so. Both counts
+    are pinned so the day the fixture grows or shrinks is a red test rather than a coverage
+    number moving quietly.
+    """
+    operations, unreadable = symbols_speakeasy.extract_symbols(SPEAKEASY_SDK)
+
+    mounts = [record for record in unreadable if " mounts " in record]
+    delegations = [record for record in unreadable if "reaches no request module" in record]
+
+    assert len(operations) == 15
+    assert len(mounts) == 38
+    assert len(delegations) == 10
+    assert len(unreadable) == 48
+
+    assert (
+        "speakeasy-typescript: sdk/sdk: Vercel.deployments mounts 'Deployments' from "
+        "'sdk/deployments', which this checkout does not contain, so that resource and every "
+        "operation under it is absent"
+    ) in mounts
+    assert (
+        "speakeasy-typescript: sdk/sdk: Vercel.createApiKeys reaches no request module -- "
+        "'funcs/createApiKeys', 'types/fp' are not in this checkout -- so it contributes no symbol"
+    ) in delegations
+
+
+def test_the_count_travels_in_the_line_an_operator_reads(tmp_path):
+    """A number nobody renders is a number nobody reads. The line already carried its
+    denominators for the reason the module docstring gives, and the decline count belongs beside
+    them: it is what says whether a small extraction is a small SDK or a rule meeting an emission
+    it does not know.
+    """
+    root = _sdk(tmp_path, "  ping() { return this._client.get(); }")
+    spec = _spec(tmp_path, ("GET", "/v1/models"))
+
+    report = symbols_typescript.report_extraction(root, read_spec_operations(spec))
+
+    assert len(report.unreadable) == 1
+    assert "1 constructs this rule could not read" in report.render()
+
+
+def test_a_clean_extraction_says_so_rather_than_saying_nothing(tmp_path):
+    """Present and empty, and the line carries no clause at all.
+
+    M3-W94's argument, which is why the field is required at construction: an absent key does not
+    distinguish a clean read from a reader that never recorded a fault. A clause that appears only
+    when there is something to say is the same argument one level down -- silence in the line is
+    the claim, and it is only a claim because the field is always there to be checked.
+
+    Neither committed vendor tree can carry this assertion: all three are partial checkouts and
+    all three now say so, which is the point of the channel.
+    """
+    spec = _spec(tmp_path, ("GET", "/v1/models"))
+    report = symbols_typescript.report_extraction(
+        _sdk(tmp_path), read_spec_operations(spec)
+    )
+
+    assert report.unreadable == ()
+    assert "could not read" not in report.render()
+    assert report.covered_count == 1
+
+
+def test_the_adapter_surfaces_a_decline_on_the_path_that_stages_no_specification(tmp_path, caplog):
+    """The default path, which M3-W91 measured as logging nothing at all.
+
+    Without a staged specification there is no coverage line and no cross-check, so a decline had
+    nowhere to appear even in principle. `extract_symbols` returning the pair is what closes that
+    half; the report closes the other.
+    """
+    import logging
+
+    from sync.signals.generated.adapter import GeneratedSpecAdapter
+
+    root = _python_sdk(
+        tmp_path,
+        """
+        class Acme(SyncAPIClient):
+            @cached_property
+            def messages(self) -> Messages:
+                ...
+
+            @cached_property
+            def models(self) -> Models:
+                ...
+
+        class Models(SyncAPIResource):
+            def list(self):
+                return self._get_api_list("/v1/models")
+        """,
+    )
+    adapter = GeneratedSpecAdapter(
+        vendor_id="acme", sources={}, fetch=_never_fetch, cache_dir=tmp_path, sdk_source=root,
+    )
+
+    with caplog.at_level(logging.DEBUG, logger="sync.signals.generated.adapter"):
+        assert adapter.operation_for_symbol("acme.models.list") is not None
+
+    warnings = [r.getMessage() for r in caplog.records if r.levelno == logging.WARNING]
+    detail = [r.getMessage() for r in caplog.records if r.levelno == logging.INFO]
+
+    assert warnings == ["acme: 1 constructs the stainless-python rule could not read"]
+    assert [record for record in detail if "Acme.messages mounts 'Messages'" in record]
+
+
+def test_the_adapter_states_the_count_once_rather_than_warning_per_decline(tmp_path, caplog):
+    """A decline that is expected and correct on every run is noise at warning level, and the
+    truncated `vercel/sdk` fixture produces 48 of them on every extraction.
+
+    So the count is one warning and the records are one level below it. That is the opposite
+    balance from `unknown_to_spec`, which warns per entry -- and deliberately: that channel
+    reports two artifacts disagreeing, where this one reports a limit of our own rule, and 48
+    warnings per vendor per run is how a reader learns to filter the logger out.
+    """
+    import logging
+
+    from sync.signals.generated.adapter import GeneratedSpecAdapter
+
+    adapter = GeneratedSpecAdapter(
+        vendor_id="vercel", sources={}, fetch=_never_fetch, cache_dir=tmp_path,
+        sdk_source=SPEAKEASY_SDK, sdk_spec_operations=VERCEL_SPEC,
+        sdk_source_generator="speakeasy-typescript",
+    )
+
+    with caplog.at_level(logging.DEBUG, logger="sync.signals.generated.adapter"):
+        adapter.operation_for_symbol("vercel.aliases.listAliases")
+
+    warnings = [r.getMessage() for r in caplog.records if r.levelno == logging.WARNING]
+    detail = [r.getMessage() for r in caplog.records if r.levelno == logging.INFO]
+
+    assert warnings == ["vercel: 48 constructs the speakeasy-typescript rule could not read"]
+    assert len(detail) == 49
+    assert len([record for record in detail if "speakeasy-typescript: sdk/sdk:" in record]) == 48
+
+
 # --- fixtures written by hand, because these shapes are not what a generator emits -----------
 
 
-def _sdk(tmp_path: Path, *methods: str) -> Path:
+def _python_sdk(tmp_path: Path, source: str) -> Path:
+    """One file of the shape the Stainless Python rule reads.
+
+    The same construction `tests/test_python_flavour_and_literal_declines.py` uses, for the same
+    reason: every construct here is one Stainless does not emit, so there is nothing in the
+    committed Anthropic tree to replace.
+    """
+    from textwrap import dedent
+
+    root = tmp_path / "sdk"
+    root.mkdir()
+    (root / "_client.py").write_text(dedent(source), encoding="utf-8")
+    return root
+
+
+def _never_fetch(url: str) -> str:
+    raise AssertionError("symbol extraction must not reach a network")
+
+
+def _sdk(
+    tmp_path: Path, *methods: str, client: str | None = None, client_field: str = ""
+) -> Path:
     """Three files of the shape the Stainless TypeScript rule reads, with `models.list` readable.
 
     The same construction `tests/test_parameter_reduction.py` uses, and hand-written for the same
@@ -225,12 +690,13 @@ def _sdk(tmp_path: Path, *methods: str) -> Path:
     """
     root = tmp_path / "sdk"
     files = {
-        "client.ts": (
+        "client.ts": client or (
             "import * as API from './resources/index';\n"
             "\n"
             "export class Anthropic extends BaseAnthropic {\n"
             "  models: API.Models = new API.Models(this);\n"
-            "}\n"
+            + client_field
+            + "}\n"
         ),
         "resources/index.ts": "export { Models } from './models';\n",
         "resources/models.ts": (

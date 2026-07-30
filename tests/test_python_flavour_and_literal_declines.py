@@ -50,7 +50,7 @@ def _symbols(root: Path) -> dict[str, tuple[str, str]]:
     """The resulting symbol map, which is what a decline is visible in or absent from."""
     return {
         operation.symbol: (operation.http_method, operation.path)
-        for operation in extract_symbols(root)
+        for operation in extract_symbols(root)[0]
     }
 
 
