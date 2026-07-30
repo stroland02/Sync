@@ -463,8 +463,24 @@ symbol that has been renamed and nothing notices.
 ## No defect was found in the production code, and nothing in it changed
 
 Six statements accounted for, one covered, five unreachable with three independent kinds of
-evidence, and **no change to any file under `src/`**. `git diff --stat` against the merge base is
-two test files and this report.
+evidence, and **no change to any file under `src/`**. `git diff --name-only origin/main...HEAD --
+src/` returns nothing, and the whole diff is three files:
+
+    docs/superpowers/reports/2026-07-29-detector-declines.md   493 +++
+    tests/test_detector_declines.py                            393 +++
+    tests/test_efficiency_detector.py                            4 +-
+
+## Gates
+
+| Gate | Result | Exit |
+|---|---|---|
+| `uv run pytest -q` | 2474 passed, 2 skipped in 242.67s | 0 |
+| `uv run python scripts/lint_encoding.py src scripts tests` | clean | 0 |
+| `PYTHONIOENCODING=utf-8 uv run lint-imports` | Analyzed 95 files, 201 dependencies. 1 contract kept, 0 broken | 0 |
+| `uv run python scripts/lint_dead_links.py src --baseline scripts/dead_links_baseline.txt` | clean | 0 |
+
+`pytest` was run unpiped and its exit code checked; `lint-imports` unredirected with
+`PYTHONIOENCODING=utf-8`. Nothing under `.coverage*` was committed.
 
 Four things are reported rather than repaired, each for a stated reason:
 
