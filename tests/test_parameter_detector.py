@@ -168,4 +168,4 @@ def test_scanning_twice_gives_the_same_answer():
     assert [f.rationale for f in detector.scan()] == first
     # The drop counter is part of the answer now, so it has to reset per scan rather than
     # accumulate across them.
-    assert detector.unlinked == []
+    assert detector.declined == []

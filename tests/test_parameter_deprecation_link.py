@@ -203,8 +203,8 @@ def test_the_dropped_deprecation_is_observable() -> None:
     )
     list(detector.scan())
 
-    assert len(detector.unlinked) == 1
-    assert "temperature" in detector.unlinked[0]
+    assert len(detector.declined) == 1
+    assert "temperature" in detector.declined[0]
 
 
 def test_an_established_link_is_not_reported_as_dropped() -> None:
@@ -213,7 +213,7 @@ def test_an_established_link_is_not_reported_as_dropped() -> None:
     detector = ParameterDeprecationDetector(_linked(store), [_site()])
     list(detector.scan())
 
-    assert detector.unlinked == []
+    assert detector.declined == []
 
 
 # --- the pairing itself -----------------------------------------------------------
