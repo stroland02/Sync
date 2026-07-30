@@ -190,17 +190,19 @@ def test_the_collision_measurement_can_fail():
 # --- what a collision does today, constructed rather than reasoned about --------------------
 
 
-def test_two_specification_operations_behind_one_key_deflate_the_denominator(tmp_path):
+def test_two_specification_operations_behind_one_key_still_reduce_to_one_key(tmp_path):
     """The collision constructed, and the reader neither picks one nor declines: it never sees it.
 
-    `report_extraction` builds `declared` as a **set** of comparable keys, so two specification
-    operations reducing to one key are one member. Nothing chooses between them and nothing reports
-    that a choice was available -- the denominator is simply one smaller than the number of
-    operations the vendor published, and the coverage ratio is taken against it.
+    That half is unchanged and is the reason the residual path below is not repairable here.
+    `_comparable` maps two specification operations onto one key, nothing chooses between them,
+    and nothing reports that a choice was available.
 
-    That makes the visible harm a wrong *measurement* rather than a wrong binding. An SDK reaching
-    both readable operations here reports 100% of an API it reaches two thirds of, and every number
-    in the line is internally consistent, which is what makes it unreadable as a warning.
+    **What changed is the denominator this deflates.** M3-W100 split the one count into two, so
+    the reduced set is `comparable_key_count` and the specification's own operation count travels
+    beside it. This test asserted `spec_operation_count == 2` against a vendor publishing three,
+    with `reaching 2 of 2 specification operations (100.0%)` in the line; the assertion below is
+    the same input reporting the same reduction without the ratio claiming to be a share of the
+    API. `tests/test_extraction_report_contract.py` holds the other side of that change.
     """
     root = _sdk(tmp_path, "  members() { return this._client.get(path`/v1/${workspaceID}/members`, {}); }")
     spec = _spec(
@@ -213,23 +215,20 @@ def test_two_specification_operations_behind_one_key_deflate_the_denominator(tmp
     report = symbols_typescript.report_extraction(root, read_spec_operations(spec))
 
     assert len(_spec_entries(spec)) == 3
-    assert report.spec_operation_count == 2
+    assert report.comparable_key_count == 2
     assert report.covered_count == 2
     assert report.coverage_ratio == 1.0
-    assert "reaching 2 of 2 specification operations (100.0%)" in report.render()
+    assert "reaching 2 of 2 comparable routes (100.0%)" in report.render()
+    assert "declares 3 operations, 1 of them not separately comparable" in report.render()
 
 
-def test_a_collision_is_reported_nowhere(tmp_path):
-    """And the other half: no decline, no warning, no field.
+def test_a_collision_is_reported_only_by_the_gap_between_the_two_counts(tmp_path):
+    """And the other half: still no decline and still no warning.
 
-    `ExtractionReport` carries `operations`, `spec_operation_count`, `unknown_to_spec` and
-    `covered_count`, and a collision moves only the two counts. `unknown_to_spec` is the one loud
-    channel this module has where a specification is staged, and a collision cannot reach it --
-    the SDK's route *did* match a declared key, so there is nothing for it to report.
-
-    This is why the deliverable for this task is a measurement rather than a repair: the condition
-    is silent, so what protects against it is a test over the real documents, not a branch that
-    fires on input nobody has.
+    `unknown_to_spec` cannot reach it, for the reason it never could -- the SDK's route *did*
+    match a declared key, so there is nothing for it to report. What reports it now is the gap
+    between the specification's operation count and the number of keys those operations reduce
+    to, and nothing else does.
     """
     root = _sdk(tmp_path, "  members() { return this._client.get(path`/v1/${workspaceID}/members`, {}); }")
     spec = _spec(
@@ -242,7 +241,7 @@ def test_a_collision_is_reported_nowhere(tmp_path):
     report = symbols_typescript.report_extraction(root, read_spec_operations(spec))
 
     assert report.unknown_to_spec == ()
-    assert not hasattr(report, "declined")
+    assert report.indistinct_operation_count == 1
 
 
 # --- the residual path the earlier report named, and what it actually costs -----------------
@@ -385,7 +384,14 @@ def test_the_speakeasy_reduction_changes_no_verdict(monkeypatch):
     monkeypatch.setattr(symbols_speakeasy, "_PARAMETER", re.compile(r"(?!)"))
     without_reduction = symbols_speakeasy.report_extraction(VERCEL_SDK, spec)
 
-    assert without_reduction.spec_operation_count == with_reduction.spec_operation_count == 359
+    assert (
+        without_reduction.comparable_key_count == with_reduction.comparable_key_count == 359
+    )
+    assert (
+        without_reduction.declared_operation_count
+        == with_reduction.declared_operation_count
+        == 359
+    )
     assert without_reduction.covered_count == with_reduction.covered_count == 15
     assert without_reduction.unknown_to_spec == with_reduction.unknown_to_spec == ()
     assert without_reduction.operations == with_reduction.operations
@@ -397,7 +403,7 @@ def test_the_speakeasy_reduction_is_inert_rather_than_unreached():
     A reduction that matched nothing would satisfy every assertion there while proving nothing. It
     fires on most of both artifacts, and the verdicts still agree, which is the claim.
     """
-    operations = symbols_speakeasy.extract_symbols(VERCEL_SDK)
+    operations, _ = symbols_speakeasy.extract_symbols(VERCEL_SDK)
     rewritten = [
         operation
         for operation in operations

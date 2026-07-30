@@ -212,6 +212,14 @@ class _Class:
     operations: dict[str, tuple[str, str]] = field(default_factory=dict)
     is_resource: bool = False
 
+    unreadable: list[str] = field(default_factory=list)
+    """A request this class states whose route this rule could not read, one string each.
+
+    Mount losses are not here: whether a mount resolves is not knowable from the class that
+    writes it, because the alias it names has to be followed through the checkout's re-exports
+    first. `_resolved_mounts` records those.
+    """
+
 
 @dataclass
 class _Module:
@@ -299,12 +307,17 @@ def _tagged_route(node: Node, source: bytes) -> str | None:
     return "".join(parts) or None
 
 
-def _operation_in(method: Node, source: bytes) -> tuple[str, str] | None:
-    """The verb and route a method sends, from the first client call it makes.
+def _operation_in(method: Node, source: bytes) -> tuple[tuple[str, str] | None, str | None]:
+    """The verb and route a method sends, and the client method it sends through if unreadable.
 
     First rather than every one: Stainless emits one request per method, and taking the first
     keeps one operation per method -- the grain the specification counts in.
+
+    The second half of the pair is what separates a method this rule declined from a method that
+    sends no request. Every SDK has many of the latter, and answering `(None, None)` for them is
+    what keeps the decline channel about losses.
     """
+    unread: str | None = None
     for node in _walk(method):
         if node.type != "call_expression":
             continue
@@ -315,18 +328,21 @@ def _operation_in(method: Node, source: bytes) -> tuple[str, str] | None:
         object_node = callee.child_by_field_name("object")
         if property_node is None or object_node is None:
             continue
-        verb = _REQUEST_METHODS.get(_text(property_node, source))
+        called = _text(property_node, source)
+        verb = _REQUEST_METHODS.get(called)
         if verb is None or _text(object_node, source) != _CLIENT_PROPERTY:
             continue
 
         arguments = node.child_by_field_name("arguments")
         if arguments is None or not arguments.named_children:
+            unread = unread or called
             continue
         first = arguments.named_children[0]
         route = _tagged_route(first, source) or _plain_route(first, source)
         if route is not None:
-            return verb, route
-    return None
+            return (verb, route), None
+        unread = unread or called
+    return None, unread
 
 
 def _mount_target(constructor: Node, source: bytes, module: str) -> tuple[str, str] | None:
@@ -347,7 +363,7 @@ def _mount_target(constructor: Node, source: bytes, module: str) -> tuple[str, s
     return None
 
 
-def _read_class(node: Node, source: bytes, module: str) -> _Class:
+def _read_class(node: Node, source: bytes, module: str, name: str) -> _Class:
     read = _Class(is_resource=_RESOURCE_BASE in _extends(node, source))
 
     body = node.child_by_field_name("body")
@@ -370,9 +386,15 @@ def _read_class(node: Node, source: bytes, module: str) -> _Class:
             name_node = member.child_by_field_name("name")
             if name_node is None:
                 continue
-            found = _operation_in(member, source)
+            found, unread_helper = _operation_in(member, source)
             if found is not None:
                 read.operations[_text(name_node, source)] = found
+            elif unread_helper is not None:
+                read.unreadable.append(
+                    f"{GENERATOR}: {module}: {name}.{_text(name_node, source)} calls "
+                    f"{_CLIENT_PROPERTY}.{unread_helper} with no route this rule can read, so it "
+                    f"contributes no symbol"
+                )
 
     return read
 
@@ -416,7 +438,8 @@ def _read_module(tree_root: Node, source: bytes, path: Path, root: Path) -> _Mod
             name_node = node.child_by_field_name("name")
             if name_node is None:
                 continue
-            read.classes[_text(name_node, source)] = _read_class(node, source, module)
+            class_name = _text(name_node, source)
+            read.classes[class_name] = _read_class(node, source, module, class_name)
 
     return read
 
@@ -449,16 +472,34 @@ def _declaring(
 
 
 def _resolved_mounts(
-    module: str, read: _Class, modules: dict[str, _Module]
-) -> dict[str, _ClassKey]:
-    """Every mount this class makes, as the key of the class it actually reaches."""
+    module: str, name: str, read: _Class, modules: dict[str, _Module]
+) -> tuple[dict[str, _ClassKey], list[str]]:
+    """Every mount this class makes, as the key of the class it actually reaches, and what missed.
+
+    **An unresolved `new` is recorded only where the source named the module it came from.**
+    `client.ts` writes `#requestAuthFlags = new WeakMap<...>()`, which reaches this by the same
+    path a mount does and resolves to nothing, and recording it would report one expected loss per
+    extraction of every Stainless TypeScript SDK. A mount across files is written
+    `new ModelsAPI.Models(this)` against an `import * as ModelsAPI from './models'`, so the source
+    states which file the class should be in; a bare constructor states no module and this rule
+    defaulted it to the mount's own file. The distinction is what the source says, not what the
+    class is called, which is why no wrapper or global is named anywhere here.
+    """
     resolved: dict[str, _ClassKey] = {}
+    unreadable: list[str] = []
     aliases = modules[module].aliases
     for attribute, (named, class_name) in read.mounts.items():
-        target = _declaring(aliases.get(named, named), class_name, modules)
+        looked_in = aliases.get(named, named)
+        target = _declaring(looked_in, class_name, modules)
         if target is not None:
             resolved[attribute] = target
-    return resolved
+        elif named in aliases:
+            unreadable.append(
+                f"{GENERATOR}: {module}: {name}.{attribute} mounts {class_name!r} through "
+                f"{looked_in!r}, which declares no class of that name in this checkout, so that "
+                f"resource and every operation under it is absent"
+            )
+    return resolved, unreadable
 
 
 def _source_files(root: Path) -> list[Path]:
@@ -469,11 +510,15 @@ def _source_files(root: Path) -> list[Path]:
     )
 
 
-def extract_symbols(source_root: Path) -> tuple[ExtractedOperation, ...]:
-    """Every operation the SDK's source states, keyed by the chain a customer writes.
+def extract_symbols(source_root: Path) -> tuple[tuple[ExtractedOperation, ...], tuple[str, ...]]:
+    """Every operation the SDK's source states, and every construct it states unreadably.
+
+    The same pair the Python flavour returns, for the same reason: what was read, then what could
+    not be, present and empty on a clean read.
 
     Raises `UnrecognisedSdkShape` when the source does not carry the shape this rule reads --
-    nothing extending `APIResource`, or resources with nothing mounting any of them.
+    nothing extending `APIResource`, or resources with nothing mounting any of them. That refusal
+    stands: the channel is for a partial loss and those two are total ones.
     """
     root = Path(source_root).resolve()
     parser = Parser(_TS_LANGUAGE)
@@ -497,9 +542,10 @@ def extract_symbols(source_root: Path) -> tuple[ExtractedOperation, ...]:
             f"indistinguishable from a vendor whose operations cannot be seen"
         )
 
-    mounts = {
-        key: _resolved_mounts(key[0], read, modules) for key, read in classes.items()
-    }
+    mounts: dict[_ClassKey, dict[str, _ClassKey]] = {}
+    unresolved: dict[_ClassKey, list[str]] = {}
+    for key, read in classes.items():
+        mounts[key], unresolved[key] = _resolved_mounts(key[0], key[1], read, modules)
     # The client is the class that mounts resources and is not one. Sorted rather than first
     # found, because file order is not a fact about the SDK, and every such class is walked
     # rather than one chosen: this emission writes exactly one, and picking among several by a
@@ -517,6 +563,10 @@ def extract_symbols(source_root: Path) -> tuple[ExtractedOperation, ...]:
         )
 
     extracted: dict[str, ExtractedOperation] = {}
+    # Recorded for the classes the walk actually reaches, and keyed so a resource mounted twice
+    # records its losses once. A class nothing mounts contributes no symbol either, so a decline
+    # from it would name a loss the map never stood to have.
+    unreadable: dict[str, None] = {}
     # Breadth-first from each root, carrying the chain each mount was reached by. The visited set
     # is per path rather than global: a resource mounted twice is two symbols a customer can
     # write, and both resolve to the same operations.
@@ -528,6 +578,8 @@ def extract_symbols(source_root: Path) -> tuple[ExtractedOperation, ...]:
         read = classes.get(key)
         if read is None:
             continue
+        unreadable.update(dict.fromkeys(read.unreadable))
+        unreadable.update(dict.fromkeys(unresolved[key]))
         for method_name, (verb, route) in read.operations.items():
             symbol = ".".join([*chain, method_name])
             extracted.setdefault(
@@ -537,7 +589,7 @@ def extract_symbols(source_root: Path) -> tuple[ExtractedOperation, ...]:
             if target not in visited:
                 queue.append((target, (*chain, attribute), visited | {key}))
 
-    return tuple(extracted[symbol] for symbol in sorted(extracted))
+    return tuple(extracted[symbol] for symbol in sorted(extracted)), tuple(unreadable)
 
 
 def report_extraction(
@@ -550,23 +602,27 @@ def report_extraction(
     specification writes `{model_id}` and a cross-check firing on that trains a reader to ignore
     it. The extracted path keeps the SDK's own spelling.
 
-    The denominator is counted after that reduction, so it is the number of distinct routes the
-    comparison can actually be made against rather than the number of entries the specification
-    happens to list.
+    The ratio's denominator is counted after that reduction, so it is the number of distinct
+    routes the comparison can actually be made against. The number of operations the
+    specification declares is counted before it and reported beside it: this reduction is the one
+    that can merge two operations the document really distinguishes, so the gap between the two
+    counts is the part of the API this comparison cannot speak about either way.
     """
-    declared = {_comparable(method, path) for method, path in spec_operations}
-    operations = extract_symbols(source_root)
+    comparable = {_comparable(method, path) for method, path in spec_operations}
+    operations, unreadable = extract_symbols(source_root)
     unknown = tuple(
         operation
         for operation in operations
-        if _comparable(operation.http_method, operation.path) not in declared
+        if _comparable(operation.http_method, operation.path) not in comparable
     )
     reached = {
         _comparable(operation.http_method, operation.path) for operation in operations
-    } & declared
+    } & comparable
     return TypeScriptExtractionReport(
         operations=operations,
-        spec_operation_count=len(declared),
+        declared_operation_count=len(spec_operations),
+        comparable_key_count=len(comparable),
         unknown_to_spec=unknown,
         covered_count=len(reached),
+        unreadable=unreadable,
     )

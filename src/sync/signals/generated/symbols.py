@@ -57,6 +57,20 @@ a vendor that genuinely does not offer that route.
 
 Coverage travels with its denominator. "Extracted 180 operations" says nothing; the Stripe map's
 105 of 414 means something only because the second number is there.
+
+Two denominators, and a channel for what was not read
+-----------------------------------------------------
+**Two**, because a comparison reduces both sides and a reduction is not free. The number of
+operations the specification declares is the API's size; the number of keys those reduce to is what
+this comparison can resolve; and the gap is the operations it cannot separate. Reporting one as the
+other was a real defect -- 121 keys called 131 operations -- and a ratio taken against the larger
+number would divide routes by operations.
+
+**And a channel**, because a construct this rule met and could not read used to lower a number and
+say nothing else. A smaller map with no explanation is indistinguishable from a smaller SDK, which
+is the false negative the whole approach exists to avoid. Only losses are recorded: a method that
+sends no request and a wrapper class this rule excludes on purpose are declined on every run of
+every SDK, and a channel carrying those is one nobody reads.
 """
 
 from __future__ import annotations
@@ -111,10 +125,38 @@ class ExtractedOperation:
 
 @dataclass(frozen=True)
 class ExtractionReport:
-    """What was extracted, and what the specification says about it."""
+    """What was extracted, what the specification says about it, and what could not be read.
+
+    **`spec_operation_count` was retired rather than corrected.** It answered "how many distinct
+    comparable keys did the specification yield" under a name claiming to answer "how many
+    operations does the specification declare", and those are two facts that differ by however
+    much the comparison's reduction absorbed -- 121 against 131 for the vendor this repository
+    pins. Both are now named for what they count. Reusing the old name for the corrected
+    quantity would have handed every existing reader a different number with no error, where a
+    name that is gone raises at the first stale read.
+    """
 
     operations: tuple[ExtractedOperation, ...]
-    spec_operation_count: int
+
+    declared_operation_count: int
+    """Operations the specification declares -- the API's size.
+
+    Counted before any reduction, which is what distinguishes it from the field below. It is not
+    a denominator for `covered_count`: that is counted in comparable routes, and dividing one by
+    the other would mix two units into a number that moves when a reduction changes and means
+    nothing either way.
+    """
+
+    comparable_key_count: int
+    """Distinct keys those operations reduce to -- what this comparison can resolve.
+
+    The denominator of `coverage_ratio`, and smaller than the count above by every operation the
+    reduction could not keep apart: the query marker this project drops on both sides, and in the
+    TypeScript flavours a parameter segment reduced to a placeholder. An operation absorbed that
+    way is neither covered nor missed by this report; it is indistinguishable from the operation
+    it shares a key with, and `indistinct_operation_count` is how many.
+    """
+
     unknown_to_spec: tuple[ExtractedOperation, ...]
 
     @property
@@ -122,34 +164,69 @@ class ExtractionReport:
         return len(self.operations)
 
     covered_count: int
-    """Distinct specification operations the extraction reaches.
+    """Distinct comparable routes the extraction reaches.
 
     Distinct, and counted on the specification's side rather than the extraction's. Two symbols
     can send the same request -- `messages.create` and `messages.parse` are both
     `POST /v1/messages` -- so counting extracted entries would report more coverage than there
-    are operations to cover, and could exceed the denominator outright.
+    are routes to cover, and could exceed the denominator outright.
+    """
+
+    unreadable: tuple[str, ...]
+    """A construct the source states and this rule could not read, one prose string each.
+
+    `IntakeReport.unreadable`'s key and shape, for the reason recorded there and carried into
+    `ReachabilityRanking` and `parse_directory` before this: a reader parsing several artifacts
+    needs one rule, not one per artifact. Present and empty on a clean read, and required at
+    construction rather than defaulted, so a flavour that records nothing cannot pass for one
+    that found nothing.
+
+    **Not every decline.** Every SDK declares methods that send no request and classes that are
+    not resources, and every Stainless client mounts wrappers this rule excludes on purpose --
+    eleven of them in the committed Anthropic tree. Those are declined on every run and are
+    correct, so recording them would bury the few that mean an operation or a whole resource
+    subtree is missing from the map. Two kinds are recorded: a mount whose target this rule
+    cannot reach, and a request whose route it cannot read.
     """
 
     @property
+    def indistinct_operation_count(self) -> int:
+        """Declared operations the comparison cannot tell apart from another.
+
+        Zero is the ordinary answer and is the claim that the two counts are the same fact for
+        this vendor. Anything else is the number of operations whose coverage this report can
+        state neither way -- reaching their shared key proves one of them is sent and says
+        nothing about the rest.
+        """
+        return self.declared_operation_count - self.comparable_key_count
+
+    @property
     def coverage_ratio(self) -> float:
-        if self.spec_operation_count == 0:
+        if self.comparable_key_count == 0:
             return 0.0
-        return self.covered_count / self.spec_operation_count
+        return self.covered_count / self.comparable_key_count
 
     def render(self) -> str:
         """One line an operator can read, with every number's denominator attached to it.
 
-        Both counts, because they answer different questions and neither substitutes. The symbol
-        count is what a call site can resolve against; the operation count is what share of the
-        vendor's API is reachable at all, and the gap between them is the SDK offering two ways
-        to send one request.
+        Four counts, because they answer different questions and none substitutes. The symbol
+        count is what a call site can resolve against; the comparable-route count is what the
+        cross-check can be made against and is the ratio's denominator; the declared-operation
+        count is the vendor's API size, which is the only one of the three a vendor publishes
+        independently; and the number of constructs this rule could not read is what says whether
+        a small extraction is a small SDK or a rule meeting an emission it does not know.
         """
         return (
             f"{GENERATOR}: {self.extracted_count} symbols extracted, reaching "
-            f"{self.covered_count} of {self.spec_operation_count} specification operations "
-            f"({self.coverage_ratio:.1%})"
+            f"{self.covered_count} of {self.comparable_key_count} comparable routes "
+            f"({self.coverage_ratio:.1%}); the specification declares "
+            f"{self.declared_operation_count} operations"
+            + (f", {self.indistinct_operation_count} of them not separately comparable"
+               if self.indistinct_operation_count else "")
             + (f"; {len(self.unknown_to_spec)} extracted operations the specification does not "
                f"declare" if self.unknown_to_spec else "")
+            + (f"; {len(self.unreadable)} constructs this rule could not read"
+               if self.unreadable else "")
         )
 
 
@@ -201,13 +278,21 @@ def _path_literal(argument: ast.expr) -> str | None:
     return None
 
 
-def _operation_in(function: ast.FunctionDef | ast.AsyncFunctionDef) -> tuple[str, str] | None:
-    """The verb and path a method sends, from the first request helper it calls.
+def _operation_in(
+    function: ast.FunctionDef | ast.AsyncFunctionDef,
+) -> tuple[tuple[str, str] | None, str | None]:
+    """The verb and path a method sends, and the helper it sends through if that could not be read.
 
     First rather than every one: Stainless emits a method with a single request, and an
     overloaded signature repeats the same call under each overload. Taking the first keeps one
     operation per method, which is the grain the specification counts in.
+
+    The second half of the pair is what separates a method this rule declined from a method that
+    is not an operation. A method calling no request helper at all is neither, and answering
+    `(None, None)` for it is what keeps the decline channel about losses rather than about every
+    method an SDK declares.
     """
+    unread: str | None = None
     for node in ast.walk(function):
         if not isinstance(node, ast.Call):
             continue
@@ -218,24 +303,41 @@ def _operation_in(function: ast.FunctionDef | ast.AsyncFunctionDef) -> tuple[str
         if verb is None or not isinstance(callee.value, ast.Name) or callee.value.id != "self":
             continue
         if not node.args:
+            unread = unread or callee.attr
             continue
         path = _path_literal(node.args[0])
         if path is not None:
-            return verb, path
-    return None
+            return (verb, path), None
+        unread = unread or callee.attr
+    return None, unread
 
 
 @dataclass
 class _Resource:
-    """One class, as the two things this rule reads out of it."""
+    """One class, as the two things this rule reads out of it and what it could not read."""
 
     mounts: dict[str, str]
     operations: dict[str, tuple[str, str]]
+    unreadable: list[str]
 
 
-def _read_class(node: ast.ClassDef, resource_classes: set[str]) -> _Resource:
+def _read_class(
+    node: ast.ClassDef, resource_classes: set[str], declared_classes: set[str], where: str
+) -> _Resource:
+    """What one class contributes, and what it states that this rule could not use.
+
+    **A mount naming a class this checkout declares is not recorded.** Every Stainless client
+    mounts `*WithRawResponse` and `*WithStreamingResponse` through a `cached_property`, and the
+    base-class rule excludes them without naming their spelling -- which is the point, and a
+    channel recording them would report eleven expected losses per Anthropic extraction. A name
+    nothing here declares is the other case: the file was not staged, the resource is gone, and
+    that is one repair. The annotation is the only evidence this language offers, so this is the
+    sharpest question available to it; the TypeScript flavours have the module too and ask a
+    better one.
+    """
     mounts: dict[str, str] = {}
     operations: dict[str, tuple[str, str]] = {}
+    unreadable: list[str] = []
 
     for member in node.body:
         if not isinstance(member, (ast.FunctionDef, ast.AsyncFunctionDef)):
@@ -244,42 +346,70 @@ def _read_class(node: ast.ClassDef, resource_classes: set[str]) -> _Resource:
             mounted = _annotation_name(member.returns)
             if mounted in resource_classes:
                 mounts[member.name] = mounted
+            elif mounted is None:
+                unreadable.append(
+                    f"{GENERATOR}: {where}: {node.name}.{member.name} is a {_MOUNT_DECORATOR} "
+                    f"whose return annotation names no class this rule can read, so the resource "
+                    f"it mounts and every operation under it is absent"
+                )
+            elif mounted not in declared_classes:
+                unreadable.append(
+                    f"{GENERATOR}: {where}: {node.name}.{member.name} mounts {mounted!r}, which "
+                    f"this checkout does not declare, so that resource and every operation under "
+                    f"it is absent"
+                )
             continue
-        found = _operation_in(member)
+        found, unread_helper = _operation_in(member)
         if found is not None:
             operations[member.name] = found
+        elif unread_helper is not None:
+            unreadable.append(
+                f"{GENERATOR}: {where}: {node.name}.{member.name} calls self.{unread_helper} with "
+                f"no route this rule can read, so it contributes no symbol"
+            )
 
-    return _Resource(mounts=mounts, operations=operations)
+    return _Resource(mounts=mounts, operations=operations, unreadable=unreadable)
 
 
 def _source_files(root: Path) -> list[Path]:
     return sorted(path for path in Path(root).rglob("*.py") if "__pycache__" not in path.parts)
 
 
-def extract_symbols(source_root: Path) -> tuple[ExtractedOperation, ...]:
-    """Every operation the SDK's source states, keyed by the chain a customer writes.
+def extract_symbols(source_root: Path) -> tuple[tuple[ExtractedOperation, ...], tuple[str, ...]]:
+    """Every operation the SDK's source states, and every construct it states unreadably.
+
+    The pair `read_declared_dependencies` and `parse_directory` already return: what was read,
+    then what could not be. The second half is present and empty on a clean read, because an
+    absent channel does not distinguish a clean read from a reader that records nothing.
 
     Raises `UnrecognisedSdkShape` when the source does not carry the shape this rule reads --
-    no client class, or a client with no resources reachable from it.
+    no client class, or a client with no resources reachable from it. That refusal stands: this
+    channel is for a partial loss, and a total one is not something to report a count for.
     """
-    files = _source_files(source_root)
+    root = Path(source_root)
+    files = _source_files(root)
     trees = {path: ast.parse(path.read_text(encoding="utf-8")) for path in files}
 
     classes: dict[str, ast.ClassDef] = {}
+    where: dict[str, str] = {}
     client_name: str | None = None
     resource_classes: set[str] = set()
+    declared_classes: set[str] = set()
 
-    for tree in trees.values():
+    for path, tree in trees.items():
         for node in ast.walk(tree):
             if not isinstance(node, ast.ClassDef):
                 continue
+            declared_classes.add(node.name)
             bases = _base_names(node)
             if _RESOURCE_BASE in bases:
                 resource_classes.add(node.name)
                 classes[node.name] = node
+                where[node.name] = path.relative_to(root).as_posix()
             elif _CLIENT_BASE in bases and client_name is None:
                 client_name = node.name
                 classes[node.name] = node
+                where[node.name] = path.relative_to(root).as_posix()
 
     if client_name is None:
         raise UnrecognisedSdkShape(
@@ -293,9 +423,16 @@ def extract_symbols(source_root: Path) -> tuple[ExtractedOperation, ...]:
             f"{_RESOURCE_BASE} under {source_root}, so no operation is reachable from it"
         )
 
-    read = {name: _read_class(node, resource_classes) for name, node in classes.items()}
+    read = {
+        name: _read_class(node, resource_classes, declared_classes, where[name])
+        for name, node in classes.items()
+    }
 
     extracted: dict[str, ExtractedOperation] = {}
+    # Recorded for the classes the walk actually reaches, and keyed so a resource mounted twice
+    # records its losses once. A class nothing mounts contributes no symbol either, so a decline
+    # from it would name a loss the map never stood to have.
+    unreadable: dict[str, None] = {}
     # Breadth-first from the client, carrying the chain each mount was reached by. `seen` is per
     # path rather than global: a resource mounted twice is two symbols a customer can write, and
     # both resolve to the same operations.
@@ -305,6 +442,7 @@ def extract_symbols(source_root: Path) -> tuple[ExtractedOperation, ...]:
         resource = read.get(class_name)
         if resource is None:
             continue
+        unreadable.update(dict.fromkeys(resource.unreadable))
         for method_name, (verb, path) in resource.operations.items():
             symbol = ".".join([*chain, method_name])
             extracted.setdefault(
@@ -314,7 +452,7 @@ def extract_symbols(source_root: Path) -> tuple[ExtractedOperation, ...]:
             if mounted not in chain:
                 queue.append((mounted, (*chain, attribute)))
 
-    return tuple(extracted[symbol] for symbol in sorted(extracted))
+    return tuple(extracted[symbol] for symbol in sorted(extracted)), tuple(unreadable)
 
 
 def _route(http_method: str, path: str) -> tuple[str, str]:
@@ -334,9 +472,17 @@ def _route(http_method: str, path: str) -> tuple[str, str]:
 
 
 def read_spec_operations(path: Path) -> set[tuple[str, str]]:
-    """The specification's operation set, as comparable routes."""
+    """The operations a specification declares, as it declares them.
+
+    The verb's case is normalised and nothing else is. Reducing here is what made the operation
+    count unrecoverable: `_route` merges a route with its `?beta=true` twin, so this vendor's 131
+    published operations arrived as 121 members and the report's denominator counted keys while
+    saying it counted operations. Each flavour applies its own reduction to both sides, which is
+    where the reduction belongs -- the TypeScript flavours add a second one this file knows
+    nothing about.
+    """
     declared = json.loads(Path(path).read_text(encoding="utf-8"))
-    return {_route(entry["method"], entry["path"]) for entry in declared}
+    return {(entry["method"].upper(), entry["path"]) for entry in declared}
 
 
 def report_extraction(
@@ -349,18 +495,21 @@ def report_extraction(
     not declare is reported rather than dropped, because a misread source and a vendor that
     genuinely lacks a route are different facts and only one of them is a defect here.
     """
-    operations = extract_symbols(source_root)
+    comparable = {_route(method, path) for method, path in spec_operations}
+    operations, unreadable = extract_symbols(source_root)
     unknown = tuple(
         operation
         for operation in operations
-        if _route(operation.http_method, operation.path) not in spec_operations
+        if _route(operation.http_method, operation.path) not in comparable
     )
     reached = {
         _route(operation.http_method, operation.path) for operation in operations
-    } & spec_operations
+    } & comparable
     return ExtractionReport(
         operations=operations,
-        spec_operation_count=len(spec_operations),
+        declared_operation_count=len(spec_operations),
+        comparable_key_count=len(comparable),
         unknown_to_spec=unknown,
         covered_count=len(reached),
+        unreadable=unreadable,
     )
