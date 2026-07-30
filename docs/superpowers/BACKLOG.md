@@ -12,37 +12,33 @@ item that cannot say what evidence closes it is not ready to dispatch.
 
 ## Ready
 
-### B65 — A persisted finding cannot be attributed to the rung that produced it
+### B66 — Nothing refuses a finding that names no rung, and the store is where it should
 
-CLAUDE.md: *"Every binding carries the rung it came from — `static`, `resolved`, or `observed` — and
-so does every artifact derived from it. A false positive that cannot be attributed to a rung cannot
-be fixed."*
+B65 landed the rung column and every detector attributes correctly. What it did not land is the
+enforcement, and it said so plainly rather than hiding it — `FindingRung`'s docstring reads
+*"`unattributed` on a row written after this shipped is still a bug -- it is just one the type no
+longer catches."* Nothing else catches it either.
 
-Measured on main, exactly one table keeps a rung:
+The history matters, because two positions were already tried. Requiring the field on the model was
+ruled and then reversed: `Finding` is exported from `sync.core.__init__`, so it is the published
+plugin SDK, and a required field breaks every detector a third party has written. Measured cost of
+that route: **153 failed, 120 errors across 32 files.** The reversal put enforcement at
+`GraphStore.insert_finding` instead — a boundary, which is where CLAUDE.md says validation belongs —
+and that half was never built.
 
-    schema.sql:258   observed_call.binding_rung TEXT NOT NULL
+**Its cost is measured too.** I prototyped the guard and ran it: `14 failed, 2523 passed`. Every
+failure is an existing test that persists a `Finding` without a rung. That is a fourteenth of the
+model route and touches no published contract, since `sync.graph` is internal — but it is fourteen
+tests that must each say which rung they mean, and blanket-pasting `static` across them would be
+worse than leaving the gap.
 
-`call_site` has none, `finding` has none, `migration_outcome` has none — zero matches for the word.
-`Finding`'s fields are `id, detector, claim, call_site_id, vendor_change_id, severity, rationale,
-status, created_at`, so there is nothing to carry the rung and nothing to join through: a finding
-references a call site, and the call site does not know either.
+A prototype guard, its test, and the exact failure list are recoverable from this coordinator's
+session; the shape that worked raised `ValueError` naming the detector, and the fourteen tests are
+in `tests/test_graph_store.py` and its neighbours.
 
-**So the rule holds for `observed` and fails for `static` and `resolved` — the two the M0 pipeline
-actually runs on.**
-
-`sync.benchmark.binding` already splits precision and recall by rung and argues the case in its
-docstring: an aggregate precision of 0.7 is a real number and a useless one, if nothing says which
-binder produced the wrong claims. That analysis works over the corpus, in memory, during a scoring
-run. It does not work for the graph. The first real findings will land in a table that cannot answer
-the question the rule exists to keep answerable — and the rung cannot be backfilled afterwards,
-because the information is gone once the run ends.
-
-Timing is why this is queued now rather than later: the acceptance run is one decision away, and it
-is what creates the rows.
-
-**Closes when:** a persisted call site carries its rung, a finding is attributable to one by a query
-that can be written down, `observed_call.binding_rung` is unchanged, the four corpus figures are
-quoted either side, and four gates green.
+**Closes when:** a finding persisted without a rung is refused at the write, naming the detector;
+each of the fourteen tests states the rung it means rather than being blanket-edited;
+`Finding`'s constructor is unchanged so the SDK contract holds; and four gates green.
 
 ### B7 — The M0 acceptance run has not executed since the pipeline changed underneath it
 
@@ -71,7 +67,6 @@ recorded with which change broke it.
 ## In flight
 
 - **B61** — `task_12ccee12fd98`, worktree `sync-solo-b`.
-- **B65** — `task_7fd551b327aa`, worktree `sync-solo-b`.
 - **B55** — re-dispatched as `task_3746257e4c0a` into `sync-solo-b`. The first attempt
   (`task_e03a2a5bb93f`) produced nothing in 94 minutes and was stood down.
 
@@ -818,3 +813,23 @@ is what a reviewer needs and duplicating it here would let the two copies drift.
   naming both digests. It also settles the two-skips question that has been drifting between
   sessions: the second skip is a worktree lacking `.cache/specs/v2320.json` and `tools/oasdiff`, not
   the pin test.
+
+- Record the rung a finding's binding came from. Landed `7cb4e95`. `finding.binding_rung` is a
+  column rather than a join, `NOT NULL DEFAULT 'unattributed'` so rows written before it existed
+  answer honestly, and all five detectors attribute by the rule that **the rung names the binding
+  whose wrongness would make the finding wrong** — `static` for vendor_change, parameter_deprecation
+  and observed_drift, the correlation's own rung carried through for efficiency, and status_rate
+  folding a population to the weaker of the only two values that table holds.
+
+  The subtlety the worker caught unprompted: the rung is deliberately absent from `_stable_id`, so a
+  correlator improving from `unresolved` to `observed` converges on the row it already wrote instead
+  of double-counting. Two idempotence tests pin it.
+
+  Corpus verified here rather than taken on trust — the worker could not run that gate, because its
+  worktree lacks the staged spec and the pin *correctly refused* to score against the wrong map,
+  which is B64's work doing its job one task later. From a tree that has it: 1.0000, 1.0000, 7, 17,
+  every floor cleared. Suite `2548 passed, 1 skipped`.
+
+  Two coordinator errors it corrected: my preservation commit still called the work "unreviewed, not
+  gated" after that stopped being true, and its schema comment still described the required field I
+  had already reversed. It amended both. The enforcement half of that reversal is B66.
