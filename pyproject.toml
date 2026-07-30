@@ -36,6 +36,10 @@ dependencies = [
     # Generated-SDK manifests are YAML. Present transitively via langchain-core today; declared
     # here because sync.signals imports it directly and a transitive dep can vanish in a bump.
     "pyyaml>=6.0.3",
+    # The plugin SDK, built from `src/pyproject.toml` out of the same tree. Pinned exactly
+    # because the two are released together and `sync` imports core's models directly, so a
+    # runtime paired with a core it was not built against is a shape nobody tested.
+    "sync-core==0.1.0",
     "tree-sitter>=0.26.0",
     "tree-sitter-python>=0.25.0",
     "tree-sitter-typescript>=0.23.2",
@@ -57,6 +61,18 @@ sync-mcp = "sync.mcp.server:main"
 [build-system]
 requires = ["uv_build>=0.11.19,<0.12.0"]
 build-backend = "uv_build"
+
+[tool.uv.workspace]
+members = ["src"]
+
+[tool.uv.sources]
+sync-core = { workspace = true }
+
+[tool.uv.build-backend]
+# `sync/core` belongs to the `sync-core` wheel. Excluded from this one so the two distributions
+# never own the same files -- uninstalling either would otherwise take core out from under the
+# other. The source tree keeps it where it is; only the wheel is split.
+wheel-exclude = ["core/**"]
 
 [dependency-groups]
 dev = [

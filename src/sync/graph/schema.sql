@@ -57,6 +57,17 @@ CREATE TABLE IF NOT EXISTS call_site (
 
 CREATE INDEX IF NOT EXISTS call_site_operation_idx ON call_site (vendor_id, operation_id);
 
+-- Grain: one row per change one vendor made between one pair of spec versions. Identity is
+-- (vendor_id, from_version, to_version, kind, path_ptr, operation_id, raw->>'text'), which is the
+-- tuple `GraphStore.upsert_vendor_change` hashes into `id`. The text is in it because two
+-- arguments removed from one operation differ in nothing else.
+--
+-- This is the one source in the pipeline that does not converge, and `CLAUDE.md` names the
+-- exemption rather than leaving it to be discovered: `oasdiff breaking` returns a different answer
+-- on successive runs over identical bytes on both pinned versions, so these rows are at-least-once
+-- and a count of them is not a measurement. `raw` keeps the vendor's own record beside our
+-- interpretation of it, which is why `b29795a` could be applied to history instead of re-fetching
+-- every spec pair.
 CREATE TABLE IF NOT EXISTS vendor_change (
     id           TEXT PRIMARY KEY,
     vendor_id    TEXT NOT NULL,
@@ -65,6 +76,43 @@ CREATE TABLE IF NOT EXISTS vendor_change (
     kind         TEXT NOT NULL,
     operation_id TEXT NOT NULL,
     path_ptr     TEXT NOT NULL,
+    -- 'breaking'|'warning'|'deprecation'|'addition'|'info' -- `sync.core.Severity`, and the same
+    -- vocabulary `finding.severity` and `migration_outcome.change_severity` hold. All three are
+    -- typed by that one alias; `tests/test_severity_vocabulary.py` asserts the identity rather
+    -- than restating the members here a fourth time.
+    --
+    -- Named in a comment and not declared as a CHECK, which means Postgres will store a severity
+    -- no build of this code can read back. That is a property of this schema rather than an
+    -- oversight, and three measurements decide it:
+    --
+    -- A CHECK riding on a column definition never reaches a database that already has the
+    -- column. `apply_schema` converges an existing database by re-issuing each definition as
+    -- `ADD COLUMN IF NOT EXISTS`, and Postgres skips the whole item -- any constraint on it
+    -- included -- when the column is there. The constraint would land on every database created
+    -- after the edit, where every write already goes through a validated model, and on none of
+    -- the ones that predate it, which is the only place a hand-written row can be. Absent and
+    -- believed present is worse than absent.
+    --
+    -- Reaching those databases means a table-level `ALTER TABLE ... ADD CONSTRAINT`, which costs
+    -- the two rules this file is held to. A bare ADD CONSTRAINT is not idempotent -- 42710 on the
+    -- second apply -- and it is refused outright by a table already holding a violating row,
+    -- 23514, so it would have to be DROP-then-ADD with NOT VALID: tolerating history the way
+    -- `finding.binding_rung`'s `unattributed` default does.
+    --
+    -- What settles it is the coupling. `Severity`'s own comment records that widening it moved no
+    -- contract precisely because nothing enumerates it -- the MCP tool schemas type severity as a
+    -- bare string and this file stores TEXT. Ten columns here have a closed vocabulary behind
+    -- them, four already name it in a comment exactly as this does, and not one is constrained in
+    -- DDL. A CHECK on severity alone would make this file a second declaration of a vocabulary
+    -- `sync.core` owns, and would close one of the four shapes that reach the same silence:
+    -- `source` outside its own literal, a `raw` that is not an object, and any field a later model
+    -- requires that the row does not carry all arrive at it too.
+    --
+    -- The failure that costs something is on the read and it is not in this package: every read in
+    -- `GraphStore` raises on such a row, and `sync.mcp.tools._change_for` is where the raise
+    -- becomes an empty answer indistinguishable from a change that had no diff.
+    -- `docs/superpowers/reports/2026-07-30-a-row-the-model-refuses.md` carries the write routes
+    -- and the argument for repairing it there.
     severity     TEXT NOT NULL,
     source       TEXT NOT NULL,
     raw          JSONB NOT NULL DEFAULT '{}'::jsonb,
@@ -90,6 +138,9 @@ CREATE TABLE IF NOT EXISTS finding (
     claim             TEXT NOT NULL,
     call_site_id      TEXT NOT NULL REFERENCES call_site (id) ON DELETE CASCADE,
     vendor_change_id  TEXT REFERENCES vendor_change (id) ON DELETE SET NULL,
+    -- `sync.core.Severity`, the same five members `vendor_change.severity` names, and TEXT for the
+    -- reason argued there. A detector chooses this rather than copying it: four of the five pick a
+    -- constant, and `vendor_change` passes the vendor's own grading through.
     severity          TEXT NOT NULL,
     rationale         TEXT NOT NULL,
     status            TEXT NOT NULL DEFAULT 'open',
@@ -131,6 +182,10 @@ CREATE TABLE IF NOT EXISTS migration_outcome (
     from_version                  TEXT NOT NULL,
     to_version                    TEXT NOT NULL,
     change_kind                   TEXT NOT NULL,
+    -- `sync.core.Severity` again, copied from the change this attempt was made against rather than
+    -- graded here, and TEXT for the reason argued on `vendor_change.severity`. Not widened for the
+    -- corpus: an attempt against a change of a severity the model cannot name is not a wider
+    -- grading, it is an unreadable row, and this table is the one that cannot be backfilled.
     change_severity               TEXT NOT NULL,
     operation_id                  TEXT,
     path_ptr                      TEXT,

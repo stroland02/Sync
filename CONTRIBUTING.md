@@ -10,6 +10,18 @@ bug in the protocol and we want to hear about it.
 An adapter is a self-contained implementation of one protocol. It depends on `sync.core` alone, so
 it does not inherit Postgres, LangGraph, or anything else in this repository's dependency tree.
 
+That is a packaging fact rather than an aspiration. `sync.core` is built as its own distribution,
+`sync-core`, and pydantic is the only thing it depends on — an environment holding it has six
+packages in it against the eighty-one a checkout of this repository installs. Nothing is published
+yet, so build the wheel from a checkout:
+
+```bash
+uv build --package sync-core   # dist/sync_core-*.whl
+```
+
+`tests/test_core_distribution.py` is what keeps that true: it builds the wheel, installs it into an
+empty environment and runs the conformance kit there.
+
 ```python
 class VendorAdapter(Protocol):
     vendor_id: str
