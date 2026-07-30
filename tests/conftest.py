@@ -227,6 +227,19 @@ def sweep_leaked_databases(
     fixes, so every drop is attempted on its own and a refusal is skipped rather than raised. An
     unreachable server returns an empty list for the same reason `pytest_configure` warns and
     carries on when Postgres is absent.
+
+    **The outer clause is `Exception` because class identity is not guaranteed across the
+    connect.** A dotted `--cov=<module>` whose import reaches psycopg makes coverage evict every
+    psycopg module from `sys.modules` and import it again; `errors.py` re-executes and builds a
+    second set of the classes, while the cached C extension keeps raising the first. The connect
+    generator lives in that extension, so `psycopg.Error` is absent from the MRO of what it
+    raises and the narrower clause does not catch. A stated invariant a coverage flag can void is
+    not an invariant. Pinned by `test_psycopg_error_identity.py`.
+
+    The inner clause stays `psycopg.Error`, and the difference is measured rather than stylistic:
+    a refused DROP is built from its SQLSTATE by the re-executed `errors.py`, so it belongs to
+    the same set the handler names and is caught either way. Only what the C extension raises is
+    split.
     """
     try:
         with psycopg.connect(admin_dsn, autocommit=True, connect_timeout=10) as conn:
@@ -250,7 +263,7 @@ def sweep_leaked_databases(
                     continue
                 dropped.append(name)
             return dropped
-    except psycopg.Error:
+    except Exception:
         return []
 
 
