@@ -107,6 +107,30 @@ to produce, and is reported honestly rather than smoothed over:
 An agent weighs a patch differently depending on which rung produced the binding, and it can only do that if the
 rung is in the payload. `observed` appears only in the hosted tier, because a laptop has no production traffic.
 
+**Two corrections, 2026-07-30, both measured.** The paragraph above says every response carries
+`binding_source`, and the ladder has since grown a fourth value and moved.
+
+`binding_source` sits **per finding** on the tools that return a page, because a page can mix rungs — a
+`sync_whats_at_risk` response holds vendor-change and status-rate findings together, and two detectors can name
+one call site. The envelope keeps the field only where every finding behind the answer agrees on a rung, and
+carries `null` where they disagree; `sync_propose_patch` answers about exactly one finding and so keeps it on the
+envelope alone; `sync_whats_changed` reads no finding and carries `null` unconditionally. Reporting the weakest
+rung on a mixed page was considered and rejected: understating is still wrong about the stronger rows.
+
+The fourth value is **`unattributed`**, and it is not a rung. It is what `finding.binding_rung` holds for rows
+written before that column existed, so it is a fact about history — `BindingRung` deliberately does not contain
+it, `GraphStore.insert_finding` refuses a finding carrying it, and the surface reports it verbatim rather than
+folding it into the `null` that means the rows disagree. Those are two different facts and flattening them loses
+one.
+
+What the original argument got right and keeps: never assert a rung nothing established. `resolved` still
+reaches nothing, because no compiler pass runs. What changed is that two detectors now raise findings from
+watched traffic, so the surface reporting a constant `static` was asserting the wrong rung rather than a
+cautious one. `2026-07-30-provenance-on-the-tool-surface.md` carries the measurement — a probe over
+`Finding.__init__` recording the constructing frame beside the rung — and the response shape is pinned by test
+rather than by `tests/golden/tool_schemas.json`, which stores only the request half and could not have caught
+it.
+
 ### Response shaping
 
 Token efficiency in a graph server comes from what is returned, not from how the index was built. Published
