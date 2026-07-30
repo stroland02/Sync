@@ -5,9 +5,9 @@ declines in `src/sync/detect/` and found five of them cannot happen. Its closing
 task: **the declines that actually lose a finding are all covered**, so no coverage number will
 ever point at them, and until now not one of them left anything a caller could count.
 
-Seven are counted now, on three detectors, through the channel the eighth already had. Three
-things the count is deliberately *not* is the load-bearing part, and they are argued below
-rather than assumed.
+Seven are counted now, on three detectors, through the channel the eighth already had. The four
+things the count is deliberately *not* are as load-bearing as the seven, and each is argued below
+rather than assumed and held by a test of its own.
 
 ## The channel, and the one deviation
 
@@ -68,8 +68,9 @@ the one structural change inside a scan loop; it moves no emission.
 ## What is not counted, and why each exclusion is a test
 
 A count that fires on every ordinary input is not a measurement of lost work — it is a
-description of the traffic, and it would drown the seven above. Each exclusion has a test whose
-whole job is to fail if the counter becomes indiscriminate.
+description of the traffic, and it would drown the eight above. Each of the four exclusions has a
+test whose whole job is to fail if the counter becomes indiscriminate, and a mutation in the table
+below that makes it fire.
 
 **A row belonging to another vendor.** `efficiency` and `status_rate` both decline these, and
 both declines are correct scoping rather than a lost finding: the finding belongs to an instance
@@ -177,7 +178,10 @@ that reason. Putting a detector's type into it is a decision about that contract
 refactor, and the docstring now says so. A reader inherits a position instead of a stale
 instruction; a next task is listed below.
 
-## The three docstrings, before and after
+## The two docstrings, before and after
+
+Two in the brief's counting, three sites: `observed_drift.DeclaredField`, and `status_rate`'s
+pair at `_leading_block` and `_periods`.
 
 **1. `observed_drift.DeclaredField`.**
 
@@ -212,11 +216,126 @@ because the gate and the split measure the same floor over the same rows, that t
 return is unreachable from `scan`, and that the only question the function really answers is
 whether the two ends are disjoint.
 
-A reader took the first and third as descriptions of two live outcomes. There is one.
+A reader took 2 and 3 as descriptions of two live outcomes — a block that is absent and two
+blocks that overlap. There is one, and it is the overlap.
 
 ## Mutation table
 
-<!--MUTATION-TABLE-->
+Harness at `%TEMP%\w106\mutate.py`, not committed. Every test here pins a behaviour this task
+added, so "fails first" was established by writing the test against absent code and watching the
+`AttributeError` — the channels did not exist — and then by these mutations once they did.
+
+The harness asserts each mutation string matches **exactly once**, `compile()`s the mutated
+source before pytest sees it, classifies from pytest's summary **counts** rather than from any
+line prefix, and asserts the restored baseline green at the same pass count before and after.
+It ran over eight files with `-n0`: the four detector test files, this task's new file, both
+parameter-deprecation files, and `tests/test_cli.py` for the output site.
+
+**Baseline 177 passed, exit 0, before and after.** Nothing failed to compile, nothing came back
+UNREADABLE, and nothing came back BASELINE-DRIFTED.
+
+| # | Statement | Mutation | Outcome | Killed by |
+|---|---|---|---|---|
+| C1 | `cli._scan` | the decline clause is never built (`note = ""`) | KILLED, 2 failed | `…scan_output_names_the_detector_and_its_decline_count`, `…clean_scan_reports_its_declines_as_zero…` |
+| C2 | `cli._scan` | an absent channel defaults to `[]`, so a channelless detector prints `0 declined` | KILLED, 1 failed | `…detector_with_no_channel_claims_nothing_about_its_declines` |
+| P1 | `parameter_deprecation._drop` | the append becomes a bare expression | KILLED, 2 failed | `…dropped_deprecation_is_observable`, `…drop_counter_resets…` |
+| P2 | `parameter_deprecation.scan` | the per-scan reset removed | KILLED, 1 failed | `…drop_counter_resets_rather_than_accumulating_across_scans` |
+| E1 | `efficiency.scan` | the whole decline block replaced by a bare `continue` | KILLED, 2 failed | `…cost_claim_with_no_indexed_call_site_is_counted`, `…every_channel_reports_the_same_declines…` |
+| E2 | `efficiency.scan` | `if not reachable` becomes `if True` | KILLED, 15 failed | 15, including every finding test in the file — **see below** |
+| E3 | `efficiency.scan` | the per-scan reset removed | KILLED, 1 failed | `…every_channel_reports_the_same_declines_on_a_second_scan` |
+| E4 | `efficiency.scan` | the foreign-vendor row is counted | KILLED, 1 failed | `…foreign_vendor_s_traffic_is_declined_without_being_counted` |
+| E5 | `efficiency.scan` | a spurious append **after** a non-empty `reachable`, leaving every finding intact | KILLED, 2 failed | `…cost_claim_that_reaches_a_call_site_is_not_counted_as_declined`, `…foreign_vendor_s_traffic_is_declined_without_being_counted` |
+| S1 | `status_rate.scan` | the floor decline drops its `errors` condition | KILLED, 1 failed | `…operation_with_no_failures_under_the_floor_declines_nothing` |
+| S2 | `status_rate.scan` | the floor decline never fires | KILLED, 1 failed | `…operation_failing_under_the_sample_floor_is_counted` |
+| S3 | `status_rate.scan` | the threshold decline never fires | KILLED, 2 failed | `…operation_failing_under_the_rate_threshold_is_counted`, `…every_channel_reports…` |
+| S4 | `status_rate.scan` | the threshold decline fires unconditionally | KILLED, 1 failed | `…operation_clearing_the_floor_with_no_failures_declines_nothing` |
+| S5 | `status_rate.scan` | the no-call-site decline never fires | KILLED, 1 failed | `…rate_that_resolves_to_no_indexed_call_site_is_counted` |
+| S6 | `status_rate._populations` | the foreign-vendor row is counted | KILLED, 1 failed | `…foreign_vendor_s_population_is_declined_without_being_counted` |
+| S7 | `status_rate.scan` | the per-scan reset removed | KILLED, 1 failed | `…every_channel_reports_the_same_declines_on_a_second_scan` |
+| D1 | `observed_drift.scan` | the no-call-site decline never fires | KILLED, 2 failed | `…baseline_no_indexed_call_site_resolves_to_is_counted`, `…every_channel_reports…` |
+| D2 | `observed_drift.scan` | `if not shapes` is counted | KILLED, 1 failed | `…operation_with_no_observed_shape_at_all_is_not_counted` |
+| D3 | `observed_drift.scan` | the floor decline never fires | KILLED, 2 failed | `…divergence_under_the_sample_floor_is_counted`, `…undescribed_field_under_the_sample_floor_is_counted` |
+| D4 | `observed_drift.scan` | the floor decline fires for every thin shape | KILLED, 1 failed | `…thin_shape_that_matches_the_specification_is_not_counted` |
+| D5 | `observed_drift.scan` | the read-filter decline never fires | KILLED, 1 failed | `…divergence_no_call_site_reads_is_counted` |
+| D6 | `observed_drift.scan` | the per-scan reset removed | KILLED, 1 failed | `…every_channel_reports_the_same_declines_on_a_second_scan` |
+
+Twenty-two mutations, twenty-two killed. Twenty-one ran through the harness over the eight-file
+set; E5 was run by hand afterwards over three of them (this file, `test_efficiency_detector.py`
+and `test_detector_declines.py`, 53 tests) because it was written in response to E2.
+
+**Eight of the twenty-two are the exclusions**: C2, E4, E5, S1, S4, S6, D2 and D4 each make a
+counter fire where it should not, and each is killed by the one test whose job is to say so.
+Without them the seven counted kinds would be proved and the three refusals would be decoration.
+
+**E2 is coarse and E5 exists because of it.** Replacing `if not reachable` with `if True` also
+takes the `continue` with it, so no efficiency finding is emitted at all and fifteen tests die —
+which proves nothing about whether the *count* is discriminating. E5 is the surgical form: an
+unconditional append placed after a non-empty `reachable`, leaving every finding exactly as it
+was. It kills `test_a_cost_claim_that_reaches_a_call_site_is_not_counted_as_declined` on the
+count alone. E2 is kept in the table because deleting a mutation whose verdict was weak
+evidence, rather than saying so, is how a table starts flattering itself.
+
+### P2 survived on the first run, and the fault was the test
+
+The first complete run scored **P2 as SURVIVED**. Suspecting the mutation first: it deletes
+`self.declined = []` from `ParameterDeprecationDetector.scan`, so the count accumulates across
+scans and a second scan reports twice the dropped work. Real defect, matched exactly once,
+compiled. The mutation was sound.
+
+The fault was the test. `test_scanning_twice_gives_the_same_answer` carried the comment *"The
+drop counter is part of the answer now, so it has to reset per scan rather than accumulate across
+them"* and asserted `detector.declined == []` — over a fixture whose deprecations are all
+**linked**, so nothing is ever dropped and the counter is empty with the reset or without it. A
+test that could not fail on the claim its own comment made.
+
+`test_the_drop_counter_resets_rather_than_accumulating_across_scans` scans twice over an unlinked
+deprecation and asserts the count is one. It kills P2. The overclaiming comment now points at it
+instead of claiming the coverage itself.
+
+**That is the tenth consecutive time on this project that the fault behind a first-pass survival
+was outside the production code**, and the fourth in a row that it was the fixture or the
+assertion rather than the mutation.
+
+### The five false-verdict modes, and which one could have bitten
+
+All five were answered by construction and none produced a verdict.
+
+- `--color=no`, and classification from the summary **counts**, never from a `FAILED ` prefix.
+  The prefix is parsed too, but only for the *names* in the last column, so a colourised summary
+  would have emptied that column rather than turning a kill into a survival.
+- `-n0` rather than `-p no:xdist`, so no plugin flag collides with the repo's `-n auto`; and any
+  exit code outside `(0, 1)`, or any run yielding no parseable counts, is UNREADABLE rather than
+  a survival.
+- `compile()` on the mutated source before pytest is invoked, so a `SyntaxError` is
+  DID-NOT-COMPILE up front instead of arriving as an `ERROR`.
+- `PYTHONIOENCODING=utf-8` in the child's environment, output captured as **bytes** and decoded
+  here with `errors="replace"` — because `subprocess.run(..., text=True, encoding="utf-8")`
+  chooses how to decode arriving bytes, not which bytes arrive.
+- The exit code is read off the `CompletedProcess`, never from a shell after a pipe, so
+  `pytest -q; echo $?` cannot report `echo`'s status in its place.
+
+**On the encoding mode, the measured position rather than the assumed one.** W103 measured all
+five `src/sync/detect/*.py` as pure ASCII and that still holds after this task's edits — every
+new docstring writes `--` rather than an em dash. So the production source could not have
+triggered it. The census over all fourteen files this task touched or the harness reads:
+
+    src\sync\detect\*.py                       none
+    src\sync\cli.py                            none
+    tests\test_declines_that_cost_findings.py  none
+    tests\test_detector_declines.py            none
+    tests\test_status_rate_detector.py         none
+    tests\test_observed_drift.py               none
+    tests\test_parameter_deprecation_link.py   none
+    tests\test_parameter_detector.py           none
+    tests\test_cli.py                          none
+    tests\test_efficiency_detector.py          [128, 148, 226]
+
+The one hazard is where W103 found it: two em dashes at `tests/test_efficiency_detector.py:299`
+and `:300`, in a file the harness renders whenever a test in it fails. Checked rather than
+inherited — they sit inside
+`test_a_cost_reaching_one_call_site_is_not_described_as_shared`, and **E2 failed that test**,
+among the fifteen it killed. So unlike W103, where the answer was answered by construction and
+never exercised, pytest did render that frame here and the decode came back clean.
 
 ## Next tasks this produced
 
@@ -244,4 +363,49 @@ detector's query count, which makes it a latency decision.
 
 ## Gates
 
-<!--GATES-->
+Run on a tree with `origin/main` merged in — twice, because it moved twice while this task's
+harness and gates were running. The second merge brought `2026-07-30-mcp-tool-surface-declines`
+and the MCP tool tests, none of which touch `src/sync/detect/`, `src/sync/cli.py` or any file
+this task's mutations read, so the table above stands over it unchanged.
+
+| Gate | Result | Exit |
+|---|---|---|
+| `uv run pytest -q` | 2604 passed, 2 skipped in 118.19s | 0 |
+| `uv run python scripts/lint_encoding.py src scripts tests` | clean | 0 |
+| `PYTHONIOENCODING=utf-8 uv run lint-imports` | Analyzed 95 files, 201 dependencies. 1 contract kept, 0 broken | 0 |
+| `uv run python scripts/lint_dead_links.py src --baseline scripts/dead_links_baseline.txt` | clean | 0 |
+
+`pytest` was run unpiped, with its exit code read from the process rather than from a shell after
+a pipe; `lint-imports` unredirected with `PYTHONIOENCODING=utf-8`.
+
+**The arithmetic closes.** `origin/main` collected 2584 of 2585 with 1 deselected, which is 2582
+passing beside the 2 skipped; this branch passes 2604. The difference is 22, and 22 is exactly
+this task's new tests — 21 in `tests/test_declines_that_cost_findings.py` and one in
+`tests/test_parameter_deprecation_link.py`. No pre-existing test was deleted or renamed.
+
+`lint_dead_links.py` reads `src` only, so identifier references in *test* docstrings are checked
+by hand. This task added three:
+`test_the_drop_counter_resets_rather_than_accumulating_across_scans`,
+`test_scanning_twice_gives_the_same_answer` and
+`test_a_foreign_vendor_s_traffic_is_declined_without_being_counted`, plus `ReachabilityRanking`
+and `IntakeReport` — all five resolve.
+
+### The `binding_rung` column B65 and B66 made mandatory
+
+`GraphStore.insert_finding` now refuses a finding whose rung is `unattributed` and names the
+detector that raised it. **Nothing here had to change.** All four detectors already declared a
+rung on every finding they emit — `static` in `parameter_deprecation` and both
+`observed_drift` paths, `call.binding_rung` in `efficiency`, `_weaker_rung(rows)` in
+`status_rate` — and this task added no emission, only counts of emissions that did not happen.
+Checked rather than assumed: the merged tree's suite is green, including
+`tests/test_finding_rung.py`.
+
+## Fixtures and provenance
+
+**No fixture file was created.** Every input is an inline model construction at the assertion,
+which is how all four existing detector test files state a shape, and every one is a graph state
+rather than a document — a call site, an `observed_call`, an `observed_shape`. There is nothing
+to put in a file.
+
+No test here calls a vendor API or a model API. The one non-local dependency is the Postgres
+container, which is what `GraphStore` needs to answer a query at all.
