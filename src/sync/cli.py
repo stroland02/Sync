@@ -187,30 +187,63 @@ def language_adapters() -> tuple[Callable[..., Any], ...]:
     return (TypeScriptAdapter, PythonAdapter)
 
 
+def _decline_line(adapter: Any, repo: RepoRef) -> str:
+    """One indexer's account of why it did not claim the repository.
+
+    `decline_reason` is optional the way `unverifiable_reason` is: `LanguageAdapter` is a
+    protocol this module does not own, so a third party's adapter that has never heard of it goes
+    on working and is listed as having explained nothing -- which is a fact about that adapter,
+    and more useful in the message than a blank.
+
+    Nothing here is allowed to raise, which is the whole reason it is a function. It runs while
+    the run is already stopping and it is where every indexer's account is assembled, so one
+    adapter's failure would trade all of them for a traceback about the refusal rather than the
+    refusal -- and an adapter from outside this deployment is a boundary, not internal code. So a
+    missing `language_id`, a missing explanation and a failing one all resolve to something
+    printable that names the adapter.
+    """
+    language = str(getattr(adapter, "language_id", type(adapter).__name__))
+    explain = getattr(adapter, "decline_reason", None)
+    if explain is None:
+        return f"  {language}: declined without saying why"
+    try:
+        return f"  {language}: {explain(repo)}"
+    except Exception as exc:
+        return f"  {language}: declined and could not say why ({exc!r})"
+
+
 def select_language_adapter(repo: RepoRef, vendor_adapter: Any) -> Any:
-    """The `LanguageAdapter` for this repository, or a refusal naming what was tried.
+    """The `LanguageAdapter` for this repository, or a refusal each indexer explains its part of.
 
     `matches` is the whole of the decision and it belongs to each adapter: TypeScript reads
     `package.json`, Python reads `pyproject.toml` and `requirements.txt`, and neither fact is
-    one this module should hold.
+    one this module should hold. `decline_reason` follows the decision rather than leading it,
+    for the same reason -- the file names are in the account because the adapter that read them
+    wrote it.
 
     An unmatched repository raises rather than defaulting, which is the registry's rule and for
     its reason. A silent fallback would index a Python project with a TypeScript indexer, find
     nothing, and report a clean scan -- a run that appears to work and establishes nothing.
+
+    What it raises *with* is the part that was wrong. Four situations reach this line as one
+    `False` per indexer -- a vendor declaring no package, a manifest that could not be read, no
+    manifest at all, and a manifest that was read and does not name the package -- and the
+    refusal said the repository declares no SDK for all four. For the first that is false twice
+    over: the repository may declare the SDK, and the absent configuration is this deployment's.
+    `sync.signals.intake` already answers the neighbouring question one reason per dependency,
+    including a channel for a manifest that would not parse, and this is that discipline applied
+    where a run actually stops.
     """
+    declined: list[str] = []
     for build in language_adapters():
         adapter = build(vendor_adapter=vendor_adapter)
         if adapter.matches(repo):
             return adapter
+        declined.append(_decline_line(adapter, repo))
 
-    # `getattr`, because this runs on the path where nothing matched and a message that raised
-    # would replace a clear refusal with an AttributeError about the refusal.
-    tried = ", ".join(sorted(
-        str(getattr(build, "language_id", getattr(build, "__name__", build)))
-        for build in language_adapters()
-    ))
+    vendor_id = getattr(vendor_adapter, "vendor_id", "unnamed")
     raise LookupError(
-        f"{repo.url} declares no SDK any indexer recognises; tried: {tried}"
+        f"no indexer claims {repo.url} for vendor '{vendor_id}':\n" + "\n".join(declined)
     )
 
 

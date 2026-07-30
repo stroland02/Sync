@@ -210,8 +210,8 @@ class PythonAdapter:
 
     # --- manifests ----------------------------------------------------------------
 
-    def _requirement_lines(self, repo: RepoRef) -> list[str]:
-        """Every dependency this project declares, as the raw requirement strings.
+    def _read_manifests(self, repo: RepoRef) -> tuple[list[str], list[str]]:
+        """Every dependency this project declares, and every manifest that would not be read.
 
         A customer's manifest is untrusted input, so an unreadable one answers "declares
         nothing" rather than raising: the caller already has a path for a repository that does
@@ -224,15 +224,23 @@ class PythonAdapter:
         reads UTF-8. Neither is decoded leniently: `errors="replace"` would turn that file into
         requirement strings nothing in it declares, which is worse than the traceback it
         replaces.
+
+        Which files failed is returned rather than swallowed, because a repository whose manifest
+        does not decode is not a repository with no dependencies, and answered as the latter it
+        costs adapter selection with nothing said. `decline_reason` is what says it, and
+        `sync.signals.intake` keeps the same two channels for the same reason. One list rather
+        than one reason, because either file can fail independently of the other.
         """
         root = Path(repo.local_path)
         requirements: list[str] = []
+        unreadable: list[str] = []
 
         pyproject = root / "pyproject.toml"
         if pyproject.exists():
             try:
                 data = tomllib.loads(pyproject.read_text(encoding=_MANIFEST_ENCODING))
-            except (tomllib.TOMLDecodeError, UnicodeDecodeError):
+            except (tomllib.TOMLDecodeError, UnicodeDecodeError) as exc:
+                unreadable.append(f"pyproject.toml could not be read: {exc}")
                 data = {}
             project = data.get("project")
             if isinstance(project, dict):
@@ -243,17 +251,19 @@ class PythonAdapter:
         text_manifest = root / "requirements.txt"
         if text_manifest.exists():
             try:
-                declared_lines = text_manifest.read_text(
-                    encoding=_MANIFEST_ENCODING
-                ).splitlines()
-            except UnicodeDecodeError:
+                declared_lines = text_manifest.read_text(encoding=_MANIFEST_ENCODING).splitlines()
+            except UnicodeDecodeError as exc:
+                unreadable.append(f"requirements.txt could not be read: {exc}")
                 declared_lines = []
             for line in declared_lines:
                 stripped = line.split("#", 1)[0].strip()
                 if stripped and not stripped.startswith("-"):
                     requirements.append(stripped)
 
-        return requirements
+        return requirements, unreadable
+
+    def _requirement_lines(self, repo: RepoRef) -> list[str]:
+        return self._read_manifests(repo)[0]
 
     def _requirement_name(self, requirement: str) -> str:
         name = requirement
@@ -267,6 +277,34 @@ class PythonAdapter:
         return any(
             self._requirement_name(item) == self._distribution
             for item in self._requirement_lines(repo)
+        )
+
+    def decline_reason(self, repo: RepoRef) -> str:
+        """Why this indexer did not claim the repository, in the terms whoever reads it can act
+        on.
+
+        The same four situations `TypeScriptAdapter.decline_reason` separates, and the
+        distribution is named in the last of them: a Python requirement is compared under PEP
+        503, so what was looked for is the folded spelling and not necessarily the one anybody
+        wrote down.
+        """
+        if self._distribution is None:
+            return (
+                f"vendor '{self._vendor.vendor_id}' declares no {self.language_id} "
+                f"distribution, so no manifest could match it -- the absent configuration is "
+                f"sdk_bindings, not anything in this repository"
+            )
+
+        requirements, unreadable = self._read_manifests(repo)
+        if unreadable:
+            return f"{'; '.join(unreadable)}, so what this repository declares is unknown"
+        if not requirements:
+            return "no pyproject.toml or requirements.txt in this repository declares a dependency"
+        count = len(requirements)
+        return (
+            f"pyproject.toml and requirements.txt declare {count} "
+            f"{'requirement' if count == 1 else 'requirements'} between them and "
+            f"'{self._distribution}' is not one of them"
         )
 
     def _sdk_version(self, repo: RepoRef) -> str:

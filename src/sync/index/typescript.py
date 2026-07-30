@@ -178,8 +178,9 @@ class TypeScriptAdapter:
         # something else's work -- see `sync.index.dependency_edits`.
         self._installed_at: dict[Path, int] = {}
 
-    def _declared_dependencies(self, repo: RepoRef) -> dict[str, object]:
-        """The SDK versions `package.json` declares, or nothing it can be read from.
+    def _read_manifest(self, repo: RepoRef) -> tuple[dict[str, object], str | None]:
+        """The SDK versions `package.json` declares, and why it declares nothing when it cannot
+        be read.
 
         A customer's manifest is untrusted input, so an unparseable one answers
         "no declared dependency" rather than raising: the caller already has a
@@ -192,25 +193,62 @@ class TypeScriptAdapter:
         two are caught together -- and neither is decoded leniently, because
         `errors="replace"` would hand the parser mojibake and a dependency
         table invented from it is worse than the traceback it replaces.
+
+        Two returns because "declares nothing" and "could not be read" are the same value and
+        different facts. Reported as the former, a manifest with one undecodable byte reads as a
+        repository that does not use the vendor, which is what `decline_reason` needs the second
+        return to avoid saying. `sync.signals.intake` keeps the same distinction, in an
+        `unreadable` channel that is deliberately not an error channel.
+
+        Undecodable and unparseable are both caught, and the first of them was not: catching
+        `JSONDecodeError` alone let a UTF-16 `package.json` raise out of `matches`, which took the
+        run down at adapter selection rather than declining. `PythonAdapter` had the same hole in
+        its `requirements.txt` branch and no longer does; nothing checked this file at the time.
         """
         manifest = Path(repo.local_path) / "package.json"
         if not manifest.exists():
-            return {}
+            return {}, None
         try:
-            # `utf-8-sig`, because a byte-order mark is valid UTF-8 and so does not fail to
-            # decode: it arrives as the document's first character and `json.loads` refuses it,
-            # in a message that names this encoding as the fix. npm writes this file, so the
-            # usual source of a mark is a Windows editor that rewrote it. Bytes that are not
-            # UTF-8 at all still raise, which is what the guard below is for.
             data = json.loads(manifest.read_text(encoding="utf-8-sig"))
-        except (json.JSONDecodeError, UnicodeDecodeError):
-            return {}
+        except (json.JSONDecodeError, UnicodeDecodeError) as exc:
+            return {}, f"package.json could not be read: {exc}"
         if not isinstance(data, dict):
-            return {}
-        return {**data.get("dependencies", {}), **data.get("devDependencies", {})}
+            return {}, "package.json could not be read: it does not hold an object"
+        return {**data.get("dependencies", {}), **data.get("devDependencies", {})}, None
+
+    def _declared_dependencies(self, repo: RepoRef) -> dict[str, object]:
+        return self._read_manifest(repo)[0]
 
     def matches(self, repo: RepoRef) -> bool:
         return self._package is not None and self._package in self._declared_dependencies(repo)
+
+    def decline_reason(self, repo: RepoRef) -> str:
+        """Why this indexer did not claim the repository, in the terms whoever reads it can act
+        on.
+
+        Four situations reach `matches` as one `False`, and they are four different jobs: fix
+        this deployment's configuration, fix the manifest's encoding, point Sync at a repository
+        that has a manifest, or accept that this one does not call the vendor. Only the last is
+        about the customer, and the refusal used to make all four sound like it.
+        """
+        if self._package is None:
+            return (
+                f"vendor '{self._vendor.vendor_id}' declares no {self.language_id} package, so "
+                f"no manifest could match it -- the absent configuration is sdk_bindings, not "
+                f"anything in this repository"
+            )
+
+        declared, unreadable = self._read_manifest(repo)
+        if unreadable is not None:
+            return f"{unreadable}, so what this repository declares is unknown"
+        if not declared:
+            return "no package.json in this repository declares a dependency"
+        count = len(declared)
+        return (
+            f"package.json declares {count} "
+            f"{'dependency' if count == 1 else 'dependencies'} and '{self._package}' "
+            f"is not one of them"
+        )
 
     def _sdk_version(self, repo: RepoRef) -> str:
         deps = self._declared_dependencies(repo)
