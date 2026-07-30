@@ -562,6 +562,31 @@ def test_the_count_travels_in_the_line_an_operator_reads(tmp_path):
     assert "1 constructs this rule could not read" in report.render()
 
 
+def test_a_speakeasy_getter_constructing_a_class_it_never_imported_is_not_a_mount(tmp_path):
+    """The Speakeasy half of the discriminator, and a mutation is what said it was missing.
+
+    `elif imported is not None:` guards the same distinction the TypeScript flavour draws for
+    `new WeakMap()`: Speakeasy imports every mounted class by name, so an unresolved mount whose
+    name is in the import map names a file this checkout does not carry, and a `new` naming
+    something the file never imported states no module at all. `get parsed()` returning
+    `new URL(...)` is that second case, and without it the guard was unfalsifiable -- replacing it
+    with a bare `else` survived the whole suite.
+
+    Written after the mutation survived rather than before, which is the ordering the brief asks
+    for: suspect the mutation, then the test, then the code. The mutation is real -- it records a
+    decline on this input and the original does not -- so the fault was the missing fixture.
+    """
+    root = _speakeasy_sdk(
+        tmp_path,
+        "  get parsed(): URL {\n    return new URL(this._baseURL);\n  }\n",
+    )
+
+    operations, unreadable = symbols_speakeasy.extract_symbols(root)
+
+    assert [operation.symbol for operation in operations] == ["aliases.getAlias"]
+    assert unreadable == ()
+
+
 def test_a_clean_extraction_says_so_rather_than_saying_nothing(tmp_path):
     """Present and empty, and the line carries no clause at all.
 
@@ -670,6 +695,56 @@ def _python_sdk(tmp_path: Path, source: str) -> Path:
     root = tmp_path / "sdk"
     root.mkdir()
     (root / "_client.py").write_text(dedent(source), encoding="utf-8")
+    return root
+
+
+def _speakeasy_sdk(tmp_path: Path, client_member: str = "") -> Path:
+    """Four files of the shape the Speakeasy rule reads, with `aliases.getAlias` readable.
+
+    Written by hand rather than cut from the committed `vercel/sdk` tree, because that tree is
+    deliberately partial: every mount and most delegations in it already decline, so it cannot
+    carry an assertion that a construct is *not* recorded. `aliases.getAlias` resolves so the
+    extraction roots and reaches an operation either way.
+    """
+    root = tmp_path / "speakeasy"
+    files = {
+        "sdk/sdk.ts": (
+            'import { Aliases } from "./aliases.js";\n'
+            'import { ClientSDK } from "../lib/sdks.js";\n'
+            "\n"
+            "export class Vercel extends ClientSDK {\n"
+            "  get aliases(): Aliases {\n"
+            "    return (this._aliases ??= new Aliases(this._options));\n"
+            "  }\n"
+            + client_member
+            + "}\n"
+        ),
+        "sdk/aliases.ts": (
+            'import { aliasesGetAlias } from "../funcs/aliasesGetAlias.js";\n'
+            'import { ClientSDK } from "../lib/sdks.js";\n'
+            'import { unwrapAsync } from "../types/fp.js";\n'
+            "\n"
+            "export class Aliases extends ClientSDK {\n"
+            "  async getAlias(request, options) {\n"
+            "    return unwrapAsync(aliasesGetAlias(this, request, options));\n"
+            "  }\n"
+            "}\n"
+        ),
+        "funcs/aliasesGetAlias.ts": (
+            "export async function aliasesGetAlias(client, request, options) {\n"
+            '  const path = pathToFunc("/v4/aliases/{id}")(pathParams);\n'
+            "  const requestRes = client._createRequest({\n"
+            '    method: "GET",\n'
+            "    path: path,\n"
+            "  }, options);\n"
+            "  return requestRes;\n"
+            "}\n"
+        ),
+    }
+    for relative, body in files.items():
+        target = root / relative
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(body, encoding="utf-8")
     return root
 
 
