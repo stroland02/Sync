@@ -65,10 +65,13 @@ Eleven of the twelve cost at most an agent run. One -- row 11 -- gates a deletio
 
 **No, and for two independent reasons.**
 
-**None of them can produce a non-empty diff.** All three codemod remediators derive the diff from
-`updated != original` and write the file in the same branch that renders it, so the failure the
-kit's first rule names -- a diff describing an edit that is not on disk -- is not reachable from
-any of the twelve. Each of them either declines or returns the input unchanged.
+**None of them can produce a non-empty diff.** The cascade's four codemods share three `propose`
+implementations -- `literal_swap`, the `_ParameterRemediator` base both parameter tiers inherit,
+and `property_omit` -- and every one of them derives the diff from `updated != original` and
+calls `target.write_bytes` in the same branch that renders it. So the failure the kit's first
+rule names, a diff describing an edit that is not on disk, is not reachable from any of the
+twelve: each of them either declines or returns the input unchanged, and an unchanged input
+produces no diff to describe.
 
 **The empty diff they can produce is not read as success anywhere.** `make_patch` turns it into
 `patch=None`; `route_after_patch` then routes to `patch` or to `abandon` and never to
