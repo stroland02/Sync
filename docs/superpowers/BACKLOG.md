@@ -12,32 +12,28 @@ item that cannot say what evidence closes it is not ready to dispatch.
 
 ## Ready
 
-### B60 — A run never says how much of the repository it could not read
+### B61 — The coverage figure counts one pass, and the language indexers skip most
 
-Today's tasks correctly stopped the indexer decoding customer source leniently. That changed what
-an unreadable file costs: it used to contribute a corrupt row, it now contributes nothing, and the
-only trace is one log line per file. Measured on a repository of four Python sources, three of them
-cp1252:
+B60 landed a coverage block: a run now prints a counted, named list of what it could not read, and
+prints nothing when it read everything. It counts only the narrow literal pass. Measured on main:
 
-    4 source files, 3 undecodable  ->  1 call site indexed
-      warnings emitted via logging : 3
-      any total or summary of skips: no
+    _literal_call_sites   -> tuple[list[CallSite], list[str]]   reports what it skipped
+    LanguageAdapter.index -> Iterable[CallSite]                 no channel at all
 
-So a customer whose repository is three-quarters unreadable gets a run that reads a quarter of it,
-reports no error, and produces a finding count shaped like a real answer. **This is the family's
-failure mode one level up:** each earlier defect was a wrong answer nobody could see, and this is a
-*partial* answer nobody can see — harder to notice, because the output has the right shape. It also
-sits on the product's claim, which is that every dependent call site is found.
+The two language indexers are the main indexing path, they do skip unreadable files, and they
+record them in `self._undecodable` — private instance state nothing exposes. So a reader can see
+`0 path(s) could not be read` while the adapters skipped most of the repository, which is the same
+partial-answer-with-the-right-shape the block was added to prevent, now wearing the block's
+authority.
 
-The skips do not agree on a channel either: the two indexers use `log.warning`, `cli.py:733` uses
-`print(file=sys.stderr)` for the same event class in the same run.
+**Design decided:** do not widen `LanguageAdapter.index`, a published protocol asserted on by
+`core/conformance.py`. Use the precedent set twice — `unverifiable_reason` and B55's
+`decline_reason` are read with `getattr`, so an adapter that has never heard of the member keeps
+working and reports nothing.
 
-**Explicitly not a threshold.** Report the figure; do not gate on it. A gate at an invented number
-either fires constantly and gets disabled or never fires and gives false assurance.
-
-**Closes when:** a run states how many source files it could not read out of how many it looked at,
-the two channels agree, a repository with nothing unreadable says nothing extra, and four gates
-green.
+**Closes when:** an unreadable Python or TypeScript source is counted in the block, a clean
+repository still prints no block, an adapter lacking the member neither breaks the run nor the
+report, `LanguageAdapter` and the conformance kit unchanged, and four gates green.
 
 ### B7 — The M0 acceptance run has not executed since the pipeline changed underneath it
 
@@ -65,7 +61,7 @@ recorded with which change broke it.
 
 ## In flight
 
-- **B60** — `task_f3c42654f325`, worktree `sync-solo-a`.
+- **B61** — `task_12ccee12fd98`, worktree `sync-solo-b`.
 - **B55** — re-dispatched as `task_3746257e4c0a` into `sync-solo-b`. The first attempt
   (`task_e03a2a5bb93f`) produced nothing in 94 minutes and was stood down.
 
@@ -725,3 +721,21 @@ is what a reviewer needs and duplicating it here would let the two copies drift.
   the control caught the coordinator twice — first a driver with no manifest, so `index()` returned
   `[]` regardless of encoding and the assertion passed for the wrong reason, then a wrong call shape.
   Both are the exact failure every brief here warns about.
+
+- Let a run say how much of the repository it could not read. Landed `a7c1057`. A run's entire
+  report was `N finding(s)`, identical whether it read the whole repository or a third of it, so
+  `0 finding(s)` over a tree of legacy-encoded sources was indistinguishable from one that
+  genuinely calls nothing. The block prints **above** the finding count, because a reader who sees
+  the number first has already drawn a conclusion from it, and prints nothing at all when
+  everything was read — a heading that fires every run is one the next reader learns to skip.
+
+  The worker took a tuple-return over an optional out-parameter despite nine mechanical call-site
+  edits, on the grounds that an omittable channel leaves the coverage report something a caller can
+  silently drop, which is the exact failure being closed. It also noted the benchmark harness has
+  printed a counted block of unread paths since a PNG first ended a corpus run, so the run path was
+  the half that had never caught up.
+
+  Two things from its report did not hold on verification. It said the indexers still decode with
+  `errors="replace"` — every occurrence left in those files is a docstring explaining the removal.
+  And it reported two suite skips; only one reproduced here. The conclusion it drew was right for a
+  different reason, and that reason is B61.
