@@ -383,6 +383,20 @@ def _drive_intake_requirements(root: Path) -> None:
     assert declared == () and any("requirements.txt" in item for item in unreadable)
 
 
+def _drive_literal_call_sites(root: Path) -> None:
+    """A customer `.ts` file that is not UTF-8, which this stage skips and names.
+
+    It read the same bytes with `errors="replace"` until B57. `operation_id` is the literal's
+    value and the key a retirement joins on, so a mangled one is a call site against a model
+    nothing retires -- and `.ts` is MPEG transport stream too, so a video in the tree parsed into
+    a phantom call site.
+    """
+    from sync.cli import _literal_call_sites
+
+    (root / "models.ts").write_bytes(UTF16)
+    assert _literal_call_sites(_repo(root)) == []
+
+
 def _drive_ts_manifest(root: Path) -> None:
     from sync.index.typescript import TypeScriptAdapter
     from sync.signals.stripe.adapter import StripeAdapter
@@ -415,6 +429,7 @@ DRIVERS: dict[str, Callable[[Path], None]] = {
     "sync/index/python_lang.py:235": _drive_requirement_lines_pyproject,
     "sync/index/python_lang.py:249": _drive_requirement_lines_requirements,
     "sync/index/python_lang.py:752": _drive_configured_typechecker,
+    "sync/cli.py:692": _drive_literal_call_sites,
     "sync/index/typescript.py:206": _drive_ts_manifest,
     "sync/remediate/literal_swap.py:84": _drive_literal_swap,
     "sync/remediate/parameters.py:77": _drive_parameters,

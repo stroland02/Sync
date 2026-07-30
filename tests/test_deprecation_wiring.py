@@ -209,6 +209,83 @@ def test_the_literal_indexer_receives_every_sources_prefixes(tmp_path: Path):
     assert "gpt-5-2025-08-07" in indexed
 
 
+# --- a .ts file this stage cannot read -----------------------------------------------
+
+# `.ts` is MPEG transport stream as well as TypeScript, and nothing keeps one out of a customer's
+# tree. A packet begins with the sync byte 0x47; the rest of these bytes are not UTF-8, and the
+# payload spells a prefix the literal indexer matches on.
+TRANSPORT_STREAM = (
+    bytes([0x47, 0x40, 0x11, 0x10]) + b'"claude-3-' + bytes([0xE9, 0xFF, 0xFE]) + b'"'
+    + bytes([0xFF] * 170)
+)
+
+# The same file a human would actually have: valid TypeScript in a legacy encoding, here an
+# accented word in a comment on the line above the literal.
+CP1252_SOURCE = (
+    "// mod\xe8le par d\xe9faut\n"
+    'const model = "claude-opus-4-1-20250805";\n'
+).encode("cp1252")
+
+
+def _repo_at(root: Path) -> RepoRef:
+    return RepoRef(
+        repo_id="acme/billing", url="https://example.invalid/r",
+        local_path=str(root), head_sha="0" * 40,
+    )
+
+
+def test_a_ts_file_that_is_not_utf8_indexes_no_mangled_model_id(tmp_path: Path):
+    """A replacement character in a matched literal is a model id the customer's code does not
+    name.
+
+    `operation_id` is the value of the literal and it is the join key the deprecation detector
+    matches a retirement against, so a mangled one is a call site recorded against a model that
+    does not exist -- and it is not inert: the value carries U+FFFD, and writing it to a cp1252
+    stream raises `UnicodeEncodeError` somewhere with no idea where the character came from.
+    """
+    (tmp_path / "models.ts").write_bytes('const m = "claude-3-caf\xe9";\n'.encode("cp1252"))
+
+    sites = _literal_call_sites(_repo_at(tmp_path))
+
+    assert [site.operation_id for site in sites if "�" in site.operation_id] == []
+    assert sites == []
+
+
+def test_a_transport_stream_named_ts_produces_no_phantom_call_site(tmp_path: Path):
+    """`read_checkout` refuses lenient decoding by name for exactly this: a mangled binary is
+    still a file the indexer will parse, and whatever it makes of one can only be phantom call
+    sites. This stage read the same bytes leniently and recorded one."""
+    (tmp_path / "clip.ts").write_bytes(TRANSPORT_STREAM)
+
+    assert _literal_call_sites(_repo_at(tmp_path)) == []
+
+
+def test_a_file_it_cannot_read_is_named_rather_than_silently_skipped(tmp_path, capsys):
+    """Skipping is only honest if it is visible. A legacy-encoded `.ts` file holds real model
+    literals this stage no longer indexes, and the cost of refusing to guess is that somebody has
+    to be told which file to look at -- the mitigation `read_checkout` already argues for, where
+    the alternative was a count nobody could act on.
+    """
+    (tmp_path / "legacy.ts").write_bytes(CP1252_SOURCE)
+
+    _literal_call_sites(_repo_at(tmp_path))
+
+    assert "legacy.ts" in capsys.readouterr().err
+
+
+def test_one_unreadable_file_does_not_cost_the_readable_ones(tmp_path: Path):
+    """The property `index_operation_literals` already keeps for a file that does not parse:
+    customer repositories contain files this stage cannot use, and one of them must not empty the
+    index."""
+    (tmp_path / "legacy.ts").write_bytes(CP1252_SOURCE)
+    (tmp_path / "models.ts").write_text(MODEL_LITERALS, encoding="utf-8")
+
+    indexed = {site.operation_id for site in _literal_call_sites(_repo_at(tmp_path))}
+
+    assert "claude-opus-4-1-20250805" in indexed
+    assert "gpt-5-2025-08-07" in indexed
+
+
 # --- the run report: a detector for every vendor whose retirements were upserted ---
 
 

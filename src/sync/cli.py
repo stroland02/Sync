@@ -662,6 +662,23 @@ def _literal_call_sites(repo: RepoRef) -> list[CallSite]:
     which table a vendor publishes: it indexes model ids in the customer's own code, and a
     finding of either kind needs a call site to attach to. Narrowing it to one signal's sources
     would leave the other signal's findings pointing at nothing.
+
+    **A file that does not decode is skipped and named, not decoded leniently.** This read used
+    `errors="replace"`, which `sync.benchmark.checkout.read_checkout`,
+    `sync.signals.generated.symbols_speakeasy._text` and both manifest readers each refuse by
+    name -- and here it was worse than in any of them, because `operation_id` *is* the literal's
+    value and it is the key a retirement joins on. Two measured outcomes: an accented byte inside
+    a matched literal recorded `claude-3-caf\\ufffd`, a model no vendor retires and no code names;
+    and `.ts` is MPEG transport stream as well as TypeScript, so a video file in the tree parsed
+    into a phantom `anthropic` call site. Neither value is inert either -- U+FFFD in an
+    `operation_id` raises `UnicodeEncodeError` in anything that later writes it to a cp1252
+    stream, far from the file it came from.
+
+    What that costs is real and is the trade `read_checkout` already argued: a valid `.ts` file in
+    a legacy encoding holds model literals this no longer indexes, where leniency did recover
+    them. Telling such a file from a binary cheaply is not possible, so the paths are printed
+    rather than counted -- a reader who sees `src/legacy.ts` knows to look, and silently
+    recovering some of its literals out of mojibake told them nothing at all.
     """
     root = Path(repo.local_path)
     sites: list[CallSite] = []
@@ -669,8 +686,17 @@ def _literal_call_sites(repo: RepoRef) -> list[CallSite]:
     for file_path in root.rglob("*.ts"):
         if "node_modules" in file_path.parts or file_path.name.endswith(".d.ts"):
             continue
-        source = file_path.read_text(encoding="utf-8", errors="replace")
         relative = file_path.relative_to(root).as_posix()
+        try:
+            source = file_path.read_text(encoding="utf-8")
+        except UnicodeDecodeError as exc:
+            # One unreadable file must not empty the index, which is the property
+            # `index_operation_literals` already keeps for a file that does not parse.
+            print(
+                f"model-deprecation: {relative} is not UTF-8 and was not indexed ({exc})",
+                file=sys.stderr,
+            )
+            continue
         for vendor in DEPRECATION_SOURCES:
             sites.extend(
                 index_operation_literals(
