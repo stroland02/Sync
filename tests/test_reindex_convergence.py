@@ -199,6 +199,10 @@ def test_a_finding_outlives_the_call_site_it_names_moving(store) -> None:
     finding_id = store.insert_finding(Finding(
         id="", detector="vendor_change", claim="response-field", call_site_id=stale,
         vendor_change_id=None, severity="breaking", rationale="PostCharges dropped status",
+        # The rung `VendorChangeDetector` attributes. What this test is about is that the row
+        # survives its call site being retracted, and a finding preserved for the record is worth
+        # less if nobody can say which binder to blame for it.
+        binding_rung="static",
     ))
 
     store.replace_call_sites("repo-a", [_site(line=13)])

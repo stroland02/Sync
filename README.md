@@ -64,7 +64,7 @@ cd sync
 uv sync                       # install dependencies
 docker compose up -d          # Postgres 16, on port 5433
 
-uv run pytest                 # ~2000 tests, about two minutes
+uv run pytest                 # ~2550 tests, two to four minutes
 ```
 
 Detect and remediate vendor changes against a checkout:
@@ -161,14 +161,14 @@ We never hold customer secrets.
 ## Quality gates
 
 Sync's product claim is quantitative, so it is measured rather than asserted. A frozen corpus of
-12 labelled pairs across 4 repositories — pinned by commit SHA and validated by tree digest —
+17 labelled pairs across 5 repositories — pinned by commit SHA and validated by tree digest —
 scores the binder on every run, and CI fails on a regression:
 
 ```
-  binding precision     1.0000    floor 1.0000    n=16
-  binding recall        1.0000    floor 1.0000    n=16
-  falsifiable negatives      4    floor      4
-  pairs scored              12    floor     12
+  binding precision     1.0000    floor 1.0000    n=26
+  binding recall        1.0000    floor 1.0000    n=26
+  falsifiable negatives      7    floor      7
+  pairs scored              17    floor     17
 ```
 
 The last two floors guard the gate rather than the binder. If falsifiable negatives returns to
