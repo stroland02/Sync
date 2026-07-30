@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
-from collections.abc import Iterator
+from collections.abc import Iterator, Sequence
 from contextlib import contextmanager
 from importlib import resources
 
@@ -198,16 +198,28 @@ class GraphStore:
             if statement.upper().startswith("CREATE TABLE")
         ]
 
-    def truncate_all(self) -> None:
-        """Empty every table the schema declares.
+    def truncate_all(self, keep: Sequence[str] = ()) -> None:
+        """Empty every table the schema declares, except the ones named.
 
         The list used to be written out here, and it was right -- but it was right the way
         `schema.sql` was complete: by somebody remembering. A table added later would have been
         missed by it exactly as a column added later was missed by `apply_schema`, and the
         consequence is quieter than a failed insert. Rows from one run survive into the next and
         the failure surfaces somewhere with no obvious connection to this method.
+
+        `keep` exists because a scan cannot use this method as written. It empties the whole
+        database, so a scan of one repository erases every other repository's rows -- `cli.run`
+        says a hosted control plane must never do it, and until `replace_call_sites` existed there
+        was nothing else that made a re-index converge. A scan now keeps `call_site` and converges
+        it per repository instead.
+
+        Keeping a parent while truncating its children is what the foreign keys already allow:
+        `finding` references `call_site`, and truncating the referencing table needs nothing from
+        the referenced one. Keeping a child while truncating its parent would need `CASCADE` to
+        reach back, which it does, so a caller cannot use this to leave a dangling row.
         """
-        self._connect().execute(f"TRUNCATE {', '.join(self._schema_tables())} CASCADE")
+        tables = [table for table in self._schema_tables() if table not in set(keep)]
+        self._connect().execute(f"TRUNCATE {', '.join(tables)} CASCADE")
 
     def upsert_call_site(self, site: CallSite) -> str:
         # line and col are part of identity, not just data: two distinct call sites
@@ -243,6 +255,41 @@ class GraphStore:
             ),
         )
         return site_id
+
+    def replace_call_sites(self, repo_id: str, sites: Sequence[CallSite]) -> list[str]:
+        """One repository's call sites, converged on the revision just indexed. Ids, in order.
+
+        `upsert_call_site` alone cannot do this and says so: position is part of identity, so a
+        call that merely shifted down the file becomes a new row and the old one survives. One
+        blank line inserted above a call turned one row into two, and the stale row kept the
+        finding raised against it -- a finding naming a position the code no longer has, which
+        reads as live and sends `make_locate` to a line that moved.
+
+        The only thing that had ever cleared those was `truncate_all`, which is per *database*.
+        This is per repository, which is the grain a re-index actually has: one customer's scan
+        must not be able to erase another's rows, and a graph holding two repositories is the
+        state a hosted control plane is entirely made of.
+
+        Delete after upsert, in one transaction, so no window exists where a live call site is
+        absent -- a reader between the two would see a repository that calls nothing.
+
+        The empty sequence is a real answer rather than a guard: a customer who removed their last
+        call to a vendor has zero call sites, and declining to write that would leave the graph
+        claiming an integration that is gone.
+
+        Findings go with the rows, through `finding.call_site_id ON DELETE CASCADE`. That is
+        deliberate rather than incidental -- a finding is a claim about a call site, and it cannot
+        outlive the thing it describes. `migration_outcome` does not cascade and must not: it
+        records attempts, which stay queryable after the code they touched has moved on, and
+        `CLAUDE.md` puts abandoned runs among the data this system learns routing from.
+        """
+        with self.transaction():
+            ids = [self.upsert_call_site(site) for site in sites]
+            self._connect().execute(
+                "DELETE FROM call_site WHERE repo_id = %s AND id <> ALL(%s::text[])",
+                (repo_id, ids),
+            )
+        return ids
 
     def upsert_vendor_change(self, change: VendorChange) -> str:
         change_id = _stable_id(
@@ -291,10 +338,30 @@ class GraphStore:
         )
         return finding_id
 
-    def call_sites_for_operation(self, vendor_id: str, operation_id: str) -> list[CallSite]:
+    def call_sites_for_operation(
+        self, vendor_id: str, operation_id: str, *, repo_id: str | None = None
+    ) -> list[CallSite]:
+        """Every call site on one vendor operation, in one repository or in all of them.
+
+        `repo_id` is optional and its absence means every repository, which is a real query for an
+        aggregate across customers. It is not a sensible default for a detector: a scan runs against
+        one repository, and unscoped this returned another's rows, so `VendorChangeDetector` emitted
+        a finding for each -- a patch proposed to one customer for a line in somebody else's
+        codebase. `truncate_all` was what hid that, by making a second repository impossible to
+        hold.
+
+        `tests/test_reindex_convergence.py` reads the detector sources and fails on a call here that
+        omits it, because the parameter staying optional is what lets a fifth detector reacquire the
+        defect silently.
+        """
+        clause = "" if repo_id is None else " AND repo_id = %s"
+        parameters = (vendor_id, operation_id) if repo_id is None else (
+            vendor_id, operation_id, repo_id
+        )
         rows = self._connect().execute(
-            "SELECT * FROM call_site WHERE vendor_id = %s AND operation_id = %s ORDER BY path, line",
-            (vendor_id, operation_id),
+            f"SELECT * FROM call_site WHERE vendor_id = %s AND operation_id = %s{clause} "
+            f"ORDER BY path, line",
+            parameters,
         ).fetchall()
         return [CallSite(**row) for row in rows]
 

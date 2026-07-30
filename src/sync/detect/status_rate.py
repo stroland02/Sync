@@ -214,7 +214,9 @@ class StatusRateDetector:
             if overall.rate < self._threshold:
                 continue
 
-            sites = self._store.call_sites_for_operation(self._vendor_id, operation_id)
+            sites = self._store.call_sites_for_operation(
+                self._vendor_id, operation_id, repo_id=self._repo_id
+            )
             if not sites:
                 continue
 

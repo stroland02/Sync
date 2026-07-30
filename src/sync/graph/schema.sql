@@ -1,3 +1,16 @@
+-- Grain: one row per call site, per repository, at the revision last indexed. Not per revision:
+-- this table carries no history, and `GraphStore.replace_call_sites` converges one repository on
+-- the revision it just read, deleting the rows that revision no longer has.
+--
+-- Identity is (repo_id, path, symbol, line, col) and position is in it deliberately -- the same
+-- SDK method called twice in one file is two call sites and would otherwise collapse into one
+-- row. The consequence is that a call which merely shifted down the file is a *new* row, so a
+-- re-index that only inserts leaves the old position behind forever, with whatever findings were
+-- raised against it. That is what the delete exists for, and why an upsert alone is not
+-- convergence for this table.
+--
+-- Every query that answers about one customer must say so. `call_sites_for_operation` filters on
+-- `repo_id` only when asked, and a detector that forgets finds every repository's rows.
 CREATE TABLE IF NOT EXISTS call_site (
     id                   TEXT PRIMARY KEY,
     repo_id              TEXT NOT NULL,

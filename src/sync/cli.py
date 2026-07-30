@@ -821,16 +821,26 @@ def _detector_suite(
     `efficiency` runs last because it is the only one that answers a question about cost rather
     than about breakage, and a scan's first output should be what is about to break.
     """
+    # Every detector that reads call sites out of the graph is given the repository being scanned.
+    # Two of them already took `repo_id` for their telemetry and asked for call sites without it,
+    # which crossed one customer's spans against another's code; the graph could not hold two
+    # repositories at all until `replace_call_sites` replaced the whole-database truncate, and now
+    # that it can, an unscoped detector is a pull request opened against the wrong repository.
     return [
-        ("vendor_change", VendorChangeDetector(store)),
+        ("vendor_change", VendorChangeDetector(store, repo_id=repo_id)),
         ("parameter-deprecation", ParameterDeprecationDetector(deprecations, call_sites)),
         # Several documents rather than one: a vendor that publishes per product declares its
         # response fields across all of them, and taking only the first would report every field
         # in every other product as undeclared -- the detector's loudest finding, raised from
         # this file having read less than the vendor published.
-        ("observed-drift", ObservedDriftDetector(store, _declared_fields(spec_documents), vendor_id)),
+        ("observed-drift", ObservedDriftDetector(
+            store, _declared_fields(spec_documents), vendor_id, repo_id=repo_id
+        )),
         *[
-            (f"model-deprecation:{vendor}", VendorChangeDetector(store, vendor_id=vendor))
+            (
+                f"model-deprecation:{vendor}",
+                VendorChangeDetector(store, vendor_id=vendor, repo_id=repo_id),
+            )
             for vendor in deprecation_vendors
         ],
         ("status-rate", StatusRateDetector(store, repo_id=repo_id, vendor_id=vendor_id)),
@@ -911,14 +921,22 @@ def run(args: argparse.Namespace, today: date | None = None) -> int:
         # one nor the new one, and the detector cannot tell a missing row from
         # an absent call site.
         #
-        # M0 has one entry point and no incremental indexing story: a stale row
-        # from a previous invocation is indistinguishable from a real finding to
-        # the detector, so every run starts from an empty graph. M2's incremental
-        # indexing replaces this; a hosted control plane must never do this, since
-        # it would erase other customers' state rather than just this one's.
+        # A stale row from a previous invocation is indistinguishable from a real
+        # finding to the detector, so everything a scan re-derives is cleared
+        # first. `call_site` is the exception and is now converged per repository
+        # instead: position is part of a call site's identity, so one blank line
+        # inserted above a call used to leave the old row behind forever with its
+        # finding attached, and the only thing that had ever cleared those was a
+        # truncate of the whole database -- which erases every other repository's
+        # rows, exactly what a hosted control plane must never do.
         # Finding ids are stable hashes of (detector, call_site_id, vendor_change_id),
         # so a re-inserted finding gets the same id its checkpoint thread already
         # used -- checkpoint coordinates survive the truncate.
+        #
+        # What is still truncated wholesale, and is still cross-repository:
+        # `finding` and `vendor_change` are re-derived every scan, and the observed
+        # tables are cleared by a scan that did not produce them. Narrowing those is
+        # a decision per table with its own grain argument and is not made here.
         # Fetched before the transaction opens. The ingest holds an ACCESS EXCLUSIVE lock on the
         # graph tables, and two vendor pages behind a slow network would hold it for the length
         # of the download rather than the length of the write.
@@ -931,16 +949,21 @@ def run(args: argparse.Namespace, today: date | None = None) -> int:
         )
 
         with store.transaction():
-            store.truncate_all()
+            store.truncate_all(keep=("call_site",))
 
             # Kept as well as stored: `ParameterDeprecationDetector` takes call sites directly,
             # and the store answers `call_sites_for_operation` rather than "all of them". The id
-            # comes back from the upsert, and a finding addresses its call site by id.
+            # comes back from the write, and a finding addresses its call site by id.
+            #
+            # One call rather than a loop, because the delete is half of it: `replace_call_sites`
+            # converges this repository on the revision just indexed and removes the rows it no
+            # longer has. A loop of upserts cannot, and left a ghost per call site that moved.
             literal_sites, literal_unread = _literal_call_sites(repo)
-            call_sites = []
-            for site in list(adapter.index(repo)) + literal_sites:
-                site.id = store.upsert_call_site(site)
-                call_sites.append(site)
+            call_sites = list(adapter.index(repo)) + literal_sites
+            for site, site_id in zip(
+                call_sites, store.replace_call_sites(repo.repo_id, call_sites)
+            ):
+                site.id = site_id
 
             # After `index`, because that is when the adapter learns: `_readable_sources` records
             # as the walk reaches each file, so asking before it reports nothing.

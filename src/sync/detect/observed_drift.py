@@ -101,10 +101,14 @@ class ObservedDriftDetector:
         store: GraphStore,
         spec: Mapping[str, Sequence[DeclaredField]],
         vendor_id: str = "stripe",
+        repo_id: str | None = None,
     ) -> None:
         self._store = store
         self._spec = spec
         self._vendor_id = vendor_id
+        # Which repository this scan is about. None means every one of them.
+        # `GraphStore.call_sites_for_operation` carries what that cost and why it stays available.
+        self._repo_id = repo_id
 
     def scan(self) -> Iterable[Finding]:
         for operation_id, declared_fields in self._spec.items():
@@ -114,7 +118,9 @@ class ObservedDriftDetector:
 
             # A `Finding` addresses its call site by id, so an operation nothing calls has no
             # location to report and no patch to propose.
-            sites = self._store.call_sites_for_operation(self._vendor_id, operation_id)
+            sites = self._store.call_sites_for_operation(
+                self._vendor_id, operation_id, repo_id=self._repo_id
+            )
             if not sites:
                 continue
 
