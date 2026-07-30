@@ -608,6 +608,13 @@ def report_extraction(
         declared_operation_count=len(spec_operations),
         comparable_key_count=len(comparable),
         unknown_to_spec=unknown,
+        unreached=tuple(
+            sorted(
+                operation
+                for operation in spec_operations
+                if _comparable(*operation) not in reached
+            )
+        ),
         covered_count=len(reached),
         unreadable=unreadable,
     )
