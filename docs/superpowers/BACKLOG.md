@@ -12,6 +12,37 @@ item that cannot say what evidence closes it is not ready to dispatch.
 
 ## Ready
 
+### B68 — The import boundary is enforced and the packaging boundary is not
+
+CLAUDE.md's first non-negotiable says a third party writing a vendor adapter *"depends on
+`sync.core` alone; a single sibling import drags Postgres into their dependency tree."* The import
+half holds — `tests/test_import_boundary.py` and `lint-imports` both pass on every run. The
+packaging half does not exist. Measured:
+
+    installing `sync`                 12 runtime dependencies, including psycopg[binary],
+                                      langgraph, langgraph-checkpoint-postgres,
+                                      claude-agent-sdk and three tree-sitter packages
+    third-party imports in sync.core  pydantic
+
+`pyproject.toml` declares one distribution, so there is no way to depend on `sync.core` alone. An
+adapter author following CONTRIBUTING.md — which promises an adapter "does not inherit Postgres,
+LangGraph, or anything else in this repository's dependency tree" — installs all of it to write a
+class with two methods. **The sentence the boundary exists to make true is false today, for exactly
+the person it was written for.**
+
+The rule is not wrong and the import test is not wasted: the boundary is what makes the split
+possible, and it has simply never been cashed in. M3's deliverable is *publish `sync.core` as the
+open plugin SDK*; the documentation exists and the packaging does not. It is also cheapest to do now,
+while `sync.core` has exactly one third-party import.
+
+**Explicitly not publishing.** Uploading anywhere is public, irreversible and the user's decision.
+This makes the package installable on its own and proves it.
+
+**Closes when:** an environment holding only the core distribution can `import sync.core`, reach the
+four plugin protocols and run `sync.core.conformance`, with evidence that psycopg, langgraph and the
+tree-sitter grammars are absent from it; `uv sync` and the suite are unchanged for this repository;
+and the import boundary test still passes untouched.
+
 ### B7 — The M0 acceptance run has not executed since the pipeline changed underneath it
 
 `tests/test_e2e_stripe.py::test_one_command_produces_one_green_pull_request` is the
@@ -37,6 +68,8 @@ when, which is why it is recorded here rather than dispatched.
 recorded with which change broke it.
 
 ## In flight
+
+- **B68** — `task_3704b87bc7cf`, worktree `sync-solo-a`.
 
 - **B61** — `task_12ccee12fd98`, worktree `sync-solo-b`.
 - **B55** — re-dispatched as `task_3746257e4c0a` into `sync-solo-b`. The first attempt
