@@ -295,6 +295,67 @@ true.
 corpus scores the hand-written Stripe and Twilio maps, which no part of this change touches, and
 `test_the_golden_tool_schemas_did_not_move` was green throughout.
 
+## Gates
+
+Branch `stroland02/m1-nodes`, three commits, head `31adc67`:
+
+| SHA | Subject |
+|---|---|
+| `f64f9f7` | `feat: count the declared operations no extracted symbol reaches` |
+| `d4ba718` | `test: pin the ordering a record has to have to converge` |
+| `31adc67` | `docs: record why the class is counted rather than closed` |
+
+`git diff --name-only origin/main...HEAD` is five files: three production modules, one new test
+file, and this report. Eleven tests added, none deleted, and no existing test file was modified --
+the field is new, so nothing existing asserted anything about it.
+
+| Gate | Exit | Result |
+|---|---|---|
+| `uv run pytest -q` | 0 | 2497 passed, 4 skipped in 128.83s. The brief's baseline of 2486 plus this branch's 11 |
+| `uv run python scripts/lint_encoding.py src scripts tests` | 0 | clean |
+| `PYTHONIOENCODING=utf-8 uv run lint-imports` | 0 | 95 files, 201 dependencies, 1 contract kept, 0 broken. Run unredirected |
+| `uv run python scripts/lint_dead_links.py src --baseline scripts/dead_links_baseline.txt` | 0 | clean |
+
+### Why the figures come from a second worktree, and what the shared one said
+
+A concurrent task was working in the assigned worktree throughout. Three things it did, none of
+them this task's to undo:
+
+- It held uncommitted edits to `src/sync/graph/schema.sql` and `tests/test_schema_convergence.py`,
+  adding a `binding_rung` column to the `finding` table. Against that tree `pytest` exits **1** with
+  exactly one failure --
+  `tests/test_schema_convergence.py::test_a_column_definition_carrying_brackets_is_not_cut_in_half`,
+  `At index 8 diff: 'binding_rung' != 'created_at'`. Neither file is one this branch touches, and
+  that test file passes 6 of 6 at this branch's committed content, which is the attribution rather
+  than a claim of it.
+- It then moved the worktree onto a new branch, `b65-rung-attribution`, which it based on this
+  task's second commit -- so `d4ba718` and `f64f9f7` are ancestors of that branch. Nothing was lost:
+  `stroland02/m1-nodes` still points at `31adc67` and carries all three. Worth flagging to whoever
+  merges, because that branch will appear to contain work that is not its own.
+- `origin/main` advanced 15 commits meanwhile. It touches none of the three modules or the test
+  file, so the merge is clean by content. The merged-tree gate run that `bb93176` establishes as the
+  convention could **not** be done from here, because `origin/main` modifies the very
+  `schema.sql` the concurrent session had dirty, and stashing another task's live edit is not this
+  task's to do. Whoever merges should re-run the gates on the merged tree.
+
+The four figures above therefore come from a detached worktree at `31adc67`. Two gitignored inputs
+had to be supplied to it and neither is code: `tools/oasdiff.exe`, without which 38 tests fail and
+9 error with `oasdiff not found; run scripts/bootstrap_tools.sh`. That intermediate run is recorded
+rather than dropped, because a clean-checkout suite red for want of a binary is exactly the figure
+that gets requoted later as a code failure.
+
+### A fifth false-verdict mode, from the gate run rather than the mutation run
+
+`pytest -q; echo "EXIT=$?"` was reported by the runner as **exit code 0** -- that is the *compound*
+command's status, which is `echo`'s, while pytest's own was 1. The `echo` is what caught it. Reading
+the wrapper's exit code rather than pytest's would have recorded a green gate over a red suite,
+which is the same error as scanning for `FAILED ` prefixes wearing different clothes. The brief's
+instruction to run pytest unpiped and read its own exit code is the guard, and it earned its place
+on this run.
+
+`SYNC_DSN` was left unset throughout, so `tests/conftest.py` derives a database name from each
+run's own pid rather than sharing one with another task, and drops only what it created.
+
 ## What this leaves for the next task
 
 1. **The decline could say the route came from a response, and it is two lines per flavour.** Both
