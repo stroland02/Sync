@@ -152,12 +152,21 @@ def run_tsc(repo_path: Path, timeout: float = _TSC_TIMEOUT_SECONDS) -> VerifyRes
         ]
 
     try:
+        # `errors="replace"` because this output is a diagnostic, and because the compiler that
+        # produces it is the customer's own -- whatever version their lockfile resolved, from
+        # whatever registry their `.npmrc` names. Task 6 shipped this call without it and one
+        # accented identifier in a typechecked project crashed the verification gate instead of
+        # failing it: the decode error lands on a reader thread, `stdout` comes back `None`, and
+        # the concatenation below raises `TypeError` somewhere unrelated. `parse_diagnostics`
+        # matches on `file(line,column): error TSxxxx:`, which is ASCII, so a replacement
+        # character can only ever land inside a message a human reads.
         result = subprocess.run(
             command,
             cwd=repo_path,
             capture_output=True,
             text=True,
             encoding="utf-8",
+            errors="replace",
             timeout=timeout,
         )
     except subprocess.TimeoutExpired:

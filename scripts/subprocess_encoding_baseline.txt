@@ -11,6 +11,11 @@
 # defends it, because `test_no_baseline_entry_has_stopped_describing_a_violation` fails on an
 # entry that no longer describes anything. The file only shrinks.
 #
+# Every entry below is a call in a module M3-W98 was forbidden to edit, each owned by a live
+# task. The seven M3-W98 did own were opened here in the same run and closed again: four took a
+# measured exemption in `src/` and three took `errors="replace"`. That is the file shrinking as
+# designed, and it is the evidence the mechanism works rather than only compiles.
+#
 # Format: <path under src/>:<qualname of the enclosing function>[#<n> for the nth call in it]
 #
 # The key is the enclosing function and not the line, so an edit above a call does not move it.
@@ -27,39 +32,21 @@
 sync/cli.py:_clone#1
 sync/cli.py:_git
 
-# `gh`/`git` through `GitHubForge._run`, argv supplied by the caller. Retired by M3-W98 (this
-# task), which owns `sync/forge/github.py`.
-sync/forge/github.py:GitHubForge._run
-
-# `git ls-files -z` and `git status --porcelain --ignored -z`. Both hand back paths, which are
-# data: `errors="replace"` would corrupt one silently, so these need the measured exemption
-# rather than the cheap fix. Retired by M3-W98 (this task).
-sync/index/dependency_edits.py:_tracked_dependency_files
-sync/index/shipped_tree.py:_status_entries
-
-# The `npm`/`pnpm`/`yarn` shim, and `tsc` or `npx`. Both outputs are diagnostic only, which is
-# the case `CLAUDE.md` scopes `errors="replace"` to. Retired by M3-W98 (this task).
-sync/index/deps.py:install_dependencies
-sync/index/tsc.py:run_tsc
-
-# `git diff --name-only`, whose output is a path list. Retired by M3-W98/b, which owns
-# `sync/index/typescript.py`.
+# `git diff --name-only`, whose output is a path list and so is data. The likely answer is the
+# same measured exemption `sync/index/shipped_tree.py` now carries, not `errors="replace"`.
+# Retired by M3-W98/b, which owns `sync/index/typescript.py`.
 sync/index/typescript.py:TypeScriptAdapter._baseline
 
 # **`git diff HEAD` is the one call in `src/` whose defect is reproduced rather than reasoned
 # about.** `git diff` copies file content onto the pipe verbatim, so a customer source file in
 # cp1252 makes git emit bytes that are not UTF-8. Measured on 2026-07-29 against a repository
 # holding one such file: exit 0, `UnicodeDecodeError` on the reader thread, and `stdout` came
-# back `None` -- after which `return result.stdout` hands `None` to `route_after_patch` as the
-# patch's diff. `_unstaged_additions` beside it reads paths and is the ordinary case. Retired by
-# M3-W98/c, which owns `sync/remediate/`; this is the entry to dispatch first.
+# back `None` -- after which `return result.stdout` hands `None` on as the patch's diff, and the
+# `TypeError` arrives somewhere that does not name this call. Neither route is obviously right:
+# a diff is data, so `errors="replace"` would corrupt the patch, and there is nothing to exempt
+# because the child genuinely does emit non-UTF-8. Reading the diff as bytes, or refusing the
+# file the way `sync.cli._literal_call_sites` refuses one it cannot decode, is the shape of the
+# answer. Retired by M3-W98/c, which owns `sync/remediate/`; this is the entry to dispatch
+# first, and the only one of the five with a measurement rather than a suspicion behind it.
 sync/remediate/agent_patch.py:_git_diff
 sync/remediate/agent_patch.py:_unstaged_additions
-
-# `oasdiff breaking` and `oasdiff checks`. `oasdiff.py:88` is the call `CLAUDE.md`'s paragraph
-# quotes verbatim, and measuring it says the rule does not reach it: oasdiff is Go, its output
-# goes through `encoding/json`, and the bytes measured on the pinned binary are UTF-8. The
-# output is also data -- `kind`, `operation_id`, `raw` -- so `errors="replace"` is the wrong
-# route. Retired by M3-W98 (this task).
-sync/signals/oasdiff.py:run_oasdiff_breaking
-sync/signals/oasdiff.py:run_oasdiff_checks
