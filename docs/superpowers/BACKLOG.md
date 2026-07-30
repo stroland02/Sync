@@ -12,36 +12,6 @@ item that cannot say what evidence closes it is not ready to dispatch.
 
 ## Ready
 
-### B62 — Retract ghost call sites without destroying findings
-
-A call site's identity is its position, so a call that moves gains a row and the old one is never
-retracted: one file, one call, a comment added above it gave `rows=1 at lines [5]` then
-`rows=2 at lines [5, 6]`. `cli.py` looped `upsert_call_site` with no prune anywhere, so every
-re-index of an evolving repository added ghosts and removed none.
-
-**A first attempt solved that half and broke a worse thing.** It is preserved unreviewed at
-`8a62f1d` on `unreviewed/b62-ghost-call-sites` — 493 insertions, `replace_call_sites`, a good grain
-comment in `schema.sql`, a 212-line test. Gated here against a real database:
-
-    after the line shift   -> call_site rows at lines [6]
-    GHOST GONE?            -> YES
-    FINDING SURVIVED?      -> NO — the cascade destroyed it (count=0)
-
-`finding.call_site_id REFERENCES call_site (id) ON DELETE CASCADE`, which the original brief named
-as the thing that would make the change worse than the defect. It was right: a ghost row is
-something a reader can notice, a silently missing finding is not, and abandoned runs are data.
-**Not landed.** The gate caught it, which is what the gate is for.
-
-The second attempt starts from the preserved commit and owes both properties at once. Three shapes
-are weighed in the brief — retract by absence via `indexed_at`, keep only what is referenced, or
-follow the call site — and the last is probably wrong, since matching an old row to a new one is a
-guess and a wrong guess reattributes a finding to a different call.
-
-**Closes when:** no row at a position the call no longer occupies, a finding raised against a call
-site that later moved still exists, an unchanged repository still converges exactly as today, the
-detector queries actually read whatever "current" comes to mean, the four corpus figures quoted
-either side, and four gates green.
-
 ### B64 — A gated test asserts against a gitignored artifact any concurrent process can rewrite
 
 `test_the_staged_map_matches_the_pin_this_corpus_records` reads `pin["staged_at"]`, which resolves
@@ -91,7 +61,7 @@ recorded with which change broke it.
 ## In flight
 
 - **B61** — `task_12ccee12fd98`, worktree `sync-solo-b`.
-- **B62** — second attempt, `task_aeec9ef29534`, worktree `sync-solo-b`.
+- **B64** — `task_49e1d009fb9d`, worktree `sync-solo-a`.
 - **B55** — re-dispatched as `task_3746257e4c0a` into `sync-solo-b`. The first attempt
   (`task_e03a2a5bb93f`) produced nothing in 94 minutes and was stood down.
 
@@ -795,3 +765,25 @@ is what a reviewer needs and duplicating it here would let the two copies drift.
   **Two agents worked this in one worktree and both errors were the coordinator's.** The original
   was stood down on the evidence that its assigned tree was clean; it had never been in that tree.
   The all-worktree scan is now the only liveness check worth running.
+
+- Retract ghost call sites without destroying findings. Landed `bb93176`, second attempt. The
+  first removed the ghost and the `ON DELETE CASCADE` removed the finding with it; this one holds
+  both properties at once by **retracting rather than deleting**. `call_site` gains `retracted_at`,
+  its grain comment now reads *one row per position a call site has ever been indexed at*, and
+  `call_sites_for_operation` excludes retracted rows with deliberately no opt-in flag — "a detector
+  asking this question is asking what to raise a finding against, and a position the code no longer
+  occupies is not one."
+
+  Verified through the detector-facing query rather than the raw table, which matters: a raw
+  `SELECT` still shows two rows and reads like a failure. What a detector sees:
+
+      initial              detector 1 site at [5] | raw 1 | findings 1
+      after the line shift detector 1 site at [6] | raw 2 | findings 1
+      re-index unchanged   detector 1 site at [6] | raw 2 | findings 1   converges
+
+  Corpus unmoved — precision 1.0000 n=26, recall 1.0000 n=26, negatives 7, pairs 17, every floor
+  cleared. Suite `2507 passed, 1 skipped`.
+
+  The lesson worth keeping is about the gate rather than the fix: the first attempt looked correct
+  and was caught only because the brief had named the cascade as the thing that would make the
+  change worse than the defect, and the check was run rather than assumed.
