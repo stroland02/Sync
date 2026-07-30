@@ -72,9 +72,14 @@ class DeclaredField:
     """What the vendor's published specification says about one response field.
 
     Addressed by JSON Pointer, the same form `ObservedShape.field_path` uses, so the two sides
-    compare without a translation nobody can verify. This lives here rather than in `sync.core`
-    because nothing in the repository parses a response schema yet; the first component that
-    does should own the type and this module should import it.
+    compare without a translation nobody can verify.
+
+    The component that parses a specification into these is `cli._declared_response_fields`,
+    which sits above this module: a detector importing a CLI symbol inverts the dependency, so
+    a parser existing is not on its own a reason to move the type. The home that would serve
+    both is `sync.core`, and that is a published contract a third party writing a vendor
+    adapter depends on -- putting a detector's type into it is a decision about that contract,
+    and it has not been made.
     """
 
     field_path: str

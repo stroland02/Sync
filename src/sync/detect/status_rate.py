@@ -174,10 +174,16 @@ def _statused(row: ObservedCall) -> int:
 
 
 def _leading_block(rows: Sequence[ObservedCall], floor: int) -> int | None:
-    """How many rows from the front it takes to reach `floor` statused requests, or `None`.
+    """How many rows from the front it takes to reach `floor` statused requests.
 
     A count rather than a tally, because the caller needs to know whether the front block and
     the back block share a row before either is worth folding.
+
+    `None` cannot arrive at the only caller there is. `scan` reaches `_periods` only once the
+    same rows have cleared the same floor under the same predicate, so the running total gets
+    there on the forward pass and on the reversed one. It stays in the signature because a
+    caller measuring against a floor the gate did not would need it, and because deleting it
+    makes `leading > len(rows) - trailing` a `TypeError` rather than a refusal.
     """
     seen = 0
     for index, row in enumerate(rows):
@@ -348,13 +354,18 @@ class StatusRateDetector:
     def _periods(
         self, rows: Sequence[ObservedCall]
     ) -> tuple[_Tally | None, _Tally | None]:
-        """The earliest and latest samples large enough to be rates, if two exist.
+        """The earliest and latest samples large enough to be rates, when they do not overlap.
 
         Each side must reach the floor on its own and they must share no row. Anything less is a
         rate compared against an impression, and this detector would rather say a level than a
         trend it cannot support. Rows between the two blocks belong to neither: they are the
         middle of the stream, and including them in either side would make the comparison depend
         on where the split fell rather than on what the two ends observed.
+
+        Overlap is the only way that happens. Two blocks always exist, because the gate and the
+        split measure the same floor over the same rows, so the absent-block return below is
+        unreachable from `scan` and the question this function really answers is whether the
+        two ends are disjoint.
         """
         leading = _leading_block(rows, self._floor)
         trailing = _leading_block(list(reversed(rows)), self._floor)
