@@ -48,11 +48,15 @@ def _change() -> VendorChange:
     )
 
 
-def _finding() -> Finding:
+def _finding(rung: str = "static") -> Finding:
+    """`binding_rung` is stated rather than defaulted, because the default is a value no row can
+    hold: `GraphStore.insert_finding` refuses `unattributed`, so a fixture carrying it stands for
+    nothing a detector can write."""
     return Finding(
         id="f-1", detector="vendor_change", claim="response-field", call_site_id="site-1",
         vendor_change_id="chg-1",
         severity="breaking", rationale="response-property-removed on PostCharges",
+        binding_rung=rung,
     )
 
 
@@ -262,18 +266,21 @@ def test_a_change_the_table_says_needs_no_patch_never_reaches_the_patch_node():
 
 
 class FakeGraph(FakeStore):
+    def __init__(self, rung: str = "static") -> None:
+        self._rung = rung
+
     def open_findings(self) -> list[Finding]:
-        return [_finding()]
+        return [_finding(self._rung)]
 
     def all_vendor_changes(self, vendor_id: str) -> list[VendorChange]:
         return [_change()] if vendor_id == "stripe" else []
 
 
-def _surface(*, verdicts, diffs, **kwargs):
+def _surface(*, verdicts, diffs, rung: str = "static", **kwargs):
     from sync.mcp.tools import GraphSurface
 
     return GraphSurface(
-        FakeGraph(), repo=REPO, adapter=FakeAdapter(verdicts),
+        FakeGraph(rung), repo=REPO, adapter=FakeAdapter(verdicts),
         remediator=FakeRemediator(diffs), **kwargs,
     )
 
@@ -312,6 +319,23 @@ def test_the_response_carries_provenance_and_context_savings_like_every_other_to
     assert response["binding_source"] == "static"
     assert response["indexed_at"] == INDEXED.isoformat()
     assert response["context_savings"] > 0
+
+
+@pytest.mark.parametrize("rung", ["static", "resolved", "observed", "unresolved", "unattributed"])
+def test_a_verified_patch_reports_the_rung_the_finding_it_patches_rests_on(rung: str):
+    """The wired branch, which is a second `_envelope` call and needs its own cover.
+
+    `propose_patch` returns early with `outcome: unavailable` on a read-only server, and
+    `tests/test_mcp_provenance.py` covers that path; this is the one that ran the pipeline. Both
+    answer about exactly one finding, so the envelope is the right place for the rung in both --
+    and a patch an agent is told rests on a static read when the claim came from watched traffic
+    is weighed wrongly in the direction that matters, since `observed` is the rung it trusts most.
+    """
+    surface = _surface(verdicts=[VerifyResult(ok=True)], diffs=["diff"], rung=rung)
+    response = surface.propose_patch("f-1")
+
+    assert response["outcome"] == PROPOSED
+    assert response["binding_source"] == rung
 
 
 def test_a_failed_typecheck_reports_the_verdict_rather_than_omitting_it():

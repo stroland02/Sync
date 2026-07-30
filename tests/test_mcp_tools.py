@@ -40,11 +40,16 @@ def _change(change_id, vendor="stripe", op="PostCharges", kind="response-propert
     )
 
 
-def _finding(finding_id, site_id, change_id, severity="breaking"):
+def _finding(finding_id, site_id, change_id, severity="breaking", rung="static"):
+    """`binding_rung` is stated rather than defaulted. The default is `unattributed`, which
+    `GraphStore.insert_finding` refuses, so a fixture that took the default would stand for a row
+    no detector can write -- and the surface reports the rung now, so the difference is visible.
+    """
     return Finding(
         id=finding_id, detector="vendor-change", claim="response-field",
         call_site_id=site_id,
         vendor_change_id=change_id, severity=severity, rationale="status was removed",
+        binding_rung=rung,
     )
 
 
@@ -208,7 +213,9 @@ def test_every_response_carries_the_provenance_fields(call: str):
 
     assert {"indexed_at", "feed_fetched_at", "binding_source", "context_savings"} <= result.keys()
     assert result["feed_fetched_at"] == FETCHED.isoformat()
-    assert result["binding_source"] == "static"
+    # Present on all three; the value is the rung the answer rests on, and `whats_changed` rests
+    # on none. `tests/test_mcp_provenance.py` carries that split and the argument for it.
+    assert result["binding_source"] == (None if call == "changed" else "static")
 
 
 @pytest.mark.parametrize("call", ["risk", "explain"])
@@ -283,10 +290,21 @@ def test_provenance_is_a_timestamp_not_a_duration():
 
 
 def test_binding_source_is_never_claimed_higher_than_it_was_established():
-    """`resolved` requires a compiler pass and `observed` requires production telemetry.
-    Neither has run here, so reporting either would be a claim about trustworthiness that
-    nothing supports."""
+    """The spec's provenance rule, which now bites in both directions.
+
+    A response with no compiler pass behind it must not say `resolved`, and one with no telemetry
+    must not say `observed`. These findings rest on a static read and the answer says so -- and it
+    says so because the findings say so, not because the field is a constant. The constant was the
+    same assertion held up by the wrong thing: it also reported `static` for a finding raised from
+    watched traffic, which is the over-claim this test is named for, pointing the other way.
+    """
+    surface = _surface(
+        findings=[_finding("f1", "cs1", "vc1", rung="observed")],
+        sites=[_site("cs1")], changes=[_change("vc1")],
+    )
+
     assert _default().whats_at_risk()["binding_source"] == "static"
+    assert surface.whats_at_risk()["binding_source"] == "observed"
 
 
 # --- the rules that make the surface worth having ---------------------------------

@@ -18,15 +18,16 @@ Four response rules, each of which exists because breaking it costs an agent con
 - **Paginate every list.** An unbounded result on a large repository consumes an agent's
   context before the model has processed anything.
 - **Report provenance honestly.** `binding_source` says how the mapping was established, so an
-  agent can weigh a patch by how much the binding is worth.
+  agent can weigh a patch by how much the binding is worth. It is per finding, because a page
+  can hold findings from several binders and no one value is true of all of them.
 """
 
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any, Protocol
+from typing import Any, Iterable, Protocol
 
-from sync.core import CallSite, Finding, VendorChange
+from sync.core import CallSite, Finding, FindingRung, VendorChange
 from sync.mcp import propose
 
 DEFAULT_LIMIT = 50
@@ -101,6 +102,7 @@ class GraphSurface:
         the unbounded case safe.
         """
         rows: list[dict[str, Any]] = []
+        matched: list[Finding] = []
         newest_index: datetime | None = None
 
         for finding in self._graph.open_findings():
@@ -116,6 +118,7 @@ class GraphSurface:
 
             change = self._change_for(finding)
             newest_index = _later(newest_index, site.indexed_at)
+            matched.append(finding)
             rows.append(
                 {
                     "file": site.path,
@@ -126,44 +129,60 @@ class GraphSurface:
                     "change_kind": change.kind if change else None,
                     "severity": finding.severity,
                     "finding_id": finding.id,
+                    # Per row, because this is the only level at which it can be right: a page
+                    # built from a vendor-change finding and a status-rate finding rests on two
+                    # binders, and an agent weighs each row against the binding under it.
+                    "binding_source": finding.binding_rung,
                 }
             )
 
-        return self._page(rows, limit, offset, indexed_at=newest_index)
+        return self._page(
+            rows, limit, offset, indexed_at=newest_index, binding_source=_shared_rung(matched)
+        )
 
     def explain_call_site(self, file: str, line: int) -> dict[str, Any] | None:
         """One binding in full, with shallow references to what changed about it.
 
         `None` for a call site the graph does not hold: an agent asking about a line that was
         never indexed has asked a question with an answer, and the answer is "nothing here".
+
+        Every finding naming the line is read rather than stopping at the first, because a call
+        site carries no rung of its own -- the findings that name it do, two detectors can name
+        one site, and the rung is a property of all of them and not of whichever the graph
+        returned first.
         """
+        matched: list[tuple[Finding, CallSite]] = []
         for finding in self._graph.open_findings():
             site = self._site_for(finding)
             if site is None or site.path != file or site.line != line:
                 continue
+            matched.append((finding, site))
 
-            changes = [
-                # Shallow. The full record is available by identifier, and returning every
-                # change in full is how a tool hands back the tokens the graph saves.
-                {"change_id": change.id, "kind": change.kind, "severity": change.severity}
-                for change in self._changes_for_site(site)
-            ]
+        if not matched:
+            return None
 
-            return self._envelope(
-                {
-                    "symbol": site.symbol,
-                    "operation": site.operation_id,
-                    "vendor": site.vendor_id,
-                    "args_keys": list(site.args_keys),
-                    "response_fields_read": list(site.response_fields_read),
-                    "sdk_version": site.sdk_version,
-                    "known_changes": changes,
-                },
-                indexed_at=site.indexed_at,
-                savings=_TOKENS_PER_AVOIDED_READ,
-            )
+        _, site = matched[0]
+        changes = [
+            # Shallow. The full record is available by identifier, and returning every
+            # change in full is how a tool hands back the tokens the graph saves.
+            {"change_id": change.id, "kind": change.kind, "severity": change.severity}
+            for change in self._changes_for_site(site)
+        ]
 
-        return None
+        return self._envelope(
+            {
+                "symbol": site.symbol,
+                "operation": site.operation_id,
+                "vendor": site.vendor_id,
+                "args_keys": list(site.args_keys),
+                "response_fields_read": list(site.response_fields_read),
+                "sdk_version": site.sdk_version,
+                "known_changes": changes,
+            },
+            indexed_at=site.indexed_at,
+            savings=_TOKENS_PER_AVOIDED_READ,
+            binding_source=_shared_rung(finding for finding, _ in matched),
+        )
 
     def whats_changed(
         self, vendor: str, since: str | None = None,
@@ -174,6 +193,10 @@ class GraphSurface:
         An unknown vendor is an empty page rather than an error: "nothing recorded for that
         vendor" is a true answer, and raising would make an agent treat a knowledge gap as a
         failure.
+
+        `binding_source` is null here for the reason `indexed_at` is: this answer is built from
+        vendor changes alone and holds no binding, so naming a rung would claim a mapping had
+        been established for a payload in which no mapping appears.
         """
         rows = [
             {
@@ -188,7 +211,7 @@ class GraphSurface:
             for change in self._graph.all_vendor_changes(vendor)
             if since is None or change.detected_at.isoformat() >= since
         ]
-        return self._page(rows, limit, offset, indexed_at=None)
+        return self._page(rows, limit, offset, indexed_at=None, binding_source=None)
 
     def propose_patch(self, finding_id: str) -> dict[str, Any] | None:
         """A verified patch for one finding, returned as data and never written anywhere.
@@ -223,6 +246,7 @@ class GraphSurface:
                 },
                 indexed_at=None,
                 savings=0,
+                binding_source=finding.binding_rung,
             )
 
         state = propose.run_to_static_verify(
@@ -254,6 +278,9 @@ class GraphSurface:
             },
             indexed_at=site.indexed_at if site else None,
             savings=_TOKENS_PER_AVOIDED_READ,
+            # One finding, so the envelope is where this belongs: the whole response rests on
+            # exactly the binding under it.
+            binding_source=finding.binding_rung,
         )
 
     # -- internals -----------------------------------------------------------------
@@ -302,7 +329,12 @@ class GraphSurface:
         ]
 
     def _page(
-        self, rows: list[dict[str, Any]], limit: int, offset: int, indexed_at: datetime | None
+        self,
+        rows: list[dict[str, Any]],
+        limit: int,
+        offset: int,
+        indexed_at: datetime | None,
+        binding_source: FindingRung | None,
     ) -> dict[str, Any]:
         window = rows[offset : offset + limit]
         consumed = offset + len(window)
@@ -316,27 +348,54 @@ class GraphSurface:
             },
             indexed_at=indexed_at,
             savings=len(window) * _TOKENS_PER_AVOIDED_READ,
+            binding_source=binding_source,
         )
 
     def _envelope(
-        self, payload: dict[str, Any], indexed_at: datetime | None, savings: int
+        self,
+        payload: dict[str, Any],
+        indexed_at: datetime | None,
+        savings: int,
+        binding_source: FindingRung | None,
     ) -> dict[str, Any]:
         """Provenance on every response, as timestamps rather than durations.
 
         A duration computed at response time expires silently once an answer is cached; a
         timestamp cannot claim a freshness it no longer has.
 
-        `binding_source` is `static` throughout, and honestly so: `resolved` requires a
-        compiler pass and `observed` requires production telemetry. Neither runs here, and
-        claiming either would assert a trustworthiness nothing supports.
+        `binding_source` is supplied rather than constant, and the argument that made it a
+        constant was sound when it was written: the only binder was the static one, so `resolved`
+        would have claimed a compiler pass and `observed` a telemetry correlation, neither of
+        which had run. What changed is the precondition, not the reasoning. Two of the five
+        detectors now raise findings from watched traffic, `finding.binding_rung` is an enforced
+        column rather than a hint, and `open_findings` returns `static`, `observed`, `unresolved`
+        and `unattributed` -- measured, not supposed. So the constant stopped describing the
+        answer and started contradicting it.
+
+        Null when the answer rests on no single binding: no binding at all, as in
+        `whats_changed`, or several rungs at once, as in a page a static finding and a telemetry
+        finding both appear on. Absent provenance is recoverable by asking again per row; wrong
+        provenance is what an agent weighs the finding by.
         """
         return {
             **payload,
             "indexed_at": indexed_at.isoformat() if indexed_at else None,
             "feed_fetched_at": self._feed_fetched_at.isoformat() if self._feed_fetched_at else None,
-            "binding_source": "static",
+            "binding_source": binding_source,
             "context_savings": savings,
         }
+
+
+def _shared_rung(findings: Iterable[Finding]) -> FindingRung | None:
+    """The rung every finding in an answer rests on, or `None` when they do not all agree.
+
+    Not the weakest of them. Understating a rung is still a wrong answer about the rows that
+    carry a stronger one, and `CLAUDE.md`'s rule is attribution rather than caution: a false
+    positive an agent was told rested on a static read cannot be attributed to the correlator
+    that actually produced it.
+    """
+    rungs = {finding.binding_rung for finding in findings}
+    return rungs.pop() if len(rungs) == 1 else None
 
 
 def _later(current: datetime | None, candidate: datetime | None) -> datetime | None:
