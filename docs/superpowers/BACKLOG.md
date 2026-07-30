@@ -38,6 +38,12 @@ while `sync.core` has exactly one third-party import.
 **Explicitly not publishing.** Uploading anywhere is public, irreversible and the user's decision.
 This makes the package installable on its own and proves it.
 
+**The guard half landed separately** as `50f808a`: `tests/test_import_boundary.py` now pins
+`sync.core`'s third-party imports at exactly `{pydantic}`. That is the fact the split rests on, and
+it was closing silently — `lint-imports` keeps core out of *sibling* packages and would pass a
+direct `import psycopg` without complaint, which is the promise CONTRIBUTING.md actually makes.
+Mutation-proved: with that import added, `lint-imports` passes and the new test fails naming it.
+
 **Closes when:** an environment holding only the core distribution can `import sync.core`, reach the
 four plugin protocols and run `sync.core.conformance`, with evidence that psycopg, langgraph and the
 tree-sitter grammars are absent from it; `uv sync` and the suite are unchanged for this repository;
@@ -69,7 +75,8 @@ recorded with which change broke it.
 
 ## In flight
 
-- **B68** — `task_3704b87bc7cf`, worktree `sync-solo-a`.
+- **B68** — re-dispatched as `task_bacf21de7db2`, worktree `sync-solo-b`. The first dispatch
+  never started: no heartbeat, no edits in any worktree after one nudge.
 
 - **B61** — `task_12ccee12fd98`, worktree `sync-solo-b`.
 - **B55** — re-dispatched as `task_3746257e4c0a` into `sync-solo-b`. The first attempt
