@@ -185,3 +185,105 @@ def test_the_collision_measurement_can_fail():
     assert _collisions(entries, greedy) == {
         ("GET", "/v1/{}/x"): {("GET", "/v1/{a}/x"), ("GET", "/v1/{a}/{b}/x")}
     }
+
+
+# --- what a collision does today, constructed rather than reasoned about --------------------
+
+
+def test_two_specification_operations_behind_one_key_deflate_the_denominator(tmp_path):
+    """The collision constructed, and the reader neither picks one nor declines: it never sees it.
+
+    `report_extraction` builds `declared` as a **set** of comparable keys, so two specification
+    operations reducing to one key are one member. Nothing chooses between them and nothing reports
+    that a choice was available -- the denominator is simply one smaller than the number of
+    operations the vendor published, and the coverage ratio is taken against it.
+
+    That makes the visible harm a wrong *measurement* rather than a wrong binding. An SDK reaching
+    both readable operations here reports 100% of an API it reaches two thirds of, and every number
+    in the line is internally consistent, which is what makes it unreadable as a warning.
+    """
+    root = _sdk(tmp_path, "  members() { return this._client.get(path`/v1/${workspaceID}/members`, {}); }")
+    spec = _spec(
+        tmp_path,
+        ("GET", "/v1/models"),
+        ("GET", "/v1/{workspace_id}/members"),
+        ("GET", "/v1/{organization_id}/members"),
+    )
+
+    report = symbols_typescript.report_extraction(root, read_spec_operations(spec))
+
+    assert len(_spec_entries(spec)) == 3
+    assert report.spec_operation_count == 2
+    assert report.covered_count == 2
+    assert report.coverage_ratio == 1.0
+    assert "reaching 2 of 2 specification operations (100.0%)" in report.render()
+
+
+def test_a_collision_is_reported_nowhere(tmp_path):
+    """And the other half: no decline, no warning, no field.
+
+    `ExtractionReport` carries `operations`, `spec_operation_count`, `unknown_to_spec` and
+    `covered_count`, and a collision moves only the two counts. `unknown_to_spec` is the one loud
+    channel this module has where a specification is staged, and a collision cannot reach it --
+    the SDK's route *did* match a declared key, so there is nothing for it to report.
+
+    This is why the deliverable for this task is a measurement rather than a repair: the condition
+    is silent, so what protects against it is a test over the real documents, not a branch that
+    fires on input nobody has.
+    """
+    root = _sdk(tmp_path, "  members() { return this._client.get(path`/v1/${workspaceID}/members`, {}); }")
+    spec = _spec(
+        tmp_path,
+        ("GET", "/v1/models"),
+        ("GET", "/v1/{workspace_id}/members"),
+        ("GET", "/v1/{organization_id}/members"),
+    )
+
+    report = symbols_typescript.report_extraction(root, read_spec_operations(spec))
+
+    assert report.unknown_to_spec == ()
+    assert not hasattr(report, "declined")
+
+
+def _sdk(tmp_path: Path, *methods: str) -> Path:
+    """Three files of the shape the Stainless TypeScript rule reads, with `models.list` readable.
+
+    Hand-written rather than cut from the committed Anthropic tree, because the routes these tests
+    need are ones Stainless does not emit -- corrupting the fixture into them would make the
+    corruption the fixture. `models.list` is always readable so that an assertion about a second
+    operation cannot pass because the whole SDK failed to parse.
+    """
+    root = tmp_path / "sdk"
+    files = {
+        "client.ts": (
+            "import * as API from './resources/index';\n"
+            "\n"
+            "export class Anthropic extends BaseAnthropic {\n"
+            "  models: API.Models = new API.Models(this);\n"
+            "}\n"
+        ),
+        "resources/index.ts": "export { Models } from './models';\n",
+        "resources/models.ts": (
+            "import { APIResource } from '../core/resource';\n"
+            "import { path } from '../internal/utils/path';\n"
+            "\n"
+            "export class Models extends APIResource {\n"
+            + "\n".join(["  list() { return this._client.get('/v1/models', {}); }", *methods])
+            + "\n}\n"
+        ),
+    }
+    for relative, body in files.items():
+        target = root / relative
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(body, encoding="utf-8")
+    return root
+
+
+def _spec(tmp_path: Path, *operations: tuple[str, str]) -> Path:
+    """An operation-set file of the shape `read_spec_operations` reads."""
+    destination = tmp_path / "spec_operations.json"
+    destination.write_text(
+        json.dumps([{"method": method, "path": route} for method, route in operations]),
+        encoding="utf-8",
+    )
+    return destination
