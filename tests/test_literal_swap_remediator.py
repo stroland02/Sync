@@ -17,7 +17,9 @@ from pathlib import Path
 import pytest
 
 from sync.core import Finding, RepoRef, VendorChange
+from sync.core.conformance import check_remediator
 from sync.remediate.literal_swap import LiteralSwapRemediator
+from sync.route import model_literal_swap
 from sync.signals.deprecations import ModelDeprecation, to_vendor_changes
 
 SOURCE = """\
@@ -93,6 +95,88 @@ def test_it_declines_a_change_that_is_not_a_deprecation():
         source="oasdiff", raw={},
     )
     assert LiteralSwapRemediator().can_handle(_finding(), spec_change) is False
+
+
+# --- the predicate and the rule builder read the same keys ---------------------------
+#
+# `to_vendor_changes` always writes `model_id`, so no record built from the in-repo catalogue
+# can separate the two. These are the records that skip it: the published feed, whose consumer
+# builds `VendorChange(**entry)` without inspecting `raw`, and a third-party adapter.
+
+FEED_RECORDS = {
+    "complete": {
+        "model_id": "claude-3-7-sonnet-20250219",
+        "replacement": "claude-opus-4-8",
+        "state": "retired",
+    },
+    "no-model-id": {"replacement": "claude-opus-4-8", "state": "retired"},
+    "no-replacement": {"model_id": "claude-3-7-sonnet-20250219", "state": "retired"},
+    "neither": {"state": "retired"},
+    "model-id-is-not-a-string": {
+        "model_id": 3, "replacement": "claude-opus-4-8", "state": "retired",
+    },
+    "model-id-is-empty": {
+        "model_id": "", "replacement": "claude-opus-4-8", "state": "retired",
+    },
+}
+
+
+def _feed_change(raw: dict) -> VendorChange:
+    return VendorChange(
+        vendor_id="anthropic", from_version="2026-07-01", to_version="2026-07-28",
+        kind="deprecation/model-retired", operation_id="claude-3-7-sonnet-20250219",
+        path_ptr="", severity="breaking", source="vendor-deprecation-table", raw=raw,
+    )
+
+
+@pytest.mark.parametrize("name", sorted(FEED_RECORDS))
+def test_the_predicate_claims_exactly_what_the_rule_builder_can_build(name: str):
+    """One condition, read in two places, and they have to agree.
+
+    `can_handle` is a promise that `propose` will act. It cannot keep that promise by testing
+    fewer keys than `model_literal_swap` requires: a record it claims and the builder refuses
+    produces no rule, and `apply_rules` with no rules returns the source unchanged -- which
+    `propose` reduces to an empty diff and the graph reads as "already migrated".
+    """
+    change = _feed_change(FEED_RECORDS[name])
+    rules = model_literal_swap(change, language="typescript")
+
+    assert LiteralSwapRemediator().can_handle(_finding(), change) is bool(rules)
+
+
+def test_the_conformance_kit_certifies_every_record_the_predicate_claims(tmp_path: Path):
+    """The promise measured where it is kept, rather than restated.
+
+    `check_remediator` reports an empty diff against the *case*: nothing was measured, because
+    the rule it exists for -- that a patch reaches disk rather than only the returned value --
+    is measured on a patch and there was none. So a predicate that claims a record `propose`
+    cannot act on is exactly a case the kit refuses, and running the kit over everything the
+    predicate claims is the assertion that no such record exists.
+    """
+    remediator = LiteralSwapRemediator()
+    claimed = [
+        name for name in sorted(FEED_RECORDS)
+        if remediator.can_handle(_finding(), _feed_change(FEED_RECORDS[name]))
+    ]
+
+    # Or the loop below certifies nothing and this test passes by measuring nothing -- the
+    # vacuity the kit itself refuses in four other places.
+    assert claimed
+
+    for name in claimed:
+        clone = tmp_path / name
+        (clone / "src").mkdir(parents=True)
+        (clone / "src" / "summarise.ts").write_bytes(SOURCE.encode("utf-8"))
+        check_remediator(
+            remediator,
+            _finding(),
+            _feed_change(FEED_RECORDS[name]),
+            _site(),
+            RepoRef(
+                repo_id="repo-1", url="https://example.invalid/r",
+                local_path=str(clone), head_sha="abc123",
+            ),
+        )
 
 
 # --- propose ----------------------------------------------------------------------

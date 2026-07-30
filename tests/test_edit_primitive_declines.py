@@ -22,6 +22,7 @@ import pytest
 from sync.core import CallSite, Finding, Patch, RepoRef, VendorChange
 from sync.core.conformance import ConformanceFailure, check_remediator
 from sync.remediate.literal_swap import LiteralSwapRemediator
+from sync.remediate.tiered import TerminalTier, TieredRemediator
 from sync.route.matrix import AGENT, CODEMOD, RoutingFacts, route
 from sync.route.templates import apply_rules, argument_is_literal_at, omit_property_at
 
@@ -214,21 +215,39 @@ def _finding() -> Finding:
     )
 
 
-def test_a_deprecation_with_no_model_id_is_accepted_and_then_produces_nothing(tmp_path: Path):
-    """The gap between `can_handle` and `model_literal_swap`, measured rather than argued.
+class _NextTier:
+    """Whatever the cascade reaches after the codemods. Its only job is to be identifiable."""
 
-    The retired id is still in the clone afterwards, so the empty diff is not "already
-    migrated" -- it is a decline wearing the same clothes.
+    strategy = "agent"
+
+    def can_handle(self, finding: Finding, change: VendorChange) -> bool:
+        return True
+
+    def propose(self, finding, change, site, repo, diagnostics: str = "") -> Patch:
+        return Patch(diff="--- a\n+++ b\n", strategy=self.strategy, rationale="the next tier ran")
+
+
+def test_a_deprecation_with_no_model_id_is_declined_before_the_attempt_is_spent(tmp_path: Path):
+    """M3-W113 closed the gap between `can_handle` and `model_literal_swap`.
+
+    The predicate now tests both keys the builder requires, so the codemod is skipped rather
+    than entered, and the loop in `TieredRemediator.propose` moves on inside the same attempt.
+    Before this, the codemod returned an empty `Patch` and the cascade returned it -- one
+    attempt spent, `patch=None` downstream, and a run reporting no change.
+
+    The retired id is still in the clone, which is what says the codemod did not act.
     """
     repo = _clone(tmp_path)
     change = _no_model_id_change()
     remediator = LiteralSwapRemediator()
 
-    assert remediator.can_handle(_finding(), change) is True
+    assert remediator.can_handle(_finding(), change) is False
 
-    patch = remediator.propose(_finding(), change, _site(), repo)
+    patch = TieredRemediator([remediator, TerminalTier(_NextTier())]).propose(
+        _finding(), change, _site(), repo
+    )
 
-    assert patch.diff == ""
+    assert patch.strategy == "agent"
     assert (tmp_path / "src" / "m.ts").read_bytes().decode("utf-8") == RETIRED_MODEL_SOURCE
 
 
@@ -269,9 +288,12 @@ def test_the_no_rules_decline_looks_exactly_like_an_already_migrated_file(tmp_pa
     `apply_rules` returns the input both when there was no rule to apply and when the rules
     matched nothing, and `propose` reduces both to `updated == original`. So the remediator
     reports "nothing to do" for a change it could not build a migration for, and reports it as
-    a `Patch` rather than as an exception -- which is what costs the attempt. The tier that
-    does distinguish them, `PropertyOmitRemediator`, raises `CannotPatch` instead and the
-    cascade falls through to the agent inside the same attempt.
+    a `Patch` rather than as an exception -- which is what costs the attempt.
+
+    Still true of `propose`, and no longer reachable through the cascade: `can_handle` now
+    tests both keys the builder requires, so the record on the left is declined before
+    `propose` is entered. This stays because it is the measurement the gate exists for --
+    remove the gate and the two answers below are once again the same answer.
     """
     no_rule = LiteralSwapRemediator().propose(
         _finding(), _no_model_id_change(), _site(), _clone(tmp_path / "a")
