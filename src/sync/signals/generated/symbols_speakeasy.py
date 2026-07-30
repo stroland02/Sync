@@ -544,24 +544,26 @@ def report_extraction(
     """Extract, then check every route against the specification the SDK's manifest names.
 
     The same check both Stainless flavours run, over the same parameter reduction the TypeScript
-    one adds. The denominator is counted after that reduction, so it is the number of distinct
-    routes the comparison can actually be made against rather than the number of entries the
-    specification happens to list -- which for `vercel/sdk` is the same 359 either way, because
-    Speakeasy spells its parameters exactly as the document it generated from does.
+    one adds. The ratio's denominator is counted after that reduction and the specification's
+    operation count before it, and for `vercel/sdk` the two are the same 359 -- Speakeasy spells
+    its parameters exactly as the document it generated from does, so nothing is absorbed. That
+    equality is a fact about this vendor and not a property of the code; the day an overlay
+    renames a parameter the two counts come apart and the line says by how much.
     """
-    declared = {_comparable(method, path) for method, path in spec_operations}
+    comparable = {_comparable(method, path) for method, path in spec_operations}
     operations = extract_symbols(source_root)
     unknown = tuple(
         operation
         for operation in operations
-        if _comparable(operation.http_method, operation.path) not in declared
+        if _comparable(operation.http_method, operation.path) not in comparable
     )
     reached = {
         _comparable(operation.http_method, operation.path) for operation in operations
-    } & declared
+    } & comparable
     return SpeakeasyExtractionReport(
         operations=operations,
-        spec_operation_count=len(declared),
+        declared_operation_count=len(spec_operations),
+        comparable_key_count=len(comparable),
         unknown_to_spec=unknown,
         covered_count=len(reached),
     )

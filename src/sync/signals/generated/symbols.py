@@ -111,10 +111,38 @@ class ExtractedOperation:
 
 @dataclass(frozen=True)
 class ExtractionReport:
-    """What was extracted, and what the specification says about it."""
+    """What was extracted, what the specification says about it, and what could not be read.
+
+    **`spec_operation_count` was retired rather than corrected.** It answered "how many distinct
+    comparable keys did the specification yield" under a name claiming to answer "how many
+    operations does the specification declare", and those are two facts that differ by however
+    much the comparison's reduction absorbed -- 121 against 131 for the vendor this repository
+    pins. Both are now named for what they count. Reusing the old name for the corrected
+    quantity would have handed every existing reader a different number with no error, where a
+    name that is gone raises at the first stale read.
+    """
 
     operations: tuple[ExtractedOperation, ...]
-    spec_operation_count: int
+
+    declared_operation_count: int
+    """Operations the specification declares -- the API's size.
+
+    Counted before any reduction, which is what distinguishes it from the field below. It is not
+    a denominator for `covered_count`: that is counted in comparable routes, and dividing one by
+    the other would mix two units into a number that moves when a reduction changes and means
+    nothing either way.
+    """
+
+    comparable_key_count: int
+    """Distinct keys those operations reduce to -- what this comparison can resolve.
+
+    The denominator of `coverage_ratio`, and smaller than the count above by every operation the
+    reduction could not keep apart: the query marker this project drops on both sides, and in the
+    TypeScript flavours a parameter segment reduced to a placeholder. An operation absorbed that
+    way is neither covered nor missed by this report; it is indistinguishable from the operation
+    it shares a key with, and `indistinct_operation_count` is how many.
+    """
+
     unknown_to_spec: tuple[ExtractedOperation, ...]
 
     @property
@@ -122,32 +150,48 @@ class ExtractionReport:
         return len(self.operations)
 
     covered_count: int
-    """Distinct specification operations the extraction reaches.
+    """Distinct comparable routes the extraction reaches.
 
     Distinct, and counted on the specification's side rather than the extraction's. Two symbols
     can send the same request -- `messages.create` and `messages.parse` are both
     `POST /v1/messages` -- so counting extracted entries would report more coverage than there
-    are operations to cover, and could exceed the denominator outright.
+    are routes to cover, and could exceed the denominator outright.
     """
 
     @property
+    def indistinct_operation_count(self) -> int:
+        """Declared operations the comparison cannot tell apart from another.
+
+        Zero is the ordinary answer and is the claim that the two counts are the same fact for
+        this vendor. Anything else is the number of operations whose coverage this report can
+        state neither way -- reaching their shared key proves one of them is sent and says
+        nothing about the rest.
+        """
+        return self.declared_operation_count - self.comparable_key_count
+
+    @property
     def coverage_ratio(self) -> float:
-        if self.spec_operation_count == 0:
+        if self.comparable_key_count == 0:
             return 0.0
-        return self.covered_count / self.spec_operation_count
+        return self.covered_count / self.comparable_key_count
 
     def render(self) -> str:
         """One line an operator can read, with every number's denominator attached to it.
 
-        Both counts, because they answer different questions and neither substitutes. The symbol
-        count is what a call site can resolve against; the operation count is what share of the
-        vendor's API is reachable at all, and the gap between them is the SDK offering two ways
-        to send one request.
+        Four counts, because they answer different questions and none substitutes. The symbol
+        count is what a call site can resolve against; the comparable-route count is what the
+        cross-check can be made against and is the ratio's denominator; the declared-operation
+        count is the vendor's API size, which is the only one of the three a vendor publishes
+        independently; and the number of constructs this rule could not read is what says whether
+        a small extraction is a small SDK or a rule meeting an emission it does not know.
         """
         return (
             f"{GENERATOR}: {self.extracted_count} symbols extracted, reaching "
-            f"{self.covered_count} of {self.spec_operation_count} specification operations "
-            f"({self.coverage_ratio:.1%})"
+            f"{self.covered_count} of {self.comparable_key_count} comparable routes "
+            f"({self.coverage_ratio:.1%}); the specification declares "
+            f"{self.declared_operation_count} operations"
+            + (f", {self.indistinct_operation_count} of them not separately comparable"
+               if self.indistinct_operation_count else "")
             + (f"; {len(self.unknown_to_spec)} extracted operations the specification does not "
                f"declare" if self.unknown_to_spec else "")
         )
@@ -334,9 +378,17 @@ def _route(http_method: str, path: str) -> tuple[str, str]:
 
 
 def read_spec_operations(path: Path) -> set[tuple[str, str]]:
-    """The specification's operation set, as comparable routes."""
+    """The operations a specification declares, as it declares them.
+
+    The verb's case is normalised and nothing else is. Reducing here is what made the operation
+    count unrecoverable: `_route` merges a route with its `?beta=true` twin, so this vendor's 131
+    published operations arrived as 121 members and the report's denominator counted keys while
+    saying it counted operations. Each flavour applies its own reduction to both sides, which is
+    where the reduction belongs -- the TypeScript flavours add a second one this file knows
+    nothing about.
+    """
     declared = json.loads(Path(path).read_text(encoding="utf-8"))
-    return {_route(entry["method"], entry["path"]) for entry in declared}
+    return {(entry["method"].upper(), entry["path"]) for entry in declared}
 
 
 def report_extraction(
@@ -349,18 +401,20 @@ def report_extraction(
     not declare is reported rather than dropped, because a misread source and a vendor that
     genuinely lacks a route are different facts and only one of them is a defect here.
     """
+    comparable = {_route(method, path) for method, path in spec_operations}
     operations = extract_symbols(source_root)
     unknown = tuple(
         operation
         for operation in operations
-        if _route(operation.http_method, operation.path) not in spec_operations
+        if _route(operation.http_method, operation.path) not in comparable
     )
     reached = {
         _route(operation.http_method, operation.path) for operation in operations
-    } & spec_operations
+    } & comparable
     return ExtractionReport(
         operations=operations,
-        spec_operation_count=len(spec_operations),
+        declared_operation_count=len(spec_operations),
+        comparable_key_count=len(comparable),
         unknown_to_spec=unknown,
         covered_count=len(reached),
     )

@@ -550,23 +550,26 @@ def report_extraction(
     specification writes `{model_id}` and a cross-check firing on that trains a reader to ignore
     it. The extracted path keeps the SDK's own spelling.
 
-    The denominator is counted after that reduction, so it is the number of distinct routes the
-    comparison can actually be made against rather than the number of entries the specification
-    happens to list.
+    The ratio's denominator is counted after that reduction, so it is the number of distinct
+    routes the comparison can actually be made against. The number of operations the
+    specification declares is counted before it and reported beside it: this reduction is the one
+    that can merge two operations the document really distinguishes, so the gap between the two
+    counts is the part of the API this comparison cannot speak about either way.
     """
-    declared = {_comparable(method, path) for method, path in spec_operations}
+    comparable = {_comparable(method, path) for method, path in spec_operations}
     operations = extract_symbols(source_root)
     unknown = tuple(
         operation
         for operation in operations
-        if _comparable(operation.http_method, operation.path) not in declared
+        if _comparable(operation.http_method, operation.path) not in comparable
     )
     reached = {
         _comparable(operation.http_method, operation.path) for operation in operations
-    } & declared
+    } & comparable
     return TypeScriptExtractionReport(
         operations=operations,
-        spec_operation_count=len(declared),
+        declared_operation_count=len(spec_operations),
+        comparable_key_count=len(comparable),
         unknown_to_spec=unknown,
         covered_count=len(reached),
     )

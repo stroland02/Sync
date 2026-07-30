@@ -190,10 +190,11 @@ def test_coverage_is_reported_against_the_specifications_operation_count():
     report = report_extraction(SDK, read_spec_operations(SPEC_OPERATIONS))
 
     assert len(published) == 131
-    assert report.spec_operation_count == 121
+    assert report.declared_operation_count == 131
+    assert report.comparable_key_count == 121
     assert report.extracted_count > 0
-    assert 0 < report.covered_count <= report.spec_operation_count
-    assert report.spec_operation_count > report.covered_count
+    assert 0 < report.covered_count <= report.comparable_key_count
+    assert report.comparable_key_count > report.covered_count
 
 
 def test_the_rendered_line_names_the_generator_and_carries_the_denominator():
@@ -211,7 +212,8 @@ def test_the_rendered_line_names_the_generator_and_carries_the_denominator():
 
     assert rendered.startswith(f"{GENERATOR}:")
     assert PYTHON_GENERATOR not in rendered
-    assert "of 121 specification operations" in rendered
+    assert "of 121 comparable routes" in rendered
+    assert "the specification declares 131 operations" in rendered
 
 
 # --- the cross-check ----------------------------------------------------------------------

@@ -221,8 +221,9 @@ def test_coverage_is_reported_against_the_specifications_operation_count():
     report = report_extraction(SDK, spec)
 
     assert report.extracted_count == 15
-    assert report.spec_operation_count == len(spec)
-    assert report.covered_count <= report.spec_operation_count
+    assert report.declared_operation_count == len(spec)
+    assert report.comparable_key_count == len(spec)
+    assert report.covered_count <= report.comparable_key_count
     assert 0 < report.coverage_ratio < 1
 
 
@@ -234,7 +235,8 @@ def test_the_rendered_line_names_this_rule_and_carries_the_denominator():
 
     assert line.startswith(f"{GENERATOR}:")
     assert "stainless" not in line
-    assert f"of {report.spec_operation_count} specification operations" in line
+    assert f"of {report.comparable_key_count} comparable routes" in line
+    assert f"declares {report.declared_operation_count} operations" in line
 
 
 def test_an_operation_the_specification_does_not_declare_is_reported(tmp_path):
