@@ -21,6 +21,7 @@ tools/
 # being written by someone else needs somewhere outside every worktree to park work.
 # Untracked and unignored, these show up as `??` in every checkout and ride along on `git add -A`.
 .claude/*-brief.txt
+.claude/*-rulings.md
 .claude/*-wip/
 
 # Coverage artifacts, written by the command docs/superpowers/specs/2026-07-29-sync-coverage-baseline.md publishes.
