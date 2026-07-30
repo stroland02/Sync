@@ -239,7 +239,7 @@ def stubbed(monkeypatch: pytest.MonkeyPatch) -> _CollectingStore:
     )
     monkeypatch.setattr(cli, "TypeScriptAdapter", _StubAdapter)
     monkeypatch.setattr(cli, "http_fetch", _fetch_pages)
-    monkeypatch.setattr(cli, "_literal_call_sites", lambda repo: [])
+    monkeypatch.setattr(cli, "_literal_call_sites", lambda repo: ([], []))
     monkeypatch.setattr(
         cli, "_clone",
         lambda url, dest: RepoRef(

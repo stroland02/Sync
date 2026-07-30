@@ -12,30 +12,61 @@ item that cannot say what evidence closes it is not ready to dispatch.
 
 ## Ready
 
-### B58 — The indexer decodes a vendor's SDK strictly and the customer's own code leniently
+### B63 — Key the decode-handler drivers by scope, not by line number
 
-`python_lang.py:98` and `typescript.py:63` turn a tree-sitter node's byte range into text with
-`.decode("utf-8", errors="replace")`, for **customer** source. `symbols_speakeasy.py:172` does the
-identical job for a **vendor's** SDK and decodes strictly, with a docstring that says a lenient
-decode "would turn one of them into a route or a class name that silently differs from what the
-file says". That argument is exactly as true of customer code, which is the untrusted side — so the
-repository is strict where it controls the input and lenient where it does not.
+`tests/test_decode_handlers.py` keys `DRIVERS` by `path:line`, so any edit above a handler
+invalidates the key and the check fails by position rather than behaviour. Counted this run: seven
+keys re-anchored when one change added comment blocks above them, three more inside a single
+commit, one key twice within an hour, and a fifth occurrence flagged by the last worker to touch
+the file. **None was a defect in `src/`.** Two workers reported it unprompted.
 
-**A brief of mine asserted these two were safe** because they "slice already-validated source and
-cannot invent a file". That was wrong: nothing validates the file first, the indexer hands
-tree-sitter bytes, and this slice is the only decode. B57 refused the claim, which is why the task
-exists. Measured consequence: an accented byte inside a matched literal recorded as
-`claude-3-caf�`, and for a literal call site that value *is* the `operation_id`, the key a
-retirement joins on.
+The file's docstring claims *"there is no stable identity to key on instead"*. Measured over `src/`,
+that is false:
 
-It is a task rather than a two-line change because fixing it means deciding, at `index()` level,
-what to do when a file fails to decode **mid-parse** — the main indexing path, where call sites may
-already have been emitted from the file. That can move a corpus denominator, so the four gate
-figures must be measured either side.
+    decode handlers in src/      : 18
+    distinct scope+caught keys   : 18
+    collisions under that scheme : 0
 
-**Closes when:** customer source that is not UTF-8 produces no call site carrying U+FFFD, valid
-source produces exactly what it produces today, the four corpus figures are quoted before and
-after, and four gates green.
+keying by file, enclosing scope and caught exception names.
+
+**A previous brief told a worker explicitly not to redesign this and to document the cost instead.**
+That was right at two occurrences and wrong at five, and the reversal is recorded here rather than
+quietly made. The reason it matters beyond annoyance: a check that cries wolf gets silenced, and
+this one has caught two real omissions this run — both a new decode handler landing with no driver.
+
+**Closes when:** keys survive an unrelated edit above a handler, a collision is refused loudly
+naming both, the two real failure modes still fire, the docstring paragraph asserting the opposite
+is corrected, and four gates green.
+
+### B62 — Retract ghost call sites without destroying findings
+
+A call site's identity is its position, so a call that moves gains a row and the old one is never
+retracted: one file, one call, a comment added above it gave `rows=1 at lines [5]` then
+`rows=2 at lines [5, 6]`. `cli.py` looped `upsert_call_site` with no prune anywhere, so every
+re-index of an evolving repository added ghosts and removed none.
+
+**A first attempt solved that half and broke a worse thing.** It is preserved unreviewed at
+`8a62f1d` on `unreviewed/b62-ghost-call-sites` — 493 insertions, `replace_call_sites`, a good grain
+comment in `schema.sql`, a 212-line test. Gated here against a real database:
+
+    after the line shift   -> call_site rows at lines [6]
+    GHOST GONE?            -> YES
+    FINDING SURVIVED?      -> NO — the cascade destroyed it (count=0)
+
+`finding.call_site_id REFERENCES call_site (id) ON DELETE CASCADE`, which the original brief named
+as the thing that would make the change worse than the defect. It was right: a ghost row is
+something a reader can notice, a silently missing finding is not, and abandoned runs are data.
+**Not landed.** The gate caught it, which is what the gate is for.
+
+The second attempt starts from the preserved commit and owes both properties at once. Three shapes
+are weighed in the brief — retract by absence via `indexed_at`, keep only what is referenced, or
+follow the call site — and the last is probably wrong, since matching an old row to a new one is a
+guess and a wrong guess reattributes a finding to a different call.
+
+**Closes when:** no row at a position the call no longer occupies, a finding raised against a call
+site that later moved still exists, an unchanged repository still converges exactly as today, the
+detector queries actually read whatever "current" comes to mean, the four corpus figures quoted
+either side, and four gates green.
 
 ### B7 — The M0 acceptance run has not executed since the pipeline changed underneath it
 
@@ -63,7 +94,10 @@ recorded with which change broke it.
 
 ## In flight
 
-- **B58** — `task_7d27047a705a`, worktree `sync-solo-b`.
+- **B61** — `task_12ccee12fd98`, worktree `sync-solo-b`.
+- **B62** — second attempt, `task_aeec9ef29534`, worktree `sync-solo-b`.
+- **B63** — re-dispatched, `task_2750adb3575e`, worktree `sync-solo-a`. The first attempt
+  produced nothing.
 - **B55** — re-dispatched as `task_3746257e4c0a` into `sync-solo-b`. The first attempt
   (`task_e03a2a5bb93f`) produced nothing in 94 minutes and was stood down.
 
@@ -694,3 +728,63 @@ is what a reviewer needs and duplicating it here would let the two copies drift.
   Preserved as `unreviewed/b55-decline-reason`, then cherry-picked with five conflict hunks —
   every one resolved as "keep both halves", its reason-reporting over main's newer encodings — and
   five `DRIVERS` keys re-anchored from what the gate reported.
+
+- Let Stripe's symbol map skip a malformed path item, as Twilio's already does. Landed `4c13681`.
+  Stripe reached `.get` on whatever `paths` held, so one malformed entry cost the **entire** map —
+  every call site for the vendor unresolved for one bad key — while Twilio skipped the path and
+  built the rest. Verified across four shapes (null, list, string, number): the two now agree on
+  all four, a well-formed document still yields its entries, and a mixed document keeps its good
+  one. The pinned symbol-map digest is unchanged at `5f71dcd3bec1302c` and the corpus gate clears,
+  which was the constraint that could have made this a much larger change.
+
+  **The verdict was already in the repository.** `tests/test_symbol_map_declines.py` had recorded
+  this exact drift and said the raise was the worse answer, because a path key names which document
+  is bad and a type name does not. The worker inverted that test from asserting disagreement to
+  asserting agreement, keeping it as a comparison because agreement is the property and the two
+  halves can only drift again by one changing alone.
+
+- The indexer read the customer's code more loosely than the vendor's. Landed `49a4a09`. Four copies
+  of one node reader existed: the two over a vendor's SDK decoded strictly, the two over the
+  customer's repository passed `errors="replace"`. **The measurement is the finding** — leniency
+  recorded `response_fields_read` of `['st']` for a field spelled with an a-circumflex, truncated at
+  the bad byte rather than marked, so the graph carried a dependency on a field that does not exist,
+  which `ObservedDriftDetector` reads and `PropertyOmitRemediator` patches against.
+
+  Landing it needed three corrections. It committed onto the other coordinator's branch 96 commits
+  behind main (preserved as `unreviewed/b58-strict-node-decode`); it duplicated B57's `cli.py` fix,
+  so main's landed version was kept with B58's two measured consequences grafted into the docstring;
+  and it added two decode handlers without drivers, which the gate caught. Writing those drivers,
+  the control caught the coordinator twice — first a driver with no manifest, so `index()` returned
+  `[]` regardless of encoding and the assertion passed for the wrong reason, then a wrong call shape.
+  Both are the exact failure every brief here warns about.
+
+- Let a run say how much of the repository it could not read. Landed `a7c1057`. A run's entire
+  report was `N finding(s)`, identical whether it read the whole repository or a third of it, so
+  `0 finding(s)` over a tree of legacy-encoded sources was indistinguishable from one that
+  genuinely calls nothing. The block prints **above** the finding count, because a reader who sees
+  the number first has already drawn a conclusion from it, and prints nothing at all when
+  everything was read — a heading that fires every run is one the next reader learns to skip.
+
+  The worker took a tuple-return over an optional out-parameter despite nine mechanical call-site
+  edits, on the grounds that an omittable channel leaves the coverage report something a caller can
+  silently drop, which is the exact failure being closed. It also noted the benchmark harness has
+  printed a counted block of unread paths since a PNG first ended a corpus run, so the run path was
+  the half that had never caught up.
+
+  Two things from its report did not hold on verification. It said the indexers still decode with
+  `errors="replace"` — every occurrence left in those files is a docstring explaining the removal.
+  And it reported two suite skips; only one reproduced here. The conclusion it drew was right for a
+  different reason, and that reason is B61.
+
+- Count the language indexers' skips in a run's coverage figure. Landed `116d1f6`. B60's figure
+  counted only the literal pass over `*.ts`, while both indexers walk every source file and recorded
+  their skips in `self._undecodable` where nothing read it. **Structurally blind, not merely
+  partial:** over a Python tree with one PEP 263 cp1252 module the adapter had `['src/legacy.py']`,
+  the literal pass had `[]`, and the run reported it could not read *zero* paths having skipped a
+  module the interpreter runs fine.
+
+  The two reports overlap on a TypeScript tree, so the worker unioned rather than summed them —
+  "an over-count is its own wrong number, and the one a reader trusts for being larger". Read
+  through `getattr` so the protocol is untouched; verified here that an adapter lacking the member
+  returns `[]` and breaks nothing, that a clean repository still reports none, and that a latin-1
+  module now appears. It also corrected two docstrings that earlier tasks had falsified.

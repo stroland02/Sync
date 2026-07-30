@@ -122,7 +122,12 @@ def _tracked_dependency_files(repo_path: Path, dependency_dirs: frozenset[str]) 
     wrong. The index is read whole and filtered here rather than through a
     pathspec, so a workspace's nested directory is found as well as the root's.
     """
-    result = subprocess.run(
+    # Paths only, and git converts NTFS's UTF-16 names to UTF-8, so this child cannot emit what
+    # `encoding="utf-8"` would fail on -- `sync.index.shipped_tree._status_entries` carries the
+    # measurement. `errors=` would be a corruption rather than a defence here: a replacement
+    # character in a path drops it out of this set, and an edit inside `node_modules` that git
+    # tracks would then read as unshippable.
+    result = subprocess.run(  # subprocess-encoding: allow - git emits utf-8 paths; output is data
         ["git", "ls-files", "-z"],
         cwd=repo_path,
         capture_output=True,

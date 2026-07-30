@@ -87,7 +87,12 @@ def _status_entries(repo_path: Path) -> Iterator[tuple[str, str]]:
     tree holding an installed `node_modules`: git answers from the directory's
     ignore match without descending into its hundred thousand files.
     """
-    result = subprocess.run(
+    # `-z` turns off git's octal quoting, so a path arrives as raw bytes. On Windows those come
+    # from NTFS, which stores names as UTF-16 and which git converts to UTF-8, so the child
+    # cannot put a byte here that `encoding="utf-8"` would fail on -- measured against a
+    # repository holding an accented filename. `errors=` must not be the route: a path is data,
+    # and a replacement character in one silently moves a file between shipped and unshipped.
+    result = subprocess.run(  # subprocess-encoding: allow - git emits utf-8 paths; output is data
         ["git", "status", "--porcelain", "--ignored", "-z"],
         cwd=repo_path,
         capture_output=True,

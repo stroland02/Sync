@@ -394,7 +394,40 @@ def _drive_literal_call_sites(root: Path) -> None:
     from sync.cli import _literal_call_sites
 
     (root / "models.ts").write_bytes(UTF16)
-    assert _literal_call_sites(_repo(root)) == []
+    assert _literal_call_sites(_repo(root))[0] == []
+
+
+def _drive_git_diff(root: Path) -> None:
+    """A clone whose tracked source file is not UTF-8, which the patch path refuses.
+
+    The one child in `src/` that genuinely hands back bytes that are not UTF-8: `git diff`
+    copies file content onto the pipe verbatim. Read with `text=True, encoding="utf-8"` the
+    decode happened on `subprocess`'s reader thread, where the `UnicodeDecodeError` is
+    swallowed and `stdout` comes back `None`. This handler is what turns that into a refusal
+    naming the file, so the driver has to reach it through real git rather than a stub.
+
+    cp1252 rather than the UTF-16 the other drivers use: this is a source file somebody edits
+    in a legacy encoding, and the byte git copies onto the pipe is a lone 0xe9.
+    """
+    import os
+    import subprocess
+
+    from sync.remediate.agent_patch import _git_diff
+
+    def git(*args: str) -> None:
+        subprocess.run(
+            ["git", *args], cwd=root, capture_output=True, check=True,
+            env={**os.environ, "GIT_CONFIG_GLOBAL": os.devnull, "GIT_CONFIG_SYSTEM": os.devnull},
+        )
+
+    git("init")
+    (root / "billing.ts").write_bytes(b"export const legacy = 1;\n")
+    git("add", "billing.ts")
+    git("-c", "user.name=Seed", "-c", "user.email=seed@example.com", "commit", "-m", "seed")
+    (root / "billing.ts").write_bytes(b'export const caf\xe9 = "montr\xe9al";\n')
+
+    with pytest.raises(RuntimeError, match="billing.ts"):
+        _git_diff(root, "finding=f-1 repo=r1")
 
 
 def _drive_ts_manifest(root: Path) -> None:
@@ -423,14 +456,63 @@ def _drive_ts_manifest(root: Path) -> None:
     assert adapter.matches(_repo(root)) is True
 
 
+def _drive_python_sources(root: Path) -> None:
+    """The indexer's own gate: a module it cannot decode contributes no call sites."""
+    (root / "requirements.txt").write_text("stripe==11.0.0\n", encoding="utf-8")
+    (root / "billing.py").write_bytes(
+        "import stripe\n\n\ndef charge():\n    # café\n    return stripe.charges.create(amount=100, currency='eur')\n"
+        .encode("cp1252")
+    )
+    adapter = _python_adapter(root)
+    assert list(adapter.index(_repo(root))) == []
+
+    # The control, and it is the half that matters: without it this driver passes for a repository
+    # the adapter never indexed at all, which is exactly the reading it exists to rule out.
+    (root / "billing.py").write_text(
+        "import stripe\n\n\ndef charge():\n    return stripe.charges.create(amount=100, currency='eur')\n",
+        encoding="utf-8",
+    )
+    assert [site.operation_id for site in adapter.index(_repo(root))] == ["PostCharges"]
+
+
+def _drive_typescript_sources(root: Path) -> None:
+    """The same gate on the other language, reached the same way."""
+    from sync.index.typescript import TypeScriptAdapter
+    from sync.signals.stripe.adapter import StripeAdapter
+    from sync.signals.stripe.symbols import build_symbol_map
+
+    map_path = root / "map.json"
+    map_path.write_text(json.dumps(build_symbol_map(SPEC)), encoding="utf-8")
+    adapter = TypeScriptAdapter(vendor_adapter=StripeAdapter(
+        spec_dir=Path(__file__).parent / "fixtures" / "specs", symbol_map_path=map_path
+    ))
+    (root / "package.json").write_text(
+        json.dumps({"dependencies": {"stripe": "^14.0.0"}}), encoding="utf-8"
+    )
+    source = root / "src"
+    source.mkdir(exist_ok=True)
+    ts = ("import Stripe from 'stripe';\n"
+          "const stripe = new Stripe(process.env.KEY!);\n"
+          "export const go = () => stripe.charges.create({ amount: 1 });\n")
+
+    (source / "billing.ts").write_bytes(("// café\n" + ts).encode("cp1252"))
+    assert list(adapter.index(_repo(root))) == []
+
+    (source / "billing.ts").write_text(ts, encoding="utf-8")
+    assert [site.operation_id for site in adapter.index(_repo(root))] == ["PostCharges"]
+
+
 DRIVERS: dict[str, Callable[[Path], None]] = {
     "sync/benchmark/checkout.py:81": _drive_checkout,
+    "sync/index/python_lang.py:371": _drive_python_sources,
+    "sync/index/typescript.py:306": _drive_typescript_sources,
     "sync/forge/webhook.py:97": _drive_webhook,
-    "sync/index/python_lang.py:242": _drive_requirement_lines_pyproject,
-    "sync/index/python_lang.py:255": _drive_requirement_lines_requirements,
-    "sync/index/python_lang.py:790": _drive_configured_typechecker,
-    "sync/cli.py:725": _drive_literal_call_sites,
-    "sync/index/typescript.py:213": _drive_ts_manifest,
+    "sync/index/python_lang.py:258": _drive_requirement_lines_pyproject,
+    "sync/index/python_lang.py:271": _drive_requirement_lines_requirements,
+    "sync/index/python_lang.py:858": _drive_configured_typechecker,
+    "sync/cli.py:737": _drive_literal_call_sites,
+    "sync/index/typescript.py:232": _drive_ts_manifest,
+    "sync/remediate/agent_patch.py:240": _drive_git_diff,
     "sync/remediate/literal_swap.py:84": _drive_literal_swap,
     "sync/remediate/parameters.py:77": _drive_parameters,
     "sync/remediate/property_omit.py:93": _drive_property_omit,

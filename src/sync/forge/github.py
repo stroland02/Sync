@@ -121,8 +121,16 @@ class GitHubForge:
         self._timeout = timeout_seconds
 
     def _run(self, args: list[str], cwd: Path) -> str:
+        # `errors="replace"` rather than an exemption, because `args` comes from the caller and
+        # nothing here constrains what the child is. Every caller today runs `git` or `gh`, both
+        # of which measure as UTF-8, but the exemption would be a claim about callers not yet
+        # written. Nothing this returns can be corrupted by a replacement character and still
+        # matter: the load-bearing values are hex SHAs, branch names, gh's JSON numbers and
+        # URLs, all ASCII by construction. What it buys is that `git push` refusing with a
+        # remote message, or `gh` reporting a workflow name, reaches the `RuntimeError` below
+        # instead of dying on a reader thread and returning `stderr` as `None`.
         result = subprocess.run(
-            args, cwd=cwd, capture_output=True, text=True, encoding="utf-8"
+            args, cwd=cwd, capture_output=True, text=True, encoding="utf-8", errors="replace"
         )
         if result.returncode != 0:
             raise RuntimeError(f"{' '.join(args)} failed: {result.stderr.strip()}")

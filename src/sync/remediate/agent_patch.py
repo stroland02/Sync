@@ -178,7 +178,32 @@ def _identity(finding: Finding, repo: RepoRef) -> str:
     return f"finding={finding.id or 'unsaved'} repo={repo.repo_id}"
 
 
-def _git_diff(repo_path: Path) -> str:
+def _undecodable_path(diff: bytes, offset: int) -> str:
+    """The file whose content holds the byte at `offset`, named as the diff names it.
+
+    A byte that is not UTF-8 can only be file content: headers, hunk ranges, index lines
+    and mode lines are ASCII by construction. So the byte always sits inside a hunk, and
+    the last destination header before it owns the file it came from.
+
+    A `+++` line counts as a header only where a `---` line precedes it. Inside a hunk an
+    added line whose content is `++ b/elsewhere.ts` renders as `+++ b/elsewhere.ts`, and a
+    customer repository that keeps patch files under version control has them -- read the
+    naive way this names a file that is not in the diff at all.
+    """
+    lines = diff[:offset].split(b"\n")
+    headers = [
+        previous[4:] if line[4:] == b"/dev/null" else line[4:]
+        for previous, line in zip(lines, lines[1:])
+        if line.startswith(b"+++ ") and previous.startswith(b"--- ")
+    ]
+    if not headers:
+        return "a file the diff does not name before that byte"
+    # Diagnostic rather than data, so lenient: `core.quotepath` renders a non-ASCII path as
+    # ASCII octal escapes, and a clone that turns it off hands over the UTF-8 git stores.
+    return headers[-1].removeprefix(b"a/").removeprefix(b"b/").decode("utf-8", errors="replace")
+
+
+def _git_diff(repo_path: Path, identity: str) -> str:
     """Everything the working tree and the index hold over HEAD.
 
     Against HEAD rather than the bare `git diff`, which compares the working tree
@@ -192,12 +217,33 @@ def _git_diff(repo_path: Path) -> str:
     to `git diff HEAD` for the same reason it is invisible to `push_branch`'s
     `git add -u`: neither reads the working tree for paths the index does not
     know. Staging remains a deliberate act, and it is still the only way in.
+
+    **Read as bytes and decoded here, because `git diff` copies file content onto the pipe
+    verbatim.** A customer source file in a legacy encoding makes the child emit bytes that
+    are not UTF-8, which is not a hypothetical: measured against a clone holding one cp1252
+    file, `text=True, encoding="utf-8"` returned exit 0 with `stdout` set to `None` and
+    raised `UnicodeDecodeError` on `subprocess`'s reader thread, where no caller can catch
+    it. `Patch` then rejected the `None`, and the pydantic message an operator and the next
+    attempt both received named neither this call nor the file.
+
+    A diff is data, so it is refused rather than decoded leniently -- `errors="replace"`
+    here would hand back a patch that applies bytes the customer did not write, the failure
+    `sync.cli._literal_call_sites` records for `operation_id`. The cost is this patch, which
+    is the direction `route_after_patch` already handles: the message goes into the abandon
+    record and back to the next attempt as feedback.
     """
     result = subprocess.run(
-        ["git", "diff", "HEAD"], cwd=repo_path, capture_output=True, text=True,
-        encoding="utf-8", check=True,
+        ["git", "diff", "HEAD"], cwd=repo_path, capture_output=True, check=True,
     )
-    return result.stdout
+    try:
+        return result.stdout.decode("utf-8")
+    except UnicodeDecodeError as exc:
+        raise RuntimeError(
+            f"`git diff HEAD` produced bytes that are not UTF-8: {_undecodable_path(result.stdout, exc.start)} "
+            f"holds byte {exc.object[exc.start]:#04x} at offset {exc.start} of the diff. A patch is "
+            f"data and is refused rather than decoded leniently; re-encode that file as UTF-8 "
+            f"[{identity}]"
+        ) from exc
 
 
 def _unstaged_additions(repo_path: Path) -> list[str]:
@@ -206,8 +252,13 @@ def _unstaged_additions(repo_path: Path) -> list[str]:
     `--exclude-standard` because a path the repository's own `.gitignore` covers
     is a byproduct by the customer's declaration, and naming it would send the
     next attempt after something no patch was ever going to carry.
+
+    Unlike `_git_diff` above, git owns the encoding of everything this hands back, at both
+    settings of `core.quotepath`: at its default a non-ASCII path is octal-escaped into pure
+    ASCII, and where a clone turns it off the path arrives as the UTF-8 git stores internally,
+    converted from NTFS's UTF-16. `tests/test_agent_patch.py` measures both.
     """
-    result = subprocess.run(
+    result = subprocess.run(  # subprocess-encoding: allow - git renders every path it lists as ascii escapes or as utf-8, measured at both settings of core.quotepath
         ["git", "ls-files", "--others", "--exclude-standard"], cwd=repo_path,
         capture_output=True, text=True, encoding="utf-8", check=True,
     )
@@ -253,7 +304,7 @@ class AgentRemediator:
                 f"[{identity}]"
             )
 
-        diff = _git_diff(repo_path)
+        diff = _git_diff(repo_path, identity)
 
         return Patch(
             diff=diff,
