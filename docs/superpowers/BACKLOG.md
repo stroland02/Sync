@@ -126,10 +126,16 @@ range, branch deletion on abandonment, checkpoint serialiser registration, the
 dependency-edit guard, staged-new-file support, and dependency-tree discarding. Every one of
 those sits on the acceptance path.
 
-Checked cheaply and it is not obviously broken: the test still collects, and the production
-graph compiles with the real `StripeAdapter`, `TypeScriptAdapter`, `TieredRemediator`,
-`GitHubForge` and store, exposing all eight nodes. That establishes the wiring survived. It
-establishes nothing about behaviour.
+Re-checked cheaply on 2026-07-30 at `bc1afdb` and it is still not obviously broken: the test
+collects, and the production graph compiles with the real `StripeAdapter`, `TypeScriptAdapter`,
+`TieredRemediator`, `GitHubForge` and a store. It now exposes **ten** nodes rather than the eight
+this entry used to claim — `locate`, `prepare`, `patch`, `static_verify`, `push_branch`,
+`await_ci`, `replay`, `open_pr`, `report`, `abandon`. Four of those postdate the last acceptance
+run, which is the point: the wiring survived, and that establishes nothing about behaviour.
+
+`build_graph` also refuses a store that cannot record a migration outcome, naming the missing
+`record_migration_outcome(outcome)` and calling it the single write every benchmark axis reads
+from. So the corpus wiring is checked at construction rather than at the end of a run.
 
 **Run it with `-n0`.** `addopts` now carries `-n auto`, which applies to the e2e test too.
 
