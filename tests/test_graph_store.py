@@ -122,6 +122,9 @@ def test_findings_round_trip_and_change_status(store):
             vendor_change_id=change_id,
             severity="breaking",
             rationale="status removed",
+            # What `VendorChangeDetector` itself attributes, rather than a value chosen to satisfy
+            # the write: a wrong static binding is what would make this claim wrong.
+            binding_rung="static",
         )
     )
     assert len(store.open_findings()) == 1
@@ -347,16 +350,23 @@ def test_two_claims_about_one_call_site_are_two_rows(store):
         )
     )
 
+    # `EfficiencyDetector` carries the correlator's own rung, which is `observed` when the spans
+    # correlated and `unresolved` when they did not. These two fixtures are about the identity of a
+    # row rather than about attribution, so they take the correlated case -- the one a finding with
+    # a call count behind it actually has. The rung is not in the finding's key, and
+    # `test_finding_rung.py` is where that is asserted.
     loop = store.insert_finding(
         Finding(
             detector="efficiency", call_site_id=site_id, claim="loop",
             severity="info", rationale="called 40 times in one unit of work",
+            binding_rung="observed",
         )
     )
     cached = store.insert_finding(
         Finding(
             detector="efficiency", call_site_id=site_id, claim="uncached-repeat",
             severity="info", rationale="the same request was made 40 times",
+            binding_rung="observed",
         )
     )
 
@@ -385,6 +395,7 @@ def test_the_same_claim_inserted_twice_converges_on_one_row(store):
             Finding(
                 detector="efficiency", call_site_id=site_id, claim="loop",
                 severity="info", rationale="called 40 times in one unit of work",
+                binding_rung="observed",
             )
         )
 
