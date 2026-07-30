@@ -218,22 +218,23 @@ def test_an_unreadable_change_is_not_reported_as_a_tool_error():
         assert "error" not in result
 
 
-# --- a second thing the surface flattens ----------------------------------------------
+# --- a second thing the surface flattened, and no longer does -------------------------
 
 
 @pytest.mark.parametrize("rung", ["static", "resolved", "observed", "unresolved"])
-def test_every_answer_reports_binding_source_static_whatever_rung_the_finding_names(rung: str):
-    """`binding_rung` is now enforced at the write and the surface still reports a constant.
+def test_the_rung_is_the_one_flattening_in_this_file_that_was_repaired(rung: str):
+    """The counterpart to the three silences above, and the contrast is the point.
 
-    `GraphStore.insert_finding` refuses a finding whose rung is `unattributed`, so every finding
-    the graph holds names a real rung -- and `_envelope` answers `binding_source: "static"` for
-    all four of them. `CLAUDE.md` requires that every artifact derived from a binding carry the
-    rung it came from, and a tool response is one.
+    This test pinned the loss first: `binding_rung` had become an enforced column and the surface
+    still answered `binding_source: "static"` for all four rungs, so a claim resting on a
+    span-to-operation correlation reached an agent as a syntactic match. M3-W109 repaired it, and
+    that turned this test red on purpose, which is what it was written to do.
 
-    Pinned rather than repaired: the rung is per finding and `binding_source` is per response, so
-    carrying it honestly means a field on the row, which is a change to the shape of a published
-    surface. `docs/superpowers/reports/2026-07-30-mcp-tool-surface-declines.md` carries the
-    argument. This is what turns that repair red on purpose when someone makes it.
+    What separates it from the declines this file exists to record is that the rung had a value to
+    carry. "No change" and "the change would not parse" are two facts with one shape and no field
+    to tell them apart, so repairing them means inventing a channel. The rung was already in the
+    row; only the response dropped it. `tests/test_mcp_provenance.py` holds the full behaviour and
+    `docs/superpowers/reports/2026-07-30-provenance-on-the-tool-surface.md` the argument.
     """
     graph = RowBackedGraph(
         [_finding("f", "vc-readable", detector="observed-drift", binding_rung=rung)],
@@ -242,8 +243,8 @@ def test_every_answer_reports_binding_source_static_whatever_rung_the_finding_na
 
     payload = _call(graph, "sync_whats_at_risk")["result"]["structuredContent"]
 
-    assert payload["binding_source"] == "static"
-    assert "binding_rung" not in payload["items"][0]
+    assert payload["items"][0]["binding_source"] == rung
+    assert payload["binding_source"] == rung
 
 
 # --- the same swallow, on the evidence a reviewer reads --------------------------------
