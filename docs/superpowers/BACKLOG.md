@@ -24,7 +24,7 @@ by content, because items were never tagged with a milestone as they landed.
 | **M2** | Production error detector | **~85%** | Built; never exercised against real telemetry |
 | **M3** | Multi-vendor, MCP, plugin SDK | **~95%** | Packaging closed 2026-07-30; nothing structural left |
 | **M4** | Hosted control plane (**the front end**) | **0%** | Not started, and has no plan file yet |
-| **M5** | Integration layer | **~35%** | Sources exist; the correlation join does not |
+| **M5** | Integration layer | **~25%** | Feed and registry exist; nothing correlates anything |
 | **M6** | Show it, rather than describe it | **0%** | Needs a UI to film |
 
 ### M0 — Walking skeleton, one real pull request · ~90%
@@ -91,8 +91,14 @@ runs and merge outcomes, and today every panel would read zero. `B7` is what cha
 
 ### M5 — The integration layer · ~35%
 
-**Done.** Sentry and Datadog sources, the signed public change feed with its consumer and cache, the
-vendor registry and its tiering, and the deprecations catalogue.
+**Done.** The signed public change feed with its consumer and cache, the vendor registry and its
+tiering, and the deprecations catalogue.
+
+**Correction to an earlier reading of this milestone.** Sentry and Datadog were previously counted
+here as "sources". They are `shapes.py` readers only — they parse a recorded response shape and
+`cli._fold_sentry` folds it into `observed_shape`, which serves M2's `observed_drift`. No detector
+reads Sentry for an error rate, nothing models a deploy, and neither module contributes anything to
+this milestone. Counting them here overstated it.
 
 **Remaining.** The correlation join itself — the thing the milestone is actually for. Nothing yet
 joins a Sentry spike to a deploy to a vendor change to the call sites affected. That is a build, not
@@ -115,6 +121,23 @@ confidently instead of refusing.
 ---
 
 ## Ready
+
+### B71 — the Sentry integration cannot see an error rate, which is the one thing M5 exists for
+
+`src/sync/signals/sentry/` is `shapes.py` and nothing else: a `SentryShapeReader` that parses a
+recorded response body, folded by `cli._fold_sentry` into `observed_shape` for M2's
+`observed_drift`. Measured on main — detectors reading Sentry for an error rate: none. Anything in
+`src/` modelling a deploy: nothing. So the vendor of record for production errors is wired in and
+the only question Sync asks it is what the body looked like.
+
+`status_rate.py` does not close this. It reads `observed_call`, populated from OTLP spans, which
+requires the customer to have wired OTLP to Sync and sees only what the span ingest received. A
+Sentry project is a source most teams already have, which is why the design document calls it the
+fastest route to this milestone.
+
+Scoped to the ingest alone — per-operation failure counts landing in the graph with a declared
+grain, a conflict clause proving convergence, and an honest rung. Deploy correlation and the spike
+finding are later work and queued separately once there is something to correlate.
 
 ### B7 — The M0 acceptance run has not executed since the pipeline changed underneath it
 
