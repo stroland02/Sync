@@ -317,7 +317,7 @@ def test_a_model_id_used_as_a_type_key_records_no_argument_keys():
     ]
 
 
-def test_the_enclosing_object_is_still_read_when_it_really_is_a_call(tmp_path):
+def test_the_enclosing_object_is_still_read_when_it_really_is_a_call():
     """The control for the test above. A guard that refused every container would pass it while
     losing the two-fact finding the whole `args_keys` capture exists for."""
     source = 'client.messages.create({ model: "claude-opus-4-8", temperature: 0.7 });'
