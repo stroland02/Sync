@@ -423,8 +423,9 @@ def test_a_check_in_a_column_definition_never_reaches_a_database_that_has_the_co
 def test_apply_schema_converges_over_a_database_holding_a_row_the_model_refuses(store):
     """Idempotence, asserted where the brief asks: against rows that are already there.
 
-    `apply_schema` runs against long-lived databases -- 216 on this container -- so a schema change
-    that fails against a violating row fails at startup for whoever holds one. It does not, today,
+    `apply_schema` runs against long-lived databases -- two hundred-odd on this container -- so a
+    schema change that fails against a violating row fails at startup for whoever happens to hold
+    one, in a run that has nothing to do with severity. It does not, today,
     and this is what would have to keep being true of any constraint added later: adding a CHECK by
     plain `ALTER TABLE` to a table holding such a row is refused with SQLSTATE 23514, which is why
     the pattern would have to be `NOT VALID` -- the same shape as `binding_rung`'s `unattributed`

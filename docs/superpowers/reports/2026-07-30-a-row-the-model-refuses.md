@@ -5,8 +5,8 @@ examining the MCP tool surface: `vendor_change.severity` is `TEXT NOT NULL` with
 a five-member `Literal`, so **a row Postgres stores is one the model refuses.** Both halves
 confirmed. `src/sync/core/models.py:23` declares
 `Severity = Literal["breaking", "warning", "deprecation", "addition", "info"]`, and `schema.sql`
-declared `severity TEXT NOT NULL` at two places plus `change_severity` at a third, none with a
-constraint.
+declares `severity TEXT NOT NULL` at two places plus `change_severity` at a third, none with a
+constraint. After this task it still does, and now says why.
 
 The answer taken is the third of the three the brief named: **neither a CHECK nor a change to the
 read.** The gap is a documented property of the schema, and the repair that would cost something
@@ -30,11 +30,16 @@ That is a decline, so the evidence for it is the whole of this report.
 | 8 | **Drift: `Severity` gains a member.** | Yes, and it has already happened once — `warning` was added when `oasdiff breaking`'s three grades stopped being collapsed into one. | Nothing today. **With a CHECK it becomes a cost**: an existing database refuses a value the deployed model considers valid. |
 | 9 | A second `GraphReader`/writer implementation | **Not for writes.** One module in `src/` issues SQL against these three tables. Measured by regex over every `src/**/*.py`: `sync/graph/store.py`, and nothing else. `tests/test_severity_vocabulary.py::test_the_store_is_the_only_module_that_writes_a_severity_column` holds it. | — |
 
-**The measured state of the world.** 216 databases on the container, 182 reachable (32 are
-`sync_b63_gw*` names whose databases no longer exist). `vendor_change` present in 145,
-`finding` in 145, `migration_outcome` in 129. Total severity-bearing rows: 130 `breaking` in
-`vendor_change`, 2 `info` and 1 `breaking` in `finding`, 3 `breaking` in `migration_outcome`.
-**Rows holding a value outside the vocabulary: zero.** Three of the five members —
+**The measured state of the world.** A snapshot, and it has to be described as one: the count moves
+while you look at it, because every suite run creates a database per xdist worker and `conftest`'s
+sweep drops the ones killed runs left behind. Twenty minutes apart the same query returned 216
+non-template databases and then 195.
+
+At the survey: 214 scanned, 182 reachable — the rest are `pg_database` rows that refuse a connect,
+all but one of them `sync_<task>_gw<n>` names left by killed xdist runs. `vendor_change` present in 145 of
+them, `finding` in 145, `migration_outcome` in 129. Severity-bearing rows found: 130 `breaking` in
+`vendor_change`, 2 `info` and 1 `breaking` in `finding`, 3 `breaking` in `migration_outcome` — 136
+in total. **Rows holding a value outside the vocabulary: zero.** Three of the five members —
 `warning`, `deprecation`, `addition` — appear in no persisted row anywhere, which is why route 7
 would go unnoticed.
 
@@ -97,8 +102,8 @@ hand-written row can be. **Absent and believed present is worse than absent.**
 
 **2. A table-level `ADD CONSTRAINT` is refused outright by a table holding a violating row.**
 SQLSTATE 23514, `check constraint "vc_sev" of relation "vendor_change" is violated by some row`.
-Against 216 databases, that is an apply-time failure in whichever one somebody happens to hold a
-bad row in, at startup, for a run that has nothing to do with severity.
+Across two hundred-odd databases, that is an apply-time failure in whichever one somebody happens to
+hold a bad row in, at startup, for a run that has nothing to do with severity.
 
 **3. A bare `ADD CONSTRAINT` is not idempotent.** 42710 on the second apply, which breaks the rule
 `CLAUDE.md` binds every stage to. `DROP CONSTRAINT IF EXISTS` followed by
