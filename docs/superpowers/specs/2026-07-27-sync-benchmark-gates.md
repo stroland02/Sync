@@ -118,15 +118,23 @@ part:
   already make.
 - **The routing decision that fired is recorded**, including the decision-table row. Otherwise
   "tier 0 was wrong for this change kind" is an archaeology project rather than a query.
-  **Holds in part, and the part that is missing has not moved.** `tier` and `strategy` record
-  which tier ran. The row is now decided earlier and carried further than it was:
+  **Holds.** `tier` and `strategy` record which tier ran, and the row itself now lands.
   `_decide_tier` at `src/sync/remediate/nodes.py:72` calls `sync.route.matrix.route()` in the
   `locate` node and stores the row on `RunState` as `routing_row`, which the report node names
-  in its reason (`nodes.py:631`); `TieredRemediator` asks the same table again at
-  `src/sync/remediate/tiered.py:319`. It still has nowhere durable to land: `migration_outcome`
-  has no column for it, `sync.remediate.corpus` takes no such argument, and `on_route` has no
-  caller anywhere in `src/`. See `2026-07-27-sync-routing-matrix.md` for the jurisdiction the
-  table currently has.
+  in its reason; `sync.remediate.corpus` writes it through, defaulting to `'unrouted'` where the
+  table had no jurisdiction, so an unrouted attempt stays distinguishable from an unrecorded one;
+  and `migration_outcome` carries `tier` and `routing_row` at the table's one-row-per-attempt
+  grain, persisted by `sync.graph.store`.
+
+  Two qualifications, because the gate is about what can be *queried* rather than what is
+  stored. **No attempt predating that column can be backfilled**, since the row a run routed on
+  is a fact about the table as it stood, and `schema.sql` says so where the column is declared.
+  And **`on_route` still has no caller in `src/`** — but that is now deliberate rather than
+  unfinished wiring: the recorder already holds the state, which `sync.remediate.corpus` and
+  `sync.remediate.tiered` each say beside the callback. A reader hunting for the missing caller
+  is hunting for nothing.
+
+  See `2026-07-27-sync-routing-matrix.md` for the jurisdiction the table currently has.
 
 ## Ground truth without customers
 
