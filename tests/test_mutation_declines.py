@@ -140,14 +140,19 @@ def test_an_untargeted_site_in_an_unparseable_file_does_not_refuse_the_whole_tre
     make it. A file with no grammar cannot be asked, and the alternative to skipping it is
     refusing the pair -- which would mean one Ruby file anywhere in a real checkout costs the
     whole specification.
+
+    The Ruby call passes a hash, and `{ limit: 3 }` is byte-identical in Ruby and TypeScript. So
+    reading the file under any grammar at all -- rather than declining to read it -- finds `limit`
+    declared and refuses the tree. That is what makes this a measurement of the skip rather than
+    of a file the substituted grammar happens to answer the same way about.
     """
     sources = {
-        "src/a.ts": f"const c = {CALL}({{ limit: 3 }});\n",
-        "lib/client.rb": f"c = {CALL}()\n",
+        "src/a.ts": f"const c = {CALL}({{ expand: ['data'] }});\n",
+        "lib/client.rb": f"c = {CALL}({{ limit: 3 }})\n",
     }
     sites = [_site(sources, "src/a.ts", "cs-ts"), _site(sources, "lib/client.rb", "cs-rb")]
 
-    pair = generate_pair(sources, _change("request-property-removed", "expand"), sites,
+    pair = generate_pair(sources, _change("request-property-removed", "limit"), sites,
                          targets=["cs-ts"])
 
     assert pair.unreachable == ()
@@ -157,7 +162,10 @@ def test_an_untargeted_site_in_an_unparseable_file_does_not_refuse_the_whole_tre
 
 @pytest.mark.parametrize(
     ("path", "body"),
-    [("src/a.ts", f"const c = {CALL};\n"), ("src/a.py", f"c = {CALL}\n")],
+    [
+        ("src/a.ts", f"const c = wrapper({CALL}());\n"),
+        ("src/a.py", f"c = wrapper({CALL}())\n"),
+    ],
     ids=["typescript", "python"],
 )
 def test_a_recorded_position_naming_no_call_is_unreachable_in_both_languages(path, body) -> None:
@@ -167,9 +175,14 @@ def test_a_recorded_position_naming_no_call_is_unreachable_in_both_languages(pat
     because guessing which call was meant would put the label on a site nobody chose. Both
     readers of that None decline rather than raise: the audit half answers False, and the
     mutation half answers None, which the caller records as a target it did not break.
+
+    The position is deliberately one byte inside a real call, and that call is nested in another,
+    so a fallback of any kind has two calls to choose from and both are wrong. A fixture holding
+    no call at all would leave nothing for a fallback to find, and would pin the return value
+    without pinning the exactness the docstring rests on.
     """
     sources = {path: body}
-    site = _site(sources, path)
+    site = _site(sources, path, offset=1)
 
     pair = generate_pair(sources, _change(), [site], targets=["cs1"])
 
