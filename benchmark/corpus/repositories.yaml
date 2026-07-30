@@ -28,7 +28,28 @@
 # were never affected by the old pruning. A mismatch here is still a real refusal -- it is not
 # evidence that a vendor moved a commit, and the commits below are the same commits they were.
 #
-# The corpus axes did not move across this change, measured rather than assumed: binding
+# What the digest covers changed again on 2026-07-30, and the pinned commits still did not.
+#
+# The digests below were produced by a Windows checkout and could only ever be reproduced on
+# one. `git checkout` converts line endings according to the machine's own configuration, and
+# `sorted(Path)` compares case-insensitively on Windows -- so the same commit materialised
+# different bytes in a different order depending on who ran the fetch, and every one of the five
+# refused on a Linux runner. The indexer reads these trees, so this was never cosmetic: a corpus
+# that differs by platform scores differently by platform, and a frozen corpus that is only
+# frozen on one machine is not frozen.
+#
+# `fetch_commit` now passes `core.autocrlf=false` and `core.eol=lf`, and both walks key on the
+# POSIX path string rather than on a `Path`. The digests below are the result, verified on two
+# platforms rather than asserted: identical output from this repository's script on Windows and
+# from an independent implementation of the same rule inside a `python:3.12-slim` container.
+#
+# All five move, and an earlier draft of this note claimed two of them did not. That claim was
+# wrong and is recorded rather than deleted: `turbo` and `fireship-server` were the two whose
+# post-fix Windows digest already equalled what a Linux CI run printed, and reading that as
+# "unchanged" confused the materialisation converging with the pin being right. Every pin here
+# was a Windows-derived value, so every one of the five is replaced.
+#
+# The corpus axes did not move across the 2026-07-29 change, measured rather than assumed: binding
 # precision 1.0000 at n=16 and binding recall 1.0000 at n=16 before and after, with 4
 # falsifiable negatives and 12 of 12 pairs scored either way. The files that arrived are files
 # the scorer skips, so the mapping the indexer runs over is the same mapping.
@@ -37,25 +58,25 @@
   repo: stripe/stripe-connect-furever-demo
   commit: 5114c968fd8537d82889e2d04afaf00a986af7bf
   subpath: .
-  tree_digest: 2562e449f98b97f025d786bf16c93a0b82d6fa3182101bc31c97271bca20cfe7
+  tree_digest: 0a153eac6316e314f703982a99fa6edc72d4831cecbfa8506dd00b89990ddd3d
 
 - name: turbo
   repo: ardriveapp/turbo-payment-service
   commit: 6c7aac00cd271abe6dd3764316209f329501583d
   subpath: .
-  tree_digest: 82d4d4342a2d53787594e16564a33abb02afea9388ce6dd7176fcad261013900
+  tree_digest: f0a7dc81c7b3dbe09c1d422d54d2828fd23a23b373da019e0d7086122526a1e7
 
 - name: remix
   repo: cjavilla-stripe/remix-stripe-sample
   commit: 25982ff9316d5219e7e0973ee2766bd6b2012723
   subpath: .
-  tree_digest: 31dd7aacd3701c0bf2c304d3fe66475659af199520dfd9c46eb11d1d1bf7eaca
+  tree_digest: d277468370ea45072f95f623bd31fcf12f7991c6a5dc64f4bef04fe62161e69e
 
 - name: fireship-server
   repo: fireship-io/stripe-payments-js-course
   commit: d4a5fc4b376d25f6d9fe875b672a26a90ed662a7
   subpath: server
-  tree_digest: 2fcb1683d028a0fbdbcc82b36347d539d2fe3d6951e7567d9acbc4126f822f4a
+  tree_digest: 7e589f89ba0644e69d5462ac83f22a7f65b8f7289bf4eb978f08a908ab5da98a
 
 # The first entry that is not TypeScript. `2026-07-29-a-python-repository-exists-and-cannot-be-pinned.md`
 # found it and measured why it could not be pinned then; the blocker was the generator rather than
@@ -64,4 +85,4 @@
   repo: openbraininstitute/virtual-lab-api
   commit: a2577bb15dd004d170a5a454c2bc850061a06d7a
   subpath: .
-  tree_digest: 7426825dba1243e737187237782d32bb5ff419a4b30dcf6fceeb0a385056921f
+  tree_digest: 6d2742310c043b31308866f1aa86eb7db341c6049fc5694dfdc1889a7c61d7b4

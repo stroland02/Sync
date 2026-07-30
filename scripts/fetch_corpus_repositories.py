@@ -81,9 +81,19 @@ def fetch_commit(repo: str, commit: str, into: Path) -> None:
     into.mkdir(parents=True, exist_ok=True)
     _git(["init", "-q", "."], into)
     if not _git(["remote"], into):
-        _git(["remote", "add", "origin", f"https://github.com/{repo}.git"], into)
+        # A slug is a GitHub repository; anything carrying a scheme is used as given, which is
+        # what lets a test fetch from a local fixture instead of the network.
+        url = repo if "://" in repo else f"https://github.com/{repo}.git"
+        _git(["remote", "add", "origin", url], into)
     _git(["fetch", "--quiet", "--depth", "1", "origin", commit], into)
-    _git(["checkout", "-q", "FETCH_HEAD"], into)
+    # `-c core.autocrlf=false`: materialise the bytes git stores, not what this machine's
+    # global config would convert them to. Without it the same commit checks out CRLF here
+    # and LF on a Linux runner, every digest depends on who ran the fetch, and the indexer
+    # scores a tree that differs by platform. `core.eol=lf` closes the second route to the
+    # same conversion: four of the five repositories carry a `.gitattributes` text rule,
+    # and attribute-driven conversion follows core.eol regardless of autocrlf -- `native`
+    # is CRLF on Windows. The manifest digests pin the LF bytes both flags guarantee.
+    _git(["-c", "core.autocrlf=false", "-c", "core.eol=lf", "checkout", "-q", "FETCH_HEAD"], into)
 
     head = _git(["rev-parse", "HEAD"], into)
     if head != commit:
@@ -122,7 +132,10 @@ def tree_digest(root: Path) -> str:
     different inputs to an indexer that reads `package.json` from the root.
     """
     digest = hashlib.sha256()
-    for path in sorted(root.rglob("*")):
+    # The same codepoint ordering as `tree_files`, for the same reason: Path comparison is
+    # case-insensitive on Windows, and a digest taken in platform order names the platform
+    # as much as the tree.
+    for path in sorted(root.rglob("*"), key=lambda p: p.relative_to(root).as_posix()):
         if not path.is_file():
             continue
         digest.update(path.relative_to(root).as_posix().encode("utf-8"))

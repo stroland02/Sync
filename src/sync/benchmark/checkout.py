@@ -40,7 +40,11 @@ def tree_files(root: Path) -> Iterator[Path]:
     from it: two machines that walked the same checkout have to produce the same string and the
     same insertion order, and a filesystem's own enumeration is not a promise.
     """
-    for path in sorted(root.rglob("*")):
+    # Keyed on the posix string, never on Path objects: Path comparison is case-insensitive
+    # on Windows, so two platforms walk the same checkout in different orders wherever a
+    # case-mixed pair exists -- and the digest and the score's insertion order both ride on
+    # this sequence. Codepoint order is the one both platforms can agree on.
+    for path in sorted(root.rglob("*"), key=lambda p: p.relative_to(root).as_posix()):
         if path.is_file() and not NOT_PART_OF_THE_TREE & set(path.parts):
             yield path
 
