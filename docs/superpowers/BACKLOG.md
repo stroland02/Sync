@@ -12,33 +12,36 @@ item that cannot say what evidence closes it is not ready to dispatch.
 
 ## Ready
 
-### B66 — Nothing refuses a finding that names no rung, and the store is where it should
+### B68 — The import boundary is enforced and the packaging boundary is not
 
-B65 landed the rung column and every detector attributes correctly. What it did not land is the
-enforcement, and it said so plainly rather than hiding it — `FindingRung`'s docstring reads
-*"`unattributed` on a row written after this shipped is still a bug -- it is just one the type no
-longer catches."* Nothing else catches it either.
+CLAUDE.md's first non-negotiable says a third party writing a vendor adapter *"depends on
+`sync.core` alone; a single sibling import drags Postgres into their dependency tree."* The import
+half holds — `tests/test_import_boundary.py` and `lint-imports` both pass on every run. The
+packaging half does not exist. Measured:
 
-The history matters, because two positions were already tried. Requiring the field on the model was
-ruled and then reversed: `Finding` is exported from `sync.core.__init__`, so it is the published
-plugin SDK, and a required field breaks every detector a third party has written. Measured cost of
-that route: **153 failed, 120 errors across 32 files.** The reversal put enforcement at
-`GraphStore.insert_finding` instead — a boundary, which is where CLAUDE.md says validation belongs —
-and that half was never built.
+    installing `sync`                 12 runtime dependencies, including psycopg[binary],
+                                      langgraph, langgraph-checkpoint-postgres,
+                                      claude-agent-sdk and three tree-sitter packages
+    third-party imports in sync.core  pydantic
 
-**Its cost is measured too.** I prototyped the guard and ran it: `14 failed, 2523 passed`. Every
-failure is an existing test that persists a `Finding` without a rung. That is a fourteenth of the
-model route and touches no published contract, since `sync.graph` is internal — but it is fourteen
-tests that must each say which rung they mean, and blanket-pasting `static` across them would be
-worse than leaving the gap.
+`pyproject.toml` declares one distribution, so there is no way to depend on `sync.core` alone. An
+adapter author following CONTRIBUTING.md — which promises an adapter "does not inherit Postgres,
+LangGraph, or anything else in this repository's dependency tree" — installs all of it to write a
+class with two methods. **The sentence the boundary exists to make true is false today, for exactly
+the person it was written for.**
 
-A prototype guard, its test, and the exact failure list are recoverable from this coordinator's
-session; the shape that worked raised `ValueError` naming the detector, and the fourteen tests are
-in `tests/test_graph_store.py` and its neighbours.
+The rule is not wrong and the import test is not wasted: the boundary is what makes the split
+possible, and it has simply never been cashed in. M3's deliverable is *publish `sync.core` as the
+open plugin SDK*; the documentation exists and the packaging does not. It is also cheapest to do now,
+while `sync.core` has exactly one third-party import.
 
-**Closes when:** a finding persisted without a rung is refused at the write, naming the detector;
-each of the fourteen tests states the rung it means rather than being blanket-edited;
-`Finding`'s constructor is unchanged so the SDK contract holds; and four gates green.
+**Explicitly not publishing.** Uploading anywhere is public, irreversible and the user's decision.
+This makes the package installable on its own and proves it.
+
+**Closes when:** an environment holding only the core distribution can `import sync.core`, reach the
+four plugin protocols and run `sync.core.conformance`, with evidence that psycopg, langgraph and the
+tree-sitter grammars are absent from it; `uv sync` and the suite are unchanged for this repository;
+and the import boundary test still passes untouched.
 
 ### B7 — The M0 acceptance run has not executed since the pipeline changed underneath it
 
@@ -65,6 +68,8 @@ when, which is why it is recorded here rather than dispatched.
 recorded with which change broke it.
 
 ## In flight
+
+- **B68** — `task_3704b87bc7cf`, worktree `sync-solo-a`.
 
 - **B61** — `task_12ccee12fd98`, worktree `sync-solo-b`.
 - **B55** — re-dispatched as `task_3746257e4c0a` into `sync-solo-b`. The first attempt
@@ -833,3 +838,49 @@ is what a reviewer needs and duplicating it here would let the two copies drift.
   Two coordinator errors it corrected: my preservation commit still called the work "unreviewed, not
   gated" after that stopped being true, and its schema comment still described the required field I
   had already reversed. It amended both. The enforcement half of that reversal is B66.
+
+- Refuse to persist a finding that names no rung. Landed `f2c8275`. `insert_finding` raises
+  `ValueError` naming the detector when `binding_rung` is `unattributed`, before the insert, with
+  the argument for the placement in its own docstring — the check is at the store because `Finding`
+  is exported from `sync.core` and a required field there breaks every third-party detector.
+
+  Verified here: it refuses, names the detector, and **leaves no row behind** — the worker's second
+  mutation existed specifically to prove that a write-then-check implementation would be caught, and
+  it is the only test that catches it. The fourteen tests it had to touch each state the rung their
+  detector attributes (four `observed`, three `static`, the efficiency fixtures commented as taking
+  the correlated case) rather than a blanket value.
+
+  It also closed the question B65 was asked and never answered: `insert_finding` is the only route
+  that can set a rung. Two `INSERT INTO finding` exist — the store, and one test deliberately
+  omitting the column to prove history reads back — `set_finding_status` writes status alone, there
+  is no `COPY` or `executemany`, `psycopg.connect` appears in `src/` only in `store.py`, and
+  `sync.benchmark` never persists a finding at all. That last fact is also why the corpus figures
+  cannot move, and both sides measured 1.0000, 1.0000, 7, 17.
+
+  `CLAUDE.md`'s rung bullet now names the mechanism, including why the check is not on `Finding` —
+  the worker left that file to the coordinator deliberately, which was right.
+
+- The conformance kit refuses what the store would. Landed `850854f`. `check_detector` gains a
+  fifth rule, `_check_findings_name_a_rung`, rejecting `unattributed` and never asserting *which*
+  rung is right — that is the detector author's judgement, and the kit cannot know it.
+
+  **The accepting half caught what the failing half could not: `_CorrectDetector`, the kit's own
+  published example of conformance, set no rung.** The kit was shipping an example whose findings
+  the store would refuse. That is the third time this kit has been found certifying something it
+  should not — `check_vendor_adapter` once passed an adapter resolving no symbol, and
+  `check_remediator` read an empty diff as a decline — and the first time the miss was in its own
+  reference implementation.
+
+  Three mutations, each caught by a different test: removing the rule reddens both new tests,
+  truncating to `findings[:1]` is seen only by the two-finding test, and inverting the predicate is
+  caught by the accepting one. Verified here independently: two real rungs conform, no rung is
+  refused naming the detector.
+
+  It declined to check membership in `BindingRung`, correctly — the field is typed, so `banana`
+  raises `ValidationError` at construction and never reaches a scan, leaving `unattributed` as the
+  only member that is not a binder's rung. CLAUDE.md forbids validating conditions that cannot
+  occur, and it applied that rather than adding a rule that could never fire.
+
+  Two things beyond the ask: two fixtures had to name a rung because the new rule runs before the
+  rule they exercise, and `docs/writing-a-vendor-adapter.md` still called the finding key a triple
+  after `claim` had joined it.

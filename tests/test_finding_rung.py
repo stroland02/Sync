@@ -159,14 +159,15 @@ def test_the_rung_survives_a_read_back_through_the_model(store):
 
 def test_a_finding_constructed_without_a_rung_says_it_was_never_attributed():
     """Defaulted rather than required, which is the weaker of the two positions and was chosen
-    knowing it. Requiring the field would fail a forgetful detector at construction; it also
-    invalidated every `Finding` fixture in the suite, and repairing those would have written a
-    rung into 32 files of fixtures that do not reason about one.
+    knowing it. Requiring the field would fail a forgetful detector at construction; `Finding` is
+    exported from `sync.core`, which `CLAUDE.md` calls the published plugin SDK, so a required
+    field breaks every detector a third party has written -- and inside this repository alone it
+    cost 153 failures and 120 errors across 32 files.
 
     So the value a forgetful caller gets is at least honest -- `unattributed` says no binder
-    claimed this -- and the guard for the five detectors that exist is the five tests below. A
-    sixth added later could omit it silently, which is the gap this test documents rather than
-    closes.
+    claimed this. What closes the gap is that the value cannot be persisted: `insert_finding`
+    refuses it, which is the section below. Constructing one is still allowed and still means
+    nothing was attributed.
     """
     finding = Finding(
         detector="d", claim="c", call_site_id="cs", severity="info", rationale="r",
@@ -203,6 +204,48 @@ def test_a_row_written_before_the_column_existed_reads_as_unattributed(store):
 
     assert row["binding_rung"] == "unattributed"
     assert [f.binding_rung for f in store.open_findings()] == ["unattributed"]
+
+
+# --- refused at the write, which is where the boundary is ----------------------------
+
+
+def test_persisting_a_finding_that_names_no_rung_is_refused(store):
+    """The enforcement the default leaves open, at the only place it can go.
+
+    `CLAUDE.md` puts validation at boundaries -- user input, vendor responses, subprocess output
+    -- and a write to Postgres is one; a Pydantic constructor inside our own detector is not.
+    `sync.graph` is internal, so unlike the model no published contract is at stake here.
+
+    Refused rather than warned. A warning in a pipeline log is the silent-wrong-answer failure
+    this repository keeps finding: the row lands looking exactly like one written before the column
+    existed, and nothing afterwards can tell the two apart -- so a detector added next month that
+    forgets produces findings nobody can attribute, forever.
+    """
+    site_id = _site(store)
+    forgetful = Finding(
+        detector="a_detector_that_forgot", claim="c", call_site_id=site_id,
+        severity="breaking", rationale="r",
+    )
+
+    with pytest.raises(ValueError, match="a_detector_that_forgot"):
+        store.insert_finding(forgetful)
+
+
+def test_the_refused_finding_leaves_no_row_behind(store):
+    """A refusal that had already written would be worse than none: the row would be there,
+    `unattributed`, and the exception would suggest it was not."""
+    site_id = _site(store)
+
+    with pytest.raises(ValueError):
+        store.insert_finding(
+            Finding(
+                detector="another_forgetful_detector", claim="c", call_site_id=site_id,
+                severity="breaking", rationale="r",
+            )
+        )
+
+    row = store._connect().execute("SELECT count(*) AS findings FROM finding").fetchone()
+    assert row["findings"] == 0
 
 
 # --- what each detector attributes its findings to ----------------------------------

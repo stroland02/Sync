@@ -54,7 +54,15 @@ import tempfile
 from pathlib import Path, PurePosixPath, PureWindowsPath
 from typing import Any
 
-from sync.core.models import CallSite, Finding, OperationRef, Patch, RepoRef, VerifyResult
+from sync.core.models import (
+    UNATTRIBUTED,
+    CallSite,
+    Finding,
+    OperationRef,
+    Patch,
+    RepoRef,
+    VerifyResult,
+)
 
 
 class ConformanceFailure(AssertionError):
@@ -667,6 +675,7 @@ def check_detector(detector: Any) -> None:
             "finds nothing it should -- the kit cannot tell which.",
         )
     _check_findings_are_usable(detector, first)
+    _check_findings_name_a_rung(first)
     _check_findings_do_not_collide(first)
     _check_scans_agree(first, _scanned(detector))
 
@@ -716,6 +725,40 @@ def _check_findings_are_usable(detector: Any, findings: list) -> None:
                 "A finding addresses its location by call_site_id and by nothing else, so one "
                 f"carrying {finding.call_site_id!r} has no line to report and no file to patch. "
                 "A detector that cannot establish the id should drop the finding and count it.",
+            )
+
+
+def _check_findings_name_a_rung(findings: list) -> None:
+    """A finding that names no rung is one the store refuses, so the kit refuses it first.
+
+    `GraphStore.insert_finding` raises on `unattributed`, which makes this the one rule here whose
+    violation is certain rather than probable: a detector that passes the kit without it is
+    rejected by production on the first finding it ever raises. That ordering is the worst one for
+    somebody working from the published SDK, and the kit exists precisely to move a failure earlier
+    than the pipeline.
+
+    **Only that a rung was named, never which one.** The rung names the binding whose wrongness
+    would make the finding wrong, and that is the detector author's judgement -- a static reading
+    says `static`, one resting on a span-to-operation correlation carries the correlator's own rung
+    through. The kit cannot know which applies to somebody else's detector and does not guess.
+
+    Membership is not checked here because it cannot fail here: `Finding.binding_rung` is typed
+    `FindingRung`, so a value outside the vocabulary raises at construction and never reaches a
+    scan's output. `unattributed` is the only member that is not a rung any binder emits, which is
+    why it is the only one this rule has to name.
+    """
+    for finding in findings:
+        if finding.binding_rung == UNATTRIBUTED:
+            _fail(
+                "a finding must name the binding rung it rests on.",
+                f"{finding.detector!r} emitted one carrying {UNATTRIBUTED!r}, which the graph "
+                "reserves for rows written before the column existed -- `insert_finding` refuses "
+                "it, so this detector would be rejected on its first finding. The rung names the "
+                "binding whose wrongness would make the finding wrong: 'static' for a claim "
+                "resting on the static index, the correlator's own rung carried through where a "
+                "span-to-operation correlation is load-bearing. A false positive that cannot be "
+                "attributed to a rung cannot be fixed, which is why nothing downstream will take "
+                "this finding.",
             )
 
 

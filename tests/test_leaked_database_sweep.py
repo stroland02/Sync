@@ -30,6 +30,7 @@ import sys
 import psycopg
 import pytest
 from psycopg import sql
+from psycopg.conninfo import conninfo_to_dict
 
 from conftest import (
     ADMIN_DBNAME,
@@ -43,6 +44,18 @@ from conftest import (
 )
 
 ADMIN = dsn_for(ADMIN_DBNAME, os.environ.get("SYNC_DSN") or DEFAULT_DSN)
+
+OWN_DATABASE = conninfo_to_dict(os.environ.get("SYNC_DSN") or DEFAULT_DSN)["dbname"]
+"""The database this run is using, which the sweeps below must never take.
+
+Every sweep in this file that lies about liveness has to be told to spare this name, because the
+lie is not narrow enough to spare it on its own. `dead_to_the_sweep` says *every pid equal to this
+process's is dead*, and under `-n0` the run's own database is `sync_test_<this pid>` -- one pid,
+and it is that one. Under `-n auto` the name is `sync_test_<controller>_gw0_p<this pid>`, the
+controller's pid reads as alive, and the name is spared by accident. That accident is why a whole
+run configuration was broken for an unknown length of time: `addopts` pins `-n auto`, so nobody
+reached the case where it does not happen. `docs/superpowers/reports/2026-07-30-n0-is-broken.md`.
+"""
 
 
 @pytest.fixture()
@@ -215,7 +228,7 @@ def test_a_database_in_use_is_refused_rather_than_force_dropped(dead_pid, made):
 
     with psycopg.connect(dsn_for(name, ADMIN), autocommit=True) as holder:
         holder.execute("SELECT 1")
-        dropped = sweep_leaked_databases(ADMIN, is_running=dead_to_the_sweep)
+        dropped = sweep_leaked_databases(ADMIN, is_running=dead_to_the_sweep, exclude=OWN_DATABASE)
 
     assert name not in dropped
     assert _exists(name)
@@ -241,7 +254,7 @@ def test_a_database_that_cannot_be_dropped_does_not_fail_the_run(dead_pid, made)
 
     with psycopg.connect(dsn_for(held, ADMIN), autocommit=True) as holder:
         holder.execute("SELECT 1")
-        dropped = sweep_leaked_databases(ADMIN, is_running=dead_to_the_sweep)
+        dropped = sweep_leaked_databases(ADMIN, is_running=dead_to_the_sweep, exclude=OWN_DATABASE)
 
     assert free in dropped and not _exists(free)
     assert held not in dropped and _exists(held)
@@ -344,3 +357,24 @@ def test_a_recycled_pid_anywhere_in_the_name_spares_the_database():
     assert leaked_database_names(
         ["sync_test_28096_gw2_p51234"], is_running=lambda pid: pid == 28096
     ) == []
+
+
+# --- the canary ---------------------------------------------------------------------------
+
+
+def test_the_run_s_own_database_survives_every_sweep_in_this_file():
+    """Last in the file, and it is meant to be: it reports on what ran before it.
+
+    Two tests above hand the sweep a predicate that calls this process dead so their own fixture
+    databases are eligible. Under `-n0` that predicate also reaches the database
+    `pytest_configure` created for this run, and a plain `DROP DATABASE` does not refuse an idle
+    one -- so the run loses its own database partway through this file and every later test
+    needing Postgres errors in setup. 186 of them in a full suite.
+
+    This cannot fail under `-n auto`, where the name carries a second pid that reads as alive.
+    `test_serial_run_isolation.py` is what runs it serially, because `addopts` pins `-n auto` and
+    nothing in an ordinary suite run would ever reach the broken case.
+    """
+    assert _exists(OWN_DATABASE), (
+        f"{OWN_DATABASE} is the database this run is using and a sweep in this file took it"
+    )

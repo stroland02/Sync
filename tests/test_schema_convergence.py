@@ -106,6 +106,11 @@ def test_a_database_that_predates_a_column_gains_it(aged_dsn):
         Finding(
             detector="efficiency", claim="loop", call_site_id=site_id,
             severity="info", rationale="called 40 times in one unit of work",
+            # The correlated case, which is the rung `EfficiencyDetector` carries when the spans
+            # resolved. This test is about a column arriving on an aged database; the rung is here
+            # because the write refuses without one, and `observed` is what a real loop finding
+            # holds.
+            binding_rung="observed",
         )
     )
 

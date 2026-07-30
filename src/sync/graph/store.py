@@ -12,7 +12,7 @@ import psycopg
 from psycopg.rows import dict_row
 
 from sync.core import CallSite, Finding, FindingStatus, MigrationOutcome, VendorChange
-from sync.core.models import ObservedCall, ObservedShape
+from sync.core.models import UNATTRIBUTED, ObservedCall, ObservedShape
 
 
 def _stable_id(*parts: str) -> str:
@@ -331,6 +331,34 @@ class GraphStore:
         return change_id
 
     def insert_finding(self, finding: Finding) -> str:
+        """One finding, refused if it names no rung.
+
+        The refusal is here and not on the model. `Finding` is exported from `sync.core`, which
+        `CLAUDE.md` calls the published plugin SDK -- a required field there breaks every detector
+        a third party has written, and inside this repository alone it cost 153 failures and 120
+        errors across 32 files. `sync.graph` is internal, so nothing published is at stake, and
+        `CLAUDE.md` puts validation at boundaries: a write to Postgres is one, a Pydantic
+        constructor inside our own detector is not.
+
+        `unattributed` is what the column defaults to, so a row written without a rung is
+        indistinguishable from every row that predates the column -- there is no later query that
+        can separate a detector which forgot from history that could not know. That is what makes
+        this a refusal rather than a warning: the evidence a warning would tell you to go and check
+        does not survive the write.
+
+        Raised rather than corrected. There is no rung this could substitute that would not be a
+        binding claim nobody made, and `sync.benchmark.binding` scores precision per rung off this
+        column -- a guessed value there is a measurement about a binder that did not run.
+        """
+        if finding.binding_rung == UNATTRIBUTED:
+            raise ValueError(
+                f"{finding.detector} produced a finding naming no binding rung, and "
+                f"'{UNATTRIBUTED}' is reserved for rows written before the column existed. "
+                f"The rung names the binding whose wrongness would make the finding wrong: "
+                f"'static' for a claim resting on a static binding, the correlator's own rung "
+                f"carried through where a span-to-operation correlation is load-bearing."
+            )
+
         # `claim` is in the identity, not just data. Without it the key was
         # (detector, call_site, vendor_change), which is one row per call site for any detector
         # that does not join against a vendor change -- and three of them do not. Two claims
