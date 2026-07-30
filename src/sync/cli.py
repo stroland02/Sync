@@ -696,6 +696,10 @@ def _literal_call_sites(repo: RepoRef) -> list[CallSite]:
     finding of either kind needs a call site to attach to. Narrowing it to one signal's sources
     would leave the other signal's findings pointing at nothing.
 
+    What leniency cost here went beyond the literal: the row's content hash was taken over a
+    line the file does not contain, and its sibling argument keys were whatever the
+    substitution made of them -- which `ParameterDeprecationDetector` then joins on.
+
     **A file that does not decode is skipped and named, not decoded leniently.** This read used
     `errors="replace"`, which `sync.benchmark.checkout.read_checkout`,
     `sync.signals.generated.symbols_speakeasy._text` and both manifest readers each refuse by

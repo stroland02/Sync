@@ -46,14 +46,17 @@ from __future__ import annotations
 
 import ast
 import hashlib
+import logging
 import tomllib
 from pathlib import Path
-from typing import Iterable
+from typing import Iterable, Iterator
 
 import tree_sitter_python as tspython
 from tree_sitter import Language, Node, Parser
 
 from sync.core import CallSite, Patch, RepoRef, VendorAdapter, VerifyResult
+
+log = logging.getLogger(__name__)
 
 _PY_LANGUAGE = Language(tspython.language())
 _FUNCTION_TYPES = {"function_definition", "lambda"}
@@ -94,8 +97,18 @@ def _text(node: Node, source: bytes) -> str:
     from the wrong offset and every symbol, argument and field after it comes out wrong together.
     `sync/route/templates.py` carries a fix for the same confusion, and every other fixture in
     this repository is ASCII, which is what let it go unnoticed there.
+
+    Strict, which is what `signals.generated.symbols_typescript._text` has always been over a
+    vendor's SDK. This copy read the customer's repository with `errors="replace"`, which is the
+    same class of defect one line further on: a PEP 263 cp1252 module produced `args_keys` holding
+    `meta.co<U+FFFD>t` and a `response_fields_read` of `st` for a field spelled with an
+    a-circumflex. The first is a key nobody wrote and the second is a plausible field name on a
+    call site that never read it.
+
+    Reaching this with bytes that do not decode is a caller that skipped `_readable_sources`, so
+    it raises rather than repairing.
     """
-    return source[node.start_byte : node.end_byte].decode("utf-8", errors="replace")
+    return source[node.start_byte : node.end_byte].decode("utf-8")
 
 
 def _walk(node: Node):
@@ -207,6 +220,9 @@ class PythonAdapter:
         # `slack_sdk` without it. A binding that declares this language and omits the root gets
         # the module, and does not acquire a guess from elsewhere.
         self._symbol_root: str | None = binding.get("symbol_root") or self._module
+        # Which files this clone holds that are not UTF-8, so two passes over one of them report
+        # it once. `_readable_sources` carries why they are skipped at all.
+        self._undecodable: set[Path] = set()
 
     # --- manifests ----------------------------------------------------------------
 
@@ -328,6 +344,41 @@ class PythonAdapter:
         skip = {".venv", "venv", "site-packages", "__pycache__", ".tox", "build", "dist"}
         return [p for p in root.rglob("*.py") if not skip & set(p.parts)]
 
+    def _readable_sources(self, repo: RepoRef) -> Iterator[tuple[Path, bytes]]:
+        """Every source file that is UTF-8, with its bytes, naming the ones that are not.
+
+        The gate both indexing passes read through, so a file the client pass skipped cannot be
+        walked by the call pass. tree-sitter takes bytes and reports byte offsets, so the bytes are
+        what is yielded and the decode is checked rather than kept.
+
+        Skipped rather than decoded leniently, which is `benchmark.read_checkout`'s rule applied
+        where a customer's scan actually reads: "`errors="replace"` would hand the indexer a file
+        full of replacement characters, which is still a file it will parse". PEP 263 makes this a
+        real category rather than a theoretical one -- a module declaring `coding: cp1252` is a file
+        the interpreter runs and this walk must not corrupt.
+
+        `_syntax_errors` deliberately does not read through here. It answers a different question
+        -- whether a patch to this repository can be verified -- and an undecodable file is a
+        reason it cannot, so that pass keeps reading every path and keeps reporting the ones that
+        do not decode. Filtering them out of both would let `static_verify` pass a repository over
+        a file it never looked at.
+        """
+        root = Path(repo.local_path)
+        for file_path in self._source_files(repo):
+            source = file_path.read_bytes()
+            try:
+                source.decode("utf-8")
+            except UnicodeDecodeError as exc:
+                if file_path not in self._undecodable:
+                    self._undecodable.add(file_path)
+                    log.warning(
+                        "%s is not valid UTF-8, so it is not indexed and its call sites are "
+                        "absent from this scan (%s)",
+                        file_path.relative_to(root).as_posix(), exc,
+                    )
+                continue
+            yield file_path, source
+
     # --- clients ------------------------------------------------------------------
 
     def _client_identifiers(self, repo: RepoRef) -> set[str]:
@@ -349,8 +400,7 @@ class PythonAdapter:
             return names
         parser = _parser()
 
-        for file_path in self._source_files(repo):
-            source = file_path.read_bytes()
+        for file_path, source in self._readable_sources(repo):
             tree = parser.parse(source)
             imported: set[str] = set()
             # Names bound to the vendor's module in this file, kept apart from `names` because
@@ -668,8 +718,7 @@ class PythonAdapter:
         root_path = Path(repo.local_path)
         parser = _parser()
 
-        for file_path in self._source_files(repo):
-            source = file_path.read_bytes()
+        for file_path, source in self._readable_sources(repo):
             tree = parser.parse(source)
             relative = file_path.relative_to(root_path).as_posix()
 

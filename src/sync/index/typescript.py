@@ -34,10 +34,11 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 import subprocess
 import time
 from pathlib import Path
-from typing import Iterable
+from typing import Iterable, Iterator
 
 import tree_sitter_typescript as tsts
 from tree_sitter import Language, Node, Parser
@@ -59,8 +60,23 @@ def _parser() -> Parser:
     return Parser(_TS_LANGUAGE)
 
 
+log = logging.getLogger(__name__)
+
+
 def _text(node: Node, source: bytes) -> str:
-    return source[node.start_byte : node.end_byte].decode("utf-8", errors="replace")
+    """The source a node covers.
+
+    Strict, which is what `signals.generated.symbols_typescript._text` has always been over a
+    vendor's SDK. This copy read the customer's repository with `errors="replace"`, and a
+    substitution is indistinguishable from a file that decoded: one cp1252 source produced
+    `args_keys` carrying a key nobody wrote and a `response_fields_read` of `st` for a field
+    spelled with an a-circumflex -- a plausible field name, on a call site that never read it.
+
+    Reaching this with bytes that do not decode is a caller that skipped `_readable_sources`, so
+    it raises rather than repairing. Nothing is caught here on purpose: a phantom field costs the
+    reviewer's trust, and `benchmark.read_checkout` already refused the same trade for the corpus.
+    """
+    return source[node.start_byte : node.end_byte].decode("utf-8")
 
 
 def _walk(node: Node):
@@ -177,6 +193,9 @@ class TypeScriptAdapter:
         # `node_modules` was written by that install, so a later mtime is
         # something else's work -- see `sync.index.dependency_edits`.
         self._installed_at: dict[Path, int] = {}
+        # Which files this clone holds that are not UTF-8, so two passes over one of them report
+        # it once. `_readable_sources` carries why they are skipped at all.
+        self._undecodable: set[Path] = set()
 
     def _read_manifest(self, repo: RepoRef) -> tuple[dict[str, object], str | None]:
         """The SDK versions `package.json` declares, and why it declares nothing when it cannot
@@ -262,6 +281,39 @@ class TypeScriptAdapter:
             if "node_modules" not in p.parts and not p.name.endswith(".d.ts")
         ]
 
+    def _readable_sources(self, repo: RepoRef) -> Iterator[tuple[Path, bytes]]:
+        """Every source file that is UTF-8, with its bytes, naming the ones that are not.
+
+        The gate both passes read through, so a file the identifier pass skipped cannot be walked
+        by the call pass. tree-sitter takes bytes and reports byte offsets, so the bytes are what
+        is yielded and the decode is checked rather than kept.
+
+        Skipped rather than decoded leniently, which is `benchmark.read_checkout`'s rule applied
+        where a customer's scan actually reads: "`errors="replace"` would hand the indexer a file
+        full of replacement characters, which is still a file it will parse". A legacy encoding is
+        not distinguishable from a binary cheaply enough to be worth trying -- cp1252 is this
+        platform's default and every byte sequence valid in it is valid in it -- so naming the path
+        is the mitigation, and it is the whole mitigation.
+
+        Warned once per file rather than once per pass, because two passes over one clone would
+        otherwise report one file twice and read as two faults.
+        """
+        root = Path(repo.local_path)
+        for file_path in self._source_files(repo):
+            source = file_path.read_bytes()
+            try:
+                source.decode("utf-8")
+            except UnicodeDecodeError as exc:
+                if file_path not in self._undecodable:
+                    self._undecodable.add(file_path)
+                    log.warning(
+                        "%s is not valid UTF-8, so it is not indexed and its call sites are "
+                        "absent from this scan (%s)",
+                        file_path.relative_to(root).as_posix(), exc,
+                    )
+                continue
+            yield file_path, source
+
     def _client_identifiers(self, repo: RepoRef) -> set[str]:
         """Identifiers bound to a vendor client anywhere in the repository.
 
@@ -297,8 +349,7 @@ class TypeScriptAdapter:
             return names
         parser = _parser()
 
-        for file_path in self._source_files(repo):
-            source = file_path.read_bytes()
+        for file_path, source in self._readable_sources(repo):
             tree = parser.parse(source)
             imported: set[str] = set()
 
@@ -507,8 +558,7 @@ class TypeScriptAdapter:
         root_path = Path(repo.local_path)
         parser = _parser()
 
-        for file_path in self._source_files(repo):
-            source = file_path.read_bytes()
+        for file_path, source in self._readable_sources(repo):
             tree = parser.parse(source)
             relative = file_path.relative_to(root_path).as_posix()
 
