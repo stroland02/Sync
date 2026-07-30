@@ -294,17 +294,28 @@ task did not create was written to, and the survey of the other 214 was read-onl
 
 ## Gates
 
+All four on the tree with `origin/main` merged in, which is the tree that lands. Three commits had
+arrived on `main` while this task ran — the `sync.core` distribution split — and none of them
+touches a file this task does.
+
 | Gate | Exit | Result |
 |---|---|---|
-| `uv run pytest -q` | 0 | 2656 passed, 2 skipped, 141s, under `-n auto` |
+| `uv run pytest -q` | 0 | 2657 passed, 2 skipped, 143s, under the repository's own `-n auto` |
 | `uv run python scripts/lint_encoding.py src scripts tests` | 0 | clean |
 | `PYTHONIOENCODING=utf-8 uv run lint-imports` | 0 | 95 files, 201 dependencies, `sync.core depends on nothing` KEPT |
 | `uv run python scripts/lint_dead_links.py src --baseline scripts/dead_links_baseline.txt` | 0 | clean, including the reference from `schema.sql` to this file |
 
+**The serial gate as well, before the merge**: `uv run pytest -q --color=no -p no:randomly -n0`,
+exit 0, 2656 passed and 2 skipped in 452s. Worth running rather than assuming, because under `-n0`
+every test in the suite shares one database and this file writes rows no read can parse. The
+fixture truncates on the way out as well as on the way in for exactly that reason; without it a
+leftover row would make `all_vendor_changes` and `open_findings` raise for whatever ran next, and
+the failure would land in a test with no connection to this one.
+
 The suite grew by exactly the fifteen cases added here, and that is measured rather than inferred
-from the pass count: `--collect-only` reports 2658 selected on this branch against 2643 at the
-commit it branched from, which with two skips is 2641 passing there. The brief's figure of 2639 was
-two behind whatever landed before this task started.
+from a pass count: `--collect-only` reports 2658 selected before the merge against 2643 at the
+commit this branch left, which with two skips is 2641 passing there. The brief's figure of 2639 was
+two behind whatever had landed before this task started.
 
 ## What is left, in priority order
 
