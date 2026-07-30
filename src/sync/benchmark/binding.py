@@ -86,10 +86,12 @@ from sync.core import BindingRung
 class EmittedFinding(BaseModel):
     """One finding a run emitted, reduced to what scoring it needs.
 
-    Not `sync.core.Finding`, which carries no rung: the rung lives on the binding, and what
-    reaches this module is whatever the caller can attribute. Keeping the input to the pair
-    plus the rung also keeps the scorer usable against a mined corpus, where the finding was
-    produced by a pipeline run that no longer exists.
+    Not `sync.core.Finding`, and no longer because that type carries no rung -- since B65 it
+    does. What keeps this one is the mined corpus: a row scored there was produced by a pipeline
+    run that no longer exists, so there is no `Finding` to read and nothing to attribute it from
+    except the corpus record itself. Reducing to the pair plus the rung is what lets the scorer
+    take both, and `BindingRung` rather than `FindingRung` is deliberate -- a row being scored
+    must name a rung a binder actually emitted, where `unattributed` is a fact about history.
     """
 
     call_site_id: str
