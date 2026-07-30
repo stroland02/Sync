@@ -32,30 +32,30 @@ job of its own rather than a step appended to `test`.
 
 ## 2. What a serial job costs, re-measured
 
-Taken on this machine, 12 cores, against the shared Postgres on 5433. **The machine is shared with
-other agents' suites and every figure below is an upper bound.** Five runs were taken and the
-spread is what that costs: one `-n0` run landed at 676 s with a mutation harness beside it, and one
-`-n auto` run at 190 s with roughly fifty foreign python processes beside it. Contention inflates
-and never deflates, so the quietest observation of each is the one to read.
+Taken on the merged tree at `c0a0e9d`, 12 cores, against the shared Postgres on 5433. Three runs
+back to back in one quiet window, so the three are comparable to each other rather than each being
+somebody's best case:
 
-| scheduler | result | this run | quietest observation |
+| scheduler | result | pytest's own wall clock | against `-n auto` |
 |---|---|---|---|
-| `-n auto` (12 workers, what `addopts` pins) | 2556 passed, 2 skipped, exit 0 | 189.99 s | **137.60 s** |
-| `-n0` | 2556 passed, 2 skipped, 1 deselected, exit 0 | **422.18 s** | 422.18 s |
-| `-n4` | 2556 passed, 2 skipped, exit 0 | **214.01 s** | 214.01 s |
+| `-n auto` — 12 workers, what `addopts` pins | 2608 passed, 2 skipped, exit 0 | **117.49 s** | 1.00× |
+| `-n4` | 2608 passed, 2 skipped, exit 0 | **167.40 s** | 1.42× |
+| `-n0` | 2608 passed, 2 skipped, 1 deselected, exit 0 | **371.23 s** | **3.16×** |
 
-Against the quietest `-n auto`, `-n0` is **3.07×**. W105 measured 3.46×, and the two agree within
-what a shared machine explains, so that figure is confirmed rather than replaced.
+W105 measured 3.46× and this is 3.16×, so that figure is confirmed rather than replaced. **But
+3.16× is the wrong number to argue the CI decision from, and the `-n4` row is why.** The ratio is a
+property of the core count, not of the suite: the serial figure barely moves as workers are taken
+away and the parallel figure is the one that does. Against four workers, `-n0` is **2.22×**. A
+GitHub-hosted `ubuntu-latest` runner has nowhere near twelve cores, and four workers on twelve cores
+still leaves the `git`, `tsc` and `oasdiff` subprocesses more room than four cores would — so 2.22×
+over-estimates the parallel side, and the real cost in CI is nearer double the parallel suite than
+triple.
 
-**The `-n4` row is the one the CI decision turns on, and it is why 3.5× is the wrong number to
-argue from.** The ratio is not a property of the suite: the serial figure barely moves with core
-count and the parallel figure is the one that does. A GitHub-hosted `ubuntu-latest` runner has far
-fewer than twelve cores, and `-n0` against four workers is **1.97×** — taken in the same quiet
-window as the `-n0` row, so that pair is internally consistent in a way the 3.07× is not. Four
-workers on twelve cores is an optimistic stand-in for four cores, since the `git`, `tsc` and
-`oasdiff` subprocesses still have room, so the real cost in CI is nearer 2× the parallel suite than
-3.5×. That is a bound in the honest direction, and it is most of why option 1 below survives its
-own price tag.
+Two earlier figures are kept here because they say what this machine is worth rather than what the
+suite is: an `-n0` run at 676 s with a mutation harness beside it, and an `-n auto` run at 190 s
+with roughly fifty foreign python processes beside it. The machine is shared with other agents'
+suites, contention inflates and never deflates, and that is why the table above is one window
+instead of a best-of across five runs.
 
 ## 3. The three options, and the two not chosen
 
@@ -100,7 +100,7 @@ The workflow's own wall clock is likely to move less than the price tag suggests
 is worth writing down because it is the one place option 1 gets cheap. `test` already runs the suite
 **twice** — once as `Tests` and once as `Coverage`, both parallel, the second with instrumentation —
 and then fetches, scores and gates the corpus. Calling the parallel suite P, that job is upwards of
-2.2 P. From §2, `-n0` against four workers is 1.97 P, so the `serial` job is about 2 P plus its own
+2.2 P. From §2, `-n0` against four workers is 2.22 P, so the `serial` job is about that plus its own
 checkout and `uv sync`. The two jobs are therefore comparable in length, and the workflow ends when
 the longer finishes rather than after their sum. What this buys with is runner minutes and a second
 Postgres container, not the minutes-per-push the option is usually charged for. It is stated as a
@@ -238,20 +238,26 @@ two-outcome harness would have printed as a surviving mutant and a hole in the t
 
 ## 8. Gates
 
-Taken at `1d5b053`, which is this branch with the workflow and the test final and only these two
-documents outstanding. Every exit code is the command's own, read from a redirect rather than a
-pipeline — `pytest -q; echo $?` reports `echo`'s status and that has produced a false verdict here.
+Taken on the merged tree at `c0a0e9d`, after `origin/main` moved twenty commits ahead mid-task. It
+was merged in rather than left for the coordinator for one reason: this branch makes `-n0` a gate,
+so whether the tree that lands is green under `-n0` is this task's question and not the next one's.
+Every exit code is the command's own, read from a redirect rather than a pipeline — `pytest -q;
+echo $?` reports `echo`'s status and that has produced a false verdict here.
 
 | gate | result |
 |---|---|
-| `uv run pytest -q` (`-n auto` via `addopts`) | **2556 passed, 2 skipped, exit 0**, 189.99 s |
-| `uv run pytest -q -n0` | **2556 passed, 2 skipped, 1 deselected, exit 0**, 422.18 s |
-| `uv run pytest -q -n4` | **2556 passed, 2 skipped, exit 0**, 214.01 s |
+| `uv run pytest -q` (`-n auto` via `addopts`) | **2608 passed, 2 skipped, exit 0**, 117.49 s |
+| `uv run pytest -q -n0` | **2608 passed, 2 skipped, 1 deselected, exit 0**, 371.23 s |
+| `uv run pytest -q -n4` | **2608 passed, 2 skipped, exit 0**, 167.40 s |
 | `uv run python scripts/lint_encoding.py src scripts tests` | exit 0 |
 | `PYTHONIOENCODING=utf-8 uv run lint-imports` | `1 kept, 0 broken`, exit 0 |
 | `uv run python scripts/lint_dead_links.py src --baseline …` | exit 0 |
 
 The second row is what the `serial` job will run. It is green here and it is red on the tree in §5.
 
-2556 passed against the 2553 the branch started from: the three are
-`tests/test_ci_runs_the_serial_scheduler.py`.
+2608 passed, against 2553 when this branch started: three are
+`tests/test_ci_runs_the_serial_scheduler.py` and the rest arrived with the merge. The measurements
+in §5 were taken before it, on 2556, and are not re-taken — the merge touched no file this branch
+touches and none of `pyproject.toml`, `tests/conftest.py` or
+`tests/test_leaked_database_sweep.py`, so the defect §5 reinstates is reachable identically on
+either side of it.
