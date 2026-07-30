@@ -725,17 +725,27 @@ def test_the_named_path_is_the_last_header_before_the_offending_byte():
 
 def test_a_plus_plus_plus_line_inside_a_hunk_is_not_read_as_a_header():
     """A customer repository that keeps patch files under version control has these. An
-    added line whose content is `++ b/elsewhere.ts` renders in the diff as `+++ b/elsewhere.ts`,
-    and a scan for the last `+++ ` line would name a file that is not in this diff at all.
-    Requiring a `--- ` line immediately above is what tells a header from content.
+    added line whose content is `++ b/elsewhere.ts` renders in the diff as `+++ b/elsewhere.ts`
+    -- git's `+` for an added line, then the content's own two -- and a scan for the last
+    `+++ ` line would name a file that is not in this diff at all. Requiring a `--- ` line
+    immediately above is what tells a header from content.
+
+    The three characters are load-bearing and the first draft of this test had two, which
+    matched nothing and left the guard unexercised: dropping it from `_undecodable_path`
+    survived mutation. Hence the assertion below on the fixture itself.
     """
+    content = b"++ b/elsewhere.ts"
     diff = (
         b"diff --git a/patches/fix.patch b/patches/fix.patch\n"
         b"--- a/patches/fix.patch\n"
         b"+++ b/patches/fix.patch\n"
         b"@@ -0,0 +1,2 @@\n"
-        b"++ b/elsewhere.ts\n"
+        b"+" + content + b"\n"
         b"+const b = \xe9;\n"
+    )
+    assert b"\n+++ b/elsewhere.ts\n" in diff, (
+        "this fixture does not contain the collision it exists to describe, so it cannot "
+        "distinguish a guarded scan from a naive one"
     )
     assert agent_patch._undecodable_path(diff, diff.index(b"\xe9")) == "patches/fix.patch"
 
