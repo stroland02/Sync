@@ -17,20 +17,25 @@ Both figures come from the same command, run over the whole suite:
 
     uv run pytest -q -p no:randomly --color=no --cov=sync.mcp --cov-report=term-missing
 
-Before, at `8187a9b`:
+Before, at `8187a9b`, the commit this branch left `main` from — 2545 passed, 4 skipped:
 
     src\sync\mcp\resources.py      39    2    95%   123, 143
     src\sync\mcp\tools.py          84    4    95%   291, 294-295, 344
     TOTAL                         297    6    98%
 
-After:
+After, on the tree with `origin/main` merged in — 2576 passed, 4 skipped:
 
+    src\sync\mcp\__init__.py        5    0   100%
+    src\sync\mcp\propose.py        41    0   100%
+    src\sync\mcp\registry.py       22    0   100%
     src\sync\mcp\resources.py      39    0   100%
+    src\sync\mcp\server.py        106    0   100%
     src\sync\mcp\tools.py          84    1    99%   344
     TOTAL                         297    1    99%
 
-No production file changed. `tools.py:344` is not covered and is not coverable; the argument is
-below, with the probe that shows the condition never holds.
+Five of the six are covered. **No production file changed** — the diff is tests, one fixture and
+this report. `tools.py:344` is not covered and is not coverable; the argument is below, with the
+whole-suite probe that shows the condition never holds.
 
 ## The six
 
@@ -134,6 +139,31 @@ rather than a completeness one.
 server does not serve at all. The difference is not that resources are easier. It is that the
 resource path was designed by writing the three outcomes down first, and the graph tools were
 not.
+
+### The same flattening reaches the rung, and that changed under this task
+
+`finding.binding_rung` became an enforced column while this task was in flight:
+`GraphStore.insert_finding` now refuses a finding whose rung is `unattributed` and names the
+detector that raised it. So every finding the graph holds names a real rung — `static`,
+`resolved`, `observed` or `unresolved` — and the surface answers `binding_source: "static"` for
+all four of them. No row carries a rung at all.
+
+`_envelope`'s docstring argues the constant is honest, and on its own terms it was: neither a
+compiler pass nor telemetry runs in this server, so claiming `resolved` would assert something
+nothing here established. What the enforcement changes is that the *finding* now carries a rung
+established elsewhere, and `CLAUDE.md` is explicit that every artifact derived from a binding
+carries the rung it came from, "and so does every artifact derived from it". A tool response is
+one. An agent handed a claim resting on a span-to-operation correlation is told it rests on a
+static binding.
+
+Reported rather than repaired, for the same reason as the rest of this section: the rung is per
+finding and `binding_source` is per response, so carrying it honestly means a field on the row.
+`test_every_answer_reports_binding_source_static_whatever_rung_the_finding_names` pins the loss
+across all four rungs, so the repair turns a test red on purpose instead of passing silently.
+
+The new refusal changes nothing else about what an agent can receive. It is a write-side check;
+`Finding` still defaults `binding_rung` to `unattributed` and constructing one is still legal, so
+no read path and no tool signature moved.
 
 ### Whether the frozen schemas make this a finding rather than a fix
 
@@ -240,12 +270,16 @@ statement each covers. Harness at `%TEMP%\w107_mutate.py`, not committed. It run
 under the repository's own `-n auto` where the claim is a whole-suite one. It compiles each
 mutated file before pytest sees it, reads pytest's summary *counts* rather than line prefixes,
 classifies any exit code other than 0 or 1 as UNREADABLE, and re-establishes the baseline at the
-same pass count after every run. Baseline: 140 passed across the nine MCP test files, 2557 passed
-over the whole suite.
+same pass count after every run.
+
+Every row below was re-measured on the tree with `origin/main` merged in, after `-n0` was fixed —
+an earlier run of the same specs produced the identical verdicts at the pre-merge pass counts.
+Baselines: 135 passed for the `resources.py` spec, 147 for the `tools.py` spec (the difference is
+the twelve tests added in between), and 2580 over the whole suite.
 
 | Statement | Mutation | Outcome | Killed by |
 |---|---|---|---|
-| — (control) | a word changed in a docstring | **SURVIVED**, 140 passed | — the harness is not blind |
+| — (control) | a word changed in a docstring | **SURVIVED** at exactly the baseline count, both specs | — the harness is not blind |
 | — (control) | `FEED_MIME_TYPE` → `"text/plain"` | **KILLED**, 1 failed | `…resource_template_is_published_exactly_as_declared` |
 | — (control) | unbalanced paren in `FEED_URI_PREFIX` | **DID-NOT-COMPILE** | caught by `compile()` before pytest ran |
 | `resources.py:123` | `return []` → advertise every registered vendor | **KILLED**, 3 failed | `…no_feed_cache_advertises_nothing`, `…advertises_nothing_and_serves_nothing`, `…same_nothing` |
@@ -256,9 +290,9 @@ over the whole suite.
 | `tools.py:294` | catch narrowed to `except KeyError` | **KILLED**, 4 failed | the four above that involve the unparseable row — the `KeyError` test is untouched, which is what isolates the two entry paths |
 | `tools.py:294-295` | probe: `raise AssertionError` in the handler | **KILLED**, 5 failed | the block is entered |
 | `tools.py:291` | probe: `raise AssertionError` in the guard | **KILLED**, 3 failed | `…names_no_vendor_change_is_still_a_row`, `…not_reported_as_a_tool_error`, `…three_silences…` |
-| `tools.py:290-291` | guard deleted (ask the graph for a null id) | **SURVIVED**, 140 passed — and **SURVIVED** the whole suite at 2557 | masked by 294-295; see the compound below |
+| `tools.py:290-291` | guard deleted (ask the graph for a null id) | **SURVIVED**, 147 passed — and **SURVIVED** the whole suite at 2580 | masked by 294-295; see the compound below |
 | `tools.py:290-295` | guard **and** catch both deleted | **KILLED**, 5 failed | including `…names_no_vendor_change_is_still_a_row`, which is what proves the survival above is masking rather than a blind test |
-| `tools.py:344` | probe: `raise AssertionError`, **whole suite** | **SURVIVED**, 2557 passed | nothing — the condition never holds |
+| `tools.py:344` | probe: `raise AssertionError`, **whole suite** | **SURVIVED**, 2580 passed | nothing — the condition never holds |
 
 One survival, and it is the reported redundancy rather than a gap. The brief's order was followed
 on it — suspect the mutation, then the test, then the code — and it came out at the code: the
@@ -285,11 +319,20 @@ The blind-harness check is the first control row: a docstring word changed must 
 exactly the baseline pass count, and a survival at any other count is reported as
 BASELINE-DRIFTED rather than as a survival.
 
+**One thing this harness got away with, worth recording.** Its focused runs used `-n0` while `-n0`
+was broken repository-wide: the leaked-database sweep reported every pid equal to the current
+process as dead, which under a serial run included the run's own database. That produced 186
+errors for anyone running the whole suite with `-n0`, and it never touched these runs, because the
+focused path names nine MCP test files and `tests/test_leaked_database_sweep.py` is not among them.
+So the baselines were green for a reason that had nothing to do with the harness being right. The
+table above was re-measured after the fix landed and the verdicts are unchanged, which is what
+turns that from luck into a result.
+
 ## Nothing else was judged unreachable
 
-The four remaining statements were reached with committed fixtures through `serve`, without
-calling a private function to get at a branch. `_change_for` and `_later` are private and their
-statements were reached through `tools/call`, asserting on the JSON-RPC frame.
+The other five were reached with committed fixtures through `serve`, without calling a private
+function to get at a branch. `_change_for` is private and both of its statements were reached
+through `tools/call`, asserting on the JSON-RPC frame.
 
 One fixture correction is worth recording, because it is where this task could have written down
 a false result. The obvious way to reach `tools.py:295` is a fake whose `get_vendor_change`
