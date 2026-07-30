@@ -149,7 +149,16 @@ Specifically:
 
 W99's red test was `test_a_server_that_cannot_be_reached_is_not_an_error` — one test failing inside
 a running suite, not a session dying before collection. That test is reproduced here, under W99's
-own command, for W99's stated reason.
+own command, for W99's stated reason:
+
+    ### W99's red test, --cov=sync.benchmark.mutate, WITH the fix
+    1 passed in 10.42s
+    ### the same test, the same flag, WITHOUT the fix
+    psycopg_binary/_psycopg/generators.pyx:67: ConnectionTimeout
+    1 failed in 10.53s
+
+**10.42 s and 10.53 s against W99's reported 10.21 s.** Its timing was accurate too. Everything it
+measured was real; only the account of where the second class set came from was wrong.
 
 ## The unguarded block, confirmed independently
 
@@ -209,16 +218,16 @@ they established is in this report and pinned by the test below.
 
 ## Mutations
 
-Baseline `1 passed in 11.29s`; restored baseline `1 passed in 11.12s`, same count, so nothing
+Baseline `1 passed in 11.06s`; restored baseline `1 passed in 11.31s`, same count, so nothing
 drifted. Harness compiles each mutant before writing it, passes `--color=no` and
 `PYTHONIOENCODING=utf-8`, and reads children with `errors="replace"`.
 
 | mutation | verdict | note |
 |---|---|---|
-| `M-outer` — the outer clause back to `psycopg.Error` | **KILLED**, `1 failed` | the change under test |
-| `M-split-guard` — the child stops constructing the split | **KILLED**, `1 failed` | the test refuses to pass without reproducing what it claims to test |
-| `M-returncode` — the exit-code assertion relaxed to `in (0, 1)` | **SURVIVED** | redundant, not untested — see below |
-| `M-outer+rc` — outer reverted *and* exit code relaxed | **KILLED**, `1 failed` | `assert "RETURNED []" in stdout` subsumes the exit-code assertion |
+| `M-outer` — the outer clause back to `psycopg.Error` | **KILLED**, `1 failed in 16.80s` | the change under test |
+| `M-split-guard` — the child stops constructing the split | **KILLED**, `1 failed in 11.24s` | the test refuses to pass without reproducing what it claims to test |
+| `M-returncode` — the exit-code assertion relaxed to `in (0, 1)` | **SURVIVED**, `1 passed` | redundant, not untested — see below |
+| `M-outer+rc` — outer reverted *and* exit code relaxed | **KILLED**, `1 failed in 10.99s` | `assert "RETURNED []" in stdout` subsumes the exit-code assertion |
 
 `M-returncode` survives because the exit-code assertion is subsumed: a sweep that raises prints no
 `RETURNED` line, so the later assertion catches it anyway. The redundancy is kept because it
@@ -244,6 +253,75 @@ did not.
 Every closed port on this machine times out rather than refusing, so a connect failure costs the
 full `connect_timeout` per address. The new test uses a bare `127.0.0.1` rather than `localhost` so
 libpq makes one attempt instead of two, which is what keeps it near 10 s.
+
+## Gates
+
+Run on the merged tree — `origin/main` moved ten commits during this task, so these are figures
+from the merge and not from the branch alone.
+
+| gate | result |
+|---|---|
+| `uv run pytest -q` | **2507 passed, 2 skipped, exit 0, 111.91 s** |
+| `uv run python scripts/lint_encoding.py src scripts tests` | exit 0 |
+| `PYTHONIOENCODING=utf-8 uv run lint-imports` | `1 kept, 0 broken`, exit 0 |
+| `uv run python scripts/lint_dead_links.py src --baseline …` | exit 0 |
+| `uv run pytest -q -n0 --cov=sync.benchmark.mutate --cov-report=term-missing` | **2321 passed, 2 skipped, 186 errors, exit 1, 495.08 s** — see below, not this change |
+
+The `-n0 --cov` gate is run in the dotted form deliberately, because that is the configuration the
+claim is about and the only one in which the defect is reachable. Zero occurrences of
+`ConnectionTimeout` or `psycopg.Error` anywhere in its output, which is the thing this task set out
+to change.
+
+An earlier `-n0 --cov` run, at the previous merge base and with the same fix in the tree, gave
+**2464 passed, 2 skipped, exit 0 in 743.18 s** — within noise of the 741 s the coordinator measured.
+Serial coverage costs this suite roughly six times its parallel wall clock.
+
+### The 186 errors are a different, pre-existing defect, and `-n0` is the axis
+
+**Not this change, and not `--cov`.** Every error is the same one:
+
+    FATAL:  database "sync_test_12316" does not exist
+
+The run's own database — the one `pytest_configure` created for it — disappears partway through
+`tests/test_leaked_database_sweep.py`, and every later test needing Postgres errors in setup.
+Attribution was measured rather than assumed:
+
+| control | result |
+|---|---|
+| `-n0`, **no** `--cov`, two files | reproduces, `32 passed, 4 errors` in 32.35 s |
+| `-n0`, no `--cov`, **`origin/main`'s `conftest.py` restored verbatim** | reproduces identically, `32 passed, 4 errors` in 33.36 s |
+| `-n auto` full suite, same tree | **2507 passed, exit 0** |
+
+So it is reachable on `main` without this branch and without coverage, and the parallel scheduler
+hides it. That is consistent with it going unnoticed: `addopts` pins `-n auto`, and CI's coverage
+step carries `|| true`.
+
+**Recipe, 33 s:**
+
+    uv run pytest -q -n0 tests/test_leaked_database_sweep.py tests/test_migration_corpus.py
+
+**What I ruled out.** `pytest_configure`'s own sweep is not it — no `swept …` line is printed in a
+reproducing run. Threading `exclude=<the run's own database>` through the two
+`sweep_leaked_databases(ADMIN, is_running=dead_to_the_sweep)` call sites does **not** fix it, which
+is what I expected to fix it and did not.
+
+**The obvious candidate, stated as a hypothesis and not a finding.** Those two call sites pass
+`dead_to_the_sweep = lambda pid: pid != os.getpid()`. Under `-n0` the test process *is* the
+controller, so the run's own `sync_test_<controller pid>` reports dead to that probe where under
+`-n auto` it reports alive. That is the right shape and it does not survive the `exclude`
+experiment, so something else or something additional is at work and I am not going to name a cause
+I could not confirm — which is the whole subject of this report.
+
+**What would settle it:** the same instrumentation that failed here for an unrelated reason. A
+`pytest_runtest_teardown` plugin reporting whether the database still exists, run per test over
+that one file, names the culprit test in one pass. My attempt hit
+`[Errno 10109] getaddrinfo failed` resolving `localhost` — a Windows resolver failure under the
+load of this session's own subprocess churn, not a logic fault — and I stopped rather than fight
+the machine.
+
+**Not fixed here.** It is a different defect in a file two earlier tasks already investigated, its
+fix belongs in `tests/test_leaked_database_sweep.py` rather than in `conftest.py`, and it wants its
+own failing test first.
 
 ## What is still open
 
