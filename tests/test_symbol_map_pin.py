@@ -21,11 +21,12 @@ from pathlib import Path
 
 import pytest
 
+from scripts import symbol_map_pin
 from scripts.symbol_map_pin import (
     PIN,
     SymbolMapMismatch,
+    SymbolMapRewritten,
     read_pin,
-    read_staged_map,
     symbol_map_digest,
     verify_staged_map,
 )
@@ -107,15 +108,26 @@ def test_a_key_the_map_does_not_carry_is_not_silently_ignored():
 
 
 def test_the_staged_map_matches_the_pin_this_corpus_records():
-    """The corpus's own state, asserted from the committed pin against the artifact on disk. This
-    is the check the scorer makes before it scores anything."""
+    """The corpus's own state, asserted from the committed pin against the artifact on disk.
+
+    Through `verify_staged_map` rather than around it, which is a change of two kinds. It is the
+    check the scorer actually makes, so this test now fails when the scorer would refuse instead of
+    when a locally rewritten pair of assertions would. And it reads the artifact once: the previous
+    form read it for the digest and read it again for the count, which in gitignored per-worktree
+    space is two reads of a file another process may have replaced in between -- it could refuse
+    over a map that was never on disk in that state.
+
+    The skip on absence stays. An absent artifact is a tree where the documented fetch has not run,
+    which is a fact about the checkout rather than about the pin. A skip on *mismatch* would retire
+    this check, so a mismatch stays a failure whatever produced it -- and `SymbolMapRewritten` is
+    how a reader tells the two apart.
+    """
     pin = read_pin(PIN)
     staged = Path(pin["staged_at"])
     if not staged.exists():
         pytest.skip(f"no staged symbol map at {staged}; run the documented fetch first")
 
-    assert symbol_map_digest(read_staged_map(staged)) == pin["digest"]
-    assert len(read_staged_map(staged)) == pin["symbols"]
+    assert verify_staged_map(staged, pin) == pin["digest"]
 
 
 def test_a_staged_map_that_does_not_match_the_pin_is_refused_by_name(tmp_path):
@@ -151,6 +163,102 @@ def test_the_symbol_count_is_checked_as_well_as_the_digest(tmp_path):
 
     with pytest.raises(SymbolMapMismatch, match="2 symbol"):
         verify_staged_map(path, {"digest": symbol_map_digest(MAP), "symbols": 99})
+
+
+# --- which of the two things a refusal is about ---------------------------------------------
+
+
+def _rewritten_while_digesting(monkeypatch, path: Path, mapping: dict) -> None:
+    """Make the staged file change *after* `verify_staged_map` has read it.
+
+    A concurrent rewrite is another process writing the artifact between the read and the
+    comparison, and the digest is what sits between them. Patching it to rewrite the file and then
+    delegate reproduces that ordering exactly, in one process and with no sleep and no thread. The
+    ordering it depends on is stated in `verify_staged_map`: the digest is taken before any
+    refusal is raised, precisely so every refusal is classified by the same re-read.
+    """
+    real = symbol_map_pin.symbol_map_digest
+
+    def digest_then_rewrite(staged):
+        digest = real(staged)
+        path.write_text(json.dumps(mapping), encoding="utf-8")
+        return digest
+
+    monkeypatch.setattr(symbol_map_pin, "symbol_map_digest", digest_then_rewrite)
+
+
+def test_a_refusal_raised_while_the_file_was_being_rewritten_says_so(monkeypatch, tmp_path):
+    """The noise case, made self-identifying.
+
+    `.cache/` is gitignored, `staged_at` is relative, and every process in the worktree can write
+    the artifact -- which is how this check once went red in a fourth consecutive suite after three
+    clean ones. "The pin is wrong" and "somebody regenerated the map" deserve different answers and
+    produced the same bare assertion failure. A reader who cannot tell them apart eventually
+    silences the check, and this one guards a frozen corpus input.
+    """
+    moved = json.loads(json.dumps(MAP))
+    moved["stripe.charges.create"]["operation_id"] = "PostSomethingElse"
+    path = _staged(tmp_path, moved)
+    _rewritten_while_digesting(monkeypatch, path, {"stripe.refunds.create": {}})
+
+    with pytest.raises(SymbolMapRewritten, match="changed while this ran") as refusal:
+        verify_staged_map(path, {"digest": symbol_map_digest(MAP), "symbols": 2})
+
+    # The classification is added to the refusal, never substituted for it. A reader who decides
+    # this was noise and re-runs in a quiet tree needs the digests to still be there if it was not.
+    assert symbol_map_digest(moved) in str(refusal.value)
+    assert symbol_map_digest(MAP) in str(refusal.value)
+
+
+def test_a_mismatch_nothing_rewrote_is_not_reported_as_a_rewrite(tmp_path):
+    """The control, and the one that matters: everything else here could have softened this.
+
+    A staged map that genuinely is not the pinned one must refuse as a mismatch and name both
+    sides. If a classifier ever calls this a rewrite, the reader is told nothing was established
+    when in fact something was -- the corpus's frozen input is not the map it records.
+    """
+    moved = json.loads(json.dumps(MAP))
+    moved["stripe.charges.create"]["operation_id"] = "PostSomethingElse"
+    path = _staged(tmp_path, moved)
+
+    with pytest.raises(SymbolMapMismatch) as refusal:
+        verify_staged_map(path, {"digest": symbol_map_digest(MAP), "symbols": 2})
+
+    assert not isinstance(refusal.value, SymbolMapRewritten)
+    assert "changed while this ran" not in str(refusal.value)
+    assert symbol_map_digest(moved) in str(refusal.value)
+    assert symbol_map_digest(MAP) in str(refusal.value)
+
+
+def test_a_rewrite_landing_after_the_read_does_not_manufacture_a_refusal(monkeypatch, tmp_path):
+    """The window this closes rather than narrows.
+
+    The verification is over the bytes it read. A map that matched the pin when it was read
+    verifies, and another process replacing the file a microsecond later is the next revision of an
+    artifact this call has already finished with -- not a reason to refuse. An implementation that
+    re-read the file to compare would refuse here, which is the shape of the failure that put this
+    on the backlog.
+    """
+    path = _staged(tmp_path, MAP, indent=2)
+    _rewritten_while_digesting(monkeypatch, path, {"stripe.refunds.create": {}})
+
+    assert verify_staged_map(path, {"digest": symbol_map_digest(MAP), "symbols": 2}) == \
+        symbol_map_digest(MAP)
+
+
+def test_a_file_that_is_not_json_is_refused_by_name_rather_than_by_stack_trace(tmp_path):
+    """Half-written JSON is what a rewrite in progress looks like from the reader's side.
+
+    `json.JSONDecodeError` escaping from here reaches `score_corpus.py` as an `Unexpected`
+    traceback -- it catches `SymbolMapMismatch`, `OSError` and `ValueError`, and a decode error is
+    a `ValueError`, so the scorer says "refused: Expecting value: line 1 column 12" and names
+    neither the file nor what to do about it.
+    """
+    path = tmp_path / "symbols.json"
+    path.write_text('{"stripe.charges.create": {"operation', encoding="utf-8")
+
+    with pytest.raises(SymbolMapMismatch, match="does not hold a symbol map"):
+        verify_staged_map(path, {"digest": "x" * 64, "symbols": 2})
 
 
 # --- the pin file itself --------------------------------------------------------------------

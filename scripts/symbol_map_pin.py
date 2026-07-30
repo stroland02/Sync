@@ -69,6 +69,23 @@ class SymbolMapMismatch(RuntimeError):
     """
 
 
+class SymbolMapRewritten(SymbolMapMismatch):
+    """The staged map changed while it was being verified, so the refusal is about the artifact.
+
+    A subclass rather than a separate exception: this still refuses, and every caller that
+    already stops on `SymbolMapMismatch` goes on stopping. A rewrite mid-verification means the
+    map a score would have been taken over is not knowable, which is the same reason to refuse as
+    a mismatch -- what differs is what the reader should do next. A mismatch says the pin and the
+    artifact disagree and one of them has to be brought to the other. This says nothing was
+    established: run it again in a quiet tree.
+
+    The distinction exists because these two arrive as the same red and only one of them is a
+    finding. `.cache/` is gitignored and `staged_at` is relative, so the artifact is shared with
+    every other process in the worktree, and a check that cannot say which of the two it met gets
+    silenced -- taking the frozen-input guarantee with it.
+    """
+
+
 def symbol_map_digest(mapping: Mapping[str, Mapping[str, Any]]) -> str:
     """One string naming what this map resolves, and nothing about how it was written.
 
@@ -78,10 +95,6 @@ def symbol_map_digest(mapping: Mapping[str, Mapping[str, Any]]) -> str:
     """
     canonical = json.dumps(mapping, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
     return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
-
-
-def read_staged_map(path: Path) -> dict[str, dict[str, Any]]:
-    return json.loads(Path(path).read_text(encoding="utf-8"))
 
 
 def read_pin(path: Path = PIN) -> dict[str, Any]:
@@ -98,29 +111,92 @@ def read_pin(path: Path = PIN) -> dict[str, Any]:
     return pin
 
 
+def _refusal(path: Path, snapshot: bytes, message: str) -> SymbolMapMismatch:
+    """One refusal, classified by whether the artifact is still the bytes that were read.
+
+    Compared by content rather than by timestamp. `CLAUDE.md` is explicit about why: a filesystem
+    records modification times far more coarsely than the clock, so a rewrite that lands inside a
+    tick leaves `st_mtime_ns` untouched, and a check written that way mostly does not detect. The
+    bytes are already in hand, so there is nothing to gain by asking a cheaper question badly.
+
+    The mismatch text is carried through rather than replaced. Whichever of the two this turns out
+    to be, the reader still gets the digests and counts that name it -- adding an explanation must
+    not cost the explanation that was already there.
+    """
+    try:
+        current: bytes | None = path.read_bytes()
+    except OSError:
+        current = None
+
+    if current == snapshot:
+        return SymbolMapMismatch(message)
+
+    became = "it is gone" if current is None else f"it now holds {len(current)} bytes"
+    return SymbolMapRewritten(
+        f"{message}\n"
+        f"-- and {path} changed while this ran: {len(snapshot)} bytes were read and {became}. "
+        f"Nothing was established about the pin. `.cache/` is gitignored and shared with every "
+        f"process in this worktree, so another run regenerating the map looks exactly like this; "
+        f"re-run against a tree nothing else is working in before treating the pin as wrong."
+    )
+
+
 def verify_staged_map(path: Path, pin: Mapping[str, Any]) -> str:
     """The digest of the staged map, or a refusal naming both sides.
 
     Both halves are checked. The count is redundant against the digest by construction and is
     kept because it is what a human reads in a diff and what a report of a change quotes -- a pin
     whose two halves disagree is a pin somebody edited without re-deriving it.
+
+    **Verified against one snapshot, read once.** The artifact lives in gitignored per-worktree
+    space that any other process can write, so reading it twice can compare two different files
+    and refuse over neither: the check this replaced read it once for the digest and again for the
+    count. Everything below is decided from `snapshot`, which means a rewrite landing after that
+    read cannot manufacture a refusal -- it is simply the next revision of an artifact this call
+    has already finished with.
+
+    A rewrite landing *before* it is a different matter, and is what `_refusal` is for. The digest
+    is taken before any refusal is raised so that every one of them is classified the same way.
+    What none of this can separate is a rewrite that completed before the read and stopped: that
+    is indistinguishable from a stale artifact, because it *is* one, and the answer to both is to
+    restage from `built_from`.
     """
     path = Path(path)
-    if not path.exists():
+    try:
+        snapshot = path.read_bytes()
+    except FileNotFoundError:
         raise SymbolMapMismatch(
             f"no symbol map at {path}; the corpus records one at digest {pin['digest'][:12]} and "
             f"{pin['symbols']} symbols, built from {pin.get('built_from', 'an unrecorded source')}"
-        )
+        ) from None
 
-    staged = read_staged_map(path)
+    try:
+        # Decoded explicitly rather than handing bytes to `json.loads`, which would guess the
+        # encoding from a BOM. A `UnicodeDecodeError` is a `ValueError`, so both halves of "this is
+        # not a readable symbol map" are caught by the one clause below.
+        staged = json.loads(snapshot.decode("utf-8"))
+    except ValueError as exc:
+        # A bare decode error reaches the scorer as a message naming neither the file nor what to
+        # do about it: it catches ValueError, and that is what a JSONDecodeError is.
+        raise _refusal(
+            path, snapshot,
+            f"{path} does not hold a symbol map: {exc}. Half a file is what a write that was "
+            f"interrupted or is still running leaves behind, so this is more often a staging "
+            f"problem than a different map. The corpus records one at digest {pin['digest'][:12]} "
+            f"and {pin['symbols']} symbols, built from "
+            f"{pin.get('built_from', 'an unrecorded source')}",
+        ) from exc
+
     digest = symbol_map_digest(staged)
     if len(staged) != pin["symbols"]:
-        raise SymbolMapMismatch(
-            f"{path} holds {len(staged)} symbol(s); the corpus records {pin['symbols']}"
+        raise _refusal(
+            path, snapshot,
+            f"{path} holds {len(staged)} symbol(s); the corpus records {pin['symbols']}",
         )
     if digest != pin["digest"]:
-        raise SymbolMapMismatch(
+        raise _refusal(
+            path, snapshot,
             f"{path} is not the symbol map this corpus was scored against: it digests to "
-            f"{digest} and {PIN} records {pin['digest']}"
+            f"{digest} and {PIN} records {pin['digest']}",
         )
     return digest
