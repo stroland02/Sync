@@ -75,6 +75,43 @@ in the raised exception's MRO. `isinstance` says False and the MRO prints `['Con
 alone makes the handler look correct. Why enabling coverage produces the duplication is not
 established here; the timeout itself elapses with or without it, so the timing is not the variable.
 
+> **Correction, 2026-07-30, by the coordinator. Everything from "Under `pytest-cov` that handler
+> does not catch" to the end of the paragraph above is wrong.** The class-identity mechanism does not
+> exist. This report's own scratch probe, re-run under the configuration it names, reports the
+> opposite of what it recorded:
+>
+>     same_class = True    is_same_Error = True    isinstance = True
+>
+> `psycopg_binary._psycopg` is in `sys.modules`, but it does not hold a second set of the classes
+> that matters, and `psycopg.Error` is in the raised exception's MRO by identity. Three independent
+> checks agree: this probe under `-n0 --cov`; a full `-n0 --cov` suite run at 2441 passed, exit 0,
+> 741 s, with zero occurrences of `psycopg.Error` or `ConnectionTimeout` in its output; and the
+> parallel coordinator's own MRO check, which returned `True` for both `OperationalError` and
+> `psycopg.Error`.
+>
+> **The failure this paragraph was chasing is real, and the cause is elsewhere.** The parallel
+> coordinator found it, and it is one gap between two guarded regions rather than a broken handler.
+> `conftest.py`'s admin connect catches `psycopg.OperationalError`; `sweep_leaked_databases` catches
+> `psycopg.Error` twice, at the inner DROP and around the whole body. Between them sits the block
+> where the run creates its own database — the `with conn:` that issues `DROP DATABASE … WITH
+> (FORCE)` and then `CREATE DATABASE` — and that block has **no `try` and no `except` at all**.
+> Anything psycopg raises there escapes `pytest_configure` and takes the session before collection,
+> which is the observed shape. A `ConnectionTimeout` is one way in; likelier on a busy container is
+> a transient failure dropping a database another run still holds, since `WITH (FORCE)` still needs
+> the lock.
+>
+> So the consequence stated below stands and the mechanism above does not. What was wrong was not
+> the observation but the explanation, and a wrong explanation stated as measured fact is worse than
+> none — it sent two readers to `psycopg_binary._psycopg` before anyone read the twelve lines
+> between the two handlers.
+>
+> A fix is still not this report's to choose, and the open question is what it should do rather than
+> where it goes. The parallel coordinator argues for failing loudly rather than warning and
+> continuing, and the argument is worth carrying: the connect case can honestly say "no server, the
+> tests needing one were going to fail anyway", while this case cannot — the server is there, the
+> run could not make its own database, and continuing unisolated would put a run's writes into
+> whatever `SYNC_DSN` already pointed at.
+
 **Two consequences, and the second is the one that matters.** The red test is cosmetic — it asserts
 exactly this contract, so it is doing its job. But `sweep_leaked_databases` is also called from
 `pytest_configure` (`conftest.py:311`), where an escaping exception takes the **whole session**

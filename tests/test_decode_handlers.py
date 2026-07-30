@@ -31,20 +31,22 @@ after which the test passes against a valid file while appearing to cover the ha
 `.encode("utf-16")` writes the byte-order mark, so these bytes begin `ff fe` exactly as the
 repository that found this defect does.
 
-**`DRIVERS` is keyed by `path:line`, so any edit above a handler breaks this file by position
-rather than by behaviour.** Adding a comment to a module in `src/` is enough. That is the price
-of reading the inventory out of the source instead of maintaining a list here: a positional key
-is what lets a handler added tomorrow be in scope without anyone registering it, and there is no
-stable identity to key on instead -- a handler has no name, and two in one file can catch the
-same exceptions.
+`DRIVERS` is keyed by file, enclosing scope and caught exception names, none of which an edit
+above a handler moves. Adding a comment to a module in `src/` leaves every key here alone. The
+keys were positional until B63 and the cost of that was measured rather than argued: seven
+re-anchored when one change added comment blocks above them, three more inside a single commit,
+one twice within an hour, and not one of them a defect in `src/`. A check that fails for a
+change that touched no behaviour is a check somebody eventually silences.
 
-The cost is real and worth stating rather than rediscovering. In one afternoon it re-anchored
-seven keys when one change added comment blocks above them, three more within a single commit,
-and one key twice in an hour. None of those was a defect in `src/`.
+Both failures this file exists to produce survive the change. A handler no driver reaches still
+fails by name, and a driver whose handler is gone still fails by key -- a renamed scope reads as
+a handler that moved, which is a question worth answering rather than a position to bump.
 
-It is cheap to fix and does not need counting by hand: the failure prints the key it expected
-beside the key it observed, so re-anchor to what it reports and re-run. Treat a stale key as
-this file asking where a handler went, not as a test to silence.
+What the positional key bought was uniqueness, and that is what this scheme has to earn: two
+chains in one scope catching the same exceptions cannot be told apart by key, and one driver's
+entry would then vouch for the other's handler. There is no such pair in `src/` -- eighteen
+handlers, eighteen keys -- and `test_no_two_decode_handlers_share_a_key` refuses the day
+somebody writes one, naming both positions.
 """
 
 from __future__ import annotations
@@ -72,11 +74,12 @@ class DecodeHandler:
     The chain is the unit rather than the clause. `EXCEPTION_HANDLED` fires on the instruction
     that opens the chain, which belongs to the first clause whichever clause matched, so no
     clause can be told from its siblings by position. `first_line` and `last_line` span the
-    whole chain for that reason; `clause_line` is the line a reader would look at, and is what
-    a driver names.
+    whole chain for that reason; `clause_line` is the line a reader would look at and what a
+    failure prints, and it is deliberately no part of `key`.
     """
 
     path: str
+    scope: str
     clause_line: int
     first_line: int
     last_line: int
@@ -84,6 +87,13 @@ class DecodeHandler:
 
     @property
     def key(self) -> str:
+        # Sorted, because the order a clause lists its exceptions in changes nothing about what
+        # the chain catches, and a key that moved when somebody reordered them would be
+        # positional again in a second spelling.
+        return f"{self.path}::{self.scope}::{'+'.join(sorted(self.caught))}"
+
+    @property
+    def position(self) -> str:
         return f"{self.path}:{self.clause_line}"
 
 
@@ -106,12 +116,45 @@ def _caught_names(node: ast.expr | None) -> tuple[str, ...]:
     return tuple(names)
 
 
+def _scopes(tree: ast.Module) -> dict[int, str]:
+    """The dotted `def`/`class` trail enclosing every node, keyed by `id`.
+
+    Descended rather than read off a parent pointer, which `ast` nodes do not carry. The ids are
+    only valid while the caller still holds the tree they came from.
+    """
+    trails: dict[int, str] = {}
+
+    def descend(node: ast.AST, trail: tuple[str, ...]) -> None:
+        for child in ast.iter_child_nodes(node):
+            if isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+                descend(child, trail + (child.name,))
+            else:
+                trails[id(child)] = ".".join(trail) or "<module>"
+                descend(child, trail)
+
+    descend(tree, ())
+    return trails
+
+
+def colliding_keys(inventory: list[DecodeHandler]) -> dict[str, list[str]]:
+    """Keys naming more than one handler, each with the positions that share it."""
+    found: dict[str, list[DecodeHandler]] = {}
+    for handler in inventory:
+        found.setdefault(handler.key, []).append(handler)
+    return {
+        key: [handler.position for handler in sorted(handlers, key=lambda h: h.clause_line)]
+        for key, handlers in found.items()
+        if len(handlers) > 1
+    }
+
+
 def decode_handlers(src: Path = SRC) -> list[DecodeHandler]:
     """Every decode handler in the tree, read from the source rather than declared."""
     found: list[DecodeHandler] = []
     for file_path in sorted(src.rglob("*.py")):
         tree = ast.parse(file_path.read_text(encoding="utf-8"))
         relative = file_path.relative_to(src).as_posix()
+        scopes = _scopes(tree)
         for node in ast.walk(tree):
             # `ast.Try` covers `try/finally`, which has no clauses at all.
             if not isinstance(node, ast.Try) or not node.handlers:
@@ -126,7 +169,9 @@ def decode_handlers(src: Path = SRC) -> list[DecodeHandler]:
             first = node.handlers[0].lineno
             last = max(handler.end_lineno or handler.lineno for handler in node.handlers)
             for handler, caught in decoding:
-                found.append(DecodeHandler(relative, handler.lineno, first, last, caught))
+                found.append(
+                    DecodeHandler(relative, scopes[id(node)], handler.lineno, first, last, caught)
+                )
     return found
 
 
@@ -503,24 +548,36 @@ def _drive_typescript_sources(root: Path) -> None:
 
 
 DRIVERS: dict[str, Callable[[Path], None]] = {
-    "sync/benchmark/checkout.py:81": _drive_checkout,
-    "sync/index/python_lang.py:371": _drive_python_sources,
-    "sync/index/typescript.py:306": _drive_typescript_sources,
-    "sync/forge/webhook.py:97": _drive_webhook,
-    "sync/index/python_lang.py:258": _drive_requirement_lines_pyproject,
-    "sync/index/python_lang.py:271": _drive_requirement_lines_requirements,
-    "sync/index/python_lang.py:858": _drive_configured_typechecker,
-    "sync/cli.py:737": _drive_literal_call_sites,
-    "sync/index/typescript.py:232": _drive_ts_manifest,
-    "sync/remediate/agent_patch.py:240": _drive_git_diff,
-    "sync/remediate/literal_swap.py:84": _drive_literal_swap,
-    "sync/remediate/parameters.py:77": _drive_parameters,
-    "sync/remediate/property_omit.py:93": _drive_property_omit,
-    "sync/remediate/tiered.py:174": _drive_tiered_literal,
-    "sync/signals/feed/consumer.py:72": _drive_feed,
-    "sync/signals/intake.py:295": _drive_intake_npm,
-    "sync/signals/intake.py:331": _drive_intake_pyproject,
-    "sync/signals/intake.py:342": _drive_intake_requirements,
+    "sync/benchmark/checkout.py::read_checkout::UnicodeDecodeError": _drive_checkout,
+    "sync/index/python_lang.py::PythonAdapter._readable_sources::UnicodeDecodeError":
+        _drive_python_sources,
+    "sync/index/typescript.py::TypeScriptAdapter._readable_sources::UnicodeDecodeError":
+        _drive_typescript_sources,
+    "sync/forge/webhook.py::parse_pull_request_event::JSONDecodeError+UnicodeDecodeError":
+        _drive_webhook,
+    "sync/index/python_lang.py::PythonAdapter._read_manifests::TOMLDecodeError+UnicodeDecodeError":
+        _drive_requirement_lines_pyproject,
+    "sync/index/python_lang.py::PythonAdapter._read_manifests::UnicodeDecodeError":
+        _drive_requirement_lines_requirements,
+    "sync/index/python_lang.py::PythonAdapter._configured_typechecker::"
+    "TOMLDecodeError+UnicodeDecodeError": _drive_configured_typechecker,
+    "sync/cli.py::_literal_call_sites::UnicodeDecodeError": _drive_literal_call_sites,
+    "sync/index/typescript.py::TypeScriptAdapter._read_manifest::"
+    "JSONDecodeError+UnicodeDecodeError": _drive_ts_manifest,
+    "sync/remediate/agent_patch.py::_git_diff::UnicodeDecodeError": _drive_git_diff,
+    "sync/remediate/literal_swap.py::LiteralSwapRemediator.propose::OSError+UnicodeDecodeError":
+        _drive_literal_swap,
+    "sync/remediate/parameters.py::_ParameterRemediator.propose::OSError+UnicodeDecodeError":
+        _drive_parameters,
+    "sync/remediate/property_omit.py::PropertyOmitRemediator.propose::OSError+UnicodeDecodeError":
+        _drive_property_omit,
+    "sync/remediate/tiered.py::_passed_as_literal::OSError+UnicodeDecodeError":
+        _drive_tiered_literal,
+    "sync/signals/feed/consumer.py::parse_feed::JSONDecodeError+UnicodeDecodeError": _drive_feed,
+    "sync/signals/intake.py::_read_npm::JSONDecodeError+UnicodeDecodeError": _drive_intake_npm,
+    "sync/signals/intake.py::_read_pypi::TOMLDecodeError+UnicodeDecodeError":
+        _drive_intake_pyproject,
+    "sync/signals/intake.py::_read_pypi::UnicodeDecodeError": _drive_intake_requirements,
 }
 
 
@@ -534,16 +591,21 @@ def test_driver_enters_the_handler_it_names(key: str, tmp_path: Path) -> None:
     with watching_decode_handlers() as observed:
         DRIVERS[key](tmp_path)
 
-    assert key in keys_entered(observed, inventory), (
-        f"{key} was not entered with a UnicodeDecodeError by its own driver"
+    entered = keys_entered(observed, inventory)
+    assert key in entered, (
+        f"{key} was not entered with a UnicodeDecodeError by its own driver; "
+        f"the run entered {sorted(entered) or 'no handler at all'}"
     )
 
 
 def test_every_decode_handler_has_been_entered(tmp_path: Path) -> None:
     inventory = decode_handlers()
     with watching_decode_handlers() as observed:
-        for key, drive in DRIVERS.items():
-            root = tmp_path / key.replace("/", "_").replace(":", "_")
+        # Numbered rather than named after the key. A scope key is long enough that one under a
+        # pytest temporary directory reaches the Windows path limit inside the drivers that build
+        # a git clone, and the number is only ever a directory nobody reads.
+        for index, drive in enumerate(DRIVERS.values()):
+            root = tmp_path / f"{index:02d}"
             root.mkdir(parents=True)
             drive(root)
 
@@ -569,6 +631,75 @@ def test_handler_spans_do_not_overlap() -> None:
         spans = sorted({(h.first_line, h.last_line) for h in handlers})
         for (_, earlier_end), (later_start, _) in zip(spans, spans[1:]):
             assert later_start > earlier_end, f"{path}: two handler chains overlap"
+
+
+def _inventory_over(root: Path, source: str) -> list[DecodeHandler]:
+    """The inventory read out of a one-module tree this test wrote."""
+    root.mkdir(parents=True)
+    (root / "reader.py").write_text(source, encoding="utf-8")
+    return decode_handlers(root)
+
+
+_ONE_HANDLER = '''
+def read(path):
+    try:
+        return path.read_text(encoding="utf-8")
+    except UnicodeDecodeError:
+        return None
+'''
+
+_TWO_HANDLERS_IN_ONE_SCOPE = '''
+def read(first, second):
+    try:
+        return first.read_text(encoding="utf-8")
+    except UnicodeDecodeError:
+        pass
+    try:
+        return second.read_text(encoding="utf-8")
+    except UnicodeDecodeError:
+        pass
+'''
+
+
+def test_a_key_survives_an_unrelated_edit_above_its_handler(tmp_path: Path) -> None:
+    """The failure mode this keying scheme exists to remove.
+
+    A comment added above a handler moves every line below it. Under a positional key that
+    invalidates the driver registered for it, and the file then fails by position over a
+    handler whose behaviour nobody touched.
+    """
+    before = _inventory_over(tmp_path / "before", _ONE_HANDLER)
+    after = _inventory_over(
+        tmp_path / "after", "# an edit this file has no business having an opinion about\n" * 3
+        + _ONE_HANDLER
+    )
+
+    assert [handler.clause_line for handler in before] != [
+        handler.clause_line for handler in after
+    ]
+    assert [handler.key for handler in before] == [handler.key for handler in after]
+
+
+def test_two_handlers_the_key_cannot_tell_apart_are_refused_naming_both(tmp_path: Path) -> None:
+    """The cost of a non-positional key, refused loudly rather than absorbed.
+
+    Two chains in one scope catching the same exceptions share a key, and one driver's entry
+    would then vouch for both. There is no such pair in `src/`; this is what happens on the day
+    somebody writes one.
+    """
+    collisions = colliding_keys(_inventory_over(tmp_path / "collide", _TWO_HANDLERS_IN_ONE_SCOPE))
+
+    assert list(collisions) == ["reader.py::read::UnicodeDecodeError"]
+    assert collisions["reader.py::read::UnicodeDecodeError"] == ["reader.py:5", "reader.py:9"]
+
+
+def test_no_two_decode_handlers_share_a_key() -> None:
+    """What the check above proves is detectable, asserted over `src/`."""
+    collisions = colliding_keys(decode_handlers())
+
+    assert not collisions, "these handlers cannot be told apart by key:\n  " + "\n  ".join(
+        f"{key} at {', '.join(positions)}" for key, positions in collisions.items()
+    )
 
 
 def test_the_check_reports_a_handler_only_a_sibling_arm_entered() -> None:
