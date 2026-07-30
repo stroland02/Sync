@@ -202,7 +202,8 @@ def test_a_request_object_carrying_members_that_are_not_pairs_still_yields_its_v
 
     Vercel's own emission holds none of these inside `_createRequest`'s object, so nothing in the
     committed tree reaches this statement. It holds one directly next door: the object handed to
-    `client._do` carries a shorthand `context`, which the `_createRequest` check at 333 declines before this loop sees it.
+    `client._do` carries a shorthand `context`, which the `_createRequest` check at 333 declines
+    before this loop ever sees it.
     """
     root = _copy(tmp_path)
     _edit(
@@ -305,7 +306,12 @@ def test_a_specifier_resolving_to_the_checkout_root_declines_the_same_way(tmp_pa
     outside the tree, the other says this rule could not name something inside it.
     """
     root = _copy(tmp_path)
-    _edit(root, _CLIENT_MODULE, 'import { Aliases } from "./aliases.js";', 'import { Aliases } from "..";')
+    _edit(
+        root,
+        _CLIENT_MODULE,
+        'import { Aliases } from "./aliases.js";',
+        'import { Aliases } from "..";',
+    )
 
     assert not [symbol for symbol in _symbols(root) if symbol.startswith("aliases.")]
     assert not [entry for entry in _declines(root) if "Aliases" in entry]
