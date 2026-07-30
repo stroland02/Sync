@@ -179,6 +179,10 @@ class ObservedDriftDetector:
                 continue
             yield Finding(
                 detector=self.detector_id,
+                # Static, and the distinction is the point: the binding is static and the
+                # evidence is observed. A wrong static binding makes this claim wrong; a
+                # correct binding meeting a surprising shape is the finding working.
+                binding_rung="static",
                 # The field path, because a response with three undescribed fields is three
                 # claims a reviewer acts on separately. Bounded by the response schema, so it
                 # discriminates without turning traffic volume into rows.
@@ -218,6 +222,10 @@ class ObservedDriftDetector:
 
             yield Finding(
                 detector=self.detector_id,
+                # Static, and the distinction is the point: the binding is static and the
+                # evidence is observed. A wrong static binding makes this claim wrong; a
+                # correct binding meeting a surprising shape is the finding working.
+                binding_rung="static",
                 # Separate from the undescribed-field claim above even for the same path: one
                 # says the specification never mentioned the field, the other says it did and
                 # traffic disagrees. Two different reports, two different fixes.

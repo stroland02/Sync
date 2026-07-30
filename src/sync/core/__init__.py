@@ -1,6 +1,7 @@
 from sync.core.keys import DEVELOPMENT_FEED_PUBLIC_KEY
 from sync.core.models import (
     BindingRung,
+    FindingRung,
     CallSite,
     ChangeSource,
     ClientSpan,
@@ -28,6 +29,7 @@ from sync.core.protocols import (
 
 __all__ = [
     "BindingRung",
+    "FindingRung",
     "CallSite",
     "ChangeSource",
     "ClientSpan",

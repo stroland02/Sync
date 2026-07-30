@@ -101,7 +101,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Iterable, Mapping, Sequence
 
-from sync.core import Finding, ObservedCall
+from sync.core import BindingRung, Finding, ObservedCall
 from sync.graph.store import GraphStore
 
 MIN_STATUSED_CALLS = 100
@@ -187,6 +187,22 @@ def _leading_block(rows: Sequence[ObservedCall], floor: int) -> int | None:
     return None
 
 
+def _weaker_rung(rows: Sequence[ObservedCall]) -> BindingRung:
+    """The rung a population of correlated spans can honestly claim.
+
+    A finding over several spans rests on several correlations, and the weaker one decides:
+    one span nothing could bind is enough to make the population's attribution uncertain, so
+    saying `observed` would claim a binding that part of the evidence never had.
+
+    Two values rather than a ranking of the four, because `observed_call.binding_rung` is only
+    ever `observed` or `unresolved` -- a span is a third kind of evidence and the rungs a call
+    site carries are `static` and `resolved`. So this needs no ordering over the vocabulary and
+    invents no tiebreak; if a third value ever reaches this table, this is the function that has
+    to be told how it ranks rather than the one that will quietly guess.
+    """
+    return "unresolved" if any(row.binding_rung == "unresolved" for row in rows) else "observed"
+
+
 class StatusRateDetector:
     """Operations returning 4xx or 5xx often enough, over enough requests, to be a rate."""
 
@@ -232,6 +248,11 @@ class StatusRateDetector:
                     continue
                 yield Finding(
                     detector=self.detector_id,
+                    # The correlator's rung rather than `static`, for the reason
+                    # `sync.detect.efficiency` gives: a perfect static binding still yields a
+                    # wrong claim if these spans were correlated to the wrong operation. Folded
+                    # over the population because a rate claim rests on all of them.
+                    binding_rung=_weaker_rung(rows),
                     # The population, minus the operation the call site already determines. One
                     # operation failing on a sandbox host and on a live one is two integrations
                     # and two claims -- which is why `server_address` is in `observed_call`'s

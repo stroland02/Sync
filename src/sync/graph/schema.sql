@@ -93,6 +93,22 @@ CREATE TABLE IF NOT EXISTS finding (
     severity          TEXT NOT NULL,
     rationale         TEXT NOT NULL,
     status            TEXT NOT NULL DEFAULT 'open',
+    -- Which binding this claim rests on, so a false positive can be attributed to the binder
+    -- that produced it. A column and not a join, which is what `graph-grain.md` requires of any
+    -- row whose content depends on a binding.
+    --
+    -- The default serves rows written before this column existed and nothing else. A bare NOT
+    -- NULL cannot be added to a populated table and a backfilled rung would be invented, which
+    -- is the failure this column exists to prevent. So history answers `unattributed`: a value
+    -- no binder emits and which `BindingRung` deliberately excludes.
+    --
+    -- `Finding.binding_rung` defaults to it too. Requiring the field would fail a forgetful
+    -- detector at construction, which is stronger; it also invalidated every `Finding` fixture
+    -- in the suite -- 32 files, 153 failures -- and repairing those would have written a rung
+    -- into fixtures that do not reason about one. `unattributed` on a row written after this
+    -- shipped is still a bug; it is one no type catches, and the five detector tests are what
+    -- stand in for that.
+    binding_rung      TEXT NOT NULL DEFAULT 'unattributed',
     created_at        TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 

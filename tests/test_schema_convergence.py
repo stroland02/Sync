@@ -220,7 +220,7 @@ def test_a_column_definition_carrying_brackets_is_not_cut_in_half():
 
     assert [d.split()[0] for d in definitions] == [
         "id", "detector", "claim", "call_site_id", "vendor_change_id",
-        "severity", "rationale", "status", "created_at",
+        "severity", "rationale", "status", "binding_rung", "created_at",
     ]
     assert (
         "call_site_id TEXT NOT NULL REFERENCES call_site (id) ON DELETE CASCADE" in definitions

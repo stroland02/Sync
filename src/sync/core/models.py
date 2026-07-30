@@ -31,6 +31,22 @@ ObservationSource = Literal["error-payload", "replay", "interceptor"]
 # binding, which is a state worth naming: an uncorrelated observation that claimed a rung would
 # be a fabricated binding, and one silently dropped would hide how good the correlation is.
 BindingRung = Literal["static", "resolved", "observed", "unresolved"]
+"""What a binder can produce. `unattributed` is deliberately absent -- see `FindingRung`."""
+
+UNATTRIBUTED = "unattributed"
+FindingRung = BindingRung | Literal["unattributed"]
+"""A rung as a persisted finding can carry it.
+
+Wider than `BindingRung` by exactly one member, and the extra one is a fact about history rather
+than a rung any binder emits: `finding.binding_rung` is `NOT NULL DEFAULT 'unattributed'`, so
+every row written before attribution existed answers `unattributed` instead of failing to have
+an answer. Keeping it out of `BindingRung` is what stops a binder returning it.
+
+`Finding.binding_rung` defaults to it too, which is a weaker position than requiring the field
+and was chosen knowing that: see the field's own docstring for what the requirement would have
+cost and what the default leaves open. `unattributed` on a row written after this shipped is
+still a bug -- it is just one the type no longer catches.
+"""
 
 
 def _now() -> datetime:
@@ -129,6 +145,35 @@ class Finding(BaseModel):
     evidence for a claim rather than a claim, and putting it here would put a row in front of a
     reviewer for every request the customer served.
     """
+    binding_rung: FindingRung = UNATTRIBUTED
+    """Which binding this claim rests on, so a false positive can be attributed to a binder.
+
+    `CLAUDE.md` requires it of every artifact derived from a binding and `graph-grain.md` requires
+    it as a column rather than a join. Without it `sync.benchmark.binding` could score precision
+    per rung only over findings a caller attributed by hand, which is why it carries its own
+    `EmittedFinding` type.
+
+    **The rung names the binding whose wrongness would make this finding wrong.** For a detector
+    reading only the static index that is `static`, whatever else its evidence was -- a correct
+    binding meeting a surprising shape is the finding working. For one reading telemetry it is
+    the rung `observed_call` already recorded for the span-to-operation correlation, because a
+    perfect static binding still yields a wrong claim if the span was correlated to the wrong
+    operation. Where two bindings are both load-bearing, the weaker one wins.
+
+    Not part of the finding's identity. A correlator improving from `unresolved` to `observed`
+    must converge on the row it already wrote rather than adding a second one, or every rate over
+    the table double-counts exactly the findings whose attribution got better.
+
+    **Defaulted rather than required, and what that costs.** Requiring it would make a detector
+    that forgets fail at construction, which is the stronger guard; it also made every existing
+    `Finding` fixture in the suite invalid -- 32 test files, 153 failures -- and the mechanical
+    repair would have written a rung into fixtures that do not reason about one, which is a
+    committed value nobody established. So the default stands and the guard is weaker: each of
+    the five detectors has a test asserting what it attributes, but a *sixth* detector added
+    later could omit the field and write `unattributed` silently. That is the gap this default
+    leaves, and it is a detector-conformance test rather than a type that would close it.
+    """
+
     call_site_id: str
     vendor_change_id: str | None = None
     severity: Severity

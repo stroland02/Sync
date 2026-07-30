@@ -97,6 +97,10 @@ class ParameterDeprecationDetector:
                 findings.append(
                     Finding(
                         detector=self.detector_id,
+                        # The rung names the binding whose wrongness would make this finding
+                        # wrong. This detector reads only the static index, so a wrong static
+                        # binding is the only thing that could make the claim wrong.
+                        binding_rung="static",
                         # The parameter, because that is what the claim is about: this site
                         # passes `model` and the vendor stopped honouring it. Two deprecated
                         # parameters on one call site already resolve to two vendor changes --

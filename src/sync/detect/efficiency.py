@@ -186,6 +186,13 @@ class EfficiencyDetector:
             for site in reachable:
                 yield Finding(
                     detector=self.detector_id,
+                    # The correlator's rung, not `static`. A perfect static binding still
+                    # yields a wrong claim if this span was correlated to the wrong operation,
+                    # so that correlation is the binding whose wrongness would make the finding
+                    # wrong -- and `observed_call` already records its rung. Carried through
+                    # including when it is `unresolved`, which is what lets the benchmark see a
+                    # correlator's false positives at all.
+                    binding_rung=call.binding_rung,
                     # The kind of claim and never its wording. The rationale beside it carries
                     # a live call count, so a discriminator derived from it would change
                     # between runs and write a new row on each one instead of converging.

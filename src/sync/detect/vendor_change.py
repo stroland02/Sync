@@ -156,6 +156,10 @@ class VendorChangeDetector:
                     Finding(
                         detector=self.detector_id,
                         claim=claim,
+                        # The rung names the binding whose wrongness would make this finding
+                        # wrong. This detector reads only the static index, so a wrong static
+                        # binding is the only thing that could make the claim wrong.
+                        binding_rung="static",
                         call_site_id=site.id,
                         vendor_change_id=change.id,
                         severity=change.severity,

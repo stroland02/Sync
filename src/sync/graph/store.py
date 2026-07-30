@@ -346,13 +346,20 @@ class GraphStore:
         self._connect().execute(
             """
             INSERT INTO finding (id, detector, claim, call_site_id, vendor_change_id, severity,
-                                 rationale, status)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                                 rationale, status, binding_rung)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
             ON CONFLICT (id) DO NOTHING
             """,
             (
                 finding_id, finding.detector, finding.claim, finding.call_site_id,
                 finding.vendor_change_id, finding.severity, finding.rationale, finding.status,
+                # Written, and deliberately absent from `_stable_id` above. The rung describes
+                # the binding a claim rested on rather than which claim it is, so a correlator
+                # improving from `unresolved` to `observed` converges on the row it already
+                # wrote -- in the key it would add a second row for the same claim and every
+                # rate over this table would double-count the findings whose attribution
+                # got better.
+                finding.binding_rung,
             ),
         )
         return finding_id
