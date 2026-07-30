@@ -86,12 +86,20 @@ def install_dependencies(repo_path: Path, timeout: float = _INSTALL_TIMEOUT_SECO
     env = {**os.environ, "YARN_IGNORE_PATH": "1"}
 
     try:
+        # `errors="replace"` because the only reader of this output is the `RuntimeError` below.
+        # The child is a `.CMD` shim over node here and measures as UTF-8, but it is whichever
+        # manager the customer's lockfile named, run against whichever registry their `.npmrc`
+        # names, and a decode failure would not raise where it happened: it lands on a reader
+        # thread, `stdout` comes back `None`, and the concatenation below raises `TypeError`
+        # instead of reporting the install that failed. A mangled character in a diagnostic
+        # costs nothing by comparison.
         result = subprocess.run(
             [executable, *args],
             cwd=repo_path,
             capture_output=True,
             text=True,
             encoding="utf-8",
+            errors="replace",
             timeout=timeout,
             env=env,
         )

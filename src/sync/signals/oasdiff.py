@@ -61,7 +61,7 @@ def run_oasdiff_breaking(base_path: Path, revision_path: Path) -> list[dict[str,
     (bad args, a crashed or killed process) and must raise rather than be read
     as a clean report.
     """
-    result = subprocess.run(
+    result = subprocess.run(  # subprocess-encoding: allow - see run_oasdiff_checks
         [_binary(), "breaking", str(base_path), str(revision_path), "--format", "json"],
         capture_output=True,
         text=True,
@@ -85,7 +85,13 @@ def run_oasdiff_checks() -> list[dict[str, Any]]:
     Note the two surfaces disagree on how `level` is encoded -- a string here, an integer in
     `breaking` output -- so map between them explicitly rather than comparing directly.
     """
-    result = subprocess.run(
+    # oasdiff is Go and answers through `encoding/json`, which replaces any byte sequence that
+    # is not valid UTF-8 before it reaches the pipe, so this child cannot emit what
+    # `encoding="utf-8"` would fail on. Measured against the pinned binary rather than reasoned
+    # from the language. `errors=` is the wrong route regardless: every field here is data --
+    # `kind`, `operation_id` and the whole of `raw` -- and a replacement character in one is a
+    # VendorChange nothing joins on.
+    result = subprocess.run(  # subprocess-encoding: allow - Go via encoding/json; output is data
         [_binary(), "checks", "--format", "json"],
         capture_output=True,
         text=True,
