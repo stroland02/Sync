@@ -136,24 +136,6 @@ which measured that `_UNSHIPPED` is exactly `{"??", "!!"}` and a staged new path
 nothing ever held it aside. Written against `9b13cce`, so it is a lead to re-derive rather than an
 answer to quote.
 
-### B70 — the `sync-core` wheel asserts Apache-2.0 and ships no licence text
-
-Built from main, `sync_core-0.1.0-py3-none-any.whl` holds 12 files, its `dist-info` carries only
-`WHEEL`, `METADATA` and `RECORD`, and its metadata reads `License-Expression: Apache-2.0` with no
-`License-File` and no body. The repository's `LICENSE` and `README.md` sit above `src/`, which
-`src/pyproject.toml` must use as its project root because `uv_build` refuses a module root
-outside the project it builds — so nothing in that build ever sees either file.
-
-Apache-2.0 section 4(a) requires recipients receive a copy of the License, and this distribution
-exists precisely so third parties install it. The blank description is the second half: M3's
-deliverable is publishing `sync.core` **with adapter-authoring documentation**, and a reader of
-the package page would not learn that guide exists. Both are uncorrectable after publication —
-PyPI does not accept a re-upload for an existing version.
-
-Publishing stays the user's call; this makes the wheel correct and proves it locally.
-
-Dispatched to `m2-parsing`.
-
 ### B7 — The M0 acceptance run has not executed since the pipeline changed underneath it
 
 `tests/test_e2e_stripe.py::test_one_command_produces_one_green_pull_request` is the
@@ -200,6 +182,20 @@ Entries stay under **Ready** above with their full reasoning until they land, be
 is what a reviewer needs and duplicating it here would let the two copies drift.
 
 ## Done
+
+- **B70** — the core wheel ships the licence it asserts, and a page worth landing on. Landed
+`e249247`. `dist-info/licenses/LICENSE` is present, `METADATA` carries `License-File: LICENSE` and
+`Description-Content-Type: text/markdown` with a rendering body, and the six-package install is
+unchanged. **The worker declined my instruction not to check in a second copy of the licence, and
+measured why:** PEP 639 forbids the parent-directory operator in a `license-files` glob and uv
+rejects `../LICENSE` verbatim, so the text must sit under `src/` — which must be the core project
+root for the reason B68 documented. A build-time copy is worse still: `src` is a workspace member,
+so declaring `license-files` with the file absent makes `uv run` itself fail, and a fresh clone
+could not run its own suite. My stated reason for the prohibition was divergence, and a byte-equality
+test on every run closes it at zero build cost. Both claims mutation-tested here — diverging the copy
+fails `test_the_two_licence_copies_cannot_drift_apart`, removing `license-files` fails
+`test_the_built_core_wheel_carries_the_licence_and_a_description`.
+
 
 - **B49** — the corpus is now a **superset** of what the rule proposes rather than equal to it. The
   four differences were classified before anything moved: one genuine addition
