@@ -1,0 +1,65 @@
+# `subprocess.run` calls that decode a child's output with no stated defence against the child
+# choosing its own encoding. Accepted as of 2026-07-29, when the check first ran.
+#
+# This is debt, and it is not an exemption. An exemption is for a child somebody established
+# cannot emit non-UTF-8; it lives in `src/` on the call, carries its reason, and is permanent.
+# A line here says instead that nobody has judged this call yet. Every entry names the task that
+# will, because debt with no owner is a permanent exemption wearing a different hat.
+#
+# This is a list and never a threshold. A count absorbs both a repair and a new defect in
+# silence; a named entry has to be deleted by whoever defends the call, in the commit that
+# defends it, because `test_no_baseline_entry_has_stopped_describing_a_violation` fails on an
+# entry that no longer describes anything. The file only shrinks.
+#
+# Format: <path under src/>:<qualname of the enclosing function>[#<n> for the nth call in it]
+#
+# The key is the enclosing function and not the line, so an edit above a call does not move it.
+# `tests/test_decode_handlers.py` records what a positional key costs -- seven keys re-anchored
+# in one afternoon over added comment blocks -- and says there is no stable identity to key on
+# instead. For a `subprocess.run` there is one. `#<n>` counts every spawning call in the
+# function in line order, including ones that already satisfy the check, so `_clone#1` is the
+# second `subprocess.run` in `_clone` and stays `#1` while the first one stands.
+
+# `git rev-parse HEAD` and an arbitrary `git` invocation in `_git`. Measured: git for Windows
+# converts NTFS's UTF-16 names to UTF-8, and both of these read paths or a hex SHA, so neither
+# is expected to bite -- but `_git` takes its argv from a caller and this task did not enumerate
+# them. Retired by M3-W98/a, which owns `sync/cli.py`.
+sync/cli.py:_clone#1
+sync/cli.py:_git
+
+# `gh`/`git` through `GitHubForge._run`, argv supplied by the caller. Retired by M3-W98 (this
+# task), which owns `sync/forge/github.py`.
+sync/forge/github.py:GitHubForge._run
+
+# `git ls-files -z` and `git status --porcelain --ignored -z`. Both hand back paths, which are
+# data: `errors="replace"` would corrupt one silently, so these need the measured exemption
+# rather than the cheap fix. Retired by M3-W98 (this task).
+sync/index/dependency_edits.py:_tracked_dependency_files
+sync/index/shipped_tree.py:_status_entries
+
+# The `npm`/`pnpm`/`yarn` shim, and `tsc` or `npx`. Both outputs are diagnostic only, which is
+# the case `CLAUDE.md` scopes `errors="replace"` to. Retired by M3-W98 (this task).
+sync/index/deps.py:install_dependencies
+sync/index/tsc.py:run_tsc
+
+# `git diff --name-only`, whose output is a path list. Retired by M3-W98/b, which owns
+# `sync/index/typescript.py`.
+sync/index/typescript.py:TypeScriptAdapter._baseline
+
+# **`git diff HEAD` is the one call in `src/` whose defect is reproduced rather than reasoned
+# about.** `git diff` copies file content onto the pipe verbatim, so a customer source file in
+# cp1252 makes git emit bytes that are not UTF-8. Measured on 2026-07-29 against a repository
+# holding one such file: exit 0, `UnicodeDecodeError` on the reader thread, and `stdout` came
+# back `None` -- after which `return result.stdout` hands `None` to `route_after_patch` as the
+# patch's diff. `_unstaged_additions` beside it reads paths and is the ordinary case. Retired by
+# M3-W98/c, which owns `sync/remediate/`; this is the entry to dispatch first.
+sync/remediate/agent_patch.py:_git_diff
+sync/remediate/agent_patch.py:_unstaged_additions
+
+# `oasdiff breaking` and `oasdiff checks`. `oasdiff.py:88` is the call `CLAUDE.md`'s paragraph
+# quotes verbatim, and measuring it says the rule does not reach it: oasdiff is Go, its output
+# goes through `encoding/json`, and the bytes measured on the pinned binary are UTF-8. The
+# output is also data -- `kind`, `operation_id`, `raw` -- so `errors="replace"` is the wrong
+# route. Retired by M3-W98 (this task).
+sync/signals/oasdiff.py:run_oasdiff_breaking
+sync/signals/oasdiff.py:run_oasdiff_checks
