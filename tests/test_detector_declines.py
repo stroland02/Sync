@@ -173,10 +173,10 @@ def test_another_vendor_s_louder_trace_never_displaces_the_quoted_one(store):
 def test_a_declined_observation_leaves_no_trace_the_caller_could_count(store):
     """The invisibility, asserted rather than described.
 
-    Six surfaces have now been examined for whether a decline reaches anything, and one -- the
-    mutation engine's `unreachable` list -- did. This one does not: a graph holding a foreign
-    vendor's traffic produces findings equal to a graph that never held it, field for field. No
-    count, no list, no log line, no exception.
+    Every surface examined this way but one has answered the same, and the exception is the
+    mutation engine, whose `unreachable` list reaches a per-pair column in the score JSON. This
+    one is no exception: a graph holding a foreign vendor's traffic produces findings equal to a
+    graph that never held it, field for field. No count, no list, no log line, no exception.
     """
     _site(store, vendor_id="stripe")
     _observe_call(store, _spans(LOOP_THRESHOLD, prefix="st"))
