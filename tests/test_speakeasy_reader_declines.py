@@ -147,12 +147,12 @@ def test_the_fourteen_other_symbols_are_the_control_for_every_edit(tmp_path):
 
 
 # --------------------------------------------------------------------------------------------
-# 282 and 286: the route argument is a string this rule does not read, or is empty
+# 287 and 293: the route argument is a string this rule does not read, or is empty
 # --------------------------------------------------------------------------------------------
 
 
 def test_a_route_built_by_interpolation_is_not_read_as_a_route(tmp_path):
-    """282. `pathToFunc` handed a template literal rather than a plain string.
+    """287. `pathToFunc` handed a template literal rather than a plain string.
 
     Reading the fragments of a template would answer `/v4/aliases/`, a route with its parameter
     segment dropped rather than templated -- which is the wrong-route failure the module's own
@@ -173,7 +173,7 @@ def test_a_route_built_by_interpolation_is_not_read_as_a_route(tmp_path):
 
 
 def test_an_empty_route_literal_reads_as_absent_rather_than_as_a_route(tmp_path):
-    """286. A `string` node with no `string_fragment` child at all.
+    """293. A `string` node with no `string_fragment` child at all.
 
     The alternative is a route of `""`, which `_route` would keep and `ExtractedOperation` would
     carry, giving a symbol bound to the empty path -- a binding to nothing that occupies the key
@@ -189,12 +189,12 @@ def test_an_empty_route_literal_reads_as_absent_rather_than_as_a_route(tmp_path)
 
 
 # --------------------------------------------------------------------------------------------
-# 333: an object member that is not a key/value pair
+# 340: an object member that is not a key/value pair
 # --------------------------------------------------------------------------------------------
 
 
 def test_a_request_object_carrying_members_that_are_not_pairs_still_yields_its_verb(tmp_path):
-    """333, and it is what makes the rest of the loop safe rather than a guard against nothing.
+    """340, and it is what makes the rest of the loop safe rather than a guard against nothing.
 
     Three of the four member kinds an object literal can hold are not `pair` nodes -- a spread
     element, a shorthand property, and a comment -- and none of them has a `key` field. Skipping
@@ -202,7 +202,7 @@ def test_a_request_object_carrying_members_that_are_not_pairs_still_yields_its_v
 
     Vercel's own emission holds none of these inside `_createRequest`'s object, so nothing in the
     committed tree reaches this statement. It holds one directly next door: the object handed to
-    `client._do` carries a shorthand `context`, which the `_createRequest` check at 333 declines
+    `client._do` carries a shorthand `context`, which the `_createRequest` anchor two loops up
     before this loop ever sees it.
     """
     root = _copy(tmp_path)
@@ -404,11 +404,11 @@ def _walk(node: Node):
 
 
 def test_the_four_guards_against_an_absent_required_field_cannot_fire(tmp_path):
-    """302, 337, 385 and 392 each test a grammar field that is never absent.
+    """309, 344, 392 and 399 each test a grammar field that is never absent.
 
     tree-sitter's error recovery inserts a MISSING node for a required field rather than omitting
     it, so `child_by_field_name` answers a node even for source that does not parse. The
-    measurement: every committed Speakeasy file truncated at every 64th byte, which is 1,600-odd
+    measurement: every committed Speakeasy file truncated at every 64th byte, which is 1,568
     parses of real vendor source in every state of incompleteness, and the count of MISSING nodes
     is asserted non-zero so that a sweep which had stopped producing broken trees cannot pass.
 
@@ -439,10 +439,10 @@ def test_the_four_guards_against_an_absent_required_field_cannot_fire(tmp_path):
 
 
 def test_a_non_pair_member_has_no_key_which_is_why_the_pair_guard_is_unreachable(tmp_path):
-    """337 specifically: it is unreachable *because* 333 is there, not because nothing has no key.
+    """344 specifically: it is unreachable *because* 340 is there, not because nothing has no key.
 
     Every member kind that is not a `pair` answers `None` for both `key` and `value`. So deleting
-    333 does not make the loop wrong -- it makes 337 the statement that skips those members. The
+    340 does not make the loop wrong -- it makes 344 the statement that skips those members. The
     two are one guard written twice, and only the first can fire.
     """
     parser = Parser(_TS_LANGUAGE)
