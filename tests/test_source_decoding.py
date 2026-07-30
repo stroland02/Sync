@@ -4,8 +4,9 @@ decodes a vendor's.
 There are four copies of one three-line helper in this repository. The two over a vendor's SDK
 source -- `signals.generated.symbols_typescript._text` and `symbols_speakeasy._text` -- slice
 tree-sitter's byte offsets and decode strictly. The two over the customer's repository --
-`index.typescript._text` and `index.python_lang._text` -- pass `errors="replace"`. Same helper,
-same parser, opposite discipline, and the lenient half is the one pointed at somebody else's code.
+`index.typescript._text` and `index.python_lang._text` -- passed `errors="replace"`. Same helper,
+same parser, opposite discipline, and the lenient half was the one pointed at somebody else's
+code. All four are strict now; the four parametrised cases below are what holds them level.
 
 `benchmark.read_checkout` already settled the argument for the corpus, and its wording is the
 brief for this: "Skipped rather than decoded leniently. `errors="replace"` would hand the indexer
@@ -166,8 +167,9 @@ def test_the_file_that_could_not_be_decoded_is_named(
     `read_checkout` returns the paths for this reason and states it: telling a legacy encoding
     apart from a binary cheaply is not possible, so naming the file is the mitigation -- "a reader
     who sees `src/legacy.ts` in the list knows to look, where a reader handed only a count could
-    not." An index has no return channel for it, so it is a warning, which reaches stderr through
-    the default handler on a run that configures no logging.
+    not." The warning reaches stderr through the default handler on a run that configures no
+    logging, and `unread_paths` below is the return channel a warning is not: it says how much was
+    missed, where this says only that something was.
     """
     repo = build(tmp_path)
     adapter = adapter_type(vendor_adapter=_Vendor())
@@ -177,6 +179,34 @@ def test_the_file_that_could_not_be_decoded_is_named(
 
     assert f"src/legacy.{suffix}" in caplog.text
     assert f"src/clean.{suffix}" not in caplog.text
+
+
+@pytest.mark.parametrize("adapter_type, build, suffix", _LANGUAGES)
+def test_the_paths_it_could_not_read_are_reported_to_the_run(
+    tmp_path: Path, adapter_type: type, build, suffix: str
+) -> None:
+    """The record both adapters kept and nothing in `src/` read.
+
+    Each already recorded every skipped file to dedupe its warning, so the figure a run needed
+    existed and had no reader -- and the run's coverage report counted the literal pass, which
+    walks `*.ts`, while this pass walks every source file. Over a Python repository that made the
+    figure structurally blind: measured, a legacy-encoded module is skipped here and the literal
+    pass reports nothing, so a run said it could not read zero paths having skipped a module the
+    interpreter runs.
+
+    Empty before `index` and filled after, which is the half that has to be asserted rather than
+    assumed. `_readable_sources` records as the walk reaches each file, so a caller that asked
+    first would report nothing on a scan that skipped plenty -- and would pass a test that only
+    checked the value afterwards.
+    """
+    repo = build(tmp_path)
+    adapter = adapter_type(vendor_adapter=_Vendor())
+
+    assert adapter.unread_paths(repo) == []
+
+    list(adapter.index(repo))
+
+    assert adapter.unread_paths(repo) == [f"src/legacy.{suffix}"]
 
 
 class _Slice:

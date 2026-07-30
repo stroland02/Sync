@@ -21,7 +21,7 @@ import yaml
 from sync.benchmark.checkout import read_checkout
 from sync.benchmark.report import render_report
 from sync.benchmark.score import index_sources, materialise, score_change
-from sync.core import CallSite, Finding, RepoRef, VendorChange
+from sync.core import CallSite, Finding, LanguageAdapter, RepoRef, VendorChange
 from sync.core.protocols import RequestCorrelator
 from sync.detect.efficiency import EfficiencyDetector
 from sync.detect.observed_drift import DeclaredField, ObservedDriftDetector
@@ -752,6 +752,23 @@ def _literal_call_sites(repo: RepoRef) -> tuple[list[CallSite], list[str]]:
     return sites, unread
 
 
+def _adapter_unread(adapter: LanguageAdapter, repo: RepoRef) -> list[str]:
+    """The source paths the language indexer skipped, or nothing if it does not report.
+
+    `getattr` rather than a protocol member, for the reason `unverifiable_reason` and
+    `sdk_bindings` are read that way: `LanguageAdapter` is a boundary this module does not own,
+    and a third party's adapter that reports nothing has to scan rather than crash. Both shipped
+    adapters report, so the fallback is for an adapter this repository has not seen.
+
+    Both of them skip a source file that is not UTF-8 and log it, and until now nothing in `src/`
+    read the record -- so a run's coverage figure described the literal pass, which walks `*.ts`,
+    and presented itself as the whole answer while the pass that walks every source file said
+    nothing.
+    """
+    report = getattr(adapter, "unread_paths", None)
+    return list(report(repo)) if report is not None else []
+
+
 def _coverage_lines(unread: Sequence[str]) -> list[str]:
     """What a run could not read, or nothing at all when it read everything.
 
@@ -919,11 +936,19 @@ def run(args: argparse.Namespace, today: date | None = None) -> int:
             # Kept as well as stored: `ParameterDeprecationDetector` takes call sites directly,
             # and the store answers `call_sites_for_operation` rather than "all of them". The id
             # comes back from the upsert, and a finding addresses its call site by id.
-            literal_sites, unread = _literal_call_sites(repo)
+            literal_sites, literal_unread = _literal_call_sites(repo)
             call_sites = []
             for site in list(adapter.index(repo)) + literal_sites:
                 site.id = store.upsert_call_site(site)
                 call_sites.append(site)
+
+            # After `index`, because that is when the adapter learns: `_readable_sources` records
+            # as the walk reaches each file, so asking before it reports nothing.
+            #
+            # A set, because the two passes overlap. A `.ts` file that is not UTF-8 is skipped by
+            # the language indexer and by the literal pass, and summing them would over-report --
+            # a wrong number a reader would trust for being the larger one.
+            unread = sorted(set(literal_unread) | set(_adapter_unread(adapter, repo)))
 
             for change in vendor.fetch_changes(args.from_version, args.to_version):
                 store.upsert_vendor_change(change)

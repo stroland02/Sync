@@ -509,7 +509,7 @@ DRIVERS: dict[str, Callable[[Path], None]] = {
     "sync/forge/webhook.py:97": _drive_webhook,
     "sync/index/python_lang.py:258": _drive_requirement_lines_pyproject,
     "sync/index/python_lang.py:271": _drive_requirement_lines_requirements,
-    "sync/index/python_lang.py:839": _drive_configured_typechecker,
+    "sync/index/python_lang.py:858": _drive_configured_typechecker,
     "sync/cli.py:737": _drive_literal_call_sites,
     "sync/index/typescript.py:232": _drive_ts_manifest,
     "sync/remediate/agent_patch.py:240": _drive_git_diff,

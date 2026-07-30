@@ -379,6 +379,25 @@ class PythonAdapter:
                 continue
             yield file_path, source
 
+    def unread_paths(self, repo: RepoRef) -> list[str]:
+        """The source paths this scan skipped because they are not UTF-8, repository-relative.
+
+        Read by `sync.cli` after `index`, and empty before it: `_readable_sources` records as the
+        walk reaches each file, so asking first reports nothing on a scan that skipped plenty.
+
+        This exists because the warning above is not a coverage figure. It names a file without
+        saying how much of the repository was missed, which is the distinction B60 drew for the
+        literal pass -- and this is the pass that skips most, since it walks every source file
+        where that one walks `*.ts` alone.
+
+        Not on the `LanguageAdapter` protocol, and read with `getattr` for the reason
+        `unverifiable_reason` and `sdk_bindings` are: this is a boundary neither this module nor
+        `sync.cli` owns, and a third party's adapter that reports nothing has to scan rather than
+        crash.
+        """
+        root = Path(repo.local_path)
+        return sorted(path.relative_to(root).as_posix() for path in self._undecodable)
+
     # --- clients ------------------------------------------------------------------
 
     def _client_identifiers(self, repo: RepoRef) -> set[str]:
