@@ -149,6 +149,14 @@ def _comparable(http_method: str, path: str) -> tuple[str, str]:
     was made and measured on the Python flavour. What is added here is the parameter reduction,
     which that flavour does not need -- its SDK writes the specification's own parameter names,
     and this one does not.
+
+    **This reduction bears on the comparison only, never on a binding.**
+    `ExtractedOperation.path` keeps the SDK's own spelling and is what `operation_for_symbol`
+    builds an `OperationRef` from, so two routes reducing to one key cannot resolve a call site to
+    the other one. What a collision costs is the coverage denominator, counted through this, and
+    the cross-check's verdict on a route -- both silently. It is measured injective over every
+    specification this repository pins; `2026-07-29-parameter-reduction-collisions.md` carries the
+    counts and `tests/test_parameter_reduction.py` fails the day one of them collides.
     """
     method, route = _route(http_method, path)
     return method, _PARAMETER.sub("{}", route)

@@ -164,6 +164,12 @@ def _comparable(http_method: str, path: str) -> tuple[str, str]:
     is the TypeScript flavour's addition and is inert for this generator -- measured, see
     `_PARAMETER`. It is kept for the overlay case that comment describes, not carried over on the
     assumption that what one flavour needed the next one needs.
+
+    Inert in outcome rather than unreached: it rewrites eight of this SDK's fifteen readable routes
+    and 258 of the specification's 359, and the verdicts agree anyway. As in the TypeScript
+    flavour, the reduction bears on the comparison only -- `ExtractedOperation.path` keeps the
+    SDK's spelling and is what a binding is built from, so a colliding key costs the denominator
+    and the cross-check rather than resolving a call site elsewhere.
     """
     method, route = _route(http_method, path)
     return method, _PARAMETER.sub("{}", route)
