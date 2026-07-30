@@ -116,6 +116,40 @@ confidently instead of refusing.
 
 ## Ready
 
+### B69 — CLAUDE.md's verification non-negotiable describes a gap that `aeecde4` closed
+
+The "Non-negotiables" section still ends its first qualification with *"The gap left is that
+`git add -u` never stages a new file, so a patch that needs one fails verification rather than
+pushing a branch without it."* `aeecde4` closed that on 2026-07-28 — the patch agent stages the
+files it added, and that staging is the assertion. `sync.index.shipped_tree`'s docstring already
+describes the post-fix behaviour ("the index, plus tracked modifications"); CLAUDE.md describes
+the pre-fix one, and it is the file every agent reads first.
+
+Carries an audit of the file's other checkable claims — the two commit shas it names, the
+`ClaudeAgentOptions` field list said to be verified against the installed package, the HTTP 400
+parameters, and the toolchain table. Environment measurements (the 184-of-200 mtime figure,
+`corepack` needing elevation) are records rather than claims and stay untouched.
+
+Dispatched to `m1-forge`.
+
+### B70 — the `sync-core` wheel asserts Apache-2.0 and ships no licence text
+
+Built from main, `sync_core-0.1.0-py3-none-any.whl` holds 12 files, its `dist-info` carries only
+`WHEEL`, `METADATA` and `RECORD`, and its metadata reads `License-Expression: Apache-2.0` with no
+`License-File` and no body. The repository's `LICENSE` and `README.md` sit above `src/`, which
+`src/pyproject.toml` must use as its project root because `uv_build` refuses a module root
+outside the project it builds — so nothing in that build ever sees either file.
+
+Apache-2.0 section 4(a) requires recipients receive a copy of the License, and this distribution
+exists precisely so third parties install it. The blank description is the second half: M3's
+deliverable is publishing `sync.core` **with adapter-authoring documentation**, and a reader of
+the package page would not learn that guide exists. Both are uncorrectable after publication —
+PyPI does not accept a re-upload for an existing version.
+
+Publishing stays the user's call; this makes the wheel correct and proves it locally.
+
+Dispatched to `m2-parsing`.
+
 ### B7 — The M0 acceptance run has not executed since the pipeline changed underneath it
 
 `tests/test_e2e_stripe.py::test_one_command_produces_one_green_pull_request` is the
