@@ -188,12 +188,12 @@ def _no_model_id_change() -> VendorChange:
     )
 
 
-def _clone(root: Path) -> RepoRef:
+def _clone(root: Path, source: str = RETIRED_MODEL_SOURCE) -> RepoRef:
     # Bytes, because the assertion below is byte-for-byte. `write_text` expands `\n` to
     # `os.linesep`, so on Windows it would put CRLF in a file the remediator reads with
     # `read_bytes` -- the round trip `literal_swap` avoids for exactly this reason.
     (root / "src").mkdir(parents=True, exist_ok=True)
-    (root / "src" / "m.ts").write_bytes(RETIRED_MODEL_SOURCE.encode("utf-8"))
+    (root / "src" / "m.ts").write_bytes(source.encode("utf-8"))
     return RepoRef(
         repo_id="r", url="https://example.invalid/r", local_path=str(root), head_sha="s"
     )
@@ -250,17 +250,38 @@ def test_the_conformance_kit_refuses_that_case_rather_than_passing_it(tmp_path: 
     assert "must be one this remediator patches" in str(raised.value)
 
 
-def test_an_empty_diff_is_still_a_patch_the_graph_can_read(tmp_path: Path):
-    """The decline is not an exception, and that is the shape of the cost.
+MIGRATED_SOURCE = 'const m = "claude-opus-4-8";\n'
 
-    `PropertyOmitRemediator` raises `CannotPatch` for what it cannot establish so the cascade
-    falls through to the agent inside the same attempt. This path returns a `Patch` instead, so
-    the attempt ends, `make_patch` records a codemod attempt that produced nothing, and only
-    the next attempt narrows to the agent.
-    """
-    patch = LiteralSwapRemediator().propose(
-        _finding(), _no_model_id_change(), _site(), _clone(tmp_path)
+
+def _complete_change() -> VendorChange:
+    change = _no_model_id_change()
+    return VendorChange(
+        vendor_id=change.vendor_id, from_version=change.from_version,
+        to_version=change.to_version, kind=change.kind, operation_id=change.operation_id,
+        path_ptr=change.path_ptr, severity=change.severity, source=change.source,
+        raw={**change.raw, "model_id": "claude-3-7-sonnet-20250219"},
     )
 
-    assert isinstance(patch, Patch)
-    assert patch.strategy == "codemod"
+
+def test_the_no_rules_decline_looks_exactly_like_an_already_migrated_file(tmp_path: Path):
+    """Two different facts, one answer, and the answer is the one that means "already correct".
+
+    `apply_rules` returns the input both when there was no rule to apply and when the rules
+    matched nothing, and `propose` reduces both to `updated == original`. So the remediator
+    reports "nothing to do" for a change it could not build a migration for, and reports it as
+    a `Patch` rather than as an exception -- which is what costs the attempt. The tier that
+    does distinguish them, `PropertyOmitRemediator`, raises `CannotPatch` instead and the
+    cascade falls through to the agent inside the same attempt.
+    """
+    no_rule = LiteralSwapRemediator().propose(
+        _finding(), _no_model_id_change(), _site(), _clone(tmp_path / "a")
+    )
+    already_done = LiteralSwapRemediator().propose(
+        _finding(), _complete_change(), _site(), _clone(tmp_path / "b", MIGRATED_SOURCE)
+    )
+
+    assert isinstance(no_rule, Patch) and isinstance(already_done, Patch)
+    assert no_rule.diff == already_done.diff == ""
+    assert no_rule.strategy == already_done.strategy == "codemod"
+    assert (tmp_path / "a" / "src" / "m.ts").read_bytes() == RETIRED_MODEL_SOURCE.encode("utf-8")
+    assert (tmp_path / "b" / "src" / "m.ts").read_bytes() == MIGRATED_SOURCE.encode("utf-8")
