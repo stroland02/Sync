@@ -421,9 +421,9 @@ DRIVERS: dict[str, Callable[[Path], None]] = {
     "sync/remediate/property_omit.py:93": _drive_property_omit,
     "sync/remediate/tiered.py:174": _drive_tiered_literal,
     "sync/signals/feed/consumer.py:72": _drive_feed,
-    "sync/signals/intake.py:288": _drive_intake_npm,
-    "sync/signals/intake.py:324": _drive_intake_pyproject,
-    "sync/signals/intake.py:335": _drive_intake_requirements,
+    "sync/signals/intake.py:295": _drive_intake_npm,
+    "sync/signals/intake.py:331": _drive_intake_pyproject,
+    "sync/signals/intake.py:342": _drive_intake_requirements,
 }
 
 

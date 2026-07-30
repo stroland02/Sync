@@ -65,28 +65,76 @@ class RegistryEntry:
     versions: dict[str, RegistryVersion]
 
 
-def parse_directory(document: dict[str, Any]) -> list[RegistryEntry]:
-    """Every usable entry in a directory document.
+# The source every skip is attributed to, in the position `sync.signals.intake` puts a manifest's
+# filename. One `unreadable` list holds faults from several inputs, so each string has to say
+# which one it came from before it says what was wrong with it.
+_SOURCE = "registry directory"
+
+
+def _timestamp(detail: dict[str, Any]) -> str | None:
+    """When this version last moved, preferring `updated` and falling back on `added`.
+
+    The fallback triggers on a value this tier cannot use rather than on a falsy one. A numeric
+    `updated` is truthy, so `detail.get("updated") or detail.get("added")` let it win and then
+    failed the string check, skipping a version whose `added` was perfectly readable. Usable means
+    a non-empty string: `versions_after` compares timestamps as strings and `""` compares less
+    than every real one, so an empty value admitted here would be reported as a version that
+    never moves.
+    """
+    for key in ("updated", "added"):
+        value = detail.get(key)
+        if isinstance(value, str) and value:
+            return value
+    return None
+
+
+def parse_directory(document: dict[str, Any]) -> tuple[list[RegistryEntry], tuple[str, ...]]:
+    """Every usable entry in a directory document, and every entry or version it declined.
 
     A public directory is untrusted input and it is large. A malformed entry is skipped rather
     than raised on: one bad row must not cost the other thousands, and an entry with no versions
     has nothing to say about what changed, so skipping loses nothing that could have been used.
+
+    What it does lose is the vendor. A skipped entry is one Sync will never offer to watch, and
+    reported as an absence it is indistinguishable from a directory that never listed it -- so the
+    second half of the return says what was declined and why, in the key and shape
+    `IntakeReport.unreadable` established and `ReachabilityRanking` already carries. Empty rather
+    than absent on a clean document, because a caller cannot otherwise tell a clean read from a
+    parser that never recorded a fault.
+
+    An entry that kept none of its versions is recorded too, and is deliberately not a fifth
+    cause: it follows from the version-scoped skips already recorded above it. It is there because
+    it is the only record that says the vendor is gone rather than one of its versions.
     """
     entries: list[RegistryEntry] = []
+    unreadable: list[str] = []
     for api_id, body in document.items():
         if not isinstance(body, dict):
+            unreadable.append(f"{_SOURCE}: '{api_id}' is not an object")
             continue
         raw_versions = body.get("versions")
         if not isinstance(raw_versions, dict) or not raw_versions:
+            unreadable.append(f"{_SOURCE}: '{api_id}' declares no versions object")
             continue
 
         versions: dict[str, RegistryVersion] = {}
         for version, detail in raw_versions.items():
             if not isinstance(detail, dict):
+                unreadable.append(f"{_SOURCE}: '{api_id}' version '{version}' is not an object")
                 continue
             spec_url = detail.get("swaggerUrl")
-            updated = detail.get("updated") or detail.get("added")
-            if not isinstance(spec_url, str) or not isinstance(updated, str):
+            if not isinstance(spec_url, str):
+                unreadable.append(
+                    f"{_SOURCE}: '{api_id}' version '{version}' declares no swaggerUrl string, "
+                    f"so there is nothing to download"
+                )
+                continue
+            updated = _timestamp(detail)
+            if updated is None:
+                unreadable.append(
+                    f"{_SOURCE}: '{api_id}' version '{version}' declares no usable updated or "
+                    f"added timestamp, so nothing can compare it against a watermark"
+                )
                 continue
             versions[version] = RegistryVersion(
                 version=version,
@@ -96,6 +144,10 @@ def parse_directory(document: dict[str, Any]) -> list[RegistryEntry]:
             )
 
         if not versions:
+            unreadable.append(
+                f"{_SOURCE}: '{api_id}' is not discoverable -- none of the "
+                f"{len(raw_versions)} version(s) it declares could be read, each recorded above"
+            )
             continue
         preferred = body.get("preferred")
         entries.append(
@@ -105,7 +157,7 @@ def parse_directory(document: dict[str, Any]) -> list[RegistryEntry]:
                 versions=versions,
             )
         )
-    return entries
+    return entries, tuple(unreadable)
 
 
 def versions_after(entries: list[RegistryEntry], watermark: str) -> list[tuple[RegistryEntry, str]]:
