@@ -236,3 +236,100 @@ def test_scanning_twice_reports_the_same_declines(store):
     list(detector.scan())
 
     assert detector.declined == first and first != []
+
+
+# --- status_rate: three gates, and what each one costs ------------------------------
+
+
+def _mix(total: int, errors: int, error_status: int = 500) -> list[int | None]:
+    """`total` statuses of which `errors` are failures. Failures first; order is not read."""
+    return [error_status] * errors + [200] * (total - errors)
+
+
+def _rate(store: GraphStore) -> StatusRateDetector:
+    return StatusRateDetector(store=store, repo_id="r", vendor_id="stripe")
+
+
+def test_an_operation_failing_under_the_sample_floor_is_counted(store):
+    """Half the traffic failing, and silent because there is not enough of it.
+
+    The floor is the right call -- two calls with one failure is not a fifty per cent error
+    rate -- but the operation really is failing and the detector really did decline to say so.
+    """
+    _site(store)
+    _observe_call(store, _statuses(_mix(FLOOR // 2, FLOOR // 4)))
+    detector = _rate(store)
+
+    assert list(detector.scan()) == []
+    assert len(detector.declined) == 1
+    assert "GetAccount" in detector.declined[0]
+    assert str(FLOOR) in detector.declined[0]
+
+
+def test_an_operation_with_no_failures_under_the_floor_declines_nothing(store):
+    """The discrimination the floor decline rests on. A thin population that returned no
+    failures lost no finding, and counting it would make the number a count of quiet
+    operations rather than of findings the detector chose not to raise."""
+    _site(store)
+    _observe_call(store, _statuses(_mix(FLOOR // 2, 0)))
+    detector = _rate(store)
+
+    assert list(detector.scan()) == []
+    assert detector.declined == []
+
+
+def test_an_operation_failing_under_the_rate_threshold_is_counted(store):
+    """`ERROR_RATE_THRESHOLD` gets no argument beyond policy -- the module says so itself --
+    so the population it silences is exactly the one somebody reviewing the number needs."""
+    _site(store)
+    _observe_call(store, _statuses(_mix(FLOOR, BELOW_THRESHOLD)))
+    detector = _rate(store)
+
+    assert list(detector.scan()) == []
+    assert len(detector.declined) == 1
+    assert f"{BELOW_THRESHOLD} of {FLOOR}" in detector.declined[0]
+
+
+def test_an_operation_clearing_the_floor_with_no_failures_declines_nothing(store):
+    """The same discrimination one gate later, so the threshold decline cannot be satisfied by
+    a counter that fires on every healthy operation with enough traffic to be measured."""
+    _site(store)
+    _observe_call(store, _statuses(_mix(FLOOR, 0)))
+    detector = _rate(store)
+
+    assert list(detector.scan()) == []
+    assert detector.declined == []
+
+
+def test_a_rate_that_resolves_to_no_indexed_call_site_is_counted(store):
+    """Traffic to an operation nothing in the index resolves to. The rate cleared both gates
+    and the finding was lost for want of a location, which is the loudest of the three."""
+    _observe_call(store, _statuses(_mix(FLOOR, AT_THRESHOLD)))
+    detector = _rate(store)
+
+    assert list(detector.scan()) == []
+    assert len(detector.declined) == 1
+    assert "call site" in detector.declined[0]
+
+
+def test_a_rate_that_reaches_a_call_site_is_not_counted_as_declined(store):
+    """So none of the three counters can be satisfied by one that always reports."""
+    _site(store)
+    _observe_call(store, _statuses(_mix(FLOOR, AT_THRESHOLD)))
+    detector = _rate(store)
+
+    assert len(list(detector.scan())) == 1
+    assert detector.declined == []
+
+
+def test_a_foreign_vendor_s_population_is_declined_without_being_counted(store):
+    """The same refusal `efficiency` makes, at the same place in the loop and for the same
+    reason: a vendor this detector is not scoped to is another instance's finding, not a lost
+    one."""
+    _site(store)
+    _observe_call(store, _statuses(_mix(FLOOR, AT_THRESHOLD), prefix="tw"), vendor_id="twilio",
+                  server_address="api.twilio.com", trace_id="t2")
+    detector = _rate(store)
+
+    assert list(detector.scan()) == []
+    assert detector.declined == []
