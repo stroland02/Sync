@@ -90,6 +90,97 @@ The fix declines the literal whole, which loses the operation. That is a false n
 right trade, for the reason `_route`'s own docstring gives and M3-W91 gave before it: a wrong route
 resolves a call site to an operation the customer never calls, and a lost one resolves to nothing.
 
+## It is the same defect, not a similar one, and the history says why the fix did not carry
+
+**Same defect, and the evidence is that it is the same code.** `git show eb50e91` against
+`git show 80e2e08^` puts the two helpers side by side, and apart from the function name and the word
+`route` where the other says `value` they are byte-identical:
+
+```python
+def _plain_route(node: Node, source: bytes) -> str | None:      # symbols_typescript.py, pre-fix
+    """A route written as a plain string literal.
+
+    The fragment rather than the quoted text, so an empty string reads as absent rather than as a
+    route, and an escape this does not interpret cannot be mistaken for one.
+    """
+    if node.type != "string":
+        return None
+    for child in node.children:
+        if child.type == "string_fragment":
+            return _text(child, source)
+    return None
+```
+
+`_string_literal` carried that body and **that same false sentence**. So this is not two authors
+making the same mistake against the same grammar; it is one function, copied, and the copy kept the
+docstring claiming the protection the body does not implement.
+
+**Why the fix did not carry: the copy predates it by nine hours, on another branch.**
+
+| Commit | When | What |
+|---|---|---|
+| `eb50e91` | 2026-07-29 06:39 | `feat: read the symbol map out of a Speakeasy SDK, the third flavour` — introduces `_string_literal`, copied from `_plain_route` as it then stood |
+| `80e2e08` | 2026-07-29 15:54 | M3-W91's fix — adds the escape guard to `_plain_route` and `_tagged_route`, and corrects the docstring |
+
+`git merge-base --is-ancestor 80e2e08 eb50e91` is false: the fix is not in the new reader's history.
+Nothing was ignored and nobody skipped a step. The two branches were open at once, the copy was
+taken from the version that was current when it was taken, and there is no mechanism in this
+repository by which a fix to one reader's literal handling reaches the other's.
+
+**The wrong route was different in each, and this one is the worse of the two.** M3-W91's input was
+`'/v1/aAb'`; `_plain_route` read `/v1/a` and `_tagged_route` read `/v1/ab/{x}`. Neither is a
+route its specification declares. Here the input is `pathToFunc("/v4/aliases\/{idOrAlias}")`, the
+truncation is `/v4/aliases`, and that **is** a route the specification declares — it is the one
+`aliases.listAliases` sends. So where W91's wrong route was at least the kind of thing
+`unknown_to_spec` exists to report, this one lands inside the set the cross-check compares against
+and provably cannot be reported by it.
+
+### This is a finding about the design, not only about the module
+
+The Speakeasy module's docstring argues at length for what is shared and what is not. Shared, by
+import: `ExtractedOperation`, `ExtractionReport`, `UnrecognisedSdkShape`, `_route` and
+`read_spec_operations`. Deliberately duplicated: the breadth-first walk, `_source_files`, and — named
+explicitly — "the tree-sitter plumbing: `_walk`, `_text`, `_module_key` and relative-specifier
+resolution". The reason given is that
+
+> what differs underneath them is the whole content of each rule: what a class is, what a mount is,
+> how a class is identified, and now whether an operation is even readable from one file. A shared
+> walker parameterised over four such differences is a framework for a population of three.
+
+**That argument is right about the walker and does not reach this helper, and the gap is what the
+defect grew in.** Reading a string literal is not one of the four differences the docstring
+enumerates. It has no generator-specific content at all — `_plain_route` and `_string_literal` were
+*the same function*, which is the strongest possible evidence that nothing about Speakeasy versus
+Stainless bears on it. It is a fact about tree-sitter's model of a string literal, and it is shared
+by exactly the two rules that use tree-sitter.
+
+So the duplication argument priced generator differences and did not price parser facts. The cost it
+did not name is this: a parser fact discovered once has to be discovered again per reader, and until
+it is, the second reader ships the wrong answer. `_route` is the precedent for the other direction —
+it was imported rather than reimplemented because "that decision was made and measured on the Python
+flavour", and an escape guard is a decision made and measured on the TypeScript one by exactly the
+same test.
+
+**The remedy is not the shared walker the docstring refuses.** It is one function, over one node
+type, with no parameters and no rule-specific behaviour, used by the two readers that parse
+TypeScript. That is stated as the third next task below rather than taken here, because the module
+it would live in is shared by three readers and this task's licence was a defect fix.
+
+### Whether the other three readers have it: no, and for two different reasons
+
+| Reader | Where its route string comes from | Exposed? |
+|---|---|---|
+| `symbols.py`, `stainless-python` | `ast.Constant.value` | **No.** The value is already decoded, so the flavour reads `/v1/aAb` as `/v1/aAb` and binds it correctly. Established and pinned by M3-W97's `test_a_route_literal_carrying_an_escape_is_read_decoded_rather_than_truncated` |
+| `symbols_typescript.py`, `stainless-typescript` | tree-sitter `string_fragment` | Was. Fixed by M3-W91 |
+| `symbols_speakeasy.py`, `speakeasy-typescript` | tree-sitter `string_fragment` | Was, from the same source text. Fixed here |
+| `sync.signals.twilio.symbols` | `spec: dict[str, Any]`, an OpenAPI document already parsed | **No, structurally.** It parses no source; `grep -n "tree_sitter\|ast\.\|string_fragment"` over both hand-written maps returns nothing. JSON decoding resolves escapes before the map sees a character |
+| `sync.signals.stripe.symbols` | the same | **No, structurally** |
+
+The population that can hold this defect is therefore **exactly the readers that parse source with
+tree-sitter**, and there are two of them. Both have now had it, and both had it from the same
+function. That is a rate of two out of two, which is the reason the third next task is worth doing
+rather than a coincidence worth recording.
+
 ## Line 214's block: three expressions raise `ValueError`, and one of them is internal
 
 The block is one line long and it is not one condition:
