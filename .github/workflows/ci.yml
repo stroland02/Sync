@@ -31,7 +31,8 @@ jobs:
     env:
       # docker-compose.yml maps Postgres to 5433 to stay clear of a local server.
       # A service container has the port to itself, so the default DSN is overridden
-      # rather than the mapping reproduced.
+      # rather than the mapping reproduced. The `serial` job below does the opposite,
+      # and the comment there says why the choice is not free.
       SYNC_DSN: postgresql://sync:sync@localhost:5432/sync
 
     steps:
@@ -87,14 +88,37 @@ jobs:
       # never fires and provides false assurance -- and a percentage that fails a build is a
       # percentage people write tests to satisfy rather than to test something.
       #
-      # `|| true` is the whole of the not-gating, and it is deliberate rather than defensive:
-      # a coverage run that errors must not turn a green suite red either. The baseline this
-      # is measured against is `docs/superpowers/specs/2026-07-29-sync-coverage-baseline.md`,
-      # which also records what this number cannot see -- seven components have shipped here
-      # fully covered and reachable from nothing, and every one of them looked healthy to a
-      # line count.
+      # The not-gating is deliberate rather than defensive and it stays: a coverage number must
+      # not turn a green suite red. What the `|| true` that used to carry it could not
+      # distinguish is a number that moved from a run that never produced one, and the exit code
+      # it discarded is the only place that distinction lives. No `--cov-fail-under` is passed
+      # here, so coverage cannot produce an exit code of its own at all -- every non-zero value
+      # is pytest's, and 2 through 5 all mean no number was measured. `|| true` therefore bought
+      # nothing against the risk its own comment named and cost the ability to see a collapsed
+      # run, so the two are separated below instead.
+      #
+      # It is worth saying what this did *not* hide, because
+      # `2026-07-30-n0-is-broken.md` records that it did: `addopts` applies to this step too, so
+      # it has always run `-n auto`, never the serial configuration those 186 errors need. And
+      # `SYNC_DSN` above is pinned, which sends every database this job creates outside
+      # `conftest.LEAKED_DATABASE_PATTERN` under either scheduler. Nothing in CI hid that
+      # defect; nothing in CI could reach it. The `serial` job is what reaches it.
+      #
+      # The baseline this is measured against is
+      # `docs/superpowers/specs/2026-07-29-sync-coverage-baseline.md`, which also records what
+      # this number cannot see -- seven components have shipped here fully covered and reachable
+      # from nothing, and every one of them looked healthy to a line count.
       - name: Coverage (recorded, not gated)
-        run: uv run pytest -q --cov=sync --cov-report=term-missing:skip-covered || true
+        run: |
+          status=0
+          uv run pytest -q --cov=sync --cov-report=term-missing:skip-covered || status=$?
+          # 0 is a clean run and 1 is a failing test. Neither is this step's business: `Tests`
+          # above is the gate on the suite, and a dotted `--cov` legitimately changes behaviour
+          # in this repository (`2026-07-29-psycopg-error-identity.md`).
+          if [ "$status" -gt 1 ]; then
+            echo "the coverage run did not complete: pytest exited $status" >&2
+            exit "$status"
+          fi
 
       # The first gate on a quality number rather than on correctness, and the only one
       # `2026-07-27-sync-benchmark-gates.md` allows today: a directional floor on a
@@ -125,3 +149,79 @@ jobs:
 
       - name: Binding floors over the frozen corpus (gated)
         run: uv run python scripts/gate_corpus.py --score corpus-score.json
+
+  # The scheduler `addopts` never selects, run in the one configuration where it can fail.
+  #
+  # `-n0` is contracted here rather than a debugging convenience: `pyproject.toml` names it for a
+  # focused run, and `2026-07-29-sync-verification-regime.md` names it as the way to run the e2e
+  # test at all, because `addopts` deselects that test and pins the scheduler in one string.
+  # Nothing verified it, and it was broken on `main` for an unknown length of time -- 186 errors
+  # from one cause, `docs/superpowers/reports/2026-07-30-n0-is-broken.md`. The whole suite rather
+  # than the database-touching part of it: the defect class is one test breaking a later test in
+  # the same process, so any rule that picks a subset picks victims while the breaker is whatever a
+  # new test brings. `2026-07-30-ci-does-not-run-serial.md` carries the cost this buys with.
+  #
+  # A job of its own rather than a step in `test`, because it needs the opposite database
+  # configuration and that is the whole of why it can fail. **No `SYNC_DSN` here, deliberately.**
+  # `conftest.database_for` returns None for a serial run handed a pin, so no per-run database is
+  # created and the sweep this job watches has nothing of the run's to take -- and under `-n auto`
+  # a pin yields `sync_gw0`, which is outside `LEAKED_DATABASE_PATTERN` as well. Measured on the
+  # broken tree: the recipe that reproduces the defect in 33 s unpinned is green under `test`'s
+  # pin. A serial step inside `test` would have stayed green through all 186 errors, and
+  # `tests/test_ci_runs_the_serial_scheduler.py` refuses a pin here for that reason.
+  serial:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: sync
+          POSTGRES_PASSWORD: sync
+          POSTGRES_DB: sync
+        ports:
+          # `conftest.DEFAULT_DSN`, reproduced rather than overridden. `test` overrides the DSN
+          # instead and is right to -- but that override is exactly what hides the defect this
+          # job exists for, so here the mapping moves and the DSN does not.
+          - 5433:5432
+        options: >-
+          --health-cmd "pg_isready -U sync"
+          --health-interval 2s
+          --health-timeout 3s
+          --health-retries 15
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      # Duplicated from `test` rather than shared, and the version cannot drift with it: both read
+      # `.oasdiff-version`, so what is copied is the mechanism and not the number.
+      # `tests/test_oasdiff.py` calls the binary with no skip guard, so a job without it errors
+      # rather than quietly running a smaller suite -- which is why this is here and not omitted.
+      - name: Install oasdiff
+        run: |
+          version="$(grep -m1 -Ev '^[[:space:]]*(#|$)' .oasdiff-version)"
+          version="${version//[[:space:]]/}"
+          mkdir -p tools
+          curl -fsSL -o /tmp/oasdiff.tar.gz \
+            "https://github.com/oasdiff/oasdiff/releases/download/v${version}/oasdiff_${version}_linux_amd64.tar.gz"
+          tar -xzf /tmp/oasdiff.tar.gz -C tools oasdiff
+          installed="$(tools/oasdiff --version)"
+          if [ "$installed" != "oasdiff version ${version}" ]; then
+            echo "pinned v${version} in .oasdiff-version, installed '${installed}'" >&2
+            exit 1
+          fi
+          echo "$installed"
+
+      - name: Sync dependencies
+        run: uv sync --all-extras --dev
+
+      # Gated, and the only gate here. No lints and no corpus: those are facts about the source
+      # and about a frozen input, neither of which a scheduler can change, and running them twice
+      # buys a second copy of the same answer.
+      - name: Tests, serial scheduler
+        run: uv run pytest -q -n0
