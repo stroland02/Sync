@@ -265,7 +265,7 @@ and `test_detector_declines.py`, 53 tests) because it was written in response to
 
 **Eight of the twenty-two are the exclusions**: C2, E4, E5, S1, S4, S6, D2 and D4 each make a
 counter fire where it should not, and each is killed by the one test whose job is to say so.
-Without them the seven counted kinds would be proved and the three refusals would be decoration.
+Without them the seven counted kinds would be proved and the four refusals would be decoration.
 
 **E2 is coarse and E5 exists because of it.** Replacing `if not reachable` with `if True` also
 takes the `continue` with it, so no efficiency finding is emitted at all and fifteen tests die —
@@ -370,7 +370,7 @@ this task's mutations read, so the table above stands over it unchanged.
 
 | Gate | Result | Exit |
 |---|---|---|
-| `uv run pytest -q` | 2604 passed, 2 skipped in 118.19s | 0 |
+| `uv run pytest -q` | 2604 passed, 2 skipped in 111.42s | 0 |
 | `uv run python scripts/lint_encoding.py src scripts tests` | clean | 0 |
 | `PYTHONIOENCODING=utf-8 uv run lint-imports` | Analyzed 95 files, 201 dependencies. 1 contract kept, 0 broken | 0 |
 | `uv run python scripts/lint_dead_links.py src --baseline scripts/dead_links_baseline.txt` | clean | 0 |
