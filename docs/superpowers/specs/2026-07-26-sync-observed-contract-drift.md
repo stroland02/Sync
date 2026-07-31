@@ -9,7 +9,15 @@ wired in `src/sync/cli.py:23`) all exist. Both readers now have a caller: `sync 
 `_fold_sentry` (927) and `_fold_datadog` (950), so the store has a writer for the first time —
 and it is fed by hand, not by a listener. The replay tier is built (`src/sync/verify/replay.py`
 and `src/sync/verify/mock_response.py`, wired as the `replay` node in
-`src/sync/remediate/graph.py:37`); the interceptor SDK does not exist — see Sequencing.
+`src/sync/remediate/graph.py:37`) and does not feed the shape store — deliberately, which
+withdraws this document's claim below that every replay run is also a `source='replay'` writer.
+A replay row is the published specification restated through the customer's code, not a response
+the customer's code received, and two consumers read this table as traffic: one replay row is
+enough to turn an uncorroborated divergence into a `breaking` finding, and a row at the floor
+outranks the specification in the mock the next replay is verified against.
+`docs/superpowers/reports/2026-07-30-replay-shapes-reach-the-store.md` carries the measurements
+and names what `src/sync/detect/` and `src/sync/graph/` have to change before replay can write.
+The interceptor SDK does not exist — see Sequencing.
 **Scope:** Detecting vendor changes no one published, and verifying patches against behavior rather than types
 alone. The design transposes Meticulous's record-replay-diff mechanism into the API-consumption domain.
 
@@ -197,7 +205,7 @@ number remains in engineering docs; the volume number is the one a customer sees
 | When | What | State |
 |---|---|---|
 | Now | This document. The `observed_shape` schema is binding on anything that later records shapes. | Built — `src/sync/graph/schema.sql:124`, `ObservedShape` in `src/sync/core/models.py` |
-| M1 (with the sandbox the threat model gates on) | The replay tier, feeding the shape store as `source='replay'`. | Built as a verification stage, not as a feeder — `src/sync/verify/replay.py`, between `static_verify` and `push_branch` in `src/sync/remediate/graph.py`. Its `source='replay'` rows reach `RunState` and no further |
+| M1 (with the sandbox the threat model gates on) | The replay tier. Feeding the shape store as `source='replay'` was specified here and is withdrawn. | Built as a verification stage, and deliberately not a feeder — `src/sync/verify/replay.py`, between `static_verify` and `push_branch` in `src/sync/remediate/graph.py`. Its `source='replay'` rows reach `RunState` and no further, pinned by `tests/test_replay_shape_writeback.py`. Replay rows are synthesized from the specification, and `observed_shapes` has no `source` filter, so they would reach two consumers that read the table as traffic. Reinstating the writer is blocked on `src/sync/detect/` and `src/sync/graph/` — see the report of 2026-07-30 |
 | M2 (signal sources) | Error-payload shapes from Sentry-class sources, `source='error-payload'`. The detector ships here, running on whatever baseline exists, with the sample floor keeping it silent where data is thin. | Built — `src/sync/signals/sentry/shapes.py`, `src/sync/signals/datadog/shapes.py`, and `src/sync/detect/observed_drift.py`, whose `MIN_SAMPLES` is the sample floor |
 | Post-M2, opt-in | The interceptor SDK, only for customers who want unpublished-change detection on live traffic. A separate adoption decision with its own trust conversation. | Not built |
 
