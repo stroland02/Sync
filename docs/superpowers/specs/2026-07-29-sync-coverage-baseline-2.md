@@ -1,5 +1,11 @@
 # Sync — The Coverage Baseline, Re-measured
 
+> **Superseded 2026-08-02 by `2026-07-30-sync-coverage-baseline-3.md`**, which re-measures the
+> tree at `048e28a`. Nothing below is renumbered, for the reason this document itself gives about
+> its predecessor. Read the figures and the line citations here as pinned to `5c546fa`. Five of
+> this document's six per-module line citations have since moved; `verify/replay.py:221` is the
+> one that still resolves. The successor tabulates all nine across both documents.
+
 **Date:** 2026-07-29
 **Status:** Measurement. Recorded, reviewed by a human, gated by nothing — the same treatment
 `2026-07-27-sync-benchmark-gates.md` gives every tier B axis, for the reason it gives.
