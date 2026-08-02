@@ -31,3 +31,9 @@ tools/
 # worktree when this line was added.
 .coverage.*
 coverage.json
+
+# The corpus score, written by `scripts/score_corpus.py --json` and read by
+# `scripts/gate_corpus.py`. A measurement of the tree it was taken on, so a committed copy is
+# a number that goes stale silently while looking authoritative. The floors are what gets
+# committed, in `gate_corpus.py`, beside the argument for each.
+corpus-score.json

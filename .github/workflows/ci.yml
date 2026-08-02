@@ -132,6 +132,21 @@ jobs:
       - name: Fetch the frozen corpus
         run: uv run python scripts/fetch_corpus_repositories.py
 
+      # The corpus has two frozen inputs and this job used to stage one of them. `repositories.yaml`
+      # pins the trees; `symbol_map.yaml` pins the map that decides which call sites resolve at
+      # all, and it lives in gitignored `.cache/specs/` because it is generated and large. With
+      # nothing staging it, `score_corpus.py` refused every time it was reached -- `no symbol map
+      # at .cache/specs/symbols.json` -- so the binding gate below has never once run on a runner.
+      # The step before this one was failing for longer, which is what hid it.
+      #
+      # Both scripts verify what they write before writing it: a git blob hash per specification,
+      # and the pinned digest for the map. Neither can quietly substitute an input.
+      - name: Stage the pinned Stripe specifications
+        run: uv run python scripts/fetch_measurement_inputs.py
+
+      - name: Stage the pinned symbol map
+        run: uv run python scripts/stage_symbol_map.py
+
       # A database of its own. `score_corpus.py` truncates the graph once per pair, so pointing
       # it at the one the suite used would delete what a later step might read.
       - name: Score the frozen corpus
