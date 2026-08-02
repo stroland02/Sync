@@ -3,7 +3,7 @@
 **Date:** 2026-07-30
 **Status:** Measurement. Recorded, reviewed by a human, gated by nothing — the same treatment
 `2026-07-27-sync-benchmark-gates.md` gives every tier B axis, for the reason it gives.
-**Scope:** How much of `src/sync` the default suite executes at `d615b75`; which modules are worth
+**Scope:** How much of `src/sync` the default suite executes at `a77eb22`; which modules are worth
 hardening *next*, ranked by what a wrong answer in each one costs rather than by percentage; which
 of the two earlier baselines' line citations still resolve; and what became of every module either
 of them named.
@@ -18,13 +18,19 @@ as thin; hardening them is the work it exists to direct, not work it did.
 ## The figure, and how to reproduce it
 
 ```
-uv run pytest -q --cov=sync --cov-report=term-missing --cov-report=json:coverage.json
+SYNC_DSN=postgresql://sync:sync@localhost:5433/sync_w118 PYTHONIOENCODING=utf-8 \
+  uv run pytest -q --cov=sync --cov-report=term-missing --cov-report=json:coverage.json -rs
 ```
 
-**97.71% of 7,234 statements, 166 missed, across 97 files.** Measured at commit `d615b75`, over a
-suite reporting **2,699 passed and 4 skipped in 147.39s, exit 0**, under the `-n auto` scheduler
-`pyproject.toml`'s `addopts` selects — twelve workers on this machine. `SYNC_DSN` pointed at
-`sync_w118`, a database created for this measurement and used by nothing else.
+**97.71% of 7,234 statements, 166 missed, across 97 files.** Measured at commit `a77eb22` —
+`origin/main` at `048e28a` merged into this branch — over a suite reporting **2,719 passed and 4
+skipped in 167.99s, exit 0**, under the `-n auto` scheduler `pyproject.toml`'s `addopts` selects,
+twelve workers on this machine. `SYNC_DSN` named `sync_w118`, used by nothing else; under `-n auto`
+each worker subdivides that name into `sync_w118_gw<n>` and creates and drops its own, so the
+pinned name itself is never created and never dropped.
+
+`-rs` is in the command because the skip list is evidence rather than noise here, for the reason
+the fourth qualification below gives. It changes no figure.
 
 `--cov-report=json` is the only addition to the command the previous baseline published, and it
 changes no figure: it writes the same run in the form `scripts/rank_coverage.py` reads, so the
@@ -46,12 +52,48 @@ was scored as untested. That module now reads 100% for an unrelated reason — M
 rest of it — so the caveat no longer distorts this table, but the property has not changed and the
 next module tested through a subprocess will read as thin again.
 
-**The suite reports two fewer passes under `--cov` than without it.** The plain gate run at this
-commit is 2,701 passed and 2 skipped; the coverage run is 2,699 passed and 4 skipped. Two tests skip
-when coverage is on and pass when it is off — the totals agree at 2,703, so nothing is lost, and the
-figure above is therefore taken over a suite two tests smaller than the one the gate runs. That is a
-small discrepancy and it is stated because a coverage figure quoted beside a test count invites the
-reader to assume the two describe the same run.
+**Four tests skip, and which four depends on the checkout rather than on `--cov`.** An earlier draft
+of this document claimed that two tests skip under coverage and pass without it, and reconciled a
+gate run of 2,701 passed and 2 skipped against a coverage run of 2,699 and 4 that way. **That claim
+was wrong, and the way it was wrong is the defect this document exists to find in other modules —
+a coverage figure taken over a suite the gate does not run.** It is recorded rather than deleted
+because the correction is the useful part.
+
+The two runs were taken in different checkouts. Measured here at `a77eb22`, in one worktree, with
+nothing else changed:
+
+```
+uv run pytest -q -rs                                    : 2,719 passed, 4 skipped
+uv run pytest -q --cov=sync ... -rs                     : 2,719 passed, 4 skipped
+```
+
+Identical, to the test. `--cov` changes no test's outcome on this project. The four skips are the
+same four in both, and every one of them names a **gitignored** input:
+
+| Skipped | Why | Present where |
+|---|---|---|
+| `test_parameter_reduction.py::test_the_reduction_collides_no_stripe_operation[v2320]` | `.cache/specs/v2320.json` absent | fetched, not committed |
+| `test_parameter_reduction.py::test_the_reduction_collides_no_stripe_operation[v2330]` | `.cache/specs/v2330.json` absent | fetched, not committed |
+| `test_oasdiff_determinism.py::test_repeated_runs_are_nested_rather_than_divergent` | opt-in: `SYNC_OASDIFF_DETERMINISM=1`, and the pinned specifications | never on by default |
+| `test_symbol_map_pin.py` | `.cache/specs/symbols.json` absent | fetched, not committed |
+
+The **two** parametrised `test_parameter_reduction` cases are the whole discrepancy. They pass in
+any tree where somebody has run `scripts/fetch_measurement_inputs.py` and skip everywhere else. The
+coordinator's checkout has `.cache/specs/` populated from a fetch on 2026-07-30, which is why it
+measured 2,701 and 2; this worktree does not, which is why it measures 2,719 and 4. The totals
+reconcile exactly — 2,721 + 2 = 2,719 + 4 = 2,723 — and always did, which is what should have
+prompted the question rather than the arithmetic that was offered instead.
+
+**CI is on this side of it.** `.github/workflows/ci.yml` installs `oasdiff` and syncs dependencies
+and never runs `scripts/fetch_measurement_inputs.py`, so the suite CI gates on skips the same four.
+The figure above therefore describes the suite CI runs, and it is the populated checkout that is
+the outlier.
+
+The residual caveat is real but small: those two cases assert that
+`symbols_typescript._comparable` is injective over Stripe's 587 operations, and in a checkout
+without the specifications nothing takes that measurement. It costs no coverage — the reduction is
+reached by the committed Anthropic and Vercel fixtures either way — but a reader who wants the
+Stripe half has to fetch first.
 
 ## What moved, and what a threshold would have made of it
 
