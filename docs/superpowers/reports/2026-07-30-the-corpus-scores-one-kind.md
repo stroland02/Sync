@@ -85,6 +85,49 @@ break in the shape the change describes, because the generator discarded the sha
 committed specification names a nested field, and why expressing one is a generator change first —
 candidate 3, and this is the measurement that says what it would cost.
 
+## What candidate 1 would actually have cost, run rather than estimated
+
+The corpus candidate 1 proposes is the seventeen plus one `request-parameter-removed`
+specification per committed `request-property-removed` one. Copied rather than regenerated,
+because `scripts/build_corpus_specs.py` chooses the field from `requestBody` and nothing else in a
+specification depends on the kind — so the specification the rule would write for the parameter
+kind differs from the property one in exactly one byte.
+
+Both runs used the same score DSN and the same pinned symbol map (`5f71dcd3bec1302c`), serially,
+one process.
+
+| | committed 17 | candidate 22 |
+|---|---:|---:|
+| pairs scored | 17 | 22 |
+| binding precision | 1.0000 n=26 | 1.0000 n=35 |
+| binding recall | 1.0000 n=26 | 1.0000 n=35 |
+| call sites affected | 26 | 35 |
+| call sites unaffected | 216 | 261 |
+| falsifiable negatives | 7 | 10 |
+| wall clock | 102 s | 129 s |
+
+The 17-pair run is byte-identical to `recorded/2026-07-29-the-hold-back-the-binder-earns.{txt,json}`,
+so the harness and the checkouts are in the state the recording was taken in and the 22-pair number
+is comparable to it.
+
+**Both denominators grow by nine and both rates hold at 1.0000, because every added row is a row
+the corpus already had.** Compared row for row rather than by totals — the findings and the labels
+themselves, with the vendor change id blanked, since `kind` is hashed into the change record and
+two otherwise identical pairs must carry different ids — **five of five added pairs are exact
+duplicates of their property twin.** Same call site ids, same rungs, same affected set, same
+falsifiable negatives.
+
+That is the whole of what the second kind buys, and it is worse than nothing. A reader who sees
+`n=35` reads a sample a third larger than `n=26`; the evidence behind it is the same evidence
+counted twice on nine of those rows. The rule the ground-truth-quality verdict set — that the cost
+travels with the number — is violated by the number itself here, not by its caption.
+
+Why the duplication is structural rather than a coincidence of these five repositories: both sides
+of the join are blind to the distinction. `_mutate` dispatches on `change.kind in REQUEST_KINDS`,
+so both kinds take the `_insert_property` branch; and `VendorChangeDetector.scan` reads `kind` only
+through `.startswith("request-")` / `.startswith("response-")`, so both kinds take the
+`args_keys` branch. Nothing between the specification and the score can tell them apart.
+
 ## The pinned repositories already carry what a false positive would need
 
 The score docstring names the partial path match as the only route to a false positive. That needs
