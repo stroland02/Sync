@@ -1,9 +1,11 @@
 # Sync — The Coverage Baseline, Third Measurement
 
-**Date:** 2026-07-30
+**Date:** 2026-07-30; figure re-taken 2026-08-02 at `048e28a` after two session limits interrupted
+the write-up. The two `preserve:` commits in this branch's history are where each interruption fell
+and are left unamended.
 **Status:** Measurement. Recorded, reviewed by a human, gated by nothing — the same treatment
 `2026-07-27-sync-benchmark-gates.md` gives every tier B axis, for the reason it gives.
-**Scope:** How much of `src/sync` the default suite executes at `a77eb22`; which modules are worth
+**Scope:** How much of `src/sync` the default suite executes at `048e28a`; which modules are worth
 hardening *next*, ranked by what a wrong answer in each one costs rather than by percentage; which
 of the two earlier baselines' line citations still resolve; and what became of every module either
 of them named.
@@ -79,10 +81,18 @@ same four in both, and every one of them names a **gitignored** input:
 
 The **two** parametrised `test_parameter_reduction` cases are the whole discrepancy. They pass in
 any tree where somebody has run `scripts/fetch_measurement_inputs.py` and skip everywhere else. The
-coordinator's checkout has `.cache/specs/` populated from a fetch on 2026-07-30, which is why it
-measured 2,701 and 2; this worktree does not, which is why it measures 2,719 and 4. The totals
-reconcile exactly — 2,721 + 2 = 2,719 + 4 = 2,723 — and always did, which is what should have
-prompted the question rather than the arithmetic that was offered instead.
+coordinator's checkout has `.cache/specs/` populated from a fetch on 2026-07-30 — eight Stripe
+specifications, none of them committed — and this worktree does not. So the same suite at the same
+commit reports 2,721 passed and 2 skipped there and 2,719 passed and 4 skipped here, and the totals
+reconcile exactly: 2,721 + 2 = 2,719 + 4 = 2,723.
+
+They always did reconcile, which is what should have prompted the question rather than the
+arithmetic that was offered instead. The earlier draft was comparing across two commits as well as
+two checkouts: the coordinator's 2,701 and 2 was measured at `d615b75`, twenty tests before
+`048e28a`. Those twenty are `tests/test_rank_coverage.py` and `tests/test_replay_shape_writeback.py`,
+which merged in between and collect twenty items exactly. Two variables had moved, and the draft
+attributed the whole difference to a third that had not moved at all — `--cov`, which moves
+nothing.
 
 **CI is on this side of it.** `.github/workflows/ci.yml` installs `oasdiff` and syncs dependencies
 and never runs `scripts/fetch_measurement_inputs.py`, so the suite CI gates on skips the same four.
@@ -298,7 +308,7 @@ nobody should try. The ranking cannot know that, which is why the last column of
 The spec audit named one broken citation and declined to renumber it. There are nine in the two
 documents. **Eight no longer resolve; one does.**
 
-| Citation | Document | What it described | What sits there at `d615b75` | Where the construct lives now |
+| Citation | Document | What it described | What sits there at `048e28a` | Where the construct lives now |
 |---|---|---|---|---|
 | `index/python_lang.py:206-210` | baseline 1 | `from stripe import X as Y` | the vendor-binding constructor reading `distribution` | 437–443 |
 | `index/python_lang.py:220-223` | baseline 1 | `import stripe as s` | a comment and `self._symbol_root` | 453–456 |
@@ -326,7 +336,7 @@ Sixteen modules were named across the two documents. **None is gone; every file 
 Nine are at 100% or one statement short of it, two have had every remaining statement classified by
 a committed report, and five still carry uncovered statements nobody has read.
 
-| Module | `58257f6` | `5c546fa` | `d615b75` | Fate |
+| Module | `58257f6` | `5c546fa` | `048e28a` | Fate |
 |---|---|---|---|---|
 | `telemetry/otlp.py` | 83%, 12 missed | 83%, 12 missed | **100%**, 0 | Repaired by baseline-2's own task, thirteen tests, each proven non-vacuous by mutation |
 | `mcp/server.py` | 86%, 13 | 82%, 17 | **100%**, 0 | Repaired — `2026-07-30-mcp-tool-surface-declines.md` (M3-W107) |
@@ -364,7 +374,7 @@ top recommendation survives three of its own successors is a document being read
 
 That matters because a per-module coverage run on this project can fail for a reason that has
 nothing to do with the module. `2026-07-29-psycopg-error-identity.md` established the mechanism, and
-it survived one retraction that was itself wrong, so it was re-verified here at `d615b75` against
+it survived one retraction that was itself wrong, so it was re-verified here at `048e28a` against
 the installed `coverage 7.15.2` rather than cited:
 
 ```
@@ -412,7 +422,7 @@ further than it deserves.
 number either fires constantly and gets disabled, or never fires and provides false assurance."* CI
 records the figure with `|| true` and gates on nothing, which is correct and was left alone.
 
-There are now three measurements, at `58257f6`, `5c546fa` and `d615b75`. Three points are the
+There are now three measurements, at `58257f6`, `5c546fa` and `048e28a`. Three points are the
 beginning of a history rather than a history, and this measurement finally moved by more than the
 noise the second one had to account for — 2.16 points, against a run-to-run variation baseline-2
 measured at three statements. So the objection is no longer that the signal is smaller than the
