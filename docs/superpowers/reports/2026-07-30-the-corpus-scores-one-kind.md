@@ -85,5 +85,32 @@ break in the shape the change describes, because the generator discarded the sha
 committed specification names a nested field, and why expressing one is a generator change first —
 candidate 3, and this is the measurement that says what it would cost.
 
-Scheduler: `-n0` (serial) for the pytest runs above; the pipeline runs are `scripts`-level and
-single-process. Score DSN `sync_w117_score`, graph DSN `sync_w117`, both created by this task.
+## Every assertion in the pinning test was proved able to fail
+
+`tests/test_mutation_kind_coverage.py` pins behaviour that already worked, so "watch it fail
+first" means mutating the code each test covers and watching the test go red. Seven mutants, one
+per claim, applied to a copy of the tree and reverted afterwards. The harness distinguishes
+*killed* from *survived*, *did-not-compile*, *unreadable* (exit outside `{0,1}`),
+*baseline-drifted*, *not-applied* and *anchor-missed*, because each of those has produced a false
+verdict on this project before.
+
+| mutant | file | verdict | detail | aimed at |
+|---|---|---|---|---|
+| `request-branch-declines` | `mutate.py` | killed | 7 failed | every kind inverts / a request kind writes the field |
+| `two-request-kinds-diverge` | `mutate.py` | killed | 4 failed | the two request kinds produce the same pair |
+| `response-guard-inverted` | `mutate.py` | killed | 1 failed | a response kind reads the field off the result |
+| `field-keeps-the-whole-path` | `mutate.py` | killed | 2 failed | a nested change is mutated as its leaf |
+| `response-branch-declines` | `mutate.py` | killed | 2 failed | the response kind inverts |
+| `rule-drops-the-request-kind` | `build_corpus_specs.py` | killed | 2 failed | the rule omits only duplicates |
+| `specification-names-another-kind` | a committed `.yaml` | killed | 1 failed | every specification names a kind the rule proposes |
+
+Baseline `exit=0 passed=12 failed=0` before, and the same after restore. Twelve tests collected,
+twelve proved able to fail. No mutant produced any of the false-verdict modes: nothing failed to
+compile, nothing exited outside `{0,1}`, no pass count drifted, and no anchor missed — which the
+CRLF normalisation in the harness is there to prevent, since this tree is CRLF and an anchor
+written with `\n` matches nothing and reads as a survival.
+
+Scheduler: `-n0` (serial) for every pytest run in the harness, which is also what makes the
+baseline `12 passed in 3.13s` rather than the 20.41s a `-n auto` run of the same file costs in
+worker startup. The pipeline runs are `scripts`-level and single-process. Score DSN
+`sync_w117_score`, graph DSN `sync_w117`, both created by this task.
