@@ -85,6 +85,40 @@ break in the shape the change describes, because the generator discarded the sha
 committed specification names a nested field, and why expressing one is a generator change first —
 candidate 3, and this is the measurement that says what it would cost.
 
+## The pinned repositories already carry what a false positive would need
+
+The score docstring names the partial path match as the only route to a false positive. That needs
+an *untargeted* call site on the changed operation whose recorded field list carries an **outer**
+segment of a nested change's path. The generator can never create one, so it has to be in the
+checkout already — and the question of whether any pinned repository has one is a question about
+the five repositories rather than about `mutate.py`.
+
+Asked directly, over all seventeen specifications: for every labelled negative the detector
+reaches, whether any top-level property of that operation in the pinned `v2330` document that
+itself carries properties is a segment the site's field list leads into.
+
+| specification | negative | what it leads into |
+|---|---|---|
+| `furever-GetAccountsAccount-response` | `app/api/account_session/route.ts:23` | `capabilities`, `controller` |
+| `furever-GetCharges-response` | `app/api/list_charges/route.ts:16` | `data` |
+| `furever-PostPaymentIntents-request` | `app/api/setup_accounts/create_charges/route.ts:104` | `mandate_data`, `payment_method_types` |
+| `turbo-PostPaymentIntents-request` | `src/routes/arnsPurchaseQuote.ts:223` | `payment_method_types` |
+| `virtual-lab-GetProductsId-response` | `scripts/migrate_to_tax_billing.py:264` | `tax_code` |
+| `fireship-server-PostPaymentIntents-request` | `src/payments.ts:8` | none |
+| `turbo-PostPaymentIntents-response` | `src/routes/arnsPurchaseQuote.ts:223` | none |
+
+**Five of the seven.** The sharpest is `furever`, whose held-back site records
+`controller.losses.payments` and `controller.stripe_dashboard.type`: a change removing any leaf
+under `controller` that this site does not itself read passes `generate_pair`'s
+already-depends refusal — that check is on the leaf — and then `_leads_into` fires on the site
+anyway, because it is anchored at the outermost segment and the change's path may skip. A finding
+on a site the label calls unaffected is a false positive, and precision would have something to be
+wrong about for the first time.
+
+So the answer to "would a partial match arise in a pinned repository" is yes, and no repository has
+to be fabricated to get one. The blocker is entirely on the generator side. That is the argument
+for candidate 3 and it is why this report names it as the next task rather than as a dead end.
+
 ## Every assertion in the pinning test was proved able to fail
 
 `tests/test_mutation_kind_coverage.py` pins behaviour that already worked, so "watch it fail
