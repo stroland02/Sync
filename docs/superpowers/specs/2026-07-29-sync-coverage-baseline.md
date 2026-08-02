@@ -1,5 +1,12 @@
 # Sync — The Coverage Baseline
 
+> **Superseded 2026-08-02 by `2026-07-30-sync-coverage-baseline-3.md`**, which re-measures the
+> tree at `048e28a`. Nothing below is renumbered: this remains a correct record of `58257f6`, and
+> a measurement half from one tree and half from another is worse than a dated one. Read the
+> figures and the line citations here as pinned to `58257f6`. All three of this document's
+> per-module line citations have since moved, and the successor tabulates where each construct
+> lives now.
+
 **Date:** 2026-07-29
 **Status:** Measurement. Recorded, reviewed by a human, gated by nothing — the treatment
 `2026-07-27-sync-benchmark-gates.md` gives every tier B axis, for the reason it gives.
