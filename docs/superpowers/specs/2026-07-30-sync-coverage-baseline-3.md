@@ -24,12 +24,19 @@ SYNC_DSN=postgresql://sync:sync@localhost:5433/sync_w118 PYTHONIOENCODING=utf-8 
   uv run pytest -q --cov=sync --cov-report=term-missing --cov-report=json:coverage.json -rs
 ```
 
-**97.71% of 7,234 statements, 166 missed, across 97 files.** Measured at commit `a77eb22` —
-`origin/main` at `048e28a` merged into this branch — over a suite reporting **2,719 passed and 4
-skipped in 167.99s, exit 0**, under the `-n auto` scheduler `pyproject.toml`'s `addopts` selects,
-twelve workers on this machine. `SYNC_DSN` named `sync_w118`, used by nothing else; under `-n auto`
-each worker subdivides that name into `sync_w118_gw<n>` and creates and drops its own, so the
-pinned name itself is never created and never dropped.
+**97.71% of 7,234 statements, 166 missed, across 97 files** — 7,068 covered, 65 further statements
+excluded outright. Measured on this branch, whose `src/` and `tests/` are byte-identical to
+`origin/main` at `048e28a`; the branch adds documentation and nothing else, which `git diff
+048e28a HEAD --stat` shows. The suite reported **2,719 passed and 4 skipped, exit 0**, under the
+`-n auto` scheduler `pyproject.toml`'s `addopts` selects, twelve workers on this machine.
+`SYNC_DSN` named `sync_w118`, used by nothing else; under `-n auto` each worker subdivides that
+name into `sync_w118_gw<n>` and creates and drops its own, so the pinned name itself is never
+created and never dropped.
+
+The figure was taken twice, in two sessions a day apart, and reproduced to the statement: 7,234,
+166, 97 files, 65 excluded, both times. Wall clock is not among the reproduced numbers and is not
+quoted here — the two runs took 168s and 341s, and the difference is machine contention rather than
+anything about the suite.
 
 `-rs` is in the command because the skip list is evidence rather than noise here, for the reason
 the fourth qualification below gives. It changes no figure.
@@ -111,7 +118,7 @@ Stripe half has to fetch first.
 |---|---:|---:|---:|---:|---:|
 | `58257f6` — baseline 1 | 4,916 | 211 | 95.71% | 84 | 1,468 |
 | `5c546fa` — baseline 2 | 5,278 | 235 | 95.55% | 87 | 1,569 |
-| `d615b75` — here | 7,234 | 166 | 97.71% | 97 | 2,699 |
+| `048e28a` — here | 7,234 | 166 | 97.71% | 97 | 2,719 |
 
 Between the second measurement and this one the tree grew by 1,956 statements — 37% — and the
 number of statements nothing executes *fell* by 69. That is the first movement in this series large
@@ -264,9 +271,12 @@ is the disagreement the weighting exists to make explicit rather than to hide.
 
 ## Where coverage has nothing left to tell you, and what would
 
-**Forty-eight per cent of the missed statements in this tree are literal declines** — 79 of 166 are
-a bare `continue`, `pass`, `return None`, `return False`, `return []`, `return {}` or `return ()`.
-In the two indexers at the top of the ranking the proportion is higher: 18 of 25 and 8 of 10.
+**Forty-eight per cent of the missed statements in this tree are literal declines** — 79 of 166, or
+47.6%. The count is every missed line whose stripped text is exactly one of `continue`, `pass`,
+`return None`, `return False`, `return []`, `return {}`, `return ()` or `return set()`; that list
+is given in full because a proportion computed from an unstated set of forms is not a measurement
+anybody can check. In the two indexers at the top of the ranking the proportion is higher: 18 of 25
+and 8 of 10.
 
 For a module in that shape, the coverage number has already told you everything it can. It says a
 `return None` never ran. It cannot say whether the `return None` is right, what input reaches it,
@@ -385,7 +395,19 @@ the installed `coverage 7.15.2` rather than cited:
                                isinstance(first-set exc, first Error)   = True
 ```
 
-0.85 s, no pytest involved. `coverage.inorout` resolves a dotted source argument by importing it
+Under a second, no pytest involved, against `coverage 7.15.2` and `psycopg 3.3.4`.
+
+**The probe has a failure mode that reports the trap as absent, and it was hit while re-verifying
+this.** A probe that imports `psycopg` before entering `sys_modules_saved()` measures zero modules
+imported and zero evicted for *both* arguments, and every identity check then answers `True` —
+because the modules are already in `sys.modules`, so they are not new to the saver and `restore()`
+deletes none of them. That reads exactly like a fixed bug. The probe must reach
+`file_and_path_for_module` with psycopg unloaded, which is what the real sequence does: coverage
+resolves its source argument at startup, before any test has imported anything. Anyone re-checking
+this should assert `"psycopg" not in sys.modules` at the top of the probe, and treat an all-`True`
+result as a broken probe until that assertion has passed.
+
+`coverage.inorout` resolves a dotted source argument by importing it
 inside `coverage.misc.sys_modules_saved()`, whose `restore()` deletes every module the import added;
 `psycopg/errors.py` is pure Python and re-executes into a second set of exception classes, while
 the `psycopg_binary._psycopg` extension is cached below `sys.modules`, is not re-executed, and goes
