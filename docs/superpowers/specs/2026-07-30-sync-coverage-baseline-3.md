@@ -68,8 +68,8 @@ was wrong, and the way it was wrong is the defect this document exists to find i
 a coverage figure taken over a suite the gate does not run.** It is recorded rather than deleted
 because the correction is the useful part.
 
-The two runs were taken in different checkouts. Measured here at `a77eb22`, in one worktree, with
-nothing else changed:
+The two runs were taken in different checkouts. Measured here at `048e28a`, in one worktree, back
+to back, with nothing else changed:
 
 ```
 uv run pytest -q -rs                                    : 2,719 passed, 4 skipped
@@ -336,9 +336,10 @@ inside `_bindings_for`"* — was true at `0613da2` and is not true here: `_bindi
 exists anywhere in the file. A citation and its correction both went stale inside one day.
 
 **This is the argument for a successor rather than an edit, and it is stronger than the audit could
-state it.** Eight of nine citations moved in 411 commits. Renumbering them would have produced a
-document whose tables were measured at one commit and whose line ranges pointed at another, which
-is the failure mode the audit refused and was right to refuse.
+state it.** Eight of nine citations moved: baseline-1's three over the 440 commits from `58257f6`
+to `048e28a`, and five of baseline-2's six over the 416 from `5c546fa`. Renumbering them would
+have produced a document whose tables were measured at one commit and whose line ranges pointed at
+another, which is the failure mode the audit refused and was right to refuse.
 
 ## Every module the two earlier baselines named, and what happened to it
 
@@ -373,7 +374,7 @@ overlap is near total, and the two modules the baselines named that nobody took 
 two still at the top of this ranking.
 
 That is the honest reading, and it has one uncomfortable half. `index/python_lang.py` has been
-named first in three consecutive measurements over 435 commits and has been hardened once, in a way
+named first in three consecutive measurements over 440 commits and has been hardened once, in a way
 that closed the specific example the document argued from rather than the module. A baseline whose
 top recommendation survives three of its own successors is a document being read and not acted on.
 
