@@ -340,7 +340,7 @@ def test_a_population_that_clears_the_gate_always_states_one_of_the_two_historie
 def _observe_shape(store: GraphStore, **over) -> None:
     fields = dict(
         vendor_id="stripe", operation_id=SHARED_OPERATION, field_path="/data/status",
-        json_type="string", source="replay", sample_count=MIN_SAMPLES,
+        json_type="string", source="error-payload", sample_count=MIN_SAMPLES,
         first_seen=NEW, last_seen=NEW,
     )
     fields.update(over)

@@ -10,21 +10,30 @@ same document's borrowed insight is that the baseline is "the responses the cust
 actually received" -- and a replay row is not one. The mock is synthesized from the vendor's
 published specification (`synthesize_mock_response`), so a replay row is the specification
 restated through the customer's code, not traffic. Writing it into a table two consumers read
-as traffic has three measured consequences, each asserted below against a real server:
+as traffic had three measured consequences, each asserted below against a real server:
 
-- The mock builder takes the store's rows with no `source` filter, and an observation at the
+- The mock builder took the store's rows with no `source` filter, and an observation at the
   floor outranks the specification. Replay rows would therefore be fed back into the mock that
-  the next replay is verified against.
+  the next replay is verified against. **Closed by M3-W119**, and the two pins below that
+  recorded it now assert its absence.
 - `ObservedDriftDetector._contradicts_earlier_window` groups siblings by `field_path` across
-  sources and applies no sample floor to them, so *one* replay row is enough to turn an
+  sources and applies no sample floor to them, so *one* replay row was enough to turn an
   uncorroborated divergence into a `breaking` finding whose rationale asserts the vendor's
-  behaviour changed.
+  behaviour changed. **Closed by M3-W119.**
 - `record_observed_shape` converges on one row and not on one count, and `route_after_replay`
   sends a failed replay back through `patch`, so a retried run would count one synthesized
-  body once per attempt.
+  body once per attempt. **Open.**
 
-The fixes for the second and third live in `src/sync/detect/` and `src/sync/graph/`. Until
-they are made, the tier not writing is the correct behaviour and these tests hold it there.
+`GraphStore.observed_shapes` now answers with traffic alone unless a caller asks for every
+source, which closed the first two together -- one of the two readers is
+`sync.remediate.nodes._observed`, so nothing a caller could have been made to pass would have
+reached it. `docs/superpowers/reports/2026-07-31-traffic-and-non-traffic-shapes.md` carries the
+argument.
+
+The third is untouched and is now the whole reason the tier still does not write. It is a
+schema question -- a run key on the row, or a write point the retry loop cannot re-enter -- and
+until it is answered the tier not writing remains correct rather than incomplete. The first
+three tests below, which assert that no outcome writes, are unchanged.
 """
 
 from __future__ import annotations

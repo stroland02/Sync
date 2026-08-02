@@ -56,7 +56,7 @@ def _site(store: GraphStore, reads=("data.status",), operation_id="PostCharges")
 def _observe(store: GraphStore, **over) -> None:
     fields = dict(
         vendor_id="stripe", operation_id="PostCharges", field_path="/data/status",
-        json_type="string", source="replay", sample_count=MIN_SAMPLES,
+        json_type="string", source="error-payload", sample_count=MIN_SAMPLES,
         first_seen=NEW, last_seen=NEW,
     )
     fields.update(over)
@@ -287,7 +287,7 @@ def test_an_earlier_sighting_of_the_same_shape_is_not_a_contradiction(store: Gra
     mismatch as breaking the moment a second source saw it.
     """
     _site(store)
-    _observe(store, json_type="number", first_seen=OLD, source="replay")
+    _observe(store, json_type="number", first_seen=OLD, source="interceptor")
     _observe(store, json_type="number", first_seen=NEW, source="error-payload")
 
     assert {f.severity for f in _detector(store).scan()} == {"info"}
