@@ -266,12 +266,12 @@ in any Python that runs. So the guard is inert rather than harmful.
 **It is not fixed here, deliberately.** Repairing it to `_same(child, module)` makes line 450
 reachable and changes what `imported` holds, which is a behaviour change no test demands; the brief
 allows a production edit only where a test proves a defect, and the defect this one would prevent
-requires code that cannot execute. It belongs in the same task as §10's other `_result_target`
-work, where a fixture can be written for it honestly.
+requires code that cannot execute. It belongs with the other binding-form work in §10, where a
+fixture can be written for the change rather than for the guard.
 
 ## 10. What the next task is
 
-Three findings this task established and deliberately did not act on.
+Four findings this task established and deliberately did not act on.
 
 **The scope walk is not shadow-aware, at any scope.** §3 and §4. `_response_fields` in both
 adapters walks a scope's whole subtree, so any nested scope that rebinds the result name donates
