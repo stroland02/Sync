@@ -186,9 +186,9 @@ in this report used `-n0`.
 
 ## 9. The remaining statements, one at a time
 
-Thirty-three statements were uncovered across the two modules before this task and thirty-one are
-after it. This is the map for them, not a plan to close them; the brief asked for the pair and the
-table, not for all thirty-three.
+Thirty-five statements were uncovered across the two modules before this task and thirty-three are
+after it — thirty declines and three capability statements. This is the map for them, not a plan to
+close them; the brief asked for the pair and the table, not for all thirty-five.
 
 **Three are capability rather than decline**, and the baseline named all three. They are listed
 apart because a decline table's question — "is refusing right?" — does not apply to a statement
