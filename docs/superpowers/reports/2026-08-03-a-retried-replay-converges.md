@@ -416,3 +416,20 @@ deselected in 951.65s, exit 0** — but it finished after the session that start
 nobody read it at the time. It is being re-run rather than transcribed. The log is evidence of a
 run, not of a run anyone supervised, and this report's own rule is that a figure is worth what its
 provenance is worth.
+
+### The branch is two commits behind `origin/main`, deliberately
+
+`origin/main` moved to `264f346` while this task was interrupted: `a1075c2` scopes `GH_TOKEN` to
+the step that shells out to `gh`, and `264f346` adds two documents. The merge is clean —
+`git merge-tree --write-tree HEAD origin/main` returns 0 with no conflicted path — and it is
+**not** taken here.
+
+The reason is that it is not gate-neutral, which is easy to assume and wrong. `a1075c2` edits
+`.github/workflows/ci.yml`, and three tests in this repository read that file at runtime:
+`tests/test_ci_runs_the_serial_scheduler.py`, `tests/test_ci_stages_the_corpus_inputs.py` and
+`tests/test_oasdiff_pin.py`. Merging it would put both suite figures above on a tree nobody ran,
+for a change that has nothing to do with this task's subject. Taking it means re-running both
+schedulers — about twenty minutes — to buy a CI fix this branch does not need in order to be
+reviewed.
+
+Left for whoever integrates the branch, which is the merge they were going to verify anyway.
