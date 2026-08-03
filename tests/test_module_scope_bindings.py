@@ -18,6 +18,9 @@ of its name from inside every function in the file, including functions that reb
 something the vendor never returned. `merged` shows that absorbing another indexed call's
 fields, which is the merge both docstrings say must not happen.
 
+`class_body` says the fallback answers for more inputs than its docstrings name: a class body is
+not a function either, so a call in one is scoped to the whole module rather than to the class.
+
 `nested_function` is why that is not a defect in the fallback. It puts the same rebinding one
 level inside a function, where `_enclosing_scope` returns the function and the fallback never
 runs, and the leak is identical. The walk is not shadow-aware at any scope; module scope is
@@ -56,6 +59,12 @@ SPEC = {
 PYTHON = "python"
 TYPESCRIPT = "typescript"
 BOTH = [PYTHON, TYPESCRIPT]
+
+# The fixture files written to the same shape in both languages. `class_body` is deliberately not
+# among them: Python reads a class attribute inside the class body by its bare name and TypeScript
+# reads it through `this.` or the class, so there is no matched source to compare and a pair here
+# would be asserting agreement about two different programs.
+MATCHED = ("script", "shadowed", "merged", "nested_function")
 
 
 def _sites(tmp_path, language: str) -> list[CallSite]:
@@ -140,12 +149,15 @@ def test_the_two_languages_agree_on_every_module_scope_call(tmp_path) -> None:
     where Python reads keyword arguments, so `merged`'s positional `retrieve` argument is
     legitimately empty on one side and not the other.
     """
-    python = sorted((s.symbol, tuple(sorted(s.response_fields_read))) for s in _sites(tmp_path, PYTHON))
-    typescript = sorted(
-        (s.symbol, tuple(sorted(s.response_fields_read))) for s in _sites(tmp_path, TYPESCRIPT)
-    )
 
-    assert python == typescript
+    def summarise(language: str) -> list[tuple[str, str, tuple[str, ...]]]:
+        return sorted(
+            (Path(s.path).stem, s.symbol, tuple(sorted(s.response_fields_read)))
+            for s in _sites(tmp_path, language)
+            if Path(s.path).stem in MATCHED
+        )
+
+    assert summarise(PYTHON) == summarise(TYPESCRIPT)
 
 
 # --- what the module as a scope costs ------------------------------------------------
@@ -201,3 +213,19 @@ def test_the_same_leak_reproduces_where_the_module_fallback_never_runs(tmp_path,
 
     assert _fields(sites, "nested_function") == ["status", "total"]
     assert _fields(sites, "nested_function") == _fields(sites, "shadowed")
+
+
+def test_a_class_body_call_reaches_the_same_fallback_and_is_scoped_to_the_module(tmp_path) -> None:
+    """A module-level call is not the only input the fallback answers for.
+
+    A class body is not a function, so a call in one has no ancestor in `_FUNCTION_TYPES` either
+    and gets the module as its scope -- not the class. That is wider than the fallback's own
+    docstrings describe, and in a file holding several classes it is the widest read this walk
+    performs.
+
+    Python only. TypeScript reads a class field through `this.` or through the class name, and
+    neither spells a bare identifier the read walk can root a chain at, so the equivalent source
+    is a different program rather than the same one in another language -- and its response
+    binding is declined earlier, at `_result_target`, which never reaches the scope walk at all.
+    """
+    assert _fields(_sites(tmp_path, PYTHON), "class_body") == ["status"]
