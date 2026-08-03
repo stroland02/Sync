@@ -139,3 +139,74 @@ reads no scope. Python has no analogue; `_response_fields`' docstring says why (
 positional and names no vendor field).
 
 No fixture in this task produced a request-side binding without a response-side one.
+
+## 8. Every test was proven able to fail
+
+All fourteen tests pin behaviour that already existed, so "watch it fail first" can only mean
+proving each one fails against a mutation of the code it covers. Ten mutations, run through
+`tools/mutate_scope.py`, scheduler `-n0`, baseline 14 passed:
+
+| Mutation | Where | Change | Verdict | Tests killed |
+|---|---|---|---|---:|
+| `py-fallback` | `python_lang.py:628` | `return root` → `return node` | killed | 6 |
+| `ts-fallback` | `typescript.py:495` | `return root` → `return node` | killed | 5 |
+| `py-scope-widened` | `python_lang._response_fields` | `_walk(scope)` → `_walk(root)` | killed | 2 |
+| `ts-scope-widened` | `typescript._response_fields` | `_walk(scope)` → `_walk(root)` | killed | 2 |
+| `py-scope-narrowed` | `python_lang._response_fields` | `_walk(scope)` → `_walk(call_node)` | killed | 6 |
+| `ts-scope-narrowed` | `typescript._response_fields` | `_walk(scope)` → `_walk(call_node)` | killed | 5 |
+| `py-line` | `python_lang.index` | `start_point[0] + 1` → `+ 2` | killed | 1 |
+| `ts-line` | `typescript.index` | `start_point[0] + 1` → `+ 2` | killed | 1 |
+| `py-args` | `python_lang._argument_keys` | `return sorted(keys)` → `return []` | killed | 1 |
+| `ts-args` | `typescript._argument_keys` | `return sorted(self._object_paths(...))` → `return []` | killed | 1 |
+
+**Every one of the fourteen is killed by at least one mutation**, and the last four rows exist for
+that reason alone. The two tests asserting the call site's identity and the two asserting its
+argument keys read nothing the scope can reach, so no mutation that moves the scope touches them —
+they are exactly the pins that would have kept passing through the defect, and the line and
+argument mutations are what shows they are not vacuous.
+
+The two `fallback` rows are the ones that matter for the coverage claim: mutating `return root`
+alone changes the module-scope results in both languages and leaves the function-scope results
+untouched, which is what makes §4's argument a measurement rather than a reading of the code.
+
+**No false-verdict mode fired.** The harness separates killed, survived, did-not-compile
+(`compile()` before the run), unreadable (exit outside `{0, 1}`, or exit 1 with no `FAILED` line),
+not-applied (anchor absent or ambiguous) and baseline-drifted (unmutated pass count off 14); all
+ten came back killed with the anchor matching exactly once.
+
+**CRLF was live, not theoretical.** Both modules are CRLF in the working tree — measured, not
+assumed. Anchors are written LF in the harness and rewritten to the file's own newline before
+matching. Without that step all ten would have matched nothing; the anchor-count check reports that
+as `not-applied` rather than as a survival, which is the distinction that keeps a harness fault
+from reading as a result.
+
+`-p no:xdist` is not usable here: this repository's `addopts` carries `-n auto`, and disabling the
+plugin leaves `-n` unrecognised, so pytest exits 4 with no `FAILED` line at all. Every measurement
+in this report used `-n0`.
+
+## 9. What the next task is
+
+Three findings this task established and deliberately did not act on.
+
+**The scope walk is not shadow-aware, at any scope.** §3 and §4. `_response_fields` in both
+adapters walks a scope's whole subtree, so any nested scope that rebinds the result name donates
+its reads to the call — at module scope, at class-body scope, and inside a function with a nested
+function. `merged` shows it absorbing another *indexed* call's field, which is a false response
+field on a real call site and therefore a false finding with a `static` rung.
+
+It is a bigger change than it looks, and it should not be taken as obviously correct. Skipping
+nested function bodies would lose the genuine case — a module-level result read from inside a
+function, through the global it is — which turns a false field into a missed break. Neither
+direction has been measured on real repositories, and the choice needs that measurement rather than
+a preference. Both adapters must move together; the fixtures for it are already committed.
+
+**`_result_target` does not recognise a TypeScript class field.** §6. `static charge =
+stripe.charges.create(...)` is indexed and binds nothing on the response side, because
+`public_field_definition` is neither of the two forms the walk knows. This is the same shape as
+the `assignment_expression` gap B33 closed, one binding form further on, and it is a missed break
+rather than a false finding. It belongs to `_result_target` and not to the scope walk.
+
+**Both `_enclosing_scope` docstrings understate their input set.** §6. They describe the fallback
+as answering for a module-level call; a class body reaches it too, and gets the module rather than
+the class. That is a documentation fix, and it should be made by whoever takes the first item,
+because the sentence to write depends on what the walk ends up doing.
