@@ -394,14 +394,16 @@ under the same restore.
 
 ### The four gates
 
-Run on `stroland02/m2-converge` at `7ec8be1` — the merged tree, with `af0365e` in it. The earlier
-attempt's gate figures were taken on top of `d24f61f`, before the merge, and are not carried
-forward.
+Run on `stroland02/m2-converge`, on the merged tree with `af0365e` in it. The `-n auto` figure was
+taken at `7ec8be1`; the other three gates and the `-n0` figure at `1830e19`. Every commit between
+those two changes documentation alone, so all five describe the same `src`, `scripts` and `tests`.
+The earlier attempt's gate figures were taken on top of `d24f61f`, before the merge, and are not
+carried forward.
 
 | Gate | Result | Exit |
 |---|---|---|
 | `pytest -q` (`-n auto`, the `addopts` default) | 2788 passed, 1 skipped, 277s | 0 |
-| `pytest -q -n0` (the CI scheduler) | *re-running* | |
+| `pytest -q -n0` (the CI scheduler) | 2788 passed, 1 skipped, 1 deselected, 482s | 0 |
 | `lint_encoding.py src scripts tests` | no output | 0 |
 | `lint-imports` (unredirected, `PYTHONIOENCODING=utf-8`) | `Contracts: 1 kept, 0 broken`, 98 files, 203 dependencies | 0 |
 | `lint_dead_links.py src --baseline scripts/dead_links_baseline.txt` | no output | 0 |
@@ -413,9 +415,20 @@ tree the two suite figures describe.
 **The `-n0` gate has a completed log this attempt did not watch.** The run this report last
 recorded as in flight did finish — `tools/w124_gate_n0.txt`, 19:23, **2788 passed, 1 skipped, 1
 deselected in 951.65s, exit 0** — but it finished after the session that started it had ended, so
-nobody read it at the time. It is being re-run rather than transcribed. The log is evidence of a
-run, not of a run anyone supervised, and this report's own rule is that a figure is worth what its
+nobody read it at the time. It was re-run rather than transcribed. The log is evidence of a run,
+not of a run anyone supervised, and this report's own rule is that a figure is worth what its
 provenance is worth.
+
+The re-run agrees on every count — 2788 passed, 1 skipped, 1 deselected, exit 0 — and disagrees
+on the clock by a factor of two, 482s against 951s. That is the machine's load, not the tree's:
+the earlier run overlapped whatever else was executing at 19:07, and this one had the box more to
+itself. It is the same warning the `-n auto` figures carry, arriving a second time on a run whose
+counts are identical, which is about as clean a demonstration as this repository is going to get
+that **wall clock here measures the machine and only counts measure the code.**
+
+Independently of the gate, `tests/test_observed_shape_sources.py` and
+`tests/test_replay_shape_writeback.py` were re-run focused against `sync_w124_mut`: **26 passed,
+exit 0, 8.81s, `-n0`**. Both schema-survival tests are in that 26.
 
 ### The branch is two commits behind `origin/main`, deliberately
 
