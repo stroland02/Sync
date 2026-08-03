@@ -12,11 +12,16 @@ and `src/sync/verify/mock_response.py`, wired as the `replay` node in
 `src/sync/remediate/graph.py:37`) and does not feed the shape store — deliberately, which
 withdraws this document's claim below that every replay run is also a `source='replay'` writer.
 A replay row is the published specification restated through the customer's code, not a response
-the customer's code received, and two consumers read this table as traffic: one replay row is
-enough to turn an uncorroborated divergence into a `breaking` finding, and a row at the floor
-outranks the specification in the mock the next replay is verified against.
-`docs/superpowers/reports/2026-07-30-replay-shapes-reach-the-store.md` carries the measurements
-and names what `src/sync/detect/` and `src/sync/graph/` have to change before replay can write.
+the customer's code received. Two consumers used to read this table as traffic with no way to say
+so, and both conditions that blocked the writer have since been answered:
+`GraphStore.observed_shapes` returns traffic alone unless a caller asks for every source, and
+`record_observed_shape` no longer accumulates `sample_count` for a synthetic source, so a replay
+retried or repeated converges instead of counting one synthesized body once per attempt.
+The writer is still not reinstated — that is its own task, and what it now owes is a consumer,
+since no caller in `src/` reads a `replay` row.
+`docs/superpowers/reports/2026-07-30-replay-shapes-reach-the-store.md` carries the measurements,
+`docs/superpowers/reports/2026-07-31-traffic-and-non-traffic-shapes.md` closed the first
+condition and `docs/superpowers/reports/2026-08-03-a-retried-replay-converges.md` the second.
 The interceptor SDK does not exist — see Sequencing.
 **Scope:** Detecting vendor changes no one published, and verifying patches against behavior rather than types
 alone. The design transposes Meticulous's record-replay-diff mechanism into the API-consumption domain.
@@ -205,7 +210,7 @@ number remains in engineering docs; the volume number is the one a customer sees
 | When | What | State |
 |---|---|---|
 | Now | This document. The `observed_shape` schema is binding on anything that later records shapes. | Built — `src/sync/graph/schema.sql:124`, `ObservedShape` in `src/sync/core/models.py` |
-| M1 (with the sandbox the threat model gates on) | The replay tier. Feeding the shape store as `source='replay'` was specified here and is withdrawn. | Built as a verification stage, and deliberately not a feeder — `src/sync/verify/replay.py`, between `static_verify` and `push_branch` in `src/sync/remediate/graph.py`. Its `source='replay'` rows reach `RunState` and no further, pinned by `tests/test_replay_shape_writeback.py`. Replay rows are synthesized from the specification, and `observed_shapes` has no `source` filter, so they would reach two consumers that read the table as traffic. Reinstating the writer is blocked on `src/sync/detect/` and `src/sync/graph/` — see the report of 2026-07-30 |
+| M1 (with the sandbox the threat model gates on) | The replay tier. Feeding the shape store as `source='replay'` was specified here and is withdrawn. | Built as a verification stage, and deliberately not a feeder — `src/sync/verify/replay.py`, between `static_verify` and `push_branch` in `src/sync/remediate/graph.py`. Its `source='replay'` rows reach `RunState` and no further, pinned by `tests/test_replay_shape_writeback.py`. Both conditions the report of 2026-07-30 set are answered: traffic and synthetic rows are kept apart on read (2026-07-31), and a synthetic row's `sample_count` no longer accumulates, so a retried replay converges (2026-08-03). Reinstating the writer is still its own task, and it owes a consumer for these rows — both readers now answer traffic alone |
 | M2 (signal sources) | Error-payload shapes from Sentry-class sources, `source='error-payload'`. The detector ships here, running on whatever baseline exists, with the sample floor keeping it silent where data is thin. | Built — `src/sync/signals/sentry/shapes.py`, `src/sync/signals/datadog/shapes.py`, and `src/sync/detect/observed_drift.py`, whose `MIN_SAMPLES` is the sample floor |
 | Post-M2, opt-in | The interceptor SDK, only for customers who want unpublished-change detection on live traffic. A separate adoption decision with its own trust conversation. | Not built |
 
