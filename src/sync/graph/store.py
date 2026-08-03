@@ -601,6 +601,19 @@ class GraphStore:
         widens at both ends rather than taking the last write, since sources do not arrive in
         order: an error-payload batch can be forwarded hours after a replay run observed the
         same shape.
+
+        `sample_count` is the one of them whose merge is not idempotent, and it adds only for a
+        source in `TRAFFIC_SOURCES`. A synthetic row is a body Sync constructed from a published
+        specification, so writing it again is this ingest running again rather than the shape
+        being seen again, and a counter that added would measure how often Sync ran against the
+        floor the detector reads. Held as a maximum rather than by holding the row still: taking
+        whichever value arrived first would make the counter the only column in this clause that
+        depends on arrival order, and taking the incoming one would rewrite counts written before
+        the clause was split.
+
+        The classification is read here rather than asserted by the caller. A row's merge is a
+        property of the mechanism that produced it, and `sync.graph.sources` is where that is
+        decided for the reader too.
         """
         placeholders = ", ".join(["%s"] * len(self._SHAPE_COLUMNS))
         self._connect().execute(
@@ -608,7 +621,11 @@ class GraphStore:
             INSERT INTO observed_shape ({", ".join(self._SHAPE_COLUMNS)})
             VALUES ({placeholders})
             ON CONFLICT (vendor_id, operation_id, field_path, json_type, source) DO UPDATE SET
-                sample_count = observed_shape.sample_count + EXCLUDED.sample_count,
+                sample_count = CASE
+                    WHEN observed_shape.source = ANY(%s)
+                    THEN observed_shape.sample_count + EXCLUDED.sample_count
+                    ELSE GREATEST(observed_shape.sample_count, EXCLUDED.sample_count)
+                END,
                 nullable_seen = observed_shape.nullable_seen OR EXCLUDED.nullable_seen,
                 spec_enum_values = ARRAY(
                     SELECT DISTINCT unnest(observed_shape.spec_enum_values || EXCLUDED.spec_enum_values)
@@ -617,7 +634,10 @@ class GraphStore:
                 first_seen = LEAST(observed_shape.first_seen, EXCLUDED.first_seen),
                 last_seen = GREATEST(observed_shape.last_seen, EXCLUDED.last_seen)
             """,
-            [getattr(shape, name) for name in self._SHAPE_COLUMNS],
+            [
+                *(getattr(shape, name) for name in self._SHAPE_COLUMNS),
+                sorted(TRAFFIC_SOURCES),
+            ],
         )
 
     def record_observed_call(self, call: ObservedCall) -> None:
