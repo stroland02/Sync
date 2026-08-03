@@ -401,7 +401,18 @@ forward.
 | Gate | Result | Exit |
 |---|---|---|
 | `pytest -q` (`-n auto`, the `addopts` default) | 2788 passed, 1 skipped, 277s | 0 |
-| `pytest -q -n0` (the CI scheduler) | *in flight* | |
+| `pytest -q -n0` (the CI scheduler) | *re-running* | |
 | `lint_encoding.py src scripts tests` | no output | 0 |
 | `lint-imports` (unredirected, `PYTHONIOENCODING=utf-8`) | `Contracts: 1 kept, 0 broken`, 98 files, 203 dependencies | 0 |
 | `lint_dead_links.py src --baseline scripts/dead_links_baseline.txt` | no output | 0 |
+
+The three lints are this attempt's, re-run rather than carried forward. Every commit since
+`7ec8be1` changes documentation only, so `src`, `scripts` and `tests` are byte-identical to the
+tree the two suite figures describe.
+
+**The `-n0` gate has a completed log this attempt did not watch.** The run this report last
+recorded as in flight did finish — `tools/w124_gate_n0.txt`, 19:23, **2788 passed, 1 skipped, 1
+deselected in 951.65s, exit 0** — but it finished after the session that started it had ended, so
+nobody read it at the time. It is being re-run rather than transcribed. The log is evidence of a
+run, not of a run anyone supervised, and this report's own rule is that a figure is worth what its
+provenance is worth.
