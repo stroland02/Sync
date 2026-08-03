@@ -61,6 +61,7 @@ PYTHON_FORMS = (
     "comprehension",
     "destructured",
     "augmented",
+    "walrus",
     "nested_def",
     "class_scope",
 )
@@ -121,9 +122,10 @@ def _fields(tmp_path, language: str, stem: str) -> list[str]:
 def test_a_python_rebinding_keeps_its_reads_to_itself(tmp_path, form) -> None:
     """Each of Python's own scopes, rebinding by the construct the fixture is named for.
 
-    All ten recorded `leaked` before this task. Python has no block scope, so every one of them
-    rebinds inside a function, a lambda, a comprehension or a class body -- there is no other
-    kind of scope for a name to be rebound in.
+    All eleven recorded `leaked` before this task. Python has no block scope, so every one of
+    them rebinds inside a function, a lambda, a comprehension or a class body -- there is no
+    other kind of scope for a name to be rebound in, and `walrus` is here to say that an `if`
+    is not one: the walrus binds for the whole function that holds it.
     """
     assert _fields(tmp_path, PYTHON, form) == [GENUINE]
 
@@ -181,6 +183,17 @@ def test_a_let_one_block_down_shadows_that_block_and_no_more(tmp_path) -> None:
     where the `var` case it is copied from is a false finding.
     """
     assert _fields(tmp_path, TYPESCRIPT, "let_in_nested_block") == [GENUINE, "total"]
+
+
+def test_a_var_hoists_to_its_own_function_and_no_further(tmp_path) -> None:
+    """The other control on the same search, and the one that bounds how far it reaches.
+
+    `inner` declares `var charge`, which hoists to `inner`. `report` therefore rebinds nothing,
+    its first line reads the outer object, and `total` is genuine. A search that walked through
+    a nested function would treat `report` as rebinding and drop it -- the missed break again,
+    where `var_in_nested_block` is the false finding this pair sits between.
+    """
+    assert _fields(tmp_path, TYPESCRIPT, "var_in_deeper_function") == [GENUINE, "total"]
 
 
 @pytest.mark.parametrize("language", BOTH)
