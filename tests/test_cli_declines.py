@@ -54,6 +54,10 @@ from sync.core import CallSite, Finding, ObservedShape, RepoRef
 from sync.detect.observed_drift import MIN_SAMPLES
 from sync.graph.store import GraphStore
 from sync.remediate import corpus
+from sync.signals.deprecations import (
+    parameters_to_vendor_changes,
+    parse_parameter_deprecations,
+)
 from sync.signals.feed import load_public_key
 from sync.signals.registry import SYMBOL_MAP_FILENAME
 
@@ -1076,3 +1080,37 @@ def test_the_module_entry_point_refuses_an_invocation_naming_no_subcommand():
 
     assert result.returncode != 0
     assert result.stdout == ""
+
+
+# --- `_parameter_changes`: the drop for a conversion that is not one-to-one -------------
+#
+# 611-616 names a `ParameterDeprecation` on stderr and drops it when converting that one row
+# produced anything other than one `VendorChange`. No input reaches it and none can:
+# `parameters_to_vendor_changes` is an unfiltered comprehension over its argument and this call
+# site hands it a one-element list, so the length is one by construction. The report carries the
+# other two kinds of evidence; this is the one that keeps working after the report goes stale.
+#
+# It asserts on the converter rather than on the guard, and that is the point. The
+# unreachability is a fact about a *different module*, and a claim resting on another module's
+# behaviour decays with nothing noticing -- a converter that grew to emit two rows for one
+# deprecation would make the drop live, silently, and this is what goes red instead.
+
+
+def test_the_converter_this_drop_guards_against_emits_one_change_per_deprecation():
+    """One in, one out, over every parameter deprecation this repository has captured.
+
+    The committed Anthropic page is the whole sample because it is the only shipped source that
+    publishes a parameter table, which `test_deprecation_wiring.py` measures rather than assumes.
+    Each row is converted alone, the way `_parameter_changes` converts it, because a batch call
+    returning the right total would satisfy this while a per-row call did not.
+    """
+    page = (Path(__file__).parent / "fixtures" / "deprecations" / "anthropic.md").read_text(
+        encoding="utf-8"
+    )
+    rows = parse_parameter_deprecations("anthropic", page)
+
+    assert rows, "the committed page no longer carries a parameter table; the sample is empty"
+    assert [
+        len(parameters_to_vendor_changes([row], from_version="2026-08-03", to_version="2026-08-03"))
+        for row in rows
+    ] == [1] * len(rows)
