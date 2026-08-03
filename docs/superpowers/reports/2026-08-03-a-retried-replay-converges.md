@@ -270,13 +270,26 @@ result rests on it.
 
 ## Verification
 
-All measurements against a real Postgres 16 on port 5433. `sync_w124` and `sync_w124_mut`, both
-created by this task; no database created by another task was dropped.
+All measurements against a real Postgres 16 on port 5433. `sync_w124` for the suite and the
+gates, `sync_w124_mut` for the mutation harness, both created by this task; no database created
+by another task was dropped. `tests/conftest.py` subdivides a pinned `SYNC_DSN` per xdist worker,
+so an `-n auto` run uses `sync_w124_gw0…gwN`, and its leaked-database sweep is confined to the
+generated `sync_test_<pid>` pattern — a pinned name is outside it, which is why running here
+cannot reach another task's database.
 
-**Every figure below was re-measured on the merged tree.** A session limit ended the first attempt
-between measuring and writing, and a remembered number is not a measurement — so nothing here was
-transcribed from the earlier run. That was not ceremony: `origin/main` moved to `da6a820` in the
-interval, and the mutation harness's own baseline moved with it, from 231 to 235.
+**Which scheduler produced which number.** The mutation harness and its baseline are `-n0` over
+twelve files, because a survival has to be attributable to a test rather than to a worker that
+died. The gates run on both schedulers, `-n auto` being the `addopts` default a developer gets
+and `-n0` being CI's. The two candidate measurements above — the run-key table and the thirty-run
+table — are direct writes against the server through `GraphStore`, with no pytest involved and so
+no scheduler.
+
+**No figure here was transcribed from a remembered number**, and that is the whole reason this
+report took three attempts. Two session limits ended between measuring and writing, and a
+measurement that exists only in an agent's context is a measurement nobody has. The mutation
+results were re-measured on the merged tree at 07:45, after `af0365e` landed at 07:30, and are on
+disk in the harness's own run log; the baseline moved from 231 to 235 across that merge, which is
+what a stale figure would have hidden. The gate figures below are this attempt's, on `7ec8be1`.
 
 Suite baseline for **this worktree**, measured at `da6a820` before the branch was merged onto it:
 **2778 passed, 1 skipped**, exit 0, `-n auto`, 140s. That matches the figure `main` reports, so
