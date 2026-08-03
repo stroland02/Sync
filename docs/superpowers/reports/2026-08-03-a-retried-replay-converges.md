@@ -198,7 +198,10 @@ attribute, and it is now unreachable rather than merely filtered.
 ## The pin that changed direction
 
 `test_a_second_write_of_one_shape_converges_on_a_row_and_not_on_a_count` asserted `sample_count
-== 3` and now asserts 1, renamed to `..._and_on_a_count`.
+== 3` and now asserts 1, as
+`test_a_second_write_of_one_replay_shape_converges_on_a_row_and_on_a_count`. The name gained
+`replay` as well as losing `not`, because a traffic counterpart now sits beside it and the two
+would otherwise differ only in a negation.
 
 It was not retired and it did not become awkward. W116 wrote that figure deliberately, to record
 the half of the idempotency rule the table did not satisfy, and it is the defect that went away.
@@ -250,35 +253,53 @@ What the reinstatement task owns:
    consumer, and that has to be answered before the write rather than after. This is a finding of
    this task, not a condition it sets, and it is why the specification's Sequencing row still says
    the tier is deliberately not a feeder.
-4. **The sibling window**, still open and still not this. W119's second finding stands: a single
-   `sample_count=1` row of *any* source escalates a divergence to `breaking`, and
-   `test_a_traffic_row_under_the_floor_still_escalates` pins it with two traffic sources and no
-   synthetic row anywhere in the database. It lives in `src/sync/detect/observed_drift.py`, which
-   is held by another task.
+**The fourth item this section carried is closed, and reinstatement does not own it.** W119's
+second finding — a single `sample_count=1` row of *any* source escalating a divergence to
+`breaking` — was still open when this task was interrupted, and M3-W122 answered it in the
+meantime: `MIN_SAMPLES` now reaches the sibling window, and a thin earlier observation grades
+`info` with a rationale naming its count and the floor. It is merged into this branch, and
+`test_a_traffic_row_under_the_floor_still_escalates` is the pin it inverted in place, now
+`..._no_longer_escalates`. `docs/superpowers/reports/2026-07-31-the-sibling-window.md` carries it.
+
+That change and this one land on the same row from opposite sides, and neither depends on the
+other. A synthetic row held at `sample_count=1` also cannot corroborate anything now, because the
+floor excludes it — but condition (1) already keeps every `replay` row out of the detector's read,
+so the floor is a second barrier behind a filter that was never going to let the row through.
+Recorded because a reader comparing the two reports will notice the overlap, not because either
+result rests on it.
 
 ## Verification
 
 All measurements against a real Postgres 16 on port 5433. `sync_w124` and `sync_w124_mut`, both
 created by this task; no database created by another task was dropped.
 
-Suite baseline at `d24f61f` before any change: **2774 passed, 1 skipped**, exit 0, `-n auto` —
-the figure the brief states, so this worktree's `.cache/specs/` is populated.
+**Every figure below was re-measured on the merged tree.** A session limit ended the first attempt
+between measuring and writing, and a remembered number is not a measurement — so nothing here was
+transcribed from the earlier run. That was not ceremony: `origin/main` moved to `da6a820` in the
+interval, and the mutation harness's own baseline moved with it, from 231 to 235.
+
+Suite baseline for **this worktree**, measured at `da6a820` before the branch was merged onto it:
+**2778 passed, 1 skipped**, exit 0, `-n auto`, 140s. That matches the figure `main` reports, so
+this worktree's gitignored `.cache/specs/` is populated and no extra environmental skip is in play.
+Recorded first so a mutation harness does not read a checkout difference as drift.
 
 ### Mutation
 
-Baseline for the harness: **231 passed, exit 0, `-n0`**, over the twelve test files that can
-reach this change.
+Baseline for the harness: **235 passed, exit 0, `-n0`**, over the twelve test files that can
+reach this change. The four tests between this and the earlier attempt's 231 are M3-W122's, in
+`test_observed_drift.py` and `test_detector_declines.py`, which the harness covers because the
+detector is a reader of the rows this change writes.
 
 | Mutation | Verdict | Killed |
 |---|---|---|
-| M1 the clause reverts to unconditional addition (the change reverted) | killed | 8, including `test_a_second_write_of_one_replay_shape_converges_on_a_row_and_on_a_count` |
-| M2 the clause holds the counter for every source | killed | 8, including `test_a_second_write_of_one_traffic_shape_still_counts_twice`, `test_a_traffic_row_written_again_counts_again[error-payload]`, `[interceptor]`, `test_recording_the_same_shape_twice_counts_it_twice_in_one_row` |
+| M1 the clause reverts to unconditional addition (the change reverted) | killed | 8, including `test_a_second_write_of_one_replay_shape_converges_on_a_row_and_on_a_count` and `test_a_synthetic_row_written_again_does_not_count_again[replay]` |
+| M2 the clause holds the counter for every source | killed | 8, including `test_a_second_write_of_one_traffic_shape_still_counts_twice`, `test_a_traffic_row_written_again_counts_again[error-payload]`, `[interceptor]`, `test_recording_the_same_shape_twice_counts_it_twice_in_one_row`, `test_a_batch_adds_its_whole_count` |
 | M3 the synthetic branch takes the incoming count | killed | 3, including `test_a_synthetic_count_written_before_this_clause_is_not_rewritten` |
 | M4 the synthetic branch keeps whatever arrived first | killed | 1: `test_a_synthetic_rows_count_does_not_depend_on_arrival_order` |
 | M5 the synthetic branch pins the count at one | killed | 3, including `test_a_held_synthetic_count_survives_a_second_apply_schema_and_a_further_write` |
 | M6 the clause is matched against `SYNTHETIC_SOURCES` (the partition inverted on write) | killed | 16 |
 | M7 `replay` classified as traffic (the partition broken) | killed | 14, including `test_a_reader_asking_for_traffic_does_not_receive_a_replay_row` |
-| M8 the replay writer reinstated (W116's candidate 1) | killed | 3: `test_a_successful_replay_...`, `test_a_failed_replay_...`, `test_the_offered_shapes_are_carried_and_not_written` |
+| M8 the replay writer reinstated (W116's candidate 1) | killed | 3: `test_a_successful_replay_builds_shape_rows_and_writes_none_of_them`, `test_a_failed_replay_builds_shape_rows_and_writes_none_of_them`, `test_the_offered_shapes_are_carried_and_not_written` |
 
 No mutation survived and no false-verdict mode fired.
 
