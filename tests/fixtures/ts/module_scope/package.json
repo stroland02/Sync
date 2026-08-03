@@ -1,0 +1,1 @@
+{ "name": "module-scope", "dependencies": { "stripe": "18.0.0" } }
