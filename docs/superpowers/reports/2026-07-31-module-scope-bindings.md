@@ -88,7 +88,7 @@ should return" — has no answer, because the fallback is not wrong.
 
 Fixing the leak means teaching `_response_fields` which reads a nested rebinding shadows. That is a
 different change to a different method, it trades a false field for a missed one in a direction
-nothing here has measured, and it belongs to its own task. §8.
+nothing here has measured, and it belongs to its own task. §10.
 
 ## 5. The rung survives, and does so without depending on the scope
 
@@ -122,7 +122,7 @@ a chain at. Measured, a TypeScript class-field call is indexed and records **no*
 but it is declined one step earlier, at `_result_target`, which does not recognise a
 `public_field_definition` and returns `None` before the scope walk is reached. That is a real gap
 and a separate one; it belongs to `_result_target`, alongside the `assignment_expression` widening
-B33 made, and it is listed in §8 rather than fixed here.
+B33 made, and it is listed in §10 rather than fixed here.
 
 ## 7. The response-side path is reachable at module scope
 
@@ -184,7 +184,92 @@ from reading as a result.
 plugin leaves `-n` unrecognised, so pytest exits 4 with no `FAILED` line at all. Every measurement
 in this report used `-n0`.
 
-## 9. What the next task is
+## 9. The remaining statements, one at a time
+
+Thirty-three statements were uncovered across the two modules before this task and thirty-one are
+after it. This is the map for them, not a plan to close them; the brief asked for the pair and the
+table, not for all thirty-three.
+
+**Three are capability rather than decline**, and the baseline named all three. They are listed
+apart because a decline table's question — "is refusing right?" — does not apply to a statement
+that produces an answer.
+
+| Statement | What it produces | Why nothing reaches it |
+|---|---|---|
+| `python_lang.py:319-320` | `decline_reason` rendering "…declare N requirements between them and 'stripe' is not one of them" | Every fixture that declines does so with an empty or unreadable manifest, which returns one line earlier. No fixture declares requirements that do not include the vendor. |
+| `python_lang.py:867` | `_configured_typechecker` answering `"mypy"` | A repository configuring mypy through `mypy.ini`, `.mypy.ini` or `setup.cfg` rather than `[tool.mypy]` in `pyproject.toml`. `static_verify` already fails closed either way, so this changes the diagnostic and not the verdict. |
+
+### `python_lang.py` — 21 declines
+
+| # | Statement | Input that reaches it | Is declining right? | What the caller observes |
+|---|---|---|---|---|
+| 1 | `128` `_same` → `False` | a binding form whose target or value field is absent from the node | Yes. `_same` asks whether the name receives *this* call, and an absent field is not this call. | The result reads as unbound: `response_fields_read` empty. |
+| 2 | `340` `_sdk_version` → `"unknown"` | a repository that imports the SDK but declares it in no manifest | Yes. The manifest is the only source, and inventing a version writes a number the project never did. | `sdk_version="unknown"` on every call site from that repository. |
+| 3 | `450` `_client_identifiers` → `continue` | intended: the `module_name` child of `from stripe import X`, among the statement's named children. **Nothing reaches it.** | **Unreachable as written** — see below. | Nothing today. The module name lands in `imported` alongside the symbol. |
+| 4 | `492` `_constructs_client` → `False` | a `call` node with no `function` field | Yes, and it cannot fire on a well-formed tree. | The name is not bound as a client; its call sites are not indexed. |
+| 5 | `498` `_constructs_client` → `False` | a callee that is neither an identifier nor an attribute — `client = make()(...)`, `client = (Stripe)(...)` | Yes. Neither spelling names something imported from the vendor, and following either needs the type inference tree-sitter does not give us. | Not bound; call sites absent. |
+| 6 | `516` `_bound_name` → `None` | an assignment target that is neither a name nor an attribute: `a, b = StripeClient(...), 1`, `table["k"] = StripeClient(...)` | Yes. Neither names a root a call chain can be spelled against. | Not bound; call sites absent. |
+| 7 | `520` `_bound_name` → `None` | an attribute target whose object is not a plain identifier: `self.a.client = StripeClient(...)` | Yes, for the reason the docstring gives one line down — a deeper root is an object this walk cannot follow to its construction. | Not bound; call sites absent. |
+| 8 | `522` `_bound_name` → `None` | an attribute target on anything but `self`: `config.client = StripeClient(...)` | Yes, and this is the case the docstring argues explicitly. Matching any attribute would bind on the attribute name alone and claim every unrelated `client.x.y()` in the repository. | Not bound; call sites absent. |
+| 9 | `550` `_attribute_chain` → `None` | an `attribute` node with no `attribute` field | Yes; cannot fire on a well-formed tree. | The call is skipped at `index:752`. |
+| 10 | `554` `_attribute_chain` → `None` | an `attribute` node with no `object` field | Yes; same. | Skipped at `index:752`. |
+| 11 | `556` `_attribute_chain` → `None` | a chain whose root is not an identifier: `get_client().charges.create(...)`, `clients["a"].charges.create(...)` | Yes. The root is a value this walk cannot resolve to a client, and guessing binds a vendor to code that may not call it. | Skipped at `index:752`; the call is not indexed. |
+| 12 | `577` `_dictionary_paths` → `continue` | a dict literal child that is not a `pair`: `{**defaults, "amount": 1}` | Yes. A spread names no key statically. | The spread contributes no `args_keys`; its siblings do. |
+| 13 | `580` `_dictionary_paths` → `continue` | a computed key: `{key_name: 1}` | Yes, and the docstring says why — recording the expression would put customer source into a column that holds field names. | That key is absent from `args_keys`. |
+| 14 | `598` `_argument_keys` → `[]` | a `call` node with no `arguments` field | Yes; cannot fire on a well-formed tree. | `args_keys` empty. |
+| 15 | `605` `_argument_keys` → `continue` | a `keyword_argument` with no `name` field | Yes; same. | That argument contributes no key. |
+| 16 | `645` `_read_path` → `None` | an `attribute` node with no `attribute` field | Yes; same. | That read contributes no response field. |
+| 17 | `657` `_read_path` → `None` | an attribute or subscript whose object/value field is absent | Yes; same. | That read contributes no response field. |
+| 18 | `700` `_result_target` → `None` | **Nothing.** The walk climbs only through `_RESULT_WRAPPERS`, and the `module` node is met before `parent` can become `None` — `module` is not a wrapper, so the loop returns at line 697 first. | **Unreachable, structurally.** | — |
+| 19 | `752` `index` → `continue` | a call whose function is an `attribute` that `_attribute_chain` refuses — rows 9, 10 and 11 arriving at the loop | Yes. Scoped to the one call. | The call is not indexed. |
+| 20 | `842` `_syntax_errors` `except ValueError` | a source file CPython rejects before the tokenizer: a UTF-16 `.py`, whose null bytes raise `ValueError` rather than `SyntaxError` | Yes, and it is not defensive — the comment records that the uncaught form took `matches` down twice against exactly this file. | — |
+| 21 | `848` the same handler's `broken.append` | as row 20 | Yes. The file is reported as unparseable, which is what it is. | `static_verify` returns `ok=False` naming the path. |
+
+### `typescript.py` — 9 declines
+
+| # | Statement | Input that reaches it | Is declining right? | What the caller observes |
+|---|---|---|---|---|
+| 1 | `96` `_same` → `False` | a binding form whose `name`/`value` or `left`/`right` field is absent | Yes; same argument as `python_lang:128`. | The result reads as unbound. |
+| 2 | `235` `_read_manifest` → not-an-object | a `package.json` that is valid JSON but not an object: `[]`, `"text"`, `null` | Yes. `data.get` would raise on all three, and the two-channel return is what keeps "declares nothing" apart from "could not be read". | `decline_reason` says the manifest could not be read, rather than that the vendor is absent from it. |
+| 3 | `409` `_member_chain` → `None` | a `member_expression` with no `property` field | Yes; cannot fire on a well-formed tree. | The call is skipped at `index:591`. |
+| 4 | `413` `_member_chain` → `None` | a `member_expression` with no `object` field | Yes; same. | Skipped at `index:591`. |
+| 5 | `438` `_object_paths` → `continue` | a `pair` with no `key` field | Yes; same. | That key is absent from `args_keys`. |
+| 6 | `455` `_argument_keys` → `[]` | a call passing no arguments at all: `stripe.charges.list()` | Yes. There is no request-side field to record. | `args_keys` empty; the call site is still indexed. |
+| 7 | `476` `_destructured_fields` → `continue` | a `pair_pattern` with no `key` field | Yes; cannot fire on a well-formed tree. | That field is absent from `response_fields_read`. |
+| 8 | `528` `_result_target` → `None` | **Nothing**, for the same structural reason as `python_lang:700`: the `program` node is not a wrapper, so line 525 returns before `parent` can become `None`. | **Unreachable, structurally.** | — |
+| 9 | `558` `_response_fields` → `[]` | a binding target that is neither an object pattern nor an identifier — an array pattern, `const [charge] = await stripe.charges.list(...)` | Yes. An array pattern binds by position and names no vendor field, which is the same argument `python_lang._response_fields` makes about tuple unpacking. | `response_fields_read` empty; the call site is still indexed. |
+
+### Row 3 is the one the coverage number was hiding something behind
+
+`python_lang.py:450` is not uncovered because the input is exotic. It is uncovered because
+**the comparison cannot be true**:
+
+```python
+module = node.child_by_field_name("module_name")
+for child in node.named_children:
+    if child is module:
+        continue
+```
+
+py-tree-sitter hands back a fresh Python object per access, so `child is module` is `False` even
+for the node it names. Measured on `from stripe import StripeClient`: the `stripe` child compares
+`is` → `False` and `==` → `True`; the `StripeClient` child compares `False` to both. This module
+already knows the rule and states it in `_same`'s docstring — *"tree-sitter returns a fresh object
+per access, so identity is the span rather than the reference"* — and this is the one place that
+does not follow it.
+
+What it costs today is nothing observable. The module name lands in `imported` beside the symbol,
+so `from stripe import StripeClient` leaves `imported == {"stripe", "StripeClient"}`, and the only
+way to turn that into a wrong binding is `client = stripe(...)` — calling a module, which raises
+in any Python that runs. So the guard is inert rather than harmful.
+
+**It is not fixed here, deliberately.** Repairing it to `_same(child, module)` makes line 450
+reachable and changes what `imported` holds, which is a behaviour change no test demands; the brief
+allows a production edit only where a test proves a defect, and the defect this one would prevent
+requires code that cannot execute. It belongs in the same task as §10's other `_result_target`
+work, where a fixture can be written for it honestly.
+
+## 10. What the next task is
 
 Three findings this task established and deliberately did not act on.
 
@@ -205,6 +290,11 @@ stripe.charges.create(...)` is indexed and binds nothing on the response side, b
 `public_field_definition` is neither of the two forms the walk knows. This is the same shape as
 the `assignment_expression` gap B33 closed, one binding form further on, and it is a missed break
 rather than a false finding. It belongs to `_result_target` and not to the scope walk.
+
+**`python_lang.py:450` compares tree-sitter nodes with `is`.** §9, row 3. The guard is inert and
+the module's own `_same` states the rule it breaks. Harmless today, and the repair changes what
+`imported` holds, so it needs a task that can write a fixture for the change rather than for the
+guard.
 
 **Both `_enclosing_scope` docstrings understate their input set.** §6. They describe the fallback
 as answering for a module-level call; a class body reaches it too, and gets the module rather than
