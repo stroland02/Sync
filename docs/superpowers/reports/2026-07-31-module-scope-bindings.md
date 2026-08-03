@@ -239,6 +239,21 @@ that produces an answer.
 | 8 | `528` `_result_target` → `None` | **Nothing**, for the same structural reason as `python_lang:700`: the `program` node is not a wrapper, so line 525 returns before `parent` can become `None`. | **Unreachable, structurally.** | — |
 | 9 | `558` `_response_fields` → `[]` | a binding target that is neither an object pattern nor an identifier — an array pattern, `const [charge] = await stripe.charges.list(...)` | Yes. An array pattern binds by position and names no vendor field, which is the same argument `python_lang._response_fields` makes about tuple unpacking. | `response_fields_read` empty; the call site is still indexed. |
 
+### The two `_result_target` tails are unreachable, and that is a proof rather than a search
+
+`python_lang.py:700` and `typescript.py:528` are the same statement in the same shape as the pair
+this task closed, and they are the one kind of uncovered statement no fixture can reach. The walk
+leaves its loop only when `parent` becomes `None`, `parent` is reassigned to `parent.parent`, and
+the only node whose parent is `None` is the root — so the root's own type would have to be a result
+wrapper for the loop to reach its tail. It is not: measured, the roots are `module` and `program`,
+their parents are `None`, and neither type is in either `_RESULT_WRAPPERS`. The loop always returns
+at the wrapper check first.
+
+Closing them means deleting them, not writing a fixture. That is worth saying because the previous
+decline reports on this project each found one or two statements of this kind, and a task that sets
+out to close a coverage number rather than to read it will spend a long time trying to reach these
+two.
+
 ### Row 3 is the one the coverage number was hiding something behind
 
 `python_lang.py:450` is not uncovered because the input is exotic. It is uncovered because
