@@ -76,26 +76,50 @@ unanswered, which the brief required be said rather than dropped.
 
 ## Whether the filter reaches the mock builder
 
-It does, and the establishing measurement came from a failing test rather than from reading code.
+**It does, and it is now established at the mock builder itself rather than inferred.**
 
 `src/sync/verify/mock_response.py` is pure — it takes `observed` as an argument and opens no
 connection — so it is not the reader. The reader is `_observed` at `src/sync/remediate/nodes.py:461`,
-which `make_replay` hands to `synthesize_mock_response`. W116's
-`test_a_replay_row_at_the_floor_outranks_the_specification_in_the_next_mock` asserted that a
-`replay` row reaches that reader; against this change it fails with `assert [] == ['replay']`. The
-row no longer arrives, and the assertion that used to record the defect is the measurement that
-the defect is gone.
+and it calls `observed_shapes(site.vendor_id, site.operation_id)` positionally with no keyword, so
+it takes the default. The chain is `make_replay` → `_observed` (`nodes.py:412`) →
+`replay_from_specification` → `synthesize_mock_response` (`replay.py:278`).
 
-`tests/test_observed_shape_sources.py` now asserts both directions through `_observed` itself
-rather than through a reconstruction of it, so either test fails if that node ever starts reading
-the table some other way: a `replay` row at the floor yields an empty baseline and a mock built
-from the specification, and an `error-payload` row at the floor yields a baseline of one and a
-mock built from observation. `mock_response.py` was not edited, and did not need to be.
+The first form of this answer was an inference: W116's
+`test_a_replay_row_at_the_floor_outranks_the_specification_in_the_next_mock` asserted that a
+`replay` row reaches that reader, and against this change it failed with `assert [] == ['replay']`.
+A test failing is evidence that something changed; it is not by itself evidence about which
+production call path changed, and the three links above were read off the source.
+
+The direct form is `test_the_baseline_a_replay_run_hands_the_mock_builder_carries_traffic_alone`.
+It puts one `error-payload` row and one `replay` row in the table, both at the sample floor, runs a
+real `make_replay` against the `handles` fixture, and **records what `synthesize_mock_response`
+actually receives** through a spy bound on the module `replay.py` imports it from. The recorded
+baseline is `('error-payload',)`. With the default flipped to `traffic_only=False` — mutation `M3`
+— the same recording is `('replay', 'error-payload')`, which is W116's defect reproduced at the
+mock builder rather than at a reader standing in for it. That is the measurement, in both
+directions, in the production call path.
+
+It names the traffic row as well as the absent replay row for the reason the two tests beside it
+do: an assertion on the absence alone would also have held if the baseline arrived empty, which is
+how this change could have closed the feedback loop by breaking the mock.
+
+Two narrower tests remain either side of it — a `replay` row at the floor yields an empty baseline
+from `_observed` and a mock built from the specification, an `error-payload` row at the floor
+yields a baseline of one and a mock built from observation. They import `_observed` rather than
+reconstruct it, so they fail if that node starts reading the table some other way; the new test is
+what fails if `make_replay` stops using that node at all. `mock_response.py` was not edited, and
+did not need to be.
 
 ## Whether the sibling window is also wrong for traffic sources — the second finding
 
 **It is, and it is a separate and larger defect than the one this task fixed.** Reported here
-rather than folded in.
+rather than folded in, and not fixed.
+
+Measured rather than argued: `test_a_traffic_row_under_the_floor_still_escalates` writes an
+`error-payload` row at the floor and an `interceptor` row at `sample_count=1`, with no synthetic
+row anywhere in the database, and the divergence is still graded `breaking` with "the vendor's
+behaviour changed" in its rationale. The traffic filter is in place while that runs. So the
+escalation is not a consequence of source mixing and this task's change does not touch it.
 
 `MIN_SAMPLES` gates the row a finding is *raised* on. It does not gate the sibling rows that
 decide that finding's *severity*: `_contradicts_earlier_window` reads every sibling whatever its
@@ -207,8 +231,7 @@ reader, and would separate each absence from the counterpart that gives it meani
 ## Verification
 
 All measurements against a real Postgres 16 on port 5433, `sync_w119` and `sync_w119_mut`, both
-created by this task. Every mutation run used `-n0`; the full-suite gate used the repository's
-`addopts` default of `-n auto`, and the full suite was also run at `-n0`.
+created by this task. Every mutation run used `-n0`. The full suite was run on both schedulers.
 
 Mutation baseline: 86 passed, exit 0, `-n0`, over the six test files that can reach this change.
 
@@ -216,7 +239,7 @@ Mutation baseline: 86 passed, exit 0, `-n0`, over the six test files that can re
 |---|---|---|
 | M1 the replay writer reinstated (W116's candidate 1) | killed | `test_a_successful_replay_...`, `test_a_failed_replay_...`, `test_the_offered_shapes_are_carried_and_not_written` |
 | M2 `observed_shapes` ignores `traffic_only` (the change reverted) | killed | 42 tests, including `test_a_reader_asking_for_traffic_does_not_receive_a_replay_row` |
-| M3 the default flips to `traffic_only=False` | killed | `test_the_replay_nodes_own_baseline_reader_receives_no_replay_row`, `test_a_reader_asking_for_traffic_...`, `test_one_replay_row_no_longer_escalates_...`, `test_rows_written_before_the_filter_existed_...` |
+| M3 the default flips to `traffic_only=False` | killed | `test_the_replay_nodes_own_baseline_reader_receives_no_replay_row`, `test_the_baseline_a_replay_run_hands_the_mock_builder_carries_traffic_alone`, `test_a_reader_asking_for_traffic_...`, `test_one_replay_row_no_longer_escalates_...`, `test_rows_written_before_the_filter_existed_...` |
 | M4 the filter matches `SYNTHETIC_SOURCES` instead of `TRAFFIC_SOURCES` | killed | 34 tests, including `test_a_traffic_row_at_the_floor_still_reaches_the_mock` |
 | M5 `TRAFFIC_SOURCES` loses `interceptor` | killed | `test_an_interceptor_row_is_traffic`, `test_every_declared_observation_source_is_classified`, `test_a_traffic_row_under_the_floor_still_escalates` |
 | M6 `replay` classified as traffic (the partition broken) | killed | `test_no_source_is_both_traffic_and_synthetic`, `test_a_reader_asking_for_traffic_...`, `test_the_replay_nodes_own_baseline_reader_...`, and two more |
@@ -244,3 +267,24 @@ over correct code.
 are restored byte-for-byte from bytes read before the edit, in a `finally`, and `git diff
 --exit-code` over the tracked tree returned 0 after the run. The vacuity measurement above edits
 `nodes.py` too, under the same restore, and also returned 0.
+
+### The four gates
+
+Run on the merged tree, `stroland02/m1-observed` on top of `9bc6fa5`.
+
+| Gate | Result | Exit |
+|---|---|---|
+| `pytest -q` (`-n auto`, the `addopts` default) | 2753 passed, 2 skipped | 0 |
+| `pytest -q -n0` | 2753 passed, 2 skipped, 1 deselected | 0 |
+| `lint_encoding.py src scripts tests` | no output | 0 |
+| `lint-imports` (unredirected, `PYTHONIOENCODING=utf-8`) | `Contracts: 1 kept, 0 broken` | 0 |
+| `lint_dead_links.py src --baseline scripts/dead_links_baseline.txt` | no output | 0 |
+
+`-n0` is the one that had not been run when the previous session ended, and it is a CI gate. It
+takes 7 minutes against this suite where `-n auto` takes 2, which is the whole reason it is the
+measurement that gets skipped.
+
+Both skips are environmental and neither is this change: `test_oasdiff_determinism.py:159` wants
+`SYNC_OASDIFF_DETERMINISM=1`, and `test_symbol_map_pin.py:128` wants a staged symbol map at
+`.cache/specs/symbols.json`, which is gitignored and absent from this worktree. A tree that has
+fetched one reads 2754 passed, 1 skipped, which is the same suite.
