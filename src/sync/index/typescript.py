@@ -627,7 +627,13 @@ class TypeScriptAdapter:
         """The nearest function, method, or arrow-function ancestor of `node`.
 
         Falls back to `root` for a module-level call, which has no such
-        ancestor.
+        ancestor -- and for any other call with no function above it, which a
+        class body would be if `_result_target` recognised a class field.
+
+        A block is not an answer here, though `_response_fields` treats one as
+        a scope. This returns the widest region a read of the name can still be
+        this call's, and the walk narrows it; returning the innermost block
+        instead would lose every read after it in the same function.
         """
         current = node.parent
         while current is not None:

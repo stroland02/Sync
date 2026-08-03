@@ -760,6 +760,11 @@ class PythonAdapter:
 
         Same reason as TypeScript: two unrelated calls sharing a generic result name in
         different functions must not merge into one dependency set.
+
+        The fallback answers for more than a module-level call. A class body holds no ancestor
+        in `_FUNCTION_TYPES` either, so a call in one is scoped to the whole module rather than
+        to the class -- which is why `_response_fields` has to know that a class body is a scope
+        a name can be rebound in, and not only that a function is.
         """
         current = node.parent
         while current is not None:
