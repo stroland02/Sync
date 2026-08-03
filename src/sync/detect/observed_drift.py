@@ -275,7 +275,7 @@ class ObservedDriftDetector:
         """
         wanted = _segments(shape.field_path)
         earlier = self._earlier_windows(shape, siblings)
-        corroborating = [s for s in earlier if s.sample_count >= MIN_SAMPLES]
+        corroborating = [window for window in earlier if window.sample_count >= MIN_SAMPLES]
 
         for site in sites:
             if site.id is None:
