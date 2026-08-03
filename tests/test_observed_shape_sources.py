@@ -21,20 +21,24 @@ that this change does not address.
 from __future__ import annotations
 
 import os
+import shutil
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 from typing import get_args
 
 import pytest
 
-from sync.core import CallSite, ObservedShape
+from sync.core import CallSite, ObservedShape, RepoRef
 from sync.core.models import ObservationSource
 from sync.detect.observed_drift import MIN_SAMPLES, DeclaredField, ObservedDriftDetector
 from sync.graph.sources import SYNTHETIC_SOURCES, TRAFFIC_SOURCES
 from sync.graph.store import GraphStore
-from sync.remediate.nodes import _observed
+from sync.remediate.nodes import _observed, make_replay
 from sync.verify.mock_response import synthesize_mock_response
 
 DSN = os.environ.get("SYNC_DSN", "postgresql://sync:sync@localhost:5433/sync")
+
+FIXTURES = Path(__file__).parent / "fixtures" / "replay"
 
 NOW = datetime(2026, 7, 20, 9, 0, tzinfo=timezone.utc)
 EARLIER = NOW - timedelta(days=30)
@@ -42,9 +46,22 @@ EARLIER = NOW - timedelta(days=30)
 SITE = CallSite(
     repo_id="r1", path="src/billing.ts", line=9, col=23, vendor_id="stripe",
     operation_id="PostCharges", symbol="stripe.charges.create",
-    args_keys=["amount"], response_fields_read=["id", "status"],
+    args_keys=["amount", "currency"], response_fields_read=["id", "status"],
     sdk_version="18.0.0", content_hash="h1",
 )
+
+REPLAY_PLAN = {
+    "schema": {
+        "type": "object",
+        "properties": {
+            "id": {"type": "string"},
+            "status": {"type": "string", "nullable": True},
+        },
+    },
+    "export": "charge",
+    "vendor_packages": ["stripe"],
+    "arguments": [1000],
+}
 
 STATUS_DECLARED_STRING = DeclaredField(
     field_path="/status", json_types=frozenset({"string"}), required=True, nullable=False,
@@ -194,6 +211,47 @@ def test_a_traffic_row_at_the_floor_still_reaches_the_mock(store: GraphStore):
 
     declared = {"type": "object", "properties": {"status": {"type": "string"}}}
     assert synthesize_mock_response(declared, baseline)["status"] == 0
+
+
+def test_the_baseline_a_replay_run_hands_the_mock_builder_carries_traffic_alone(
+    store: GraphStore, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    """The one link the two tests above leave to be read off the source rather than measured.
+
+    They establish that `_observed` answers with traffic and that the mock builder honours what
+    it is handed. That `_observed` is what a replay run actually uses is a single argument at
+    one line of `sync.remediate.nodes`, and a change there that built the baseline some other
+    way would leave both of them passing. So this records what reaches
+    `synthesize_mock_response` during a real `make_replay`, with one row of each kind in the
+    table -- naming the traffic row as well as the absent replay row, because an assertion on
+    the absence alone would also hold if the baseline arrived empty.
+    """
+    store.record_observed_shape(
+        _shape(json_type="number", source="error-payload", sample_count=MIN_SAMPLES)
+    )
+    store.record_observed_shape(
+        _shape(json_type="boolean", source="replay", sample_count=MIN_SAMPLES)
+    )
+
+    handed: list[tuple[str, ...]] = []
+    build = synthesize_mock_response
+
+    def spy(schema, observed=(), **kwargs):
+        observed = tuple(observed)
+        handed.append(tuple(row.source for row in observed))
+        return build(schema, observed, **kwargs)
+
+    monkeypatch.setattr("sync.verify.mock_response.synthesize_mock_response", spy)
+
+    shutil.copytree(FIXTURES / "handles", tmp_path, dirs_exist_ok=True)
+    repo = RepoRef(
+        repo_id="r1", url="https://example.invalid/r",
+        local_path=str(tmp_path), head_sha="0" * 40,
+    )
+
+    make_replay(store)({"site": SITE, "repo": repo, "replay_plan": REPLAY_PLAN})
+
+    assert handed == [("error-payload",)]
 
 
 # --- rows that were already there ---------------------------------------------------
