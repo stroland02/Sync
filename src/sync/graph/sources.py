@@ -12,6 +12,13 @@ These are mechanisms, not vendors: Sentry and Datadog both write `error-payload`
 name appears here and none may, which is what keeps this out of the reach of `CLAUDE.md`'s rule
 that vendor knowledge lives in adapters.
 
+The partition decides two things, and the second was added after the first. On read, which rows
+a caller asking for traffic receives. On write, whether `sample_count` accumulates: a second
+write of a traffic row is a second sample, and a second write of a synthetic row is this ingest
+running again over a body Sync built. Both live here because a row's merge and a row's audience
+are the same question about the mechanism, and answering them from two lists would let them
+disagree.
+
 **Membership is positive.** A source added to `ObservationSource` and forgotten here is then
 absent from every baseline rather than silently entering one -- and `ObservedDriftDetector` is
 the detector most able to violate precision-over-recall, so the failure that costs recall is the
