@@ -350,3 +350,69 @@ CREATE TABLE IF NOT EXISTS observed_call (
 -- leads with (repo_id, vendor_id, operation_id) and serves that. This index serves the other
 -- direction -- everything one unit of work did -- which is how a loop finding is evidenced.
 CREATE INDEX IF NOT EXISTS observed_call_trace_idx ON observed_call (repo_id, trace_id);
+
+-- Grain: one row per (repo_id, vendor_id, operation_id, source, status_class, window_start,
+-- window_end) -- one operation's failures of one class, over one period somebody queried, in one
+-- repository. NOT one row per error and NOT one row per Sentry issue. `error_count` is how many
+-- errors the window held and `issue_count` is how many distinct groups produced them, so a query
+-- counting errors by counting rows is wrong by three orders of magnitude and a query reading
+-- `issue_count` as a volume is wrong the other way.
+--
+-- The window bounds are in the grain because they are a fact about the *query*, not about the
+-- errors. A window derived from what happened to fail shrinks to the extent of the failures, so
+-- an hour with two errors and an hour with two thousand both read as a busy minute and no two
+-- windows are comparable. Only the caller knows the period it asked Sentry for, so the caller
+-- supplies it and a mismatch between the two is undetectable here -- an export queried over a
+-- different period files its counts under a window they did not happen in.
+--
+-- **This is a numerator with no denominator, and it must never be read as a rate.** Sentry sees
+-- failures and nothing else: it cannot say how many requests were made, so `error_count / N` has
+-- no N in this table and never will. `observed_call` is where the denominator lives, at a
+-- different grain from a different sample. Joining them is real work and it is deliberately not
+-- done here; what these rows support unaided is a comparison of one window against another.
+--
+-- `status_class` is '4xx', '5xx', '2xx' or '' -- the hundreds bucket of the response the
+-- representative event recorded, and empty when it recorded none. It is in the key rather than
+-- summed away because a 402 is a declined card and a 503 is the vendor being down, and pooled
+-- they are a count that describes neither integration. Empty is a third answer and not a missing
+-- one: a `TypeError` reading a field off a successful response is the failure a removed response
+-- property causes, and it carries no status at all. The class is read from one event and
+-- attributed to the whole group's count -- Sentry groups by fingerprint so that is usually right
+-- and it is not guaranteed.
+--
+-- It cannot be backfilled: an error tracker's retention is finite and a window that has aged out
+-- is gone. That is why the resolution is chosen now and aggregated later rather than the reverse.
+CREATE TABLE IF NOT EXISTS observed_error_window (
+    id            BIGSERIAL PRIMARY KEY,
+    repo_id       TEXT NOT NULL,
+    vendor_id     TEXT NOT NULL,
+    operation_id  TEXT NOT NULL,
+    -- Which binding the count rests on, so a wrong attribution can be traced to the binder that
+    -- made it. A column and not a join, for the reason `finding.binding_rung` is one.
+    --
+    -- Non-empty always, and there is no 'unresolved' counterpart to `observed_call`'s. An issue
+    -- nothing correlates is not this vendor's, and a Sentry project is the customer's entire
+    -- error stream rather than a pre-filtered one, so recording those would make this table a
+    -- copy of their error volume filed under no operation.
+    binding_rung  TEXT NOT NULL,
+    -- 'sentry-issue' today, and the only writer. In the key for the reason `observed_shape.source`
+    -- is: a count Sentry grouped and a count derived from spans have different sampling stories,
+    -- and merging them lets one masquerade as the other. That disagreement is the point -- two
+    -- independent sources differing about one operation is information about the correlator, and
+    -- with one source there is nothing to disagree with.
+    source        TEXT NOT NULL,
+    status_class  TEXT NOT NULL,
+    window_start  TIMESTAMPTZ NOT NULL,
+    window_end    TIMESTAMPTZ NOT NULL,
+    error_count   INTEGER NOT NULL,
+    -- How many distinct Sentry groups the count came from. Not recoverable from `error_count`,
+    -- and it separates one broken call path from a vendor refusing everything.
+    issue_count   INTEGER NOT NULL,
+    recorded_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
+
+    -- The natural key. `binding_rung` is deliberately outside it, exactly as it is outside
+    -- `finding`'s: the rung describes the binding a count rests on rather than which count it is,
+    -- so a correlator that improves must converge on the row it already wrote instead of adding a
+    -- second one that double-counts the window.
+    UNIQUE (repo_id, vendor_id, operation_id, source, status_class, window_start, window_end)
+);
