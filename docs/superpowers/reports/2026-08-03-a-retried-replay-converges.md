@@ -338,6 +338,11 @@ both are killed by this test among others.
 
 ### Mutation
 
+The harness is `tools/w124_mutations.py` and its output is `tools/w124_mutation_run.txt`.
+**`tools/` is gitignored**, on the precedent the earlier reports set, so neither is committed and
+the table below is the durable record of the run — which is the reason it names kills test by
+test rather than only counting them.
+
 Baseline for the harness: **235 passed, exit 0, `-n0`**, over the twelve test files that can
 reach this change. The four tests between this and the earlier attempt's 231 are M3-W122's, in
 `test_observed_drift.py` and `test_detector_declines.py`, which the harness covers because the
