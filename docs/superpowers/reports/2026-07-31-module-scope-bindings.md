@@ -186,6 +186,47 @@ in this report used `-n0`.
 
 ## 9. The remaining statements, one at a time
 
+### Coverage, before and after
+
+Before, over the whole suite at `9bc6fa5` (`origin/main`) with this task's test file ignored,
+scheduler `-n0`:
+
+    uv run pytest -q -p no:randomly -n0 --color=no --ignore=tests/test_module_scope_bindings.py \
+        --cov=sync.index.python_lang --cov=sync.index.typescript --cov-report=term-missing
+
+    src\sync\index\python_lang.py   373  25  93%  128, 319-320, 340, 450, 492, 498, 516, 520, 522,
+                                                  550, 554, 556, 577, 580, 598, 605, 628, 645, 657,
+                                                  700, 752, 842-848, 867
+    src\sync\index\typescript.py    307  10  97%  96, 235, 409, 413, 438, 455, 476, 495, 528, 558
+    TOTAL                           680  35  95%
+    2750 passed, 4 skipped, 1 deselected in 605.19s (0:10:05)
+
+Those two counts — 25 and 10 — are exactly what baseline-3's ranking table records, so the module
+is being measured the same way it was a day ago.
+
+**After: 24 and 9.** That figure is derived rather than re-measured over the whole suite, and the
+derivation is exact. Coverage of the two modules from the new test file alone names every line it
+does *not* reach; intersecting that against the before-list above leaves precisely two lines that
+the file closes and nothing else:
+
+    uv run pytest tests/test_module_scope_bindings.py -q -p no:randomly -n0 --color=no \
+        --cov=sync.index.python_lang --cov=sync.index.typescript --cov-report=term-missing
+    14 passed in 5.34s
+
+Every other before-missing line still appears in that run's missing list — `128`, `319-320`, `340`,
+`450`, `492`, `498`, `516`, `520`, `522`, `550`, `554`, `556`, `577`, `580`, `598`, `605`, `645`,
+`657`, `700`, `752`, `842-848`, `867` on the Python side and `96`, `235`, `409`, `413`, `438`,
+`455`, `476`, `528`, `558` on the TypeScript side. **`628` and `495` are the only two absent from
+it.** So the new tests close the two statements this task was for, add nothing incidental, and the
+suite total goes from 35 missed to 33.
+
+The whole-suite re-measurement was started and stopped: it was contending with the required gate
+run and with two sibling tasks on the same machine, and neither was finishing. The derivation above
+answers the same question from a five-second run, which is why it was preferred rather than
+guessed at.
+
+### The map
+
 Thirty-five statements were uncovered across the two modules before this task and thirty-three are
 after it — thirty declines and three capability statements. This is the map for them, not a plan to
 close them; the brief asked for the pair and the table, not for all thirty-five.
@@ -315,3 +356,24 @@ guard.
 as answering for a module-level call; a class body reaches it too, and gets the module rather than
 the class. That is a documentation fix, and it should be made by whoever takes the first item,
 because the sentence to write depends on what the walk ends up doing.
+
+## 11. The four gates
+
+| Gate | Result | Exit |
+|---|---|---:|
+| `uv run pytest -q` | 2764 passed, 4 skipped in 279.57s, scheduler `-n auto` | **0** |
+| `uv run python scripts/lint_encoding.py src scripts tests` | no output | **0** |
+| `PYTHONIOENCODING=utf-8 uv run lint-imports` | `sync.core depends on nothing KEPT` — 1 kept, 0 broken, 98 files, 203 dependencies | **0** |
+| `uv run python scripts/lint_dead_links.py src --baseline scripts/dead_links_baseline.txt` | no output | **0** |
+
+2764 is 2750 plus this task's fourteen, and 2750 is what the same suite produced with the new file
+ignored. `lint-imports` was run unredirected, which is the only way it survives its own
+box-drawing banner.
+
+Schedulers, since they differ per measurement: the gate ran `-n auto`; the coverage measurements
+and every mutation run used `-n0`.
+
+Databases: `SYNC_DSN` was left unset throughout, so `tests/conftest.py` created `sync_test_<pid>`
+per run and dropped it in `pytest_unconfigure`. No database belonging to another task was created,
+pinned or dropped — the sweep excludes any database whose owning process is still alive, which is
+what makes three concurrent suites on one machine safe here.
