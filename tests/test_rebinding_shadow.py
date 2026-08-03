@@ -66,9 +66,12 @@ PYTHON_FORMS = (
 )
 TYPESCRIPT_FORMS = (
     "parameter",
+    "optional_parameter",
     "arrow_parameter",
     "for_of",
+    "counted_loop",
     "catch_parameter",
+    "switch_case",
     "destructured",
     "array_pattern",
     "bare_block",
@@ -128,9 +131,9 @@ def test_a_python_rebinding_keeps_its_reads_to_itself(tmp_path, form) -> None:
 def test_a_typescript_rebinding_keeps_its_reads_to_itself(tmp_path, form) -> None:
     """The same claim over TypeScript's scopes, which include blocks.
 
-    `for_of`, `catch_parameter`, `destructured`, `array_pattern` and `bare_block` rebind inside
-    the *same function* as the indexed call, in a block. Nothing in Python can do that, and a
-    fix ported across unchanged would leave all five leaking.
+    `for_of`, `counted_loop`, `catch_parameter`, `switch_case`, `destructured`, `array_pattern`
+    and `bare_block` rebind inside the *same function* as the indexed call, in a block. Nothing
+    in Python can do that, and a fix ported across unchanged would leave all seven leaking.
     """
     assert _fields(tmp_path, TYPESCRIPT, form) == [GENUINE]
 
