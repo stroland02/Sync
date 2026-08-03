@@ -144,7 +144,7 @@ No fixture in this task produced a request-side binding without a response-side 
 
 All fourteen tests pin behaviour that already existed, so "watch it fail first" can only mean
 proving each one fails against a mutation of the code it covers. Ten mutations, run through
-`tools/mutate_scope.py`, scheduler `-n0`, baseline 14 passed:
+`tools/mutate_scope.py`, gitignored. Scheduler `-n0`, baseline 14 passed:
 
 | Mutation | Where | Change | Verdict | Tests killed |
 |---|---|---|---|---:|
