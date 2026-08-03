@@ -76,6 +76,7 @@ TYPESCRIPT_FORMS = (
     "array_pattern",
     "bare_block",
     "var_in_function",
+    "var_in_nested_block",
     "nested_function",
 )
 
@@ -169,6 +170,17 @@ def test_a_nested_scope_that_only_reads_still_donates(tmp_path, language) -> Non
 
 
 # --- the shape around the change -----------------------------------------------------
+
+
+def test_a_let_one_block_down_shadows_that_block_and_no_more(tmp_path) -> None:
+    """The control for `var_in_nested_block`, and the reason that fix is not a wider one.
+
+    The same shape written with `let` really is block-scoped, so `report`'s first line reads the
+    outer object and `total` is a field the call genuinely returns. A fix that treated any
+    declaration one block down as shadowing the whole function would drop it -- a missed break,
+    where the `var` case it is copied from is a false finding.
+    """
+    assert _fields(tmp_path, TYPESCRIPT, "let_in_nested_block") == [GENUINE, "total"]
 
 
 @pytest.mark.parametrize("language", BOTH)

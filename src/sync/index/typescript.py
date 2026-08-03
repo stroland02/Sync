@@ -179,6 +179,30 @@ def _holds_binding(node: Node, source: bytes, name: str) -> bool:
     return any(_holds_binding(child, source, name) for child in node.children)
 
 
+def _hoisted_var(node: Node, source: bytes, name: str) -> bool:
+    """Whether `node` holds a `var` binding of `name` belonging to the function around it.
+
+    `var` is the one declaration whose scope is the enclosing *function* rather than the block it
+    is written in, so it has to be looked for through the blocks `_holds_binding` deliberately
+    stops at. A nested function is still a wall: its own `var`s hoist to itself.
+
+    A read above such a declaration sees the hoisted binding holding `undefined`, never the outer
+    object, which is why finding one here shadows the whole function exactly as a parameter does.
+    """
+    if node.type in _FUNCTION_TYPES:
+        return False
+    if node.type == "variable_declaration":
+        for declarator in node.named_children:
+            target = declarator.child_by_field_name("name")
+            if target is not None and name in _pattern_names(target, source):
+                return True
+    if node.type == "for_in_statement" and any(child.type == "var" for child in node.children):
+        left = node.child_by_field_name("left")
+        if left is not None and name in _pattern_names(left, source):
+            return True
+    return any(_hoisted_var(child, source, name) for child in node.children)
+
+
 def _scope_body(scope: Node) -> Node:
     """The node whose children are the scope's own statements.
 
@@ -197,7 +221,7 @@ def _rebinds(scope: Node, source: bytes, name: str) -> bool:
     """Whether `scope` gives `name` a binding of its own.
 
     Its head first -- parameters, a `catch` parameter, a `for ... of` target -- then whatever
-    its body holds.
+    its body holds, and for a function also whatever `var` any block inside it declares.
     """
     for field in ("parameters", "parameter"):
         header = scope.child_by_field_name(field)
@@ -209,9 +233,12 @@ def _rebinds(scope: Node, source: bytes, name: str) -> bool:
         left = scope.child_by_field_name("left")
         if left is not None and name in _pattern_names(left, source):
             return True
-    return any(
-        _holds_binding(child, source, name) for child in _scope_body(scope).children
-    )
+    body = _scope_body(scope)
+    if scope.type in _FUNCTION_TYPES and any(
+        _hoisted_var(child, source, name) for child in body.children
+    ):
+        return True
+    return any(_holds_binding(child, source, name) for child in body.children)
 
 
 def _unshadowed(scope: Node, source: bytes, name: str, call_node: Node) -> Iterator[Node]:
