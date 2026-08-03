@@ -99,6 +99,20 @@ def test_the_vendor_class_name_on_a_foreign_module_does_not_bind(adapter) -> Non
     assert "src/foreign_constructor.py" not in _bound(adapter)
 
 
+def test_the_module_s_own_name_is_not_something_the_file_imported(adapter) -> None:
+    """`from stripe import StripeClient` imports `StripeClient`, and not `stripe`.
+
+    The scan that collects imported names walks the statement's named children and skips the
+    module name among them. It skipped it by object identity, which tree-sitter never gives --
+    every access returns a fresh handle, which is why `_same` exists in this module -- so the
+    vendor's module name landed in the set of names a constructor may be spelled as. A file that
+    binds `stripe` to something of its own then has every call on that object attributed to the
+    vendor: a call site against code that never reached Stripe, which is the false attribution
+    this file's negative cases exist to prevent.
+    """
+    assert "src/module_name_shadowed.py" not in _bound(adapter)
+
+
 def test_a_client_only_received_as_a_parameter_does_not_bind(adapter) -> None:
     """The adjacent form left unfixed, asserted so the boundary is read rather than discovered.
 

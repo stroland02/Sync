@@ -611,7 +611,7 @@ class PythonAdapter:
                     if module is None or _text(module, source).split(".")[0] != self._module:
                         continue
                     for child in node.named_children:
-                        if child is module:
+                        if _same(child, module):
                             continue
                         if child.type == "dotted_name":
                             imported.add(_text(child, source))
