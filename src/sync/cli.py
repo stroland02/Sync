@@ -740,6 +740,7 @@ def _literal_call_sites(repo: RepoRef) -> tuple[list[CallSite], list[str]]:
             # for a file that does not parse -- and a per-file warning is not a coverage figure:
             # it says a file was missed without ever saying how much was.
             unread.append(relative)
+            unread.append(relative)
             continue
         for vendor in DEPRECATION_SOURCES:
             sites.extend(

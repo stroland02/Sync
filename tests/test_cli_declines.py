@@ -1012,3 +1012,67 @@ def test_an_untouched_dependency_tree_is_not_announced(tmp_path, monkeypatch, ca
     assert run(_run_args(origin, tmp_path, "clean")) == 0
 
     assert "discarded" not in capsys.readouterr().out
+
+
+# --- `python -m sync.cli`: the module entry point ------------------------------------
+#
+# `raise SystemExit(main())` runs only when this module is `__main__`, which no in-process test
+# can arrange -- and a child process's lines are invisible to a coverage run that did not start
+# it under coverage, so the statement stays in the missing list however hard these two press on
+# it. That is a property of the instrument rather than of the code, and it is the same caveat
+# `2026-07-30-sync-coverage-baseline-3.md` records for `mcp/server.py`.
+#
+# What they establish is the thing the number cannot: the guard exists and it carries the exit
+# code out. Delete it and both go red -- an unguarded module runs `main()` never, exits 0 always,
+# and every wrapper reading `$?` is told the command succeeded.
+
+
+def _module_entry_point(*args: str, **env_overrides) -> subprocess.CompletedProcess:
+    """`python -m sync.cli`, run the way an operator without an installed console script runs it.
+
+    `PYTHONIOENCODING` in the child's environment as well as `encoding` on the call: the first
+    says which bytes arrive and the second says how to decode them, and on this platform a
+    Python child emits cp1252 unless told otherwise. `errors="replace"` because this output is
+    read as diagnosis rather than as data.
+    """
+    environment = {**os.environ, "PYTHONIOENCODING": "utf-8", **env_overrides}
+    return subprocess.run(
+        [sys.executable, "-m", "sync.cli", *args],
+        capture_output=True, text=True, encoding="utf-8", errors="replace", env=environment,
+    )
+
+
+def test_the_module_entry_point_carries_a_refusal_out_as_the_exit_code(monkeypatch):
+    """A wrapper reads `$?`, and a refusal that exited 0 would tell it the command worked.
+
+    `feed-public-key` with no key is the cheapest refusal to reach -- it opens no database and
+    reads no file -- and it exits 2 through `raise SystemExit(main())` and nowhere else.
+    """
+    result = _module_entry_point("feed-public-key", **{cli.FEED_SIGNING_KEY_ENV: ""})
+
+    assert result.returncode == 2
+    assert result.stdout == ""
+    assert cli.FEED_SIGNING_KEY_ENV in result.stderr
+
+
+def test_the_module_entry_point_carries_a_success_out_too(signing_key):
+    """The counterweight, and it is the half that fails against a module with no guard at all:
+    without the block the process exits 0 having printed nothing, which passes any assertion
+    that only reads the exit code of a refusal.
+    """
+    private, _ = signing_key
+
+    result = _module_entry_point("feed-public-key")
+
+    assert result.returncode == 0
+    assert bytes.fromhex(result.stdout.strip()) == private.public_key().public_bytes_raw()
+
+
+def test_the_module_entry_point_refuses_an_invocation_naming_no_subcommand():
+    """Argparse's own refusal, reaching the shell. `main()` never returns here -- the parser
+    raises `SystemExit` before `args.func` is consulted -- so this is the one path out of the
+    module that does not travel through the `raise`, and it still has to be non-zero."""
+    result = _module_entry_point()
+
+    assert result.returncode != 0
+    assert result.stdout == ""
