@@ -21,6 +21,13 @@ count. It is a floor on the *divergent* row, not on the operation: a rare field 
 drifts stays silent until it has been seen enough times to be a baseline, which is the intended
 trade.
 
+It governs the row that *grades* a finding as well as the row one is raised on, and for the same
+reason rather than by analogy. `MIN_SAMPLES` is derived from what a count can be -- below it, one
+incident or one account supplies the whole of it -- and not from the use the row is put to, so it
+transfers wherever a row is read as a baseline. A sibling read as "the baseline's own history" is
+exactly such a read. Applying it to one role and not the other would have this module decline to
+call a shape a baseline and then rest a severity on it as one.
+
 Absence is not evidence
 -----------------------
 A field the specification marks required and traffic never carries is *not* reported. A field can
@@ -36,6 +43,12 @@ another way now -- is a change in the vendor's behaviour, and is reported as bre
 uncorroborated divergence, where traffic has only ever disagreed with the specification, is far
 more likely to be a specification that was always inaccurate, and is reported as information. The
 distinction cannot live anywhere but severity, because both produce the same divergence.
+
+Corroboration is a claim about a baseline, so the corroborating row clears the sample floor too. A
+thinner earlier observation is not discarded quietly: the divergence is still reported at `info`,
+and the rationale names that shape and its count. A reviewer told only "no earlier observation"
+would be told something false about what the store holds, which is the trade this distinction
+exists to avoid making in the other direction.
 
 That comparison -- observed now against observed before -- never raises a finding by itself. A
 baseline that shifts between windows in a way the specification permits is silent. It is
@@ -261,7 +274,8 @@ class ObservedDriftDetector:
         trade: a divergence in a response field nobody consumes is real and is not actionable.
         """
         wanted = _segments(shape.field_path)
-        changed = self._contradicts_earlier_window(shape, siblings)
+        earlier = self._earlier_windows(shape, siblings)
+        corroborating = [window for window in earlier if window.sample_count >= MIN_SAMPLES]
 
         for site in sites:
             if site.id is None:
@@ -284,25 +298,32 @@ class ObservedDriftDetector:
                 # changing. Uncorroborated, it is more likely a specification that was always
                 # inaccurate, and claiming otherwise would spend trust the finding has not
                 # earned.
-                severity="breaking" if changed else "info",
-                rationale=self._rationale(shape, field, divergence, changed, site, operation_id),
+                severity="breaking" if corroborating else "info",
+                rationale=self._rationale(
+                    shape, field, divergence, earlier, corroborating, site, operation_id
+                ),
             )
 
-    def _contradicts_earlier_window(
+    def _earlier_windows(
         self, shape: ObservedShape, siblings: Sequence[ObservedShape]
-    ) -> bool:
-        """Whether this field was seen behaving differently before this shape first appeared.
+    ) -> list[ObservedShape]:
+        """Siblings showing this field behaving differently before this shape first appeared.
 
         Derived from the baseline that already exists rather than from a second query: a sibling
         row for the same field with an earlier `first_seen` is the earlier window, and its
         existence is what separates "the vendor changed something" from "the specification has
         always been wrong about this field".
+
+        Returned rather than reduced to a verdict because the caller needs both halves. Which of
+        these clear the sample floor decides severity; which of them do not is the only thing
+        that can tell a reviewer an earlier observation was seen and discounted rather than
+        never made at all.
         """
-        return any(
-            sibling.first_seen < shape.first_seen
+        return [
+            sibling
             for sibling in siblings
-            if sibling.json_type != shape.json_type
-        )
+            if sibling.json_type != shape.json_type and sibling.first_seen < shape.first_seen
+        ]
 
     def _evidence(self, shape: ObservedShape) -> str:
         """What the claim is made of, in the terms a reviewer would need to discount it."""
@@ -316,22 +337,48 @@ class ObservedDriftDetector:
         shape: ObservedShape,
         field: DeclaredField,
         divergence: str,
-        changed: bool,
+        earlier: Sequence[ObservedShape],
+        corroborating: Sequence[ObservedShape],
         site: CallSite,
         operation_id: str,
     ) -> str:
         """What a reviewer needs in order to judge a claim the detector cannot prove."""
-        history = (
-            "The same field was seen arriving differently before this shape appeared, so the "
-            "vendor's behaviour changed rather than the specification having always been wrong."
-            if changed
-            else "No earlier observation shows this field behaving differently, so an inaccurate "
-            "specification is at least as likely an explanation as a change in behaviour."
-        )
-
         return (
             f"`{field.field_path}` on {operation_id} {divergence}, and the call site at "
-            f"{site.path}:{site.line} reads it. {self._evidence(shape)} {history} "
+            f"{site.path}:{site.line} reads it. {self._evidence(shape)} "
+            f"{self._history(earlier, corroborating)} "
             "This rests on observed traffic, not on anything the vendor published: a sample "
             "can misrepresent a rollout in progress, and no specification says this changed."
+        )
+
+    def _history(
+        self, earlier: Sequence[ObservedShape], corroborating: Sequence[ObservedShape]
+    ) -> str:
+        """What the earlier window says, stated as strongly as the evidence for it allows.
+
+        Three outcomes rather than two. An earlier observation too thin to be a baseline is
+        neither corroboration nor the absence of one, and collapsing it into either tells a
+        reviewer something untrue about what the store holds.
+        """
+        if corroborating:
+            return (
+                "The same field was seen arriving differently before this shape appeared, so the "
+                "vendor's behaviour changed rather than the specification having always been "
+                "wrong."
+            )
+
+        if earlier:
+            # The largest is the strongest evidence that still failed to reach the floor. Counts
+            # are never added across these rows: each is a different shape, so a sum would quote
+            # a baseline no single observation supports.
+            thin = max(earlier, key=lambda sibling: sibling.sample_count)
+            return (
+                f"An earlier observation shows this field arriving as {thin.json_type}, seen "
+                f"{thin.sample_count} time(s) against a floor of {MIN_SAMPLES} -- too thin to be "
+                f"a baseline, so it is not read as the vendor's behaviour having changed."
+            )
+
+        return (
+            "No earlier observation shows this field behaving differently, so an inaccurate "
+            "specification is at least as likely an explanation as a change in behaviour."
         )

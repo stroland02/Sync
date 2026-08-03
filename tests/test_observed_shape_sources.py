@@ -252,9 +252,12 @@ def test_one_replay_row_no_longer_escalates_an_uncorroborated_divergence(store: 
     `first_seen` flipped `info` to `breaking` -- on a rationale telling the reviewer the claim
     rested on observed traffic, of a row Sync synthesized from what the vendor published.
 
-    The sibling window is unchanged and is still wrong for traffic; see
-    `test_a_traffic_row_under_the_floor_still_escalates`. What changed is that a replay row
-    cannot reach it.
+    The sibling window has since been given the same sample floor by M3-W122, which is what
+    `test_a_traffic_row_under_the_floor_no_longer_escalates` records. That is why the replay row
+    here is written **at** the floor: at `_shape`'s default of one sample it would now be
+    excluded by the floor as well as by the source filter, and this test would keep passing
+    through the source filter being reverted -- proving nothing it was written to prove. At the
+    floor, provenance is the only thing that can keep it out of the window.
     """
     store.upsert_call_site(SITE)
     store.record_observed_shape(
@@ -264,7 +267,11 @@ def test_one_replay_row_no_longer_escalates_an_uncorroborated_divergence(store: 
 
     assert [f.severity for f in ObservedDriftDetector(store, spec).scan()] == ["info"]
 
-    store.record_observed_shape(_shape(source="replay", first_seen=EARLIER, last_seen=EARLIER))
+    store.record_observed_shape(
+        _shape(
+            source="replay", sample_count=MIN_SAMPLES, first_seen=EARLIER, last_seen=EARLIER,
+        )
+    )
 
     findings = list(ObservedDriftDetector(store, spec).scan())
     assert [f.severity for f in findings] == ["info"]
@@ -390,22 +397,26 @@ def test_a_held_synthetic_count_survives_a_second_apply_schema_and_a_further_wri
     assert [row.sample_count for row in rows] == [5]
 
 
-# --- the defect this task did not fix -----------------------------------------------
+# --- the defect this task did not fix, fixed by M3-W122 -----------------------------
 
 
-def test_a_traffic_row_under_the_floor_still_escalates(store: GraphStore):
-    """**This pins a defect.** It is the second finding of M3-W119 and is not fixed here.
+def test_a_traffic_row_under_the_floor_no_longer_escalates(store: GraphStore):
+    """The inversion of M3-W119's second finding, which this line pinned as a defect.
 
-    `MIN_SAMPLES` gates the row being reported and not the siblings it is compared against, so a
+    `MIN_SAMPLES` gated the row being reported and not the siblings it was compared against, so a
     single `error-payload` row -- one upstream incident, one misbehaving account, which is the
-    module docstring's own justification for the floor -- is enough to escalate a divergence to
-    `breaking` on the claim that the vendor's behaviour changed. The module says a shape seen
-    fewer than `MIN_SAMPLES` times "is not a baseline", and `_contradicts_earlier_window` then
-    reads exactly such a row as "the baseline's own history".
+    module docstring's own justification for the floor -- escalated a divergence to `breaking` on
+    the claim that the vendor's behaviour changed. The floor now reaches the sibling window, so
+    the module no longer declines to call a shape a baseline and then rests a severity on it as
+    one.
 
-    Filtering by source does not touch this and was never going to: the escalation needs one
-    row of any source. Fixing it changes the severity of findings against live `error-payload`
-    baselines, which needs its own measurement.
+    The fixture is W119's, unchanged, so what moved is the verdict rather than the question. Two
+    sources still, and no synthetic row anywhere in the database: this was never about provenance
+    and the source filter above is not what fixes it.
+
+    Both assertions are made after the sibling is written, because the grade alone no longer
+    separates this from the state before it -- the rationale is what says the row was seen and
+    discounted rather than never written.
     """
     store.upsert_call_site(SITE)
     store.record_observed_shape(
@@ -413,7 +424,9 @@ def test_a_traffic_row_under_the_floor_still_escalates(store: GraphStore):
     )
     spec = {"PostCharges": [STATUS_DECLARED_STRING]}
 
-    assert [f.severity for f in ObservedDriftDetector(store, spec).scan()] == ["info"]
+    before = list(ObservedDriftDetector(store, spec).scan())
+    assert [f.severity for f in before] == ["info"]
+    assert "No earlier observation" in before[0].rationale
 
     store.record_observed_shape(
         _shape(
@@ -423,5 +436,26 @@ def test_a_traffic_row_under_the_floor_still_escalates(store: GraphStore):
     )
 
     findings = list(ObservedDriftDetector(store, spec).scan())
+    assert [f.severity for f in findings] == ["info"]
+    assert "the vendor's behaviour changed" not in findings[0].rationale
+    assert f"seen 1 time(s) against a floor of {MIN_SAMPLES}" in findings[0].rationale
+
+
+def test_a_traffic_row_at_the_floor_still_escalates(store: GraphStore):
+    """The counterpart that keeps the test above from being satisfied by a detector that stopped
+    reading siblings at all. Same two sources, same fixture, one count changed."""
+    store.upsert_call_site(SITE)
+    store.record_observed_shape(
+        _shape(json_type="number", source="error-payload", sample_count=MIN_SAMPLES)
+    )
+    store.record_observed_shape(
+        _shape(
+            json_type="string", source="interceptor", sample_count=MIN_SAMPLES,
+            first_seen=EARLIER, last_seen=EARLIER,
+        )
+    )
+
+    findings = list(ObservedDriftDetector(store, {"PostCharges": [STATUS_DECLARED_STRING]}).scan())
+
     assert [f.severity for f in findings] == ["breaking"]
     assert "the vendor's behaviour changed" in findings[0].rationale
