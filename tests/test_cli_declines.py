@@ -23,14 +23,19 @@ import io
 import json
 import os
 import secrets
+import subprocess
 import sys
+from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from typing import TypedDict
 
 import pytest
 import yaml
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+from langgraph.checkpoint.memory import InMemorySaver
+from langgraph.graph import END, START, StateGraph
 
 import sync.cli as cli
 from sync.cli import (
@@ -42,9 +47,10 @@ from sync.cli import (
     feed_public_key,
     ingest,
     merge_outcome,
+    run,
     shapes,
 )
-from sync.core import CallSite, ObservedShape, RepoRef
+from sync.core import CallSite, Finding, ObservedShape, RepoRef
 from sync.detect.observed_drift import MIN_SAMPLES
 from sync.graph.store import GraphStore
 from sync.remediate import corpus
@@ -733,3 +739,276 @@ def test_the_report_still_renders_when_no_pair_is_asked_for(store, capsys):
     assert benchmark(_benchmark_args()) == 0
 
     assert capsys.readouterr().out != ""
+
+
+# --- `sync run`: what the two paths through the remediation loop print ---------------
+#
+# Both statements below sit inside `run()`, which normally reaches Postgres, the network and the
+# Agent SDK. Every one of those is replaced, and the graph is a stand-in compiled against the
+# same checkpointer contract -- the device `test_cli.py` already uses for `_thread_to_invoke`,
+# for the reason it gives there: the question is what LangGraph does with an interrupted thread,
+# and a fake `get_state` would only assert what this file believes.
+
+
+class _RunState(TypedDict, total=False):
+    finding: object
+    repo: RepoRef
+    branch: str
+    outcome: str
+    pr_url: str
+    report_reason: str
+
+
+class _LoopStore:
+    """`GraphStore` for a run that reaches the remediation loop. Answers, records nothing."""
+
+    def __init__(self, findings):
+        self._findings = findings
+
+    @contextmanager
+    def transaction(self):
+        yield
+
+    def apply_schema(self):
+        pass
+
+    def truncate_all(self, keep=()):
+        pass
+
+    def replace_call_sites(self, repo_id, sites):
+        return [f"cs-{index}" for index, _ in enumerate(sites)]
+
+    def upsert_vendor_change(self, change):
+        return "vc-1"
+
+    def insert_finding(self, finding):
+        return finding.call_site_id
+
+
+class _LoopVendor:
+    vendor_id = VENDOR
+
+    def fetch_changes(self, from_version, to_version):
+        return []
+
+
+class _LoopAdapter:
+    """A language adapter that claims the repository and finds nothing in it.
+
+    `discard_contaminated_dependencies` is the whole variable: `_reset_clone` keeps ignored
+    files on purpose, so a dependency tree the previous finding doctored survives into the next
+    one, and this is what the adapter says about it.
+    """
+
+    contaminated = False
+
+    def __init__(self, vendor_adapter=None):
+        pass
+
+    def matches(self, repo):
+        return True
+
+    def index(self, repo):
+        return []
+
+    def discard_contaminated_dependencies(self, repo):
+        return type(self).contaminated
+
+
+def _one_finding():
+    return Finding(
+        detector="vendor_change", claim="response-field", call_site_id="site-1",
+        vendor_change_id="vc-1", severity="breaking", rationale="status removed",
+    )
+
+
+class _OneFindingDetector:
+    def __init__(self, store, vendor_id: str = VENDOR, repo_id: str | None = None):
+        self._vendor_id = vendor_id
+
+    def scan(self):
+        return [_one_finding()] if self._vendor_id == VENDOR else []
+
+
+class _MemoryCheckpointer(InMemorySaver):
+    def setup(self):
+        pass
+
+    @classmethod
+    @contextmanager
+    def from_conn_string(cls, dsn):
+        yield cls()
+
+
+def _remediation_graph(pushed_sha: str):
+    """A stand-in for the remediation graph, carrying the two node names either side of a push.
+
+    `await_ci` is written the way the real one behaves and that is the whole point of the
+    fixture: it reads HEAD out of the clone and matches it against the commit the branch
+    carries, because that is how a CI run is found. A resumed run whose clone was never moved
+    onto the pushed branch polls for a commit no run exists for.
+    """
+
+    def push(state: _RunState) -> _RunState:
+        return {"branch": "sync/api-drift-aaaa"}
+
+    def await_ci(state: _RunState) -> _RunState:
+        head = subprocess.run(
+            ["git", "rev-parse", "HEAD"], cwd=state["repo"].local_path,
+            capture_output=True, text=True, encoding="utf-8", check=True,
+        ).stdout.strip()
+        if head != pushed_sha:
+            return {
+                "outcome": "no_ci_run",
+                "report_reason": f"polled {head[:12]}, which no run was started for",
+            }
+        return {"outcome": "opened", "pr_url": "https://github.invalid/pull/1"}
+
+    builder = StateGraph(_RunState)
+    builder.add_node("push", push)
+    builder.add_node("await_ci", await_ci)
+    builder.add_edge(START, "push")
+    builder.add_edge("push", "await_ci")
+    builder.add_edge("await_ci", END)
+    return builder.compile(checkpointer=InMemorySaver())
+
+
+def _origin_with_a_pushed_branch(tmp_path: Path) -> tuple[Path, str]:
+    """An origin carrying the branch a process that has since died pushed to it."""
+    origin = tmp_path / "origin"
+    origin.mkdir()
+    identity = ["-c", "user.email=t@example.invalid", "-c", "user.name=t"]
+    subprocess.run(["git", "init", "-q", "-b", "main", str(origin)], check=True)
+    (origin / "billing.ts").write_text("original\n", encoding="utf-8")
+    for args in (
+        ["add", "-A"], ["commit", "-q", "-m", "root"],
+        ["checkout", "-q", "-b", "sync/api-drift-aaaa"],
+    ):
+        subprocess.run(["git", *identity, *args], cwd=origin, check=True)
+    (origin / "billing.ts").write_text("patched\n", encoding="utf-8")
+    for args in (["add", "-u"], ["commit", "-q", "-m", "fix: the finding"]):
+        subprocess.run(["git", *identity, *args], cwd=origin, check=True)
+    pushed = subprocess.run(
+        ["git", "rev-parse", "HEAD"], cwd=origin,
+        capture_output=True, text=True, encoding="utf-8", check=True,
+    ).stdout.strip()
+    subprocess.run(["git", *identity, "checkout", "-q", "main"], cwd=origin, check=True)
+    return origin, pushed
+
+
+def _stub_the_run(monkeypatch, graph, store):
+    """Everything `run()` touches outside the loop under test."""
+    from sync.signals.registry import PreparedVendor
+
+    monkeypatch.setattr(
+        cli, "prepare_vendor",
+        lambda vendor_id, context: PreparedVendor(adapter=_LoopVendor(), documents=()),
+    )
+    monkeypatch.setattr(cli, "GraphStore", lambda dsn: store)
+    monkeypatch.setattr(cli, "VendorChangeDetector", _OneFindingDetector)
+    monkeypatch.setattr(cli, "TypeScriptAdapter", _LoopAdapter)
+    monkeypatch.setattr(cli, "http_fetch", lambda url, **kw: "")
+    monkeypatch.setattr(cli, "PostgresSaver", _MemoryCheckpointer)
+    monkeypatch.setattr(cli, "load_catalogue", dict)
+    monkeypatch.setattr(cli, "build_graph", lambda **kwargs: graph)
+
+
+def _run_args(origin: Path, tmp_path: Path, run_id: str):
+    return argparse.Namespace(
+        vendor=VENDOR, from_version="v2320", to_version="v2330", repo=str(origin),
+        dsn="postgresql://unused", cache=str(tmp_path / "cache"), limit=1, run_id=run_id,
+    )
+
+
+def test_a_resumed_run_polls_the_commit_its_dead_predecessor_pushed(tmp_path, monkeypatch, capsys):
+    """The two statements that put a resumed run's clone back where the checkpoint expects it.
+
+    A run interrupted during the CI wait left its patch in a temporary directory that died with
+    it; the pushed branch is the only durable part. This process clones fresh, so it sits on the
+    default branch -- and `await_ci` matches CI runs against the commit HEAD names, so without
+    the checkout it polls a commit no run exists for and reports that half an hour later.
+
+    Asserted on the line the operator reads. The failure this prevents is not a missing answer
+    but a wrong one: the run finishes, prints an outcome, and the outcome is about a commit
+    nobody built.
+    """
+    origin, pushed = _origin_with_a_pushed_branch(tmp_path)
+    graph = _remediation_graph(pushed)
+    store = _LoopStore([_one_finding()])
+    _stub_the_run(monkeypatch, graph, store)
+
+    # What the process that died left behind: a thread interrupted after the push, carrying the
+    # branch and a `repo` naming a working copy that is gone.
+    thread = {"configurable": {"thread_id": "site-1:resumed:0"}}
+    graph.update_state(thread, {
+        "branch": "sync/api-drift-aaaa",
+        "repo": RepoRef(repo_id=REPO, url=str(origin), local_path=str(tmp_path / "gone"),
+                        head_sha=pushed),
+    }, as_node="push")
+
+    assert run(_run_args(origin, tmp_path, "resumed")) == 0
+
+    assert "opened: https://github.invalid/pull/1" in capsys.readouterr().out
+
+
+def test_without_the_checkout_the_resumed_run_reports_a_commit_nobody_built(
+    tmp_path, monkeypatch, capsys
+):
+    """The counterweight, and it is what makes the test above mean something. With the clone
+    left where a fresh checkout puts it, the same graph on the same thread finishes and prints a
+    verdict about the wrong commit -- and an operator reading it has no way to tell that from a
+    repository whose CI genuinely did not run.
+    """
+    origin, pushed = _origin_with_a_pushed_branch(tmp_path)
+    graph = _remediation_graph(pushed)
+    store = _LoopStore([_one_finding()])
+    _stub_the_run(monkeypatch, graph, store)
+    monkeypatch.setattr(cli, "_checkout_branch", lambda repo, branch: None)
+
+    thread = {"configurable": {"thread_id": "site-1:unmoved:0"}}
+    graph.update_state(thread, {
+        "branch": "sync/api-drift-aaaa",
+        "repo": RepoRef(repo_id=REPO, url=str(origin), local_path=str(tmp_path / "gone"),
+                        head_sha=pushed),
+    }, as_node="push")
+
+    assert run(_run_args(origin, tmp_path, "unmoved")) == 0
+
+    printed = capsys.readouterr().out
+    assert "no_ci_run: polled " in printed
+    assert "opened:" not in printed
+
+
+def test_a_discarded_dependency_tree_is_announced_rather_than_done_quietly(
+    tmp_path, monkeypatch, capsys
+):
+    """`_reset_clone` runs `git clean` without `-x`, so the dependency install the previous
+    finding paid for survives -- which is the point, and also means an install that finding
+    doctored survives too. The adapter discards it, and the discard is printed.
+
+    An operator who does not see this line reads the next finding's wall clock as the cost of
+    that finding. Silent, it is a reinstall attributed to the wrong work.
+    """
+    origin, pushed = _origin_with_a_pushed_branch(tmp_path)
+    graph = _remediation_graph(pushed)
+    store = _LoopStore([_one_finding()])
+    _stub_the_run(monkeypatch, graph, store)
+    monkeypatch.setattr(_LoopAdapter, "contaminated", True)
+
+    assert run(_run_args(origin, tmp_path, "fresh")) == 0
+
+    assert "discarded the previous finding's dependency tree" in capsys.readouterr().out
+
+
+def test_an_untouched_dependency_tree_is_not_announced(tmp_path, monkeypatch, capsys):
+    """The counterweight: the line prints on the adapter's answer rather than on every finding.
+    A message an operator sees on every run is a message they learn to skip."""
+    origin, pushed = _origin_with_a_pushed_branch(tmp_path)
+    graph = _remediation_graph(pushed)
+    store = _LoopStore([_one_finding()])
+    _stub_the_run(monkeypatch, graph, store)
+    monkeypatch.setattr(_LoopAdapter, "contaminated", False)
+
+    assert run(_run_args(origin, tmp_path, "clean")) == 0
+
+    assert "discarded" not in capsys.readouterr().out
