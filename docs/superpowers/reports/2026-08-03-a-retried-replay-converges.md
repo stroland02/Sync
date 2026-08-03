@@ -230,7 +230,10 @@ through `_writes_nothing`.
 **Condition (2) is closed.** A retried replay converges, and so does a repeated one: the rows a
 real `make_replay` builds, written once per attempt across the whole retry budget, produce one row
 per shape at `sample_count` 1, and thirty repetitions do not reach `MIN_SAMPLES`. Both are
-asserted against a real database over rows the tier actually produced rather than hand-built ones.
+asserted against a real database over rows the tier actually produced rather than hand-built ones
+— `test_the_rows_a_retried_replay_would_write_converge_over_the_whole_retry_budget` and
+`test_no_number_of_replays_lifts_a_synthesized_shape_over_the_sample_floor`, both in
+`tests/test_replay_shape_writeback.py`.
 
 **The writer is not reinstated here and this task was not authorised to reinstate it.** Both
 conditions being satisfied makes the write safe; it does not make it right, and those are
@@ -253,6 +256,7 @@ What the reinstatement task owns:
    consumer, and that has to be answered before the write rather than after. This is a finding of
    this task, not a condition it sets, and it is why the specification's Sequencing row still says
    the tier is deliberately not a feeder.
+
 **The fourth item this section carried is closed, and reinstatement does not own it.** W119's
 second finding — a single `sample_count=1` row of *any* source escalating a divergence to
 `breaking` — was still open when this task was interrupted, and M3-W122 answered it in the
