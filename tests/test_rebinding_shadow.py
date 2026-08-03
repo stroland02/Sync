@@ -185,6 +185,22 @@ def test_a_let_one_block_down_shadows_that_block_and_no_more(tmp_path) -> None:
     assert _fields(tmp_path, TYPESCRIPT, "let_in_nested_block") == [GENUINE, "total"]
 
 
+def test_a_python_local_shadows_its_own_function_and_no_further(tmp_path) -> None:
+    """The same wall on the Python side, and the fixture the mutation table was missing.
+
+    `inner` assigns `charge`, which makes it local to `inner`. `report` therefore rebinds
+    nothing, its first line closes over the outer object, and `total` is genuine -- the
+    interpreter agrees: the shape returns that field rather than raising. A search that walked
+    through a nested scope would treat `report` as rebinding and drop it, which is the missed
+    break again.
+
+    Python's analogue of `var_in_deeper_function` has to be a nested *function*, because a
+    nested block is not a scope here at all. That is why the Python table had no fixture over
+    this wall until now, and why deleting it changed no test.
+    """
+    assert _fields(tmp_path, PYTHON, "local_in_deeper_function") == [GENUINE, "total"]
+
+
 def test_a_var_hoists_to_its_own_function_and_no_further(tmp_path) -> None:
     """The other control on the same search, and the one that bounds how far it reaches.
 
