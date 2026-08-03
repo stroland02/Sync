@@ -17,27 +17,38 @@ actually reads.
 from __future__ import annotations
 
 import argparse
+import hashlib
+import hmac
 import io
 import json
 import os
+import secrets
 import sys
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import pytest
+import yaml
+from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
+import sync.cli as cli
 from sync.cli import (
     _declared_fields,
     _declared_response_fields,
     _detector_suite,
     _scan,
+    benchmark,
+    feed_public_key,
     ingest,
+    merge_outcome,
     shapes,
 )
 from sync.core import CallSite, ObservedShape, RepoRef
 from sync.detect.observed_drift import MIN_SAMPLES
 from sync.graph.store import GraphStore
 from sync.remediate import corpus
+from sync.signals.feed import load_public_key
 from sync.signals.registry import SYMBOL_MAP_FILENAME
 
 DSN = os.environ.get("SYNC_DSN", "postgresql://sync:sync@localhost:5433/sync")
@@ -459,3 +470,266 @@ def test_ingest_reads_a_payload_from_stdin(staged_cache, store, monkeypatch, cap
 
     assert "span(s)" in capsys.readouterr().out
     assert store.observed_calls(REPO)
+
+
+# --- `sync merge-outcome`: the delivery that verifies and is not a pull request -----
+
+
+def _sign(body: bytes, secret: bytes) -> str:
+    return "sha256=" + hmac.new(secret, body, hashlib.sha256).hexdigest()
+
+
+@pytest.fixture()
+def webhook_secret(monkeypatch) -> bytes:
+    """A throwaway secret, generated here and never written beside a fixture. Committing one --
+    even a fake -- teaches the pattern that a shared secret has a value this repository knows."""
+    secret = secrets.token_hex(32).encode("ascii")
+    monkeypatch.setenv(cli.WEBHOOK_SECRET_ENV, secret.decode("ascii"))
+    return secret
+
+
+def _merge_args(payload: Path, signature: str):
+    return argparse.Namespace(
+        payload=str(payload), signature=signature, secret_file=None, commits=None, dsn=DSN
+    )
+
+
+def test_a_verified_delivery_that_is_not_a_pull_request_event_is_rejected_by_name(
+    tmp_path, store, webhook_secret, capsys
+):
+    """A webhook pointed at this command receives every event the repository is configured for,
+    and only the pull request ones carry an outcome. The bytes are vouched for and still are not
+    a delivery this receiver can read, which is a different fact from a forgery -- so the message
+    says what was wrong with the payload where the signature failure deliberately says nothing.
+
+    Exit 1 rather than 2. The two refusals above it -- no secret, and a payload that cannot be
+    read -- exit 2 because the operator has to change the invocation; this one is a verdict about
+    the delivery itself.
+    """
+    body = json.dumps({"action": "completed", "workflow_run": {"id": 7}}).encode("utf-8")
+    payload = tmp_path / "delivery.json"
+    payload.write_bytes(body)
+
+    assert merge_outcome(_merge_args(payload, _sign(body, webhook_secret))) == 1
+
+    printed = capsys.readouterr()
+    assert printed.out == ""
+    assert "delivery rejected: " in printed.err
+    assert "pull_request" in printed.err
+
+
+def test_a_rejected_delivery_says_more_than_a_forged_one_does(
+    tmp_path, store, webhook_secret, capsys
+):
+    """The asymmetry is deliberate and this is what holds it. A signature failure describes
+    nothing, because an "expected X, got Y" pasted into an issue is a free guess at how close a
+    forgery came; a format failure describes the payload, because the operator has to fix it.
+    """
+    body = json.dumps({"action": "completed"}).encode("utf-8")
+    payload = tmp_path / "delivery.json"
+    payload.write_bytes(body)
+
+    assert merge_outcome(_merge_args(payload, _sign(body, webhook_secret))) == 1
+    rejected = capsys.readouterr().err
+
+    assert merge_outcome(_merge_args(payload, _sign(body, b"a different secret"))) == 1
+    forged = capsys.readouterr().err
+
+    assert rejected != forged
+    assert "does not verify" in forged
+
+
+def test_a_malformed_delivery_and_an_uninteresting_one_are_told_apart_by_the_exit_code(
+    tmp_path, store, webhook_secret, capsys
+):
+    """The distinction an operator scripts against. A pull request that decided nothing is the
+    ordinary case and exits 0; bytes this receiver cannot read exit 1. Without the difference a
+    wrapper would either retry every routine delivery or swallow every malformed one.
+    """
+    opened = (
+        Path(__file__).parent / "fixtures" / "webhook" / "pull_request_opened.json"
+    ).read_bytes()
+    routine = tmp_path / "opened.json"
+    routine.write_bytes(opened)
+
+    assert merge_outcome(_merge_args(routine, _sign(opened, webhook_secret))) == 0
+    assert "nothing to record" in capsys.readouterr().out
+
+
+# --- `sync feed-public-key`: the subcommand nothing had ever run --------------------
+
+
+@pytest.fixture()
+def signing_key(monkeypatch, tmp_path):
+    """A throwaway Ed25519 pair in PEM, which is what `openssl genpkey -algorithm ed25519`
+    writes and therefore what an operator's key management already produces."""
+    private = Ed25519PrivateKey.generate()
+    pem = private.private_bytes(
+        encoding=serialization.Encoding.PEM,
+        format=serialization.PrivateFormat.PKCS8,
+        encryption_algorithm=serialization.NoEncryption(),
+    )
+    key_file = tmp_path / "signing.pem"
+    key_file.write_bytes(pem)
+    monkeypatch.setenv(cli.FEED_SIGNING_KEY_ENV, pem.decode("ascii"))
+    return private, key_file
+
+
+def test_feed_public_key_prints_the_hex_sync_core_keys_holds(signing_key, capsys):
+    """The command exists so somebody can derive the trust anchor from a key this repository
+    must never hold, and the whole subcommand had never been run.
+
+    Asserted by loading the printed hex back into a public key and verifying a signature the
+    private half produced, rather than by comparing two strings. A command that printed a
+    correctly-shaped 32-byte hex of the wrong key would pass any string comparison and would put
+    a constant in `sync.core.keys` that rejects every feed as a forgery.
+    """
+    private, _ = signing_key
+
+    assert feed_public_key(argparse.Namespace(key_file=None)) == 0
+
+    printed = capsys.readouterr().out.strip()
+    load_public_key(bytes.fromhex(printed)).verify(private.sign(b"payload"), b"payload")
+
+
+def test_feed_public_key_reads_a_key_file_as_well_as_the_environment(
+    signing_key, monkeypatch, capsys
+):
+    """Two sources and no third, which is the rule `_webhook_secret` established: a variable is
+    how a process holds a credential without it reaching a file, a file is how an operator holds
+    one without it reaching a process listing."""
+    private, key_file = signing_key
+    monkeypatch.delenv(cli.FEED_SIGNING_KEY_ENV)
+
+    assert feed_public_key(argparse.Namespace(key_file=str(key_file))) == 0
+
+    printed = capsys.readouterr().out.strip()
+    assert bytes.fromhex(printed) == private.public_key().public_bytes_raw()
+
+
+def test_feed_public_key_refuses_when_there_is_no_usable_key(monkeypatch, capsys):
+    """Nothing is printed on stdout, which is the property that matters for a command whose
+    output is meant to be pasted into a source file: a refusal that also wrote something to
+    stdout would put whatever it wrote into `sync.core.keys`."""
+    monkeypatch.delenv(cli.FEED_SIGNING_KEY_ENV, raising=False)
+
+    assert feed_public_key(argparse.Namespace(key_file=None)) == 2
+
+    printed = capsys.readouterr()
+    assert printed.out == ""
+    assert cli.FEED_SIGNING_KEY_ENV in printed.err
+
+
+def test_feed_public_key_says_nothing_that_narrows_the_private_half(signing_key, capsys):
+    """The docstring's stated reason for the command being this narrow: one that emitted the
+    private half for convenience is how a key reaches a terminal scrollback. Asserted over both
+    streams against the PEM, its body lines, and the raw private bytes."""
+    private, _ = signing_key
+
+    feed_public_key(argparse.Namespace(key_file=None))
+
+    printed = capsys.readouterr()
+    said = printed.out + printed.err
+    raw = private.private_bytes(
+        encoding=serialization.Encoding.Raw,
+        format=serialization.PrivateFormat.Raw,
+        encryption_algorithm=serialization.NoEncryption(),
+    )
+
+    assert raw.hex() not in said
+    assert os.environ[cli.FEED_SIGNING_KEY_ENV] not in said
+    for line in os.environ[cli.FEED_SIGNING_KEY_ENV].splitlines():
+        if line and "-----" not in line:
+            assert line not in said
+
+
+# --- `sync benchmark --score-pair`: the specification that cannot be honoured -------
+
+
+def _benchmark_args(score_pair=None):
+    return argparse.Namespace(
+        dsn=DSN,
+        score_pair=None if score_pair is None else str(score_pair),
+        # Never connected to: every refusal below raises while reading the specification, which
+        # happens before a store is built over this name.
+        score_dsn=DSN + "_scoring_never_reached",
+    )
+
+
+def _corpus_spec(tmp_path: Path, spec: dict) -> Path:
+    path = tmp_path / "corpus.yaml"
+    path.write_text(yaml.safe_dump(spec), encoding="utf-8")
+    return path
+
+
+_COMPLETE_SPEC = {
+    "repo": "/nowhere",
+    "vendor": "stripe",
+    "cache": "/nowhere/cache",
+    "from_version": "2026-05-01",
+    "to_version": "2026-11-01",
+    "change": {
+        "kind": "request-property-removed",
+        "operation": "PostCharges",
+        "field": "receipt_email",
+    },
+}
+
+
+def test_a_pair_specification_missing_a_top_level_key_is_refused_naming_the_file(
+    tmp_path, store, capsys
+):
+    """Every field is required and a missing one raises naming the file. A corpus that quietly
+    defaulted its checkout or its vendor would report a number over a pair nobody chose, and the
+    number is the whole product of the command.
+
+    The refusal happens before the vendor is loaded and before anything is indexed, so a
+    specification an operator is still editing costs nothing.
+    """
+    spec = {key: value for key, value in _COMPLETE_SPEC.items() if key not in ("repo", "cache")}
+
+    assert benchmark(_benchmark_args(_corpus_spec(tmp_path, spec))) == 2
+
+    printed = capsys.readouterr()
+    assert "pair specification: " in printed.err
+    assert "corpus.yaml" in printed.err
+    # Both, not the first one it noticed. An operator told about one missing key at a time edits
+    # and re-runs once per field.
+    assert "repo" in printed.err and "cache" in printed.err
+
+
+def test_a_pair_specification_whose_change_is_incomplete_is_refused_the_same_way(
+    tmp_path, store, capsys
+):
+    """The nested half, and it is a separate statement because the change block is where the
+    mutation comes from: a pair whose change named no field would break nothing and report a
+    flawless run over an empty positive set."""
+    spec = dict(_COMPLETE_SPEC, change={"kind": "request-property-removed"})
+
+    assert benchmark(_benchmark_args(_corpus_spec(tmp_path, spec))) == 2
+
+    printed = capsys.readouterr()
+    assert "pair specification: " in printed.err
+    assert "change names no" in printed.err
+    assert "operation" in printed.err and "field" in printed.err
+
+
+def test_a_refused_pair_specification_prints_no_report_at_all(tmp_path, store, capsys):
+    """The operator-facing half, and the one a wrapper could get wrong. `benchmark` renders the
+    corpus report before it scores, so a refusal that still printed would put an unscored report
+    on stdout under a non-zero exit -- a reader seeing axes and a failure has no way to know
+    which half of the command produced them.
+    """
+    spec = {key: value for key, value in _COMPLETE_SPEC.items() if key != "vendor"}
+
+    assert benchmark(_benchmark_args(_corpus_spec(tmp_path, spec))) == 2
+
+    assert capsys.readouterr().out == ""
+
+
+def test_the_report_still_renders_when_no_pair_is_asked_for(store, capsys):
+    """The control. Without it the assertion above passes against a `benchmark` that prints
+    nothing ever, which would be the same command with its only output removed."""
+    assert benchmark(_benchmark_args()) == 0
+
+    assert capsys.readouterr().out != ""
