@@ -220,7 +220,7 @@ that produces an answer.
 | 15 | `605` `_argument_keys` → `continue` | a `keyword_argument` with no `name` field | Yes; same. | That argument contributes no key. |
 | 16 | `645` `_read_path` → `None` | an `attribute` node with no `attribute` field | Yes; same. | That read contributes no response field. |
 | 17 | `657` `_read_path` → `None` | an attribute or subscript whose object/value field is absent | Yes; same. | That read contributes no response field. |
-| 18 | `700` `_result_target` → `None` | **Nothing.** The walk climbs only through `_RESULT_WRAPPERS`, and the `module` node is met before `parent` can become `None` — `module` is not a wrapper, so the loop returns at line 697 first. | **Unreachable, structurally.** | — |
+| 18 | `700` `_result_target` → `None` | **Nothing.** The walk climbs only through `_RESULT_WRAPPERS`, and the `module` node is met before `parent` can become `None` — `module` is not a wrapper, so the check at line 697 returns at 698 first. | **Unreachable, structurally.** | — |
 | 19 | `752` `index` → `continue` | a call whose function is an `attribute` that `_attribute_chain` refuses — rows 9, 10 and 11 arriving at the loop | Yes. Scoped to the one call. | The call is not indexed. |
 | 20 | `842` `_syntax_errors` `except ValueError` | a source file CPython rejects before the tokenizer: a UTF-16 `.py`, whose null bytes raise `ValueError` rather than `SyntaxError` | Yes, and it is not defensive — the comment records that the uncaught form took `matches` down twice against exactly this file. | — |
 | 21 | `848` the same handler's `broken.append` | as row 20 | Yes. The file is reported as unparseable, which is what it is. | `static_verify` returns `ok=False` naming the path. |
@@ -236,7 +236,7 @@ that produces an answer.
 | 5 | `438` `_object_paths` → `continue` | a `pair` with no `key` field | Yes; same. | That key is absent from `args_keys`. |
 | 6 | `455` `_argument_keys` → `[]` | a call passing no arguments at all: `stripe.charges.list()` | Yes. There is no request-side field to record. | `args_keys` empty; the call site is still indexed. |
 | 7 | `476` `_destructured_fields` → `continue` | a `pair_pattern` with no `key` field | Yes; cannot fire on a well-formed tree. | That field is absent from `response_fields_read`. |
-| 8 | `528` `_result_target` → `None` | **Nothing**, for the same structural reason as `python_lang:700`: the `program` node is not a wrapper, so line 525 returns before `parent` can become `None`. | **Unreachable, structurally.** | — |
+| 8 | `528` `_result_target` → `None` | **Nothing**, for the same structural reason as `python_lang:700`: the `program` node is not a wrapper, so the check at line 525 returns at 526 before `parent` can become `None`. | **Unreachable, structurally.** | — |
 | 9 | `558` `_response_fields` → `[]` | a binding target that is neither an object pattern nor an identifier — an array pattern, `const [charge] = await stripe.charges.list(...)` | Yes. An array pattern binds by position and names no vendor field, which is the same argument `python_lang._response_fields` makes about tuple unpacking. | `response_fields_read` empty; the call site is still indexed. |
 
 ### The two `_result_target` tails are unreachable, and that is a proof rather than a search
