@@ -300,6 +300,12 @@ Suite baseline for **this worktree**, measured at `da6a820` before the branch wa
 this worktree's gitignored `.cache/specs/` is populated and no extra environmental skip is in play.
 Recorded first so a mutation harness does not read a checkout difference as drift.
 
+**Do not read the wall-clock figures against each other.** That 140s baseline was taken in an
+earlier session and the gate timings below in a later one, on a machine roughly twice as busy —
+the same `-n auto` invocation that took 2m18 then takes 4m37 now over ten more tests. Ten tests
+do not double a suite. Only counts and exit codes are comparable across these runs; the durations
+are each true of their own session and of nothing else.
+
 ### The retried run, asserted against the server
 
 The failing test this change was written against is
