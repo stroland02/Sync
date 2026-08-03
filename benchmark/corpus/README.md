@@ -282,7 +282,8 @@ reports measure against.
 | `2026-07-29-symbol-map-pinned.{txt,json}` | 12 pairs | the symbol map pinned, and a Python repository added contributing no pair |
 | `2026-07-29-first-python-pair.{txt,json}` | 13 pairs | `virtual-lab-GetProductsId`, the first Python pair to score |
 | `2026-07-29-the-rule-and-the-corpus-agree.{txt,json}` | 17 pairs | the four pairs the corrected selection rule proposes and the pinned set lacked |
-| `2026-07-29-the-hold-back-the-binder-earns.{txt,json}` | **current, 17 pairs** | one positive traded for the seventh falsifiable negative on `turbo`, and the same trade refused on `furever` |
+| `2026-07-29-the-hold-back-the-binder-earns.{txt,json}` | 17 pairs | one positive traded for the seventh falsifiable negative on `turbo`, and the same trade refused on `furever` |
+| `2026-08-02-the-chained-call-mislabel.{txt,json}` | **current, 17 pairs** | the same bytes from different code: `_call_at` stopped resolving a chained position to the pager, and no axis moved |
 
 `docs/superpowers/reports/2026-07-29-frozen-corpus-first-binding-numbers.md` carries what the
 first set of numbers does and does not support,
@@ -302,6 +303,48 @@ Three things those reports insist on and this directory must keep:
   `remix-PostPaymentIntents-response` and `turbo-PostRefunds-response` — because every target
   discards its result and the response mutation has nothing to attach to. The corpus total cannot
   show that and the per-pair table does.
+
+## The generator changed which call it mutates, and the number did not move
+
+`sync.benchmark.mutate._call_at` resolved a recorded position to the wrong call whenever two
+calls started at one line and column, which is exactly a chained call and its receiver. It took
+the longest, which is the pager, so a field removed from the operation was written into
+`auto_paging_iter(...)` while the label still said the site was affected. It now takes the call
+whose callee flattens to a dotted run of plain identifiers, which is the only shape either
+indexer records.
+
+That is a change to how every pair in this directory is built, so it is a regeneration, and
+`recorded/2026-08-02-the-chained-call-mislabel.{txt,json}` is the score after it. The two files
+are byte-identical to their 2026-07-29 predecessors — the same bytes produced by different code,
+which is what makes the pair worth committing rather than a duplicate.
+
+**Why nothing moved, measured rather than assumed.** Nine indexed call sites in the pinned
+checkouts have a recorded position that names two calls. All nine are in `virtual-lab`, in
+`scripts/manage_stripe_coupons.py` and `scripts/migrate_to_tax_billing.py`, over five list
+operations — `GetCoupons`, `GetCustomers`, `GetInvoices`, `GetPrices`, `GetSubscriptions`. The
+other four repositories have none. Resolution moves at all nine, in both specifications
+`virtual-lab` contributes, and **none of the eighteen is a target**: both those specifications are
+`response-property-removed` on operations whose call sites do not chain, so the nine appear only
+as labelled negatives. The one path by which a negative could still have moved the score is
+`generate_pair`'s already-depends refusal, and it answers `False` at all eighteen under both the
+old resolution and the new one — a chained pager binds its result to nothing a guard could read,
+so the response branch declines whichever call it is asked about.
+
+**What a reader may not conclude from the unchanged number.** It is not evidence that the defect
+was harmless. It is evidence that this corpus never had a pair positioned to see it, which is what
+`docs/superpowers/reports/2026-07-30-the-corpus-scores-one-kind.md` predicted when it called the
+misattachment latent. The margin is one hand-written specification wide: a
+`request-parameter-removed` pair on any of those five operations would target a chained site, and
+that kind is in `SUPPORTED_KINDS` and mutates through the same branch.
+
+The rule in `scripts/build_corpus_specs.py` would *not* produce one, and the reason is worth
+recording because it is narrower than it looks. Those five operations do qualify as candidates on
+the request side — every chained site carries a non-empty `args_keys`, because `params={...}` is
+read as a keyword argument. The rule then declines at the field step: all five are GETs, all five
+have zero `requestBody` properties in `v2330`, and the run prints `no unused property; skipped`
+for `virtual-lab/GetCustomers` and `virtual-lab/GetSubscriptions`. That is the same clause that
+already excludes `furever/GetCharges` and `fireship-server/GetPaymentMethods`. `KINDS` holds two
+kinds and the parameter kind is not one of them, so nothing generated reaches this shape.
 
 ## Precision now has a negative it could be wrong about
 

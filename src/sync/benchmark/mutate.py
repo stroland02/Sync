@@ -119,6 +119,9 @@ _MUTABLE_LANGUAGES = {
 # below branch, because a table of format strings would hide which language a bug is in.
 _CALL_KIND = {"python": "call"}
 _MAPPING_KIND = {"python": "dictionary"}
+# How each grammar spells one link of the dotted chain a callee has to flatten to before an
+# indexer records the call. `_recorded_shape` carries why that is the condition.
+_CHAIN_KIND = {"python": "attribute"}
 # Binder kind -> the field holding the name, and the field holding the value.
 _BINDING_FORMS = {
     "python": {"assignment": ("left", "right"), "named_expression": ("name", "value")},
@@ -431,17 +434,51 @@ def _call_at(root, line: int, col: int, language: str = "typescript"):
     as a fallback because a patch that no-ops reads as "nothing to fix"; here a position that
     does not name a call is a broken input to a benchmark, and guessing which call was meant
     would put the label on a site nobody chose.
+
+    **An exact start match is ambiguous, and `_recorded_shape` is what resolves it.** Two calls
+    share a position exactly when one is the other's receiver -- an argument begins after the
+    opening parenthesis, so nothing in an argument list can start where the call does. This used
+    to break that tie by preferring a call passing an object argument and then the longest, which
+    on a chain is the pager: the field the vendor removed from the operation was written into
+    `auto_paging_iter(...)` while the label still said the site was affected.
+
+    At most one match satisfies the shape, because a callee that flattens to identifiers contains
+    no call for a second match to start at. None when none does, which is a position no indexer
+    could have emitted -- the same broken input as a position naming no call, answered the same
+    way, and a target the caller records as unreachable rather than mislabels.
     """
     matches = [
         call for call in root.find_all(kind=_CALL_KIND.get(language, "call_expression"))
         if call.range().start.line + 1 == line and call.range().start.column == col
     ]
-    if not matches:
-        return None
-    return max(matches, key=lambda call: (
-        _object_argument(call, language) is not None,
-        call.range().end.index - call.range().start.index,
-    ))
+    return next((call for call in matches if _recorded_shape(call, language)), None)
+
+
+def _recorded_shape(call, language: str) -> bool:
+    """Whether this call's callee is the dotted run of plain identifiers an indexer records.
+
+    The condition is taken from the indexer rather than invented here, and it is what makes this
+    a rule instead of a preference for the shorter call. `sync.index.python_lang.index` keeps a
+    call only when `_attribute_chain` flattens its callee, and that walk steps through `attribute`
+    nodes and then requires the object it lands on to be an `identifier`;
+    `sync.index.typescript.index` asks the same of `_member_chain` over `member_expression`. A
+    chained call's callee has another *call* as its object, so neither walk terminates and the
+    outer call is never recorded at all. Measured over the pinned checkouts: every one of the
+    seventy-one indexed call sites leaves exactly one match satisfying this, and none leaves two.
+
+    Duplicated rather than imported, for the reason `_RESULT_WRAPPERS` above is: this module
+    imports nothing from `sync.index`, because a generator that consulted the binder would be
+    scoring the binder against its own opinion.
+    """
+    node = call.field("function")
+    if node is None:
+        return False
+    chain = _CHAIN_KIND.get(language, "member_expression")
+    while node.kind() == chain:
+        node = node.field("object")
+        if node is None:
+            return False
+    return node.kind() == "identifier"
 
 
 def _object_argument(call, language: str = "typescript"):
