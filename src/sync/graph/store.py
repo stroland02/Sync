@@ -13,6 +13,7 @@ from psycopg.rows import dict_row
 
 from sync.core import CallSite, Finding, FindingStatus, MigrationOutcome, VendorChange
 from sync.core.models import UNATTRIBUTED, ObservedCall, ObservedShape
+from sync.graph.sources import TRAFFIC_SOURCES
 
 
 def _stable_id(*parts: str) -> str:
@@ -677,19 +678,44 @@ class GraphStore:
         ).fetchall()
         return [ObservedCall(**row) for row in rows]
 
-    def observed_shapes(self, vendor_id: str, operation_id: str) -> list[ObservedShape]:
-        """The baseline for one operation.
+    def observed_shapes(
+        self, vendor_id: str, operation_id: str, *, traffic_only: bool = True
+    ) -> list[ObservedShape]:
+        """The baseline for one operation: what the vendor sent, unless everything is asked for.
 
         Scoped to one operation because that is what the detector asks about; a baseline that
         leaked another operation's fields into the answer would produce findings against paths
         the operation never returns.
+
+        Scoped to traffic by default, which is the opposite of how `call_sites_for_operation`
+        treats `repo_id` and for the opposite reason. There the wide answer is the dangerous one,
+        so a detector has to ask for the narrow one and a test reads the sources to check it did.
+        Here the narrow answer is the safe one and the two readers that matter both want it --
+        `ObservedDriftDetector`, and the baseline `sync.remediate.nodes._observed` hands the mock
+        builder. Making each ask would be two call sites that must not disagree.
+
+        A `source` outside `TRAFFIC_SOURCES` is a row Sync built rather than one a vendor sent.
+        `sync.verify.replay` constructs its bodies from the published specification, so a
+        `replay` row is that specification restated through the customer's code; read as traffic
+        it escalates a divergence to `breaking` on a rationale asserting the opposite of its own
+        provenance, and at the sample floor it outranks the specification in the mock the next
+        replay is verified against. Both are measured in
+        `docs/superpowers/reports/2026-07-30-replay-shapes-reach-the-store.md`.
+
+        `traffic_only=False` answers a different question -- what the table holds, which is what
+        an audit of the ingest asks and what a test of the conflict clause has to read. It is not
+        an escape hatch for a consumer that found the filter inconvenient.
         """
+        clause = " AND source = ANY(%s)" if traffic_only else ""
+        parameters = (
+            (vendor_id, operation_id, sorted(TRAFFIC_SOURCES))
+            if traffic_only
+            else (vendor_id, operation_id)
+        )
         rows = self._connect().execute(
-            """
-            SELECT * FROM observed_shape
-             WHERE vendor_id = %s AND operation_id = %s
-             ORDER BY field_path, json_type, source
-            """,
-            (vendor_id, operation_id),
+            f"SELECT * FROM observed_shape "
+            f"WHERE vendor_id = %s AND operation_id = %s{clause} "
+            f"ORDER BY field_path, json_type, source",
+            parameters,
         ).fetchall()
         return [ObservedShape(**row) for row in rows]

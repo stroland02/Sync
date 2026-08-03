@@ -266,7 +266,11 @@ CREATE TABLE IF NOT EXISTS observed_shape (
     nullable_seen    BOOLEAN NOT NULL DEFAULT FALSE,
     -- Only members the published specification names, and only those actually observed.
     spec_enum_values TEXT[] NOT NULL DEFAULT '{}',
-    -- 'error-payload'|'replay'|'interceptor'
+    -- 'error-payload'|'replay'|'interceptor'. The mechanism that produced the row, not a vendor:
+    -- Sentry and Datadog both write 'error-payload'. Only some of these are responses a vendor
+    -- actually sent -- 'replay' rows are a specification restated through the customer's code --
+    -- and `GraphStore.observed_shapes` answers with traffic alone unless asked for everything.
+    -- `sync.graph.sources` holds which is which and must be extended with this list.
     source           TEXT NOT NULL,
     sample_count     INTEGER NOT NULL DEFAULT 1,
     first_seen       TIMESTAMPTZ NOT NULL DEFAULT now(),

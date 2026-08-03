@@ -780,7 +780,7 @@ def _observed_drift_case(store):
     store.record_observed_shape(
         ObservedShape(
             vendor_id="stripe", operation_id="PostCharges", field_path="/data/status",
-            json_type="number", source="replay", sample_count=DRIFT_MIN_SAMPLES,
+            json_type="number", source="error-payload", sample_count=DRIFT_MIN_SAMPLES,
             first_seen=_SEEN, last_seen=_SEEN,
         )
     )

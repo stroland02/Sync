@@ -32,7 +32,7 @@ def _shape(**over) -> ObservedShape:
         operation_id="PostCharges",
         field_path="/data/status",
         json_type="string",
-        source="replay",
+        source="error-payload",
     )
     fields.update(over)
     return ObservedShape(**fields)
@@ -325,11 +325,16 @@ def test_a_type_change_on_one_path_is_a_second_row(store: GraphStore):
 def test_the_same_shape_from_two_sources_stays_two_rows(store: GraphStore):
     """`source` is in the key because the sources have different fidelity: error-payload shapes
     are biased toward failures, replay shapes are Sync's own. Merging them would let a biased
-    sample masquerade as a baseline."""
+    sample masquerade as a baseline.
+
+    Read with `traffic_only=False` because the subject is the key rather than the reader: the
+    default answer holds traffic alone and would show one row here whether or not the second
+    write had merged into the first, which is the distinction this asserts.
+    """
     store.record_observed_shape(_shape(source="replay"))
     store.record_observed_shape(_shape(source="error-payload"))
 
-    assert len(store.observed_shapes("stripe", "PostCharges")) == 2
+    assert len(store.observed_shapes("stripe", "PostCharges", traffic_only=False)) == 2
 
 
 def test_two_paths_are_two_rows(store: GraphStore):

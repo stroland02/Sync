@@ -290,7 +290,7 @@ def test_observed_drift_findings_are_attributed_to_the_static_binding(store):
     store.record_observed_shape(
         ObservedShape(
             vendor_id="stripe", operation_id="PostCharges", field_path="/data/surprise",
-            json_type="string", source="replay", sample_count=MIN_SAMPLES,
+            json_type="string", source="error-payload", sample_count=MIN_SAMPLES,
             first_seen=SEEN, last_seen=SEEN,
         )
     )
