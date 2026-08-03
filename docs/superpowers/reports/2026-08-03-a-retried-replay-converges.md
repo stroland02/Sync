@@ -283,6 +283,42 @@ Suite baseline for **this worktree**, measured at `da6a820` before the branch wa
 this worktree's gitignored `.cache/specs/` is populated and no extra environmental skip is in play.
 Recorded first so a mutation harness does not read a checkout difference as drift.
 
+### The retried run, asserted against the server
+
+The failing test this change was written against is
+`test_the_rows_a_retried_replay_would_write_converge_over_the_whole_retry_budget`. It is not a
+hand-built row: it drives `make_replay` over the `mishandles` fixture, which is the outcome
+`route_after_replay` returns to `patch`, takes the `ObservedShape` rows that run actually built,
+writes them once per attempt across `MAX_STATIC_ATTEMPTS`, and then reads back **through the
+store** with `observed_shapes(..., traffic_only=False)`. It asserts one row per shape and
+`{row.sample_count for row in rows} == {1}`.
+
+Against the additive clause it read 3 and failed for that reason. That is the direction the brief
+asked to see, and it is the same figure W116 recorded as the defect.
+
+`traffic_only=False` is the read the subject requires rather than a concession to condition (1)'s
+filter: the rows are `replay` rows, and a traffic-only read returns empty whether the second write
+merged, added, or was discarded, so it cannot tell those apart. A test written that way would
+have passed against the defect.
+
+### The schema, applied twice to a database that already holds rows
+
+`CLAUDE.md` requires the grain declared before a column is added, and idempotence of every stage.
+No column was added, so the risk is not a backfill — it is that re-applying the schema over a
+populated database disturbs rows written under the old clause. Both are asserted against a
+database holding rows rather than inferred from the DDL:
+
+| Test | Set up | After two `apply_schema()` calls |
+|---|---|---|
+| `test_rows_written_before_the_filter_existed_survive_a_second_apply_schema` | `error-payload` at 7, `replay` at 5 | both intact — `{"error-payload": 7, "replay": 5}`, and the traffic read still returns `error-payload` alone |
+| `test_a_held_synthetic_count_survives_a_second_apply_schema_and_a_further_write` | `replay` at 5 | still `[5]` after a *further* write — neither reset to 1 nor advanced to 6 |
+
+The second is the one that binds the clause rather than the column list. A `replay` row at 5 could
+only have been written under the additive clause, so it is exactly the history this change could
+have rewritten: taking `EXCLUDED.sample_count` would reset it to 1, and continuing to add would
+carry it to 6. `GREATEST` holds it at 5. Mutations `M3` and `M5` are those two wrong answers, and
+both are killed by this test among others.
+
 ### Mutation
 
 Baseline for the harness: **235 passed, exit 0, `-n0`**, over the twelve test files that can
