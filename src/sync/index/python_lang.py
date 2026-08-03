@@ -61,18 +61,23 @@ log = logging.getLogger(__name__)
 _PY_LANGUAGE = Language(tspython.language())
 _FUNCTION_TYPES = {"function_definition", "lambda"}
 
-# Every node that opens a scope of its own, which is what a name can be rebound in without the
-# rebinding reaching the code around it. Python has no block scope, so an `if`, `for`, `while`,
-# `with` or `try` body is deliberately absent: a name bound in one of those belongs to the
-# enclosing function and shadows nothing. `typescript.py` carries a wider list for the opposite
-# reason.
-_SCOPE_TYPES = _FUNCTION_TYPES | {
-    "class_definition",
+# A comprehension is a scope for its `for` target and not for a walrus: PEP 572 binds an
+# assignment expression in the scope *containing* the comprehension, which makes it the one
+# Python binding that escapes the construct it is written in. `typescript.py` has exactly one of
+# those too -- `var`, which hoists out of its block to the enclosing function.
+_COMPREHENSION_TYPES = {
     "list_comprehension",
     "set_comprehension",
     "dictionary_comprehension",
     "generator_expression",
 }
+
+# Every node that opens a scope of its own, which is what a name can be rebound in without the
+# rebinding reaching the code around it. Python has no block scope, so an `if`, `for`, `while`,
+# `with` or `try` body is deliberately absent: a name bound in one of those belongs to the
+# enclosing function and shadows nothing. `typescript.py` carries a wider list for the opposite
+# reason.
+_SCOPE_TYPES = _FUNCTION_TYPES | {"class_definition"} | _COMPREHENSION_TYPES
 
 # Nodes that give a name a binding in the scope holding them, as the field carrying the target.
 # `augmented_assignment` belongs here and is not a read: `charge += 1` makes `charge` local to
@@ -198,11 +203,30 @@ def _pattern_names(node: Node, source: bytes) -> Iterator[str]:
             yield from _pattern_names(child, source)
 
 
+def _escaping_walrus(node: Node, source: bytes, name: str) -> bool:
+    """Whether `node` holds a `:=` binding `name` in the scope around the comprehension.
+
+    `[(charge := row) for row in rows]` makes `charge` local to the function holding the
+    comprehension, exactly as a plain assignment there would, so a read above the line raises
+    `UnboundLocalError` and cannot be of an outer object. A `lambda` inside the comprehension is
+    still a wall -- a walrus written in one binds there -- and it is the only scope a
+    comprehension can contain, the rest being statements.
+    """
+    if node.type == "lambda":
+        return False
+    if node.type == "named_expression":
+        target = node.child_by_field_name("name")
+        if target is not None and _text(target, source) == name:
+            return True
+    return any(_escaping_walrus(child, source, name) for child in node.children)
+
+
 def _holds_binding(node: Node, source: bytes, name: str) -> bool:
     """Whether `node` binds `name` in the scope holding it, at any depth short of a new scope.
 
     A nested scope is read for the name it declares and then not entered: what it binds inside
-    itself is its own, which is the whole distinction this walk exists to make.
+    itself is its own, which is the whole distinction this walk exists to make. A comprehension
+    is entered for one thing only, because one Python binding written inside it is not its own.
     """
     declared = _DECLARATION_FIELDS.get(node.type)
     if declared is not None:
@@ -210,7 +234,7 @@ def _holds_binding(node: Node, source: bytes, name: str) -> bool:
         if target is not None and _text(target, source) == name:
             return True
     if node.type in _SCOPE_TYPES:
-        return False
+        return node.type in _COMPREHENSION_TYPES and _escaping_walrus(node, source, name)
     field = _REBINDING_FIELDS.get(node.type)
     if field is not None:
         target = node.child_by_field_name(field)

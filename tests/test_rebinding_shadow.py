@@ -62,6 +62,7 @@ PYTHON_FORMS = (
     "destructured",
     "augmented",
     "walrus",
+    "walrus_in_comprehension",
     "nested_def",
     "class_scope",
 )
@@ -122,10 +123,14 @@ def _fields(tmp_path, language: str, stem: str) -> list[str]:
 def test_a_python_rebinding_keeps_its_reads_to_itself(tmp_path, form) -> None:
     """Each of Python's own scopes, rebinding by the construct the fixture is named for.
 
-    All eleven recorded `leaked` before this task. Python has no block scope, so every one of
+    All twelve recorded `leaked` before this task. Python has no block scope, so every one of
     them rebinds inside a function, a lambda, a comprehension or a class body -- there is no
     other kind of scope for a name to be rebound in, and `walrus` is here to say that an `if`
     is not one: the walrus binds for the whole function that holds it.
+
+    `walrus_in_comprehension` is the form that runs the other way. A comprehension *is* a scope,
+    and a walrus written inside one is still bound outside it, so the rebinding belongs to the
+    function around the comprehension rather than to the comprehension.
     """
     assert _fields(tmp_path, PYTHON, form) == [GENUINE]
 
@@ -183,6 +188,18 @@ def test_a_let_one_block_down_shadows_that_block_and_no_more(tmp_path) -> None:
     where the `var` case it is copied from is a false finding.
     """
     assert _fields(tmp_path, TYPESCRIPT, "let_in_nested_block") == [GENUINE, "total"]
+
+
+def test_a_walrus_inside_a_lambda_binds_there_and_no_further(tmp_path) -> None:
+    """The control for `walrus_in_comprehension`, and the reason that search is not a wider one.
+
+    A comprehension is entered looking for a walrus because PEP 572 binds one in the scope
+    around it. A `lambda` written inside the comprehension is the exception and the only one
+    that can be written there at all -- a `def` or a `class` in an expression is a syntax error
+    -- so a walrus in the lambda binds in the lambda. `report` still reads the outer object and
+    the interpreter agrees; a search that walked through the lambda would drop `total`.
+    """
+    assert _fields(tmp_path, PYTHON, "walrus_in_comprehension_lambda") == [GENUINE, "total"]
 
 
 def test_a_python_local_shadows_its_own_function_and_no_further(tmp_path) -> None:
