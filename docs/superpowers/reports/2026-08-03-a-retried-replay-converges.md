@@ -389,7 +389,7 @@ forward.
 
 | Gate | Result | Exit |
 |---|---|---|
-| `pytest -q` (`-n auto`, the `addopts` default) | *in flight* | |
+| `pytest -q` (`-n auto`, the `addopts` default) | 2788 passed, 1 skipped, 277s | 0 |
 | `pytest -q -n0` (the CI scheduler) | *in flight* | |
 | `lint_encoding.py src scripts tests` | no output | 0 |
 | `lint-imports` (unredirected, `PYTHONIOENCODING=utf-8`) | `Contracts: 1 kept, 0 broken`, 98 files, 203 dependencies | 0 |
