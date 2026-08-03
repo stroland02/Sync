@@ -17,8 +17,10 @@ actually reads.
 from __future__ import annotations
 
 import argparse
+import io
 import json
 import os
+import sys
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -29,10 +31,14 @@ from sync.cli import (
     _declared_response_fields,
     _detector_suite,
     _scan,
+    ingest,
+    shapes,
 )
-from sync.core import CallSite, ObservedShape
+from sync.core import CallSite, ObservedShape, RepoRef
 from sync.detect.observed_drift import MIN_SAMPLES
 from sync.graph.store import GraphStore
+from sync.remediate import corpus
+from sync.signals.registry import SYMBOL_MAP_FILENAME
 
 DSN = os.environ.get("SYNC_DSN", "postgresql://sync:sync@localhost:5433/sync")
 
@@ -315,3 +321,141 @@ def test_the_collision_drop_is_printed_where_the_walk_declines_are_not(capsys):
 
     assert declared == {}
     assert OPERATION in capsys.readouterr().err
+
+
+# --- the files the literal pass declines to read -----------------------------------
+
+
+def test_the_literal_pass_reads_neither_an_installed_dependency_nor_a_declaration_file(tmp_path):
+    """`_literal_call_sites` walks every `*.ts` in the tree and skips two kinds.
+
+    `node_modules` is the vendor's own code. A model literal found in it is not a call the
+    customer wrote, and a finding raised against it would propose a patch inside a directory
+    the customer's CI reinstalls before it compiles -- an edit that cannot survive its own
+    verification. `.d.ts` declares types and calls nothing.
+
+    Asserted through the returned sites because they are the whole of what `run()` derives its
+    finding count from: a walk that indexed either would inflate that count with call sites no
+    patch can reach, and the operator has no other view of the difference.
+    """
+    from sync.cli import _literal_call_sites
+
+    root = tmp_path / "repo"
+    (root / "src").mkdir(parents=True)
+    (root / "node_modules" / "anthropic").mkdir(parents=True)
+    body = 'const r = client.messages.create({ model: "claude-3-opus-20240229" });\n'
+    (root / "src" / "app.ts").write_text(body, encoding="utf-8")
+    (root / "src" / "models.d.ts").write_text(body, encoding="utf-8")
+    (root / "node_modules" / "anthropic" / "index.ts").write_text(body, encoding="utf-8")
+
+    sites, unread = _literal_call_sites(
+        RepoRef(repo_id=REPO, url="u", local_path=str(root), head_sha="0" * 40)
+    )
+
+    assert {site.path for site in sites} == {"src/app.ts"}
+    # And a skipped file is not reported as one the run could not read. The coverage block
+    # exists to say how much of the tree went unindexed, and counting a deliberate skip there
+    # would make every repository with dependencies installed look partly unreadable.
+    assert unread == []
+
+
+# --- `sync shapes`: the vendor that cannot correlate, and the payload on stdin ------
+
+
+_SHAPE_SYMBOLS = {
+    "stripe.charges.list": {
+        "operation_id": OPERATION, "http_method": "get", "path": "/v1/charges",
+    },
+}
+
+_SENTRY_EVENT = {
+    "event_id": "9fdc2e1a2b3c4d5e6f708192a3b4c5d6",
+    "timestamp": "2026-07-20T10:15:00Z",
+    "request": {"method": "GET", "url": "https://api.stripe.com/v1/charges?limit=1"},
+    "contexts": {"response": {"status_code": 402, "data": {"object": "list", "id": "ch_1"}}},
+}
+
+
+@pytest.fixture()
+def staged_cache(tmp_path) -> Path:
+    """A cache carrying the symbol map a previous `sync run` would have written."""
+    cache = tmp_path / "cache"
+    cache.mkdir()
+    (cache / SYMBOL_MAP_FILENAME).write_text(json.dumps(_SHAPE_SYMBOLS), encoding="utf-8")
+    return cache
+
+
+def _shape_args(cache: Path, payload: str, vendor: str = VENDOR, fmt: str = "sentry"):
+    return argparse.Namespace(
+        vendor=vendor, format=fmt, payload=payload, dsn=DSN, cache=str(cache)
+    )
+
+
+def test_shapes_refuses_a_vendor_whose_adapter_cannot_correlate_a_request(
+    staged_cache, tmp_path, capsys
+):
+    """Four vendors this deployment offers are served by `GeneratedSpecAdapter`, which
+    implements no `operation_for_request`. `sync shapes --vendor anthropic` is therefore an
+    ordinary invocation reaching an adapter with no correlation story, and it has to say so.
+
+    The alternative is an `AttributeError` from inside the fold, which reports a missing method
+    where the answer is that this vendor has no way to turn an observed request back into an
+    operation. `sync ingest` already refuses the same way and its refusal is exercised; this
+    one, on the sibling command, never was.
+    """
+    payload = tmp_path / "event.json"
+    payload.write_text(json.dumps(_SENTRY_EVENT), encoding="utf-8")
+
+    assert shapes(_shape_args(staged_cache, str(payload), vendor="anthropic")) == 2
+
+    printed = capsys.readouterr()
+    assert printed.out == ""
+    assert "anthropic" in printed.err
+    assert "correlate" in printed.err
+
+
+def test_shapes_refuses_before_it_reads_the_payload(staged_cache, tmp_path, capsys):
+    """The ordering, and it is the operator-facing half: a payload is a captured production
+    response, so a command that reads one and then discovers it has nowhere to fold it has held
+    customer data for no reason. The refusal fires against a payload that is not there at all.
+    """
+    assert shapes(_shape_args(staged_cache, str(tmp_path / "absent.json"), "anthropic")) == 2
+
+    assert "correlate" in capsys.readouterr().err
+
+
+def test_shapes_reads_a_payload_from_stdin(staged_cache, store, monkeypatch, capsys):
+    """`--payload -` is how an export reaches this command without landing in a file, which for
+    a captured production response is the difference between a payload that exists on disk and
+    one that does not. The file route is exercised throughout; the pipe never was.
+    """
+    monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(_SENTRY_EVENT)))
+
+    assert shapes(_shape_args(staged_cache, "-")) == 0
+
+    assert "shape observation(s) recorded from sentry" in capsys.readouterr().out
+    assert store.observed_shapes(VENDOR, OPERATION)
+
+
+# --- `sync ingest`: the payload on stdin -------------------------------------------
+
+
+def test_ingest_reads_a_payload_from_stdin(staged_cache, store, monkeypatch, capsys):
+    """The same pipe on the span half. An OTLP export is large and is normally produced by
+    another process, so the pipe is the ordinary invocation rather than the exotic one.
+    """
+    monkeypatch.delenv(corpus.SALT_VARIABLE, raising=False)
+    monkeypatch.setattr(corpus, "SALT_FILE", Path(str(staged_cache)) / ".sync-corpus-salt")
+    spans = (Path(__file__).parent / "fixtures" / "otlp" / "stripe_client_spans.json").read_text(
+        encoding="utf-8"
+    )
+    monkeypatch.setattr(sys, "stdin", io.StringIO(spans))
+
+    args = argparse.Namespace(
+        vendor=VENDOR, payload="-", repo_id=REPO, dsn=DSN, cache=str(staged_cache)
+    )
+
+    assert ingest(args) == 0
+
+    assert "span(s)" in capsys.readouterr().out
+    assert store.observed_calls(REPO)
