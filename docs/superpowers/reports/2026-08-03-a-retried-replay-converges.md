@@ -330,16 +330,14 @@ under the same restore.
 
 ### The four gates
 
-Run on `stroland02/m2-converge`, on top of `d24f61f`.
+Run on `stroland02/m2-converge` at `7ec8be1` — the merged tree, with `af0365e` in it. The earlier
+attempt's gate figures were taken on top of `d24f61f`, before the merge, and are not carried
+forward.
 
 | Gate | Result | Exit |
 |---|---|---|
-| `pytest -q` (`-n auto`, the `addopts` default) | 2784 passed, 1 skipped | 0 |
-| `pytest -q -n0` (the CI scheduler) | 2784 passed, 1 skipped, 1 deselected | 0 |
+| `pytest -q` (`-n auto`, the `addopts` default) | *in flight* | |
+| `pytest -q -n0` (the CI scheduler) | *in flight* | |
 | `lint_encoding.py src scripts tests` | no output | 0 |
-| `lint-imports` (unredirected, `PYTHONIOENCODING=utf-8`) | `Contracts: 1 kept, 0 broken` | 0 |
+| `lint-imports` (unredirected, `PYTHONIOENCODING=utf-8`) | `Contracts: 1 kept, 0 broken`, 98 files, 203 dependencies | 0 |
 | `lint_dead_links.py src --baseline scripts/dead_links_baseline.txt` | no output | 0 |
-
-Ten tests added, none removed: 2774 before, 2784 after, on both schedulers. `-n auto` takes 2m18,
-`-n0` takes 8m29. The one skip is environmental and is not this change —
-`test_oasdiff_determinism.py` wants `SYNC_OASDIFF_DETERMINISM=1`.
