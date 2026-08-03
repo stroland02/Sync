@@ -73,6 +73,7 @@ from sync.signals.registry import (
     load_vendor,
     prepare_vendor,
 )
+from sync.signals.sentry.errors import SentryErrorReader
 from sync.signals.sentry.shapes import SentryShapeReader
 from sync.telemetry import ingest_payload
 
@@ -1231,6 +1232,101 @@ def shapes(args: argparse.Namespace) -> int:
     return 0
 
 
+def _window_bound(value: str) -> datetime | None:
+    """One end of the queried period, or `None` when it is not one.
+
+    An offset is required rather than assumed. A naive bound would be read in whatever timezone
+    the database happens to run in, so the counts would land under a period the operator did not
+    ask about -- and every comparison of one window against another, which is the only thing
+    these rows support, would be against a window an hour or eight out of place.
+    """
+    try:
+        moment = datetime.fromisoformat(value)
+    except ValueError:
+        return None
+    return moment if moment.tzinfo is not None else None
+
+
+def sentry_errors(args: argparse.Namespace) -> int:
+    """Fold an exported Sentry issue list into `observed_error_window`.
+
+    The first half of what M5 is for. Sentry was already wired in and the only question anything
+    asked it was what a response body looked like, so an error rising against one vendor
+    operation -- the signal the milestone exists to join against a deploy and a vendor change --
+    had no numerator anywhere in the graph.
+
+    Nothing downstream of this reads those rows yet, and that is the intended end state: a
+    detector written against one fixture is a detector tuned to a fixture.
+
+    The window comes from the operator because only they know what period they asked Sentry for.
+    Nothing here can check that the export matches it -- an issue list carries no record of the
+    query that produced it -- so a file exported over one period and ingested under another files
+    its counts under a window they did not happen in. The bounds are validated for what can be
+    checked: readable, offset-bearing, and in order.
+
+    This reads what somebody else exported and is not a server, for the reason `shapes` gives:
+    a listener needs a port, a supervisor and an authentication story, none of which makes an
+    observation mean more once it lands.
+    """
+    since, until = _window_bound(args.since), _window_bound(args.until)
+    if since is None or until is None:
+        print(
+            "--since and --until must each be a timestamp with a UTC offset, "
+            "such as 2026-07-20T14:00:00+00:00",
+            file=sys.stderr,
+        )
+        return 2
+    if since >= until:
+        # Reversed, the bounds still make a legal key, so the rows would land under a period no
+        # query could ask about again.
+        print(f"the window {args.since} to {args.until} ends before it starts", file=sys.stderr)
+        return 2
+
+    cache = Path(args.cache)
+    symbol_map_path = cache / SYMBOL_MAP_FILENAME
+    if not symbol_map_path.exists():
+        print(
+            f"no symbol map at {symbol_map_path}; run `sync run` against this cache first",
+            file=sys.stderr,
+        )
+        return 2
+
+    vendor = load_vendor(args.vendor, VendorContext(
+        cache_dir=cache, from_version="", to_version="",
+    ))
+    if not isinstance(vendor, RequestCorrelator):
+        print(
+            f"the {args.vendor} adapter cannot correlate an observed request to an operation, "
+            f"so these counts have nothing to be attributed to",
+            file=sys.stderr,
+        )
+        return 2
+
+    try:
+        if args.payload == "-":
+            payload = json.load(sys.stdin)
+        else:
+            payload = json.loads(Path(args.payload).read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        # A payload that cannot be read and a vendor whose operations did not fail are different
+        # facts, and reporting the first as zero rows would read as a quiet week.
+        print(f"could not read {args.payload}: {type(exc).__name__}: {exc}", file=sys.stderr)
+        return 2
+
+    store = GraphStore(args.dsn)
+    store.apply_schema()
+
+    reader = SentryErrorReader(
+        store, args.repo_id, args.vendor, _operation_resolver(vendor)
+    )
+    written = reader.ingest(payload if isinstance(payload, list) else [payload], since, until)
+    # The count of rows, and nothing about what was in them. An export holding nothing this
+    # vendor owns writes none and is not an error: a customer whose error stream is all their own
+    # bugs is the ordinary case.
+    print(f"{written} error window(s) recorded from sentry")
+    return 0
+
+
 def ingest(args: argparse.Namespace) -> int:
     """Fold one captured OTLP/JSON export payload into `observed_call`.
 
@@ -1820,6 +1916,27 @@ def main() -> int:
     shapes_parser.add_argument("--cache", default=".cache/specs",
                                help="where a previous `sync run` left symbols.json")
     shapes_parser.set_defaults(func=shapes)
+
+    sentry_errors_parser = sub.add_parser(
+        "sentry-errors",
+        help="fold an exported Sentry issue list into the observed error-window counts",
+    )
+    sentry_errors_parser.add_argument("--vendor", default="stripe", choices=available_vendors())
+    sentry_errors_parser.add_argument("--payload", required=True,
+                                      help="path to an exported issue list, or - for stdin")
+    sentry_errors_parser.add_argument("--repo-id", dest="repo_id", required=True,
+                                      help="the repository whose errors this export describes")
+    # The period the export was queried over. Required and never defaulted: an issue list carries
+    # no record of the query that produced it, so a guessed window would file real counts under a
+    # period they did not happen in and nothing downstream could tell.
+    sentry_errors_parser.add_argument("--since", required=True,
+                                      help="start of the queried window, with a UTC offset")
+    sentry_errors_parser.add_argument("--until", required=True,
+                                      help="end of the queried window, with a UTC offset")
+    sentry_errors_parser.add_argument("--dsn", default=DEFAULT_DSN)
+    sentry_errors_parser.add_argument("--cache", default=".cache/specs",
+                                      help="where a previous `sync run` left symbols.json")
+    sentry_errors_parser.set_defaults(func=sentry_errors)
 
     merge_parser = sub.add_parser(
         "merge-outcome",

@@ -12,7 +12,7 @@ import psycopg
 from psycopg.rows import dict_row
 
 from sync.core import CallSite, Finding, FindingStatus, MigrationOutcome, VendorChange
-from sync.core.models import UNATTRIBUTED, ObservedCall, ObservedShape
+from sync.core.models import UNATTRIBUTED, ObservedCall, ObservedErrorWindow, ObservedShape
 
 
 def _stable_id(*parts: str) -> str:
@@ -676,6 +676,63 @@ class GraphStore:
             (repo_id,),
         ).fetchall()
         return [ObservedCall(**row) for row in rows]
+
+    def record_observed_error_window(self, window: ObservedErrorWindow) -> None:
+        """Record one operation's failure count over one window.
+
+        The conflict clause replaces rather than adds, which is where this parts company with
+        `record_observed_shape`. A shape observation is an increment -- each one is fresh
+        evidence that a shape recurs -- but a count over a bounded window is a level, and adding
+        would double it every time the same export was fed twice. That is the idempotency rule
+        with a number attached: the second ingest of one export has to converge, and a detector
+        reading a doubled count would see a spike that is an artifact of how often the ingest ran.
+
+        Replacement rather than a maximum, in the other direction. A window re-queried after a
+        group was merged or deleted holds fewer errors, and a clause that could only ever
+        increase would leave the graph asserting a level the tracker no longer reports, with
+        nothing able to bring it down.
+
+        `binding_rung` follows the count because it is outside the natural key: a correlator that
+        improves must converge on the row it already wrote, and the row's rung has to describe
+        the binding that produced the count now stored in it.
+        """
+        self._connect().execute(
+            """
+            INSERT INTO observed_error_window (repo_id, vendor_id, operation_id, binding_rung,
+                                               source, status_class, window_start, window_end,
+                                               error_count, issue_count)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            ON CONFLICT (repo_id, vendor_id, operation_id, source, status_class,
+                         window_start, window_end)
+            DO UPDATE SET
+                error_count = EXCLUDED.error_count,
+                issue_count = EXCLUDED.issue_count,
+                binding_rung = EXCLUDED.binding_rung,
+                recorded_at = now()
+            """,
+            (
+                window.repo_id, window.vendor_id, window.operation_id, window.binding_rung,
+                window.source, window.status_class, window.window_start, window.window_end,
+                window.error_count, window.issue_count,
+            ),
+        )
+
+    def observed_error_windows(self, repo_id: str) -> list[ObservedErrorWindow]:
+        """Every failure count recorded for one repository.
+
+        Scoped to a repository for the reason `observed_calls` is: it is the unit a finding is
+        raised against, and a query leaking another customer's error volume in would produce
+        findings naming the wrong code.
+        """
+        rows = self._connect().execute(
+            """
+            SELECT * FROM observed_error_window
+             WHERE repo_id = %s
+             ORDER BY window_start, window_end, operation_id, status_class, source
+            """,
+            (repo_id,),
+        ).fetchall()
+        return [ObservedErrorWindow(**row) for row in rows]
 
     def observed_shapes(self, vendor_id: str, operation_id: str) -> list[ObservedShape]:
         """The baseline for one operation.
