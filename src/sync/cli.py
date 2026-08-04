@@ -1465,6 +1465,16 @@ def _webhook_secret(secret_file: str | None) -> bytes | None:
     a forged delivery. An empty value is no value: an exported-but-empty variable is the
     ordinary way a secret goes missing in a shell, and reading it as one would verify every
     delivery against the empty string.
+
+    A file that cannot be opened is left to raise, and the caller refuses on it by name.
+    `_signing_key` answers `None` for material it cannot use, on the argument that a parser's
+    complaint about a key quotes offsets and lengths -- but nothing is parsed here and nothing
+    was read, so an `OSError` describes a path and an errno rather than any byte of the file.
+    `None` is also already spoken for: it means no secret was supplied, and the caller answers
+    it with a message naming both sources, which is advice an operator who passed
+    `--secret-file` has already taken. Swallowing the read would also fall through to the
+    environment, and verifying against a credential the operator did not name is a signature
+    check that passed for the wrong reason.
     """
     if secret_file:
         return Path(secret_file).read_bytes().strip() or None
@@ -1492,7 +1502,19 @@ def merge_outcome(args: argparse.Namespace) -> int:
     unverified bytes, and a receiver that processed them anyway would let anyone on the internet
     write the table every future routing decision is measured against.
     """
-    secret = _webhook_secret(args.secret_file)
+    try:
+        secret = _webhook_secret(args.secret_file)
+    except OSError as exc:
+        # The path and the kind of failure, and nothing else. Not `str(exc)` either: this is the
+        # one refusal in this command whose subject is a credential, and the exception class
+        # already tells an absent file from an unreadable one.
+        print(
+            f"could not read the webhook secret from {args.secret_file}: "
+            f"{type(exc).__name__}",
+            file=sys.stderr,
+        )
+        return 2
+
     if secret is None:
         print(
             f"no webhook secret: set {WEBHOOK_SECRET_ENV} or pass --secret-file. "
