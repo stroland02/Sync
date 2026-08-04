@@ -617,10 +617,12 @@ def webhook_secret(monkeypatch) -> bytes:
     return secret
 
 
-def _merge_args(payload: Path, signature: str):
-    return argparse.Namespace(
+def _merge_args(payload: Path, signature: str, **overrides):
+    fields = dict(
         payload=str(payload), signature=signature, secret_file=None, commits=None, dsn=DSN
     )
+    fields.update(overrides)
+    return argparse.Namespace(**fields)
 
 
 def test_a_verified_delivery_that_is_not_a_pull_request_event_is_rejected_by_name(
@@ -683,6 +685,115 @@ def test_a_malformed_delivery_and_an_uninteresting_one_are_told_apart_by_the_exi
 
     assert merge_outcome(_merge_args(routine, _sign(opened, webhook_secret))) == 0
     assert "nothing to record" in capsys.readouterr().out
+
+
+# --- `sync merge-outcome`: the three files it reads before it records anything ------
+#
+# All three reads were unguarded, so a path an operator mistyped was a traceback rather than an
+# exit code. Every refusal below fires before `GraphStore` is constructed, which is what the
+# unserved DSN asserts: a run that reached the database would fail against it rather than pass.
+
+UNSERVED_DSN = "postgresql://unused"
+
+
+def test_merge_outcome_refuses_a_delivery_body_it_cannot_read(tmp_path, webhook_secret, capsys):
+    """The path an operator mistyped, on the file route where an `OSError` is reachable at all.
+
+    Exit 2 rather than 1: the two verdicts about a delivery -- forged, and malformed -- are 1,
+    and a body that was never read is not a verdict about anything. A wrapper scripting on the
+    difference would otherwise retry a typo as though GitHub had sent something.
+    """
+    absent = tmp_path / "absent-delivery.json"
+
+    assert merge_outcome(_merge_args(absent, "sha256=0", dsn=UNSERVED_DSN)) == 2
+
+    printed = capsys.readouterr()
+    assert printed.out == ""
+    assert "could not read" in printed.err
+    assert str(absent) in printed.err
+
+
+def test_merge_outcome_refuses_a_commits_file_that_is_not_there_and_says_which(
+    tmp_path, webhook_secret, capsys
+):
+    """Naming the file is the whole of this one. Two paths arrive on one command line and the
+    operator has to know which of them to fix, so a refusal that only said one of them was
+    unreadable would send them to reread the delivery that was fine.
+
+    An absent `--commits` must not be read as `--commits` omitted. Omitted leaves
+    `human_edits_before_merge` null, which the benchmark reads as unmeasured; defaulting a file
+    that could not be opened to the same null would record the attempt and lose the measurement
+    the operator asked for, with nothing anywhere saying so.
+    """
+    body = json.dumps({"action": "closed"}).encode("utf-8")
+    payload = tmp_path / "delivery.json"
+    payload.write_bytes(body)
+    absent = tmp_path / "absent-commits.json"
+
+    assert merge_outcome(_merge_args(
+        payload, _sign(body, webhook_secret), commits=str(absent), dsn=UNSERVED_DSN
+    )) == 2
+
+    printed = capsys.readouterr()
+    assert printed.out == ""
+    assert str(absent) in printed.err
+    assert str(payload) not in printed.err
+
+
+def test_merge_outcome_refuses_a_commits_file_that_decodes_and_is_not_json(
+    tmp_path, webhook_secret, capsys
+):
+    """A truncated fetch, or an API error page saved under the file's name. The refusal says
+    what was wrong with it and quotes none of it -- a commit list carries authors and message
+    subjects from a customer's repository."""
+    body = json.dumps({"action": "closed"}).encode("utf-8")
+    payload = tmp_path / "delivery.json"
+    payload.write_bytes(body)
+    commits = tmp_path / "commits.json"
+    commits.write_text('[{"commit": {"author": {"name": "Ada Lovel', encoding="utf-8")
+
+    assert merge_outcome(_merge_args(
+        payload, _sign(body, webhook_secret), commits=str(commits), dsn=UNSERVED_DSN
+    )) == 2
+
+    printed = capsys.readouterr()
+    assert printed.out == ""
+    assert str(commits) in printed.err
+    assert "JSONDecodeError" in printed.err
+    assert "Lovel" not in printed.err
+
+
+def test_an_unreadable_secret_file_refuses_rather_than_falling_back_to_the_environment(
+    tmp_path, webhook_secret, capsys
+):
+    """The secret is the one read where the silent answer is the dangerous one.
+
+    `_signing_key` answers `None` for key material it cannot parse, on the argument that a
+    parser's complaint about a key quotes offsets and lengths. That argument does not reach here:
+    nothing is parsed, an `OSError` describes a path and an errno rather than any byte of the
+    file, and `None` at this call site already means something else -- no secret was supplied,
+    reported with a message naming the very flag the operator did use.
+
+    Worse, the environment holds a usable secret throughout this test and the delivery is signed
+    with it. A handler that swallowed the read would verify against a credential the operator did
+    not name and exit 0, which is a signature check that passed for the wrong reason.
+    """
+    body = json.dumps({"action": "closed"}).encode("utf-8")
+    payload = tmp_path / "delivery.json"
+    payload.write_bytes(body)
+    absent = tmp_path / "absent.secret"
+
+    assert merge_outcome(_merge_args(
+        payload, _sign(body, webhook_secret), secret_file=str(absent), dsn=UNSERVED_DSN
+    )) == 2
+
+    printed = capsys.readouterr()
+    assert printed.out == ""
+    assert str(absent) in printed.err
+    # The absent-secret message names both sources and would send an operator who supplied one
+    # to supply it again.
+    assert cli.WEBHOOK_SECRET_ENV not in printed.err
+    assert webhook_secret.decode("ascii")[:8] not in printed.err
 
 
 # --- `sync feed-public-key`: the subcommand nothing had ever run --------------------
