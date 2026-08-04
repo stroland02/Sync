@@ -22,9 +22,11 @@ and a symbol from the customer's own codebase.
 from __future__ import annotations
 
 import argparse
+import io
 import json
 import logging
 import os
+import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -284,6 +286,68 @@ def test_a_key_the_re_query_no_longer_reaches_is_removed_from_the_window(store, 
     _feed(cache, without_5xx)
 
     assert ("PostCharges", "5xx") not in _rows(store)
+
+
+# --- the payload on stdin ----------------------------------------------------------
+
+
+def _piped(monkeypatch, raw: bytes) -> None:
+    """`sys.stdin` as the interpreter builds it on this machine.
+
+    A text wrapper over bytes whose declared encoding is the locale codepage, cp1252 here. A
+    reader that takes the text side gets that decoding; only the buffer underneath carries the
+    bytes the operator piped in.
+    """
+    monkeypatch.setattr(sys, "stdin", io.TextIOWrapper(io.BytesIO(raw), encoding="cp1252"))
+
+
+# A capital A-acute, spelled as a codepoint so this source stays ASCII. The character is chosen
+# rather than incidental: most of what a European error string carries -- an accented lowercase
+# letter, an em dash, a curly quote -- has some cp1252 character to decode to, so the wrong
+# decoding mangles the text rather than raising, and this reader discards the text anyway. This
+# one is `c3 81` in UTF-8 and cp1252 maps nothing to `0x81`, which is what turns reading stdin as
+# text into the crash an operator sees.
+_A_ACUTE = chr(0xC1)
+
+# A customer's own exception message, which is the field of an issues export most likely to
+# carry a byte outside ASCII.
+_ACCENTED_ISSUE = {
+    "id": "4501234580",
+    "count": "3",
+    "title": "Error: pago rechazado, tarjeta INV" + _A_ACUTE + "LIDA",
+    "latestEvent": {
+        "request": {"url": "https://api.stripe.com/v1/charges", "method": "POST"},
+        "contexts": {"response": {"status_code": 402}},
+    },
+}
+
+
+def test_an_export_piped_in_is_decoded_as_utf8_and_not_as_the_codepage(store, cache, monkeypatch):
+    """`--payload -` read the text side of stdin, so the bytes arrived decoded with whatever
+    codepage the machine runs. One accented character in a customer's error string is enough to
+    make that raise, and a `UnicodeDecodeError` is neither an `OSError` nor a `JSONDecodeError` --
+    so it escaped the handler whose whole job is to turn an unreadable payload into exit 2, and
+    the command tracebacked at the operator instead."""
+    # `ensure_ascii=False`, which is how a real export arrives. Sentry sends UTF-8 rather than
+    # escapes, and an ASCII-escaped body decodes under any codepage and would prove nothing.
+    _piped(monkeypatch, json.dumps([_ACCENTED_ISSUE], ensure_ascii=False).encode("utf-8"))
+
+    assert sentry_errors(_args(cache, Path("-"))) == 0
+
+    assert _rows(store)[("PostCharges", "4xx")] == (3, 1)
+
+
+def test_a_payload_that_is_not_utf8_at_all_exits_two(store, cache, capsys):
+    """The other half, and what the handler is for. Bytes in no encoding this reads are an
+    unreadable payload, which is a different fact from a vendor whose operations did not fail:
+    as a traceback it reads as a crash, and as zero rows it would read as a quiet week."""
+    unreadable = Path(str(cache)) / "utf16.json"
+    unreadable.write_bytes(json.dumps([_ACCENTED_ISSUE]).encode("utf-16"))
+
+    assert sentry_errors(_args(cache, unreadable)) == 2
+
+    assert store.observed_error_windows(REPO) == []
+    assert "could not read" in capsys.readouterr().err
 
 
 # --- the privacy rule --------------------------------------------------------------

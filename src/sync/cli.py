@@ -1154,6 +1154,19 @@ and there is no arrangement of this table that teaches `cli.py` anything about a
 """
 
 
+def _payload_bytes(payload: str) -> bytes:
+    """One export's bytes, from a file or from the pipe, decoded by nobody yet.
+
+    The pipe is why this exists. `sys.stdin` decodes with the machine's locale codepage rather
+    than UTF-8, so an export carrying a byte that codepage has no character for raises before
+    the JSON is ever parsed -- and a `UnicodeDecodeError` is a `ValueError` rather than a
+    `JSONDecodeError`, so it escapes the handler that exists to report an unreadable payload and
+    reaches the operator as a traceback. The buffer underneath is what was actually piped, and
+    every caller decodes it as UTF-8 itself.
+    """
+    return sys.stdin.buffer.read() if payload == "-" else Path(payload).read_bytes()
+
+
 def shapes(args: argparse.Namespace) -> int:
     """Fold captured error-tracker payloads into the observed-shape baseline.
 
@@ -1211,11 +1224,8 @@ def shapes(args: argparse.Namespace) -> int:
         return 2
 
     try:
-        if args.payload == "-":
-            payload = json.load(sys.stdin)
-        else:
-            payload = json.loads(Path(args.payload).read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError) as exc:
+        payload = json.loads(_payload_bytes(args.payload).decode("utf-8"))
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
         # A payload that cannot be read and a vendor that sent nothing are different facts, and
         # reporting the first as zero rows would read as a quiet vendor.
         print(f"could not read {args.payload}: {type(exc).__name__}: {exc}", file=sys.stderr)
@@ -1303,11 +1313,8 @@ def sentry_errors(args: argparse.Namespace) -> int:
         return 2
 
     try:
-        if args.payload == "-":
-            payload = json.load(sys.stdin)
-        else:
-            payload = json.loads(Path(args.payload).read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError) as exc:
+        payload = json.loads(_payload_bytes(args.payload).decode("utf-8"))
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
         # A payload that cannot be read and a vendor whose operations did not fail are different
         # facts, and reporting the first as zero rows would read as a quiet week.
         print(f"could not read {args.payload}: {type(exc).__name__}: {exc}", file=sys.stderr)
@@ -1381,10 +1388,7 @@ def ingest(args: argparse.Namespace) -> int:
         )
         return 2
 
-    if args.payload == "-":
-        payload = json.load(sys.stdin)
-    else:
-        payload = json.loads(Path(args.payload).read_text(encoding="utf-8"))
+    payload = json.loads(_payload_bytes(args.payload).decode("utf-8"))
 
     store = GraphStore(args.dsn)
     store.apply_schema()
