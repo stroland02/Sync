@@ -147,7 +147,7 @@ import tailwindcss from "@tailwindcss/vite"
 
 export default defineConfig({
   plugins: [react(), tailwindcss()],
-  resolve: { alias: { "@": path.resolve(__dirname, "./src") } },
+  resolve: { alias: { "@": path.resolve(import.meta.dirname, "./src") } },
   server: {
     // The Python API. A proxy rather than CORS: one origin in development is one
     // origin in production, so nothing depends on a permission the deployed app
