@@ -5,12 +5,19 @@ rules. Written 2026-08-04 against clones taken the same day.
 
 **Repositories examined for this dimension.** All nine were opened. Four persist structured data
 and are the substance of this note: `codegraph`, `codebase-memory-mcp`, `code-review-graph`, and
-`codegraph`'s separately-schema'd telemetry backend. Three persist unstructured state and are
-covered briefly because their *absence* of schema is itself a data point: `Understand-Anything`,
-`PageIndex`, `open-code-review`. Two persist nothing at all: `superpowers`, `skills`.
-`claude-cookbooks` contains DDL, but only as tutorial fixture data, and is dismissed in one
-paragraph. Every claim below is labelled VERIFIED (read this session), REPORTED (a comment or
-commit message in the repository says so and I did not re-derive it), or INFERENCE.
+`codegraph`'s separately-schema'd telemetry backend. Three persist unstructured state:
+`Understand-Anything` and `PageIndex` are covered briefly because their *absence* of schema is
+itself a data point, and `open-code-review` gets a section of its own (§2g) because it has the
+sharpest thinking in the set about what belongs inside a key, despite having no schema to enforce it
+with. Two persist nothing at all: `superpowers`, `skills`. `claude-cookbooks` contains DDL, but only
+as tutorial fixture data, and is dismissed in one paragraph. Every claim below is labelled VERIFIED
+(read this session), REPORTED (a comment or commit message in the repository says so and I did not
+re-derive it), or INFERENCE.
+
+**Revised 2026-08-04 after a second pass.** Three things changed. §2c's claim that
+`codebase-memory-mcp` has no provenance was wrong and is corrected — it has one, inside a JSON blob,
+which is a more useful finding than the original. §2g, §3.7 and §3.8 are new, all from
+`open-code-review`, which the first pass under-read. Open questions 6 and 7 are new.
 
 ---
 
@@ -165,11 +172,35 @@ that actually produced it rather than the session that reported it. In a schemal
 purely convention — nothing prevents omitting either field — but the *modelling instinct* is right
 and is the same one Sync formalises.
 
-**`codebase-memory-mcp` has none.** (VERIFIED.) Nodes and edges carry a free-form `properties` JSON
-blob and nothing that says which extraction mechanism produced them. It has the best convergence
-story in the set and the worst provenance story. Absence is evidence: this is a *memory* product
-where every row came from one tree-sitter pass, so there is nothing to attribute. The moment a
-second extractor exists the schema has no place to record which one ran.
+**`codebase-memory-mcp` has provenance, and keeps it where it cannot be used.** (VERIFIED. An
+earlier draft of this note said the repository had none; that was wrong, and the correction is more
+useful than the original claim.) There is no provenance *column*, but every `CALLS` edge carries the
+resolver's verdict inside the free-form `properties` JSON blob. `src/pipeline/pass_calls.c:358-364`
+builds it literally:
+
+```c
+snprintf(props, sizeof(props),
+         "{\"callee\":\"%s\",\"confidence\":%.2f,\"strategy\":\"%s\",\"candidates\":%d}",
+         esc_callee, res->confidence, res->strategy ? res->strategy : "unknown",
+         res->candidate_count);
+```
+
+The vocabulary is a real confidence ladder — the MCP tool description at `src/mcp/mcp.c:515-518`
+enumerates it as `lsp | language_rule | heuristic | unresolved` and tells the caller what it is for:
+"Use it to judge whether an edge is trustworthy, not to find edges." That last clause is the whole
+finding. Because the strategy lives in a JSON blob rather than a column, it is available for
+*display* and unavailable for *selection*: it cannot be constrained, cannot be grouped without a
+`json_extract` over every row, and cannot be indexed cheaply. The tool exposes it behind an opt-in
+`include_evidence` flag that is off by default, so the trust signal is something a caller must know
+to ask for.
+
+The repository has already conceded the point once, for a different field. `properties.url_path` was
+promoted out of the blob into a generated column and indexed
+(`src/store/store.c:271` and `create_user_indexes` at 380) precisely so it could be queried. The
+escape hatch exists and is proven; provenance simply has not been through it. This is the strongest
+available evidence for Sync's own rule that lineage is "a column, not a join" — a repository that
+started with the blob, hit the wall, and built the exact promotion mechanism Sync's rule skips
+straight to.
 
 ### 2d. Grain, declared or not
 
@@ -314,6 +345,48 @@ Idempotent seeding is the only design decision in it. Nothing to learn beyond th
 `hooks.json`, `hooks-cursor.json`, `run-hook.cmd` and a `session-start` directory, with no file
 writes; `skills/skills/` is markdown.) Both are content libraries distributed as files, and the
 absence is correct for what they are.
+
+### 2g. Identity, and what is deliberately kept out of it
+
+One reference has thought harder about *what belongs in a key* than about where the key is enforced,
+and it is the one with no schema at all.
+
+**`open-code-review` keeps two identities per item and names the job of each.** (VERIFIED.)
+`CoverageItem` (`internal/session/manifest.go:178-185`) carries both an `ItemID` and a
+`Fingerprint`. `ItemID` is minted by one canonical function (196-207) from
+`(operation, mode, normalizePath(oldPath), normalizePath(newPath))`, SHA-256 over a NUL-joined key,
+with `normalizePath` (213-223) unifying separators and cleaning `.`/`..` so cosmetically different
+spellings of one path collapse. The doc comment above it states the contract:
+
+> It is content-independent... so the same logical file keeps a stable item_id across a resume chain
+> even when its diff content (and therefore its fingerprint) changes. The raw diff content lives
+> only in `CoverageItem.Fingerprint`, which is used for checkpoint matching. Every call site —
+> `RegisterSelected` and each `Mark*` — MUST key on the same `ItemID(...)` so a mismatched key never
+> silently no-ops a transition.
+
+So the content-dependent identity is not forbidden, it is *demoted*: it exists as a second field for
+the one job that needs it (matching a resume checkpoint), while every state transition keys on the
+content-independent one. The failure it is written against — "a mismatched key never silently
+no-ops a transition" — is the same class as the one Sync's `finding` key was fixed for.
+
+Sync reaches the same conclusion and expresses it as a prohibition. `insert_finding`
+(`store.py:370-372`) carries: "Neither the rationale nor anything derived from it may join this key:
+efficiency rationales carry live call counts, so an id computed from one would change between runs
+and accumulate a row per scan rather than converging." (VERIFIED.) Both projects identified that
+content in a key destroys convergence. `open-code-review` then kept the content hash and gave it a
+job; Sync discarded it. The consequence is in §3.7.
+
+Two smaller things in the same file are worth recording. The failure vocabularies are *closed and
+validated*: `FailureClass` has eight members with a `valid()` method (`manifest.go:52-72`),
+`RunFailureClass` has seven and a separate `valid()` (86-107), and the two are deliberately different
+enumerations — a run never fails with `provider` or `panic` because those are always attributable to
+one item, and the run enum adds `internal` for scheduler failures. `itemFailureForRunClass` (110-129)
+is the explicit, commented mapping between them, including the two run classes that have no item
+equivalent and therefore sweep their pending items to `unknown` while the run-level record keeps the
+precise cause. And `TerminalState` (159-166) is four values computed *only* from the coverage sets
+plus `run_failure`, with the comment naming it "the authoritative replacement for the
+warning-derived `completed_with_errors` status" — a terminal status that is derived from the work
+rather than from how loud the run was.
 
 ---
 
@@ -471,6 +544,55 @@ but every filter on it happens in Python after materialising Pydantic models. `o
 `WHERE` clause. Cheap, and it is what turns "we record the rung" into "you can ask for only the
 findings you trust."
 
+### 3.7 Keep the content fingerprint that the identity rule throws away
+
+**Proof: `open-code-review/internal/session/manifest.go:178-207` — `ItemID` (content-independent,
+keys every transition) and `Fingerprint` (content-dependent, keys checkpoint matching) as two fields
+on one struct.**
+
+Sync's `finding` identity is `_stable_id(detector, call_site_id, vendor_change_id, claim)`
+(`store.py:373-375`), and `store.py:370-372` correctly forbids the rationale from entering it,
+because efficiency rationales carry live call counts and a key computed from one would write a fresh
+row per scan. The prohibition is right. What it costs is that `finding` carries no record of the
+rationale's content at all beyond the current text, so one question is unanswerable: *did this
+finding's evidence change?* A DETECT run that upserts an existing finding with a materially different
+rationale — the call count doubled, the drift got worse — is indistinguishable from a run that
+re-derived the identical claim, because `ON CONFLICT (id) DO NOTHING` (`store.py:381`) does not even
+write the new rationale. (VERIFIED.)
+
+`open-code-review`'s answer is to keep both and give the content hash a narrow job. The Sync analogue
+is a `rationale_hash` column on `finding`, written on every DETECT pass, deliberately outside the
+identity for exactly the reason `binding_rung` is outside it (`store.py:386-392`). It costs one
+column and turns `DO NOTHING` into `DO UPDATE SET rationale = EXCLUDED.rationale, rationale_hash =
+EXCLUDED.rationale_hash` where the hash differs, which makes "this finding's evidence moved" both
+detectable and cheap to query. Land it in `schema.sql`'s `finding` table and `insert_finding`.
+
+### 3.8 Give `abandon_reason` a closed vocabulary
+
+**Proof: `open-code-review/internal/session/manifest.go:52-129` — two distinct closed enumerations,
+each with a `valid()` method, plus an explicit commented mapping between them.**
+
+`CLAUDE.md` and `.claude/rules/graph-grain.md` both say abandoned runs are data and the reason stays
+queryable, and `schema.sql:222` has the column. But the value written is
+`state.get("diagnostics") or "unknown"` (`src/sync/remediate/nodes.py:643`) — free-form diagnostic
+prose from whichever stage failed. (VERIFIED.) So `GROUP BY abandon_reason` over
+`migration_outcome` returns approximately one group per distinct error message, and the query the
+column exists to serve — which change kinds are not mechanically safe — cannot be written against it.
+The column is queryable in the sense that it is a column, and not in the sense that anyone can learn
+from it.
+
+`terminal_status` is milder but has the same shape: three string literals written inline at
+`nodes.py:217`, `571` and `653` with no shared alias, unlike `Severity`, which `schema.sql:79-82`
+names once and `tests/test_severity_vocabulary.py` asserts the identity of across three columns.
+(VERIFIED.)
+
+What `open-code-review` proves is that the useful version of this is *two* vocabularies, not one: a
+per-item class and a per-run class that are deliberately different sets, with a named function
+mapping run cause onto item cause and a comment explaining the two run causes that have no item
+equivalent. Sync has the same two levels — a `migration_outcome` row is one attempt, and a scan is a
+run over many. The adoption is a `sync.core.AbandonReason` alias in the same shape as `Severity`,
+with the free-form diagnostic kept in a separate column rather than in this one.
+
 ---
 
 ## 4. What Sync already does better, and where a reference would cost it
@@ -573,3 +695,27 @@ Sync that would mean an interrupted OBSERVE ingest presenting as "no baseline ye
    row sizes and a storage cap, with the levers listed. Sync's arithmetic will differ, but the
    question — how long does a conclusion stay explainable — is answerable before the first hosted
    tenant, and much harder after.
+
+6. **Is the Type 2 rule aspirational, and should it say so?** `.claude/rules/graph-grain.md` carries
+   a rule with a heading of its own — "Vendor operations are Type 2, not Type 1... Never update a
+   vendor-derived row in place — write a new row with validity bounds" — and there is nothing in the
+   schema for it to govern. `src/` contains no `vendor_operation` table, no `valid_from`, and no
+   `valid_to`; `schema.sql` declares seven tables and none of them is an operation dimension.
+   (VERIFIED — grep over `src/` for all three terms returns nothing.) The nearest thing is
+   `vendor_change`, which records a *transition* between two spec versions rather than an
+   operation's state at one, and whose write is an in-place update:
+   `ON CONFLICT (id) DO UPDATE SET raw = EXCLUDED.raw, detected_at = now()` (`store.py:325`).
+   That update is bounded — `raw->>'text'` is inside the hashed identity, so a change with different
+   text is a different row — but every other field of `raw` is overwritten by whatever the last
+   ingest saw, which is precisely "update a vendor-derived row in place." Either the rule is a
+   commitment about a table M2 or M3 will add, in which case the rule should name it; or the ADG
+   answers "what did this operation look like before the change" by replaying `vendor_change` rows
+   rather than by holding versioned operation rows, in which case the rule is describing a design
+   Sync did not take and should be rewritten. A rule with no referent is a rule an agent will
+   eventually satisfy by inventing a table.
+
+7. **Does `finding` want to know its evidence moved?** §3.7's `rationale_hash` is cheap, but it
+   implies a policy decision the schema cannot make: when a finding's rationale changes materially,
+   is that the same finding with new evidence, or a new finding? Today `ON CONFLICT DO NOTHING`
+   answers "the same, and the new evidence is discarded." That is defensible for convergence and
+   indefensible for a customer reading a rationale that describes traffic from three weeks ago.

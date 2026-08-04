@@ -20,6 +20,19 @@ Every claim below is labelled VERIFIED (I opened the file this session), REPORTE
 the repository asserts it and I did not confirm against code), or INFERENCE (my reasoning from
 what I read).
 
+**Second pass, same date.** A later reading re-derived the load-bearing claims independently
+against `open-code-review`'s `internal/telemetry/` and `internal/session/`,
+`codebase-memory-mcp`'s `src/foundation/log.h` and `src/mcp/mcp.c`, `codegraph`'s
+`telemetry-worker/`, and Sync's `queries.py`, `corpus.py`, `store.py` and `agent_patch.py`. Every
+claim it checked held. It added four findings, marked below: the dead content-logging switch
+(2h), the redaction floor and the `Finalize` backstop sweep (2h and 3.4, 3.9), and span-name
+cardinality (2a). It also *withdrew* one claim it had drafted — that `open-code-review`'s trace is
+flat because `StartLLMSpan` and `StartToolSpan` discard their returned contexts. They do discard
+them (`internal/llmloop/loop.go:202,321,387`), but a per-file span at `internal/agent/agent.go:1092`
+rebinds `ctx` before the loop runs, so LLM and tool spans are correctly parented under
+`subtask.execute.<path>`. Recorded because the near-miss is the lesson: span nesting is invisible
+in a grep and has to be traced through the context variable.
+
 ---
 
 ## 1. What this dimension covers, and why it matters here
@@ -91,6 +104,22 @@ reviewed, comments generated, LLM request count, tokens used, LLM request durati
 count, tool execution duration — with `model` and `status` as attributes
 (`metrics.go:104-122`). Exporters cover console (pretty-printed stdout, `exporter.go:180-207`)
 and OTLP over gRPC or HTTP (`exporter.go:96-178`).
+
+The span *hierarchy* is right and worth copying: `review.run` (`review_cmd.go:209`) parents
+`subtask.execute.<path>` (`agent.go:1092`), which parents the `llm.request` and
+`tool.execute.<name>` spans the loop starts (`llmloop/loop.go:202,321,387`), so a concurrent
+review of forty files still attributes every model call to a file. The nesting works because
+`agent.go:1092` rebinds `ctx` from the returned context; the leaf calls discard theirs, which is
+harmless only because nothing is nested under a leaf.
+
+The span *names* are the flaw. `"subtask.execute."+d.NewPath` (`agent.go:1092`) and
+`"scan.subtask."+it.Path` (`internal/scan/agent.go:693`) put a file path in the span name rather
+than in an attribute — `file.path` is then set as an attribute anyway, two lines later at
+`agent.go:1094`. VERIFIED. Span name is the dimension every tracing backend groups, indexes and
+bills on, so this turns a bounded set of operation names into one name per file ever reviewed.
+The `tool.execute.`/`llm.request` spans get this right (`span.go:85-86`: fixed name, tool name as
+an attribute), which makes the inconsistency an oversight rather than a philosophy. If Sync ever
+adopts the pattern, node names are the span names and the finding ID is an attribute.
 
 The honest wart, and it is instructive: `checkMetricErr` at `metrics.go:70-72` is an empty
 function body with a comment saying telemetry is best-effort and must not interrupt the main flow.
@@ -369,6 +398,29 @@ The manifest deserves its own paragraph because it is the best-designed artifact
   discovered only at Finalize (or never)."
 - `ManifestExecution` (`:255-263`) stores `RuleConfigSHA256` and `RuntimeConfigSHA256`, hashes
   rather than config, with the comment "never tokens, endpoints or raw config."
+- **Every stored reason passes one redaction floor.** `sanitizeReason` (`manifest.go:659-684`) is
+  called by the builder on every failure and waive reason, so no caller path can write an
+  unredacted summary into an artifact that is serialized to two outlets. VERIFIED. It strips URL
+  userinfo, `Bearer`/`Basic` tokens and credential-shaped `key=value` pairs, drops C0/DEL/C1
+  control characters, collapses to one line, coerces to valid UTF-8, and caps at 500 *runes* so a
+  multibyte character is never cut in half. The ordering comment (`:663-672`) is the part worth
+  reading twice: UTF-8 coercion and control-character stripping must run *before* the redaction
+  regexes, because an embedded control byte inside a token truncates the regex match — `Bearer
+  AAA\x00BBB` matches only `Bearer AAA` — and the later strip would then remove the byte and
+  splice the surviving `BBB` back in, leaking the tail of the secret. It is documented as a floor
+  rather than a substitute for caller-side redaction, and it names what it does *not* strip:
+  absolute local paths, cookies, and raw request or response bodies.
+- **No selected item may end a run without an outcome.** `Finalize` (`manifest.go:739-818`) opens
+  with a backstop sweep (`:762-790`): every item still in `selected` is moved to `failed` and
+  coloured by a stated precedence — the run failure's class if one was recorded, else the pending
+  failure cause, else `unknown` with the reason `"no terminal outcome recorded"`. VERIFIED. The
+  sweep covers goroutines that exited early, cancellation before dispatch, deliberate coverage
+  truncation, "or any path the caller forgot," and the comment is honest about its limit: it only
+  runs when the process survives to call `Finalize`, and a hard kill falls back to the per-item
+  JSONL checkpoints. The detail that makes it safe is the rollback at `:796-800` — if validation
+  then fails, every swept item is restored to exactly its pre-sweep value and the builder is left
+  unfrozen, so a caller can repair the problem and record the real outcome instead of being handed
+  a manifest full of fabricated failures.
 
 Finally, the exit-code contract at `cmd/opencodereview/review_cmd.go:253-262` follows from the
 manifest rather than from an ad-hoc guess: non-zero only for a run-level failure or when every
@@ -381,6 +433,31 @@ JSONL per run containing every prompt and every model response. That is unbounde
 an unbounded local corpus of source excerpts, with no documented lifetime. `codegraph`, which
 stores far less sensitive data on someone else's server, has a documented 90-day purge.
 `open-code-review`, which stores far more sensitive data on the user's own disk, has none.
+
+**And the worse absence: the off switch exists and is not wired to anything.** VERIFIED, and this
+is the single most instructive defect in the audit. `Config.ContentLog` is described at
+`internal/telemetry/config.go:25` as "Include prompt/response content in log events". It defaults
+to `false` (`config.go:15,36`), is settable by `OCR_CONTENT_LOGGING=1` (`config.go:56-58`), by a
+`content_logging` key in `~/.opencodereview/config.json` (`config.go:66,102-104`), and by
+`ocr config set telemetry.content_logging` (`cmd/opencodereview/config_cmd.go:494-500`, with its
+own struct field at `:319`). It is read back by an exported accessor, `ContentLogging()` at
+`internal/telemetry/provider.go:74-80`. **That accessor has no callers.** A grep for
+`ContentLogging()` across `internal/` and `cmd/` returns only its own definition. Meanwhile
+`WriteLLMRequest` (`internal/session/persist.go:221-229`) writes the full resolved `messages`
+array — the prompt, including the customer's diff — on every request, unconditionally, gated by
+nothing.
+
+So a user who reads the config reference, sets `content_logging: false`, and confirms it with
+`ocr config get` has changed nothing at all. Four layers of plumbing were built, tested
+(`config_test.go` is 277 lines) and documented, and the one line that consults the result was
+never written. This is a strictly worse failure than having no switch: no switch is a gap a user
+can see, and a dead switch is a gap that reports itself as closed. It belongs in the same category
+as `codebase-memory-mcp`'s `ingest_traces` returning `"accepted"` for data it drops (4.5) — a
+control surface that lies — and it is the reason section 5's transcript question should be settled
+before 3.3 is built rather than after. INFERENCE on intent: the naming and the config precedence
+strongly suggest the switch was meant to gate the `llm_request`/`llm_response` records, but
+nothing in the repository states that, and it is equally consistent with a plan to gate span
+attributes that were never added.
 
 ---
 
@@ -497,6 +574,20 @@ The `unknown` member is mandatory and should be named, not omitted —
 have failed but cannot be reliably mapped to a more specific class." An enumeration without an
 escape hatch gets one anyway, spelled as a lie.
 
+**And put a redaction floor on the prose half.** The sentence that stays free-form is written from
+nine call sites (`src/sync/remediate/nodes.py:433,653,667` and the report paths), and at least one
+of them composes it from `diagnostics` — raw `tsc` output. Compiler output quotes source lines,
+and a source line can contain an API key as easily as anything else; a git remote in an error
+string can carry userinfo. Sync's own rule is to validate at system boundaries, and the boundary
+here is the write, not the nine callers. **Adopt** `open-code-review`'s `sanitizeReason`
+(`internal/session/manifest.go:659-684`) — including its ordering argument, which is the part that
+is easy to get wrong: coerce to valid UTF-8 and strip control characters *before* the redaction
+regexes run, or an embedded control byte truncates a token match and the later strip splices the
+unredacted tail back in. **Lands in** `src/sync/remediate/corpus.py`, in `_record` immediately
+before `MigrationOutcome.from_attempt`, so that every row written to a table the project intends
+to aggregate across customers has passed one function. Its docstring should name what it does not
+strip, as the reference's does.
+
 ### 3.5 Record per-node duration in the checkpoint
 
 **Sync's current state.** `src/sync/remediate/state.py:134` has `attempt_started_at: float`, one
@@ -582,6 +673,45 @@ DETECT modules under `src/sync/detect/` plus a small counter table in
 This is the one recommendation whose value is strategic rather than operational: Sync's stated
 differentiator is the binding, and nothing currently measures how often the binding logic declines
 to speak.
+
+### 3.9 Distinguish a node that has not run yet from one that never will
+
+**Sync's current state.** `workflow_state` classifies every node as `current`, `done` or
+`pending`, and `pending` is the fallback branch — `else: status = "pending"` at
+`src/sync/dashboard/queries.py:218-219`. VERIFIED. A node is `pending` when it is absent from
+`versions_seen`, which is true both for a node the run has not reached yet and for a node the run
+will never reach because the process was killed at `await_ci` three days ago. The console renders
+those identically, forever. `_pending_node` (`:230-244`) reads the checkpoint honestly, but a
+checkpoint that stopped being written says nothing about why, and the newest-checkpoint query at
+`:190-197` has no staleness bound.
+
+The corresponding gap in the corpus is narrower than it first looks, and worth stating precisely.
+`record` has three call sites: `nodes.py:217` on a retry (`terminal_status="retried"`), `:571` on
+a pull request (`"opened"`), and `:653` on abandonment (`"abandoned"`). VERIFIED. So an
+interrupted run that had already retried at least once leaves a row; a run killed during its first
+attempt leaves nothing, because `src/sync/remediate/corpus.py:248-260` also returns `False`
+without a row whenever `attempt_index < 1` or the finding, site or change is missing. The
+population that goes unrecorded is therefore exactly first-attempt deaths — which is the
+population most likely to indicate a node that hangs rather than a repair that is hard. The
+project rule says abandoned runs are data; a run that was *interrupted* before it ever retried is
+currently not data at all.
+
+**Adopt from** `open-code-review/internal/session/manifest.go:739-800`: the `Finalize` backstop
+sweep moves every item still lacking an outcome into `failed` with a stated class, under a
+documented precedence, and reverts the whole sweep if validation then fails. Its comment is also
+honest about the limit — the sweep only runs if the process lives to call `Finalize`, and a hard
+kill falls back to the per-item checkpoints written as the run proceeded. Both halves matter:
+a finalizer for the recoverable case, and durable per-step records for the case where there is no
+finalizer.
+
+**Lands in** two places. First, `src/sync/dashboard/queries.py`: carry the newest checkpoint's
+timestamp out of the query at `:190-197` and let the node loop distinguish `pending` from
+`stalled` past a threshold, which is a read-only change and needs no schema. Second — the larger
+one — a terminal sweep in `src/sync/remediate/graph.py`'s exit path that records an attempt row
+with the `abandon_class` of 3.4 set to an `interrupted` member for any run whose state carries an
+`attempt_index >= 1` and no `terminal_status`. That second half depends on 3.4 landing first, and
+on the ruling in section 5 about whether an interrupted run is the same kind of fact as an
+abandoned one.
 
 ---
 
@@ -718,6 +848,19 @@ honoured — is the strongest template available for the day Sync wants aggregat
 customers, and `migration_outcome`'s privacy shape means Sync is unusually close to being able to
 ship it. But that is a positioning decision for an open-core product with a trust story, not an
 engineering one, and nothing in this audit argues for making it now.
+
+**Is an interrupted run the same kind of fact as an abandoned one?** 3.9 proposes sweeping runs
+that died mid-flight into `migration_outcome` with their own class. The argument for is that
+`migration_outcome`'s stated purpose is routing learning, and a change kind whose runs reliably die
+at `await_ci` is exactly the signal routing wants. The argument against is that the table's grain
+is one *attempt*, an interrupted attempt has no verdict, and a swept row inflates every denominator
+computed from the table — the same harm the `UNIQUE (finding_id, attempt_index)` natural key at
+`src/sync/graph/schema.sql:234` exists to prevent, arriving through a different door.
+`open-code-review` resolved the equivalent question by keeping the swept items inside `coverage`
+but forcing the terminal state to be computed from the sets rather than inferred
+(`manifest.go:938-953`), which is a third option: record it, and make every rate that reads the
+table state which classes it counts. Whichever way this goes, it should be decided before 3.4's
+enum is written, because the answer determines whether `interrupted` is a member of it.
 
 **Should DETECT's suppression counters be part of the graph or beside it?** 3.8 proposes counting
 detector decisions. The project rule says anything that does not read from or write to the API

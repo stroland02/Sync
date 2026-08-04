@@ -75,6 +75,28 @@ marked failed and count against coverage, but the run itself did not fail and it
 state stays coverage-derived. That is a fourth outcome beside "succeeded", "abandoned", and
 "nothing to do".
 
+VERIFIED, and this is the argument rather than the mechanism, at `internal/agent/agent.go:540-572`.
+When the token budget is projected to be exceeded before the next file, the agent calls
+`SetPendingFailureCause(session.FailureBudget, …)` and the comment states two independent
+reasons it does not call `SetRunFailure`. First, "the run did exactly what it was told to do,
+and everything it finished before the cap is a valid result", so forcing `terminal_state` to
+`failed` would misreport a run that produced most of its answer. Second — and this is the
+non-obvious one — `SetRunFailure` claims the single first-wins slot, so recording a
+budget stop there "would block a genuine run-level cause raised later, such as a global
+deadline or user cancellation, from being recorded at all". A first-wins failure slot and an
+eager writer are a bad pair; the fix is not to relax first-wins but to keep the eager writer
+out of the slot. `RunFailureBudget` stays reserved for a corrupted budget counter, the case
+where per-item coverage genuinely cannot be determined.
+
+`codebase-memory-mcp` states the consumer half of the same idea. `src/pipeline/pipeline.h:59-69`
+documents `cbm_pipeline_run`'s int return: "Treating any non-zero as 'the run failed' is always
+correct", and *then* offers a finer read for callers who need it — specific codes distinguish
+the aborts that left the previous generation of the database intact (the run publishes by
+renaming a validated staging database over the destination, so any abort before that rename
+preserves what was there) from the ones that did not. VERIFIED. A coarse consumer is never
+wrong; a careful consumer gets more. That is the property `abandon_reason` wants: a dashboard
+counting abandons should not have to enumerate reasons to be correct.
+
 `codebase-memory-mcp` does the same thing one layer down, for subprocesses.
 `src/foundation/subprocess.h:26-34` classifies how a supervised child ended into
 `CBM_PROC_CLEAN`, `CBM_PROC_EXIT_NONZERO` (annotated "a graceful failure"), `CBM_PROC_CRASH`
@@ -104,6 +126,15 @@ Second, the `fresh` arm types `changedFileCount: 0`, `changedFiles: []`, `commit
 `commitsAhead: 0` as *literal* types, not `number` and `string[]`. VERIFIED at
 `staleness.ts:19-28`. A "fresh" result carrying a changed file will not compile. That is the
 type system enforcing what a comment would otherwise ask for.
+
+The single cleanest line of this whole discipline is in the same file, at
+`staleness.ts:201-212`. `isAncestor` shells out to `git merge-base --is-ancestor` and catches:
+if the error is a `GitCommandError` with `exitCode === 1` it returns `false`, and anything else
+is re-thrown. VERIFIED. Exit 1 from that command is git's way of saying *no*; every other
+non-zero exit means git could not answer. Four lines separate an answer from a failure at a
+subprocess boundary, and they are the four lines most often skipped. Sync shells out in
+`sync.index`, `sync.remediate`, and `deps.py`, and every one of those sites faces the same
+question: which non-zero exits are answers?
 
 `codegraph` reaches for the same shape more locally. `src/extraction/index.ts:1696-1697`
 buffers each file's parse as `{ ok: true; ... } | { ok: false; filePath: string; err: unknown }`,
@@ -145,6 +176,42 @@ all items carry an integer `index`, no item carries one, or some do and some do 
 two are handled. The third raises: "OpenAI API returned mixed indexed/unindexed data — refusing
 to misalign vectors." It would have been trivial to zip in server order and return something.
 The code declines, because a misaligned vector is a wrong answer that never looks wrong.
+
+The uncomfortable finding is that the *same file* contains two weaker taxonomies, so the good
+one is not the house rule. VERIFIED: `embeddings.py:212-246` is `GeminiEmbedder._call_with_retry`,
+and it decides retryability with `retryable_statuses = ("429", "500", "503")` followed by
+`any(status in err_str for status in retryable_statuses)` at line 222 — a substring match
+against `str(e)`. `embeddings.py:326` does the same for MiniMax with an inline
+`"429" in err_str or "500" in err_str or "503" in err_str`. INFERENCE, but mechanical: any
+message whose text happens to contain those three characters is retried. "Batch size 500
+exceeded" and "model returned 429 embeddings for 430 inputs" both retry three times and then
+raise something confusing. The type-based classifier 250 lines below already exists in the
+same module and is not reused.
+
+`codegraph` has the same defect in a different language. `src/extraction/index.ts:1975-1981`
+builds its retry set with `e.message.includes('Worker exited')`, `.includes('memory access out
+of bounds')`, and `.includes('timed out')`. VERIFIED. `parse-pool.ts:19-22` documents the
+contract these strings are matching — "reject, don't retry: a parse that crashes or times out
+its worker REJECTS (with a message the orchestrator's retry pass recognises)" — which is honest
+about what it is doing and still leaves a producer and a consumer coupled through prose in an
+error string. INFERENCE: two repositories independently reaching for substring matching on
+error text is a signal about how easy this is to fall into, not about these two authors.
+
+Two gaps common to every retry loop in the set, all VERIFIED by their absence. None of them
+jitters: `code-review-graph` uses a bare `2 ** attempt` (`embeddings.py:239-246`, `:329-334`,
+`:591-597`), and `PageIndex` a flat `time.sleep(1)` (`utils.py:95`, `:137`). And none reads a
+`Retry-After` header on a 429, even where the 429 is matched explicitly. For Sync that matters
+in one specific place: parallel branches of a pipeline hitting one vendor's rate limit will
+retry in lockstep, and the reducer requirement means those branches are by construction
+concurrent.
+
+`PageIndex` does one thing here better than anyone else, and it is worth saying because the rest
+of that repository appears below as the anti-pattern. Its retry loops are under test.
+`tests/test_issue_163.py:60-92` drives `extract_toc_content` through three cases — completes
+first try (`call_count == 1`), continues on an incomplete answer (`call_count == 2`), and
+exhausts (`pytest.raises(...)` with `call_count == 6`). VERIFIED. Retry code only executes on a
+bad day, which makes it exactly the code Sync's "a test that has never failed has never been
+shown to test anything" rule was written for.
 
 `PageIndex` reaches for the same classification and gets the boundary right while getting the
 result type wrong — see Approach E. VERIFIED: `pageindex/utils.py:46-53` defines
@@ -256,7 +323,158 @@ logger.warning("Could not install X hooks")` and continues, then unconditionally
 steps: … Restart your AI coding tool to pick up the new config". VERIFIED. An installation that
 installed nothing reports the same closing message as one that succeeded.
 
-### Approach F — repositories with essentially no runtime error model
+### Approach F — the optional pass whose failure only makes the answer smaller
+
+This is a distinct shape from the sentinel and it is the one that should worry Sync most,
+because the reference doing it is the reference whose architecture is closest to Sync's.
+
+`code-review-graph/code_review_graph/incremental.py:79-152` wraps seven graph-resolution passes
+— Python imports, ReScript cross-module, Spring DI, Spring application events, Temporal
+workflow/activity, Terraform/HCL, and scoped `Class::method` calls — in seven identical
+functions of the form `try: … except Exception as exc: logger.warning("<X> resolver failed:
+%s", exc); return None`. VERIFIED, each with a `# noqa: BLE001 - best-effort post-pass`.
+Two of the docstrings state the intent without euphemism: "Run the ReScript cross-module
+resolver, **swallowing any failure so build never fails because of it**" (`incremental.py:90-92`),
+identically for Spring at `:102-104`.
+
+The consequence is precise. These passes are what turn an unresolved reference into a resolved
+edge. When one raises, the build still reports success, and the graph it produced simply has
+fewer edges — with nothing in the database saying which pass did not run or why. A `WARNING`
+on stderr during a CI build is not a queryable fact. INFERENCE, high confidence: two graphs
+built from identical inputs, one with a resolver crash and one without, are indistinguishable
+by query, and any downstream measurement of resolution coverage silently attributes the missing
+edges to the language rather than to the crash.
+
+`code-review-graph` does the same thing to search quality. `graph.py:1219-1220` and
+`:1259-1260` wrap the FTS5 query in `except Exception: # nosec B110 / pass` and fall through
+to a `LIKE '%word%'` substring scan. VERIFIED. The stated justification — "FTS5 table may not
+exist on older schemas" — is a real and expected condition, and it is why the swallow is
+broad enough to also absorb a corrupted index, a locked database, or a malformed match
+expression. All four produce a degraded result set with no marker on it. The expected negative
+and the genuine failure are handled by the same `pass`.
+
+`codegraph` supplies the same shape at the discovery boundary.
+`src/extraction/index.ts:516-526` is `listIgnoredDirs`, which runs
+`git ls-files -o -i --exclude-standard --directory` with a 30-second timeout and, on any
+throw, returns `[]`. VERIFIED. The docstring above it (`:509-515`) explains that these
+directories are "exactly where the nested project repos live" in a multi-repo workspace. So a
+git timeout, a `git` missing from `PATH`, or an unreadable repository all read as "this
+workspace contains no ignored directories", and the embedded repositories are not indexed. The
+answer is smaller and nothing says so. `discoverEmbeddedRepoRoots` at `:750-756` has the same
+`catch { return []; }`, though there the empty result is at least documented as the intended
+answer for a non-git root.
+
+The contrast that shows it did not have to be this way is thirty lines earlier in the same
+file. `src/extraction/index.ts:269-286` compiles a `.gitignore` line by line, and when a line
+will not compile it increments `dropped` and, after the loop, logs
+`Skipped ${dropped} unparseable pattern(s) in a .gitignore; the rest are applied.` VERIFIED.
+Same author, same file, same class of partial failure — and here the shortfall is counted
+rather than absorbed. Counting the loss is the minimum honest response, and it costs one
+integer.
+
+### Approach G — timeouts, and the two ways they lie
+
+Every repository that shells out sets a timeout. The interesting material is in what the
+timeout means when it fires.
+
+`codegraph/src/extraction/parse-pool.ts:63-75` carries the best timeout postmortem in the set,
+and it is a Windows-adjacent bug Sync is exposed to. The base per-parse budget is
+`DEFAULT_PARSE_TIMEOUT_MS = 10_000`, but a worker is only killed at `HARD_KILL_MULTIPLIER = 3`
+times that, and the comment (`:64-74`) explains why: "The base timer firing is NOT proof the
+parse is still running: after a long synchronous main-thread stretch (the SQLite store on slow
+disks, issue #1231) Node runs the timers phase before the poll phase, so the expired timer
+fires BEFORE an already-delivered `parse-result` is processed. Killing at the base timeout
+therefore produced false timeouts on parses that finished instantly (even 0-byte files)."
+VERIFIED. The fix is that the base timer only marks a job *late*; a result arriving inside the
+backstop window is accepted, and only a worker silent for the whole window is treated as hung.
+INFERENCE: a timeout measured against a clock the work does not share will eventually report a
+completed unit as hung, and that failure is indistinguishable from a real hang in the record.
+
+`codebase-memory-mcp` answers the same question with a different instrument.
+`src/foundation/subprocess.h:69-72` defines `quiet_timeout_ms` as "kill+HANG after this many ms
+with **no new completed log line**", and `:96-99` says the timer starts at spawn and is reset by
+each completed line. VERIFIED. That is a liveness timeout rather than a duration cap: a
+twenty-minute `npm install` that is talking is fine; a thirty-second one that has gone silent
+is not. For Sync's `await_ci` and its dependency installs, a wall-clock cap has to be set for
+the worst case and therefore tolerates a genuine hang for that long, while a quiet timeout does
+not.
+
+The opposite failure is a timeout that is not on by default.
+`code-review-graph/code_review_graph/main.py:669-686` reads `CRG_TOOL_TIMEOUT` with a default
+of `"0"`, and `if tool_timeout > 0` guards the entire `asyncio.wait_for`. VERIFIED. Out of the
+box an MCP `detect_changes_tool` call has no deadline at all. When the timeout *is* configured,
+the handling is good and worth copying: it returns a structured
+`{"status": "error", "error": …, "summary": …}` payload naming the two environment variables
+that reduce scope and the one that raises the deadline, rather than raising into the transport.
+An MCP client sees an error it can act on, in the same envelope as a success.
+
+`claude-cookbooks` shows the readiness-poll variant of the sentinel, which is the most common
+place a timeout mislabels a configuration error. `claude_agent_sdk/site_reliability_agent/infra_setup.py:951-970`
+polls `/health` sixty times at one-second intervals inside `try: … except Exception: pass`,
+then logs "API server did not become ready in time" and returns `False`. VERIFIED. A DNS
+failure, a TLS misconfiguration, and a genuinely slow start are all reported as a timeout.
+The same file gets the neighbouring loop right — `infra_setup.py:429-446` retries the database
+connection thirty times and `raise`s the last exception on exhaustion, so the actual error
+survives. Two loops, forty lines of separation, opposite terminal behaviours.
+
+`codegraph` also bounds the *retrying* rather than only the individual attempt.
+`parse-pool.ts:84-89` sets `CRASH_BUDGET = 100` total worker deaths before the pool stops
+respawning and fails its outstanding work, "so a systematically-broken worker platform degrades
+instead of respawning forever", and `:234` is the check. VERIFIED. A per-attempt timeout does
+not stop an infinite loop of attempts; a budget on the aggregate does.
+
+### Approach H — what a mid-run failure leaves behind, and whether it can be resumed
+
+The brief asks specifically what happens when a model call fails mid-run. Three repositories
+have an answer and they sit at three different levels.
+
+`open-code-review` resumes at the level of the reviewed unit.
+`internal/agent/agent.go:676-712` is `applyResume`: for every diff in the new run it computes
+`reviewItemFingerprint` and, if a prior session recorded a completed item under that
+fingerprint, replays that item's comments, records `RecordReviewItemReused`, marks it `reused`
+in the coverage rollup, and drops it from the dispatch list. `agent.go:732-735` shows the
+fingerprint is `sha256(mode ‖ oldPath ‖ newPath ‖ diff)` — a hash of the *content*, not the
+path. VERIFIED. So a resume reuses a result only when the input that produced it is bit-identical,
+which is the same natural-key-plus-conflict-clause reasoning Sync applies to its pipeline
+tables, applied to run resumption. `agent.go:502` notes that the coverage denominator is frozen
+*after* `applyResume`, so reused items are counted in the same denominator as newly reviewed
+ones and a resumed run's coverage number stays comparable to a fresh run's.
+
+`claude-cookbooks` resumes at the level of the SDK session and is the closest analogue to
+Sync's own use of the Agent SDK. `claude_agent_sdk/hosting/server.py:130-146` looks up an
+external session id in a persisted map and passes `resume=sdk_session_id` into
+`ClaudeAgentOptions`, with a comment that `cwd` "must match the Dockerfile WORKDIR for resume
+to find transcripts" — the resume is a filesystem fact, not a purely logical one.
+`server.py:163-176` persists the map with a tmp-write-then-`replace`, and, unusually, documents
+the race it does *not* fix: two concurrent first turns on the same external id each start a
+fresh SDK session and the map is last-write-wins, "a production server would lock around the
+read-create-write span, not just the write". VERIFIED. Naming an unfixed race in the source is
+better than an unnamed one, and the Kubernetes tier's `SET NX` is offered as the fix.
+
+The mid-stream question has a separate answer, at
+`claude_agent_sdk/hosting/kubernetes/gateway/proxy.py:65-77`. Once the upstream 200 has gone
+out, a pod dying mid-stream cannot be reported as a 502 — so the proxy catches `httpx.HTTPError`
+inside the streaming generator and emits an explicit `event: error` SSE frame instead of
+letting the connection drop. VERIFIED, with the reasoning in the comment: "The HTTP status
+already went out, so we can't 502 — emit the contract's `event: error` frame instead of
+dropping the connection." A truncated stream and a completed stream look identical to a client
+otherwise. `server.py:148-160` is the other half — the agent loop's `except Exception` exists
+purely to turn any agent error into an `event: error` frame rather than a silent end.
+
+`codegraph` resumes at the level of the individual unresolved reference, and this is the piece
+closest to Sync's "abandoned runs are data" rule applied one rung below a run.
+`src/db/migrations.ts:122-126` is migration version 8: "Track attempted-but-unresolvable refs
+as `status=failed` so sync can retry them when a changed file adds a matching symbol (#1240)."
+The failure is a row with a natural key, not a log line. `src/db/queries.ts:2334-2367` is
+`getRetryableFailedReferences`, which reads those rows back when a later sync touches files
+carrying matching symbol names — and refuses to retry a name matching more than
+`perNameCeiling = 500` failed refs, because "at that population a name is external/builtin
+noise (`get`, `map`, …) that one new definition won't resolve … and retrying an arbitrary
+subset would be both wasted work and incoherent coverage". VERIFIED. That last clause is the
+important one: the ceiling exists to keep *coverage* coherent, not to save time. A partial
+retry would make the resolved set depend on which arbitrary subset was attempted.
+
+### Approach I — repositories with essentially no runtime error model
 
 `superpowers` and `skills` are skill libraries: markdown plus a handful of shell scripts.
 VERIFIED. `superpowers` uses `set -euo pipefail` consistently
