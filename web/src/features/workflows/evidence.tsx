@@ -13,7 +13,7 @@
 
 import type { ReactNode } from "react"
 
-import { ABSENT } from "@/lib/format"
+import { ABSENT, orAbsent } from "@/lib/format"
 
 type FieldKind = "text" | "flag" | "url" | "block"
 
@@ -157,10 +157,9 @@ function asScalarText(value: unknown): string | null {
   return null
 }
 
-/** The absence marker unless the value is a non-empty scalar. */
+/** The absence marker unless the value is a non-empty scalar. `orAbsent` owns what absent means. */
 function scalarOrAbsent(value: unknown): string {
-  const text = asScalarText(value)
-  return text === null || text === "" ? ABSENT : text
+  return orAbsent(asScalarText(value))
 }
 
 function Row({ label, help, children }: { label: string; help?: string; children: ReactNode }) {
@@ -200,6 +199,12 @@ function Flag({ field, value }: { field: Field; value: unknown }) {
  * preserves its newlines and scrolls in its own box rather than widening the page.
  */
 function Block({ value }: { value: unknown }) {
+  // Null is tested before stringifying, not after. `JSON.stringify(null)` is the string
+  // "null", which is non-empty and would draw the word `null` inside a box styled as
+  // compiler output — a reader could take that for something tsc said.
+  if (value === null || value === undefined) {
+    return <span className="text-muted-foreground">{ABSENT} nothing recorded</span>
+  }
   const text = asScalarText(value)
   const rendered = text === null ? JSON.stringify(value, null, 2) : text
   if (rendered === undefined || rendered === "") {

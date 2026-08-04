@@ -23,6 +23,17 @@ const PURPOSE: Record<string, string> = {
   open_pr: "Open the pull request, carrying the spec diff, the changelog entry, the call sites and the CI run as evidence.",
 }
 
+/**
+ * What a node this file has never heard of says about itself.
+ *
+ * `PURPOSE` is a `Record<string, string>`, so a missing key types as `string` and renders as
+ * nothing — a renamed node in the remediation graph would leave a blank line that reads as a
+ * layout gap rather than as staleness. Naming the gap is the point: the payload is still
+ * honest, this file is the part that has fallen behind.
+ */
+const UNKNOWN_NODE =
+  "This node is not one the console knows about — the remediation graph has changed since this view was written."
+
 interface Appearance {
   glyph: string
   /** What the status means here, in words, because a glyph alone is a legend to memorise. */
@@ -86,7 +97,9 @@ function Step({
           <h3 className={`font-mono text-sm ${look.nameClass}`}>{node.name}</h3>
           <p className="text-xs text-muted-foreground">{look.label}</p>
         </div>
-        <p className="mt-1 text-sm text-muted-foreground">{PURPOSE[node.name]}</p>
+        <p className="mt-1 text-sm text-muted-foreground">
+          {PURPOSE[node.name] ?? UNKNOWN_NODE}
+        </p>
         {revisited && (
           <p className="mt-1 text-sm">
             This node has already produced evidence and the graph owes it another visit — it
