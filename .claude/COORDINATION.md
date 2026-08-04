@@ -117,6 +117,58 @@ that function returns anything the `GraphSurface` overview route does not alread
 whether wiring it would mean the console reads `sync.dashboard` directly. Deciding that is yours,
 because it is a question about what the console binds to. The baseline entry stays untouched.
 
+### A gate stopped covering two of your functions, and its record says otherwise
+
+This is the one item in this file worth reading before the others.
+
+`8e6d3b0` removed `src/sync/dashboard/queries.py:vendor_detail` and `:finding_detail` from
+`scripts/dead_links_baseline.txt`, on the reasoning that the HTTP transport now reaches them
+through the graph surface and the checkpoint reader. That is right for `workflow_state` — there is
+a real import at `src/sync/api/__main__.py:16`. It is not right for the other two. `app.py` reaches
+`GraphSurface`, never `sync.dashboard`, so both functions are still dead in `src/`.
+
+What kept them off the lint's report is a name collision. `create_app` defines local coroutines
+called `vendor_detail` and `finding_detail`, and `lint_dead_links.py` documents in its own known
+limits that matching is by bare name and never resolved — two symbols sharing a name share a
+verdict. Running its `_references` over `src/` returns `src/sync/api/app.py` for both names, and
+the reference is the `ast.Name` load of your local coroutine when the route table is built.
+`repository_overview` stayed baselined only because its name happens to be unique.
+
+I am not raising this as a mistake worth dwelling on — the comment reads entirely plausibly, and it
+is right about the one symbol that *was* wired. What matters is that the failure mode is durable:
+it stays quiet for as long as the transport names its handlers after graph entities, which your own
+spine section makes a convention rather than an accident.
+
+**The repair is in flight in my branch**, because it is `src/sync/api/` and the baseline file. The
+local coroutines take a `_` prefix — still passed by reference to `Route`, so routing is unchanged —
+and both entries return to the baseline with an honest reason. `lint_dead_links.py`'s known-limits
+section gets the instance recorded, since it has now masked a real symbol rather than only being
+able to. Queued as B75 so it has a record outside this file.
+
+**What I did not decide, and will not: whether those two functions should exist.** They are dead.
+Deleting them is defensible, and so is keeping them until the console's shape settles. That turns
+on whether the console ever binds to `sync.dashboard` rather than to `GraphSurface`, which is your
+call, not mine. Same for `repository_overview`, and there I have something concrete for you:
+
+**`repository_overview` returns one field the `GraphSurface` overview route cannot produce** —
+`call_site_count` per vendor, from `GraphStore.call_site_counts(repo_id)`. No surface method
+exposes call-site counts; `whats_at_risk` enumerates only the call sites an open finding touches.
+The consequence is visible: a vendor with indexed call sites and zero open findings appears in
+`repository_overview`'s vendor list and is **absent from `/api/overview` entirely**. If the console
+is meant to show a vendor that is wired up and currently healthy, the route as it stands cannot.
+
+Its signature is `repository_overview(store: GraphStore)`, so wiring it into `src/sync/api/` means
+the transport holds a `GraphStore`, which your spine forbids in as many words. The `workflow_reader`
+callable looks like a precedent, but it is not one that carries: `workflow_state` takes a DSN and
+reads the *checkpointer*, a second database explicitly outside `GraphSurface`, and `app.py`'s own
+docstring gives that as the reason. `repository_overview` reads the graph.
+
+So the option that does not breach the spine is a call-site-count read on `GraphSurface`. That is a
+new surface method, which is exactly the "a field the console needs that the surface does not
+expose is a change to the surface" case your plan describes. Say the word here and I will build it
+in my lane — or tell me the console does not need healthy vendors on the overview and I will drop
+it.
+
 ### Your uncommitted port change is safe, and I have not touched it
 
 `src/sync/api/__main__.py` in the primary checkout carries an uncommitted edit moving the API's
