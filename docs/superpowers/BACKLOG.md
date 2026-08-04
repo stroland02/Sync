@@ -154,6 +154,54 @@ when, which is why it is recorded here rather than dispatched.
 **Closes when:** one `sync run` produces a CI-green pull request again, or the failure is
 recorded with which change broke it.
 
+### B74 — `/api/overview` contradicts itself past ten thousand open findings
+
+`total_findings` comes from `page["total"]`, which `GraphSurface._page` sets to the full row count
+*before* windowing. `vendors[].open_finding_count` is computed from `page["items"]`, which is
+windowed. Under ten thousand open findings the two agree and nothing shows; past it the per-vendor
+counts under-report while the total does not, and the response says both numbers with equal
+confidence.
+
+Reproduced rather than reasoned: with the scan ceiling patched to 3 over 5 open findings, the route
+answers `total_findings=5` alongside `vendors=[{'vendor_id': 'stripe', 'open_finding_count': 3}]`.
+
+Found while narrowing that constant's comment during M4-P1, and left alone there deliberately —
+it is off the path that task fixed. It is the same shape as the defect M4-P1 *did* fix: a ceiling
+that does not error when crossed, it just answers wrongly. This repository's discipline says that
+kind of failure must not be quiet, which is the argument for queueing it rather than leaving the
+comment to carry it.
+
+**Closes when:** the two numbers come from the same window, or the response names which of them is
+windowed; with a test that fails against the current behaviour.
+
+### B75 — the dead-links gate stopped covering two symbols, and the baseline says otherwise
+
+`sync.dashboard.queries.vendor_detail` and `finding_detail` have no caller anywhere in `src/`. They
+were removed from `scripts/dead_links_baseline.txt` in `8e6d3b0` on the stated grounds that the
+HTTP transport reaches them — but `src/sync/api/app.py` reaches `GraphSurface` and never
+`sync.dashboard`.
+
+What keeps them off the lint's report is a name collision. `create_app` defines local coroutines
+called `vendor_detail` and `finding_detail`, and `lint_dead_links.py` documents in its own "Known
+limits" that matching is by bare name and is never resolved — two symbols sharing a name share a
+verdict. Running `_references` over `src/` returns `src/sync/api/app.py` for both names, and the
+reference is the `ast.Name` load of the local coroutine when the route table is built.
+`workflow_state` is genuinely reached through a real import, which is why the comment reads
+plausibly, and `repository_overview` has a unique name, which is why it alone stayed baselined.
+
+So a gate went quiet and its own record asserts a reach the code does not perform. This does not
+heal on its own: it stays quiet for as long as the transport names its handlers after graph
+entities, which the M4 plan's second spine section makes a convention rather than an accident.
+
+The repair is in flight under M4-P1 — the local coroutines take a `_` prefix and both entries
+return to the baseline with an honest reason. **What is not decided here is whether those two
+functions should exist at all.** They are dead, and whether the console ever binds to
+`sync.dashboard` rather than to `GraphSurface` belongs to whoever owns the console.
+
+**Closes when:** the two symbols are either baselined with a reason that survives reading the code,
+or deleted; and `lint_dead_links.py`'s "Known limits" records that its bare-name matching has now
+masked a real symbol rather than only being able to.
+
 ### B73 — three more operator-named file reads still answer a traceback
 
 B72 closed `sync ingest` and left three, all found while closing it and all the same defect:
