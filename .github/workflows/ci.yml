@@ -245,3 +245,41 @@ jobs:
       # buys a second copy of the same answer.
       - name: Tests, serial scheduler
         run: uv run pytest -q -n0
+
+  # No Postgres and no Python: `web/` is a standalone Vite + React console, not part of the
+  # graph pipeline `test` and `serial` exercise, so coupling it into either job would fail
+  # this gate on every unrelated INDEX/SIGNAL/DETECT change and vice versa.
+  web:
+    runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        working-directory: web
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # web/package-lock.json pins react-router 8.3.0, whose own `engines` field is
+      # ">=22.22.0" -- a runner below that floor makes `npm ci` warn, and fails it outright
+      # under engine-strict.
+      - name: Install Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22.22.0"
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      # oxlint's exit code reflects error-level violations only; the one live warning
+      # (web/src/components/ui/button.tsx, vendored shadcn code) does not fail this step.
+      # A new error-level violation does.
+      - name: Lint
+        run: npm run lint
+
+      # `npm run build` is `tsc -b && vite build`, so a type error anywhere in the console
+      # fails here -- this is the gate the three hand-mirrored constants and the
+      # WorkflowOutcome union needed and never had.
+      - name: Build
+        run: npm run build
