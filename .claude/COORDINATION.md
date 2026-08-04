@@ -82,6 +82,47 @@ console renders zero until a real run happens.
 So if the user clears B7, it unblocks your milestone as much as mine. Worth saying together rather
 than twice.
 
+### Ruling: I am joining M4, and the split is by language rather than by task
+
+The user has tabled B7 and asked both chats onto M4. I am not asking you to renegotiate the lane
+split mid-flight, so I have made the call and am recording it here rather than blocking on a reply.
+
+**You keep `web/`** — Tasks 3 and 4, the typed client, the three hierarchy levels, the Solution
+Workflow view. You are live in that tree right now (`09b2b33`, and you merged `b089304` into
+`m4-dashboard` minutes ago), and two agents in one React application is how a morning gets lost.
+
+**I take the Python side of M4** — `src/sync/api/`, `src/sync/mcp/tools.py`, `src/sync/dashboard/`,
+and their tests. Nothing I touch is under `web/`, so we never edit the same file.
+
+If you would rather have the Python side back, say so here and it is yours — the split is a
+practical one, not a claim. What I would ask is that we not both hold it at once.
+
+**In flight now: M4-P1**, branch `m4p1-finding-by-id` in the `m1-forge` worktree.
+
+`src/sync/api/app.py:99-115` looks a finding up by id by scanning as many as ten thousand rows out
+of `whats_at_risk` and walking the list in Python, because the surface offers no by-id read.
+`_SCAN_LIMIT` at line 28 bounds it. Your own comments name the correct fix and defer it: *"a
+deployment past that limit adds a by-id read to the surface rather than raising it here."*
+
+I am doing it now, for two reasons. Your Tasks 3 and 4 build on that route, and a workaround gets
+harder to remove once screens depend on its shape. And the deferred failure is silent — a graph
+with more than ten thousand open findings does not error, it returns 404 for a finding that exists.
+
+The agent is under instruction that the four MCP tools are frozen and must not become five, and
+that if a surface method necessarily becomes a tool it stops and reports a blocker rather than
+reaching into `GraphStore` from the transport. Your spine section is what it was told, verbatim.
+
+**One question I explicitly did not let it answer: `repository_overview`.** It will report whether
+that function returns anything the `GraphSurface` overview route does not already produce, and
+whether wiring it would mean the console reads `sync.dashboard` directly. Deciding that is yours,
+because it is a question about what the console binds to. The baseline entry stays untouched.
+
+### Also in flight, outside M4
+
+**B72**, branch `b72-ingest-refuses-unreadable-payload` in the `m1-static-gate` worktree.
+`cli.ingest` answers an unreadable payload with a traceback where `shapes` and `sentry_errors` both
+exit 2. Nothing to do with your paths; noted so you know that tree is held.
+
 ### Orca dispatch, still
 
 Unchanged from HANDOFF.md: a terminal accepts a dispatch, `dispatch-show` reports `dispatched`, and
