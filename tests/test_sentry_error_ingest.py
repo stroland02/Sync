@@ -269,6 +269,23 @@ def test_an_export_re_queried_with_fewer_issues_replaces_the_window(store, cache
     assert _rows(store)[("PostCharges", "4xx")] == (45, 1)
 
 
+def test_a_key_the_re_query_no_longer_reaches_is_removed_from_the_window(store, cache, tmp_path):
+    """The half the test above cannot reach. `full[0]` shares its `(PostCharges, 4xx)` key with
+    `full[1]`, so dropping it exercises the surviving-key path and only that. The fixture's single
+    5xx group is the one issue whose key nothing else carries: merge it into the 402 group, or
+    delete it, and a per-key replacement has no row to replace. The stale count keeps asserting a
+    level Sentry no longer reports and nothing can ever bring it down, so a consumer summing the
+    window counts eight errors twice."""
+    full = json.loads((FIXTURES / "stripe_charge_issues.json").read_text(encoding="utf-8"))
+    without_5xx = tmp_path / "without_5xx.json"
+    without_5xx.write_text(json.dumps(full[:2] + full[3:]), encoding="utf-8")
+
+    _feed(cache, FIXTURES / "stripe_charge_issues.json")
+    _feed(cache, without_5xx)
+
+    assert ("PostCharges", "5xx") not in _rows(store)
+
+
 # --- the privacy rule --------------------------------------------------------------
 
 

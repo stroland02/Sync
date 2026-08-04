@@ -95,6 +95,13 @@ class SentryErrorReader:
         data a third party produced, and one malformed group must not cost the rest of a window.
         It is logged rather than swallowed, because a source that quietly stopped working looks
         exactly like a week with no errors.
+
+        One window's slice for this source is replaced whole rather than upserted key by key. An
+        export re-queried after Sentry merged or deleted a group reaches fewer keys, and a key
+        nothing writes is a key nothing corrects -- the stale row keeps asserting a level the
+        tracker no longer reports while the errors it counted are counted again under the group
+        they were merged into. The writes and the removal share one transaction so no reader ever
+        sees a window that is half-replaced.
         """
         pooled: dict[tuple[str, str], list[int]] = {}
         for issue in issues:
@@ -107,19 +114,28 @@ class SentryErrorReader:
             totals[0] += count
             totals[1] += 1
 
-        for (operation_id, status_class), (errors, groups) in pooled.items():
-            self._store.record_observed_error_window(ObservedErrorWindow(
-                repo_id=self._repo_id,
-                vendor_id=self._vendor_id,
-                operation_id=operation_id,
-                binding_rung=BINDING_RUNG,
-                source=SENTRY_ISSUE_SOURCE,
-                status_class=status_class,
-                window_start=window_start,
-                window_end=window_end,
-                error_count=errors,
-                issue_count=groups,
-            ))
+        with self._store.transaction():
+            for (operation_id, status_class), (errors, groups) in pooled.items():
+                self._store.record_observed_error_window(ObservedErrorWindow(
+                    repo_id=self._repo_id,
+                    vendor_id=self._vendor_id,
+                    operation_id=operation_id,
+                    binding_rung=BINDING_RUNG,
+                    source=SENTRY_ISSUE_SOURCE,
+                    status_class=status_class,
+                    window_start=window_start,
+                    window_end=window_end,
+                    error_count=errors,
+                    issue_count=groups,
+                ))
+            self._store.remove_observed_error_windows_outside(
+                self._repo_id,
+                self._vendor_id,
+                SENTRY_ISSUE_SOURCE,
+                window_start,
+                window_end,
+                pooled.keys(),
+            )
         return len(pooled)
 
     def _parse(self, issue: Any) -> tuple[str, str, int] | None:
