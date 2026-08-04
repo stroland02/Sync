@@ -1,10 +1,11 @@
 import os
 import threading
+from datetime import datetime, timezone
 
 import psycopg
 import pytest
 
-from sync.core import CallSite, Finding, VendorChange
+from sync.core import CallSite, Finding, ObservedErrorWindow, VendorChange
 from sync.graph.store import GraphStore
 
 DSN = os.environ.get("SYNC_DSN", "postgresql://sync:sync@localhost:5433/sync")
@@ -401,3 +402,31 @@ def test_the_same_claim_inserted_twice_converges_on_one_row(store):
 
     assert emit() == emit()
     assert len(store.open_findings()) == 1
+
+
+def _error_window(**over) -> ObservedErrorWindow:
+    base = dict(
+        repo_id="r1", vendor_id="stripe", operation_id="PostCharges",
+        binding_rung="observed", source="error-tracker-group", status_class="5xx",
+        window_start=datetime(2026, 7, 20, 14, tzinfo=timezone.utc),
+        window_end=datetime(2026, 7, 20, 15, tzinfo=timezone.utc),
+        error_count=8, issue_count=1,
+    )
+    base.update(over)
+    return ObservedErrorWindow(**base)
+
+
+def test_a_window_rewritten_under_a_better_rung_carries_the_new_one(store):
+    """`binding_rung` is outside the natural key so that a correlator which improves converges on
+    the row it already wrote instead of adding a second one that double-counts the window. The
+    conflict clause therefore has to carry the rung forward, and until now nothing proved it did.
+
+    No ingest-level test can: the writer's rung is a module constant, so every row an export
+    produces carries the same one and the assignment could have been deleted with the suite still
+    green. The rung has to change here, at the store, or it never changes at all.
+    """
+    store.record_observed_error_window(_error_window(binding_rung="unresolved"))
+    store.record_observed_error_window(_error_window(binding_rung="observed"))
+
+    rows = store.observed_error_windows("r1")
+    assert [row.binding_rung for row in rows] == ["observed"], "one row, under the newer rung"
