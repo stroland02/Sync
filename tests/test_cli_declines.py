@@ -1091,6 +1091,58 @@ def test_a_pair_specification_whose_change_is_incomplete_is_refused_the_same_way
     assert "operation" in printed.err and "field" in printed.err
 
 
+def test_a_pair_specification_that_is_not_there_is_refused_naming_the_file(
+    tmp_path, store, capsys
+):
+    """The read itself, which had no handler: a `--score-pair` an operator mistyped raised out of
+    the command where every missing field inside the file is already refused by name."""
+    absent = tmp_path / "absent-corpus.yaml"
+
+    assert benchmark(_benchmark_args(absent)) == 2
+
+    printed = capsys.readouterr()
+    assert printed.out == ""
+    assert str(absent) in printed.err
+
+
+def test_a_pair_specification_that_is_not_utf8_at_all_is_refused_naming_the_file(
+    tmp_path, store, capsys
+):
+    """The decode arm, and it is the one that was already refusing for the wrong reason.
+
+    `UnicodeDecodeError` is a `ValueError`, so the chain around `_score_corpus` caught it and
+    printed the codec's complaint -- which names a byte offset and no file. Two paths reach this
+    command and an operator told only that byte 0 is invalid has to guess which.
+    """
+    spec = tmp_path / "corpus.yaml"
+    spec.write_bytes(yaml.safe_dump(_COMPLETE_SPEC).encode("utf-16"))
+
+    assert benchmark(_benchmark_args(spec)) == 2
+
+    printed = capsys.readouterr()
+    assert printed.out == ""
+    assert str(spec) in printed.err
+    assert "UnicodeDecodeError" in printed.err
+
+
+def test_a_pair_specification_that_is_not_yaml_is_refused_rather_than_raised(
+    tmp_path, store, capsys
+):
+    """A YAML parse failure is not a `json.JSONDecodeError` and is not a `ValueError` either --
+    `yaml.YAMLError` inherits straight from `Exception` -- so it passed through the chain around
+    `_score_corpus` untouched and reached the operator as a traceback. A tab where a space
+    belongs is the ordinary way an operator writes one."""
+    spec = tmp_path / "corpus.yaml"
+    spec.write_text("repo: /nowhere\n\tvendor: stripe\n", encoding="utf-8")
+
+    assert benchmark(_benchmark_args(spec)) == 2
+
+    printed = capsys.readouterr()
+    assert printed.out == ""
+    assert str(spec) in printed.err
+    assert "ScannerError" in printed.err
+
+
 def test_a_refused_pair_specification_prints_no_report_at_all(tmp_path, store, capsys):
     """The operator-facing half, and the one a wrapper could get wrong. `benchmark` renders the
     corpus report before it scores, so a refusal that still printed would put an unscored report

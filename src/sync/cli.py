@@ -1874,7 +1874,16 @@ def _score_corpus(spec_path: Path, score_dsn: str):
     `generate_pair` refuses to choose targets itself, deliberately, and a harness that picked a
     subset would be choosing a distribution without saying so.
     """
-    spec = yaml.safe_load(spec_path.read_text(encoding="utf-8")) or {}
+    try:
+        spec = yaml.safe_load(spec_path.read_text(encoding="utf-8")) or {}
+    except (OSError, UnicodeDecodeError, yaml.YAMLError) as exc:
+        # Raised rather than printed, because the caller owns the refusal and every other
+        # unusable specification arrives there the same way. `yaml.YAMLError` inherits from
+        # `Exception` rather than from `ValueError`, so a tab where a space belongs was a
+        # traceback; the decode was caught by the caller and reported the codec's byte offset
+        # with no file named, which is unhelpful when two paths reach that command.
+        raise ValueError(f"could not read {spec_path}: {type(exc).__name__}: {exc}") from exc
+
     required = ("repo", "vendor", "cache", "from_version", "to_version", "change")
     missing = [key for key in required if key not in spec]
     if missing:

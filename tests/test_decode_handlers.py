@@ -563,6 +563,25 @@ def _drive_intake_registry_directory(root: Path) -> None:
     )) == 2
 
 
+def _drive_score_corpus_spec(root: Path) -> None:
+    """A corpus specification in an encoding this does not read.
+
+    Reached through `_score_corpus` rather than through `benchmark`, because the read is the
+    first thing it does and the command around it opens two databases before it gets there. The
+    assertion is on the type as well as the message: `UnicodeDecodeError` is itself a
+    `ValueError`, so a `pytest.raises(ValueError)` alone would pass with no handler present.
+    """
+    from sync.cli import _score_corpus
+
+    spec = root / "corpus.yaml"
+    spec.write_bytes(UTF16)
+
+    with pytest.raises(ValueError, match="could not read") as raised:
+        _score_corpus(spec, "postgresql://unused")
+    assert type(raised.value) is ValueError
+    assert "corpus.yaml" in str(raised.value)
+
+
 def _drive_git_diff(root: Path) -> None:
     """A clone whose tracked source file is not UTF-8, which the patch path refuses.
 
@@ -691,6 +710,7 @@ DRIVERS: dict[str, Callable[[Path], None]] = {
         _drive_merge_outcome_commits,
     "sync/cli.py::intake::JSONDecodeError+OSError+UnicodeDecodeError":
         _drive_intake_registry_directory,
+    "sync/cli.py::_score_corpus::OSError+UnicodeDecodeError+YAMLError": _drive_score_corpus_spec,
     "sync/index/typescript.py::TypeScriptAdapter._read_manifest::"
     "JSONDecodeError+UnicodeDecodeError": _drive_ts_manifest,
     "sync/remediate/agent_patch.py::_git_diff::UnicodeDecodeError": _drive_git_diff,
