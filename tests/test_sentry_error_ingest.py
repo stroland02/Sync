@@ -137,9 +137,9 @@ def test_counts_are_pooled_per_operation_and_never_per_issue(store, cache, issue
 
 def test_status_classes_are_not_pooled_into_one_number(store, cache, issues_file):
     """`status_rate.py` makes this argument about `observed_call` and it is sharper here: a 402
-    is a declined card and a 503 is the vendor being down. Summed into one error count they are a
-    rate that describes neither, and the class cannot be recovered afterwards because this table
-    cannot be backfilled."""
+    is a declined card and a 503 is the vendor being down. Pooled they are a count that describes
+    neither integration, and the class cannot be recovered afterwards because this table cannot be
+    backfilled."""
     _feed(cache, issues_file)
     rows = _rows(store)
 

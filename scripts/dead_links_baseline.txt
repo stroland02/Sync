@@ -37,7 +37,7 @@ src/sync/dashboard/queries.py:workflow_state
 
 # `observed_error_windows` is a deferral like the block above, but a weaker one, and the
 # difference is worth stating rather than borrowing the stronger framing. The dashboard entries
-# name a written task that consumes them. This one does not: B71 landed the Sentry error-rate
+# name a written task that consumes them. This one does not: B71 landed the Sentry error-count
 # ingest deliberately without a detector, because a detector written against the single fixture
 # that exists would be a detector tuned to that fixture. So the consumer is intended but
 # unplanned, and no document names the commit that deletes this line.
