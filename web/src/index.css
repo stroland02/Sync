@@ -1,5 +1,33 @@
 @import "tailwindcss";
 
+/* No `.dark` element exists, so this pins the console to one palette rather than letting
+   the shadcn components' `dark:` rules fire off the reader's OS preference against tokens
+   that have no dark values yet. */
+@custom-variant dark (&:is(.dark *));
+
 @theme {
-  /* Console palette. Deliberately minimal now — the deferred slice owns the design system. */
+  /* The minimum the shadcn catalog needs to be legible, and no more. Data-dense and
+     unstyled beyond legibility is the target for this slice; a deferred slice owns the
+     design system, and that is where a real palette belongs. */
+  --color-background: oklch(1 0 0);
+  --color-foreground: oklch(0.21 0 0);
+  --color-card: oklch(1 0 0);
+  --color-card-foreground: oklch(0.21 0 0);
+  --color-muted: oklch(0.97 0 0);
+  --color-muted-foreground: oklch(0.52 0 0);
+  --color-border: oklch(0.88 0 0);
+  --color-input: oklch(0.88 0 0);
+  --color-ring: oklch(0.6 0 0);
+  --color-primary: oklch(0.21 0 0);
+  --color-primary-foreground: oklch(0.99 0 0);
+  --color-secondary: oklch(0.97 0 0);
+  --color-secondary-foreground: oklch(0.21 0 0);
+  --color-destructive: oklch(0.51 0.19 27.5);
+}
+
+@layer base {
+  body {
+    background-color: var(--color-background);
+    color: var(--color-foreground);
+  }
 }
