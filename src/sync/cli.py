@@ -73,7 +73,7 @@ from sync.signals.registry import (
     load_vendor,
     prepare_vendor,
 )
-from sync.signals.sentry.errors import SentryErrorReader
+from sync.signals.sentry.errors import SentryErrorReader, UnreadableExport
 from sync.signals.sentry.shapes import SentryShapeReader
 from sync.telemetry import ingest_payload
 
@@ -1345,7 +1345,17 @@ def sentry_errors(args: argparse.Namespace) -> int:
     reader = SentryErrorReader(
         store, args.repo_id, args.vendor, _operation_resolver(vendor)
     )
-    written = reader.ingest(payload, since, until)
+    try:
+        written = reader.ingest(payload, since, until)
+    except UnreadableExport as exc:
+        # Refused for the reason every other refusal in this command is: nothing happened, and
+        # the alternative is telling the operator their integration was quiet during an hour
+        # this could not read a single record of.
+        print(
+            f"{exc}; the window {args.since} to {args.until} is left as it was",
+            file=sys.stderr,
+        )
+        return 2
     # The count of rows, and nothing about what was in them. An export holding nothing this
     # vendor owns writes none and is not an error: a customer whose error stream is all their own
     # bugs is the ordinary case.

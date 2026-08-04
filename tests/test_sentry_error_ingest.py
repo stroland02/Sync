@@ -35,7 +35,11 @@ import pytest
 from sync.cli import sentry_errors
 from sync.graph.store import GraphStore
 from sync.signals.registry import SYMBOL_MAP_FILENAME
-from sync.signals.sentry import ERROR_TRACKER_GROUP_SOURCE, SentryErrorReader
+from sync.signals.sentry import (
+    ERROR_TRACKER_GROUP_SOURCE,
+    SentryErrorReader,
+    UnreadableExport,
+)
 
 DSN = os.environ.get("SYNC_DSN", "postgresql://sync:sync@localhost:5433/sync")
 FIXTURES = Path(__file__).parent / "fixtures" / "sentry"
@@ -378,6 +382,68 @@ def test_a_payload_that_is_not_utf8_at_all_exits_two(store, cache, capsys):
     assert "could not read" in capsys.readouterr().err
 
 
+# --- the export that stopped being readable ----------------------------------------
+
+
+def test_an_export_no_record_of_which_reads_leaves_the_window_standing(
+    store, cache, issues_file, tmp_path, capsys
+):
+    """The empty-pool replacement is right when the tracker genuinely reports nothing, and it is
+    indistinguishable from the reader having stopped working. Sentry renames `latestEvent`, the
+    operator re-runs the same command over the same window, every record drops out, the slice is
+    cleared and the command prints zero windows and exits 0 -- an unreadable export reported as a
+    quiet hour, with the counts that were there gone and unrecoverable, because this table cannot
+    be backfilled.
+
+    So the replacement is refused when every record the export held was dropped as malformed.
+    Nothing is written, nothing is removed, and the operator is told."""
+    _feed(cache, issues_file)
+    before = _rows(store)
+    assert before, "the window has to hold something for this to be about losing it"
+
+    renamed = tmp_path / "renamed.json"
+    renamed.write_text(
+        json.dumps([
+            {("latest_event" if key == "latestEvent" else key): value
+             for key, value in issue.items()}
+            for issue in json.loads(issues_file.read_text(encoding="utf-8"))
+        ]),
+        encoding="utf-8",
+    )
+
+    assert sentry_errors(_args(cache, renamed)) == 2
+
+    assert _rows(store) == before
+    assert "readable" in capsys.readouterr().err
+
+
+def test_an_export_of_other_peoples_errors_still_replaces_the_window(
+    store, cache, issues_file, tmp_path
+):
+    """The other side of the line the test above draws, and the reason it is drawn where it is.
+
+    A customer whose Sentry project holds nothing this vendor owns is the ordinary case, not a
+    broken reader: those records were read, understood, and identified as somebody else's. A
+    condition that fired on "nothing pooled" would refuse every hour of such a customer, and a
+    window the tracker now reports as clean has to bring yesterday's counts down."""
+    _feed(cache, issues_file)
+    assert _rows(store)
+
+    foreign = tmp_path / "foreign.json"
+    foreign.write_text(json.dumps([{
+        "id": "4501234590",
+        "count": "500",
+        "latestEvent": {
+            "request": {"url": "https://api.example-crm.test/v3/contacts", "method": "POST"},
+            "contexts": {"response": {"status_code": 500}},
+        },
+    }]), encoding="utf-8")
+
+    assert sentry_errors(_args(cache, foreign)) == 0
+
+    assert _rows(store) == {}
+
+
 # --- the privacy rule --------------------------------------------------------------
 
 
@@ -430,6 +496,20 @@ def _issue(**over) -> dict:
     return issue
 
 
+def _foreign() -> dict:
+    """A record this reader reads and this vendor does not own.
+
+    The ordinary content of a customer's Sentry project, and it is in the batches below so each
+    export stays readable as a whole. A lone malformed record is an export none of which read,
+    which the reader refuses outright -- a different claim from the one each of those tests
+    makes, which is that one bad record costs the batch nothing.
+    """
+    return _issue(id="9", latestEvent={
+        "request": {"url": "https://api.example-crm.test/v3/contacts", "method": "POST"},
+        "contexts": {"response": {"status_code": 500}},
+    })
+
+
 WINDOW = (
     datetime(2026, 7, 20, 14, 0, tzinfo=timezone.utc),
     datetime(2026, 7, 20, 15, 0, tzinfo=timezone.utc),
@@ -454,7 +534,7 @@ WINDOW = (
 def test_a_malformed_issue_records_nothing_and_does_not_raise(store, malformed):
     """This reads data a third party produced, and one bad record must not stop the rest of an
     export. It yields no row rather than an exception."""
-    assert _reader(store).ingest([malformed], *WINDOW) == 0
+    assert _reader(store).ingest([malformed, _foreign()], *WINDOW) == 0
     assert store.observed_error_windows(REPO) == []
 
 
@@ -470,7 +550,7 @@ def test_a_dropped_issue_is_logged_rather_than_swallowed(store, caplog):
     """Silence on one bad record is correct; silence on all of them is a source that quietly
     stopped working, which looks identical to a week with no errors."""
     with caplog.at_level(logging.WARNING, logger="sync.signals.sentry"):
-        _reader(store).ingest([_issue(count="many")], *WINDOW)
+        _reader(store).ingest([_issue(count="many"), _foreign()], *WINDOW)
 
     # The logger is asserted, not merely that something was logged. `caplog` collects from the
     # root, so any warning anything emitted during the call satisfied the weaker form -- including
@@ -483,7 +563,8 @@ def test_the_log_line_carries_no_issue_content(store, caplog):
     quotable thing a Sentry issue holds."""
     with caplog.at_level(logging.WARNING, logger="sync.signals.sentry"):
         _reader(store).ingest(
-            [_issue(count="many", title="TypeError on ch_3NpqR2eZvKYlo2C41gK3TQzr")], *WINDOW
+            [_issue(count="many", title="TypeError on ch_3NpqR2eZvKYlo2C41gK3TQzr"), _foreign()],
+            *WINDOW,
         )
 
     logged = " ".join(record.getMessage() for record in caplog.records)
@@ -498,3 +579,12 @@ def test_an_export_holding_nothing_this_vendor_owns_writes_no_row(store):
         "request": {"url": "https://api.example-crm.test/v3/contacts", "method": "POST"},
         "contexts": {"response": {"status_code": 500}},
     })], *WINDOW) == 0
+
+
+def test_an_export_of_nothing_but_malformed_records_refuses_to_replace_the_window(store):
+    """The aggregate the per-record contract above says nothing about. One bad group must not
+    cost the rest of a window, and every group being bad is not a fact about a group at all --
+    it is the reader having stopped reading, and clearing the slice on that evidence deletes
+    counts the tracker's retention will not give back."""
+    with pytest.raises(UnreadableExport):
+        _reader(store).ingest([{"id": "1", "count": "3"}, "not-a-mapping"], *WINDOW)

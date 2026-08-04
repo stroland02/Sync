@@ -72,6 +72,26 @@ and window -- which any consumer summing rows would double-count.
 BINDING_RUNG = "observed"
 
 
+class UnreadableExport(Exception):
+    """Every record the export held was dropped as malformed, so the window is not replaced.
+
+    An empty pooling is otherwise a replacement: a period the tracker now reports as clean has
+    to bring the previous counts down. This is the one reading of an empty pooling that is not
+    evidence about the vendor's operations -- rename a field an issue is built from and every
+    record drops out, and clearing the slice would report the reader having stopped working as
+    an hour in which nothing failed, with the counts gone and no way back because this table
+    cannot be backfilled.
+
+    An export holding records this reader understood and does not own is not this. Those were
+    read; that a customer's Sentry project is mostly their own bugs is the ordinary case, and a
+    condition that fired on "nothing pooled" would refuse every hour of one.
+    """
+
+    def __init__(self, held: int) -> None:
+        super().__init__(f"no record in an export of {held} was readable as an issue")
+        self.held = held
+
+
 class SentryErrorReader:
     """Folds an issues export into `observed_error_window`.
 
@@ -108,17 +128,44 @@ class SentryErrorReader:
         tracker no longer reports while the errors it counted are counted again under the group
         they were merged into. The writes and the removal share one transaction so no reader ever
         sees a window that is half-replaced.
+
+        Raises `UnreadableExport` when every record held was dropped as malformed, which is the
+        one empty pooling that says nothing about the vendor's operations.
         """
         pooled: dict[tuple[str, str], list[int]] = {}
+        dropped = 0
         for issue in issues:
-            parsed = self._parse(issue)
-            if parsed is None:
+            request = self._request(issue)
+            if request is None:
+                dropped += 1
                 continue
 
-            operation_id, status_class, count = parsed
-            totals = pooled.setdefault((operation_id, status_class), [0, 0])
+            method, url, event = request
+            operation_id = self._resolve_operation(method, url)
+            if operation_id is None:
+                # Not a defect and the ordinary case: most of a customer's error stream is their
+                # own code and other people's APIs. Deliberately not counted as a drop -- this
+                # record was read, and that is what tells a quiet window from a broken reader.
+                log.debug("sentry issue %s resolves to no operation", self._issue_id(issue))
+                continue
+
+            count = _count(issue.get("count"))
+            if count is None:
+                log.warning("sentry issue %s carries no readable count", self._issue_id(issue))
+                dropped += 1
+                continue
+
+            totals = pooled.setdefault((operation_id, _status_class(event)), [0, 0])
             totals[0] += count
             totals[1] += 1
+
+        if dropped and dropped == len(issues):
+            log.warning(
+                "every one of %d record(s) in this export was dropped as malformed; "
+                "the window is left as it was",
+                dropped,
+            )
+            raise UnreadableExport(dropped)
 
         with self._store.transaction():
             for (operation_id, status_class), (errors, groups) in pooled.items():
@@ -144,8 +191,14 @@ class SentryErrorReader:
             )
         return len(pooled)
 
-    def _parse(self, issue: Any) -> tuple[str, str, int] | None:
-        """The three things an issue has to yield, or `None` with a reason logged."""
+    def _request(self, issue: Any) -> tuple[str, str, Mapping[str, Any]] | None:
+        """The method, url and representative event, or `None` with a reason logged.
+
+        Structural only, and that is what makes it the readability test. Whether this vendor owns
+        the operation is a fact about the customer's traffic rather than about the export, so it
+        is decided by the caller and not here -- a record that gets this far was read, whoever it
+        turns out to belong to.
+        """
         if not isinstance(issue, Mapping):
             log.warning("sentry issue is %s, not a mapping", type(issue).__name__)
             return None
@@ -166,19 +219,7 @@ class SentryErrorReader:
             )
             return None
 
-        operation_id = self._resolve_operation(method, url)
-        if operation_id is None:
-            # Not a defect and the ordinary case: most of a customer's error stream is their own
-            # code and other people's APIs.
-            log.debug("sentry issue %s resolves to no operation", self._issue_id(issue))
-            return None
-
-        count = _count(issue.get("count"))
-        if count is None:
-            log.warning("sentry issue %s carries no readable count", self._issue_id(issue))
-            return None
-
-        return operation_id, _status_class(event), count
+        return method, url, event
 
     def _issue_id(self, issue: Mapping[str, Any]) -> str:
         """Sentry's own surrogate for the group, which is the only handle on a dropped record.
