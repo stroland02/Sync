@@ -17,6 +17,7 @@ from pathlib import Path
 import pytest
 from starlette.testclient import TestClient
 
+from sync.api.__main__ import DEFAULT_PORT
 from sync.api.app import _MAX_LIMIT, create_app
 from sync.core import CallSite, Finding, VendorChange
 from sync.mcp.tools import DEFAULT_LIMIT, GraphSurface
@@ -444,3 +445,13 @@ def test_the_consoles_default_page_size_matches_the_surfaces():
     match = re.search(r"export const DEFAULT_LIMIT\s*=\s*(\d+)", source)
     assert match is not None, "web/src/api/client.ts no longer declares DEFAULT_LIMIT"
     assert int(match.group(1)) == DEFAULT_LIMIT
+
+
+def test_the_consoles_proxy_target_matches_the_apis_default_port():
+    # `web/vite.config.ts` proxies `/api` to a hardcoded host:port because the dev server
+    # cannot import Python. Nothing else holds the two together: a port changed on one side
+    # and not the other turns every console request into a proxy error, silently.
+    source = _web_source("vite.config.ts")
+    match = re.search(r'target:\s*"http://127\.0\.0\.1:(\d+)"', source)
+    assert match is not None, "web/vite.config.ts no longer proxies /api to a fixed port"
+    assert int(match.group(1)) == DEFAULT_PORT
