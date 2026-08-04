@@ -14,22 +14,18 @@ The load-bearing idea is the **API Dependency Graph**: static call sites joined 
 
 The rule it exists to enforce: **every agent must shorten the critical path or improve a result. An agent that does neither is latency and cost with extra steps.**
 
-Three things from it that are easy to get wrong:
+One consequence binds everywhere, because breaking it fails silently: any state key written by parallel branches **must** declare a reducer. Without one, concurrent writes are dropped — no error, no warning, missing results.
 
-- Sync's critical path is dominated by the customer's CI run, which nothing we build makes faster. Parallelism addresses about a fifth of the wall clock. The larger wins are precomputation and staged delivery.
-- Any state key written by parallel branches **must** declare a reducer. Without one, concurrent writes are dropped silently — no error, no warning, missing results.
-- `locate → patch → verify` is a data dependency, not an accident. Parallelising it produces a race, not speed.
+Two more, both scoped to the remediation pipeline and both in `.claude/rules/remediate-stage.md`: the critical path is dominated by the customer's CI run, and `locate → patch → verify` is a data dependency rather than an ordering accident.
 
 ## This is a data pipeline, and it obeys data-pipeline rules
 
-`docs/superpowers/specs/2026-07-27-sync-pipeline-discipline.md` carries the argument and names what deliberately does not apply. Six rules bind every session:
+`docs/superpowers/specs/2026-07-27-sync-pipeline-discipline.md` carries the argument and names what deliberately does not apply. Two of the six rules are purely about vendor adapters — keep `VendorChange.raw`, and a signature proves origin rather than correctness — and live in `.claude/rules/signal-stage.md`. The four that bind every session:
 
 - **Declare a table's grain as a comment in `schema.sql` before adding a column.** One `migration_outcome` row is one *attempt*, not one finding. A query that counts findings by counting rows is wrong, and wrong quietly.
 - **Every stage is idempotent.** Re-running INDEX, SIGNAL, or DETECT on the same input converges on the same rows. Every table gets a natural key and an explicit conflict clause. `efcc19d` was this bug. **One named exemption:** oasdiff-derived `vendor_change` rows do not converge, because `oasdiff breaking` returns a different answer every run over identical bytes on both pinned versions. Treat that source as at-least-once and do not read a row count from it as a measurement. Nothing else is exempt — INDEX, DETECT and the rest of SIGNAL are bound as written. `docs/superpowers/specs/2026-07-27-sync-pipeline-discipline.md` carries what retires it.
-- **Every binding carries the rung it came from** — `static`, `resolved`, or `observed` — and so does every artifact derived from it. A false positive that cannot be attributed to a rung cannot be fixed. This is enforced rather than asked for: `finding.binding_rung` is a column, not a join, and `GraphStore.insert_finding` refuses a finding whose rung is `unattributed`, naming the detector that raised it. `unattributed` is reserved for rows written before that column existed — it is a fact about history, which is why `BindingRung` does not contain it. The check sits at the write rather than on `Finding`, because `Finding` is exported from `sync.core` and a required field there would break every third-party detector.
+- **Every binding carries the rung it came from** — `static`, `resolved`, or `observed` — and so does every artifact derived from it. A false positive that cannot be attributed to a rung cannot be fixed. This is enforced rather than asked for: the rung is a column, not a join, and the write refuses an unattributed finding. `.claude/rules/graph-grain.md` carries where that check sits and why.
 - **Abandoned runs are data.** `abandon_reason` stays queryable; abandoned attempts are where routing learns which change kinds are not mechanically safe.
-- **Keep the raw vendor record.** `VendorChange.raw` is why `b29795a` could be applied to history instead of re-fetching every spec pair. Store the interpretation *and* the source.
-- **A signature proves origin, not correctness.** A validly signed feed carrying a malformed `VendorChange` fails at parse, before any row is built from it.
 
 ## Non-negotiables
 
@@ -70,11 +66,9 @@ Git warns `LF will be replaced by CRLF` on every commit. That is expected. Do no
 
 **Test first, always.** Write the failing test, run it, watch it fail for the reason you expect, then implement. A test that has never failed has never been shown to test anything.
 
-**A test that cannot fail is worse than no test** — it manufactures confidence. When a test asserts on a subprocess, an exit code, or an external tool, prove it detects a real violation before trusting it. This has already bitten us once: the import-boundary test's original form exited 0 without parsing its own argument.
+**A test that cannot fail is worse than no test.** It reports a component as covered while asserting nothing, and nothing downstream ever contradicts it — the import-boundary test's original form exited 0 without parsing its own argument. When a test asserts on a subprocess, an exit code, or an external tool, break the thing deliberately and watch it go red before trusting it.
 
-**No test calls a vendor API or a model API.** Fixtures are committed. Local toolchain access — the Postgres container, `npx` fetching a compiler — is fine. The one end-to-end test is marked `@pytest.mark.e2e` and deselected by default.
-
-Run the focused test while iterating; run the full suite once before committing.
+The rest of the test discipline is in `.claude/rules/test-discipline.md`, which loads whenever you touch `tests/`: the no-vendor-API and no-model-API rule, why fixtures being ASCII means no test catches a missing `encoding="utf-8"`, and focused-while-iterating then full-before-committing.
 
 **Never detect a write by comparing against a live mtime.** Filesystems record modification times
 far more coarsely than the clock, so a write that changes no bytes usually leaves `st_mtime_ns`
@@ -122,8 +116,6 @@ Restricting a tool means listing it in `disallowed_tools`. Merely leaving it out
 `temperature`, `top_p`, and `budget_tokens` return HTTP 400 on this model on either surface. Steer with prompting instead. Thinking is on by default, and on the Messages API `max_tokens` caps thinking plus output together, which is why that ceiling is generous.
 
 ## Code style
-
-Write code that reads like the code already here. Match its naming, comment density, and idiom.
 
 Comment to state a constraint the code cannot show — never to narrate what the next line does, where something came from, or why a change is correct. That last one is talking to a reviewer, and it becomes noise the moment the pull request merges.
 
