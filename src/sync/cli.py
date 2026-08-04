@@ -1162,7 +1162,8 @@ def _payload_bytes(payload: str) -> bytes:
     the JSON is ever parsed -- and a `UnicodeDecodeError` is a `ValueError` rather than a
     `JSONDecodeError`, so it escapes the handler that exists to report an unreadable payload and
     reaches the operator as a traceback. The buffer underneath is what was actually piped, and
-    every caller decodes it as UTF-8 itself.
+    what becomes of those bytes is the caller's: three decode them as UTF-8 themselves, and
+    `merge_outcome` deliberately never does, because the HMAC covers exactly what GitHub sent.
     """
     return sys.stdin.buffer.read() if payload == "-" else Path(payload).read_bytes()
 
@@ -1500,7 +1501,15 @@ def merge_outcome(args: argparse.Namespace) -> int:
         )
         return 2
 
-    body = sys.stdin.buffer.read() if args.payload == "-" else Path(args.payload).read_bytes()
+    try:
+        body = _payload_bytes(args.payload)
+    except OSError as exc:
+        # Exit 2 rather than 1. One is a verdict about a delivery -- forged, or genuine and
+        # unusable -- and a body nothing ever read is neither, so a wrapper scripting on the
+        # difference would retry a mistyped path as though GitHub had sent something.
+        print(f"could not read {args.payload}: {type(exc).__name__}: {exc}", file=sys.stderr)
+        return 2
+
     # Fetched by whoever holds a GitHub client, not here: the pull request event carries a count
     # and a link rather than the commits. Absent, the column stays null rather than zero, and
     # zero would read as "no human touched this patch" -- the claim the benchmark rests on.

@@ -617,10 +617,12 @@ def webhook_secret(monkeypatch) -> bytes:
     return secret
 
 
-def _merge_args(payload: Path, signature: str):
-    return argparse.Namespace(
+def _merge_args(payload: Path, signature: str, **overrides):
+    fields = dict(
         payload=str(payload), signature=signature, secret_file=None, commits=None, dsn=DSN
     )
+    fields.update(overrides)
+    return argparse.Namespace(**fields)
 
 
 def test_a_verified_delivery_that_is_not_a_pull_request_event_is_rejected_by_name(
@@ -683,6 +685,32 @@ def test_a_malformed_delivery_and_an_uninteresting_one_are_told_apart_by_the_exi
 
     assert merge_outcome(_merge_args(routine, _sign(opened, webhook_secret))) == 0
     assert "nothing to record" in capsys.readouterr().out
+
+
+# --- `sync merge-outcome`: the three files it reads before it records anything ------
+#
+# All three reads were unguarded, so a path an operator mistyped was a traceback rather than an
+# exit code. Every refusal below fires before `GraphStore` is constructed, which is what the
+# unserved DSN asserts: a run that reached the database would fail against it rather than pass.
+
+UNSERVED_DSN = "postgresql://unused"
+
+
+def test_merge_outcome_refuses_a_delivery_body_it_cannot_read(tmp_path, webhook_secret, capsys):
+    """The path an operator mistyped, on the file route where an `OSError` is reachable at all.
+
+    Exit 2 rather than 1: the two verdicts about a delivery -- forged, and malformed -- are 1,
+    and a body that was never read is not a verdict about anything. A wrapper scripting on the
+    difference would otherwise retry a typo as though GitHub had sent something.
+    """
+    absent = tmp_path / "absent-delivery.json"
+
+    assert merge_outcome(_merge_args(absent, "sha256=0", dsn=UNSERVED_DSN)) == 2
+
+    printed = capsys.readouterr()
+    assert printed.out == ""
+    assert "could not read" in printed.err
+    assert str(absent) in printed.err
 
 
 # --- `sync feed-public-key`: the subcommand nothing had ever run --------------------
