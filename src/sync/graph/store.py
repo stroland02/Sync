@@ -4,15 +4,16 @@ from __future__ import annotations
 
 import hashlib
 import json
-from collections.abc import Iterator, Sequence
+from collections.abc import Collection, Iterator, Sequence
 from contextlib import contextmanager
+from datetime import datetime
 from importlib import resources
 
 import psycopg
 from psycopg.rows import dict_row
 
 from sync.core import CallSite, Finding, FindingStatus, MigrationOutcome, VendorChange
-from sync.core.models import UNATTRIBUTED, ObservedCall, ObservedShape
+from sync.core.models import UNATTRIBUTED, ObservedCall, ObservedErrorWindow, ObservedShape
 from sync.graph.sources import TRAFFIC_SOURCES
 
 
@@ -697,6 +698,106 @@ class GraphStore:
             (repo_id,),
         ).fetchall()
         return [ObservedCall(**row) for row in rows]
+
+    def record_observed_error_window(self, window: ObservedErrorWindow) -> None:
+        """Record one operation's failure count over one window.
+
+        The conflict clause replaces rather than adds, which is where this parts company with
+        `record_observed_shape`. A shape observation is an increment -- each one is fresh
+        evidence that a shape recurs -- but a count over a bounded window is a level, and adding
+        would double it every time the same export was fed twice. That is the idempotency rule
+        with a number attached: the second ingest of one export has to converge, and a detector
+        reading a doubled count would see a spike that is an artifact of how often the ingest ran.
+
+        Replacement rather than a maximum, in the other direction. A window re-queried after a
+        group was merged or deleted holds fewer errors, and a clause that could only ever
+        increase would leave the graph asserting a level the tracker no longer reports, with
+        nothing able to bring it down.
+
+        `binding_rung` follows the count because it is outside the natural key: a correlator that
+        improves must converge on the row it already wrote, and the row's rung has to describe
+        the binding that produced the count now stored in it.
+        """
+        self._connect().execute(
+            """
+            INSERT INTO observed_error_window (repo_id, vendor_id, operation_id, binding_rung,
+                                               source, status_class, window_start, window_end,
+                                               error_count, issue_count)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            ON CONFLICT (repo_id, vendor_id, operation_id, source, status_class,
+                         window_start, window_end)
+            DO UPDATE SET
+                error_count = EXCLUDED.error_count,
+                issue_count = EXCLUDED.issue_count,
+                binding_rung = EXCLUDED.binding_rung,
+                recorded_at = now()
+            """,
+            (
+                window.repo_id, window.vendor_id, window.operation_id, window.binding_rung,
+                window.source, window.status_class, window.window_start, window.window_end,
+                window.error_count, window.issue_count,
+            ),
+        )
+
+    def remove_observed_error_windows_outside(
+        self,
+        repo_id: str,
+        vendor_id: str,
+        source: str,
+        window_start: datetime,
+        window_end: datetime,
+        keys: Collection[tuple[str, str]],
+    ) -> int:
+        """Drop this window's rows for this source that `keys` no longer names, and say how many.
+
+        The count has a caller rather than being returned for symmetry: an ingest that wrote
+        nothing and deleted three rows is indistinguishable from one that held nothing for this
+        vendor, and rows leaving the graph unremarked is the worse half of that pair to get wrong.
+
+        The other half of what makes an ingest a replacement. `record_observed_error_window`
+        replaces a key whose count changed and cannot touch a key that stopped being reported at
+        all -- a group merged into another or deleted outright leaves a row asserting a level the
+        tracker no longer holds, and a consumer summing the window counts those errors a second
+        time under the operation they were merged into.
+
+        `source` bounds the delete because two sources are two samples of the same failures, which
+        is why it is in the natural key; one ingest must not clear a window another source wrote.
+        The bounds are the ones the caller wrote, never every window for the repository: an
+        earlier period is a separate observation and is not contradicted by this one.
+
+        An empty `keys` is a replacement like any other, not a no-op. A window the tracker now
+        reports as clean has to bring yesterday's counts down, and a guard against the empty case
+        would leave exactly the rows that can never be corrected.
+        """
+        operations = [operation for operation, _ in keys]
+        classes = [status_class for _, status_class in keys]
+        return self._connect().execute(
+            """
+            DELETE FROM observed_error_window
+             WHERE repo_id = %s AND vendor_id = %s AND source = %s
+               AND window_start = %s AND window_end = %s
+               AND (operation_id, status_class)
+                   NOT IN (SELECT * FROM unnest(%s::text[], %s::text[]))
+            """,
+            (repo_id, vendor_id, source, window_start, window_end, operations, classes),
+        ).rowcount
+
+    def observed_error_windows(self, repo_id: str) -> list[ObservedErrorWindow]:
+        """Every failure count recorded for one repository.
+
+        Scoped to a repository for the reason `observed_calls` is: it is the unit a finding is
+        raised against, and a query leaking another customer's error volume in would produce
+        findings naming the wrong code.
+        """
+        rows = self._connect().execute(
+            """
+            SELECT * FROM observed_error_window
+             WHERE repo_id = %s
+             ORDER BY window_start, window_end, operation_id, status_class, source
+            """,
+            (repo_id,),
+        ).fetchall()
+        return [ObservedErrorWindow(**row) for row in rows]
 
     def observed_shapes(
         self, vendor_id: str, operation_id: str, *, traffic_only: bool = True

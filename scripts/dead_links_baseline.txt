@@ -31,3 +31,20 @@ src/sync/route/templates.py:omit_property_at
 # `src/` for a reason the surface makes structural. It leaves when Task 3 or a followup either
 # wires it or removes it.
 src/sync/dashboard/queries.py:repository_overview
+
+# `observed_error_windows` is a deferral like the entry above, but a weaker one, and the
+# difference is worth stating rather than borrowing the stronger framing. `repository_overview`
+# leaves when Task 3 or a followup wires it or removes it, so a written task decides its fate.
+# This one has no such task: B71 landed the Sentry error-count ingest deliberately without a
+# detector, because a detector written against the single fixture that exists would be a
+# detector tuned to that fixture. So the consumer is intended but unplanned, and no document
+# names the commit that deletes this line.
+#
+# The reader stays rather than the tests reading SQL directly. Every assertion about what the
+# ingest wrote goes through this method; replacing it with a query in the test file would put a
+# second copy of the row mapping there, and a test that builds its own expected row out of the
+# same SELECT it is checking is the shape of test this repository has twice found cannot fail.
+#
+# What retires this line is the first M5 detector querying these counts. Until then the entry is
+# the honest record: the write path is wired and the read path is not.
+src/sync/graph/store.py:GraphStore.observed_error_windows

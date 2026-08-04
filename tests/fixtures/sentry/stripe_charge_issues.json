@@ -1,0 +1,191 @@
+[
+  {
+    "id": "4501234567",
+    "shortId": "BILLING-7K",
+    "count": "312",
+    "userCount": 118,
+    "level": "error",
+    "firstSeen": "2026-07-20T14:04:11.000Z",
+    "lastSeen": "2026-07-20T14:59:02.000Z",
+    "title": "HTTPError: 402 Payment Required",
+    "culprit": "src/billing.ts in createCharge",
+    "metadata": {
+      "type": "HTTPError",
+      "value": "402 Payment Required for ch_3NpqR2eZvKYlo2C41gK3TQzr"
+    },
+    "latestEvent": {
+      "event_id": "9ec79c33ec9942ab8353589fcb2e04dc",
+      "timestamp": "2026-07-20T14:59:02.000Z",
+      "request": {
+        "url": "https://api.stripe.com/v1/charges",
+        "method": "POST"
+      },
+      "contexts": {
+        "response": {
+          "type": "response",
+          "status_code": 402
+        }
+      }
+    }
+  },
+  {
+    "id": "4501234568",
+    "shortId": "BILLING-8M",
+    "count": "45",
+    "userCount": 31,
+    "level": "error",
+    "firstSeen": "2026-07-20T14:11:00.000Z",
+    "lastSeen": "2026-07-20T14:52:40.000Z",
+    "title": "HTTPError: 402 Payment Required",
+    "culprit": "src/checkout.ts in retryCharge",
+    "metadata": {
+      "type": "HTTPError",
+      "value": "402 Payment Required for cus_NffrFeUfNV2Hib"
+    },
+    "latestEvent": {
+      "event_id": "1a2b3c4d5e6f708192a3b4c5d6e7f809",
+      "timestamp": "2026-07-20T14:52:40.000Z",
+      "request": {
+        "url": "https://api.stripe.com/v1/charges",
+        "method": "POST"
+      },
+      "contexts": {
+        "response": {
+          "type": "response",
+          "status_code": 402
+        }
+      }
+    }
+  },
+  {
+    "id": "4501234569",
+    "shortId": "BILLING-9Q",
+    "count": "8",
+    "userCount": 6,
+    "level": "error",
+    "firstSeen": "2026-07-20T14:40:02.000Z",
+    "lastSeen": "2026-07-20T14:41:19.000Z",
+    "title": "HTTPError: 503 Service Unavailable",
+    "culprit": "src/billing.ts in createCharge",
+    "metadata": {
+      "type": "HTTPError",
+      "value": "503 Service Unavailable"
+    },
+    "latestEvent": {
+      "event_id": "2b3c4d5e6f708192a3b4c5d6e7f80910",
+      "timestamp": "2026-07-20T14:41:19.000Z",
+      "request": {
+        "url": "https://api.stripe.com/v1/charges",
+        "method": "POST"
+      },
+      "contexts": {
+        "response": {
+          "type": "response",
+          "status_code": 503
+        }
+      }
+    }
+  },
+  {
+    "id": "4501234570",
+    "shortId": "BILLING-2C",
+    "count": "27",
+    "userCount": 22,
+    "level": "error",
+    "firstSeen": "2026-07-20T14:05:44.000Z",
+    "lastSeen": "2026-07-20T14:58:31.000Z",
+    "title": "TypeError: Cannot read properties of undefined (reading 'status')",
+    "culprit": "src/billing.ts in createCharge",
+    "metadata": {
+      "type": "TypeError",
+      "value": "Cannot read properties of undefined (reading 'status')"
+    },
+    "latestEvent": {
+      "event_id": "3c4d5e6f708192a3b4c5d6e7f8091011",
+      "timestamp": "2026-07-20T14:58:31.000Z",
+      "request": {
+        "url": "https://api.stripe.com/v1/charges",
+        "method": "POST"
+      },
+      "contexts": {
+        "runtime": {
+          "name": "node",
+          "version": "22.4.0"
+        }
+      }
+    }
+  },
+  {
+    "id": "4501234571",
+    "shortId": "BILLING-4T",
+    "count": 12,
+    "userCount": 9,
+    "level": "error",
+    "firstSeen": "2026-07-20T14:20:00.000Z",
+    "lastSeen": "2026-07-20T14:39:12.000Z",
+    "title": "HTTPError: 429 Too Many Requests",
+    "culprit": "src/reports.ts in listCharges",
+    "metadata": {
+      "type": "HTTPError",
+      "value": "429 Too Many Requests"
+    },
+    "latestEvent": {
+      "event_id": "4d5e6f708192a3b4c5d6e7f809101112",
+      "timestamp": "2026-07-20T14:39:12.000Z",
+      "request": {
+        "url": "https://api.stripe.com/v1/charges?limit=100",
+        "method": "GET"
+      },
+      "contexts": {
+        "response": {
+          "type": "response",
+          "status_code": 429
+        }
+      }
+    }
+  },
+  {
+    "id": "4501234572",
+    "shortId": "CRM-1A",
+    "count": "9001",
+    "userCount": 400,
+    "level": "error",
+    "firstSeen": "2026-07-20T14:00:00.000Z",
+    "lastSeen": "2026-07-20T14:59:59.000Z",
+    "title": "HTTPError: 500 Internal Server Error",
+    "culprit": "src/crm.ts in syncContacts",
+    "metadata": {
+      "type": "HTTPError",
+      "value": "500 Internal Server Error"
+    },
+    "latestEvent": {
+      "event_id": "5e6f708192a3b4c5d6e7f80910111213",
+      "timestamp": "2026-07-20T14:59:59.000Z",
+      "request": {
+        "url": "https://api.example-crm.test/v3/contacts",
+        "method": "POST"
+      },
+      "contexts": {
+        "response": {
+          "type": "response",
+          "status_code": 500
+        }
+      }
+    }
+  },
+  {
+    "id": "4501234573",
+    "shortId": "BILLING-6Z",
+    "count": "77",
+    "userCount": 60,
+    "level": "error",
+    "firstSeen": "2026-07-20T14:30:00.000Z",
+    "lastSeen": "2026-07-20T14:44:00.000Z",
+    "title": "HTTPError: 402 Payment Required",
+    "culprit": "src/billing.ts in createCharge",
+    "metadata": {
+      "type": "HTTPError",
+      "value": "402 Payment Required"
+    }
+  }
+]

@@ -599,3 +599,47 @@ class ObservedShape(BaseModel):
             source=source,
             sample_count=sample_count,
         )
+
+
+class ObservedErrorWindow(BaseModel):
+    """How many times one operation failed, over one period somebody asked about.
+
+    The grain is one row per `(repo_id, vendor_id, operation_id, source, status_class,
+    window_start, window_end)`. A row is not an error and not an error group: `error_count` is
+    how many errors the window held and `issue_count` is how many groups produced them, so a
+    query counting errors by counting rows is wrong by orders of magnitude.
+
+    **A numerator with no denominator.** An error tracker sees failures and nothing else, so
+    there is no request total here and `error_count` is not a rate. Comparing one window against
+    another is what these rows support unaided; the denominator lives in `observed_call`, at a
+    different grain from a different sample, and joining the two is work nobody has done yet.
+
+    The bounds are a fact about the query rather than about the errors. Derived from when the
+    errors happened, a window would shrink to the extent of the failures and no two windows
+    would be comparable.
+
+    Nothing here identifies a customer. An error group's title is an exception message and its
+    culprit is a path and a symbol out of the customer's repository; none of that survives the
+    read that produces these fields.
+    """
+
+    id: int | None = None
+    repo_id: str
+    vendor_id: str
+    operation_id: str
+    binding_rung: BindingRung
+    # Which pipeline produced the count -- an adapter's own constant, not a member of a closed
+    # set named here. `ObservedShape.source` is a Literal because its three values are ways of
+    # observing a response and core knows all of them; a failure count comes from whatever
+    # monitoring the customer already runs, and a vocabulary in core would have to name each of
+    # those products to admit them.
+    source: str
+    # The hundreds bucket of the response the group's representative event carried -- '4xx',
+    # '5xx', '2xx' -- and empty when it carried none. Empty is a third answer rather than a
+    # missing one: an exception raised reading a field off a successful response has no status.
+    status_class: str
+    window_start: datetime
+    window_end: datetime
+    error_count: int
+    issue_count: int
+    recorded_at: datetime = Field(default_factory=_now)

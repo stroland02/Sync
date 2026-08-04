@@ -51,6 +51,7 @@ somebody writes one, naming both positions.
 
 from __future__ import annotations
 
+import argparse
 import ast
 import json
 import sys
@@ -442,6 +443,55 @@ def _drive_literal_call_sites(root: Path) -> None:
     assert _literal_call_sites(_repo(root))[0] == []
 
 
+def _tracker_cache(root: Path) -> Path:
+    """A cache holding the symbol map both error-tracker commands refuse to run without."""
+    from sync.signals.registry import SYMBOL_MAP_FILENAME
+    from sync.signals.stripe.symbols import build_symbol_map
+
+    cache = root / "cache"
+    cache.mkdir(exist_ok=True)
+    (cache / SYMBOL_MAP_FILENAME).write_text(
+        json.dumps(build_symbol_map(SPEC)), encoding="utf-8"
+    )
+    return cache
+
+
+def _drive_shapes_payload(root: Path) -> None:
+    """A captured response in an encoding this does not read.
+
+    What an operator receives from this command is a count of rows, so an unreadable payload
+    reported as zero of them reads as a vendor that sent nothing. The handler answers with exit 2
+    before any store is opened, which is why the DSN below is never used.
+    """
+    from sync.cli import shapes
+
+    payload = root / "event.json"
+    payload.write_bytes(UTF16)
+
+    assert shapes(argparse.Namespace(
+        vendor="stripe", format="sentry", payload=str(payload),
+        dsn="postgresql://unused", cache=str(_tracker_cache(root)),
+    )) == 2
+
+
+def _drive_sentry_errors_payload(root: Path) -> None:
+    """The same bytes on the count half, where the misreading is worse.
+
+    Zero rows from this command is a window in which the vendor's operations did not fail, and
+    an export nobody could decode reported that way is a quiet week that never happened.
+    """
+    from sync.cli import sentry_errors
+
+    payload = root / "issues.json"
+    payload.write_bytes(UTF16)
+
+    assert sentry_errors(argparse.Namespace(
+        vendor="stripe", repo_id="decode", payload=str(payload),
+        since="2026-07-20T14:00:00+00:00", until="2026-07-20T15:00:00+00:00",
+        dsn="postgresql://unused", cache=str(_tracker_cache(root)),
+    )) == 2
+
+
 def _drive_git_diff(root: Path) -> None:
     """A clone whose tracked source file is not UTF-8, which the patch path refuses.
 
@@ -562,6 +612,9 @@ DRIVERS: dict[str, Callable[[Path], None]] = {
     "sync/index/python_lang.py::PythonAdapter._configured_typechecker::"
     "TOMLDecodeError+UnicodeDecodeError": _drive_configured_typechecker,
     "sync/cli.py::_literal_call_sites::UnicodeDecodeError": _drive_literal_call_sites,
+    "sync/cli.py::shapes::JSONDecodeError+OSError+UnicodeDecodeError": _drive_shapes_payload,
+    "sync/cli.py::sentry_errors::JSONDecodeError+OSError+UnicodeDecodeError":
+        _drive_sentry_errors_payload,
     "sync/index/typescript.py::TypeScriptAdapter._read_manifest::"
     "JSONDecodeError+UnicodeDecodeError": _drive_ts_manifest,
     "sync/remediate/agent_patch.py::_git_diff::UnicodeDecodeError": _drive_git_diff,
