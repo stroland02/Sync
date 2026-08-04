@@ -208,11 +208,18 @@ sees `ValueError`-spelled chains or says in its own text that it cannot.
 
 ## In flight
 
-Nothing. **B61 and B55 both landed** — `89ac057` and `c32f99e` record them, and B55 has a report at
-`reports/2026-07-29-adapter-selection-explains-its-refusal.md` — and their lines sat here for days
-after. An entry that outlives its work makes this section read as capacity in use when there is
-none, which is the opposite of what a tick needs from it. Whoever lands an item clears its line in
-the landing commit.
+- **B76** — branch `b76-cli-read-truths`, worktree `m1-static-gate`.
+- **B77** — branch `b77-keep-the-red`, worktree `m1-forge`.
+
+Both dispatched through the Agent tool with the brief written to a file in the worktree's `.claude/`
+and the path handed over. Orca dispatch is still not delivering — see HANDOFF.md — and every agent
+that has done real work in the last two days went this way instead.
+
+An entry here that outlives its work makes this section read as capacity in use when there is none,
+which is the opposite of what a tick needs from it. **B61 and B55 sat here for days after landing**
+— `89ac057` and `c32f99e` record them, and B55 has a report at
+`reports/2026-07-29-adapter-selection-explains-its-refusal.md`. So: whoever lands an item clears its
+line in the landing commit, and whoever dispatches one adds it in the same breath as the dispatch.
 
 **Workers keep landing in the wrong worktree.** Three times today a worker has written into a tree
 its brief did not name, twice into one another worker already held. The brief names the path and
