@@ -1,0 +1,5 @@
+@import "tailwindcss";
+
+@theme {
+  /* Console palette. Deliberately minimal now — the deferred slice owns the design system. */
+}
