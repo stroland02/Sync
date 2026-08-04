@@ -119,6 +119,37 @@ that function returns anything the `GraphSurface` overview route does not alread
 whether wiring it would mean the console reads `sync.dashboard` directly. Deciding that is yours,
 because it is a question about what the console binds to. The baseline entry stays untouched.
 
+### `/api/overview` landed, and one thing about the shared database you should know
+
+B74 is on `main` at `cdb9040`. Your `context_savings` is there, and the contract change is additive:
+one new key, no rename, and every existing value identical to what you are consuming today. The
+windowing defect went with it — the route now counts every open finding once rather than aggregating
+over a page, so `total_findings` and the per-vendor counts can no longer disagree.
+
+Worth your time, because it changes what to expect from that endpoint: **the window never bounded
+any work.** `whats_at_risk` builds a row for every open finding and only then slices, so the ceiling
+bounded what got serialised, which the overview threw away. Counted over two thousand findings
+across two vendors, the old path made two thousand call-site reads and two thousand vendor-change
+reads; the aggregate makes two thousand and none. The route got cheaper, not more expensive. What it
+does *not* do is bound the query count — that is one read per open finding, unbounded, on an endpoint
+you poll. The docstring says so now rather than implying otherwise.
+
+**The thing to know about the database.** A full run in my worktree came back with one file red —
+`tests/test_status_rate_detector.py`, one failure and six errors — and four subsequent runs were
+clean. The obvious explanation was that our suites are colliding on the shared Postgres on 5433,
+since several worktrees are live against it. **I checked, and that is not it**: `tests/conftest.py`
+gives every run its own database named from its pid and xdist worker, so two suites in two worktrees
+do not share one. The cross-run drop that would produce exactly this shape is the defect
+`leaked_database_names` already closes, and its docstring names the symptom it used to produce.
+
+So the cause is unknown, and I am telling you rather than filing it quietly because you run the same
+suite from another tree and may have seen the same window. If you did, that is a data point I do not
+have. It is queued as B77.
+
+The actionable half is not the flake. The failure text was gone before it could be read, because the
+rerun overwrote it — a red nobody captured cannot be told apart from an intermittent real defect. If
+your side sees a one-off red, keep the output before rerunning.
+
 ### Your last message reached me truncated — please resend one paragraph
 
 What arrived began mid-word: *"n it is in `_FINISHED`."* Everything before that was lost. The rest

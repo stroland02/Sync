@@ -154,40 +154,31 @@ when, which is why it is recorded here rather than dispatched.
 **Closes when:** one `sync run` produces a CI-green pull request again, or the failure is
 recorded with which change broke it.
 
-### B74 — `/api/overview` is the odd route out twice: no envelope, and it contradicts itself
+### B77 — one unexplained red in a database-backed suite, and no capture of it
 
-Two defects in one function, queued together because they are one route and a second review of the
-same twenty lines buys nothing.
+`tests/test_status_rate_detector.py` ended a full run `1 failed, 2897 passed, 4 skipped, 6 errors`,
+every failure and error in that one file, during B74. The immediate rerun was clean and the file
+alone then passed three times, `27 passed` each. Nothing on that branch touches `sync.detect`.
 
-**It hand-builds its JSON and drops a provenance field.** The other four routes return
-`GraphSurface._envelope` and carry all four of `indexed_at`, `feed_fetched_at`, `binding_source` and
-`context_savings`. `/api/overview` composes its own response and omits `context_savings`, so a
-consumer has to model that field optional and render "not reported" for one route in five. Reported
-by the chat building the console, which found it consuming the transport against a live server —
-which is the useful kind of bug report, because it is the shape of the contract rather than a
-crash. `CLAUDE.md`'s provenance rule is the reason this matters beyond tidiness: the console renders
-provenance wherever a binding is shown, and a route that drops a field silently teaches the frontend
-to treat provenance as optional.
+**The obvious explanation was checked and does not hold.** The hypothesis was a concurrent
+`truncate_all()` across the several worktrees live against the shared Postgres on 5433. But
+`tests/conftest.py` gives every run its own database, named from its pid and its xdist worker id, so
+two suites in two worktrees do not share one. The cross-run drop that *could* produce this shape --
+a sweep removing a database out from under a live worker -- is the defect
+`leaked_database_names` was written to close, and its docstring names the exact symptom it produced,
+`database "sync_test_28096_gw2" does not exist`. That path is guarded and pinned by a test.
 
-**And it contradicts itself past ten thousand open findings.**
-`total_findings` comes from `page["total"]`, which `GraphSurface._page` sets to the full row count
-*before* windowing. `vendors[].open_finding_count` is computed from `page["items"]`, which is
-windowed. Under ten thousand open findings the two agree and nothing shows; past it the per-vendor
-counts under-report while the total does not, and the response says both numbers with equal
-confidence.
+So the cause is unknown, and the honest record is that: one red, four subsequent greens, and the
+leading theory eliminated rather than confirmed.
 
-Reproduced rather than reasoned: with the scan ceiling patched to 3 over 5 open findings, the route
-answers `total_findings=5` alongside `vendors=[{'vendor_id': 'stripe', 'open_finding_count': 3}]`.
+**The part that is actionable is the process failure, not the flake.** The failure text was gone
+before anyone read it, because the rerun overwrote it. A one-off red that nobody captured cannot be
+diagnosed later and cannot be told apart from a real defect that happens to be intermittent, which
+is the same reason this repository does not accept a green it did not watch.
 
-Found while narrowing that constant's comment during M4-P1, and left alone there deliberately —
-it is off the path that task fixed. It is the same shape as the defect M4-P1 *did* fix: a ceiling
-that does not error when crossed, it just answers wrongly. This repository's discipline says that
-kind of failure must not be quiet, which is the argument for queueing it rather than leaving the
-comment to carry it.
-
-**Closes when:** `/api/overview` carries the same four envelope fields as every other route, covered
-in `tests/test_api_routes.py`; and the two counts come from the same window, or the response names
-which of them is windowed — with a test that fails against the current behaviour.
+**Closes when:** either the failure is reproduced and explained, or a harness change makes a red
+run's output survive the next run — and the second is worth doing whether or not the first ever
+happens.
 
 ### B76 — three small truths about how this CLI reads files, left over from B73
 
@@ -238,6 +229,19 @@ Entries stay under **Ready** above with their full reasoning until they land, be
 is what a reviewer needs and duplicating it here would let the two copies drift.
 
 ## Done
+
+- **B74** — `/api/overview` counts once and carries the same envelope as every other route, at
+`cdb9040`. Two defects reported from two directions: the console chat found the missing
+`context_savings` by consuming the API against a live server, and the windowing contradiction turned
+up while narrowing a comment during M4-P1. **The measurement that decided the design**: the window
+never bounded any work. `whats_at_risk` builds a row for every open finding and only then slices, so
+the ceiling bounded serialisation, which the overview discarded — counted over two thousand findings,
+the old path made two thousand call-site reads and two thousand vendor-change reads, the aggregate
+makes two thousand and none. Removing the window halved the reads. `context_savings` is 0 as a
+measurement rather than a placeholder, because the constant is a file read avoided per binding
+returned and an overview returns no binding; `binding_source` follows `whats_at_risk` over the same
+loop iteration the counts come from. The console contract is additive — one new key, no rename, every
+existing value identical below the old ceiling.
 
 - **M4-P1** — the operator console's transport reads one finding by asking for it, at `e7a481c`.
 It had been scanning as many as ten thousand rows out of `whats_at_risk` and walking the list in
