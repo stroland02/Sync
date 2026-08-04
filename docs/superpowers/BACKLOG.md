@@ -24,7 +24,7 @@ by content, because items were never tagged with a milestone as they landed.
 | **M2** | Production error detector | **~85%** | Built; never exercised against real telemetry |
 | **M3** | Multi-vendor, MCP, plugin SDK | **~95%** | Packaging closed 2026-07-30; nothing structural left |
 | **M4** | Hosted control plane (**the front end**) | **0%** | Not started, and has no plan file yet |
-| **M5** | Integration layer | **~25%** | Feed and registry exist; nothing correlates anything |
+| **M5** | Integration layer | **~35%** | Sentry feeds counts in now; still nothing correlates anything |
 | **M6** | Show it, rather than describe it | **0%** | Needs a UI to film |
 
 ### M0 — Walking skeleton, one real pull request · ~90%
@@ -154,12 +154,32 @@ when, which is why it is recorded here rather than dispatched.
 **Closes when:** one `sync run` produces a CI-green pull request again, or the failure is
 recorded with which change broke it.
 
+### B72 — `sync ingest` answers an unreadable payload with a traceback where its siblings exit 2
+
+`cli.ingest` reads its payload at `src/sync/cli.py:1425` with no handler around it. `shapes` and
+`sentry_errors` both wrap the same read in `except (OSError, UnicodeDecodeError,
+json.JSONDecodeError)` and return 2, which is what every refusal in this CLI means: nothing
+happened. `ingest` raises instead, so an operator who names a path that does not exist, or a
+capture that was truncated mid-write, gets a stack trace and no statement about whether anything
+was written.
+
+Found during B71's review and deliberately left out of that branch, because the finding it came
+from named only the decode and `ingest` had the same hole on all three exception types before the
+branch touched it. Nothing regressed; it was already there.
+
+`tests/test_decode_handlers.py` asserts that handlers which exist have been entered, and never
+that a decode has one, so no gate is failing today and none will start.
+
+**Closes when:** all three payload reads answer the same three exception types the same way, with
+a test per route that watches the traceback become an exit code.
+
 ## In flight
 
-
-- **B61** — `task_12ccee12fd98`, worktree `sync-solo-b`.
-- **B55** — re-dispatched as `task_3746257e4c0a` into `sync-solo-b`. The first attempt
-  (`task_e03a2a5bb93f`) produced nothing in 94 minutes and was stood down.
+Nothing. **B61 and B55 both landed** — `89ac057` and `c32f99e` record them, and B55 has a report at
+`reports/2026-07-29-adapter-selection-explains-its-refusal.md` — and their lines sat here for days
+after. An entry that outlives its work makes this section read as capacity in use when there is
+none, which is the opposite of what a tick needs from it. Whoever lands an item clears its line in
+the landing commit.
 
 **Workers keep landing in the wrong worktree.** Three times today a worker has written into a tree
 its brief did not name, twice into one another worker already held. The brief names the path and
