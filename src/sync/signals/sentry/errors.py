@@ -218,6 +218,6 @@ def _status_class(event: Mapping[str, Any]) -> str:
     contexts = event.get("contexts")
     response = contexts.get("response") if isinstance(contexts, Mapping) else None
     status = response.get("status_code") if isinstance(response, Mapping) else None
-    if not isinstance(status, int) or isinstance(status, bool) or not 100 <= status <= 599:
+    if not isinstance(status, int) or not 100 <= status <= 599:
         return ""
     return f"{status // 100}xx"
