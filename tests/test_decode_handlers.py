@@ -543,6 +543,26 @@ def _drive_merge_outcome_commits(root: Path) -> None:
     )) == 2
 
 
+def _drive_intake_registry_directory(root: Path) -> None:
+    """A public OpenAPI directory document in an encoding this does not read.
+
+    The directory is what promotes a declared dependency from unwatchable to watchable, so a
+    document read as holding no entries reports a smaller work queue than the deployment has --
+    and this command's report is the one a customer is shown. Nothing is opened before the
+    refusal, which is why the DSN below is never used.
+    """
+    from sync.cli import intake
+
+    directory = root / "directory.json"
+    directory.write_bytes(UTF16)
+
+    assert intake(argparse.Namespace(
+        repo=str(root), evidence=None, registry_directory=str(directory),
+        registry_evidence=None, registry_moved_since=None, rank_by_repo_id=None,
+        dsn="postgresql://unused",
+    )) == 2
+
+
 def _drive_git_diff(root: Path) -> None:
     """A clone whose tracked source file is not UTF-8, which the patch path refuses.
 
@@ -669,6 +689,8 @@ DRIVERS: dict[str, Callable[[Path], None]] = {
     "sync/cli.py::ingest::JSONDecodeError+OSError+UnicodeDecodeError": _drive_ingest_payload,
     "sync/cli.py::merge_outcome::JSONDecodeError+OSError+UnicodeDecodeError":
         _drive_merge_outcome_commits,
+    "sync/cli.py::intake::JSONDecodeError+OSError+UnicodeDecodeError":
+        _drive_intake_registry_directory,
     "sync/index/typescript.py::TypeScriptAdapter._read_manifest::"
     "JSONDecodeError+UnicodeDecodeError": _drive_ts_manifest,
     "sync/remediate/agent_patch.py::_git_diff::UnicodeDecodeError": _drive_git_diff,

@@ -46,6 +46,7 @@ from sync.cli import (
     benchmark,
     feed_public_key,
     ingest,
+    intake,
     merge_outcome,
     publish_feed,
     run,
@@ -962,6 +963,61 @@ def test_feed_public_key_says_nothing_that_narrows_the_private_half(signing_key,
     for line in os.environ[cli.FEED_SIGNING_KEY_ENV].splitlines():
         if line and "-----" not in line:
             assert line not in said
+
+
+# --- `sync intake`: the directory document it reads before it assesses anything -----
+#
+# The read was unguarded, so a `--registry-directory` an operator mistyped was a traceback. What
+# a swallowed one would cost is worse than the traceback: the directory is what promotes a
+# declared dependency into the watchable category, so a document nobody could read reports a
+# smaller work queue and no fault -- and the docstring calls that category a sales asset as much
+# as an engineering one. Both refusals fire before the repository is assessed.
+
+
+def _intake_args(repo: Path, **overrides):
+    fields = dict(
+        repo=str(repo), evidence=None, registry_directory=None, registry_evidence=None,
+        registry_moved_since=None, rank_by_repo_id=None, dsn=UNSERVED_DSN,
+    )
+    fields.update(overrides)
+    return argparse.Namespace(**fields)
+
+
+def test_intake_refuses_a_registry_directory_that_is_not_there(tmp_path, capsys):
+    """The path an operator mistyped, which is the ordinary way this fires."""
+    absent = tmp_path / "absent-directory.json"
+
+    assert intake(_intake_args(tmp_path, registry_directory=str(absent))) == 2
+
+    printed = capsys.readouterr()
+    assert printed.out == ""
+    assert "could not read" in printed.err
+    assert str(absent) in printed.err
+
+
+def test_intake_refuses_a_registry_directory_that_is_not_utf8_at_all(tmp_path, capsys):
+    """A document fetched and saved through a tool that wrote it in another encoding.
+
+    Nothing is printed on stdout, which is the property a wrapper reads: this command's whole
+    output is one JSON report, and a report that omitted the directory silently would be a
+    coverage claim over evidence the run never had.
+    """
+    directory = tmp_path / "directory.json"
+    directory.write_bytes(json.dumps({"apis": {}}).encode("utf-16"))
+
+    assert intake(_intake_args(tmp_path, registry_directory=str(directory))) == 2
+
+    printed = capsys.readouterr()
+    assert printed.out == ""
+    assert str(directory) in printed.err
+
+
+def test_intake_reports_when_no_registry_directory_is_asked_for(tmp_path, capsys):
+    """The control. Without it both assertions above pass against an `intake` that refuses
+    everything, which is the same command with its only output removed."""
+    assert intake(_intake_args(tmp_path)) == 0
+
+    assert capsys.readouterr().out != ""
 
 
 # --- `sync benchmark --score-pair`: the specification that cannot be honoured -------

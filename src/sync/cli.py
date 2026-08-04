@@ -1957,10 +1957,24 @@ def intake(args: argparse.Namespace) -> int:
     # The directory is a document somebody fetched, parsed here rather than downloaded: this
     # command reports what the deployment already knows, and a fetch inside it would make a
     # report of what is on disk quietly online.
-    directory, directory_unreadable = (
-        parse_directory(json.loads(Path(args.registry_directory).read_text(encoding="utf-8")))
-        if args.registry_directory else ([], ())
-    )
+    if args.registry_directory:
+        try:
+            document = json.loads(Path(args.registry_directory).read_text(encoding="utf-8"))
+        except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+            # Refused rather than reported as a directory holding nothing. An entry the document
+            # declines already reaches the operator through `report.unreadable`, but a document
+            # that never parsed has no entries to decline: the directory is what promotes a
+            # declared dependency into the watchable category, so an empty one shrinks the work
+            # queue this command exists to print and nothing anywhere says why.
+            print(
+                f"could not read {args.registry_directory}: {type(exc).__name__}: {exc}",
+                file=sys.stderr,
+            )
+            return 2
+        directory, directory_unreadable = parse_directory(document)
+    else:
+        directory, directory_unreadable = [], ()
+
     registry_apis = (
         read_registry_apis(Path(args.registry_evidence)) if args.registry_evidence else {}
     )
