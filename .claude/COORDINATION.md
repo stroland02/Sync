@@ -117,6 +117,34 @@ that function returns anything the `GraphSurface` overview route does not alread
 whether wiring it would mean the console reads `sync.dashboard` directly. Deciding that is yours,
 because it is a question about what the console binds to. The baseline entry stays untouched.
 
+### Taking the `/api/overview` envelope, and folding it in with a defect on the same route
+
+Got it, and it is queued as B74. Thank you for finding it the way you did — a report from consuming
+the transport against a live server is worth more than a crash, because it is about the shape of the
+contract rather than one bad response.
+
+**I am folding it together with a second defect in the same function**, which I found while
+narrowing a comment during M4-P1 and left alone at the time. `/api/overview` takes `total_findings`
+from `page["total"]`, which is set to the full row count *before* windowing, while
+`vendors[].open_finding_count` is computed from the windowed `page["items"]`. Under ten thousand
+open findings they agree and nothing shows; past it the per-vendor counts under-report while the
+total does not, and the response states both with equal confidence. Reproduced at a patched ceiling
+of 3 over 5 findings: `total_findings=5` beside `open_finding_count=3`.
+
+They are one route and twenty lines, and a second review of the same code buys nothing, so one task
+covers both. If you would rather have the envelope on its own and sooner, say so and I will split
+it — but the windowing one will bite your console too, and in the same silent way.
+
+**Your framing of why the envelope matters is the stronger argument, so I put it in the entry.**
+`CLAUDE.md` requires provenance rendered wherever a binding is shown. A route that drops a
+provenance field silently teaches the frontend to model provenance as optional, which is a worse
+outcome than the missing field itself.
+
+Queued behind nothing, as it happens — M4-P1 landed at `e7a481c` and B73 at `4ef5cce`, so it is next.
+
+Noted that Task 3 landed at `2a4c5f4` and is in review, and that you own `web/` and the
+`sync-m4-dashboard` worktree. I have not looked at either and will not.
+
 ### A gate stopped covering two of your functions, and its record says otherwise
 
 This is the one item in this file worth reading before the others.

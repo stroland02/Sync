@@ -154,8 +154,22 @@ when, which is why it is recorded here rather than dispatched.
 **Closes when:** one `sync run` produces a CI-green pull request again, or the failure is
 recorded with which change broke it.
 
-### B74 — `/api/overview` contradicts itself past ten thousand open findings
+### B74 — `/api/overview` is the odd route out twice: no envelope, and it contradicts itself
 
+Two defects in one function, queued together because they are one route and a second review of the
+same twenty lines buys nothing.
+
+**It hand-builds its JSON and drops a provenance field.** The other four routes return
+`GraphSurface._envelope` and carry all four of `indexed_at`, `feed_fetched_at`, `binding_source` and
+`context_savings`. `/api/overview` composes its own response and omits `context_savings`, so a
+consumer has to model that field optional and render "not reported" for one route in five. Reported
+by the chat building the console, which found it consuming the transport against a live server —
+which is the useful kind of bug report, because it is the shape of the contract rather than a
+crash. `CLAUDE.md`'s provenance rule is the reason this matters beyond tidiness: the console renders
+provenance wherever a binding is shown, and a route that drops a field silently teaches the frontend
+to treat provenance as optional.
+
+**And it contradicts itself past ten thousand open findings.**
 `total_findings` comes from `page["total"]`, which `GraphSurface._page` sets to the full row count
 *before* windowing. `vendors[].open_finding_count` is computed from `page["items"]`, which is
 windowed. Under ten thousand open findings the two agree and nothing shows; past it the per-vendor
@@ -171,61 +185,35 @@ that does not error when crossed, it just answers wrongly. This repository's dis
 kind of failure must not be quiet, which is the argument for queueing it rather than leaving the
 comment to carry it.
 
-**Closes when:** the two numbers come from the same window, or the response names which of them is
-windowed; with a test that fails against the current behaviour.
+**Closes when:** `/api/overview` carries the same four envelope fields as every other route, covered
+in `tests/test_api_routes.py`; and the two counts come from the same window, or the response names
+which of them is windowed — with a test that fails against the current behaviour.
 
-### B75 — the dead-links gate stopped covering two symbols, and the baseline says otherwise
+### B76 — three small truths about how this CLI reads files, left over from B73
 
-`sync.dashboard.queries.vendor_detail` and `finding_detail` have no caller anywhere in `src/`. They
-were removed from `scripts/dead_links_baseline.txt` in `8e6d3b0` on the stated grounds that the
-HTTP transport reaches them — but `src/sync/api/app.py` reaches `GraphSurface` and never
-`sync.dashboard`.
+Recorded rather than folded into B73, because each is a decision and none is a typo.
 
-What keeps them off the lint's report is a name collision. `create_app` defines local coroutines
-called `vendor_detail` and `finding_detail`, and `lint_dead_links.py` documents in its own "Known
-limits" that matching is by bare name and is never resolved — two symbols sharing a name share a
-verdict. Running `_references` over `src/` returns `src/sync/api/app.py` for both names, and the
-reference is the `ast.Name` load of the local coroutine when the route table is built.
-`workflow_state` is genuinely reached through a real import, which is why the comment reads
-plausibly, and `repository_overview` has a unique name, which is why it alone stayed baselined.
+- **A whitespace-only `--secret-file` still answers the both-sources message.** An operator who
+  passed `--secret-file` is told to set the environment variable or pass `--secret-file`, which is
+  advice they have already taken. Fails closed, so this is confusion rather than a security defect.
+  It is the same confusion B73's third ground names, on the one case that commit did not reach.
+- **`_signing_key`'s docstring says "a key that is present and unreadable answers `None` like an
+  absent one".** It does not: the read sits outside the `try`, and only unparseable material answers
+  `None`. This sentence is what B73's brief was built on and what the implementer had to correct, so
+  it has already cost one round of work. Its own read is unguarded too, and an unreadable key file
+  tracebacks out of `publish-feed` and `feed-public-key`.
+- **`benchmark` catches `ValueError`, which subsumes `UnicodeDecodeError`.**
+  `tests/test_decode_handlers.py` inventories handlers by the exception *names* a chain lists, so
+  that one is invisible to the gate — neither counted nor required to have a driver. A handler
+  spelled `ValueError` is a hole in that gate's coverage by construction, and the gate cannot see
+  its own blind spot.
 
-So a gate went quiet and its own record asserts a reach the code does not perform. This does not
-heal on its own: it stays quiet for as long as the transport names its handlers after graph
-entities, which the M4 plan's second spine section makes a convention rather than an accident.
+Two more reads still have no handler at all: `intake --registry-directory` and the `--score-pair`
+specification.
 
-The repair is in flight under M4-P1 — the local coroutines take a `_` prefix and both entries
-return to the baseline with an honest reason. **What is not decided here is whether those two
-functions should exist at all.** They are dead, and whether the console ever binds to
-`sync.dashboard` rather than to `GraphSurface` belongs to whoever owns the console.
-
-**Closes when:** the two symbols are either baselined with a reason that survives reading the code,
-or deleted; and `lint_dead_links.py`'s "Known limits" records that its bare-name matching has now
-masked a real symbol rather than only being able to.
-
-### B73 — three more operator-named file reads still answer a traceback
-
-B72 closed `sync ingest` and left three, all found while closing it and all the same defect:
-
-- `merge_outcome` reads its payload with
-  `sys.stdin.buffer.read() if args.payload == "-" else Path(args.payload).read_bytes()` and no
-  handler. It does not go through `_payload_bytes`, which is why B72's scope did not reach it.
-- The line below it reads `--commits` with `Path(...).read_text(encoding="utf-8")` inside a
-  `json.loads`, also unguarded. A missing or malformed file on either argument is a stack trace.
-- `_webhook_secret` reads `--secret-file` the same unguarded way. **This one needs its own
-  thinking rather than the same handler**: the file holds a shared secret, and the neighbouring
-  `_signing_key` deliberately answers `None` for a key that is present and unreadable, on the
-  argument that a parser's complaint about key material quotes offsets and lengths and a narrowed
-  key is a leaked key. Whether that reasoning extends to a secret file, and whether an absent file
-  and an unreadable one should stay indistinguishable, is the decision this item carries.
-
-Also stale, and cheap: `tests/test_decode_handlers.py` opens by saying "eighteen handlers,
-eighteen keys". The inventory held twenty before B72 and holds twenty-one after. The sentence's
-argument does not depend on the number, which is exactly why nobody noticed it drift.
-
-**Closes when:** every operator-named file read in `cli.py` either refuses with exit 2 naming the
-path, or has a comment saying why silence is the right answer for that one; each with a test that
-watched the traceback become an exit code; and the docstring count is either correct or replaced
-by something that cannot go stale.
+**Closes when:** each of the three is either fixed or carries a comment saying why the current
+answer is right, the two remaining reads refuse like their siblings, and the decode gate either
+sees `ValueError`-spelled chains or says in its own text that it cannot.
 
 ## In flight
 
@@ -250,6 +238,42 @@ Entries stay under **Ready** above with their full reasoning until they land, be
 is what a reviewer needs and duplicating it here would let the two copies drift.
 
 ## Done
+
+- **M4-P1** — the operator console's transport reads one finding by asking for it, at `e7a481c`.
+It had been scanning as many as ten thousand rows out of `whats_at_risk` and walking the list in
+Python, and past that ceiling it answered 404 for a finding that exists. `GraphSurface.finding_by_id`
+returns the row the page carries for that finding and `None` in exactly the cases the page would not
+list it; the row literal is now shared so the two cannot drift, and the reviewer established the
+predicate cannot drift either. **The four published MCP tools are still four** — a surface method
+becomes a tool only when somebody writes a `ToolSpec`, the golden schema blob is byte-identical, and
+`dispatch` answers "unknown tool" for the new name. The proving test shrinks the ceiling rather than
+building ten thousand rows, because what breaks the scan is a finding's position past the window and
+not the size of the graph. **B75 closed with it** — see below.
+
+- **B75** — the dead-links gate covers its two symbols again, at `e7a481c`. Both entries are back in
+the baseline with a reason that states the correction rather than repeating the framing that was
+wrong, all five transport handlers took a `_` prefix rather than only the two that collide today,
+and `lint_dead_links.py`'s known-limits section carries the instance and the lesson: when a baseline
+entry disappears, confirm the caller with an import rather than with a name. **What is still open is
+not this** — whether those two dead functions should exist at all turns on whether the console binds
+to `sync.dashboard`, which belongs to whoever owns the console. One fact for that decision is in
+`.claude/COORDINATION.md`: `repository_overview` returns a per-vendor `call_site_count` the surface
+route cannot produce, so a vendor with indexed call sites and no open findings is absent from
+`/api/overview` entirely.
+
+- **B73** — the last three operator-named file reads refuse rather than traceback, at `4ef5cce`. Two
+took the established handler. The third, the webhook secret, deliberately did not: the question was
+what the caller does with `None`, because if `None` had meant verification is skipped then swallowing
+a read failure would have downgraded authentication over a file permission. It fails closed instead —
+but the behaviour being replaced was not silence either. The unguarded read raised out of `main()` as
+exit 1, and exit 1 in that command is the code reserved for a verdict about a delivery, so an
+unreadable secret file was reporting as a forged one. **The reviewer confirmed what the silent
+alternative would have cost**: with the read swallowed inside `_webhook_secret`, control falls
+through to the environment variable and a delivery signed with the environment's secret verifies and
+exits 0 against a credential the operator did not name. The test pins exactly that. One premise of
+the brief was false and the implementer said so rather than building on it — the neighbouring
+signing-key loader does not answer `None` for a key file it cannot read, only for an unparseable PEM,
+and its docstring says otherwise. That docstring is part of B76.
 
 - **B72** — `sync ingest` refuses an unreadable payload rather than tracebacking, at `eb33cd6`.
 Three commands read an operator-named payload through one helper and only two of them said what
