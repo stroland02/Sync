@@ -796,6 +796,36 @@ def test_an_unreadable_secret_file_refuses_rather_than_falling_back_to_the_envir
     assert webhook_secret.decode("ascii")[:8] not in printed.err
 
 
+def test_a_secret_file_holding_only_whitespace_is_refused_naming_the_file(
+    tmp_path, webhook_secret, capsys
+):
+    """The other half of the same read, and the one that opened successfully.
+
+    `echo secret > file` is why `_webhook_secret` strips, so a file holding a lone newline holds
+    nothing -- which is also what a truncated write and an empty fetch leave behind. The command
+    already fails closed on it; what was wrong was the message. `None` reached the both-sources
+    text, which tells an operator to set the environment variable or pass `--secret-file`, and
+    that is advice the operator reading it has already taken.
+
+    The file's contents are not described beyond the fact that there was nothing usable in it.
+    That is the rule this read is under whatever the file turns out to hold.
+    """
+    body = json.dumps({"action": "closed"}).encode("utf-8")
+    payload = tmp_path / "delivery.json"
+    payload.write_bytes(body)
+    empty = tmp_path / "empty.secret"
+    empty.write_text("\n", encoding="utf-8")
+
+    assert merge_outcome(_merge_args(
+        payload, _sign(body, webhook_secret), secret_file=str(empty), dsn=UNSERVED_DSN
+    )) == 2
+
+    printed = capsys.readouterr()
+    assert printed.out == ""
+    assert str(empty) in printed.err
+    assert cli.WEBHOOK_SECRET_ENV not in printed.err
+
+
 # --- `sync feed-public-key`: the subcommand nothing had ever run --------------------
 
 

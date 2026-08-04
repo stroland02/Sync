@@ -1475,6 +1475,10 @@ def _webhook_secret(secret_file: str | None) -> bytes | None:
     `--secret-file` has already taken. Swallowing the read would also fall through to the
     environment, and verifying against a credential the operator did not name is a signature
     check that passed for the wrong reason.
+
+    A named file that held only whitespace answers `None` too, and the caller tells that from an
+    absent secret by the argument rather than by the return: the two have different remedies and
+    only one of them is the advice that message carries.
     """
     if secret_file:
         return Path(secret_file).read_bytes().strip() or None
@@ -1511,6 +1515,19 @@ def merge_outcome(args: argparse.Namespace) -> int:
         print(
             f"could not read the webhook secret from {args.secret_file}: "
             f"{type(exc).__name__}",
+            file=sys.stderr,
+        )
+        return 2
+
+    if secret is None and args.secret_file:
+        # A file that opened and held nothing is not a secret nobody supplied. The message below
+        # answers the second and names both sources, which is advice an operator who passed
+        # --secret-file has already taken. What the file held is not described: trailing
+        # whitespace is stripped before this, so there is nothing to describe and nothing that
+        # could be said about a longer file without narrowing a credential.
+        print(
+            f"the webhook secret file {args.secret_file} holds nothing usable. "
+            "Refusing rather than processing an unverified delivery.",
             file=sys.stderr,
         )
         return 2
