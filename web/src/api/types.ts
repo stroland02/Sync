@@ -114,3 +114,52 @@ export interface NotFoundBody {
   error: string
   identifier: string
 }
+
+/**
+ * Where a node stands the last time the checkpointer wrote.
+ *
+ * `current` is the node the graph owes a visit, which is not the same as "has never run":
+ * a `patch` that failed verification and looped back is due again and reads as `current`
+ * even though it already ran once. Preferring the later status would render a retry as
+ * progress.
+ */
+export type WorkflowNodeStatus = "done" | "current" | "pending"
+
+/**
+ * How a run ended. Null while it is in flight, and the only terminal signal there is.
+ *
+ * `abandon_reason` is meaningful under `abandoned` alone; on the other two it is whatever
+ * the channel happened to hold and means nothing.
+ */
+export type WorkflowOutcome = "opened" | "abandoned" | "reported"
+
+/**
+ * One node of the remediation graph.
+ *
+ * `evidence` carries only the keys the run actually produced, so a missing key is "not
+ * produced" and a present key holding null is "produced, and null". The two render
+ * differently and must not be collapsed.
+ */
+export interface WorkflowNode {
+  name: string
+  status: WorkflowNodeStatus
+  evidence: Record<string, unknown>
+}
+
+/**
+ * `GET /api/workflows/{finding_id}`.
+ *
+ * Deliberately not a `Provenance`: this route reads the LangGraph checkpointer tables and
+ * every other route reads the graph. They are two databases, so there is no `indexed_at`
+ * or `binding_source` to report, and inheriting the envelope would invent four fields the
+ * transport never sends.
+ *
+ * `nodes` always arrives in the remediation graph's own order — locate, prepare, patch,
+ * static_verify, replay, push_branch, await_ci, open_pr — and the view renders that order
+ * rather than sorting it.
+ */
+export interface WorkflowState {
+  nodes: WorkflowNode[]
+  outcome: WorkflowOutcome | null
+  abandon_reason: string | null
+}

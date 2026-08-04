@@ -19,6 +19,7 @@ import type {
   Page,
   RiskRow,
   VendorChangeRow,
+  WorkflowState,
 } from "@/api/types"
 
 /** Matches `DEFAULT_LIMIT` in `sync.mcp.tools`, so a page here is a page there. */
@@ -108,4 +109,18 @@ export function fetchFinding(
   signal?: AbortSignal,
 ): Promise<FindingDetail> {
   return getJson<FindingDetail>(`/api/findings/${encodeURIComponent(findingId)}`, signal)
+}
+
+/**
+ * The remediation run for a finding.
+ *
+ * 404 here means the checkpointer holds no run for this finding — a true answer, and a
+ * different sentence from the finding route's 404. It arrives as `NotFoundError` like
+ * every other 404, and the view decides which sentence to print.
+ */
+export function fetchWorkflow(
+  findingId: string,
+  signal?: AbortSignal,
+): Promise<WorkflowState> {
+  return getJson<WorkflowState>(`/api/workflows/${encodeURIComponent(findingId)}`, signal)
 }

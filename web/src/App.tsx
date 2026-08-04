@@ -10,6 +10,7 @@ import { Route, Routes } from "react-router"
 import { FindingPage } from "@/features/findings/finding-page"
 import { OverviewPage } from "@/features/repositories/overview-page"
 import { VendorPage } from "@/features/vendors/vendor-page"
+import { WorkflowPage } from "@/features/workflows/workflow-page"
 import { AppShell } from "@/layouts/app-shell"
 import { UnknownRoute } from "@/layouts/unknown-route"
 
@@ -20,6 +21,7 @@ export default function App() {
         <Route index element={<OverviewPage />} />
         <Route path="vendors/:vendorId" element={<VendorPage />} />
         <Route path="findings/:findingId" element={<FindingPage />} />
+        <Route path="findings/:findingId/workflow" element={<WorkflowPage />} />
         <Route path="*" element={<UnknownRoute />} />
       </Route>
     </Routes>

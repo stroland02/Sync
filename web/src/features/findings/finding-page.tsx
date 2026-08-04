@@ -74,6 +74,22 @@ function FindingDetail({ findingId }: { findingId: string }) {
       <Breadcrumbs trail={trail} />
       <h1 className="font-mono text-lg font-medium">{findingId}</h1>
 
+      {/* Outside the success branch on purpose. A finding that has been patched or
+          abandoned is no longer open, so this page 404s for it — and that is exactly the
+          finding whose run is most worth reading. The workflow lives in the checkpointer,
+          which does not care whether the graph still holds the finding. */}
+      <p className="text-sm">
+        <Link
+          to={`/findings/${encodeURIComponent(findingId)}/workflow`}
+          className="underline underline-offset-2"
+        >
+          Solution workflow
+        </Link>{" "}
+        <span className="text-muted-foreground">
+          — what Sync did about this finding, node by node.
+        </span>
+      </p>
+
       {query.isPending && <LoadingState what={`finding ${findingId}`} />}
 
       {query.isError &&
