@@ -1779,6 +1779,11 @@ def benchmark(args: argparse.Namespace) -> int:
     try:
         scored = _score_corpus(Path(args.score_pair), args.score_dsn)
     except (KeyError, LookupError, ValueError) as exc:
+        # `UnicodeDecodeError` is a `ValueError`, so this chain catches one -- and
+        # `tests/test_decode_handlers.py` inventories chains by the names they list, which makes
+        # this handler invisible to it. The specification's own read is guarded inside
+        # `_score_corpus` where that gate can see it; a decode failure from anywhere else under
+        # this call lands here and is counted by nothing.
         print(f"pair specification: {exc}", file=sys.stderr)
         return 2
 

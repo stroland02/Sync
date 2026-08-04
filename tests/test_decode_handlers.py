@@ -48,6 +48,22 @@ entry would then vouch for the other's handler. There is no such pair in `src/` 
 distinct keys as there are handlers -- and `test_no_two_decode_handlers_share_a_key` refuses
 the day somebody writes one, naming both positions.
 
+What none of this can see is a chain that catches a `UnicodeDecodeError` without naming one.
+The inventory reads exception *names*, and `UnicodeDecodeError` is a `ValueError`, so
+`except ValueError` catches a decode failure while being neither counted nor required to have
+a driver. `benchmark`'s chain around `_score_corpus` is the known instance and says so where it
+sits; the specification's own read is guarded inside `_score_corpus`, where this file can see
+it, but a decode failure raised anywhere else under that call still lands in a handler nothing
+here knows about.
+
+Following the hierarchy instead was measured and declined, for what it would demand rather than
+for its size. Most chains in `src/` that name a base class sit over `int()`,
+`datetime.fromisoformat` or a graph lookup by id, none of which can raise a `UnicodeDecodeError`
+at all -- so each would enter the inventory owing a driver that cannot be written, and a rule
+whose obligation is unsatisfiable is a rule somebody eventually silences.
+`test_a_chain_naming_only_a_base_class_is_outside_this_inventory` holds the limitation where a
+reader of this file meets it.
+
 How many that is stays unwritten here on purpose. The inventory is read out of `src/` on every
 run, so a count in this prose is a second copy of something already computed, and a copy no
 assertion reads goes stale the first time anyone adds a handler. This one did, twice, and the
@@ -840,6 +856,30 @@ def test_two_handlers_the_key_cannot_tell_apart_are_refused_naming_both(tmp_path
 
     assert list(collisions) == ["reader.py::read::UnicodeDecodeError"]
     assert collisions["reader.py::read::UnicodeDecodeError"] == ["reader.py:5", "reader.py:9"]
+
+
+_SUBSUMING_HANDLER = '''
+def read(path):
+    try:
+        return path.read_text(encoding="utf-8")
+    except ValueError:
+        return None
+'''
+
+
+def test_a_chain_naming_only_a_base_class_is_outside_this_inventory(tmp_path: Path) -> None:
+    """What this file cannot answer, asserted rather than described.
+
+    The handler below catches every decode failure that read produces and appears in no
+    inventory, so nothing above requires a driver for it and nothing above reports it missing.
+    Written as an assertion because a limitation recorded only in prose is one that goes stale
+    the first time somebody changes the reading -- and this one is meant to fail on the day
+    somebody teaches `_caught_names` the exception hierarchy, which is the day it stops being
+    true.
+    """
+    assert issubclass(UnicodeDecodeError, ValueError)
+
+    assert _inventory_over(tmp_path / "subsuming", _SUBSUMING_HANDLER) == []
 
 
 def test_no_two_decode_handlers_share_a_key() -> None:
