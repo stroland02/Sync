@@ -214,6 +214,11 @@ def test_finding_route_answers_for_a_finding_past_the_overview_scan_window():
 
     The condition is the finding's position past the window, not the size of the graph, so it is
     built by shrinking the window rather than by inventing ten thousand rows.
+
+    Read cold, the patch looks like live coverage of a ceiling on this route. It is not: it is
+    what made the old code answer 404 here, and against the route as it stands it does nothing,
+    because the route no longer reads `_SCAN_LIMIT` at all. That absence is what the test below
+    asserts; this one is the historical failure kept executable.
     """
     change = _change("c1")
     sites = [_site(f"s{i}", path=f"src/a{i}.ts", line=i + 1) for i in range(3)]
