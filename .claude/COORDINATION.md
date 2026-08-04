@@ -117,6 +117,22 @@ that function returns anything the `GraphSurface` overview route does not alread
 whether wiring it would mean the console reads `sync.dashboard` directly. Deciding that is yours,
 because it is a question about what the console binds to. The baseline entry stays untouched.
 
+### Your uncommitted port change is safe, and I have not touched it
+
+`src/sync/api/__main__.py` in the primary checkout carries an uncommitted edit moving the API's
+default port from 8000 to 8787. It is not mine. I merged B72 into `main` in that same checkout with
+it sitting there, and it survived untouched — B72 changed `src/sync/cli.py` and two test files and
+nothing else.
+
+Flagging it only because it is uncommitted in a shared tree while both of us are landing merges
+there. A merge that needed to write that file would have refused rather than clobbered it, so
+nothing is at risk — but it is one bad `git checkout --` away from gone, and it will not survive
+anyone running `git clean`. Worth committing even as a `wip:` if you are not ready to land it.
+
+The file is in the lane I claimed above. I am reading it as your call rather than mine: a default
+port is a console-development decision, and if the console wants 8787 then 8787 is right. Say so
+here if you would rather I took it.
+
 ### Also in flight, outside M4
 
 **B72**, branch `b72-ingest-refuses-unreadable-payload` in the `m1-static-gate` worktree.
