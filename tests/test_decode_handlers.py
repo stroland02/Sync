@@ -44,9 +44,14 @@ a handler that moved, which is a question worth answering rather than a position
 
 What the positional key bought was uniqueness, and that is what this scheme has to earn: two
 chains in one scope catching the same exceptions cannot be told apart by key, and one driver's
-entry would then vouch for the other's handler. There is no such pair in `src/` -- eighteen
-handlers, eighteen keys -- and `test_no_two_decode_handlers_share_a_key` refuses the day
-somebody writes one, naming both positions.
+entry would then vouch for the other's handler. There is no such pair in `src/` -- as many
+distinct keys as there are handlers -- and `test_no_two_decode_handlers_share_a_key` refuses
+the day somebody writes one, naming both positions.
+
+How many that is stays unwritten here on purpose. The inventory is read out of `src/` on every
+run, so a count in this prose is a second copy of something already computed, and a copy no
+assertion reads goes stale the first time anyone adds a handler. This one did, twice, and the
+argument above never depended on it -- which is exactly why nobody noticed.
 """
 
 from __future__ import annotations
@@ -492,6 +497,52 @@ def _drive_sentry_errors_payload(root: Path) -> None:
     )) == 2
 
 
+def _drive_ingest_payload(root: Path) -> None:
+    """The same bytes on the span half, where zero rows is a claim about a customer's traffic.
+
+    An ingest that writes nothing is indistinguishable from a repository that does not call this
+    vendor, from every query downstream of `observed_call`. The handler answers with exit 2
+    before any store is opened, which is why the DSN below is never used.
+    """
+    from sync.cli import ingest
+
+    payload = root / "spans.json"
+    payload.write_bytes(UTF16)
+
+    assert ingest(argparse.Namespace(
+        vendor="stripe", repo_id="decode", payload=str(payload),
+        dsn="postgresql://unused", cache=str(_tracker_cache(root)),
+    )) == 2
+
+
+def _drive_merge_outcome_commits(root: Path) -> None:
+    """The commit list beside a delivery, in an encoding this does not read.
+
+    `--commits` omitted leaves `human_edits_before_merge` null, so a file that could not be
+    decoded must not answer with the same null: the delivery would be recorded and the
+    measurement the operator asked for would be missing with nothing saying so. The handler
+    answers with exit 2 before any store is opened, which is why the DSN below is never used.
+
+    The secret is a file rather than the environment variable, because a driver that exported
+    one would leave it set for every driver after it.
+    """
+    import secrets
+
+    from sync.cli import merge_outcome
+
+    secret_file = root / "webhook.secret"
+    secret_file.write_text(secrets.token_hex(32), encoding="utf-8")
+    payload = root / "delivery.json"
+    payload.write_bytes(json.dumps({"action": "closed"}).encode("utf-8"))
+    commits = root / "commits.json"
+    commits.write_bytes(UTF16)
+
+    assert merge_outcome(argparse.Namespace(
+        payload=str(payload), signature="sha256=0", secret_file=str(secret_file),
+        commits=str(commits), dsn="postgresql://unused",
+    )) == 2
+
+
 def _drive_git_diff(root: Path) -> None:
     """A clone whose tracked source file is not UTF-8, which the patch path refuses.
 
@@ -615,6 +666,9 @@ DRIVERS: dict[str, Callable[[Path], None]] = {
     "sync/cli.py::shapes::JSONDecodeError+OSError+UnicodeDecodeError": _drive_shapes_payload,
     "sync/cli.py::sentry_errors::JSONDecodeError+OSError+UnicodeDecodeError":
         _drive_sentry_errors_payload,
+    "sync/cli.py::ingest::JSONDecodeError+OSError+UnicodeDecodeError": _drive_ingest_payload,
+    "sync/cli.py::merge_outcome::JSONDecodeError+OSError+UnicodeDecodeError":
+        _drive_merge_outcome_commits,
     "sync/index/typescript.py::TypeScriptAdapter._read_manifest::"
     "JSONDecodeError+UnicodeDecodeError": _drive_ts_manifest,
     "sync/remediate/agent_patch.py::_git_diff::UnicodeDecodeError": _drive_git_diff,

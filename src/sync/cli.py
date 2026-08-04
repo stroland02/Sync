@@ -1162,7 +1162,8 @@ def _payload_bytes(payload: str) -> bytes:
     the JSON is ever parsed -- and a `UnicodeDecodeError` is a `ValueError` rather than a
     `JSONDecodeError`, so it escapes the handler that exists to report an unreadable payload and
     reaches the operator as a traceback. The buffer underneath is what was actually piped, and
-    every caller decodes it as UTF-8 itself.
+    what becomes of those bytes is the caller's: three decode them as UTF-8 themselves, and
+    `merge_outcome` deliberately never does, because the HMAC covers exactly what GitHub sent.
     """
     return sys.stdin.buffer.read() if payload == "-" else Path(payload).read_bytes()
 
@@ -1422,7 +1423,14 @@ def ingest(args: argparse.Namespace) -> int:
         )
         return 2
 
-    payload = json.loads(_payload_bytes(args.payload).decode("utf-8"))
+    try:
+        payload = json.loads(_payload_bytes(args.payload).decode("utf-8"))
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+        # A payload that cannot be read and a repository that does not call this vendor are
+        # different facts, and every query downstream of `observed_call` reads the first as the
+        # second. Uncaught it was a traceback, which says nothing about whether spans landed.
+        print(f"could not read {args.payload}: {type(exc).__name__}: {exc}", file=sys.stderr)
+        return 2
 
     store = GraphStore(args.dsn)
     store.apply_schema()
@@ -1457,6 +1465,16 @@ def _webhook_secret(secret_file: str | None) -> bytes | None:
     a forged delivery. An empty value is no value: an exported-but-empty variable is the
     ordinary way a secret goes missing in a shell, and reading it as one would verify every
     delivery against the empty string.
+
+    A file that cannot be opened is left to raise, and the caller refuses on it by name.
+    `_signing_key` answers `None` for material it cannot use, on the argument that a parser's
+    complaint about a key quotes offsets and lengths -- but nothing is parsed here and nothing
+    was read, so an `OSError` describes a path and an errno rather than any byte of the file.
+    `None` is also already spoken for: it means no secret was supplied, and the caller answers
+    it with a message naming both sources, which is advice an operator who passed
+    `--secret-file` has already taken. Swallowing the read would also fall through to the
+    environment, and verifying against a credential the operator did not name is a signature
+    check that passed for the wrong reason.
     """
     if secret_file:
         return Path(secret_file).read_bytes().strip() or None
@@ -1484,7 +1502,19 @@ def merge_outcome(args: argparse.Namespace) -> int:
     unverified bytes, and a receiver that processed them anyway would let anyone on the internet
     write the table every future routing decision is measured against.
     """
-    secret = _webhook_secret(args.secret_file)
+    try:
+        secret = _webhook_secret(args.secret_file)
+    except OSError as exc:
+        # The path and the kind of failure, and nothing else. Not `str(exc)` either: this is the
+        # one refusal in this command whose subject is a credential, and the exception class
+        # already tells an absent file from an unreadable one.
+        print(
+            f"could not read the webhook secret from {args.secret_file}: "
+            f"{type(exc).__name__}",
+            file=sys.stderr,
+        )
+        return 2
+
     if secret is None:
         print(
             f"no webhook secret: set {WEBHOOK_SECRET_ENV} or pass --secret-file. "
@@ -1493,13 +1523,29 @@ def merge_outcome(args: argparse.Namespace) -> int:
         )
         return 2
 
-    body = sys.stdin.buffer.read() if args.payload == "-" else Path(args.payload).read_bytes()
+    try:
+        body = _payload_bytes(args.payload)
+    except OSError as exc:
+        # Exit 2 rather than 1. One is a verdict about a delivery -- forged, or genuine and
+        # unusable -- and a body nothing ever read is neither, so a wrapper scripting on the
+        # difference would retry a mistyped path as though GitHub had sent something.
+        print(f"could not read {args.payload}: {type(exc).__name__}: {exc}", file=sys.stderr)
+        return 2
+
     # Fetched by whoever holds a GitHub client, not here: the pull request event carries a count
     # and a link rather than the commits. Absent, the column stays null rather than zero, and
     # zero would read as "no human touched this patch" -- the claim the benchmark rests on.
-    commits = (
-        json.loads(Path(args.commits).read_text(encoding="utf-8")) if args.commits else None
-    )
+    try:
+        commits = (
+            json.loads(Path(args.commits).read_text(encoding="utf-8")) if args.commits else None
+        )
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+        # `None` is already the value for a `--commits` nobody passed, so a file that could not
+        # be read cannot answer with one: the delivery would be recorded with
+        # human_edits_before_merge left null, which the benchmark reads as unmeasured rather
+        # than as a measurement the operator asked for and did not get.
+        print(f"could not read {args.commits}: {type(exc).__name__}: {exc}", file=sys.stderr)
+        return 2
 
     store = GraphStore(args.dsn)
     store.apply_schema()

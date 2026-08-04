@@ -154,24 +154,78 @@ when, which is why it is recorded here rather than dispatched.
 **Closes when:** one `sync run` produces a CI-green pull request again, or the failure is
 recorded with which change broke it.
 
-### B72 — `sync ingest` answers an unreadable payload with a traceback where its siblings exit 2
+### B74 — `/api/overview` contradicts itself past ten thousand open findings
 
-`cli.ingest` reads its payload at `src/sync/cli.py:1425` with no handler around it. `shapes` and
-`sentry_errors` both wrap the same read in `except (OSError, UnicodeDecodeError,
-json.JSONDecodeError)` and return 2, which is what every refusal in this CLI means: nothing
-happened. `ingest` raises instead, so an operator who names a path that does not exist, or a
-capture that was truncated mid-write, gets a stack trace and no statement about whether anything
-was written.
+`total_findings` comes from `page["total"]`, which `GraphSurface._page` sets to the full row count
+*before* windowing. `vendors[].open_finding_count` is computed from `page["items"]`, which is
+windowed. Under ten thousand open findings the two agree and nothing shows; past it the per-vendor
+counts under-report while the total does not, and the response says both numbers with equal
+confidence.
 
-Found during B71's review and deliberately left out of that branch, because the finding it came
-from named only the decode and `ingest` had the same hole on all three exception types before the
-branch touched it. Nothing regressed; it was already there.
+Reproduced rather than reasoned: with the scan ceiling patched to 3 over 5 open findings, the route
+answers `total_findings=5` alongside `vendors=[{'vendor_id': 'stripe', 'open_finding_count': 3}]`.
 
-`tests/test_decode_handlers.py` asserts that handlers which exist have been entered, and never
-that a decode has one, so no gate is failing today and none will start.
+Found while narrowing that constant's comment during M4-P1, and left alone there deliberately —
+it is off the path that task fixed. It is the same shape as the defect M4-P1 *did* fix: a ceiling
+that does not error when crossed, it just answers wrongly. This repository's discipline says that
+kind of failure must not be quiet, which is the argument for queueing it rather than leaving the
+comment to carry it.
 
-**Closes when:** all three payload reads answer the same three exception types the same way, with
-a test per route that watches the traceback become an exit code.
+**Closes when:** the two numbers come from the same window, or the response names which of them is
+windowed; with a test that fails against the current behaviour.
+
+### B75 — the dead-links gate stopped covering two symbols, and the baseline says otherwise
+
+`sync.dashboard.queries.vendor_detail` and `finding_detail` have no caller anywhere in `src/`. They
+were removed from `scripts/dead_links_baseline.txt` in `8e6d3b0` on the stated grounds that the
+HTTP transport reaches them — but `src/sync/api/app.py` reaches `GraphSurface` and never
+`sync.dashboard`.
+
+What keeps them off the lint's report is a name collision. `create_app` defines local coroutines
+called `vendor_detail` and `finding_detail`, and `lint_dead_links.py` documents in its own "Known
+limits" that matching is by bare name and is never resolved — two symbols sharing a name share a
+verdict. Running `_references` over `src/` returns `src/sync/api/app.py` for both names, and the
+reference is the `ast.Name` load of the local coroutine when the route table is built.
+`workflow_state` is genuinely reached through a real import, which is why the comment reads
+plausibly, and `repository_overview` has a unique name, which is why it alone stayed baselined.
+
+So a gate went quiet and its own record asserts a reach the code does not perform. This does not
+heal on its own: it stays quiet for as long as the transport names its handlers after graph
+entities, which the M4 plan's second spine section makes a convention rather than an accident.
+
+The repair is in flight under M4-P1 — the local coroutines take a `_` prefix and both entries
+return to the baseline with an honest reason. **What is not decided here is whether those two
+functions should exist at all.** They are dead, and whether the console ever binds to
+`sync.dashboard` rather than to `GraphSurface` belongs to whoever owns the console.
+
+**Closes when:** the two symbols are either baselined with a reason that survives reading the code,
+or deleted; and `lint_dead_links.py`'s "Known limits" records that its bare-name matching has now
+masked a real symbol rather than only being able to.
+
+### B73 — three more operator-named file reads still answer a traceback
+
+B72 closed `sync ingest` and left three, all found while closing it and all the same defect:
+
+- `merge_outcome` reads its payload with
+  `sys.stdin.buffer.read() if args.payload == "-" else Path(args.payload).read_bytes()` and no
+  handler. It does not go through `_payload_bytes`, which is why B72's scope did not reach it.
+- The line below it reads `--commits` with `Path(...).read_text(encoding="utf-8")` inside a
+  `json.loads`, also unguarded. A missing or malformed file on either argument is a stack trace.
+- `_webhook_secret` reads `--secret-file` the same unguarded way. **This one needs its own
+  thinking rather than the same handler**: the file holds a shared secret, and the neighbouring
+  `_signing_key` deliberately answers `None` for a key that is present and unreadable, on the
+  argument that a parser's complaint about key material quotes offsets and lengths and a narrowed
+  key is a leaked key. Whether that reasoning extends to a secret file, and whether an absent file
+  and an unreadable one should stay indistinguishable, is the decision this item carries.
+
+Also stale, and cheap: `tests/test_decode_handlers.py` opens by saying "eighteen handlers,
+eighteen keys". The inventory held twenty before B72 and holds twenty-one after. The sentence's
+argument does not depend on the number, which is exactly why nobody noticed it drift.
+
+**Closes when:** every operator-named file read in `cli.py` either refuses with exit 2 naming the
+path, or has a comment saying why silence is the right answer for that one; each with a test that
+watched the traceback become an exit code; and the docstring count is either correct or replaced
+by something that cannot go stale.
 
 ## In flight
 
@@ -196,6 +250,18 @@ Entries stay under **Ready** above with their full reasoning until they land, be
 is what a reviewer needs and duplicating it here would let the two copies drift.
 
 ## Done
+
+- **B72** — `sync ingest` refuses an unreadable payload rather than tracebacking, at `eb33cd6`.
+Three commands read an operator-named payload through one helper and only two of them said what
+had gone wrong; the third raised, so a mistyped path or a capture truncated mid-write produced a
+stack trace and no statement about whether anything had reached the graph. The handler is
+duplicated across the three rather than shared, deliberately: each command's comment states what a
+wrong reading would mean for that command's own numbers, and one shared message keeps the
+behaviour while losing three reasons. Four tests, each watched failing first with the exact
+exception it now prevents, across the file route and the piped one; one asserts no fragment of the
+payload reaches stderr, because a captured OTLP export carries customer request data. **What
+closing it turned up is B73**: three more unguarded reads, one of which is a secret file and needs
+its own answer rather than the same handler.
 
 - **B71** — Sentry now answers a question other than what a response body looked like. An ingest
 folds an issues export into per-operation, per-window failure counts on `observed_error_window`,
