@@ -98,8 +98,22 @@ export interface KnownChange {
   severity: string
 }
 
+/**
+ * The finding the URL names, carried beside the call site it points at.
+ *
+ * `binding_source` here is that one finding's rung and is never null — it is a column on
+ * the row. The envelope's field on the same payload describes the answer as a whole and
+ * goes null when two detectors name this call site by different rungs, which is exactly
+ * when this one still has something definite to say.
+ */
+export interface FindingIdentity {
+  finding_id: string
+  binding_source: BindingSource
+}
+
 /** `GET /api/findings/{finding_id}` — one binding in full. */
 export interface FindingDetail extends Provenance {
+  finding: FindingIdentity
   symbol: string | null
   operation: string | null
   vendor: string
@@ -126,12 +140,18 @@ export interface NotFoundBody {
 export type WorkflowNodeStatus = "done" | "current" | "pending"
 
 /**
- * How a run ended. Null while it is in flight, and the only terminal signal there is.
+ * How a run ended, or `running` while it has not.
  *
- * `abandon_reason` is meaningful under `abandoned` alone; on the other two it is whatever
- * the channel happened to hold and means nothing.
+ * The transport reports null for a run in flight, and null is the signal to poll. `running`
+ * is carried here because it is a value of `sync.remediate.state.Outcome` that a checkpoint
+ * genuinely holds — `locate` writes it on the first hop of every run — so a transport that
+ * stopped filtering it would send a value this type had no branch for. Only the three
+ * terminal values end a run.
+ *
+ * `abandon_reason` is meaningful under `abandoned` alone; on the others it is whatever the
+ * channel happened to hold and means nothing.
  */
-export type WorkflowOutcome = "opened" | "abandoned" | "reported"
+export type WorkflowOutcome = "opened" | "abandoned" | "reported" | "running"
 
 /**
  * One node of the remediation graph.

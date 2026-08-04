@@ -55,7 +55,7 @@ export function RunOutcome({
   outcome: WorkflowOutcome | null
   abandonReason: string | null
 }) {
-  if (outcome === null) {
+  if (outcome === null || outcome === "running") {
     return (
       <Panel headline="This run is still in flight." tone="neutral">
         <p>
@@ -102,12 +102,29 @@ export function RunOutcome({
     )
   }
 
+  if (outcome === "reported") {
+    return (
+      <Panel headline="This run reported rather than patched." tone="neutral">
+        <p>
+          Routing found no patch was warranted, so nothing was attempted. That is not an
+          abandonment and carries no reason: the finding stays open and unremediated, which is
+          the honest state.
+        </p>
+      </Panel>
+    )
+  }
+
+  // Every outcome the type knows is handled above, so this is the value the console has
+  // never heard of. It is named rather than folded into whichever branch fell through
+  // last: an unknown outcome rendered as a known one is a confident wrong verdict, which
+  // is the failure this whole view exists to replace.
   return (
-    <Panel headline="This run reported rather than patched." tone="neutral">
+    <Panel headline="This run ended in a way the console does not recognise." tone="neutral">
       <p>
-        Routing found no patch was warranted, so nothing was attempted. That is not an
-        abandonment and carries no reason: the finding stays open and unremediated, which is
-        the honest state.
+        The checkpointer recorded{" "}
+        <code className="font-mono">{String(outcome)}</code>, which is not an outcome this
+        view was written for. The sequence below is still what the run produced; the
+        remediation graph has grown an outcome the console has not caught up with.
       </p>
     </Panel>
   )

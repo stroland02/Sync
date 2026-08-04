@@ -31,6 +31,11 @@ WorkflowReader = Callable[[str], Optional[dict[str, Any]]]
 # ceiling rather than a truth about the graph: past this, the console pages instead.
 _SCAN_LIMIT = 10_000
 
+# Ceiling on a page a caller may ask for. "Paginate every list" is a frozen rule of the graph
+# surface, and a query string is the one place a caller can ask for an unbounded page: the
+# surface honours whatever limit it is handed.
+_MAX_LIMIT = 500
+
 
 def _int_param(request: Request, name: str, default: int) -> int:
     """A query parameter parsed as int, falling back to the default rather than 400.
@@ -45,6 +50,10 @@ def _int_param(request: Request, name: str, default: int) -> int:
         return int(raw)
     except ValueError:
         return default
+
+
+def _limit_param(request: Request) -> int:
+    return min(_int_param(request, "limit", DEFAULT_LIMIT), _MAX_LIMIT)
 
 
 def _not_found(what: str, identifier: str) -> JSONResponse:
@@ -71,9 +80,7 @@ def create_app(
         page = surface.whats_at_risk(limit=_SCAN_LIMIT, offset=0)
         vendor_counts: dict[str, int] = {}
         for row in page["items"]:
-            vendor = row.get("vendor")
-            if vendor is None:
-                continue
+            vendor = row["vendor"]
             vendor_counts[vendor] = vendor_counts.get(vendor, 0) + 1
         vendors = [
             {"vendor_id": vendor_id, "open_finding_count": count}
@@ -91,7 +98,7 @@ def create_app(
 
     async def vendor_detail(request: Request) -> JSONResponse:
         vendor_id = request.path_params["vendor_id"]
-        limit = _int_param(request, "limit", DEFAULT_LIMIT)
+        limit = _limit_param(request)
         offset = _int_param(request, "offset", 0)
         page = surface.whats_at_risk(vendor=vendor_id, limit=limit, offset=offset)
         return JSONResponse(page)
@@ -112,11 +119,23 @@ def create_app(
             # The row named the site, so the surface should hold it; a `None` here is a
             # race between pages, and the honest answer is still "not found".
             return _not_found("finding", finding_id)
-        return JSONResponse(payload)
+        # Two fields, two meanings, and merging them would lose one. The envelope's
+        # `binding_source` is the rung of the whole answer and goes null when the detectors
+        # naming this call site disagree; `finding.binding_source` is the column on the row
+        # the URL names, which is what a false positive has to be attributable to.
+        return JSONResponse(
+            {
+                **payload,
+                "finding": {
+                    "finding_id": finding_id,
+                    "binding_source": row["binding_source"],
+                },
+            }
+        )
 
     async def vendor_changes(request: Request) -> JSONResponse:
         vendor_id = request.path_params["vendor_id"]
-        limit = _int_param(request, "limit", DEFAULT_LIMIT)
+        limit = _limit_param(request)
         offset = _int_param(request, "offset", 0)
         since = request.query_params.get("since")
         page = surface.whats_changed(vendor=vendor_id, since=since, limit=limit, offset=offset)

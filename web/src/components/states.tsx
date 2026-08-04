@@ -86,7 +86,7 @@ function explain(error: unknown, what: string): Explanation {
       headline: "Could not reach the API.",
       detail:
         `The request for ${what} never reached a server. The Python API behind /api is ` +
-        "probably not running: start it with SYNC_API_PORT=8787 uv run python -m sync.api.",
+        "probably not running: start it with uv run python -m sync.api.",
     }
   }
   if (error instanceof ApiStatusError && error.status >= 500) {

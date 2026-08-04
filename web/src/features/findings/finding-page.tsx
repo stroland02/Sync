@@ -1,17 +1,18 @@
 /**
  * One finding: the binding in full, and the vendor changes that name it.
  *
- * The whole screen rests on exactly one binding, so the envelope's rung is the rung of
- * that binding and belongs at the top rather than in a footnote. It is null only when two
- * detectors name the same call site and disagree about how it was bound, which is a fact
- * worth reading rather than a gap worth hiding.
+ * Two rungs on one screen, and they answer different questions. `finding.binding_source` is
+ * this finding's own column and always says something definite — it is what a false positive
+ * here has to be attributable to. The envelope's rung describes the whole answer, which is
+ * built from every finding naming this call site, and goes null when those disagree. Showing
+ * only the envelope's would lose the definite value at the exact moment it matters.
  */
 
 import { Link, useParams } from "react-router"
 
 import { NotFoundError } from "@/api/errors"
 import { useFinding } from "@/api/queries"
-import { ProvenanceStrip } from "@/components/provenance"
+import { ProvenanceStrip, RungBadge } from "@/components/provenance"
 import { ErrorState, LoadingState, NotFoundState } from "@/components/states"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import {
@@ -145,10 +146,18 @@ function FindingDetail({ findingId }: { findingId: string }) {
                   </dt>
                   <dd className="font-mono text-sm">{orAbsent(query.data.sdk_version)}</dd>
                 </div>
+                <div>
+                  <dt className="text-xs tracking-wide text-muted-foreground uppercase">
+                    This finding's rung
+                  </dt>
+                  <dd className="text-sm">
+                    <RungBadge rung={query.data.finding.binding_source} />
+                  </dd>
+                </div>
               </dl>
               <ProvenanceStrip
                 provenance={query.data}
-                bindingNullLabel="mixed: more than one detector names this call site and they disagree on the rung"
+                bindingNullLabel="mixed: more than one detector names this call site and they disagree on the rung — this finding's own rung is above"
               />
             </CardContent>
           </Card>

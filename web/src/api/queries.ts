@@ -63,14 +63,18 @@ export function useFinding(findingId: string) {
 export const WORKFLOW_POLL_MS = 5_000
 
 /**
- * A run that will not change again. The only terminal signal is a non-null `outcome`.
+ * A run that will not change again.
  *
- * Reading terminality off the nodes instead would be wrong twice: `open_pr` reads `done` on
- * a run that went on to be abandoned, and a run can finish through `report` or `abandon`,
- * neither of which is a node this view renders.
+ * Terminality is read off the outcome and not off the nodes, which would be wrong twice:
+ * `open_pr` reads `done` on a run that went on to be abandoned, and a run can finish through
+ * `report` or `abandon`, neither of which is a node this view renders.
+ *
+ * `running` is not terminal. The transport reports null for a run in flight, so this test is
+ * belt and braces against a checkpoint value reaching the client: reading it as terminal
+ * stops the poll on a live run, which freezes the screen on a stale answer.
  */
 export function isRunTerminal(state: WorkflowState | undefined): boolean {
-  return state !== undefined && state.outcome !== null
+  return state !== undefined && state.outcome !== null && state.outcome !== "running"
 }
 
 /**

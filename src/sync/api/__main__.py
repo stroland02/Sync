@@ -29,7 +29,9 @@ def main() -> None:
 
     app = create_app(surface=surface, workflow_reader=workflow_reader)
     host = os.environ.get("SYNC_API_HOST", "127.0.0.1")
-    port = int(os.environ.get("SYNC_API_PORT", "8000"))
+    # 8787 is what `web/vite.config.ts` proxies `/api` to. The two have to name one port or
+    # the console's every request is a proxy error.
+    port = int(os.environ.get("SYNC_API_PORT", "8787"))
     uvicorn.run(app, host=host, port=port)
 
 

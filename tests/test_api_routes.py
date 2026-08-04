@@ -2,10 +2,10 @@
 
 Every route is one call into the surface and one JSON return. The rules under test are the
 plan's, and each exists because breaking it costs the console its read-only guarantee: the
-route returns the surface's payload unaltered, pagination parameters pass through, an unknown
-identifier is a 404 with a JSON body, and no route mutates -- proved by grepping the package
-for INSERT/UPDATE/DELETE and for `sync.remediate` imports rather than by asking the reader to
-trust the code.
+route returns the surface's payload unaltered, pagination parameters pass through and are
+bounded, an unknown identifier is a 404 with a JSON body, and no route mutates -- proved by
+driving every route against a surface that records what it was asked, so the constraint is
+tested by behaviour rather than by grepping the source for the shape a mutation might take.
 """
 
 from __future__ import annotations
@@ -17,9 +17,9 @@ from pathlib import Path
 import pytest
 from starlette.testclient import TestClient
 
-from sync.api.app import create_app
+from sync.api.app import _MAX_LIMIT, create_app
 from sync.core import CallSite, Finding, VendorChange
-from sync.mcp.tools import GraphSurface
+from sync.mcp.tools import DEFAULT_LIMIT, GraphSurface
 
 INDEXED = datetime(2026, 7, 28, 6, 0, tzinfo=timezone.utc)
 FETCHED = datetime(2026, 7, 28, 7, 0, tzinfo=timezone.utc)
@@ -76,6 +76,14 @@ class FakeGraph:
 
     def all_vendor_changes(self, vendor_id):
         return [c for c in self._changes.values() if c.vendor_id == vendor_id]
+
+
+def _web_source(relative: str) -> str:
+    """A file out of `web/`, or a skip when the console is not checked out here."""
+    path = Path(__file__).resolve().parent.parent / "web" / relative
+    if not path.is_file():
+        pytest.skip(f"web/{relative} is absent; this checkout carries no console")
+    return path.read_text(encoding="utf-8")
 
 
 def _client(**graph_kw) -> TestClient:
@@ -205,6 +213,31 @@ def test_finding_route_returns_explain_call_site_plus_change():
     assert body["known_changes"][0]["change_id"] == "c1"
 
 
+def test_finding_route_carries_the_findings_own_rung_beside_the_pages():
+    # Two detectors bind one call site by different rungs, so the envelope's rung is null --
+    # it describes the whole answer and the answer rests on no single binding. The rung of
+    # the finding the URL names is a column on its row, and the two routes must not return
+    # the same payload for two findings that were bound differently.
+    site = _site("s1")
+    change = _change("c1")
+    client = _client(
+        findings=[
+            _finding("f1", "s1", "c1", rung="static"),
+            _finding("f2", "s1", "c1", rung="observed"),
+        ],
+        sites=[site],
+        changes=[change],
+    )
+
+    static = client.get("/api/findings/f1").json()
+    observed = client.get("/api/findings/f2").json()
+
+    assert static["binding_source"] is None
+    assert observed["binding_source"] is None
+    assert static["finding"] == {"finding_id": "f1", "binding_source": "static"}
+    assert observed["finding"] == {"finding_id": "f2", "binding_source": "observed"}
+
+
 def test_finding_route_returns_404_json_for_unknown_finding():
     client = _client()
 
@@ -278,28 +311,115 @@ def test_workflow_route_returns_404_when_reader_yields_none():
 
 # -- the read-only constraint, as a test rather than a promise ------------------
 
-
-def _api_package_files() -> list[Path]:
-    package = Path(__file__).resolve().parent.parent / "src" / "sync" / "api"
-    assert package.is_dir(), f"expected api package at {package}"
-    return sorted(package.rglob("*.py"))
-
-
-def test_api_package_holds_no_write_sql():
-    # An enforced constraint rather than a docstring: the transport is read-only, so a route
-    # that emitted a mutation would break the console's contract. Grepping the package for
-    # verbs a mutation would use catches an accidental one before it ships.
-    forbidden = re.compile(r"\b(INSERT|UPDATE|DELETE)\b", re.IGNORECASE)
-    for path in _api_package_files():
-        text = path.read_text(encoding="utf-8")
-        # `updated` and similar English words are allowed; the regex is on the SQL verb, not
-        # on the substring.
-        matches = [m.group(0) for m in forbidden.finditer(text)]
-        assert not matches, f"{path} names a mutation verb: {matches}"
+# The three surface methods a read-only console is allowed to reach. `propose_patch` is
+# absent deliberately: it clones the customer's repository, installs its dependencies and
+# runs `tsc`, all of which the plan forbids a console route from doing.
+_READ_ONLY_METHODS = frozenset({"whats_at_risk", "explain_call_site", "whats_changed"})
 
 
-def test_api_package_does_not_import_sync_remediate():
-    forbidden = re.compile(r"\bfrom\s+sync\.remediate\b|\bimport\s+sync\.remediate\b")
-    for path in _api_package_files():
-        text = path.read_text(encoding="utf-8")
-        assert not forbidden.search(text), f"{path} imports sync.remediate"
+class RecordingSurface:
+    """A `GraphSurface` that remembers what the routes asked it.
+
+    Reads are delegated so the routes see real payloads. `propose_patch` is the one method
+    the transport may not reach, so it raises instead of running: a route that called it
+    would otherwise pass every assertion here and still start a remediation run.
+    """
+
+    def __init__(self, inner: GraphSurface) -> None:
+        self._inner = inner
+        self.calls: list[tuple[str, dict]] = []
+
+    def __getattr__(self, name: str):
+        attribute = getattr(self._inner, name)
+
+        def recorded(*args, **kwargs):
+            self.calls.append((name, kwargs))
+            return attribute(*args, **kwargs)
+
+        return recorded
+
+    def propose_patch(self, *args, **kwargs):
+        self.calls.append(("propose_patch", kwargs))
+        raise AssertionError("a read-only transport must never propose a patch")
+
+    def method_names(self) -> set[str]:
+        return {name for name, _ in self.calls}
+
+
+def _recording_client(**graph_kw) -> tuple[TestClient, RecordingSurface, list[str]]:
+    surface = RecordingSurface(GraphSurface(FakeGraph(**graph_kw), feed_fetched_at=FETCHED))
+    workflow_reads: list[str] = []
+
+    def workflow_reader(finding_id: str):
+        workflow_reads.append(finding_id)
+        return {"nodes": [], "outcome": None, "abandon_reason": None}
+
+    app = create_app(surface=surface, workflow_reader=workflow_reader)
+    return TestClient(app), surface, workflow_reads
+
+
+def test_no_route_reaches_past_the_read_surface():
+    # Every route, driven against a surface that records the method behind each call. The
+    # constraint is "reads only", and the only way to hold it is to watch what the routes
+    # do -- a route reaching `propose_patch` names no SQL and imports nothing, and clones
+    # the customer's repository all the same.
+    site = _site("s1")
+    change = _change("c1")
+    client, surface, workflow_reads = _recording_client(
+        findings=[_finding("f1", "s1", "c1")], sites=[site], changes=[change]
+    )
+
+    assert client.get("/api/overview").status_code == 200
+    assert client.get("/api/vendors/stripe").status_code == 200
+    assert client.get("/api/vendors/stripe/changes").status_code == 200
+    assert client.get("/api/findings/f1").status_code == 200
+    assert client.get("/api/workflows/f1").status_code == 200
+
+    unexpected = surface.method_names() - _READ_ONLY_METHODS
+    assert not unexpected, f"routes reached beyond the read surface: {sorted(unexpected)}"
+    assert workflow_reads == ["f1"]
+
+
+def test_a_404_route_reaches_past_nothing_either():
+    # The unhappy paths get the same treatment: a route that fell back to a heavier call
+    # when its cheap read came up empty would pass the test above and fail the constraint.
+    client, surface, _ = _recording_client()
+
+    assert client.get("/api/findings/nope").status_code == 404
+    assert client.get("/api/vendors/nobody").status_code == 200
+
+    assert not surface.method_names() - _READ_ONLY_METHODS
+
+
+# -- pagination is bounded ------------------------------------------------------
+
+
+def test_limit_above_the_ceiling_is_clamped():
+    client, surface, _ = _recording_client()
+
+    client.get(f"/api/vendors/stripe?limit={_MAX_LIMIT * 1000}")
+    client.get(f"/api/vendors/stripe/changes?limit={_MAX_LIMIT * 1000}")
+
+    limits = [kwargs["limit"] for _, kwargs in surface.calls if "limit" in kwargs]
+    assert limits == [_MAX_LIMIT, _MAX_LIMIT]
+
+
+def test_a_limit_under_the_ceiling_passes_through_untouched():
+    client, surface, _ = _recording_client()
+
+    client.get("/api/vendors/stripe?limit=7")
+
+    assert [kwargs["limit"] for _, kwargs in surface.calls if "limit" in kwargs] == [7]
+
+
+# -- the console's mirrored constants -------------------------------------------
+
+
+def test_the_consoles_default_page_size_matches_the_surfaces():
+    # `web/src/api/client.ts` restates `DEFAULT_LIMIT` because the console cannot import
+    # Python. Nothing else holds the two together: `web/` has no CI gate, so this is the
+    # only place a drift can be noticed.
+    source = _web_source("src/api/client.ts")
+    match = re.search(r"export const DEFAULT_LIMIT\s*=\s*(\d+)", source)
+    assert match is not None, "web/src/api/client.ts no longer declares DEFAULT_LIMIT"
+    assert int(match.group(1)) == DEFAULT_LIMIT

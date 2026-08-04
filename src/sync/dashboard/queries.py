@@ -203,8 +203,11 @@ def workflow_state(checkpointer_dsn: str, finding_id: str) -> dict | None:
     versions = checkpoint.get("channel_versions") or {}
     seen = checkpoint.get("versions_seen") or {}
 
-    outcome = values.get("outcome")
-    current = None if outcome in _FINISHED else _pending_node(versions, seen)
+    # `sync.remediate.state.Outcome` also holds `running`, which `locate` writes on the
+    # first hop of every run. Only a finished value is reported: `outcome` is the console's
+    # terminal signal, and a live run reaching it stops the poll on a run still in flight.
+    outcome = values.get("outcome") if values.get("outcome") in _FINISHED else None
+    current = None if outcome is not None else _pending_node(versions, seen)
 
     nodes = []
     for name in WORKFLOW_NODES:

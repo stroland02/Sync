@@ -12,12 +12,16 @@ match by prefix rather than by equality.
 
 import json
 import os
+import re
+from pathlib import Path
 
 import psycopg
 import pytest
 
 from sync.core import CallSite, Finding, VendorChange
 from sync.dashboard.queries import (
+    WORKFLOW_NODES,
+    _EVIDENCE_KEYS,
     finding_detail,
     repository_overview,
     vendor_detail,
@@ -283,6 +287,37 @@ def test_workflow_state_reports_nodes_with_evidence_once_rows_exist(checkpointer
     assert state["abandon_reason"] is None
 
 
+def test_workflow_state_of_a_live_run_reports_no_outcome(checkpointer_tables):
+    # `locate` writes `outcome: "running"` on the first hop of every run, so a live run's
+    # newest checkpoint carries it for the whole rest of the run. The payload's `outcome`
+    # is the console's terminal signal, and a run in flight has not reached one.
+    _insert_checkpoint(
+        f"{FINDING_ID}:abc123def456:0",
+        "1f069000-0000-6000-8000-000000000003",
+        channel_values={
+            "outcome": "running",
+            "tier": 2,
+            "routing_row": "request-parameter-removed",
+            "prepare_ok": True,
+        },
+        channel_versions={"branch:to:patch": _version(3)},
+        versions_seen={
+            "__input__": {},
+            "locate": {"branch:to:locate": _version(1)},
+            "prepare": {"branch:to:prepare": _version(2)},
+        },
+        step=3,
+    )
+
+    state = workflow_state(DSN, FINDING_ID)
+
+    assert state["outcome"] is None
+    status = {n["name"]: n["status"] for n in state["nodes"]}
+    assert status["patch"] == "current"
+    assert status["locate"] == "done"
+    assert status["open_pr"] == "pending"
+
+
 def test_workflow_state_of_an_abandoned_run_carries_the_reason(checkpointer_tables):
     _insert_checkpoint(
         f"{FINDING_ID}:abc123def456:0",
@@ -336,3 +371,48 @@ def test_workflow_state_reads_the_newest_run_not_the_first(checkpointer_tables):
     assert state["outcome"] == "opened"
     evidence = {n["name"]: n["evidence"] for n in state["nodes"]}
     assert evidence["open_pr"]["pr_url"] == "https://github.com/x/y/pull/7"
+
+
+# --- what the console mirrors from this module -------------------------------
+#
+# The console cannot import Python, so it restates the node order and the evidence keys
+# this module owns. Nothing else holds the two sides together: `web/` has no CI gate, so a
+# rename here and a stale copy there would both be correct on their own and wrong together.
+# The parsing is deliberately loose -- it reads the names out of the TypeScript, not its
+# formatting, because a guard that fails on a reflow is a guard that gets deleted.
+
+
+def _web_source(relative: str) -> str:
+    path = Path(__file__).resolve().parent.parent / "web" / relative
+    if not path.is_file():
+        pytest.skip(f"web/{relative} is absent; this checkout carries no console")
+    return path.read_text(encoding="utf-8")
+
+
+def _object_literal(source: str, name: str) -> str:
+    """The body of a top-level `const <name> ... = { ... }`."""
+    match = re.search(rf"const {name}\b[^{{]*\{{(.*?)\n\}}", source, re.S)
+    assert match is not None, f"{name} is no longer a top-level object literal"
+    return match.group(1)
+
+
+def test_the_consoles_node_order_matches_this_modules():
+    documented = re.search(
+        r"own order(.*?)and the view renders", _web_source("src/api/types.ts"), re.S
+    )
+    assert documented is not None, "web/src/api/types.ts no longer states the node order"
+    assert re.findall(r"[a-z_]+", documented.group(1)) == list(WORKFLOW_NODES)
+
+
+def test_the_consoles_node_purposes_name_every_node_and_no_others():
+    purposes = _object_literal(_web_source("src/features/workflows/node-sequence.tsx"), "PURPOSE")
+    assert re.findall(r"^\s*([a-z_]+):", purposes, re.M) == list(WORKFLOW_NODES)
+
+
+def test_the_consoles_evidence_fields_match_this_modules_keys():
+    fields = _object_literal(_web_source("src/features/workflows/evidence.tsx"), "FIELDS")
+    assert re.findall(r"^\s*([a-z_]+):\s*\[", fields, re.M) == list(WORKFLOW_NODES)
+
+    rendered = re.findall(r'key:\s*"([^"]+)"', fields)
+    assert len(rendered) == len(set(rendered)), "the console names an evidence key twice"
+    assert set(rendered) == {key for keys in _EVIDENCE_KEYS.values() for key in keys}
