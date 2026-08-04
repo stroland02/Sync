@@ -444,6 +444,33 @@ def test_an_export_of_other_peoples_errors_still_replaces_the_window(
     assert _rows(store) == {}
 
 
+def test_the_operator_line_says_how_many_rows_the_re_query_removed(
+    store, cache, issues_file, tmp_path, capsys
+):
+    """A re-query that deleted four rows and wrote none printed the same line as an export that
+    held nothing for this vendor: "0 error window(s) recorded from sentry". Rows left the graph
+    with nothing said about it, which is the reading this command has already been corrected for
+    once, and a deletion is the half that cannot be undone."""
+    _feed(cache, issues_file)
+    assert len(_rows(store)) == 4
+    capsys.readouterr()
+
+    foreign = tmp_path / "foreign.json"
+    foreign.write_text(json.dumps([{
+        "id": "4501234591",
+        "count": "500",
+        "latestEvent": {
+            "request": {"url": "https://api.example-crm.test/v3/contacts", "method": "POST"},
+            "contexts": {"response": {"status_code": 500}},
+        },
+    }]), encoding="utf-8")
+
+    assert sentry_errors(_args(cache, foreign)) == 0
+
+    assert "0 error window(s) recorded from sentry, 4 stale row(s) removed" \
+        in capsys.readouterr().out
+
+
 # --- the privacy rule --------------------------------------------------------------
 
 
@@ -534,14 +561,14 @@ WINDOW = (
 def test_a_malformed_issue_records_nothing_and_does_not_raise(store, malformed):
     """This reads data a third party produced, and one bad record must not stop the rest of an
     export. It yields no row rather than an exception."""
-    assert _reader(store).ingest([malformed, _foreign()], *WINDOW) == 0
+    assert _reader(store).ingest([malformed, _foreign()], *WINDOW).written == 0
     assert store.observed_error_windows(REPO) == []
 
 
 def test_one_malformed_issue_does_not_cost_the_rest_of_the_export(store):
     """The reason the record above is dropped rather than raised on, stated as a test: an export
     is a batch and the alternative is a single bad group silencing a whole window."""
-    assert _reader(store).ingest([{"id": "1", "count": "3"}, _issue()], *WINDOW) == 1
+    assert _reader(store).ingest([{"id": "1", "count": "3"}, _issue()], *WINDOW).written == 1
 
     assert _rows(store)[("PostCharges", "4xx")] == (3, 1)
 
@@ -578,7 +605,7 @@ def test_an_export_holding_nothing_this_vendor_owns_writes_no_row(store):
     assert _reader(store).ingest([_issue(count="500", latestEvent={
         "request": {"url": "https://api.example-crm.test/v3/contacts", "method": "POST"},
         "contexts": {"response": {"status_code": 500}},
-    })], *WINDOW) == 0
+    })], *WINDOW).written == 0
 
 
 def test_an_export_of_nothing_but_malformed_records_refuses_to_replace_the_window(store):

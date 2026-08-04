@@ -41,6 +41,7 @@ access control.
 from __future__ import annotations
 
 import logging
+from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, Callable, Mapping, Sequence
 
@@ -70,6 +71,20 @@ and window -- which any consumer summing rows would double-count.
 # the customer's entire error stream rather than a pre-filtered one, so recording what nothing
 # correlates would make this table a copy of their error volume filed under no operation.
 BINDING_RUNG = "observed"
+
+
+@dataclass(frozen=True)
+class WindowIngest:
+    """What one export did to the window it was queried over.
+
+    Two numbers and not one. A re-query that wrote nothing and removed three rows reports
+    identically to an export holding nothing this vendor owns if only the writes are counted, and
+    of the two it is the deletion that cannot be undone -- an error tracker's retention is finite
+    and this table cannot be backfilled.
+    """
+
+    written: int
+    removed: int
 
 
 class UnreadableExport(Exception):
@@ -114,8 +129,8 @@ class SentryErrorReader:
 
     def ingest(
         self, issues: Sequence[Any], window_start: datetime, window_end: datetime
-    ) -> int:
-        """Record the counts in one export. Returns how many rows were written.
+    ) -> WindowIngest:
+        """Record the counts in one export. Returns what it did to the window.
 
         A record that is not what it claims to be yields nothing and raises nothing: this reads
         data a third party produced, and one malformed group must not cost the rest of a window.
@@ -181,7 +196,7 @@ class SentryErrorReader:
                     error_count=errors,
                     issue_count=groups,
                 ))
-            self._store.remove_observed_error_windows_outside(
+            removed = self._store.remove_observed_error_windows_outside(
                 self._repo_id,
                 self._vendor_id,
                 ERROR_TRACKER_GROUP_SOURCE,
@@ -189,7 +204,7 @@ class SentryErrorReader:
                 window_end,
                 pooled.keys(),
             )
-        return len(pooled)
+        return WindowIngest(written=len(pooled), removed=removed)
 
     def _request(self, issue: Any) -> tuple[str, str, Mapping[str, Any]] | None:
         """The method, url and representative event, or `None` with a reason logged.

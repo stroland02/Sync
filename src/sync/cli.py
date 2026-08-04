@@ -1346,7 +1346,7 @@ def sentry_errors(args: argparse.Namespace) -> int:
         store, args.repo_id, args.vendor, _operation_resolver(vendor)
     )
     try:
-        written = reader.ingest(payload, since, until)
+        ingested = reader.ingest(payload, since, until)
     except UnreadableExport as exc:
         # Refused for the reason every other refusal in this command is: nothing happened, and
         # the alternative is telling the operator their integration was quiet during an hour
@@ -1356,10 +1356,15 @@ def sentry_errors(args: argparse.Namespace) -> int:
             file=sys.stderr,
         )
         return 2
-    # The count of rows, and nothing about what was in them. An export holding nothing this
-    # vendor owns writes none and is not an error: a customer whose error stream is all their own
-    # bugs is the ordinary case.
-    print(f"{written} error window(s) recorded from sentry")
+    # Counts of rows, and nothing about what was in them. An export holding nothing this vendor
+    # owns writes none and is not an error: a customer whose error stream is all their own bugs
+    # is the ordinary case. The removals are reported beside the writes because a re-query that
+    # deleted rows and wrote none otherwise prints what an empty export prints, and a deletion
+    # here is the half nothing can undo.
+    print(
+        f"{ingested.written} error window(s) recorded from sentry, "
+        f"{ingested.removed} stale row(s) removed"
+    )
     return 0
 
 

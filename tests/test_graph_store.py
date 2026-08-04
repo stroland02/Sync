@@ -474,3 +474,19 @@ def test_a_removal_does_not_reach_the_window_beside_the_one_it_was_given(store):
 
     rows = store.observed_error_windows("r1")
     assert [(row.window_start, row.window_end) for row in rows] == [(_HOUR_15, _HOUR_16)]
+
+
+def test_a_removal_reports_how_many_rows_it_took_out(store):
+    """The count has a caller: an ingest that wrote nothing and deleted three rows reads exactly
+    like one that held nothing for this vendor, and the operator sees only the writes. Scoped the
+    same way the delete is, so the row belonging to another source is not in the number either.
+    """
+    store.record_observed_error_window(_error_window())
+    store.record_observed_error_window(_error_window(status_class="4xx"))
+    store.record_observed_error_window(_error_window(source="span-derived"))
+
+    removed = store.remove_observed_error_windows_outside(
+        "r1", "stripe", "error-tracker-group", _HOUR_14, _HOUR_15, ()
+    )
+
+    assert removed == 2

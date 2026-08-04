@@ -747,8 +747,12 @@ class GraphStore:
         window_start: datetime,
         window_end: datetime,
         keys: Collection[tuple[str, str]],
-    ) -> None:
-        """Drop this window's rows for this source that `keys` no longer names.
+    ) -> int:
+        """Drop this window's rows for this source that `keys` no longer names, and say how many.
+
+        The count has a caller rather than being returned for symmetry: an ingest that wrote
+        nothing and deleted three rows is indistinguishable from one that held nothing for this
+        vendor, and rows leaving the graph unremarked is the worse half of that pair to get wrong.
 
         The other half of what makes an ingest a replacement. `record_observed_error_window`
         replaces a key whose count changed and cannot touch a key that stopped being reported at
@@ -767,7 +771,7 @@ class GraphStore:
         """
         operations = [operation for operation, _ in keys]
         classes = [status_class for _, status_class in keys]
-        self._connect().execute(
+        return self._connect().execute(
             """
             DELETE FROM observed_error_window
              WHERE repo_id = %s AND vendor_id = %s AND source = %s
@@ -776,7 +780,7 @@ class GraphStore:
                    NOT IN (SELECT * FROM unnest(%s::text[], %s::text[]))
             """,
             (repo_id, vendor_id, source, window_start, window_end, operations, classes),
-        )
+        ).rowcount
 
     def observed_error_windows(self, repo_id: str) -> list[ObservedErrorWindow]:
         """Every failure count recorded for one repository.
