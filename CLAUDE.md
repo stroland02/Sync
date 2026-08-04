@@ -66,6 +66,8 @@ Git warns `LF will be replaced by CRLF` on every commit. That is expected. Do no
 
 **Test first, always.** Write the failing test, run it, watch it fail for the reason you expect, then implement. A test that has never failed has never been shown to test anything.
 
+**Executing a plan, decide rather than ask.** `.claude/rules/autonomous-development.md` carries the rule and the three exceptions that are still the human's. It exists because one blocking question idled a milestone for three hours; a ruling recorded in the plan's ledger costs a fix round to reverse, and waiting costs the afternoon.
+
 **A test that cannot fail is worse than no test.** It reports a component as covered while asserting nothing, and nothing downstream ever contradicts it — the import-boundary test's original form exited 0 without parsing its own argument. When a test asserts on a subprocess, an exit code, or an external tool, break the thing deliberately and watch it go red before trusting it.
 
 The rest of the test discipline is in `.claude/rules/test-discipline.md`, which loads whenever you touch `tests/`: the no-vendor-API and no-model-API rule, why fixtures being ASCII means no test catches a missing `encoding="utf-8"`, and focused-while-iterating then full-before-committing.
