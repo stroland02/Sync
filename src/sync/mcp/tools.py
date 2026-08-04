@@ -152,6 +152,53 @@ class GraphSurface:
             binding_source=finding.binding_rung,
         )
 
+    def overview(self) -> dict[str, Any]:
+        """Open findings per vendor, counted over every one of them.
+
+        Not a tool, for `finding_by_id`'s reason: `sync.mcp.registry` declares the published set
+        as data, so the console's aggregate question is answered without the frozen four becoming
+        five.
+
+        Deliberately unpaginated, which is the one place this surface departs from "paginate
+        every list": the payload is bounded by the number of vendors rather than by the number of
+        findings, so it cannot grow with the graph. That bounds the response and not the cost --
+        the read behind it is one call per open finding, unbounded, on a route a console polls. A
+        window here would put the counts and the total on different sets, and the two would
+        disagree past it with nothing saying so.
+
+        Counted over the same findings `whats_at_risk` builds rows from -- a finding whose call
+        site has gone is dropped by both -- or a total and a page over the same graph would
+        report different numbers.
+
+        `context_savings` is zero and that is the measurement rather than a placeholder:
+        `_TOKENS_PER_AVOIDED_READ` is an estimate per binding returned, and this answer returns
+        counts and no binding.
+        """
+        vendor_counts: dict[str, int] = {}
+        matched: list[Finding] = []
+        newest_index: datetime | None = None
+
+        for finding in self._graph.open_findings():
+            site = self._site_for(finding)
+            if site is None:
+                continue
+            newest_index = _later(newest_index, site.indexed_at)
+            matched.append(finding)
+            vendor_counts[site.vendor_id] = vendor_counts.get(site.vendor_id, 0) + 1
+
+        return self._envelope(
+            {
+                "vendors": [
+                    {"vendor_id": vendor_id, "open_finding_count": count}
+                    for vendor_id, count in sorted(vendor_counts.items())
+                ],
+                "total_findings": len(matched),
+            },
+            indexed_at=newest_index,
+            savings=0,
+            binding_source=_shared_rung(matched),
+        )
+
     def explain_call_site(self, file: str, line: int) -> dict[str, Any] | None:
         """One binding in full, with shallow references to what changed about it.
 

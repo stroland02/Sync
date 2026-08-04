@@ -25,13 +25,6 @@ from sync.mcp.tools import DEFAULT_LIMIT, GraphSurface
 WorkflowReader = Callable[[str], Optional[dict[str, Any]]]
 
 
-# Upper bound on the page the overview aggregates over. The surface offers no aggregate read,
-# so the per-vendor counts are built from a page of `whats_at_risk` while `total_findings` is
-# the surface's own full count -- past this ceiling the two disagree, and the counts are the
-# side that under-reports. An operator ceiling rather than a truth about the graph.
-_SCAN_LIMIT = 10_000
-
-
 def _int_param(request: Request, name: str, default: int) -> int:
     """A query parameter parsed as int, falling back to the default rather than 400.
 
@@ -65,29 +58,7 @@ def create_app(
     """
 
     async def _overview(request: Request) -> JSONResponse:
-        # Composed from `whats_at_risk` because the surface offers no aggregate read: the
-        # overview is "what open findings do we hold, grouped by vendor". A separate
-        # aggregate on the surface would repeat what the page already reports.
-        page = surface.whats_at_risk(limit=_SCAN_LIMIT, offset=0)
-        vendor_counts: dict[str, int] = {}
-        for row in page["items"]:
-            vendor = row.get("vendor")
-            if vendor is None:
-                continue
-            vendor_counts[vendor] = vendor_counts.get(vendor, 0) + 1
-        vendors = [
-            {"vendor_id": vendor_id, "open_finding_count": count}
-            for vendor_id, count in sorted(vendor_counts.items())
-        ]
-        return JSONResponse(
-            {
-                "vendors": vendors,
-                "total_findings": page["total"],
-                "indexed_at": page["indexed_at"],
-                "feed_fetched_at": page["feed_fetched_at"],
-                "binding_source": page["binding_source"],
-            }
-        )
+        return JSONResponse(surface.overview())
 
     async def _vendor_detail(request: Request) -> JSONResponse:
         vendor_id = request.path_params["vendor_id"]

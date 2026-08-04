@@ -247,6 +247,78 @@ def test_finding_by_id_rests_its_provenance_on_the_one_binding_under_it():
     assert surface.finding_by_id("f1")["binding_source"] == "observed"
 
 
+# --- the aggregate, which is not a tool either ------------------------------------
+
+
+def _many(count: int, vendor: str = "stripe", rung: str = "static"):
+    return (
+        [_finding(f"{vendor}-f{i}", f"{vendor}-cs{i}", "vc1", rung=rung) for i in range(count)],
+        [_site(f"{vendor}-cs{i}", path=f"src/{vendor}{i}.ts", line=i + 1, vendor=vendor)
+         for i in range(count)],
+    )
+
+
+def test_overview_counts_open_findings_per_vendor_over_all_of_them():
+    """An aggregate has no page, and that is the point of it being on the surface: the console's
+    total and its per-vendor counts have to come from one scan or they can disagree."""
+    stripe_findings, stripe_sites = _many(3)
+    shopify_findings, shopify_sites = _many(2, vendor="shopify")
+    surface = _surface(
+        findings=[*stripe_findings, *shopify_findings],
+        sites=[*stripe_sites, *shopify_sites],
+        changes=[_change("vc1")],
+    )
+
+    result = surface.overview()
+
+    assert result["total_findings"] == 5
+    assert result["vendors"] == [
+        {"vendor_id": "shopify", "open_finding_count": 2},
+        {"vendor_id": "stripe", "open_finding_count": 3},
+    ]
+    assert sum(v["open_finding_count"] for v in result["vendors"]) == result["total_findings"]
+
+
+def test_overview_drops_a_finding_whose_call_site_vanished_as_the_page_does():
+    """Counted the way `whats_at_risk` counts, or the overview's total and the page's total
+    disagree about the same graph."""
+    findings, sites = _many(2)
+    surface = _surface(
+        findings=[*findings, _finding("f-dangling", "gone", "vc1")],
+        sites=sites, changes=[_change("vc1")],
+    )
+
+    assert surface.overview()["total_findings"] == 2
+    assert surface.overview()["total_findings"] == surface.whats_at_risk()["total"]
+
+
+def test_overview_reports_no_rung_when_the_findings_it_counted_disagree():
+    """The same answer `whats_at_risk` gives for a page over many findings, for the same reason:
+    an aggregate rests on no single binding, and naming one rung would be wrong about the rows
+    that carry the other."""
+    static_findings, static_sites = _many(1)
+    observed_findings, observed_sites = _many(1, vendor="shopify", rung="observed")
+    mixed = _surface(
+        findings=[*static_findings, *observed_findings],
+        sites=[*static_sites, *observed_sites],
+        changes=[_change("vc1")],
+    )
+
+    assert mixed.overview()["binding_source"] is None
+    assert _default().overview()["binding_source"] == "static"
+
+
+def test_overview_claims_no_context_savings_because_it_returns_no_binding():
+    """`_TOKENS_PER_AVOIDED_READ` is an estimate per binding returned, and this answer returns
+    counts. Zero is the measurement rather than a placeholder: a response that hands back no
+    binding saved nobody a file read, and a tool that inflates its own value is one nobody can
+    use to measure the product."""
+    result = _default().overview()
+
+    assert result["context_savings"] == 0
+    assert "items" not in result
+
+
 # --- provenance, on every response ------------------------------------------------
 
 
