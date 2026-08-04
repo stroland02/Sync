@@ -192,12 +192,17 @@ def _count(raw: Any) -> int | None:
 
     A negative is refused rather than clamped: there is no reading of a negative error count, and
     zeroing it would file a group that cannot be believed under a number that can be.
+
+    `isdecimal` and not `isdigit`: superscripts and other numeric-but-not-positional characters
+    satisfy `isdigit` and `int` rejects them, so that guard admits strings the conversion behind
+    it raises on -- and the exception would escape the whole ingest, costing every record after
+    it in the export.
     """
     if isinstance(raw, bool):
         return None
     if isinstance(raw, int):
         return raw if raw >= 0 else None
-    if isinstance(raw, str) and raw.isdigit():
+    if isinstance(raw, str) and raw.isdecimal():
         return int(raw)
     return None
 

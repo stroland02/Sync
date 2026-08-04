@@ -352,6 +352,9 @@ WINDOW = (
         pytest.param(_issue(latestEvent={"request": 7}), id="request-not-a-mapping"),
         pytest.param(_issue(latestEvent={"request": {"url": 1, "method": 2}}), id="url-not-a-string"),
         pytest.param(_issue(count="many"), id="count-not-a-number"),
+        # Superscript two, spelled as an escape so this source stays ASCII. `str.isdigit` is
+        # True for it and `int` raises, which is the gap the guard has to not have.
+        pytest.param(_issue(count="\u00b2"), id="count-a-digit-int-refuses"),
         pytest.param(_issue(count=-4), id="negative-count"),
         pytest.param(_issue(count=None), id="no-count"),
     ],
