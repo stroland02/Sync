@@ -32,6 +32,44 @@ depend on somebody remembering. `docs/superpowers/loops/console-improvement-tick
 Ticks are session-only in the current harness — they die with the session that scheduled them, which
 is a real limit and not a detail.
 
+## Cost and speed are the same lever, and it is not more agents
+
+Both improve by spending less, so treat a request to go faster and a request to spend less as the
+same instruction rather than as a trade-off.
+
+**Measured on 2026-08-04.** A fourteen-agent workflow relaunched into an exhausted account limit
+burned 618,000 tokens in seventy seconds and produced one usable note; twelve of its agents failed on
+the same error. Nothing about that was fast. Width is the most expensive thing an orchestrator can
+choose, and it is expensive whether or not it works.
+
+**Model tier per role.** Defaulting everything to the most capable model is the other half of the
+bill, and it is slower — a bigger model is not quicker at a mechanical diff, it is merely dearer.
+
+| Role | Tier |
+|---|---|
+| Whole-branch review, architecture, a plan revision | the most capable model |
+| Task review of a substantial diff | mid tier |
+| Scoped re-review of a fix, a mechanical fix, a single-file change, a config edit | cheapest tier that can do it |
+| An implementer transcribing code the plan already contains | cheapest tier |
+
+Turn count beats token price. The cheapest model takes two or three times the turns on multi-step
+work and costs more overall, so the floor for anything reasoning from prose is mid tier, not the
+bottom.
+
+**Width discipline.** Fan out only where the parts are genuinely independent and the shape is known
+before dispatch. Four agents that each return something usable beat fourteen that mostly duplicate
+each other's reading. Before launching a workflow, name what each agent will return that the others
+cannot — if that sentence is hard to write for an agent, delete it.
+
+**A tick is not a fan-out.** A scheduled loop exists to make small, steady progress. Cap it at two
+subagents, never let it launch a workflow, and let it stop early: a tick that correctly does nothing
+costs almost nothing, and a tick that starts work on top of another agent's uncommitted changes costs
+a day. Space ticks widely enough that idle firings do not accumulate — hourly was too often while
+work was blocked, and every firing still paid for the reading.
+
+**Do not re-dispatch into a limit.** A resumed workflow re-runs its failed agents rather than
+skipping them, so a resume during an outage pays the full price for the same failure twice.
+
 ## Reaching the other terminal
 
 `orca terminal list --json` gives handles. Then:
