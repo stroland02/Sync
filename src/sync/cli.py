@@ -1422,7 +1422,14 @@ def ingest(args: argparse.Namespace) -> int:
         )
         return 2
 
-    payload = json.loads(_payload_bytes(args.payload).decode("utf-8"))
+    try:
+        payload = json.loads(_payload_bytes(args.payload).decode("utf-8"))
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+        # A payload that cannot be read and a repository that does not call this vendor are
+        # different facts, and every query downstream of `observed_call` reads the first as the
+        # second. Uncaught it was a traceback, which says nothing about whether spans landed.
+        print(f"could not read {args.payload}: {type(exc).__name__}: {exc}", file=sys.stderr)
+        return 2
 
     store = GraphStore(args.dsn)
     store.apply_schema()

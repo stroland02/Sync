@@ -519,6 +519,88 @@ def test_ingest_reads_a_payload_from_stdin(staged_cache, store, monkeypatch, cap
     assert store.observed_calls(REPO)
 
 
+# --- `sync ingest`: the payload it cannot read ------------------------------------
+#
+# `shapes` and `sentry_errors` read a payload the same way and both answer an unreadable one
+# with exit 2. This command answered it with a traceback, which tells an operator nothing about
+# whether spans reached the graph before it stopped. Three exception types arrive at that read
+# and each is a separate arm of the handler; the pipe is a separate route into it.
+
+
+def _ingest_args(cache: Path, payload: str):
+    return argparse.Namespace(
+        vendor=VENDOR, payload=payload, repo_id=REPO, dsn=DSN, cache=str(cache)
+    )
+
+
+def test_ingest_refuses_a_payload_that_is_not_there(staged_cache, store, tmp_path, capsys):
+    """The path an operator mistyped, which is the ordinary way this fires. An `OSError` is
+    reachable on the file route alone -- the pipe is already open by the time this reads it."""
+    absent = tmp_path / "absent.json"
+
+    assert ingest(_ingest_args(staged_cache, str(absent))) == 2
+
+    printed = capsys.readouterr()
+    assert printed.out == ""
+    assert "could not read" in printed.err
+    assert str(absent) in printed.err
+    assert store.observed_calls(REPO) == []
+
+
+def test_ingest_refuses_a_payload_that_is_not_utf8_at_all(staged_cache, store, tmp_path, capsys):
+    """A collector's export in an encoding this does not read. Zero spans is a repository that
+    does not call this vendor, and an export nobody could decode reported that way is a claim
+    about a customer's traffic that nothing measured."""
+    payload = tmp_path / "spans.json"
+    payload.write_bytes(
+        (Path(__file__).parent / "fixtures" / "otlp" / "stripe_client_spans.json")
+        .read_text(encoding="utf-8").encode("utf-16")
+    )
+
+    assert ingest(_ingest_args(staged_cache, str(payload))) == 2
+
+    printed = capsys.readouterr()
+    assert printed.out == ""
+    assert "could not read" in printed.err
+    assert store.observed_calls(REPO) == []
+
+
+def test_ingest_refuses_a_payload_that_decodes_and_is_not_json(
+    staged_cache, store, tmp_path, capsys
+):
+    """A capture truncated mid-write, or a proxy's error page saved under the payload's name.
+    The refusal names the file and says what was wrong with it, and quotes none of it: an OTLP
+    export carries customer request data, so a diagnostic echoing a fragment is a leak."""
+    payload = tmp_path / "spans.json"
+    payload.write_text('{"resourceSpans": [{"scopeSpans": [{"spans": [{"attri', encoding="utf-8")
+
+    assert ingest(_ingest_args(staged_cache, str(payload))) == 2
+
+    printed = capsys.readouterr()
+    assert printed.out == ""
+    assert "could not read" in printed.err
+    assert "JSONDecodeError" in printed.err
+    assert "resourceSpans" not in printed.err
+    assert store.observed_calls(REPO) == []
+
+
+def test_ingest_refuses_an_unreadable_payload_on_the_pipe(
+    staged_cache, store, monkeypatch, capsys
+):
+    """The same refusal through `--payload -`, which for an export another process produces is
+    the ordinary invocation. The bytes have to reach `sys.stdin.buffer` for this to prove
+    anything: a stand-in with no buffer delivers none and the command would refuse whatever it
+    was handed."""
+    _piped(monkeypatch, json.dumps({"resourceSpans": []}).encode("utf-16"))
+
+    assert ingest(_ingest_args(staged_cache, "-")) == 2
+
+    printed = capsys.readouterr()
+    assert printed.out == ""
+    assert "could not read -" in printed.err
+    assert store.observed_calls(REPO) == []
+
+
 # --- `sync merge-outcome`: the delivery that verifies and is not a pull request -----
 
 

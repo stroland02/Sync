@@ -492,6 +492,24 @@ def _drive_sentry_errors_payload(root: Path) -> None:
     )) == 2
 
 
+def _drive_ingest_payload(root: Path) -> None:
+    """The same bytes on the span half, where zero rows is a claim about a customer's traffic.
+
+    An ingest that writes nothing is indistinguishable from a repository that does not call this
+    vendor, from every query downstream of `observed_call`. The handler answers with exit 2
+    before any store is opened, which is why the DSN below is never used.
+    """
+    from sync.cli import ingest
+
+    payload = root / "spans.json"
+    payload.write_bytes(UTF16)
+
+    assert ingest(argparse.Namespace(
+        vendor="stripe", repo_id="decode", payload=str(payload),
+        dsn="postgresql://unused", cache=str(_tracker_cache(root)),
+    )) == 2
+
+
 def _drive_git_diff(root: Path) -> None:
     """A clone whose tracked source file is not UTF-8, which the patch path refuses.
 
@@ -615,6 +633,7 @@ DRIVERS: dict[str, Callable[[Path], None]] = {
     "sync/cli.py::shapes::JSONDecodeError+OSError+UnicodeDecodeError": _drive_shapes_payload,
     "sync/cli.py::sentry_errors::JSONDecodeError+OSError+UnicodeDecodeError":
         _drive_sentry_errors_payload,
+    "sync/cli.py::ingest::JSONDecodeError+OSError+UnicodeDecodeError": _drive_ingest_payload,
     "sync/index/typescript.py::TypeScriptAdapter._read_manifest::"
     "JSONDecodeError+UnicodeDecodeError": _drive_ts_manifest,
     "sync/remediate/agent_patch.py::_git_diff::UnicodeDecodeError": _drive_git_diff,
