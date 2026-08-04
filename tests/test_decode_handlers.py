@@ -51,23 +51,40 @@ the day somebody writes one, naming both positions.
 What none of this can see is a chain that catches a `UnicodeDecodeError` without naming one.
 The inventory reads exception *names*, and `UnicodeDecodeError` is a `ValueError`, so
 `except ValueError` catches a decode failure while being neither counted nor required to have
-a driver. `benchmark`'s chain around `_score_corpus` is the known instance and says so where it
-sits; the specification's own read is guarded inside `_score_corpus`, where this file can see
-it, but a decode failure raised anywhere else under that call still lands in a handler nothing
-here knows about.
+a driver.
+
+**Two clauses in `src/` guard a read that way**, and both say so where they sit. `benchmark`'s
+chain around `_score_corpus` is one; the specification's own read is guarded inside
+`_score_corpus` where this file can see it, but a decode failure raised anywhere else under that
+call lands in a handler nothing here knows about. `PythonAdapter._syntax_errors` is the other,
+over `ast.parse` on a customer source file, and its own comment states the subsumption as the
+reason it needs no clause of its own. Probed on UTF-16, on cp1252 in an identifier, a string and
+a comment, and on a mis-declared coding line, `ast.parse` answers `SyntaxError` every time, so
+that arm may be unreachable in practice -- but an instance that cannot fire is still an instance
+this survey has to account for, and the earlier version of this paragraph claimed one instance
+while the second sat in the tree.
 
 Following the hierarchy instead was measured and declined, for what it would demand rather than
-for its size. Most chains in `src/` that name a base class sit over `int()`,
-`datetime.fromisoformat` or a graph lookup by id, none of which can raise a `UnicodeDecodeError`
-at all -- so each would enter the inventory owing a driver that cannot be written, and a rule
+for its size. It would surface forty-three clauses. Thirteen sit over `int()`,
+`datetime.fromisoformat`, a graph lookup by id, a PEM parse or a signature check -- nothing that
+decodes -- so each would enter the inventory owing a driver that cannot be written, and a rule
 whose obligation is unsatisfiable is a rule somebody eventually silences.
-`test_a_chain_naming_only_a_base_class_is_outside_this_inventory` holds the limitation where a
-reader of this file meets it.
 
-How many that is stays unwritten here on purpose. The inventory is read out of `src/` on every
-run, so a count in this prose is a second copy of something already computed, and a copy no
-assertion reads goes stale the first time anyone adds a handler. This one did, twice, and the
-argument above never depended on it -- which is exactly why nobody noticed.
+**The other twenty-eight are the real argument, and they are the majority rather than the
+exception.** They are `except Exception` around a whole stage, where the contract is that no
+failure of any kind escapes. A decode failure genuinely reaches several of them --
+`static_verify` over a repository whose `pyproject.toml` is UTF-16 is a path
+`_drive_configured_typechecker` already builds -- so a driver for one would pass. Passing would
+say nothing. It would prove the catch-all catches, not that anything decided what undecodable
+bytes mean; that decision is made inside the stage, at the read, by a handler this file already
+sees.
+
+`SUBSUMING` below names all forty-three, grouped by which of those three conclusions applies,
+and two checks hold it: one fails when a clause appears that the census does not account for,
+the other when an entry describes nothing. That is what the earlier version of this file lacked
+-- it stated the limitation in prose and left nothing reading `src/`, which is how the second
+guarded read went unseen. A count in prose is a second copy of something computed on every run,
+and this file's own count went stale twice before anyone noticed.
 """
 
 from __future__ import annotations
@@ -191,6 +208,39 @@ def decode_handlers(src: Path = SRC) -> list[DecodeHandler]:
             first = node.handlers[0].lineno
             last = max(handler.end_lineno or handler.lineno for handler in node.handlers)
             for handler, caught in decoding:
+                found.append(
+                    DecodeHandler(relative, scopes[id(node)], handler.lineno, first, last, caught)
+                )
+    return found
+
+
+SUBSUMING_BASES = frozenset({"UnicodeError", "ValueError", "Exception", "BaseException"})
+
+
+def subsuming_handlers(src: Path = SRC) -> list[DecodeHandler]:
+    """Every clause in the tree that catches a `UnicodeDecodeError` without naming one.
+
+    The clause is the unit here where the chain is the unit above, because a chain may hold
+    both and order decides which one a decode failure reaches. A clause naming
+    `UnicodeDecodeError` ends the walk over its chain: every clause after it is unreachable for
+    a decode failure, and every clause before it shadows it.
+    """
+    found: list[DecodeHandler] = []
+    for file_path in sorted(src.rglob("*.py")):
+        tree = ast.parse(file_path.read_text(encoding="utf-8"))
+        relative = file_path.relative_to(src).as_posix()
+        scopes = _scopes(tree)
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.Try) or not node.handlers:
+                continue
+            first = node.handlers[0].lineno
+            last = max(handler.end_lineno or handler.lineno for handler in node.handlers)
+            for handler in node.handlers:
+                caught = _caught_names(handler.type)
+                if "UnicodeDecodeError" in caught:
+                    break
+                if SUBSUMING_BASES.isdisjoint(caught):
+                    continue
                 found.append(
                     DecodeHandler(relative, scopes[id(node)], handler.lineno, first, last, caught)
                 )
@@ -880,6 +930,118 @@ def test_a_chain_naming_only_a_base_class_is_outside_this_inventory(tmp_path: Pa
     assert issubclass(UnicodeDecodeError, ValueError)
 
     assert _inventory_over(tmp_path / "subsuming", _SUBSUMING_HANDLER) == []
+
+
+# Every clause in `src/` that catches a `UnicodeDecodeError` without naming one, accepted as of
+# 2026-08-04. Keyed exactly as `DRIVERS` is, and for the same reason: an edit above a clause must
+# not invalidate a decision nobody revisited.
+#
+# This is a list and never a threshold. A count absorbs both a repair and a new blind spot in
+# silence; a named entry has to be deleted by whoever removes the clause. The file only shrinks,
+# and adding a line is a decision rather than a formality -- it says somebody looked at what the
+# clause guards and concluded a decode failure either cannot reach it or would prove nothing by
+# reaching it. The three comments below are the three conclusions available.
+
+# Nothing under the `try` decodes anything, so a `UnicodeDecodeError` cannot arrive: `int()` and
+# `datetime.fromisoformat` and `strptime` over a `str`, a graph lookup by id, a PEM parse and a
+# signature check over bytes neither of them reads as text, a dataclass built from values
+# `json.loads` already decoded, and a `relative_to` over paths. A driver here would have nothing
+# to drive, and an obligation that cannot be satisfied is one somebody eventually silences.
+_DECODES_NOTHING = (
+    "sync/api/app.py::_int_param::ValueError",
+    "sync/cli.py::_signing_key::TypeError+ValueError",
+    "sync/cli.py::_window_bound::ValueError",
+    "sync/mcp/tools.py::GraphSurface._change_for::KeyError+LookupError+ValueError",
+    "sync/mcp/tools.py::GraphSurface._site_for::KeyError+LookupError+ValueError",
+    "sync/signals/datadog/shapes.py::DatadogShapeReader._seen_at::ValueError",
+    "sync/signals/deprecations/catalogue.py::_parse_date::ValueError",
+    "sync/signals/feed/consumer.py::parse_feed::TypeError+ValueError",
+    "sync/signals/feed/consumer.py::verify_feed::InvalidSignature+ValueError",
+    "sync/signals/generated/symbols_speakeasy.py::_specifier_target::ValueError",
+    "sync/signals/generated/symbols_typescript.py::_specifier_target::ValueError",
+    "sync/signals/sentry/shapes.py::SentryShapeReader._seen_at::ValueError",
+    "sync/telemetry/otlp.py::_as_int::ValueError",
+)
+
+# `except Exception` around a whole stage, where the contract is that no failure of any kind
+# escapes. Several of these a decode failure genuinely can reach -- `static_verify` over a
+# repository whose `pyproject.toml` is UTF-16 is a path `_drive_configured_typechecker` already
+# builds -- and a driver for one would pass. Passing would say nothing: it would prove the
+# catch-all catches, not that anything downstream decided what undecodable bytes mean. That
+# decision is made inside the stage, at the read, by a handler this file can already see.
+_WHOLE_STAGE_CATCH_ALL = (
+    "sync/cli.py::_decline_line::Exception",
+    "sync/cli.py::_model_deprecations::Exception",
+    "sync/cli.py::_parameter_deprecations::Exception",
+    "sync/cli.py::_scan::Exception",
+    "sync/core/conformance.py::_check_fetch_changes::Exception",
+    "sync/core/conformance.py::_check_matches::Exception",
+    "sync/core/conformance.py::_check_operation_for_symbol::Exception",
+    "sync/core/conformance.py::_check_prepare_is_repeatable::Exception",
+    "sync/core/conformance.py::_check_static_verify_refuses_a_doctored_dependency::Exception",
+    "sync/core/conformance.py::_correlate::Exception",
+    "sync/forge/github.py::GitHubForge.delete_branch::Exception",
+    "sync/index/literals.py::index_operation_literals::Exception",
+    "sync/mcp/server.py::_call::Exception",
+    "sync/remediate/corpus.py::make_recorder.record::Exception",
+    "sync/remediate/nodes.py::_observed::Exception",
+    "sync/remediate/nodes.py::make_abandon.abandon::Exception",
+    "sync/remediate/nodes.py::make_await_ci.await_ci::Exception",
+    "sync/remediate/nodes.py::make_locate.locate::Exception",
+    "sync/remediate/nodes.py::make_open_pr.open_pr::Exception",
+    "sync/remediate/nodes.py::make_patch.patch::Exception",
+    "sync/remediate/nodes.py::make_prepare.prepare::Exception",
+    "sync/remediate/nodes.py::make_push_branch.push_branch::Exception",
+    "sync/remediate/nodes.py::make_replay.replay::Exception",
+    "sync/remediate/nodes.py::make_static_verify.static_verify::Exception",
+    "sync/remediate/tiered.py::TieredRemediator.propose::Exception",
+    "sync/signals/deprecations/adapter.py::DeprecationAdapter._page::Exception",
+    "sync/signals/generated/adapter.py::GeneratedSpecAdapter._spec::Exception",
+    "sync/signals/registry.py::_spec_source::Exception",
+)
+
+# A read sits under these two, so they are the blind spot rather than an instance of it being
+# harmless. Both say so where they sit. The docstring above carries what is known about each.
+_GUARDS_A_READ = (
+    "sync/cli.py::benchmark::KeyError+LookupError+ValueError",
+    "sync/index/python_lang.py::PythonAdapter._syntax_errors::ValueError",
+)
+
+SUBSUMING: tuple[str, ...] = _DECODES_NOTHING + _WHOLE_STAGE_CATCH_ALL + _GUARDS_A_READ
+
+
+def test_no_subsuming_chain_in_src_is_unaccounted_for() -> None:
+    """The same limitation as above, asserted over `src/` instead of a module this test wrote.
+
+    The check above proves the inventory misses a subsuming chain. It cannot notice one being
+    added, because it never reads `src/` -- which is how the second entry in `SUBSUMING` sat in
+    the tree with nothing saying so.
+    """
+    appeared = sorted(
+        f"{handler.key} at {handler.position}"
+        for handler in subsuming_handlers()
+        if handler.key not in SUBSUMING
+    )
+
+    assert not appeared, (
+        "these clauses catch a UnicodeDecodeError without naming one, and SUBSUMING does not "
+        "account for them:\n  " + "\n  ".join(appeared) + "\n"
+        "A new one is not a defect by itself. Decide whether the code it guards can produce "
+        "undecodable bytes: if it can, the read wants its own `except UnicodeDecodeError` and a "
+        "driver above; if it cannot, or if the clause is a whole-stage catch-all, it needs "
+        "neither. Either way add the key to SUBSUMING under the comment saying which of those "
+        "it is, so the next reader inherits the decision rather than the question."
+    )
+
+
+def test_no_entry_in_the_subsuming_census_is_gone() -> None:
+    """The census only shrinks, and a line leaves in the commit that removes its clause."""
+    stale = sorted(set(SUBSUMING) - {handler.key for handler in subsuming_handlers()})
+
+    assert not stale, (
+        "SUBSUMING names clauses that are no longer in src/:\n  " + "\n  ".join(stale) + "\n"
+        "Delete the line. A census entry that describes nothing is one nobody can check."
+    )
 
 
 def test_no_two_decode_handlers_share_a_key() -> None:
