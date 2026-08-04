@@ -69,6 +69,16 @@ Known limits, so nobody rediscovers them: a recursive function references itself
 live; a name reached only through a computed string (an f-string, `prefix + name`) is
 invisible; and nested definitions inside a function body are not collected.
 
+Bare-name matching has cost a real repair once, which is worth recording because the shape
+recurs. `src/sync/api/app.py` defined its route handlers as local coroutines named after graph
+entities -- `vendor_detail`, `finding_detail` -- and the `ast.Name` load that passes each one to
+`Route` counted as a reference to the unrelated module-level `sync.dashboard.queries.vendor_detail`
+and `finding_detail`. Both were removed from the baseline on the belief that the transport had
+wired them; nothing had. The masking is silent in the direction this lint is meant to protect,
+and it does not heal on its own, because naming a handler after the entity it serves is a
+convention rather than a slip. The handlers carry a leading underscore now. When a baseline entry
+disappears, confirm the caller with an import rather than with a name.
+
 The opt-out
 -----------
 For what the rule above cannot know, put a marker on the definition line:
