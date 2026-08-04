@@ -45,6 +45,13 @@ unlabelled data.
 If a row's content depends on a binding, the row records which rung produced that binding:
 `static`, `resolved`, or `observed`. Not a join away — a column.
 
+`GraphStore.insert_finding` refuses a finding whose rung is `unattributed`, naming the detector
+that raised it. The check sits at the write rather than on `Finding` itself, because `Finding` is
+exported from `sync.core` and a required field there would break every third-party detector.
+
+`unattributed` exists only for rows written before the column did — a fact about history, which
+is why `BindingRung` does not contain it. Nothing new may be written with it.
+
 ## Never store what must not be stored
 
 Shapes, not values. Field paths, JSON types, nullability, presence counts. An enum value only
