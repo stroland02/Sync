@@ -419,11 +419,16 @@ CREATE TABLE IF NOT EXISTS observed_error_window (
     -- error stream rather than a pre-filtered one, so recording those would make this table a
     -- copy of their error volume filed under no operation.
     binding_rung  TEXT NOT NULL,
-    -- 'sentry-issue' today, and the only writer. In the key for the reason `observed_shape.source`
-    -- is: a count Sentry grouped and a count derived from spans have different sampling stories,
-    -- and merging them lets one masquerade as the other. That disagreement is the point -- two
-    -- independent sources differing about one operation is information about the correlator, and
-    -- with one source there is nothing to disagree with.
+    -- 'error-tracker-group' today, and the only writer. The mechanism rather than a vendor, the
+    -- way `observed_shape.source` names its values -- Sentry and Datadog both write
+    -- 'error-payload' there and both write this. In the key for the reason that column has it:
+    -- a count an error tracker's own grouping produced and a count derived from spans have
+    -- different sampling stories, and merging them lets one masquerade as the other. That
+    -- disagreement is the point -- two independent sources differing about one operation is
+    -- information about the correlator, and with one source there is nothing to disagree with.
+    -- The same argument refuses a per-product value: two trackers grouping the same failures are
+    -- one sampling story, and splitting them would put one window's errors in two rows that any
+    -- consumer summing rows would add together.
     source        TEXT NOT NULL,
     status_class  TEXT NOT NULL,
     window_start  TIMESTAMPTZ NOT NULL,

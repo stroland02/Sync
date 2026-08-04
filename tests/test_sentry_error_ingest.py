@@ -35,7 +35,7 @@ import pytest
 from sync.cli import sentry_errors
 from sync.graph.store import GraphStore
 from sync.signals.registry import SYMBOL_MAP_FILENAME
-from sync.signals.sentry import SENTRY_ISSUE_SOURCE, SentryErrorReader
+from sync.signals.sentry import ERROR_TRACKER_GROUP_SOURCE, SentryErrorReader
 
 DSN = os.environ.get("SYNC_DSN", "postgresql://sync:sync@localhost:5433/sync")
 FIXTURES = Path(__file__).parent / "fixtures" / "sentry"
@@ -198,13 +198,24 @@ def test_the_rung_names_the_binding_the_count_rests_on(store, cache, issues_file
     assert {row.binding_rung for row in store.observed_error_windows(REPO)} == {"observed"}
 
 
-def test_the_source_says_where_the_count_came_from(store, cache, issues_file):
-    """In the natural key for the reason `observed_shape.source` is: a count Sentry grouped and a
-    count derived from spans have different sampling stories, and merging them would let one
-    masquerade as the other."""
+def test_the_source_names_the_mechanism_and_not_the_product(store, cache, issues_file):
+    """In the natural key for the reason `observed_shape.source` is, and named the way that
+    column names its values -- for the mechanism, so that Sentry and Datadog both write
+    'error-payload' there.
+
+    The rationale is what fixes the name. A grouped count and a span-derived count are different
+    sampling stories and must not merge; a count grouped by Datadog is the same sampling story as
+    one grouped by Sentry and must not split. `sentry-issue` split it, so the day a Datadog
+    issue-count ingest lands -- `DatadogShapeReader` already exists -- the same failures counted
+    through two trackers would be two rows for one operation, class and window, and any consumer
+    summing rows would double-count them.
+
+    The literal is asserted rather than the constant alone, because the stored value is the thing
+    a second writer has to agree with and a constant compared against itself agrees always."""
     _feed(cache, issues_file)
 
-    assert {row.source for row in store.observed_error_windows(REPO)} == {SENTRY_ISSUE_SOURCE}
+    assert ERROR_TRACKER_GROUP_SOURCE == "error-tracker-group"
+    assert {row.source for row in store.observed_error_windows(REPO)} == {"error-tracker-group"}
 
 
 # --- the window --------------------------------------------------------------------

@@ -49,13 +49,19 @@ from sync.graph.store import GraphStore
 
 log = logging.getLogger(__name__)
 
-SENTRY_ISSUE_SOURCE = "sentry-issue"
+ERROR_TRACKER_GROUP_SOURCE = "error-tracker-group"
 """How a count reached the graph, as `observed_error_window.source` records it.
 
-Named for the export rather than for the product, because the sampling story is what the column
-separates: these are counts Sentry's own grouping produced, and a count derived from spans is a
-different sample of the same failures. Two sources disagreeing about one operation is
-information about the correlator, and merging them would let one masquerade as the other.
+The mechanism and not the product, which is how `observed_shape.source` names its values --
+Sentry and Datadog both write 'error-payload' there. The sampling story is what the column
+separates: a count an error tracker's own grouping produced and a count derived from spans are
+different samples of the same failures, and two sources disagreeing about one operation is
+information about the correlator that merging them would erase.
+
+That argument runs the other way too, which is why this is not named for Sentry. A count
+Datadog grouped is the same sampling story as a count Sentry grouped, and under a per-product
+value the same failures seen through two trackers would be two rows for one operation, class
+and window -- which any consumer summing rows would double-count.
 """
 
 # The rung every row here carries. A recorded request URL matched against the vendor's published
@@ -121,7 +127,7 @@ class SentryErrorReader:
                     vendor_id=self._vendor_id,
                     operation_id=operation_id,
                     binding_rung=BINDING_RUNG,
-                    source=SENTRY_ISSUE_SOURCE,
+                    source=ERROR_TRACKER_GROUP_SOURCE,
                     status_class=status_class,
                     window_start=window_start,
                     window_end=window_end,
@@ -131,7 +137,7 @@ class SentryErrorReader:
             self._store.remove_observed_error_windows_outside(
                 self._repo_id,
                 self._vendor_id,
-                SENTRY_ISSUE_SOURCE,
+                ERROR_TRACKER_GROUP_SOURCE,
                 window_start,
                 window_end,
                 pooled.keys(),
