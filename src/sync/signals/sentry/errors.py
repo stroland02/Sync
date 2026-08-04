@@ -104,7 +104,6 @@ class UnreadableExport(Exception):
 
     def __init__(self, held: int) -> None:
         super().__init__(f"no record in an export of {held} was readable as an issue")
-        self.held = held
 
 
 class SentryErrorReader:
