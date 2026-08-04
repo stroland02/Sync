@@ -615,3 +615,21 @@ def test_an_export_of_nothing_but_malformed_records_refuses_to_replace_the_windo
     counts the tracker's retention will not give back."""
     with pytest.raises(UnreadableExport):
         _reader(store).ingest([{"id": "1", "count": "3"}, "not-a-mapping"], *WINDOW)
+
+
+def test_a_renamed_count_field_refuses_even_beside_a_record_this_vendor_does_not_own(store):
+    """`count` is a field an issue is built from, so renaming it is the scenario the refusal
+    names -- and it is a likelier rename than most, because Sentry already serialises that field
+    two ways.
+
+    It reached the refusal only when the export held nothing else. A record whose count cannot be
+    read but which resolves to nobody was counted as read, and an export being mostly the
+    customer's own bugs is the ordinary case, so a foreign record was almost always there to hold
+    the count of drops below the count of records. The window was then cleared and the counts are
+    not recoverable. Whether a count can be read is a fact about the export, exactly as the
+    request is, so it is decided before ownership rather than after."""
+    renamed = _foreign()
+    renamed["eventCount"] = renamed.pop("count")
+
+    with pytest.raises(UnreadableExport):
+        _reader(store).ingest([_issue(count="many"), renamed], *WINDOW)

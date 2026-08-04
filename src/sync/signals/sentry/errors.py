@@ -155,19 +155,13 @@ class SentryErrorReader:
                 dropped += 1
                 continue
 
-            method, url, event = request
+            method, url, event, count = request
             operation_id = self._resolve_operation(method, url)
             if operation_id is None:
                 # Not a defect and the ordinary case: most of a customer's error stream is their
                 # own code and other people's APIs. Deliberately not counted as a drop -- this
                 # record was read, and that is what tells a quiet window from a broken reader.
                 log.debug("sentry issue %s resolves to no operation", self._issue_id(issue))
-                continue
-
-            count = _count(issue.get("count"))
-            if count is None:
-                log.warning("sentry issue %s carries no readable count", self._issue_id(issue))
-                dropped += 1
                 continue
 
             totals = pooled.setdefault((operation_id, _status_class(event)), [0, 0])
@@ -206,13 +200,19 @@ class SentryErrorReader:
             )
         return WindowIngest(written=len(pooled), removed=removed)
 
-    def _request(self, issue: Any) -> tuple[str, str, Mapping[str, Any]] | None:
-        """The method, url and representative event, or `None` with a reason logged.
+    def _request(self, issue: Any) -> tuple[str, str, Mapping[str, Any], int] | None:
+        """The method, url, representative event and count, or `None` with a reason logged.
 
-        Structural only, and that is what makes it the readability test. Whether this vendor owns
-        the operation is a fact about the customer's traffic rather than about the export, so it
-        is decided by the caller and not here -- a record that gets this far was read, whoever it
-        turns out to belong to.
+        Everything an issue has to yield that is a fact about the record itself, and that is what
+        makes this the readability test. Whether this vendor owns the operation is a fact about
+        the customer's traffic instead, so it is decided by the caller and not here -- a record
+        that gets this far was read, whoever it turns out to belong to.
+
+        The count is in here rather than after ownership because `count` is a field an issue is
+        built from, and Sentry already serialises it two ways. Read after ownership, a rename of
+        it left every record that resolves to nobody counted as read -- and most of a customer's
+        Sentry project is their own bugs, so there is almost always such a record to keep the
+        export looking readable while every count in it has stopped arriving.
         """
         if not isinstance(issue, Mapping):
             log.warning("sentry issue is %s, not a mapping", type(issue).__name__)
@@ -234,7 +234,12 @@ class SentryErrorReader:
             )
             return None
 
-        return method, url, event
+        count = _count(issue.get("count"))
+        if count is None:
+            log.warning("sentry issue %s carries no readable count", self._issue_id(issue))
+            return None
+
+        return method, url, event, count
 
     def _issue_id(self, issue: Mapping[str, Any]) -> str:
         """Sentry's own surrogate for the group, which is the only handle on a dropped record.
