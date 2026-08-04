@@ -32,7 +32,10 @@ from __future__ import annotations
 import os
 import subprocess
 import sys
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
+
+import red_run_capture
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
@@ -175,3 +178,88 @@ def test_a_red_run_is_kept_and_the_next_green_run_does_not_take_it(tmp_path: Pat
         "a green run writes nothing and removes nothing -- the directory changed"
     )
     assert kept[0].read_bytes() == before, "the green run overwrote the red run's output"
+
+
+# --- where it goes, and what removes it ---------------------------------------------------
+
+
+def test_the_captures_land_where_git_already_ignores_them(pytestconfig, monkeypatch):
+    """A durable location that is already ignored, rather than a new one.
+
+    An artifact that shows up as untracked in `git status` is one somebody commits by accident, and
+    the point of this mechanism is that nobody has to remember anything about it. `git check-ignore`
+    is asked rather than `.gitignore` read, because the answer is the one git actually gives.
+    """
+    monkeypatch.delenv(red_run_capture.DIR_VARIABLE, raising=False)
+
+    directory = red_run_capture.output_dir(pytestconfig)
+
+    assert directory == Path(pytestconfig.rootpath) / ".cache" / "red-runs"
+    ignored = subprocess.run(
+        ["git", "check-ignore", "-q", str(directory / "any-run.log")],
+        cwd=REPO_ROOT,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+    )
+    assert ignored.returncode == 0, f"{directory} is not ignored, so a capture would show up in git status"
+
+
+def test_an_operator_can_send_the_captures_somewhere_else(pytestconfig, monkeypatch):
+    """The seam the child runs above use, so watching this work does not fill the real directory."""
+    monkeypatch.setenv(red_run_capture.DIR_VARIABLE, "/somewhere/else")
+
+    assert red_run_capture.output_dir(pytestconfig) == Path("/somewhere/else")
+
+
+def test_only_the_newest_captures_are_kept(tmp_path: Path):
+    """Something that keeps every run until a disk fills is a different defect.
+
+    Retention runs on the write, so it costs a green run nothing -- and a green run writes nothing,
+    which is why the window holds red runs rather than the last N of anything.
+    """
+    start = datetime(2026, 8, 4, 12, 0, 0, tzinfo=timezone.utc)
+    written = [
+        red_run_capture.write_capture(
+            tmp_path, f"run {n}", now=start + timedelta(seconds=n), pid=1000 + n, keep=3
+        )
+        for n in range(6)
+    ]
+
+    survivors = sorted(tmp_path.glob("*.log"))
+
+    assert survivors == written[-3:], "the three newest survive and the older three are gone"
+    assert [path.read_text(encoding="utf-8") for path in survivors] == ["run 3", "run 4", "run 5"]
+
+
+def test_two_captures_taken_from_the_clock_do_not_land_on_one_name(tmp_path: Path):
+    """The next run being red is the case a fixed path loses, and the harder one.
+
+    A green run writes nothing, so a fixed name would survive it and look fine. Two reds in a row
+    is what the name has to separate, and it separates them on the clock -- which is only an answer
+    if the clock here has the resolution the name asks for. Same process, same pid, back to back.
+    """
+    first = red_run_capture.write_capture(
+        tmp_path, "first", now=datetime.now(timezone.utc), pid=os.getpid()
+    )
+    second = red_run_capture.write_capture(
+        tmp_path, "second", now=datetime.now(timezone.utc), pid=os.getpid()
+    )
+
+    assert first != second
+    assert first.read_text(encoding="utf-8") == "first"
+
+
+def test_a_capture_python_cannot_encode_is_written_rather_than_raised(tmp_path: Path):
+    """The worst outcome this could have: raising on the failure it exists to record.
+
+    A lone surrogate is what a byte stream decoded with `surrogateescape` leaves behind, and it is
+    the one thing `str` holds that UTF-8 cannot encode. The em dash the child run above carries is
+    the ordinary case; this is the one that would take the capture down with the run.
+    """
+    path = red_run_capture.write_capture(
+        tmp_path, "before \udcff after", now=datetime.now(timezone.utc), pid=os.getpid()
+    )
+
+    assert "before " in path.read_text(encoding="utf-8")
+    assert "after" in path.read_text(encoding="utf-8")
