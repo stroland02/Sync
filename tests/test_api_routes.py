@@ -13,12 +13,10 @@ from __future__ import annotations
 import re
 from datetime import datetime, timezone
 from pathlib import Path
-from unittest import mock
 
 import pytest
 from starlette.testclient import TestClient
 
-from sync.api import app as app_module
 from sync.api.app import create_app
 from sync.core import CallSite, Finding, VendorChange
 from sync.mcp.tools import GraphSurface
@@ -131,6 +129,58 @@ def test_overview_carries_the_surfaces_envelope_fields_unaltered():
     assert body["feed_fetched_at"] == FETCHED.isoformat()
 
 
+def _five_stripe_findings():
+    change = _change("c1")
+    sites = [_site(f"s{i}", path=f"src/a{i}.ts", line=i + 1) for i in range(5)]
+    findings = [_finding(f"f{i}", f"s{i}", "c1") for i in range(5)]
+    return dict(findings=findings, sites=sites, changes=[change])
+
+
+def test_overview_counts_every_open_finding_rather_than_a_page_of_them():
+    """The two numbers used to come from different sets: `total_findings` from the surface's
+    full row count, the per-vendor counts from a window over it. Under the window they agree
+    and nothing shows; past it the counts under-report while the total does not, and the
+    response states both with equal confidence.
+
+    The condition is a finding's position past the window, not the size of the graph, so it is
+    built by narrowing the page rather than by inventing ten thousand rows. Narrowing it on the
+    surface rather than by patching a ceiling in the transport is what keeps this test alive
+    after the fix: a route that goes back to aggregating a page goes red here again, whatever
+    limit it asks that page for.
+    """
+
+    class NarrowPagingSurface(GraphSurface):
+        def whats_at_risk(self, *args, **kwargs):
+            kwargs["limit"] = 3
+            return super().whats_at_risk(*args, **kwargs)
+
+    surface = NarrowPagingSurface(FakeGraph(**_five_stripe_findings()), feed_fetched_at=FETCHED)
+    client = TestClient(create_app(surface=surface, workflow_reader=lambda finding_id: None))
+
+    body = client.get("/api/overview").json()
+
+    assert body["total_findings"] == 5
+    assert body["vendors"] == [{"vendor_id": "stripe", "open_finding_count": 5}]
+    assert sum(v["open_finding_count"] for v in body["vendors"]) == body["total_findings"]
+
+
+def test_overview_does_not_aggregate_over_a_page_read():
+    """An aggregate answered by paging is the defect above waiting to come back, so the absence
+    of the page read is asserted rather than left to the counts."""
+    calls: list[str] = []
+
+    class RecordingSurface(GraphSurface):
+        def whats_at_risk(self, *args, **kwargs):
+            calls.append("whats_at_risk")
+            return super().whats_at_risk(*args, **kwargs)
+
+    surface = RecordingSurface(FakeGraph(**_five_stripe_findings()), feed_fetched_at=FETCHED)
+    client = TestClient(create_app(surface=surface, workflow_reader=lambda finding_id: None))
+
+    assert client.get("/api/overview").status_code == 200
+    assert calls == []
+
+
 # -- vendor detail --------------------------------------------------------------
 
 
@@ -209,24 +259,20 @@ def test_finding_route_returns_explain_call_site_plus_change():
 
 def test_finding_route_answers_for_a_finding_past_the_overview_scan_window():
     """The failure this route used to hide: it found a finding by paging `whats_at_risk` and
-    stopping at `_SCAN_LIMIT`, so a graph holding more open findings than that answered 404 for
+    stopping at a scan ceiling, so a graph holding more open findings than that answered 404 for
     a finding that exists -- silently, because 404 is also the honest answer for a closed one.
 
-    The condition is the finding's position past the window, not the size of the graph, so it is
-    built by shrinking the window rather than by inventing ten thousand rows.
-
-    Read cold, the patch looks like live coverage of a ceiling on this route. It is not: it is
-    what made the old code answer 404 here, and against the route as it stands it does nothing,
-    because the route no longer reads `_SCAN_LIMIT` at all. That absence is what the test below
-    asserts; this one is the historical failure kept executable.
+    The ceiling it stopped at is gone from this module: the overview reads an aggregate off the
+    surface and no route windows a scan any more. So the historical failure is kept executable
+    here without a window to shrink, and the test below is what holds the route to the by-id
+    read that made the ceiling unnecessary.
     """
     change = _change("c1")
     sites = [_site(f"s{i}", path=f"src/a{i}.ts", line=i + 1) for i in range(3)]
     findings = [_finding(f"f{i}", f"s{i}", "c1") for i in range(3)]
     client = _client(findings=findings, sites=sites, changes=[change])
 
-    with mock.patch.object(app_module, "_SCAN_LIMIT", 2):
-        response = client.get("/api/findings/f2")
+    response = client.get("/api/findings/f2")
 
     assert response.status_code == 200
     assert response.json()["symbol"] == "stripe.charges.create"
