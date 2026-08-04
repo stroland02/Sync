@@ -8,11 +8,17 @@
  * has to see before trusting a pull request.
  */
 
-import type { WorkflowNode, WorkflowNodeStatus } from "@/api/types"
+import type { WorkflowNode, WorkflowNodeName, WorkflowNodeStatus } from "@/api/types"
 import { NodeEvidence } from "@/features/workflows/evidence"
 
-/** What each node does, for a reader who has not read `sync.remediate.nodes`. */
-const PURPOSE: Record<string, string> = {
+/**
+ * What each node does, for a reader who has not read `sync.remediate.nodes`.
+ *
+ * Typed against `WorkflowNodeName` rather than `string` so that renaming or dropping a node
+ * in `WORKFLOW_NODE_ORDER` without updating this object fails the build, instead of quietly
+ * rendering `UNKNOWN_NODE` for a node that is not actually unknown.
+ */
+const PURPOSE: Record<WorkflowNodeName, string> = {
   locate: "Read the finding's call site and vendor change out of the graph, then route the change kind to a remediation tier.",
   prepare: "Clone the repository and install its dependencies with the manager its lockfile names, then ask the language adapter whether a patch here can be verified at all.",
   patch: "Edit the call site. Every re-entry is a fresh attempt, carrying the feedback from whichever stage rejected the last one.",
@@ -26,13 +32,18 @@ const PURPOSE: Record<string, string> = {
 /**
  * What a node this file has never heard of says about itself.
  *
- * `PURPOSE` is a `Record<string, string>`, so a missing key types as `string` and renders as
- * nothing — a renamed node in the remediation graph would leave a blank line that reads as a
- * layout gap rather than as staleness. Naming the gap is the point: the payload is still
- * honest, this file is the part that has fallen behind.
+ * A payload's `node.name` is a plain `string` -- the transport does not promise it is one of
+ * `WorkflowNodeName` -- so a lookup falls back here rather than indexing `PURPOSE` directly.
+ * Naming the gap is the point: the payload is still honest, this file is the part that has
+ * fallen behind.
  */
 const UNKNOWN_NODE =
   "This node is not one the console knows about — the remediation graph has changed since this view was written."
+
+/** `PURPOSE[name]`, or `UNKNOWN_NODE` when the payload names a node this file does not. */
+function purposeFor(name: string): string {
+  return name in PURPOSE ? PURPOSE[name as WorkflowNodeName] : UNKNOWN_NODE
+}
 
 interface Appearance {
   glyph: string
@@ -98,7 +109,7 @@ function Step({
           <p className="text-xs text-muted-foreground">{look.label}</p>
         </div>
         <p className="mt-1 text-sm text-muted-foreground">
-          {PURPOSE[node.name] ?? UNKNOWN_NODE}
+          {purposeFor(node.name)}
         </p>
         {revisited && (
           <p className="mt-1 text-sm">

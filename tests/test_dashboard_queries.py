@@ -396,12 +396,19 @@ def _object_literal(source: str, name: str) -> str:
     return match.group(1)
 
 
+def _array_literal(source: str, name: str) -> str:
+    """The body of a top-level `export const <name> = [ ... ]`."""
+    match = re.search(rf"export const {name}\b[^\[]*\[(.*?)\]", source, re.S)
+    assert match is not None, f"{name} is no longer a top-level array literal"
+    return match.group(1)
+
+
 def test_the_consoles_node_order_matches_this_modules():
-    documented = re.search(
-        r"own order(.*?)and the view renders", _web_source("src/api/types.ts"), re.S
-    )
-    assert documented is not None, "web/src/api/types.ts no longer states the node order"
-    assert re.findall(r"[a-z_]+", documented.group(1)) == list(WORKFLOW_NODES)
+    # Bound to the exported array, not to the surrounding prose -- a docstring edit that
+    # changes no code must not turn this suite red. `WORKFLOW_NODE_ORDER` is real code the
+    # console type-checks `PURPOSE` against in `node-sequence.tsx`, not a decorative export.
+    order = _array_literal(_web_source("src/api/types.ts"), "WORKFLOW_NODE_ORDER")
+    assert re.findall(r'"([a-z_]+)"', order) == list(WORKFLOW_NODES)
 
 
 def test_the_consoles_node_purposes_name_every_node_and_no_others():

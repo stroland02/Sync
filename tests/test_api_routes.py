@@ -412,6 +412,27 @@ def test_a_limit_under_the_ceiling_passes_through_untouched():
     assert [kwargs["limit"] for _, kwargs in surface.calls if "limit" in kwargs] == [7]
 
 
+def test_a_negative_limit_is_floored_not_turned_into_a_negative_slice():
+    # `rows[offset : offset + limit]` in the surface turns a negative limit into a negative
+    # slice stop, which trims from the end instead of returning nothing. The ceiling alone
+    # does not stop this -- a floor does.
+    client, surface, _ = _recording_client()
+
+    client.get("/api/vendors/stripe?limit=-1")
+
+    assert [kwargs["limit"] for _, kwargs in surface.calls if "limit" in kwargs] == [1]
+
+
+def test_a_zero_limit_is_floored_so_the_cursor_terminates():
+    # `next_offset` only reaches `None` once a window is non-empty; a limit of zero never
+    # consumes a row, so the cursor the console would page with never advances.
+    client, surface, _ = _recording_client()
+
+    client.get("/api/vendors/stripe?limit=0")
+
+    assert [kwargs["limit"] for _, kwargs in surface.calls if "limit" in kwargs] == [1]
+
+
 # -- the console's mirrored constants -------------------------------------------
 
 

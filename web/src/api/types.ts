@@ -174,12 +174,33 @@ export interface WorkflowNode {
  * or `binding_source` to report, and inheriting the envelope would invent four fields the
  * transport never sends.
  *
- * `nodes` always arrives in the remediation graph's own order — locate, prepare, patch,
- * static_verify, replay, push_branch, await_ci, open_pr — and the view renders that order
- * rather than sorting it.
+ * `nodes` always arrives in the remediation graph's own order, named below by
+ * `WORKFLOW_NODE_ORDER`, and the view renders that order rather than sorting it.
  */
 export interface WorkflowState {
   nodes: WorkflowNode[]
   outcome: WorkflowOutcome | null
   abandon_reason: string | null
 }
+
+/**
+ * The remediation graph's node order, mirroring `WORKFLOW_NODES` in `sync.dashboard.queries`.
+ *
+ * `nodes` on `WorkflowState` already arrives in this order — the transport does not sort —
+ * so this array is not needed to render the sequence. It exists so a file that names every
+ * node, such as `PURPOSE` in `node-sequence.tsx`, has a real set to be checked against
+ * rather than retyping eight strings a second time.
+ */
+export const WORKFLOW_NODE_ORDER = [
+  "locate",
+  "prepare",
+  "patch",
+  "static_verify",
+  "replay",
+  "push_branch",
+  "await_ci",
+  "open_pr",
+] as const
+
+/** One of the remediation graph's known node names. */
+export type WorkflowNodeName = (typeof WORKFLOW_NODE_ORDER)[number]

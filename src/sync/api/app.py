@@ -53,7 +53,12 @@ def _int_param(request: Request, name: str, default: int) -> int:
 
 
 def _limit_param(request: Request) -> int:
-    return min(_int_param(request, "limit", DEFAULT_LIMIT), _MAX_LIMIT)
+    # `rows[offset : offset + limit]` in the surface treats a limit below 1 as a slice
+    # bound, not a page size: negative turns the stop negative (an unbounded page from the
+    # other end), zero returns nothing and never advances `next_offset`. The floor sits
+    # here rather than in the surface because the frozen "paginate every list" rule belongs
+    # to the transport, and `sync/mcp/tools.py` is not the surface to change.
+    return min(max(_int_param(request, "limit", DEFAULT_LIMIT), 1), _MAX_LIMIT)
 
 
 def _not_found(what: str, identifier: str) -> JSONResponse:
