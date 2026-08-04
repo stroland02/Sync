@@ -58,16 +58,7 @@ def create_app(
     """
 
     async def _overview(request: Request) -> JSONResponse:
-        aggregate = surface.overview()
-        return JSONResponse(
-            {
-                "vendors": aggregate["vendors"],
-                "total_findings": aggregate["total_findings"],
-                "indexed_at": aggregate["indexed_at"],
-                "feed_fetched_at": aggregate["feed_fetched_at"],
-                "binding_source": aggregate["binding_source"],
-            }
-        )
+        return JSONResponse(surface.overview())
 
     async def _vendor_detail(request: Request) -> JSONResponse:
         vendor_id = request.path_params["vendor_id"]

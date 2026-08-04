@@ -129,6 +129,31 @@ def test_overview_carries_the_surfaces_envelope_fields_unaltered():
     assert body["feed_fetched_at"] == FETCHED.isoformat()
 
 
+def test_overview_returns_the_surfaces_payload_unaltered():
+    """Four routes in five return the surface's envelope; this one composed its own and dropped
+    `context_savings`, so a consumer had to model one provenance field optional for one route in
+    five. The M4 plan requires provenance rendered wherever a binding is shown, and a route that
+    drops a field silently teaches the frontend that provenance is optional -- a worse outcome
+    than the missing field.
+
+    Asserted as equality against the surface rather than as a check for the field that went
+    missing, because the rule is that this transport composes nothing.
+    """
+    graph = FakeGraph(
+        findings=[_finding("f1", "s1", "c1")], sites=[_site("s1")], changes=[_change("c1")]
+    )
+    surface = GraphSurface(graph, feed_fetched_at=FETCHED)
+    client = TestClient(create_app(surface=surface, workflow_reader=lambda finding_id: None))
+
+    body = client.get("/api/overview").json()
+
+    assert body == surface.overview()
+    assert {"indexed_at", "feed_fetched_at", "binding_source", "context_savings"} <= body.keys()
+    assert body["indexed_at"] == INDEXED.isoformat()
+    assert body["binding_source"] == "static"
+    assert body["context_savings"] == 0
+
+
 def _five_stripe_findings():
     change = _change("c1")
     sites = [_site(f"s{i}", path=f"src/a{i}.ts", line=i + 1) for i in range(5)]
