@@ -204,12 +204,21 @@ def test_an_unknown_vendor_returns_an_empty_page_not_an_error():
 
 def test_finding_by_id_returns_the_row_whats_at_risk_carries_for_that_finding():
     """The by-id read is the same answer, reached without paging. A richer payload here would
-    be a second contract for the same question."""
+    be a second contract for the same question, so the keys are equal and not merely a
+    superset -- a subset check enforces only that this read is no poorer than the page row,
+    which is the half that was never in doubt.
+
+    The three excluded keys are the envelope's own and are named rather than subtracted as a
+    set difference against the envelope: `binding_source` is in both the envelope and the row,
+    so excluding everything the envelope adds would drop a row field and make the equality
+    pass for the wrong reason.
+    """
     surface = _default()
     row = next(r for r in surface.whats_at_risk()["items"] if r["finding_id"] == "f2")
 
     result = surface.finding_by_id("f2")
 
+    assert result.keys() - {"indexed_at", "feed_fetched_at", "context_savings"} == row.keys()
     assert row.items() <= result.items()
 
 
