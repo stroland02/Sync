@@ -47,6 +47,7 @@ from sync.cli import (
     feed_public_key,
     ingest,
     merge_outcome,
+    publish_feed,
     run,
     shapes,
 )
@@ -888,6 +889,56 @@ def test_feed_public_key_refuses_when_there_is_no_usable_key(monkeypatch, capsys
     printed = capsys.readouterr()
     assert printed.out == ""
     assert cli.FEED_SIGNING_KEY_ENV in printed.err
+
+
+def test_feed_public_key_refuses_a_key_file_it_cannot_open_naming_it(
+    signing_key, tmp_path, capsys
+):
+    """The one read on this path that was never guarded.
+
+    `_signing_key` opens the file outside its own `try`, so a `--key-file` an operator mistyped
+    raises rather than answering `None`, and the operator receives a traceback where every other
+    file this CLI reads answers exit 2 and the path. Both commands that load a key are affected
+    and both refuse the same way; a traceback here also says nothing about whether anything was
+    published, which is the question `publish-feed` leaves behind.
+
+    The message names the path and the class of failure and stops. An `OSError` carries a path
+    and an errno rather than any byte of the file, but the subject is still a private key, so
+    nothing beyond the class is repeated.
+    """
+    absent = tmp_path / "absent.pem"
+
+    assert feed_public_key(argparse.Namespace(key_file=str(absent))) == 2
+
+    printed = capsys.readouterr()
+    assert printed.out == ""
+    assert str(absent) in printed.err
+    # The environment holds a usable key throughout, and this command must not answer with it:
+    # an operator who named a file is asking about that file.
+    assert cli.FEED_SIGNING_KEY_ENV not in printed.err
+
+
+def test_publish_feed_refuses_a_key_file_it_cannot_open_before_writing_anything(
+    signing_key, tmp_path, capsys
+):
+    """The same read on the command where the refusal has to arrive first.
+
+    A half-written pair is worse than nothing -- a consumer may fetch a payload whose signature
+    does not exist yet, which is indistinguishable from one whose signature was stripped -- so
+    the output directory is asserted not to exist at all. The unserved DSN is the other half of
+    that: a run that reached the database would fail against it rather than pass.
+    """
+    out_dir = tmp_path / "feed"
+    absent = tmp_path / "absent.pem"
+
+    assert publish_feed(argparse.Namespace(
+        vendor=VENDOR, out_dir=str(out_dir), key_file=str(absent), dsn=UNSERVED_DSN
+    )) == 2
+
+    printed = capsys.readouterr()
+    assert printed.out == ""
+    assert str(absent) in printed.err
+    assert not out_dir.exists()
 
 
 def test_feed_public_key_says_nothing_that_narrows_the_private_half(signing_key, capsys):

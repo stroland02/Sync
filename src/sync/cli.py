@@ -1603,9 +1603,14 @@ def _signing_key(key_file: str | None):
     the right response to it is a loader that does not need the call rather than an exception
     to the rule.
 
-    A key that is present and unreadable answers `None` like an absent one. The caller's job is
-    to refuse, and the two cases have the same remedy -- supply a usable key -- so telling them
+    Material this cannot parse answers `None` like absent material. The caller's job is to
+    refuse, and the two cases have the same remedy -- supply a usable key -- so telling them
     apart would only be an invitation to describe what was wrong with the bytes.
+
+    A file that cannot be *opened* is a third case and is left to raise, which is the rule
+    `_webhook_secret` already established: nothing has been parsed and nothing was read, so an
+    `OSError` describes a path and an errno rather than any byte of the key. The caller refuses
+    on it by name.
     """
     from cryptography.hazmat.primitives import serialization
     from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
@@ -1656,7 +1661,18 @@ def publish_feed(args: argparse.Namespace) -> int:
     that went out through a text mode on this platform would carry translated line endings and
     fail verification in a way that reads as forgery.
     """
-    key = _signing_key(args.key_file)
+    try:
+        key = _signing_key(args.key_file)
+    except OSError as exc:
+        # The path and the kind of failure, and nothing else. `None` is spoken for -- it means no
+        # usable key material -- and the message that answers it names both sources, which is
+        # advice an operator who passed --key-file has already taken.
+        print(
+            f"could not read the feed signing key from {args.key_file}: {type(exc).__name__}",
+            file=sys.stderr,
+        )
+        return 2
+
     if key is None:
         print(
             f"no usable feed signing key: set {FEED_SIGNING_KEY_ENV} or pass --key-file with an "
@@ -1697,7 +1713,18 @@ def feed_public_key(args: argparse.Namespace) -> int:
     Nothing is written and nothing else is printed. A command that also emitted the private half
     "for convenience" is how a key reaches a terminal scrollback.
     """
-    key = _signing_key(args.key_file)
+    try:
+        key = _signing_key(args.key_file)
+    except OSError as exc:
+        # Duplicated rather than shared, for the reason every refusal in this module is: what a
+        # wrong reading costs differs per command, and here it is a trust anchor an operator was
+        # about to paste into `sync.core.keys`.
+        print(
+            f"could not read the feed signing key from {args.key_file}: {type(exc).__name__}",
+            file=sys.stderr,
+        )
+        return 2
+
     if key is None:
         print(
             f"no usable feed signing key: set {FEED_SIGNING_KEY_ENV} or pass --key-file.",
