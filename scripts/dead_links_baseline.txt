@@ -20,17 +20,31 @@
 # collapsed distinction, which is worse than a baselined line.
 src/sync/route/templates.py:omit_property_at
 
-# The four below are a deferral and not an acceptance, which makes them a different kind of
-# entry from the one above. `ea8f869` landed the M4 dashboard view models with their caller
-# still unwritten: `src/sync/dashboard/__init__.py` says in as many words that Task 2 adds
-# `build_app`, and `docs/superpowers/plans/2026-07-30-sync-m4-dashboard.md` has that task
-# consuming exactly these functions. So the lint is right -- nothing in `src/` reaches them --
-# and it is right about work in flight rather than about a decision anyone made.
-#
-# Whoever lands `build_app` deletes this block in the same commit. Leaving it would fail the
-# lint on an entry that no longer describes a violation, which is the mechanism that stops a
-# deferral from quietly becoming permanent.
+# A deferral rather than an acceptance, which makes it a different kind of entry from the one
+# above. `ea8f869` landed the M4 dashboard view models with their caller still unwritten. The
+# HTTP transport now wired in `src/sync/api/app.py` reaches `vendor_detail`, `finding_detail`,
+# and `workflow_state` through the graph surface and the checkpoint reader, so those three
+# lines were deleted here in the same commit that wired them -- per this file's own rule that
+# a repaired entry has to be removed by whoever repaired it. `repository_overview` stayed
+# behind: the overview route composes its answer from `whats_at_risk` because the plan binds
+# the console to `GraphSurface` and not to `sync.dashboard`, so this function is dead in
+# `src/` for a reason the surface makes structural. It leaves when Task 3 or a followup either
+# wires it or removes it.
 src/sync/dashboard/queries.py:repository_overview
-src/sync/dashboard/queries.py:vendor_detail
-src/sync/dashboard/queries.py:finding_detail
-src/sync/dashboard/queries.py:workflow_state
+
+# `observed_error_windows` is a deferral like the entry above, but a weaker one, and the
+# difference is worth stating rather than borrowing the stronger framing. `repository_overview`
+# leaves when Task 3 or a followup wires it or removes it, so a written task decides its fate.
+# This one has no such task: B71 landed the Sentry error-count ingest deliberately without a
+# detector, because a detector written against the single fixture that exists would be a
+# detector tuned to that fixture. So the consumer is intended but unplanned, and no document
+# names the commit that deletes this line.
+#
+# The reader stays rather than the tests reading SQL directly. Every assertion about what the
+# ingest wrote goes through this method; replacing it with a query in the test file would put a
+# second copy of the row mapping there, and a test that builds its own expected row out of the
+# same SELECT it is checking is the shape of test this repository has twice found cannot fail.
+#
+# What retires this line is the first M5 detector querying these counts. Until then the entry is
+# the honest record: the write path is wired and the read path is not.
+src/sync/graph/store.py:GraphStore.observed_error_windows

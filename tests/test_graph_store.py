@@ -1,10 +1,11 @@
 import os
 import threading
+from datetime import datetime, timezone
 
 import psycopg
 import pytest
 
-from sync.core import CallSite, Finding, VendorChange
+from sync.core import CallSite, Finding, ObservedErrorWindow, VendorChange
 from sync.graph.store import GraphStore
 
 DSN = os.environ.get("SYNC_DSN", "postgresql://sync:sync@localhost:5433/sync")
@@ -401,3 +402,91 @@ def test_the_same_claim_inserted_twice_converges_on_one_row(store):
 
     assert emit() == emit()
     assert len(store.open_findings()) == 1
+
+
+_HOUR_14 = datetime(2026, 7, 20, 14, tzinfo=timezone.utc)
+_HOUR_15 = datetime(2026, 7, 20, 15, tzinfo=timezone.utc)
+_HOUR_16 = datetime(2026, 7, 20, 16, tzinfo=timezone.utc)
+
+
+def _error_window(**over) -> ObservedErrorWindow:
+    base = dict(
+        repo_id="r1", vendor_id="stripe", operation_id="PostCharges",
+        binding_rung="observed", source="error-tracker-group", status_class="5xx",
+        window_start=_HOUR_14, window_end=_HOUR_15,
+        error_count=8, issue_count=1,
+    )
+    base.update(over)
+    return ObservedErrorWindow(**base)
+
+
+def test_a_window_rewritten_under_a_better_rung_carries_the_new_one(store):
+    """`binding_rung` is outside the natural key so that a correlator which improves converges on
+    the row it already wrote instead of adding a second one that double-counts the window. The
+    conflict clause therefore has to carry the rung forward, and until now nothing proved it did.
+
+    No ingest-level test can: the writer's rung is a module constant, so every row an export
+    produces carries the same one and the assignment could have been deleted with the suite still
+    green. The rung has to change here, at the store, or it never changes at all.
+    """
+    store.record_observed_error_window(_error_window(binding_rung="unresolved"))
+    store.record_observed_error_window(_error_window(binding_rung="observed"))
+
+    rows = store.observed_error_windows("r1")
+    assert [row.binding_rung for row in rows] == ["observed"], "one row, under the newer rung"
+
+
+def test_a_removal_does_not_reach_another_source_in_the_same_window(store):
+    """`source` is in the natural key because two sources are two samples of the same failures,
+    and a removal that ignored it would destroy the second sample the moment either one re-ran.
+
+    An error tracker's grouping and a span-derived count disagreeing about one operation is
+    information about the correlator; with one of them deleted there is nothing to disagree
+    with, and nothing in the graph records that there ever was.
+    """
+    store.record_observed_error_window(_error_window())
+    store.record_observed_error_window(_error_window(source="span-derived"))
+
+    store.remove_observed_error_windows_outside(
+        "r1", "stripe", "error-tracker-group", _HOUR_14, _HOUR_15, ()
+    )
+
+    assert [row.source for row in store.observed_error_windows("r1")] == ["span-derived"]
+
+
+def test_a_removal_does_not_reach_the_window_beside_the_one_it_was_given(store):
+    """The bounds are the ones the caller wrote, never every window for the repository. An
+    earlier or later period is a separate observation that this ingest does not contradict, and
+    comparing one window against another is the only thing these rows support unaided -- so a
+    removal reaching past its own bounds deletes the series it exists to build.
+
+    The two rows carry the same `(operation_id, status_class)` deliberately. Anything narrower
+    would survive on its key alone and prove nothing about the bounds.
+    """
+    store.record_observed_error_window(_error_window())
+    store.record_observed_error_window(
+        _error_window(window_start=_HOUR_15, window_end=_HOUR_16)
+    )
+
+    store.remove_observed_error_windows_outside(
+        "r1", "stripe", "error-tracker-group", _HOUR_14, _HOUR_15, ()
+    )
+
+    rows = store.observed_error_windows("r1")
+    assert [(row.window_start, row.window_end) for row in rows] == [(_HOUR_15, _HOUR_16)]
+
+
+def test_a_removal_reports_how_many_rows_it_took_out(store):
+    """The count has a caller: an ingest that wrote nothing and deleted three rows reads exactly
+    like one that held nothing for this vendor, and the operator sees only the writes. Scoped the
+    same way the delete is, so the row belonging to another source is not in the number either.
+    """
+    store.record_observed_error_window(_error_window())
+    store.record_observed_error_window(_error_window(status_class="4xx"))
+    store.record_observed_error_window(_error_window(source="span-derived"))
+
+    removed = store.remove_observed_error_windows_outside(
+        "r1", "stripe", "error-tracker-group", _HOUR_14, _HOUR_15, ()
+    )
+
+    assert removed == 2

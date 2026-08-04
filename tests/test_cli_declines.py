@@ -445,17 +445,50 @@ def test_shapes_refuses_before_it_reads_the_payload(staged_cache, tmp_path, caps
     assert "correlate" in capsys.readouterr().err
 
 
+# A capital A-acute, spelled as a codepoint so this source stays ASCII. Chosen rather than
+# incidental: most of what a customer's error string carries -- an accented lowercase letter, an
+# em dash, a curly quote -- has some cp1252 character to decode to, so reading the pipe as text
+# mangles those rather than raising. This one is `c3 81` in UTF-8 and cp1252 maps nothing to
+# `0x81`, which is what turns the wrong decoding into a traceback.
+_A_ACUTE = chr(0xC1)
+
+
+def _piped(monkeypatch, raw: bytes) -> None:
+    """`sys.stdin` as the interpreter builds it here: a text wrapper whose declared encoding is
+    the machine's codepage, over the bytes the operator actually piped."""
+    monkeypatch.setattr(sys, "stdin", io.TextIOWrapper(io.BytesIO(raw), encoding="cp1252"))
+
+
 def test_shapes_reads_a_payload_from_stdin(staged_cache, store, monkeypatch, capsys):
     """`--payload -` is how an export reaches this command without landing in a file, which for
     a captured production response is the difference between a payload that exists on disk and
     one that does not. The file route is exercised throughout; the pipe never was.
+
+    The bytes carry a character the machine's codepage has no mapping for, because a captured
+    production response is the input most likely to hold one and reading the pipe as text decoded
+    it with that codepage. The `UnicodeDecodeError` is neither an `OSError` nor a
+    `JSONDecodeError`, so it escaped the handler below and reached the operator as a traceback.
     """
-    monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(_SENTRY_EVENT)))
+    event = json.loads(json.dumps(_SENTRY_EVENT))
+    event["message"] = "pago rechazado, tarjeta INV" + _A_ACUTE + "LIDA"
+    _piped(monkeypatch, json.dumps(event, ensure_ascii=False).encode("utf-8"))
 
     assert shapes(_shape_args(staged_cache, "-")) == 0
 
     assert "shape observation(s) recorded from sentry" in capsys.readouterr().out
     assert store.observed_shapes(VENDOR, OPERATION)
+
+
+def test_shapes_refuses_a_payload_that_is_not_utf8_at_all(staged_cache, tmp_path, capsys):
+    """Bytes in no encoding this reads are an unreadable payload, and the handler exists to say
+    so with exit 2. Uncaught it is a traceback; reported as zero rows it would read as a vendor
+    who sent nothing."""
+    payload = tmp_path / "event.json"
+    payload.write_bytes(json.dumps(_SENTRY_EVENT).encode("utf-16"))
+
+    assert shapes(_shape_args(staged_cache, str(payload))) == 2
+
+    assert "could not read" in capsys.readouterr().err
 
 
 # --- `sync ingest`: the payload on stdin -------------------------------------------
@@ -464,13 +497,17 @@ def test_shapes_reads_a_payload_from_stdin(staged_cache, store, monkeypatch, cap
 def test_ingest_reads_a_payload_from_stdin(staged_cache, store, monkeypatch, capsys):
     """The same pipe on the span half. An OTLP export is large and is normally produced by
     another process, so the pipe is the ordinary invocation rather than the exotic one.
+
+    The service name carries a character the machine's codepage cannot decode, which is what a
+    collector run anywhere outside an English-speaking deployment sends. This command has no
+    handler at all, so reading the pipe as text made that a traceback rather than an exit code.
     """
     monkeypatch.delenv(corpus.SALT_VARIABLE, raising=False)
     monkeypatch.setattr(corpus, "SALT_FILE", Path(str(staged_cache)) / ".sync-corpus-salt")
     spans = (Path(__file__).parent / "fixtures" / "otlp" / "stripe_client_spans.json").read_text(
         encoding="utf-8"
-    )
-    monkeypatch.setattr(sys, "stdin", io.StringIO(spans))
+    ).replace("checkout-api", "checkout-api-INV" + _A_ACUTE + "LIDA")
+    _piped(monkeypatch, spans.encode("utf-8"))
 
     args = argparse.Namespace(
         vendor=VENDOR, payload="-", repo_id=REPO, dsn=DSN, cache=str(staged_cache)

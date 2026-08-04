@@ -92,17 +92,19 @@ runs and merge outcomes, and today every panel would read zero. `B7` is what cha
 ### M5 — The integration layer · ~35%
 
 **Done.** The signed public change feed with its consumer and cache, the vendor registry and its
-tiering, and the deprecations catalogue.
+tiering, the deprecations catalogue, and B71's Sentry error-count ingest.
 
 **Correction to an earlier reading of this milestone.** Sentry and Datadog were previously counted
-here as "sources". They are `shapes.py` readers only — they parse a recorded response shape and
-`cli._fold_sentry` folds it into `observed_shape`, which serves M2's `observed_drift`. No detector
-reads Sentry for an error rate, nothing models a deploy, and neither module contributes anything to
-this milestone. Counting them here overstated it.
+here as "sources" on the strength of their `shapes.py` readers, which parse a recorded response
+shape that `cli._fold_sentry` folds into `observed_shape` for M2's `observed_drift`. That
+contributed nothing to this milestone and counting it here overstated it. B71 is what made Sentry a
+source of this milestone's data: `observed_error_window` holds per-operation failure counts, and
+nothing before it did.
 
-**Remaining.** The correlation join itself — the thing the milestone is actually for. Nothing yet
-joins a Sentry spike to a deploy to a vendor change to the call sites affected. That is a build, not
-a defect, which is why nothing here is queued.
+**Remaining.** Nothing models a deploy, and no detector reads the counts B71 lands — the reader is
+baselined as reached from nowhere, deliberately. The correlation join itself is what the milestone
+is actually for: joining a spike to a deploy to a vendor change to the call sites affected. That is
+a build rather than a defect, which is why nothing here is queued.
 
 ### M6 — Show it, rather than describe it · 0%
 
@@ -121,23 +123,6 @@ confidently instead of refusing.
 ---
 
 ## Ready
-
-### B71 — the Sentry integration cannot see an error rate, which is the one thing M5 exists for
-
-`src/sync/signals/sentry/` is `shapes.py` and nothing else: a `SentryShapeReader` that parses a
-recorded response body, folded by `cli._fold_sentry` into `observed_shape` for M2's
-`observed_drift`. Measured on main — detectors reading Sentry for an error rate: none. Anything in
-`src/` modelling a deploy: nothing. So the vendor of record for production errors is wired in and
-the only question Sync asks it is what the body looked like.
-
-`status_rate.py` does not close this. It reads `observed_call`, populated from OTLP spans, which
-requires the customer to have wired OTLP to Sync and sees only what the span ingest received. A
-Sentry project is a source most teams already have, which is why the design document calls it the
-fastest route to this milestone.
-
-Scoped to the ingest alone — per-operation failure counts landing in the graph with a declared
-grain, a conflict clause proving convergence, and an honest rung. Deploy correlation and the spike
-finding are later work and queued separately once there is something to correlate.
 
 ### B7 — The M0 acceptance run has not executed since the pipeline changed underneath it
 
@@ -191,6 +176,36 @@ Entries stay under **Ready** above with their full reasoning until they land, be
 is what a reviewer needs and duplicating it here would let the two copies drift.
 
 ## Done
+
+- **B71** — Sentry now answers a question other than what a response body looked like. An ingest
+folds an issues export into per-operation, per-window failure counts on `observed_error_window`,
+which closes the half of M5 that `status_rate.py` could not: that detector reads `observed_call`
+from OTLP spans, and a Sentry project is a source most teams already have. **The entry that queued
+this called it an error rate and the table deliberately is not one.** An error tracker sees
+failures and cannot say how many requests were made, so these counts are a numerator with no
+denominator, and the schema comment, the model and the source constant each say so. The source is
+named `error-tracker-group` rather than for the vendor, matching how `observed_shape.source` names
+the mechanism — otherwise a later Datadog ingest of the same failures would land as a second row
+for one window and anything summing rows would double-count.
+
+Two unreviewed preservation commits, left by agents that hit session limits, went through a full
+review and three fix rounds before landing. The review found one defect the tests could not have
+caught: re-ingesting a window after a Sentry group was merged or deleted replaced the keys that
+survived and left the vanished key's row standing, so summing that window counted those failures
+twice — and the test meant to cover it dropped an issue whose key another issue also carried, so
+it could only ever exercise the surviving-key path. A window ingest is now a replacement of that
+window's slice for that source inside one transaction, which in turn required a refusal path: an
+export nothing in which reads would otherwise delete real counts and report a quiet hour at exit 0.
+The condition is that every record held was dropped as malformed rather than that nothing pooled,
+because a record that reads structurally but resolves to no operation still counts as read — a
+customer's Sentry project is mostly their own bugs, and refusing every hour on that basis would be
+wrong.
+
+`GraphStore.observed_error_windows` ships with no caller and is baselined in
+`scripts/dead_links_baseline.txt`, deliberately: a detector written against the single fixture that
+exists would be a detector tuned to that fixture. The correlation join this milestone is actually
+for — a spike joined to a deploy joined to a vendor change joined to the call sites affected — is
+still unqueued, and now has something to correlate against.
 
 - **B69** — CLAUDE.md described a gap `aeecde4` had closed. Landed by the coordinator after four
 failed dispatches. The stale sentence claimed `git add -u` never stages a new file, so a patch
