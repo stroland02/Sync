@@ -21,16 +21,34 @@
 src/sync/route/templates.py:omit_property_at
 
 # A deferral rather than an acceptance, which makes it a different kind of entry from the one
-# above. `ea8f869` landed the M4 dashboard view models with their caller still unwritten. The
-# HTTP transport now wired in `src/sync/api/app.py` reaches `vendor_detail`, `finding_detail`,
-# and `workflow_state` through the graph surface and the checkpoint reader, so those three
-# lines were deleted here in the same commit that wired them -- per this file's own rule that
-# a repaired entry has to be removed by whoever repaired it. `repository_overview` stayed
+# above. `ea8f869` landed the M4 dashboard view models with their caller still unwritten.
+# `workflow_state` is genuinely wired: `src/sync/api/__main__.py` imports it and hands it to the
+# transport as the checkpoint reader, so its line left here in the same commit that wired it,
+# per this file's own rule that a repaired entry has to be removed by whoever repaired it. The
+# `vendor_detail` and `finding_detail` lines were deleted alongside it on a claim about the same
+# commit that is not true; the entry below restores them. `repository_overview` stayed
 # behind: the overview route composes its answer from `whats_at_risk` because the plan binds
 # the console to `GraphSurface` and not to `sync.dashboard`, so this function is dead in
 # `src/` for a reason the surface makes structural. It leaves when Task 3 or a followup either
 # wires it or removes it.
 src/sync/dashboard/queries.py:repository_overview
+
+# A correction to the decision above rather than a new acceptance. The header says adding a line
+# is a decision and not a formality; re-adding one is a decision about a decision, so it is worth
+# saying plainly what went wrong. These two were removed on the claim that
+# `src/sync/api/app.py` reaches them. It does not. It reaches `GraphSurface`, and nothing in
+# `src/` imports either function. What kept the lint quiet was a bare-name collision: `create_app`
+# named its route handlers `vendor_detail` and `finding_detail` after the graph entities they
+# serve, this lint matches by bare name and never resolves it, and so a local coroutine counted as
+# a reference to a module-level function it has nothing to do with. The handlers are
+# `_vendor_detail` and `_finding_detail` now, which is what makes these two visible again.
+#
+# They are dead for the same structural reason as `repository_overview`: the console binds to
+# `GraphSurface`, so a view model that takes a `GraphStore` has no caller on that path. Whether
+# the console ever binds to `sync.dashboard` is an open M4 question, and these lines leave when it
+# is answered either way.
+src/sync/dashboard/queries.py:vendor_detail
+src/sync/dashboard/queries.py:finding_detail
 
 # `observed_error_windows` is a deferral like the entry above, but a weaker one, and the
 # difference is worth stating rather than borrowing the stronger framing. `repository_overview`

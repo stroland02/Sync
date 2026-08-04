@@ -199,16 +199,65 @@ def test_an_unknown_vendor_returns_an_empty_page_not_an_error():
     assert _default().whats_changed("adyen")["items"] == []
 
 
+# --- a finding by id, which is not a tool -----------------------------------------
+
+
+def test_finding_by_id_returns_the_row_whats_at_risk_carries_for_that_finding():
+    """The by-id read is the same answer, reached without paging. A richer payload here would
+    be a second contract for the same question, so the keys are equal and not merely a
+    superset -- a subset check enforces only that this read is no poorer than the page row,
+    which is the half that was never in doubt.
+
+    The three excluded keys are the envelope's own and are named rather than subtracted as a
+    set difference against the envelope: `binding_source` is in both the envelope and the row,
+    so excluding everything the envelope adds would drop a row field and make the equality
+    pass for the wrong reason.
+    """
+    surface = _default()
+    row = next(r for r in surface.whats_at_risk()["items"] if r["finding_id"] == "f2")
+
+    result = surface.finding_by_id("f2")
+
+    assert result.keys() - {"indexed_at", "feed_fetched_at", "context_savings"} == row.keys()
+    assert row.items() <= result.items()
+
+
+def test_finding_by_id_returns_none_for_a_finding_the_graph_does_not_hold_open():
+    assert _default().finding_by_id("f-closed") is None
+
+
+def test_finding_by_id_skips_a_finding_whose_call_site_vanished():
+    """`whats_at_risk` drops such a finding, so the row does not exist and the by-id read must
+    agree. Answering here would let a page and a lookup disagree about what is open."""
+    surface = _surface(
+        findings=[_finding("f1", "gone", "vc1")], sites=[], changes=[_change("vc1")]
+    )
+
+    assert surface.finding_by_id("f1") is None
+
+
+def test_finding_by_id_rests_its_provenance_on_the_one_binding_under_it():
+    """One finding, so the envelope is where the rung belongs -- as in `propose_patch`, and
+    unlike a page that can mix rungs."""
+    surface = _surface(
+        findings=[_finding("f1", "cs1", "vc1", rung="observed")],
+        sites=[_site("cs1")], changes=[_change("vc1")],
+    )
+
+    assert surface.finding_by_id("f1")["binding_source"] == "observed"
+
+
 # --- provenance, on every response ------------------------------------------------
 
 
-@pytest.mark.parametrize("call", ["risk", "explain", "changed"])
+@pytest.mark.parametrize("call", ["risk", "explain", "changed", "finding"])
 def test_every_response_carries_the_provenance_fields(call: str):
     surface = _default()
     result = {
         "risk": lambda: surface.whats_at_risk(),
         "explain": lambda: surface.explain_call_site("src/pay.ts", 12),
         "changed": lambda: surface.whats_changed("stripe"),
+        "finding": lambda: surface.finding_by_id("f1"),
     }[call]()
 
     assert {"indexed_at", "feed_fetched_at", "binding_source", "context_savings"} <= result.keys()
@@ -218,12 +267,13 @@ def test_every_response_carries_the_provenance_fields(call: str):
     assert result["binding_source"] == (None if call == "changed" else "static")
 
 
-@pytest.mark.parametrize("call", ["risk", "explain"])
+@pytest.mark.parametrize("call", ["risk", "explain", "finding"])
 def test_answers_drawn_from_the_index_report_when_it_was_built(call: str):
     surface = _default()
     result = {
         "risk": lambda: surface.whats_at_risk(),
         "explain": lambda: surface.explain_call_site("src/pay.ts", 12),
+        "finding": lambda: surface.finding_by_id("f1"),
     }[call]()
 
     assert result["indexed_at"] == INDEXED.isoformat()
@@ -315,7 +365,7 @@ def test_no_response_returns_file_contents():
     graph exists to save."""
     surface = _default()
     for result in (surface.whats_at_risk(), surface.explain_call_site("src/pay.ts", 12),
-                   surface.whats_changed("stripe")):
+                   surface.whats_changed("stripe"), surface.finding_by_id("f1")):
         assert "source" not in result
         assert "contents" not in result
 

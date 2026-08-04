@@ -25,10 +25,10 @@ from sync.mcp.tools import DEFAULT_LIMIT, GraphSurface
 WorkflowReader = Callable[[str], Optional[dict[str, Any]]]
 
 
-# Upper bound on a single scan of `whats_at_risk` when the transport needs to look up a
-# finding by id. The surface does not offer a by-id read; the overview and finding routes
-# fan through the same page and stop when they have what they need. Chosen as an operator
-# ceiling rather than a truth about the graph: past this, the console pages instead.
+# Upper bound on the page the overview aggregates over. The surface offers no aggregate read,
+# so the per-vendor counts are built from a page of `whats_at_risk` while `total_findings` is
+# the surface's own full count -- past this ceiling the two disagree, and the counts are the
+# side that under-reports. An operator ceiling rather than a truth about the graph.
 _SCAN_LIMIT = 10_000
 
 
@@ -64,7 +64,7 @@ def create_app(
     reaching into module state, and a deployment configures the surface once at start-up.
     """
 
-    async def overview(request: Request) -> JSONResponse:
+    async def _overview(request: Request) -> JSONResponse:
         # Composed from `whats_at_risk` because the surface offers no aggregate read: the
         # overview is "what open findings do we hold, grouped by vendor". A separate
         # aggregate on the surface would repeat what the page already reports.
@@ -89,32 +89,28 @@ def create_app(
             }
         )
 
-    async def vendor_detail(request: Request) -> JSONResponse:
+    async def _vendor_detail(request: Request) -> JSONResponse:
         vendor_id = request.path_params["vendor_id"]
         limit = _int_param(request, "limit", DEFAULT_LIMIT)
         offset = _int_param(request, "offset", 0)
         page = surface.whats_at_risk(vendor=vendor_id, limit=limit, offset=offset)
         return JSONResponse(page)
 
-    async def finding_detail(request: Request) -> JSONResponse:
+    async def _finding_detail(request: Request) -> JSONResponse:
         finding_id = request.path_params["finding_id"]
-        # `whats_at_risk` is the surface's window on open findings; scanning it is the only
-        # by-id lookup the read surface offers, and the surface's own reasoning says a
-        # closed finding is `None` rather than an error. `_SCAN_LIMIT` bounds the scan; a
-        # deployment past that limit adds a by-id read to the surface rather than raising
-        # it here.
-        page = surface.whats_at_risk(limit=_SCAN_LIMIT, offset=0)
-        row = next((r for r in page["items"] if r.get("finding_id") == finding_id), None)
+        # The surface's own reasoning: a finding that is not open is `None` rather than an
+        # error, and this transport is where that becomes a 404.
+        row = surface.finding_by_id(finding_id)
         if row is None:
             return _not_found("finding", finding_id)
         payload = surface.explain_call_site(row["file"], row["line"])
         if payload is None:
             # The row named the site, so the surface should hold it; a `None` here is a
-            # race between pages, and the honest answer is still "not found".
+            # race between reads, and the honest answer is still "not found".
             return _not_found("finding", finding_id)
         return JSONResponse(payload)
 
-    async def vendor_changes(request: Request) -> JSONResponse:
+    async def _vendor_changes(request: Request) -> JSONResponse:
         vendor_id = request.path_params["vendor_id"]
         limit = _int_param(request, "limit", DEFAULT_LIMIT)
         offset = _int_param(request, "offset", 0)
@@ -122,7 +118,7 @@ def create_app(
         page = surface.whats_changed(vendor=vendor_id, since=since, limit=limit, offset=offset)
         return JSONResponse(page)
 
-    async def workflow(request: Request) -> JSONResponse:
+    async def _workflow(request: Request) -> JSONResponse:
         finding_id = request.path_params["finding_id"]
         payload = workflow_reader(finding_id)
         if payload is None:
@@ -130,10 +126,10 @@ def create_app(
         return JSONResponse(payload)
 
     routes = [
-        Route("/api/overview", overview, methods=["GET"]),
-        Route("/api/vendors/{vendor_id}", vendor_detail, methods=["GET"]),
-        Route("/api/vendors/{vendor_id}/changes", vendor_changes, methods=["GET"]),
-        Route("/api/findings/{finding_id}", finding_detail, methods=["GET"]),
-        Route("/api/workflows/{finding_id}", workflow, methods=["GET"]),
+        Route("/api/overview", _overview, methods=["GET"]),
+        Route("/api/vendors/{vendor_id}", _vendor_detail, methods=["GET"]),
+        Route("/api/vendors/{vendor_id}/changes", _vendor_changes, methods=["GET"]),
+        Route("/api/findings/{finding_id}", _finding_detail, methods=["GET"]),
+        Route("/api/workflows/{finding_id}", _workflow, methods=["GET"]),
     ]
     return Starlette(routes=routes)

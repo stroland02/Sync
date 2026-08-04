@@ -13,10 +13,12 @@ from __future__ import annotations
 import re
 from datetime import datetime, timezone
 from pathlib import Path
+from unittest import mock
 
 import pytest
 from starlette.testclient import TestClient
 
+from sync.api import app as app_module
 from sync.api.app import create_app
 from sync.core import CallSite, Finding, VendorChange
 from sync.mcp.tools import GraphSurface
@@ -203,6 +205,51 @@ def test_finding_route_returns_explain_call_site_plus_change():
     assert body["vendor"] == "stripe"
     # the change shows shallow, matching the surface's rule
     assert body["known_changes"][0]["change_id"] == "c1"
+
+
+def test_finding_route_answers_for_a_finding_past_the_overview_scan_window():
+    """The failure this route used to hide: it found a finding by paging `whats_at_risk` and
+    stopping at `_SCAN_LIMIT`, so a graph holding more open findings than that answered 404 for
+    a finding that exists -- silently, because 404 is also the honest answer for a closed one.
+
+    The condition is the finding's position past the window, not the size of the graph, so it is
+    built by shrinking the window rather than by inventing ten thousand rows.
+
+    Read cold, the patch looks like live coverage of a ceiling on this route. It is not: it is
+    what made the old code answer 404 here, and against the route as it stands it does nothing,
+    because the route no longer reads `_SCAN_LIMIT` at all. That absence is what the test below
+    asserts; this one is the historical failure kept executable.
+    """
+    change = _change("c1")
+    sites = [_site(f"s{i}", path=f"src/a{i}.ts", line=i + 1) for i in range(3)]
+    findings = [_finding(f"f{i}", f"s{i}", "c1") for i in range(3)]
+    client = _client(findings=findings, sites=sites, changes=[change])
+
+    with mock.patch.object(app_module, "_SCAN_LIMIT", 2):
+        response = client.get("/api/findings/f2")
+
+    assert response.status_code == 200
+    assert response.json()["symbol"] == "stripe.charges.create"
+
+
+def test_finding_route_does_not_page_whats_at_risk_to_find_one_finding():
+    """A by-id question asked as a page read is the defect above waiting to come back, so the
+    absence of the page read is asserted rather than left to the row count."""
+    calls: list[str] = []
+
+    class RecordingSurface(GraphSurface):
+        def whats_at_risk(self, *args, **kwargs):
+            calls.append("whats_at_risk")
+            return super().whats_at_risk(*args, **kwargs)
+
+    graph = FakeGraph(
+        findings=[_finding("f1", "s1", "c1")], sites=[_site("s1")], changes=[_change("c1")]
+    )
+    surface = RecordingSurface(graph, feed_fetched_at=FETCHED)
+    client = TestClient(create_app(surface=surface, workflow_reader=lambda finding_id: None))
+
+    assert client.get("/api/findings/f1").status_code == 200
+    assert calls == []
 
 
 def test_finding_route_returns_404_json_for_unknown_finding():
