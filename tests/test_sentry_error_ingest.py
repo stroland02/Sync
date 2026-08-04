@@ -472,7 +472,10 @@ def test_a_dropped_issue_is_logged_rather_than_swallowed(store, caplog):
     with caplog.at_level(logging.WARNING, logger="sync.signals.sentry"):
         _reader(store).ingest([_issue(count="many")], *WINDOW)
 
-    assert caplog.records != []
+    # The logger is asserted, not merely that something was logged. `caplog` collects from the
+    # root, so any warning anything emitted during the call satisfied the weaker form -- including
+    # one from a library, on a run where this reader said nothing at all.
+    assert any(record.name.startswith("sync.signals.sentry") for record in caplog.records)
 
 
 def test_the_log_line_carries_no_issue_content(store, caplog):
