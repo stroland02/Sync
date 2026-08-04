@@ -1257,6 +1257,14 @@ def _window_bound(value: str) -> datetime | None:
     return moment if moment.tzinfo is not None else None
 
 
+# JSON's own words for what a payload turned out to be. The operator reading the refusal below
+# is holding a JSON file, and `dict` is Python's name for what that file calls an object.
+_JSON_KINDS = {
+    dict: "object", str: "string", bool: "boolean", int: "number", float: "number",
+    type(None): "null",
+}
+
+
 def sentry_errors(args: argparse.Namespace) -> int:
     """Fold an exported Sentry issue list into `observed_error_window`.
 
@@ -1320,13 +1328,24 @@ def sentry_errors(args: argparse.Namespace) -> int:
         print(f"could not read {args.payload}: {type(exc).__name__}: {exc}", file=sys.stderr)
         return 2
 
+    if not isinstance(payload, list):
+        # Sentry's own error bodies are objects, so an expired token arrives here as one. Folded
+        # as a single issue it writes nothing and exits 0 reporting zero windows, which tells the
+        # operator their integration is healthy and quiet at the moment it stopped working.
+        print(
+            f"an issues export is a list of issues; {args.payload} holds a JSON "
+            f"{_JSON_KINDS.get(type(payload), type(payload).__name__)}",
+            file=sys.stderr,
+        )
+        return 2
+
     store = GraphStore(args.dsn)
     store.apply_schema()
 
     reader = SentryErrorReader(
         store, args.repo_id, args.vendor, _operation_resolver(vendor)
     )
-    written = reader.ingest(payload if isinstance(payload, list) else [payload], since, until)
+    written = reader.ingest(payload, since, until)
     # The count of rows, and nothing about what was in them. An export holding nothing this
     # vendor owns writes none and is not an error: a customer whose error stream is all their own
     # bugs is the ordinary case.

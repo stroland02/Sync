@@ -232,6 +232,23 @@ def test_two_windows_over_the_same_operation_are_two_rows(store, cache, issues_f
     assert len(starts) == 2
 
 
+def test_an_export_that_is_not_a_list_of_issues_is_refused(store, cache, capsys):
+    """Sentry's error bodies are objects, so this is what an expired token looks like arriving
+    here. Wrapped in a list it was one "issue" that logged one warning, wrote nothing and exited
+    0 printing "0 error window(s) recorded from sentry" -- an authentication failure reported to
+    the operator as a window in which nothing failed. That is the same misreading the handler
+    above it exists to prevent, so it gets the same answer."""
+    body = Path(str(cache)) / "error.json"
+    body.write_text(json.dumps({"detail": "Invalid token"}), encoding="utf-8")
+
+    assert sentry_errors(_args(cache, body)) == 2
+
+    printed = capsys.readouterr()
+    assert printed.out == ""
+    assert "object" in printed.err
+    assert store.observed_error_windows(REPO) == []
+
+
 def test_a_window_that_ends_before_it_starts_is_refused(store, cache, issues_file):
     """User input at the command boundary. Reversed, the bounds still make a legal key, so the
     rows would land under a period no query could ever ask about again."""
