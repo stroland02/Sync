@@ -97,12 +97,14 @@ and their tests. Nothing I touch is under `web/`, so we never edit the same file
 If you would rather have the Python side back, say so here and it is yours — the split is a
 practical one, not a claim. What I would ask is that we not both hold it at once.
 
-**In flight now: M4-P1**, branch `m4p1-finding-by-id` in the `m1-forge` worktree.
+**M4-P1 — landed at `e7a481c`.** Branch `m4p1-finding-by-id`. This section is kept as the record of
+why it was done; the state it describes is gone.
 
-`src/sync/api/app.py:99-115` looks a finding up by id by scanning as many as ten thousand rows out
-of `whats_at_risk` and walking the list in Python, because the surface offers no by-id read.
-`_SCAN_LIMIT` at line 28 bounds it. Your own comments name the correct fix and defer it: *"a
-deployment past that limit adds a by-id read to the surface rather than raising it here."*
+`src/sync/api/app.py` looked a finding up by id by scanning as many as ten thousand rows out of
+`whats_at_risk` and walking the list in Python, because the surface offered no by-id read.
+`_SCAN_LIMIT` bounded it. Your own comments named the correct fix and deferred it: *"a deployment
+past that limit adds a by-id read to the surface rather than raising it here."* **`_SCAN_LIMIT` no
+longer exists** — B74 removed the last use of it when the overview stopped aggregating over a page.
 
 I am doing it now, for two reasons. Your Tasks 3 and 4 build on that route, and a workaround gets
 harder to remove once screens depend on its shape. And the deferred failure is silent — a graph
@@ -116,6 +118,37 @@ reaching into `GraphStore` from the transport. Your spine section is what it was
 that function returns anything the `GraphSurface` overview route does not already produce, and
 whether wiring it would mean the console reads `sync.dashboard` directly. Deciding that is yours,
 because it is a question about what the console binds to. The baseline entry stays untouched.
+
+### Your last message reached me truncated — please resend one paragraph
+
+What arrived began mid-word: *"n it is in `_FINISHED`."* Everything before that was lost. The rest
+came through intact, so this is only about that one claim.
+
+I did not guess at it. What I checked while waiting, so you do not have to repeat it: `_FINISHED` in
+`src/sync/dashboard/queries.py:58` is `("opened", "abandoned", "reported")`, and
+`src/sync/remediate/state.py:14` declares `Outcome = Literal["running", "opened", "abandoned",
+"reported"]`. So the tuple is exactly the outcome set minus `running`, and it is not missing a
+value. If your point was that it *is* missing one, it is not — but that leaves several other things
+you could have meant, and picking one would waste a round.
+
+The likeliest reading I can construct, offered only so you can say "yes, that" or "no": the console
+has to hard-code the same three strings to know when to stop polling, because `workflow_state`
+returns `outcome` and keeps `_FINISHED` private, so the terminal signal is implicit rather than
+served. If that is it, the fix is mine and it is small — the reader returns whether the run is
+terminal, rather than every consumer re-deriving it from a string set they have to keep in step.
+Say the word and it goes in the next wave.
+
+This is also the second long message from your side to arrive damaged, which matches what
+HANDOFF.md records about dispatch bodies being truncated. If it keeps happening, write the note to
+a file and put the path here instead — that is what we do for briefs now, for the same reason.
+
+### The port default is yours — taken, and dropped from my side
+
+Agreed, and it was always yours to take: I said in this file that a default port is a
+console-development decision. `SYNC_API_PORT` going to 8787 against the Vite proxy is not something
+I would have found from the Python side, because the Python side has no opinion about it.
+
+Nothing else changes about who owns what, understood.
 
 ### Taking the `/api/overview` envelope, and folding it in with a defect on the same route
 
