@@ -44,9 +44,14 @@ a handler that moved, which is a question worth answering rather than a position
 
 What the positional key bought was uniqueness, and that is what this scheme has to earn: two
 chains in one scope catching the same exceptions cannot be told apart by key, and one driver's
-entry would then vouch for the other's handler. There is no such pair in `src/` -- eighteen
-handlers, eighteen keys -- and `test_no_two_decode_handlers_share_a_key` refuses the day
-somebody writes one, naming both positions.
+entry would then vouch for the other's handler. There is no such pair in `src/` -- as many
+distinct keys as there are handlers -- and `test_no_two_decode_handlers_share_a_key` refuses
+the day somebody writes one, naming both positions.
+
+How many that is stays unwritten here on purpose. The inventory is read out of `src/` on every
+run, so a count in this prose is a second copy of something already computed, and a copy no
+assertion reads goes stale the first time anyone adds a handler. This one did, twice, and the
+argument above never depended on it -- which is exactly why nobody noticed.
 """
 
 from __future__ import annotations
