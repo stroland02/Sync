@@ -25,10 +25,10 @@ from sync.mcp.tools import DEFAULT_LIMIT, GraphSurface
 WorkflowReader = Callable[[str], Optional[dict[str, Any]]]
 
 
-# Upper bound on a single scan of `whats_at_risk` when the transport needs to look up a
-# finding by id. The surface does not offer a by-id read; the overview and finding routes
-# fan through the same page and stop when they have what they need. Chosen as an operator
-# ceiling rather than a truth about the graph: past this, the console pages instead.
+# Upper bound on the page the overview aggregates over. The surface offers no aggregate read,
+# so the per-vendor counts are built from a page of `whats_at_risk` while `total_findings` is
+# the surface's own full count -- past this ceiling the two disagree, and the counts are the
+# side that under-reports. An operator ceiling rather than a truth about the graph.
 _SCAN_LIMIT = 10_000
 
 
@@ -98,19 +98,15 @@ def create_app(
 
     async def finding_detail(request: Request) -> JSONResponse:
         finding_id = request.path_params["finding_id"]
-        # `whats_at_risk` is the surface's window on open findings; scanning it is the only
-        # by-id lookup the read surface offers, and the surface's own reasoning says a
-        # closed finding is `None` rather than an error. `_SCAN_LIMIT` bounds the scan; a
-        # deployment past that limit adds a by-id read to the surface rather than raising
-        # it here.
-        page = surface.whats_at_risk(limit=_SCAN_LIMIT, offset=0)
-        row = next((r for r in page["items"] if r.get("finding_id") == finding_id), None)
+        # The surface's own reasoning: a finding that is not open is `None` rather than an
+        # error, and this transport is where that becomes a 404.
+        row = surface.finding_by_id(finding_id)
         if row is None:
             return _not_found("finding", finding_id)
         payload = surface.explain_call_site(row["file"], row["line"])
         if payload is None:
             # The row named the site, so the surface should hold it; a `None` here is a
-            # race between pages, and the honest answer is still "not found".
+            # race between reads, and the honest answer is still "not found".
             return _not_found("finding", finding_id)
         return JSONResponse(payload)
 
