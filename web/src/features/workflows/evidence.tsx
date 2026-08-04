@@ -14,6 +14,7 @@
 import type { ReactNode } from "react"
 
 import { ABSENT, orAbsent } from "@/lib/format"
+import { cn } from "@/lib/utils"
 
 type FieldKind = "text" | "flag" | "url" | "block"
 
@@ -162,12 +163,24 @@ function scalarOrAbsent(value: unknown): string {
   return orAbsent(asScalarText(value))
 }
 
-function Row({ label, help, children }: { label: string; help?: string; children: ReactNode }) {
+function Row({
+  label,
+  help,
+  className,
+  children,
+}: {
+  label: string
+  help?: string
+  className?: string
+  children: ReactNode
+}) {
   return (
-    <div className="flex flex-col gap-1">
+    <div className={cn("flex flex-col gap-1", className)}>
       <dt className="text-xs tracking-wide text-muted-foreground uppercase">{label}</dt>
-      <dd className="text-sm">{children}</dd>
-      {help !== undefined && <p className="text-xs text-muted-foreground">{help}</p>}
+      <dd className="flex flex-col gap-1 text-sm">
+        {children}
+        {help !== undefined && <p className="text-xs text-muted-foreground">{help}</p>}
+      </dd>
     </div>
   )
 }
@@ -273,23 +286,21 @@ export function NodeEvidence({
   return (
     <dl className="mt-3 grid gap-3 sm:grid-cols-2">
       {named.map((field) => (
-        <div
+        <Row
           key={field.key}
+          label={field.label}
+          help={field.help}
           className={field.kind === "block" ? "sm:col-span-2" : undefined}
         >
-          <Row label={field.label} help={field.help}>
-            <FieldValue field={field} value={evidence[field.key]} />
-          </Row>
-        </div>
+          <FieldValue field={field} value={evidence[field.key]} />
+        </Row>
       ))}
       {unnamed.map((key) => (
-        <div key={key}>
-          <Row label={key}>
-            <span className="font-mono text-xs">
-              {asScalarText(evidence[key]) ?? JSON.stringify(evidence[key])}
-            </span>
-          </Row>
-        </div>
+        <Row key={key} label={key}>
+          <span className="font-mono text-xs">
+            {asScalarText(evidence[key]) ?? JSON.stringify(evidence[key])}
+          </span>
+        </Row>
       ))}
     </dl>
   )
