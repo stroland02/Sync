@@ -1513,9 +1513,17 @@ def merge_outcome(args: argparse.Namespace) -> int:
     # Fetched by whoever holds a GitHub client, not here: the pull request event carries a count
     # and a link rather than the commits. Absent, the column stays null rather than zero, and
     # zero would read as "no human touched this patch" -- the claim the benchmark rests on.
-    commits = (
-        json.loads(Path(args.commits).read_text(encoding="utf-8")) if args.commits else None
-    )
+    try:
+        commits = (
+            json.loads(Path(args.commits).read_text(encoding="utf-8")) if args.commits else None
+        )
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+        # `None` is already the value for a `--commits` nobody passed, so a file that could not
+        # be read cannot answer with one: the delivery would be recorded with
+        # human_edits_before_merge left null, which the benchmark reads as unmeasured rather
+        # than as a measurement the operator asked for and did not get.
+        print(f"could not read {args.commits}: {type(exc).__name__}: {exc}", file=sys.stderr)
+        return 2
 
     store = GraphStore(args.dsn)
     store.apply_schema()

@@ -713,6 +713,56 @@ def test_merge_outcome_refuses_a_delivery_body_it_cannot_read(tmp_path, webhook_
     assert str(absent) in printed.err
 
 
+def test_merge_outcome_refuses_a_commits_file_that_is_not_there_and_says_which(
+    tmp_path, webhook_secret, capsys
+):
+    """Naming the file is the whole of this one. Two paths arrive on one command line and the
+    operator has to know which of them to fix, so a refusal that only said one of them was
+    unreadable would send them to reread the delivery that was fine.
+
+    An absent `--commits` must not be read as `--commits` omitted. Omitted leaves
+    `human_edits_before_merge` null, which the benchmark reads as unmeasured; defaulting a file
+    that could not be opened to the same null would record the attempt and lose the measurement
+    the operator asked for, with nothing anywhere saying so.
+    """
+    body = json.dumps({"action": "closed"}).encode("utf-8")
+    payload = tmp_path / "delivery.json"
+    payload.write_bytes(body)
+    absent = tmp_path / "absent-commits.json"
+
+    assert merge_outcome(_merge_args(
+        payload, _sign(body, webhook_secret), commits=str(absent), dsn=UNSERVED_DSN
+    )) == 2
+
+    printed = capsys.readouterr()
+    assert printed.out == ""
+    assert str(absent) in printed.err
+    assert str(payload) not in printed.err
+
+
+def test_merge_outcome_refuses_a_commits_file_that_decodes_and_is_not_json(
+    tmp_path, webhook_secret, capsys
+):
+    """A truncated fetch, or an API error page saved under the file's name. The refusal says
+    what was wrong with it and quotes none of it -- a commit list carries authors and message
+    subjects from a customer's repository."""
+    body = json.dumps({"action": "closed"}).encode("utf-8")
+    payload = tmp_path / "delivery.json"
+    payload.write_bytes(body)
+    commits = tmp_path / "commits.json"
+    commits.write_text('[{"commit": {"author": {"name": "Ada Lovel', encoding="utf-8")
+
+    assert merge_outcome(_merge_args(
+        payload, _sign(body, webhook_secret), commits=str(commits), dsn=UNSERVED_DSN
+    )) == 2
+
+    printed = capsys.readouterr()
+    assert printed.out == ""
+    assert str(commits) in printed.err
+    assert "JSONDecodeError" in printed.err
+    assert "Lovel" not in printed.err
+
+
 # --- `sync feed-public-key`: the subcommand nothing had ever run --------------------
 
 
