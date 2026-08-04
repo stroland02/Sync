@@ -109,6 +109,17 @@ are working in, not the list.
 | Running or hosting the console somewhere | [awesome-selfhosted/awesome-selfhosted](https://github.com/awesome-selfhosted/awesome-selfhosted), [ripienaar/free-for-dev](https://github.com/ripienaar/free-for-dev) |
 | General tooling and operational knowledge | [trimstray/the-book-of-secret-knowledge](https://github.com/trimstray/the-book-of-secret-knowledge) |
 
+## The interface is ours
+
+`.claude/rules/interface-originality.md` binds every tick. Competitors are studied for concepts,
+ideas, and efficient workflows and pipelines — never for how a screen should look. The eighteen
+screenshots under `docs/superpowers/references/screenshots/` are a research artifact, not a design
+target, and the rule exists because a directory of screenshots usually is one.
+
+The test to apply before building anything a reference suggested: state it as a problem the operator
+has, without naming the product it came from. If it cannot be stated that way, it has not been
+understood well enough to build.
+
 ## What a tick must not do
 
 - **Do not restyle ahead of the data.** Functionality before polish is a plan constraint, not a
