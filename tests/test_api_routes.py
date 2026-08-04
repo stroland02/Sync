@@ -282,25 +282,28 @@ def test_finding_route_returns_explain_call_site_plus_change():
     assert body["known_changes"][0]["change_id"] == "c1"
 
 
-def test_finding_route_answers_for_a_finding_past_the_overview_scan_window():
-    """The failure this route used to hide: it found a finding by paging `whats_at_risk` and
-    stopping at a scan ceiling, so a graph holding more open findings than that answered 404 for
-    a finding that exists -- silently, because 404 is also the honest answer for a closed one.
+def test_finding_route_explains_the_site_the_finding_asked_for_names():
+    """The route reads one finding by id and then explains the call site that row names, so the
+    file and line have to be threaded from the row asked for and not from whichever row came
+    first. Nothing else holds that: the surface's by-id tests stop at the row, and the sibling
+    below records that no page was read without caring which finding came back.
 
-    The ceiling it stopped at is gone from this module: the overview reads an aggregate off the
-    surface and no route windows a scan any more. So the historical failure is kept executable
-    here without a window to shrink, and the test below is what holds the route to the by-id
-    read that made the ceiling unnecessary.
+    Each site carries its own operation because `explain_call_site` returns no path. With one
+    operation across three sites every row's payload is byte-identical, and "the finding asked
+    for" cannot be asserted at all -- which is what was wrong with the test this replaces. It was
+    named for the scan ceiling the overview used to impose, and against a page-based by-id read
+    at the realistic `DEFAULT_LIMIT` it passed, so it no longer caught the regression its name
+    promised.
     """
     change = _change("c1")
-    sites = [_site(f"s{i}", path=f"src/a{i}.ts", line=i + 1) for i in range(3)]
+    sites = [_site(f"s{i}", path=f"src/a{i}.ts", line=i + 1, op=f"Op{i}") for i in range(3)]
     findings = [_finding(f"f{i}", f"s{i}", "c1") for i in range(3)]
     client = _client(findings=findings, sites=sites, changes=[change])
 
     response = client.get("/api/findings/f2")
 
     assert response.status_code == 200
-    assert response.json()["symbol"] == "stripe.charges.create"
+    assert response.json()["operation"] == "Op2"
 
 
 def test_finding_route_does_not_page_whats_at_risk_to_find_one_finding():

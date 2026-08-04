@@ -160,9 +160,11 @@ class GraphSurface:
         five.
 
         Deliberately unpaginated, which is the one place this surface departs from "paginate
-        every list": the answer is bounded by the number of vendors rather than by the number of
-        findings, so it cannot grow with the graph. A window here would put the counts and the
-        total on different sets, and the two would disagree past it with nothing saying so.
+        every list": the payload is bounded by the number of vendors rather than by the number of
+        findings, so it cannot grow with the graph. That bounds the response and not the cost --
+        the read behind it is one call per open finding, unbounded, on a route a console polls. A
+        window here would put the counts and the total on different sets, and the two would
+        disagree past it with nothing saying so.
 
         Counted over the same findings `whats_at_risk` builds rows from -- a finding whose call
         site has gone is dropped by both -- or a total and a page over the same graph would
