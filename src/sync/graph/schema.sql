@@ -242,6 +242,25 @@ CREATE INDEX IF NOT EXISTS migration_outcome_kind_idx
 -- column exists at all: a table that appended would make every presence rate a function of how
 -- often the ingest ran rather than of what the vendor sent.
 --
+-- **sample_count means one thing per source class and merges accordingly**, and it is the
+-- sentence above that forces the split rather than an exception to it. For a traffic source the
+-- write is a response somebody received, so a second write is a second sample and the counter
+-- adds. For a synthetic source -- `sync.graph.sources.SYNTHETIC_SOURCES`, the rows Sync
+-- constructed from a published specification -- a second write is the ingest running again over
+-- the same constructed body, so the counter holds: it is the largest single claim made about the
+-- row rather than the sum of the claims. One row still means one shape; for a synthetic source
+-- it also means one sample, at any repetition count.
+--
+-- The replay tier is what forces it. A failed replay re-enters `patch` and MAX_STATIC_ATTEMPTS
+-- is 3, so one finding offers the same synthesized body three times, and ten findings over one
+-- operation would carry it past the sample floor the drift detector reads. A run key on the row
+-- does not fix that -- it changes which row the addition lands in, and the retry writes the same
+-- key twice. Convergence under re-execution is a property of the merge.
+--
+-- Only the counter is held. Every other column merges identically for both classes, so a
+-- synthetic row still records that the shape was seen, that the field can be null, which
+-- published members were exercised, and over what window.
+--
 -- Values are never stored, only shape -- paths, types, nullability, counts. The single
 -- exception is an enum member the vendor's published specification names, because a vendor enum
 -- is public data. A string the specification does not name is a customer's data and is
@@ -266,8 +285,13 @@ CREATE TABLE IF NOT EXISTS observed_shape (
     nullable_seen    BOOLEAN NOT NULL DEFAULT FALSE,
     -- Only members the published specification names, and only those actually observed.
     spec_enum_values TEXT[] NOT NULL DEFAULT '{}',
-    -- 'error-payload'|'replay'|'interceptor'
+    -- 'error-payload'|'replay'|'interceptor'. The mechanism that produced the row, not a vendor:
+    -- Sentry and Datadog both write 'error-payload'. Only some of these are responses a vendor
+    -- actually sent -- 'replay' rows are a specification restated through the customer's code --
+    -- and `GraphStore.observed_shapes` answers with traffic alone unless asked for everything.
+    -- `sync.graph.sources` holds which is which and must be extended with this list.
     source           TEXT NOT NULL,
+    -- Samples, not writes. What that counts depends on the source class -- see the grain note.
     sample_count     INTEGER NOT NULL DEFAULT 1,
     first_seen       TIMESTAMPTZ NOT NULL DEFAULT now(),
     last_seen        TIMESTAMPTZ NOT NULL DEFAULT now(),

@@ -56,7 +56,7 @@ def _site(store: GraphStore, reads=("data.status",), operation_id="PostCharges")
 def _observe(store: GraphStore, **over) -> None:
     fields = dict(
         vendor_id="stripe", operation_id="PostCharges", field_path="/data/status",
-        json_type="string", source="replay", sample_count=MIN_SAMPLES,
+        json_type="string", source="error-payload", sample_count=MIN_SAMPLES,
         first_seen=NEW, last_seen=NEW,
     )
     fields.update(over)
@@ -287,10 +287,37 @@ def test_an_earlier_sighting_of_the_same_shape_is_not_a_contradiction(store: Gra
     mismatch as breaking the moment a second source saw it.
     """
     _site(store)
-    _observe(store, json_type="number", first_seen=OLD, source="replay")
+    _observe(store, json_type="number", first_seen=OLD, source="interceptor")
     _observe(store, json_type="number", first_seen=NEW, source="error-payload")
 
     assert {f.severity for f in _detector(store).scan()} == {"info"}
+
+
+def test_a_later_sighting_of_a_different_shape_is_not_an_earlier_window(store: GraphStore):
+    """The window is directional, asserted in both directions from one baseline.
+
+    Traffic holds a number first and a boolean afterwards, and the specification declares a
+    string, so both rows diverge and both are reported. The boolean has an observation before it
+    showing the field arriving differently and is the vendor's behaviour changing; the number
+    does not -- what differs from it arrived afterwards -- and an inaccurate specification
+    explains it at least as well.
+
+    Reading "a sibling differs" as "the field used to differ" grades both `breaking`, on a
+    history one of them does not have. Both rows clear the sample floor, so the floor is not
+    what separates them here and direction is the only variable.
+    """
+    _site(store)
+    _observe(store, json_type="number", first_seen=OLD, last_seen=OLD)
+    _observe(store, json_type="boolean", first_seen=NEW, last_seen=NEW)
+
+    graded = {
+        json_type: finding.severity
+        for finding in _detector(store).scan()
+        for json_type in ("number", "boolean")
+        if f"arrives as {json_type}" in finding.rationale
+    }
+
+    assert graded == {"number": "info", "boolean": "breaking"}
 
 
 def test_the_rationale_reports_the_evidence_and_its_limit(store: GraphStore):

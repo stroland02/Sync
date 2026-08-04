@@ -340,7 +340,7 @@ def test_a_population_that_clears_the_gate_always_states_one_of_the_two_historie
 def _observe_shape(store: GraphStore, **over) -> None:
     fields = dict(
         vendor_id="stripe", operation_id=SHARED_OPERATION, field_path="/data/status",
-        json_type="string", source="replay", sample_count=MIN_SAMPLES,
+        json_type="string", source="error-payload", sample_count=MIN_SAMPLES,
         first_seen=NEW, last_seen=NEW,
     )
     fields.update(over)
@@ -356,21 +356,24 @@ def _drift(store: GraphStore) -> ObservedDriftDetector:
     return ObservedDriftDetector(store, spec={SHARED_OPERATION: [DECLARED_STRING]})
 
 
-def test_a_single_earlier_observation_is_enough_to_grade_a_divergence_breaking(store):
-    """Pinned because it reads as an asymmetry rather than as a decision.
+def test_a_single_earlier_observation_is_too_thin_to_grade_a_divergence_breaking(store):
+    """The inversion of the pin this line carried, which asserted `breaking` on this fixture.
 
-    `MIN_SAMPLES` gates the row a finding is raised on. It does not gate the sibling row that
-    decides that finding's severity: `_contradicts_earlier_window` reads every sibling whatever
-    its count. So one observation -- the count the module's own docstring calls "one upstream
-    incident or one misbehaving account" -- promotes a divergence from `info` to `breaking`, and
-    severity is where this module says its confidence lives.
+    That pin recorded an asymmetry rather than a decision: `MIN_SAMPLES` gated the row a finding
+    was raised on and not the sibling row that decided its severity, so one observation -- the
+    count the module's own docstring calls "one upstream incident or one misbehaving account" --
+    promoted a divergence from `info` to `breaking`. The fixture is kept exactly as it stood, so
+    what changed is the verdict and not the question.
 
-    The sibling here is not even the declared type. A single earlier `null` is a divergence in
-    its own right, too thin to report on its own, and sufficient to grade a different divergence
-    as the vendor's behaviour having changed.
+    The sibling is still not the declared type, which is what made the old grade worst: a single
+    earlier `null` is a divergence in its own right, too thin to report on its own, and it graded
+    a different divergence as the vendor's behaviour having changed. It is now read the same way
+    in both roles -- below the floor it is not a baseline, whether it is being reported or being
+    compared against.
 
-    Both lines are covered, so this is not a defect this task fixes. The test exists so the
-    asymmetry is visible in the suite rather than only in a report.
+    The rationale is asserted as well as the grade, because a reviewer who is no longer told the
+    vendor changed something still has to be told that an earlier observation exists and why it
+    did not count.
     """
     _site(store, vendor_id="stripe", reads=("data.status",))
     _observe_shape(store, json_type="null", nullable_seen=True, first_seen=OLD, sample_count=1)
@@ -379,12 +382,19 @@ def test_a_single_earlier_observation_is_enough_to_grade_a_divergence_breaking(s
     findings = list(_drift(store).scan())
 
     assert len(findings) == 1
-    assert findings[0].severity == "breaking"
+    assert findings[0].severity == "info"
+    assert f"seen 1 time(s) against a floor of {MIN_SAMPLES}" in findings[0].rationale
+    assert "the vendor's behaviour changed" not in findings[0].rationale
 
 
 def test_the_same_divergence_with_no_earlier_sibling_at_all_is_informational(store):
-    """The control for the test above: without the one-sample row the grade is `info`, so the
-    assertion there is about the sibling and not about the divergence."""
+    """The control for the test above, and it still isolates the sibling as the variable.
+
+    Both now grade `info`, so severity can no longer be what separates them and the rationale is.
+    Asserted here rather than left implicit: without this, the pair above would agree on every
+    assertion it makes and the control would have gone vacuous -- passing just as well against a
+    detector that had stopped reading siblings at all.
+    """
     _site(store, vendor_id="stripe", reads=("data.status",))
     _observe_shape(store, json_type="number", first_seen=NEW, sample_count=MIN_SAMPLES)
 
@@ -392,3 +402,41 @@ def test_the_same_divergence_with_no_earlier_sibling_at_all_is_informational(sto
 
     assert len(findings) == 1
     assert findings[0].severity == "info"
+    assert "No earlier observation" in findings[0].rationale
+    assert "against a floor of" not in findings[0].rationale
+
+
+def test_an_earlier_observation_at_the_floor_still_grades_the_divergence_breaking(store):
+    """The floor reaches the sibling window, and stops there.
+
+    The escalation is narrowed, not removed: a sibling that is a baseline by the module's own
+    definition corroborates exactly as it always did. Without this, every assertion above would
+    be satisfied by a detector that had stopped grading anything `breaking`.
+    """
+    _site(store, vendor_id="stripe", reads=("data.status",))
+    _observe_shape(store, json_type="string", first_seen=OLD, sample_count=MIN_SAMPLES)
+    _observe_shape(store, json_type="number", first_seen=NEW, sample_count=MIN_SAMPLES)
+
+    findings = list(_drift(store).scan())
+
+    assert len(findings) == 1
+    assert findings[0].severity == "breaking"
+
+
+def test_an_earlier_observation_one_short_of_the_floor_does_not(store):
+    """Which side of the comparison the boundary sits on, against the test above.
+
+    The pair differs in the sibling's count and in nothing else, so it pins the boundary rather
+    than the fixture. A floor asserted only from one side is satisfied by an off-by-one.
+    """
+    _site(store, vendor_id="stripe", reads=("data.status",))
+    _observe_shape(store, json_type="string", first_seen=OLD, sample_count=MIN_SAMPLES - 1)
+    _observe_shape(store, json_type="number", first_seen=NEW, sample_count=MIN_SAMPLES)
+
+    findings = list(_drift(store).scan())
+
+    assert len(findings) == 1
+    assert findings[0].severity == "info"
+    assert f"seen {MIN_SAMPLES - 1} time(s) against a floor of {MIN_SAMPLES}" in (
+        findings[0].rationale
+    )

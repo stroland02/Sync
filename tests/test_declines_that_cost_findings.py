@@ -235,7 +235,7 @@ DECLARED_STRING = DeclaredField(
 def _observe_shape(store: GraphStore, **over) -> None:
     fields = dict(
         vendor_id="stripe", operation_id="GetAccount", field_path="/data/status",
-        json_type="number", source="replay", sample_count=MIN_SAMPLES,
+        json_type="number", source="error-payload", sample_count=MIN_SAMPLES,
         first_seen=SEEN, last_seen=SEEN,
     )
     fields.update(over)

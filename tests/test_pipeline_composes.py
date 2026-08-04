@@ -238,6 +238,23 @@ def _drive(finding: Finding, repo: RepoRef, store: GraphStore, adapter, remediat
         return state
 
 
+def _why(state: RunState) -> str:
+    """Everything the run recorded about why it ended where it did.
+
+    An outcome assertion that fails alone says a run abandoned and says nothing about what
+    abandoned it, and this pipeline runs a compiler and a package download -- so a failure here
+    is as likely to be the environment as the code, and the two are indistinguishable from
+    `assert 'abandoned' == 'verified'`. That is not hypothetical: it is how this test failed on
+    a Linux runner while passing locally, with the log carrying no reason.
+    """
+    keys = (
+        "abandon_reason", "diagnostics", "verify_ok", "prepare_ok", "verifiable", "verify_gap",
+        "static_fatal", "fatal", "tier", "routing_row", "static_attempts",
+        "replay_outcome", "replay_reason",
+    )
+    return "\n".join(f"{key}={state.get(key)!r}" for key in keys)
+
+
 def _verified_run(tmp_path, store):
     repo = _clone(tmp_path, "verified")
     finding = _seed(store, repo, "src/summarise.ts")
@@ -271,8 +288,8 @@ def test_a_finding_reaches_a_verified_patch_through_the_real_graph(tmp_path, sto
     """
     state, repo, _ = _verified_run(tmp_path, store)
 
-    assert state["outcome"] == "verified"
-    assert state["verify_ok"] is True
+    assert state["outcome"] == "verified", _why(state)
+    assert state["verify_ok"] is True, _why(state)
     source = Path(repo.local_path, "src", "summarise.ts").read_text(encoding="utf-8")
     assert REPLACEMENT in source
     assert RETIRED not in source
