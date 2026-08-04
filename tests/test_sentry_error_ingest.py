@@ -400,13 +400,15 @@ def test_an_export_no_record_of_which_reads_leaves_the_window_standing(
     _feed(cache, issues_file)
     before = _rows(store)
     assert before, "the window has to hold something for this to be about losing it"
+    capsys.readouterr()
 
+    held = json.loads(issues_file.read_text(encoding="utf-8"))
     renamed = tmp_path / "renamed.json"
     renamed.write_text(
         json.dumps([
             {("latest_event" if key == "latestEvent" else key): value
              for key, value in issue.items()}
-            for issue in json.loads(issues_file.read_text(encoding="utf-8"))
+            for issue in held
         ]),
         encoding="utf-8",
     )
@@ -414,7 +416,13 @@ def test_an_export_no_record_of_which_reads_leaves_the_window_standing(
     assert sentry_errors(_args(cache, renamed)) == 2
 
     assert _rows(store) == before
-    assert "readable" in capsys.readouterr().err
+    printed = capsys.readouterr()
+    # Nothing on stdout at all. The operator line reports what the command did to the window, and
+    # a refusal printing one beside the error would say a window was recorded and that it was not
+    # -- which is the confusion the two counts on that line were added to remove.
+    assert printed.out == ""
+    assert "readable" in printed.err
+    assert f"export of {len(held)}" in printed.err
 
 
 def test_an_export_of_other_peoples_errors_still_replaces_the_window(
