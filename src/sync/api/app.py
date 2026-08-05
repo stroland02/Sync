@@ -41,9 +41,9 @@ RepositoriesReader = Callable[[], dict[str, Any]]
 
 
 # Upper bound on a single scan of `whats_at_risk` when the transport needs to look up a
-# finding by id. The surface does not offer a by-id read; the overview and finding routes
-# fan through the same page and stop when they have what they need. Chosen as an operator
-# ceiling rather than a truth about the graph: past this, the console pages instead.
+# finding by id. The surface does not offer a by-id read; `finding_detail` fans through one
+# page and stops when it has what it needs. Chosen as an operator ceiling rather than a
+# truth about the graph: past this, the console pages instead.
 _SCAN_LIMIT = 10_000
 
 # Ceiling on a page a caller may ask for. "Paginate every list" is a frozen rule of the graph
@@ -104,7 +104,15 @@ def create_app(
         # Composed from `whats_at_risk` because the surface offers no aggregate read: the
         # overview is "what open findings do we hold, grouped by vendor". A separate
         # aggregate on the surface would repeat what the page already reports.
-        page = surface.whats_at_risk(limit=_SCAN_LIMIT, offset=0)
+        #
+        # `_page` sets `total` to the full unpaginated count regardless of `limit`, so one
+        # probe at `limit=1` learns it; the second call then asks for exactly that many rows,
+        # bounding this at two calls at any scale rather than looping `next_offset` through a
+        # read that re-materialises every row on each call. `total_findings` below is read
+        # from the second call, not the probe, so both halves of the payload come from the
+        # same read and agree with each other even under a concurrent write between the two.
+        probe = surface.whats_at_risk(limit=1, offset=0)
+        page = surface.whats_at_risk(limit=max(probe["total"], 1), offset=0)
         vendor_counts: dict[str, int] = {}
         for row in page["items"]:
             vendor = row["vendor"]

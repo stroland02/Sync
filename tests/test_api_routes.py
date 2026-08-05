@@ -200,6 +200,37 @@ def test_overview_carries_the_envelopes_context_savings_not_a_hardcoded_number()
     assert body["context_savings"] == expected
 
 
+def test_overview_aggregates_past_the_scan_limit_not_just_the_first_page():
+    # `_page` sets `total` to the full unpaginated count no matter what `limit` was asked
+    # for, so a single call at `limit=_SCAN_LIMIT` used to build `vendors` from only the
+    # first `_SCAN_LIMIT` rows while reporting `total_findings` from the true count -- the
+    # two halves of the payload disagreed once open findings passed the limit. A vendor
+    # named only beyond row `_SCAN_LIMIT` is the sharpest case: it vanished from `vendors`
+    # entirely while still being counted in `total_findings`.
+    stripe_site = _site("s-stripe", vendor="stripe")
+    stripe_change = _change("c-stripe", vendor="stripe")
+    shopify_site = _site(
+        "s-shopify", vendor="shopify", op="GetOrders", path="src/orders.ts", line=9
+    )
+    shopify_change = _change("c-shopify", vendor="shopify", op="GetOrders")
+
+    findings = [_finding(f"f-stripe-{i}", "s-stripe", "c-stripe") for i in range(_SCAN_LIMIT)]
+    findings.append(_finding("f-shopify-0", "s-shopify", "c-shopify"))
+
+    client = _client(
+        findings=findings,
+        sites=[stripe_site, shopify_site],
+        changes=[stripe_change, shopify_change],
+    )
+
+    body = client.get("/api/overview").json()
+
+    assert body["total_findings"] == _SCAN_LIMIT + 1
+    vendors = {v["vendor_id"]: v for v in body["vendors"]}
+    assert vendors["stripe"]["open_finding_count"] == _SCAN_LIMIT
+    assert vendors["shopify"]["open_finding_count"] == 1
+
+
 # -- vendor detail --------------------------------------------------------------
 
 
