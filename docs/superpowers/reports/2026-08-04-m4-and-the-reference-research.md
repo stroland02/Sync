@@ -4,6 +4,10 @@ Written 2026-08-04 to replace a scattered set of artifacts with one account. A s
 should be able to read this file and know what exists, what is decided, what is open, and what to do
 next, without reconstructing anything from a transcript.
 
+**Reconciled 2026-08-05 against `a87cbf3`.** Forty-plus commits landed on this branch after the first
+draft, including the fleet screen this file originally called an open gap. Every claim below was
+re-checked against `git log` and the tree rather than carried forward.
+
 ## The honest summary of how this went
 
 The console was built well and the reviews caught real defects. The research around it was run badly:
@@ -17,9 +21,14 @@ orchestrator makes, and it costs the same whether or not it works.
 
 ## The branch
 
-`m4-dashboard`, sixteen commits ahead of `main` at the time of writing. The merge gate returned
-**ready to merge** after one Critical and three Important findings were fixed and independently
-verified.
+`m4-dashboard`. A raw commit count goes stale by the next tick — it already has once, from sixteen to
+fifty-one — so this names what the branch contains instead of counting it.
+
+The first slice (Tasks 1–4: the `web/` scaffold, the console's first three graph levels, the Solution
+Workflow view, the CI gate) went through a merge gate that returned **ready to merge** after one
+Critical and three Important findings were fixed and independently verified, then a second slice
+added the fleet screen and a design-system pass, and both slices' open questions have since been
+ruled. Nothing in this branch has gone back to main yet — that step is the human's.
 
 | Commit | What |
 |---|---|
@@ -28,8 +37,14 @@ verified.
 | `2a4c5f4` | Task 3 — the console's first three graph levels |
 | `f6e6a1c`, `897d182` | Task 4 — the Solution Workflow view |
 | `0902571` | the console's CI gate |
-| `259906b` | the fix wave answering the final review |
-| `09b2b33`, `d6bfc97`, `47c4b53`, `b4b488d`, `53052e0`, `f98bc64`, `25e1add`, `f8af645` | rules, loops, specifications and research |
+| `259906b` | the fix wave answering the first slice's final review — the run-state Critical (a live run reading as terminal) |
+| `0a1c8bc` | the two follow-ups that review named, closed: the pagination clamp's floor, and the docstring-parsing mirror test replaced with one that parses an exported const |
+| `b4b488d` | the run-state and abandonment specification, proposed |
+| `e7ee2b7` | a CI gate against unqualified test skips |
+| `7f8661d`, `f6fbc93`, `12cbaf0`, `7535fbf` | the fleet screen — `sync.dashboard.fleet` and its three read-only view models, the routes over them, the screen itself as the console's new index route, and the fix that made it render `abandon_reason` |
+| `1ef6103`, `83f64a6` | the design system's five open questions, ruled — dark mode ships, the brand hue is a blue-violet near 265°, 14px body text |
+| `ff41faa` | slice 2's five open questions, ruled — including overturning a recommendation to delete `@react-three/fiber`, `three`, `drei` and `react-grid-layout`, because the owner had since asked for those capabilities by name |
+| the remaining ~30 | rules, loops, further specifications, and the reference research described below |
 
 ## What was decided, and where each decision lives
 
@@ -42,7 +57,9 @@ Rules bind every session and load automatically. Specifications are proposals un
 | Who owns which paths, how to reach the other agent, and why the orchestration board cannot be bound from a tool call | `docs/superpowers/ORCHESTRATION.md` |
 | Model tier per role, width discipline, and never re-dispatching into a limit | `docs/superpowers/ORCHESTRATION.md` |
 | How a console improvement tick decides its work | `docs/superpowers/loops/console-improvement-tick.md` |
-| Run states, the abandonment vocabulary, and why no confidence score — **proposed, not accepted** | `docs/superpowers/specs/2026-08-04-sync-run-state-and-abandonment-vocabulary.md` |
+| Run states, the abandonment vocabulary, and why no confidence score — **accepted** (`ff41faa`); the `Disposition` move and the sixteen codes still need to land in `src/sync/remediate/`, unblocked but not yet done | `docs/superpowers/specs/2026-08-04-sync-run-state-and-abandonment-vocabulary.md` |
+| The design system's five open questions — dark mode ships, brand hue ~265°, 14px body text, the two 3D/grid packages stay installed unimported | `docs/superpowers/plans/2026-08-05-sync-console-design-system.md` (ruled in `1ef6103`, `83f64a6`) |
+| Slice 2's five open questions, including the fleet keyed by run rather than repository and the overturned package-deletion recommendation | `docs/superpowers/plans/2026-08-04-sync-m4-slice-2.md` (ruled in `ff41faa`) |
 
 ## The research, and what each piece answers
 
@@ -63,11 +80,13 @@ reads a reference set end to end.
 | `public-apis-and-hosting.md` | How to prioritise the next vendor adapter, and what hosting a solo founder can afford |
 
 **`engineering/` — one file per engineering dimension, read across all nine repositories at once.**
-Eight of eleven landed: repository layout and boundaries, testing strategy, CI and release
-engineering, error handling and failure, observability, data modelling and persistence, API and
-interface design, dependencies and packaging. **Three are missing** — configuration and secrets,
-documentation and onboarding, and LLM engineering practice — along with the synthesis and the
-completeness critic.
+All eleven dimension notes have landed: repository layout and boundaries, testing strategy, CI and
+release engineering, error handling and failure, observability, data modelling and persistence, API
+and interface design, dependencies and packaging (`f98bc64`), plus the final three — configuration
+and secrets, documentation and onboarding, and LLM engineering practice (`eb59a73`), which is also
+where the prompt-injection finding below came from. **Still missing:** the synthesis and the
+completeness critic. Neither has a file in this repository; nothing has resumed that work since
+`f98bc64` stopped on a session limit.
 
 **`screenshots/` — twenty-two captures of six competitors' interfaces.** A research artifact, and
 explicitly **not** a design target. `.claude/rules/interface-originality.md` says so and says why.
@@ -81,8 +100,9 @@ Each is stated as a problem before it is a feature, which is the test the origin
 "which change kinds do we abandon most, and at which node?" can only be answered by reading strings
 by hand. `CLAUDE.md` promises abandoned runs are data and that abandoned attempts are where routing
 learns which change kinds are not mechanically safe; the schema behind that promise cannot keep it.
-The specification proposes sixteen codes derived from the routing predicates that actually reach
-`abandon`. The shape came from a competitor; every value came from Sync's own code.
+The specification, accepted in `ff41faa`, proposes sixteen codes derived from the routing predicates
+that actually reach `abandon`. The shape came from a competitor; every value came from Sync's own
+code. The codes have not yet been written into `src/sync/remediate/`.
 
 **Nothing said what states a run can be in, so three modules held three partial answers.** That is
 the root cause of the Critical, and the fix filtered the symptom. The specification moves the list to
@@ -98,28 +118,30 @@ the current node instead.
 
 **Needing the project owner:**
 
-- Accept, amend or reject the run-state and abandonment specification. Its three owner-questions are
-  listed in its final section.
-- Two contradictions it found in `src/sync/remediate/`, both handed to the session that owns that
-  code: `state.py` and `tiered.py` cite the same rule and disagree about whether `NoPatchWarranted`
+- Nothing left in the run-state and abandonment specification — it was accepted in `ff41faa`. What
+  remains is implementation, not a ruling: the `Disposition` move and the sixteen abandonment codes
+  still need to land in `src/sync/remediate/`, and no commit on this branch has touched that
+  directory.
+- The same two contradictions in `src/sync/remediate/`, still unresolved because nothing has changed
+  there: `state.py` and `tiered.py` cite the same rule and disagree about whether `NoPatchWarranted`
   should reach `abandon_reason`; and `sync.mcp.propose` writes five values into `RunState["outcome"]`
   that are not in the `Outcome` literal, which the console now filters to null, so such a run would
-  read as permanently in flight.
+  read as permanently in flight. Both are handed to the session that owns that code.
 - B7, the M0 acceptance run, which opens a real pull request and therefore is not an agent's call.
 
-**Unfinished research**, resumable and cheap because completed agents replay from cache:
+**Unfinished research:**
 
-- Engineering audit — three dimensions, the synthesis and the completeness critic.
-  `resumeFromRunId: 'wf_1744ae13-79d'`.
+- The engineering audit's three missing dimensions have landed (`eb59a73`) — see above. What is
+  still unfinished is the synthesis and the completeness critic; neither has resumed.
 - The deeper interface pass — **stopped deliberately.** Driving a browser is the most expensive kind
   of agent here: every navigation captures a screenshot, the full DOM, the page as markdown and the
   console log, and the agent then reads the markdown. The project's owner is taking these captures
   by hand instead, which is both cheaper and better targeted.
 
-**Follow-ups the merge gate named**, in flight at the time of writing: a floor on the pagination
-clamp, because `?limit=-1` returns the whole page minus one row and the report wrongly called that
-harmless; and replacing a mirror test that parses prose in a docstring, which would go red on a
-comment edit and be deleted the first time it cried wolf.
+**Follow-ups the merge gate named** are closed, both in `0a1c8bc`: a floor on the pagination clamp,
+because `?limit=-1` had returned the whole page minus one row and the report wrongly called that
+harmless; and the mirror test that parsed prose in a docstring, replaced with one that binds an
+exported const by name, so a renamed node is a build failure rather than a blank line.
 
 ## Two facts that will otherwise cost somebody an afternoon
 
