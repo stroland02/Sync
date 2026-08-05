@@ -591,8 +591,16 @@ def route_after_open_pr(state: RunState) -> str:
     return "end"
 
 
-def make_report():
+def make_report(halt_reason: str | None = None):
     """Tier -1: the table found no patch is warranted, so the run says so and stops.
+
+    `halt_reason` is supplied only by an assembly that removed the push path, and it is what
+    that assembly's runs say instead. A graph built with no forge has no `push_branch` node,
+    so the decision that would have pushed arrives here -- and the sentence tier -1 writes
+    would be the opposite claim about a patch that verified. Which of the two applies is read
+    from `verify_ok`, the boolean `static_verify` set deliberately and the same one
+    `route_after_static` routes on: it is true on exactly the runs that reached this node
+    carrying a verified patch, and unset on every run that reached it from `prepare`.
 
     Three things it deliberately does not do, and each has a reason worth keeping.
 
@@ -619,7 +627,12 @@ def make_report():
     def report(state: RunState) -> RunState:
         change = state["change"]
         gap = state.get("verify_gap", "")
-        if gap and state.get("tier") != NO_PATCH:
+        if halt_reason and state.get("verify_ok"):
+            reason = (
+                f"a verified patch for {change.kind} on {change.operation_id} was not "
+                f"pushed: {halt_reason}"
+            )
+        elif gap and state.get("tier") != NO_PATCH:
             # The other reason a run knows not to try. It names the operation, because a
             # report saying only "this language cannot be verified" tells a reader nothing
             # about what is broken -- and the finding is the point.

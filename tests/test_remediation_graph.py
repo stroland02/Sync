@@ -641,3 +641,132 @@ def test_a_failed_cleanup_does_not_replace_the_reason_the_finding_abandoned():
     assert result["outcome"] == "abandoned"
     assert "CI" in result["abandon_reason"]
     assert "hung up" not in result["abandon_reason"]
+
+
+# --- the graph that ships, pinned, and the graph that cannot push -------------------
+
+# Read off the shipped assembly rather than transcribed from `graph.py`, so a router whose
+# destination moves moves this pin with it. `__start__` and `__end__` are langgraph's and are
+# part of the compiled shape, so they are pinned alongside the ten Sync writes.
+SHIPPED_NODES = (
+    "__start__", "locate", "prepare", "patch", "static_verify", "replay",
+    "push_branch", "await_ci", "open_pr", "report", "abandon", "__end__",
+)
+
+# `data` carries the router's decision only where the decision and its destination differ.
+# The shipped graph has two such edges and both are load-bearing: `static_verify` decides
+# "push_branch" and reaches `replay`, and `open_pr` decides "end" and reaches `__end__`.
+SHIPPED_EDGES = frozenset({
+    ("__start__", "locate", None, False),
+    ("locate", "prepare", None, True),
+    ("locate", "abandon", None, True),
+    ("prepare", "patch", None, True),
+    ("prepare", "report", None, True),
+    ("prepare", "abandon", None, True),
+    ("patch", "static_verify", None, True),
+    ("patch", "patch", None, True),
+    ("patch", "abandon", None, True),
+    ("static_verify", "patch", None, True),
+    ("static_verify", "replay", "push_branch", True),
+    ("static_verify", "abandon", None, True),
+    ("replay", "patch", None, True),
+    ("replay", "push_branch", None, True),
+    ("replay", "abandon", None, True),
+    ("push_branch", "await_ci", None, True),
+    ("push_branch", "abandon", None, True),
+    ("await_ci", "patch", None, True),
+    ("await_ci", "open_pr", None, True),
+    ("await_ci", "abandon", None, True),
+    ("open_pr", "__end__", "end", True),
+    ("open_pr", "abandon", None, True),
+    ("report", "__end__", None, False),
+    ("abandon", "__end__", None, False),
+})
+
+REMOTE_NODES = frozenset({"push_branch", "await_ci", "open_pr"})
+
+
+def _topology(graph):
+    drawable = graph.get_graph()
+    return tuple(drawable.nodes), frozenset(
+        (edge.source, edge.target, edge.data, edge.conditional) for edge in drawable.edges
+    )
+
+
+def _build(forge):
+    return build_graph(
+        store=StubStore(), adapter=StubAdapter(), remediator=StubRemediator(),
+        forge=forge, checkpointer=InMemorySaver(),
+    )
+
+
+def test_a_graph_built_with_a_forge_is_the_graph_that_ships():
+    """The regression surface, not the change.
+
+    A real run drives this assembly and the acceptance run that would notice a narrowing
+    costs a model budget and a pull request. Pinning the whole compiled shape -- every node
+    in order, every edge with its condition -- is what makes a node quietly dropped from the
+    forge-carrying path a red test here rather than a discovery there.
+    """
+    nodes, edges = _topology(_build(StubForge()))
+
+    assert nodes == SHIPPED_NODES
+    assert edges == SHIPPED_EDGES
+
+
+def test_a_graph_built_without_a_forge_has_no_node_that_can_push():
+    """Absent from the compiled graph, not guarded inside it.
+
+    A guard leaves the node present, and a present node is resumable: an interrupted run
+    checkpointed at `push_branch` resumes straight into a push the moment a caller holding a
+    forge picks it up. Absence is not resumable, which is the whole of the safety argument.
+    """
+    nodes, edges = _topology(_build(None))
+
+    assert REMOTE_NODES.isdisjoint(nodes)
+    # Nothing else moved: the three named nodes are the only difference.
+    assert set(nodes) == set(SHIPPED_NODES) - REMOTE_NODES
+    assert not [
+        edge for edge in edges if REMOTE_NODES & {edge[0], edge[1]}
+    ]
+    # The decision keeps its name and only its destination moves. `route_after_static` and
+    # `sync.mcp.propose` both read the literal "push_branch" as the verdict "this patch is
+    # verified", which is a claim about the patch and not a request for a remote.
+    assert ("static_verify", "replay", "push_branch", True) in edges
+    assert ("replay", "report", "push_branch", True) in edges
+
+
+def test_a_forgeless_run_that_would_have_pushed_reports_the_halt():
+    forge_less = _run(StubAdapter(), StubRemediator(), None)
+
+    assert forge_less["outcome"] == "reported"
+    assert forge_less["pr_url"] is None
+    reason = forge_less["report_reason"]
+    assert "without a forge" in reason
+    assert "push_branch" in reason
+    # The finding is what an operator is looking at; a reason that names only the harness
+    # says nothing about what was left unrepaired.
+    assert "response-property-removed" in reason
+    assert "PostCharges" in reason
+    # And it must not borrow tier -1's sentence. A verified patch that was not pushed is the
+    # opposite claim to "no patch was warranted", and the console renders this verbatim.
+    assert "no patch is warranted" not in reason
+
+
+def test_a_forgeless_graph_still_reports_tier_minus_one_in_its_own_words():
+    """The halt reason must discriminate rather than decorate.
+
+    `report` is reached from two places in a forge-less graph -- a run that had nothing to
+    try, and a run that verified a patch and had nowhere to push it. Both are `reported`, and
+    a reason that cannot tell them apart makes the outcome unreadable.
+    """
+
+    @dataclass
+    class Unverifiable(StubAdapter):
+        unverifiable_reason: str = "sync cannot typecheck Python"
+
+    result = _run(Unverifiable(), StubRemediator(), None)
+
+    assert result["outcome"] == "reported"
+    assert "sync cannot typecheck Python" in result["report_reason"]
+    assert "without a forge" not in result["report_reason"]
