@@ -176,12 +176,22 @@ export interface WorkflowNode {
  *
  * `nodes` always arrives in the remediation graph's own order, named below by
  * `WORKFLOW_NODE_ORDER`, and the view renders that order rather than sorting it.
+ *
+ * `thread_id` names the one run this payload describes — `{finding_id}:{run_id or
+ * head_sha[:12]}:{generation}`, the convention `sync.dashboard.queries`'s module docstring
+ * records. `generation_count` is how many threads the checkpointer holds for this finding;
+ * this route always answers with the newest, so a finding retried across generations has
+ * `generation_count` threads and this payload is only one of them. `sync.dashboard.fleet.runs`
+ * is the query that lists every generation as its own row, which is why a reader who wants
+ * the others goes there rather than to a link this route cannot serve.
  */
 export interface WorkflowState {
   nodes: WorkflowNode[]
   outcome: WorkflowOutcome | null
   abandon_reason: string | null
   report_reason: string | null
+  thread_id: string
+  generation_count: number
 }
 
 /**

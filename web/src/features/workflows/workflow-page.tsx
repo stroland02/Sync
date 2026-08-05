@@ -131,6 +131,21 @@ function Workflow({ findingId }: { findingId: string }) {
             />
           )}
 
+          <p className="text-meta text-ink-muted">
+            Run <span className="font-mono">{data.thread_id}</span>
+            {data.generation_count > 1 && (
+              <>
+                {" — the most recent of "}
+                {data.generation_count}
+                {" runs the checkpointer holds for this finding. "}
+                <Link to="/" className="underline underline-offset-2">
+                  The fleet screen
+                </Link>
+                {" lists every one."}
+              </>
+            )}
+          </p>
+
           <RunOutcome
             outcome={data.outcome}
             abandonReason={data.abandon_reason}
