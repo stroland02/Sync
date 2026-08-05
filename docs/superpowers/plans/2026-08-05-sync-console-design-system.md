@@ -848,27 +848,55 @@ Value over cost, for a solo and self-funded project.
 
 ---
 
-## Questions only the owner can settle
+## The five questions, and how each was settled
 
-1. **Dark mode: ship it, or stay light-only?** *Recommendation: ship it, in Tasks 1 and 2
-   together.* An operator console is read all day, often beside a terminal. The reason it is a
-   question rather than a decision is cost — it roughly doubles Task 1's colour work and adds Task
-   2. If the answer is no, Task 1 still defines both columns (the derivation is the expensive part,
-   not the typing) and Task 2 is cut.
-2. **Which hue is Sync's?** The palette needs one brand hue for links, focus, and the current node,
-   and everything else derives from it. I cannot choose a brand. *Recommendation: name one hue and
-   let the ramp be generated from it, rather than approving a palette by looking at it.*
-3. **Confirm the reversal in writing.** This plan treats `@react-three/fiber` and
-   `react-grid-layout` as wanted, per the owner's decision. Slice 2's question 4
-   (`2026-08-04-sync-m4-slice-2.md:576-579`) recommended the opposite and is still formally open;
-   answering it closes the contradiction between two plans in the same directory.
-4. **Body text at 14px or 16px?** *Recommendation: 14px.* This console's currency is rows per
-   screen and 14px at AA contrast is comfortable. 16px is the safer general-purpose default and it
-   costs roughly 12% of the rows on every table. This is the one density decision a reader will feel
-   every day, so it is the owner's rather than a ruling.
-5. **Is anyone outside the owner going to open this console in the next quarter?** It changes how
-   much of Tasks 5 through 7 is worth doing now. If the answer is no, Tasks 1, 3 and 4 are the whole
-   slice and the rest can wait.
+Ruled 2026-08-05 by the controlling session, under `.claude/rules/autonomous-development.md`.
+None of the five is one of the three things that rule reserves for the human: none is an
+irreversible action outside the repository, none invalidates the plan's architecture, and none
+needs a credential or a spend. Each is recorded here rather than in a transcript so an agent
+arriving cold reads a decision instead of a question. **Every one of them is reversible at the
+cost of one fix round**, and the token layer is deliberately structured so that reversing the
+biggest of them touches one declaration rather than every component.
+
+**1. Dark mode ships, in Tasks 1 and 2 together.** An operator console is read all day beside a
+terminal, and the argument for deferring was cost rather than doubt. The plan's own escape hatch
+is the reason the cost is bearable: Task 1 defines both columns whatever the answer, because
+deriving the dark ramp is the expensive part and typing it is not.
+
+**2. Sync's hue is a blue-violet at roughly 265°**, and the ramp is generated from it rather than
+approved by eye. The reasoning is a constraint rather than a taste:
+
+- The reserved status palette occupies the warm and green arc — good, warning, serious, critical
+  land between about 30° and 145°. A brand hue inside that arc collides with a verdict, and this
+  console's whole position is that it does not paint verdicts it cannot support.
+- Under both protanopia and deuteranopia, 265° stays separable from every one of those four. A
+  teal or cyan brand would not; it collapses toward "good" for a substantial share of readers, and
+  the brand hue marks the *current node*, which is a position and not a judgement.
+- It is not the default blue of every developer tool, which matters for a product whose argument
+  is that it is not the same thing as the tools it replaces.
+
+The hue is the input. `--color-primary` and the focus ring derive from it, and nothing else in the
+console is chromatic on a normal screen. Reversing this ruling means regenerating one ramp.
+
+**3. The reversal is confirmed: the packages stay installed and unimported, and their retiring
+conditions stand as written.** `@react-three/fiber`, `@react-three/drei`, `three` and
+`react-grid-layout` are wanted in the sense the owner meant — the project is not committing to a
+plain interface, and nothing is uninstalled. What does not follow is building either now. This
+plan already declined 3D on the merits (occlusion makes "every affected call site is shown"
+unprovable, which is the one claim a spatial view would exist to make) and declined the draggable
+dashboard on the grounds that a first version is what teaches a user what they want on screen.
+Slice 2's question 4 is closed by this paragraph: the two plans do not contradict each other, they
+answer different questions. Keeping a package for a condition that has not yet been met is not the
+same as declining the capability.
+
+**4. Body text is 14px.** Rows per screen is this console's currency and the plan's own
+recommendation is sound. The `meta` step at 12px is a floor and not a suggestion; nothing renders
+below it.
+
+**5. Assume yes — somebody other than the owner opens this console this quarter.** The dogfooding
+milestone makes the console the instrument through which the backend is exercised, and the product
+position makes it the thing anyone is shown first. So Tasks 5 through 7 are worth doing now rather
+than deferred, and the slice runs to its full eight tasks.
 
 ---
 
