@@ -179,21 +179,38 @@ def _like_prefix(finding_id: str) -> str:
 
 
 def workflow_state(checkpointer_dsn: str, finding_id: str) -> dict | None:
+    """The newest generation's workflow state, naming which generation it is.
+
+    A finding retried across generations has one checkpointer thread per
+    generation (module docstring above). `sync.dashboard.fleet.runs` lists
+    every generation as its own row, so a reader landing here from that list
+    needs to know whether this payload is the row they clicked or a newer
+    one that superseded it -- `thread_id` and `generation_count` answer
+    that; neither is inferable from `outcome` alone.
+    """
     with psycopg.connect(checkpointer_dsn, row_factory=dict_row) as conn:
         # A database no run has ever checkpointed into has no tables at all;
         # that is the same answer as a finding with no run, not an error.
         if conn.execute("SELECT to_regclass('checkpoints') AS t").fetchone()["t"] is None:
             return None
-        # The newest checkpoint across every thread of this finding.
+        # The newest checkpoint across every thread of this finding, plus how many
+        # threads (generations) it has -- one query, one snapshot, so the count
+        # can't straddle a write and land inconsistent with the selected row.
         # `checkpoint_id` is a UUIDv6, so text order is creation order, within
         # a thread and across the generations `sync.cli` steps through.
+        # Postgres 16 rejects `COUNT(DISTINCT ...) OVER ()`; a scalar subquery
+        # in the select list gets the same one-round-trip, one-snapshot result.
+        prefix = _like_prefix(finding_id)
         row = conn.execute(
             """
-            SELECT checkpoint FROM checkpoints
+            SELECT thread_id, checkpoint,
+                   (SELECT COUNT(DISTINCT thread_id) FROM checkpoints
+                     WHERE thread_id LIKE %s AND checkpoint_ns = '') AS generation_count
+              FROM checkpoints
              WHERE thread_id LIKE %s AND checkpoint_ns = ''
              ORDER BY checkpoint_id DESC LIMIT 1
             """,
-            (_like_prefix(finding_id),),
+            (prefix, prefix),
         ).fetchone()
     if row is None:
         return None
@@ -225,6 +242,8 @@ def workflow_state(checkpointer_dsn: str, finding_id: str) -> dict | None:
         "outcome": outcome,
         "abandon_reason": values.get("abandon_reason"),
         "report_reason": values.get("report_reason"),
+        "thread_id": row["thread_id"],
+        "generation_count": row["generation_count"],
     }
 
 

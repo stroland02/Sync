@@ -421,6 +421,66 @@ def test_workflow_state_reads_the_newest_run_not_the_first(checkpointer_tables):
     assert evidence["open_pr"]["pr_url"] == "https://github.com/x/y/pull/7"
 
 
+def test_workflow_state_names_the_owning_thread_of_a_single_generation(checkpointer_tables):
+    thread_id = f"{FINDING_ID}:abc123def456:0"
+    _insert_checkpoint(
+        thread_id,
+        "1f069000-0000-6000-8000-000000000001",
+        channel_values={"outcome": "opened", "pr_url": "https://github.com/x/y/pull/1"},
+        channel_versions={},
+        versions_seen={"__input__": {}, "open_pr": {"branch:to:open_pr": _version(1)}},
+        step=3,
+    )
+
+    state = workflow_state(DSN, FINDING_ID)
+
+    assert state["thread_id"] == thread_id
+    assert state["generation_count"] == 1
+
+
+def test_workflow_state_of_three_generations_names_the_newest_threads_outcome(
+    checkpointer_tables,
+):
+    # `f-multi-gen`'s own shape from the fleet-view review: retried across generations,
+    # each with a different outcome. The fleet screen lists all three as separate rows;
+    # this payload must say which one it is, not just which one it looks like.
+    oldest = f"{FINDING_ID}:ccc333ddd444:0"
+    middle = f"{FINDING_ID}:ccc333ddd444:1"
+    newest = f"{FINDING_ID}:ccc333ddd444:2"
+    _insert_checkpoint(
+        oldest,
+        "1f069200-0000-6000-8000-000000000001",
+        channel_values={"outcome": "abandoned", "abandon_reason": "first attempt failed"},
+        channel_versions={},
+        versions_seen={"__input__": {}, "abandon": {"branch:to:abandon": _version(1)}},
+        step=9,
+    )
+    _insert_checkpoint(
+        middle,
+        "1f069200-0000-6000-8000-000000000002",
+        channel_values={"outcome": "abandoned", "abandon_reason": "second attempt failed"},
+        channel_versions={},
+        versions_seen={"__input__": {}, "abandon": {"branch:to:abandon": _version(1)}},
+        step=9,
+    )
+    _insert_checkpoint(
+        newest,
+        "1f069200-0000-6000-8000-000000000003",
+        channel_values={"outcome": "opened", "pr_url": "https://github.com/x/y/pull/9"},
+        channel_versions={},
+        versions_seen={"__input__": {}, "open_pr": {"branch:to:open_pr": _version(1)}},
+        step=11,
+    )
+
+    state = workflow_state(DSN, FINDING_ID)
+
+    assert state["generation_count"] == 3
+    assert state["thread_id"] == newest
+    assert state["outcome"] == "opened"
+    evidence = {n["name"]: n["evidence"] for n in state["nodes"]}
+    assert evidence["open_pr"]["pr_url"] == "https://github.com/x/y/pull/9"
+
+
 # --- what the console mirrors from this module -------------------------------
 #
 # The console cannot import Python, so it restates the node order and the evidence keys
