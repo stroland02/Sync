@@ -44,6 +44,105 @@ is the tick's work.
 4. **Is the top item of the Deferred table now worth building?** Each row in that table names the
    condition that retires it. Check the condition, not the appetite.
 
+**The seven-item interface-quality checklist.** Copied from
+`docs/superpowers/references/notes/impeccable-interface-quality.md:328-417`, unparaphrased, because
+those seven ask something the four questions above do not: whether what *is* rendered can actually
+be read. Run them after the four questions, on every tick that touches a screen.
+
+Before the list: the one command, and its precondition. If the detector is installed, the fastest
+way to answer items 1, 3, 4, 5 and 7 at once is a URL scan of each route. It is only valid if the
+browser engine actually runs:
+
+```bash
+node -e "require.resolve('puppeteer')" || echo "URL SCAN INVALID — see section 5"
+npx impeccable detect --no-advisory --viewport 1280x800 \
+  http://localhost:5173/ \
+  http://localhost:5173/vendors/stripe \
+  http://localhost:5173/findings/<id> \
+  http://localhost:5173/findings/<id>/workflow
+```
+
+Exit 2 means findings; exit 0 means either clean **or** that the browser engine was missing and the
+scan silently did nothing. Never record a clean result without the first line passing.
+
+1. **Did a full walk of Codebase → API Services → Errors & Incidents → Finding → Solution Workflow
+   leave the browser console empty?** (`script-error`, one of only two rules carrying
+   `severity: 'error'`.) It is first because in React 19 an uncaught exception unmounts a subtree and
+   leaves nothing behind, which is the silent version of question 3 above: the state does not say
+   what happened, because there is no state. This console has two places a transport change lands
+   first — `run-outcome.tsx:121-130`, the branch for an outcome the console has never heard of, and
+   `evidence.tsx:285-293`, which renders unnamed evidence keys through `JSON.stringify` — and both
+   are reached by data, not by clicking. A tick that answers the other six while the console throws
+   has measured the wrong thing.
+
+2. **At a 1280px window, on the Errors & Incidents table, is the Rung column on screen without
+   scrolling the table sideways?** (No rule id; `text-overflow` is structurally blind to this — see
+   the note's section 5.) `vendor-findings-table.tsx` renders seven columns with Rung sixth, and
+   every header and cell carries `whitespace-nowrap` inside a `w-full overflow-x-auto` container.
+   The widest cell is `{row.file}:{row.line}`, a path supplied by a customer repository, and no
+   fixture will be long enough to catch it. The failure is that the provenance column — non-
+   negotiable under question 2 above — slides out of the viewport. Question 2 asks whether
+   provenance is rendered; this asks whether it is visible.
+
+3. **On each page, does the heading outline descend without skipping a level?**
+   (`skipped-heading`.) It earns its place over every other accessibility rule because the
+   console's navigation hierarchy *is* the dependency graph, and the heading tree is the only
+   machine-readable assertion of which level of that graph you are looking at.
+
+4. **Can you tell a page title, a card title and a row label apart at a glance?**
+   (`flat-type-hierarchy`.) This is the one `slop` rule that earns a place, because "unstyled
+   beyond legibility" fails at exactly this seam: with no design system, every level of a
+   six-level hierarchy renders at nearly the same weight and the operator loses their place.
+
+5. **On a 1920px window, does the prose in an error, empty or abandoned-run panel wrap at a
+   readable measure?** (`line-length`, which fires above roughly 85 characters and only inside
+   `p/li/td/th/dd/blockquote/figcaption`.) Tables want the whole viewport and paragraphs do not,
+   and this console mixes both on one screen. Evidence nobody reads is the same failure as evidence
+   not shown. The `<pre>` blocks (`evidence.tsx`, `max-h-72 overflow-auto whitespace-pre-wrap`) are
+   already correct and are not what this asks about.
+
+6. **Tab to the Next button inside a card. Is its whole focus ring visible?**
+   (`clipped-overflow-container`.) A Card with `overflow-hidden` clips a focus ring drawn as a
+   box-shadow. It also covers any future tooltip or popover added without a portal. Keyboard focus
+   is a states question no screenshot answers.
+
+7. **Is anything on screen rendered below 11px?** (`undersized-ui-text`, whose floor is 11px and
+   whose "furniture" selector explicitly covers `td`, `th` and anything classed `meta`, `label` or
+   `badge`.) It earns its slot because the standing temptation of a data-dense console is to reach
+   for `text-[10px]` the next time a table gets crowded, and the rule's own docstring records that
+   exact failure shipping once already, waved through because the size was on the design ramp.
+   **Being on `DESIGN.md`'s ramp does not exempt a value from this floor.**
+
+**Where each item stands, checked against the tree at `72450ae` (2026-08-05), after Task 1 of
+`docs/superpowers/plans/2026-08-05-sync-console-design-system.md` landed and before Tasks 2-7:**
+
+- **Item 7 is already closed**, and stays closed rather than being newly fixed: the console's floor
+  was 12px before this slice and still is. Task 1 gives that floor a name — `meta`, 12px, a floor
+  and not a suggestion — in `DESIGN.md`, which is what keeps a future crowded table from reaching
+  for `text-[10px]` instead of quietly regressing it.
+- **Items 2, 3, 4, 5 and 6 are open.** Each has a task and a step that closes it once landed — item
+  2 is Task 4 Step 4, items 3 and 4 are Task 3 Steps 1-2, item 5 is Task 4 Step 5, item 6 is Task 4
+  Step 3 — and none of those steps had landed as of `72450ae`: every `h1` in the tree is still
+  `text-lg` (`finding-page.tsx:77`, `fleet-page.tsx:24`, `overview-page.tsx:33`,
+  `vendor-page.tsx:29`, `workflow-page.tsx:96`), `card.tsx` still sets `overflow-hidden`
+  unconditionally, and `vendor-findings-table.tsx` still lists Rung sixth, after Call site. Re-check
+  each against the running tree rather than trusting this note once those tasks land.
+- **Item 1 is open and this slice does not close it.** The design system changes colour, type,
+  space, elevation and motion; it does not touch `run-outcome.tsx`'s outcome branch or
+  `evidence.tsx`'s unnamed-key rendering. It stays a tick item in its own right.
+
+**The detector's status here, and why the scan above is not wired into an automated step.**
+Checked in this worktree on 2026-08-05: `impeccable` is not a dependency of `web/package.json`, is
+not resolvable via `npx --no-install`, and is not installed globally; `node -e
+"require.resolve('puppeteer')"` fails with `MODULE_NOT_FOUND`. The precondition in the command
+block above is written into this tick regardless of that, because it must hold before any future
+session trusts a scan's exit code — a URL scan run without puppeteer prints one line to stderr and
+exits **0**, which a tick reads as clean when it means the opposite:
+`impeccable-interface-quality.md:207-223`. Until the detector is installed here, answer the seven
+items by hand against the running dev server, as the rest of this tick already does for questions
+1-4. If it is installed later, the precondition command must run and pass before any exit code from
+the scan is trusted — do not skip straight to the `npx impeccable detect` line.
+
 **3. Take exactly one item, and take it through the loop.**
 
 Use `superpowers:subagent-driven-development`: dispatch one implementer, review it for spec
