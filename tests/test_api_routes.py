@@ -22,6 +22,7 @@ from starlette.testclient import TestClient
 from sync.api.__main__ import DEFAULT_PORT
 from sync.api.app import _MAX_LIMIT, _SCAN_LIMIT, create_app
 from sync.core import CallSite, Finding, VendorChange
+from sync.dashboard.queries import _FINISHED
 from sync.mcp.tools import DEFAULT_LIMIT, GraphSurface
 
 INDEXED = datetime(2026, 7, 28, 6, 0, tzinfo=timezone.utc)
@@ -712,3 +713,15 @@ def test_the_consoles_proxy_target_matches_the_apis_default_port():
     match = re.search(r'target:\s*"http://127\.0\.0\.1:(\d+)"', source)
     assert match is not None, "web/vite.config.ts no longer proxies /api to a fixed port"
     assert int(match.group(1)) == DEFAULT_PORT
+
+
+def test_the_consoles_run_disposition_matches_the_finished_outcomes():
+    # `web/src/api/types.ts` restates `_FINISHED` as `RunDisposition` because the console
+    # cannot import Python. Nothing else holds the two together: a value added to one side
+    # and not the other lets a real outcome reach the console as a type the compiler never
+    # checked, which is exactly the run-state Critical this class of test exists to pin.
+    source = _web_source("src/api/types.ts")
+    match = re.search(r"export type RunDisposition\s*=([^\n]+)", source)
+    assert match is not None, "web/src/api/types.ts no longer declares RunDisposition"
+    members = set(re.findall(r'"([^"]+)"', match.group(1)))
+    assert members == set(_FINISHED)

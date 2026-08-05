@@ -9,14 +9,17 @@ import { useQuery } from "@tanstack/react-query"
 
 import {
   DEFAULT_LIMIT,
+  fetchCorpus,
   fetchFinding,
   fetchOverview,
+  fetchRepositories,
+  fetchRuns,
   fetchVendorChanges,
   fetchVendorFindings,
   fetchWorkflow,
 } from "@/api/client"
 import type { PageParams } from "@/api/client"
-import type { WorkflowState } from "@/api/types"
+import type { RunsPage, WorkflowState } from "@/api/types"
 
 export function useOverview() {
   return useQuery({
@@ -96,5 +99,56 @@ export function useWorkflow(findingId: string) {
       isRunTerminal(query.state.data) || query.state.data === undefined
         ? false
         : WORKFLOW_POLL_MS,
+  })
+}
+
+/**
+ * Whether a page of runs still has one in flight.
+ *
+ * `outcome` is null on a run exactly while it has not reached `opened`, `abandoned` or
+ * `reported` — the same test `isRunTerminal` runs against one workflow, applied across a
+ * page of them so the fleet stops polling only once every row it can see is done.
+ */
+function hasLiveRun(page: RunsPage | undefined): boolean {
+  return page !== undefined && page.items.some((run) => run.outcome === null)
+}
+
+/**
+ * Every run the checkpointer holds, one row per thread, newest first.
+ *
+ * Polls at `WORKFLOW_POLL_MS` while the page holds a run in flight, and stops the moment it
+ * does not — the same interval as a single workflow, for the same reason: nothing on this
+ * screen changes faster than the customer's own CI run.
+ */
+export function useRuns(params: PageParams = {}) {
+  const limit = params.limit ?? DEFAULT_LIMIT
+  const offset = params.offset ?? 0
+  return useQuery({
+    queryKey: ["runs", limit, offset],
+    queryFn: ({ signal }) => fetchRuns({ limit, offset }, signal),
+    refetchInterval: (query) => (hasLiveRun(query.state.data) ? WORKFLOW_POLL_MS : false),
+  })
+}
+
+/**
+ * The repair record, aggregated. Not polled: `migration_outcome` only gains a row when a
+ * run finishes an attempt, and the runs poll above already surfaces that a run finished.
+ */
+export function useCorpus() {
+  return useQuery({
+    queryKey: ["corpus"],
+    queryFn: ({ signal }) => fetchCorpus(signal),
+  })
+}
+
+/**
+ * The `repo_id` roll-up from the index. Not polled, for the same reason as `useCorpus`: it
+ * moves only when INDEX runs, which nothing on this screen would tell you had happened
+ * sooner than a manual refresh would.
+ */
+export function useRepositories() {
+  return useQuery({
+    queryKey: ["repositories"],
+    queryFn: ({ signal }) => fetchRepositories(signal),
   })
 }

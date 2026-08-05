@@ -20,7 +20,7 @@ export function AppShell() {
             Sync — operator console
           </Link>
           <p className="font-mono text-xs text-muted-foreground">
-            Codebase → API Services → Errors &amp; Incidents → Finding
+            Fleet → Codebase → API Services → Errors &amp; Incidents → Finding
           </p>
         </div>
       </header>

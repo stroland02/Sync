@@ -87,7 +87,8 @@ function Workflow({ findingId }: { findingId: string }) {
     <section className="flex flex-col gap-4">
       <Breadcrumbs
         trail={[
-          { label: "Codebase", to: "/" },
+          { label: "Fleet", to: "/" },
+          { label: "Codebase", to: "/codebase" },
           { label: findingId, to: `/findings/${encodeURIComponent(findingId)}` },
           { label: "Solution workflow" },
         ]}

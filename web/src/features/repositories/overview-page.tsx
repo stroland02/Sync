@@ -1,5 +1,6 @@
 /**
- * The root of the hierarchy: the codebase, as the API can describe it.
+ * The codebase, as the API can describe it: the root of the per-finding hierarchy, one
+ * level below the fleet.
  *
  * The plan calls this level "repositories", and the directory keeps that name so it
  * mirrors the graph. The screen does not: `/api/overview` answers with vendors and open
@@ -28,7 +29,7 @@ export function OverviewPage() {
 
   return (
     <section className="flex flex-col gap-4">
-      <Breadcrumbs trail={[{ label: "Codebase" }]} />
+      <Breadcrumbs trail={[{ label: "Fleet", to: "/" }, { label: "Codebase" }]} />
       <h1 className="text-lg font-medium">Codebase overview</h1>
 
       {query.isPending && <LoadingState what="the codebase overview" />}

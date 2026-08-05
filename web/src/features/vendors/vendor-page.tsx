@@ -19,7 +19,13 @@ export function VendorPage() {
 
   return (
     <section className="flex flex-col gap-4">
-      <Breadcrumbs trail={[{ label: "Codebase", to: "/" }, { label: vendorId }]} />
+      <Breadcrumbs
+        trail={[
+          { label: "Fleet", to: "/" },
+          { label: "Codebase", to: "/codebase" },
+          { label: vendorId },
+        ]}
+      />
       <h1 className="font-mono text-lg font-medium">{vendorId}</h1>
 
       <Card>

@@ -8,6 +8,7 @@
 import { Route, Routes } from "react-router"
 
 import { FindingPage } from "@/features/findings/finding-page"
+import { FleetPage } from "@/features/fleet/fleet-page"
 import { OverviewPage } from "@/features/repositories/overview-page"
 import { VendorPage } from "@/features/vendors/vendor-page"
 import { WorkflowPage } from "@/features/workflows/workflow-page"
@@ -18,7 +19,8 @@ export default function App() {
   return (
     <Routes>
       <Route element={<AppShell />}>
-        <Route index element={<OverviewPage />} />
+        <Route index element={<FleetPage />} />
+        <Route path="codebase" element={<OverviewPage />} />
         <Route path="vendors/:vendorId" element={<VendorPage />} />
         <Route path="findings/:findingId" element={<FindingPage />} />
         <Route path="findings/:findingId/workflow" element={<WorkflowPage />} />

@@ -58,7 +58,8 @@ function FindingDetail({ findingId }: { findingId: string }) {
   const query = useFinding(findingId)
 
   const trail = [
-    { label: "Codebase", to: "/" },
+    { label: "Fleet", to: "/" },
+    { label: "Codebase", to: "/codebase" },
     ...(query.isSuccess
       ? [
           {

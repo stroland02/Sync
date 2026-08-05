@@ -205,3 +205,98 @@ export const WORKFLOW_NODE_ORDER = [
 
 /** One of the remediation graph's known node names. */
 export type WorkflowNodeName = (typeof WORKFLOW_NODE_ORDER)[number]
+
+/**
+ * A run's outcome, once it has one.
+ *
+ * Mirrors `_FINISHED` in `sync.dashboard.queries`, the tuple `/api/runs` filters a
+ * checkpoint's `outcome` channel through before it reaches the transport. Unlike
+ * `WorkflowOutcome` above, this type carries no `"running"` member: the fleet route never
+ * forwards that value, so there is nothing here for a branch on it to handle. A value added
+ * to `_FINISHED` and not here is a real outcome the console cannot express — held together
+ * by `tests/test_api_routes.py::test_the_consoles_run_disposition_matches_the_finished_outcomes`,
+ * since nothing else keeps the two languages agreeing.
+ */
+export type RunDisposition = "opened" | "abandoned" | "reported"
+
+/**
+ * One run the checkpointer holds: the newest checkpoint on one thread.
+ *
+ * `thread_id` is `{finding_id}:{run_id or head_sha}:{generation}`, so a finding retried
+ * across generations is two rows here, one per generation — this row is per-run, not
+ * per-finding, and does not collapse the way `WorkflowState` does for a single finding.
+ *
+ * `current_node` is non-null exactly when `outcome` is null: it names the node the graph
+ * owes a visit, which only means something while the run has not yet finished. It is typed
+ * as a plain string rather than `WorkflowNodeName` because a pending run can also be due at
+ * `report` or `abandon`, which end a run rather than advance it and are not in
+ * `WORKFLOW_NODE_ORDER`.
+ *
+ * `last_checkpoint_at` is the checkpoint's own `ts` — staleness, not liveness. See the
+ * fleet screen's legend for why silence here does not mean the run has died.
+ */
+export interface RunRow {
+  thread_id: string
+  finding_id: string
+  current_node: string | null
+  outcome: RunDisposition | null
+  abandon_reason: string | null
+  last_checkpoint_at: string | null
+}
+
+/**
+ * `GET /api/runs`.
+ *
+ * Deliberately not a `Page<T>`: `Page` extends `Provenance`, and this route reads the
+ * LangGraph checkpointer, not the graph — there is no `indexed_at`, no `feed_fetched_at`,
+ * no binding rung and no context-savings figure to report for it. Inheriting the envelope
+ * would invent four fields the transport never sends, the same reasoning that keeps
+ * `WorkflowState` off `Provenance`. `items`, `total` and `next_offset` are the whole shape.
+ */
+export interface RunsPage {
+  items: RunRow[]
+  total: number
+  next_offset: number | null
+}
+
+/**
+ * One count per distinct value of a `migration_outcome` column.
+ *
+ * The key `"null"` is not the string form of an empty bucket — `sync.dashboard.fleet`
+ * writes it for a row whose column genuinely holds `NULL`, so dropping it would understate
+ * the denominator by exactly the attempts that column was never recorded for.
+ */
+export type Tally = Record<string, number>
+
+/**
+ * `GET /api/corpus` — the repair record, aggregated.
+ *
+ * `attempts` and `distinct_findings` are separate fields on purpose: `sync.remediate.corpus`
+ * writes one `migration_outcome` row per attempt, so a finding retried three times is three
+ * attempts and one finding. A payload that reported one number for both would be the grain
+ * defect `CLAUDE.md` names for this table.
+ *
+ * The count behind every field here excludes three abandonment classes `corpus._record`
+ * never writes a row for: a run abandoned before any attempt (at `locate` or `prepare`), a
+ * run for which no tier applied, and a run whose state was missing its finding, site or
+ * change. Those runs are real — `/api/runs` still names them through `abandon_reason` — but
+ * a row for them here would be a fabrication, not a measurement.
+ */
+export interface CorpusSummary {
+  attempts: number
+  distinct_findings: number
+  by_terminal_status: Tally
+  by_strategy: Tally
+  by_tier: Tally
+}
+
+/**
+ * `GET /api/repositories`.
+ *
+ * `repo_ids` names every repository the index has seen at least one call site from. A
+ * repository that was configured but never indexed writes no `call_site` row and has no
+ * entry here — indistinguishable from one that was never configured at all.
+ */
+export interface RepositoriesResponse {
+  repo_ids: string[]
+}

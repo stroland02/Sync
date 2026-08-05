@@ -1,5 +1,5 @@
 /**
- * The console's only data source: five GET routes over the Python transport.
+ * The console's only data source: eight GET routes over the Python transport.
  *
  * Paths are relative so one origin in development is one origin in production — the Vite
  * proxy in `vite.config.ts` exists so that nothing here depends on a cross-origin
@@ -13,11 +13,14 @@ import {
   UnreachableApiError,
 } from "@/api/errors"
 import type {
+  CorpusSummary,
   FindingDetail,
   NotFoundBody,
   OverviewResponse,
   Page,
+  RepositoriesResponse,
   RiskRow,
+  RunsPage,
   VendorChangeRow,
   WorkflowState,
 } from "@/api/types"
@@ -117,4 +120,20 @@ export function fetchWorkflow(
   signal?: AbortSignal,
 ): Promise<WorkflowState> {
   return getJson<WorkflowState>(`/api/workflows/${encodeURIComponent(findingId)}`, signal)
+}
+
+/** Every run the checkpointer holds, newest first — one row per thread, not per finding. */
+export function fetchRuns(params: PageParams, signal?: AbortSignal): Promise<RunsPage> {
+  const path = withPageParams("/api/runs", params)
+  return getJson<RunsPage>(path, signal)
+}
+
+/** The repair record, aggregated: every `migration_outcome` row, by disposition, strategy and tier. */
+export function fetchCorpus(signal?: AbortSignal): Promise<CorpusSummary> {
+  return getJson<CorpusSummary>("/api/corpus", signal)
+}
+
+/** The `repo_id` roll-up from the index. */
+export function fetchRepositories(signal?: AbortSignal): Promise<RepositoriesResponse> {
+  return getJson<RepositoriesResponse>("/api/repositories", signal)
 }
