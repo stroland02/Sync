@@ -180,6 +180,34 @@ is the same reason this repository does not accept a green it did not watch.
 run's output survive the next run — and the second is worth doing whether or not the first ever
 happens.
 
+### B78 — no way to run the pipeline end to end without opening a real pull request
+
+The console has no live data. `migration_outcome` holds three rows and none carries a `pr_number`,
+the checkpoint tables are empty, and every UI verification so far has been done by hand-inserting
+checkpoint rows — which tests the renderer against rows a human invented rather than against rows
+the graph wrote.
+
+**Most of this already exists and is not reachable.** `tests/test_cli.py:693` defines
+`_LocalForge(GitHubForge)`, which keeps the real `push_branch` so a real branch lands in a real
+origin and replaces only the two steps needing GitHub: `await_ci` answers green and
+`open_pull_request` fabricates a `PullRequest`. `tests/test_cli.py:456` builds the fixture origin.
+And `build_graph` already takes both the store and the checkpointer as parameters, so pointing them
+at Postgres on 5433 needs no monkeypatching at all.
+
+What is missing is the entry point. That test reaches the shape through `monkeypatch` with
+`GraphStore` stubbed and `PostgresSaver` swapped for an in-memory checkpointer, so the run is real
+and the rows go nowhere. There is no `--fixture` or `--dry-run` on `cli.run` — no spelling of one
+exists.
+
+This is not B7. B7 is the acceptance run against a real repository, it opens a real pull request,
+and it stays gated on the user. This is the opposite: everything except the two steps that talk to
+GitHub, against a fixture repo, writing real rows.
+
+**Closes when:** one command drives `locate` through `open_pr` against a fixture repository, writes
+real checkpoint and `migration_outcome` rows to the configured database, opens nothing, and is
+covered by a test that watches the rows arrive. Whether the fabricated pull-request number counts
+up across runs is a question for whoever consumes it.
+
 ### B76 — three small truths about how this CLI reads files, left over from B73
 
 Recorded rather than folded into B73, because each is a decision and none is a typo.
