@@ -6,7 +6,6 @@
  * which is exactly when the per-row column stops being redundant.
  */
 
-import { useState } from "react"
 import { Link } from "react-router"
 
 import { DEFAULT_LIMIT } from "@/api/client"
@@ -23,9 +22,10 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import { orAbsent } from "@/lib/format"
+import { useOffsetParam } from "@/lib/use-offset-param"
 
 export function VendorFindingsTable({ vendorId }: { vendorId: string }) {
-  const [offset, setOffset] = useState(0)
+  const [offset, setOffset] = useOffsetParam("findings_offset")
   const query = useVendorFindings(vendorId, { limit: DEFAULT_LIMIT, offset })
 
   if (query.isPending) return <LoadingState what={`open findings for ${vendorId}`} />

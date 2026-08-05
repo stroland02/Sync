@@ -9,8 +9,6 @@
  * no binding, so naming a rung would claim a mapping that does not appear in the payload.
  */
 
-import { useState } from "react"
-
 import { DEFAULT_LIMIT } from "@/api/client"
 import { useVendorChanges } from "@/api/queries"
 import { PageControls } from "@/components/page-controls"
@@ -25,9 +23,10 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import { ABSENT, formatTimestamp, orAbsent } from "@/lib/format"
+import { useOffsetParam } from "@/lib/use-offset-param"
 
 export function VendorChangesTable({ vendorId }: { vendorId: string }) {
-  const [offset, setOffset] = useState(0)
+  const [offset, setOffset] = useOffsetParam("changes_offset")
   const query = useVendorChanges(vendorId, { limit: DEFAULT_LIMIT, offset })
 
   if (query.isPending) return <LoadingState what={`vendor changes for ${vendorId}`} />
