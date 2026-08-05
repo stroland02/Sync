@@ -1,31 +1,200 @@
 @import "tailwindcss";
 
-/* No `.dark` element exists, so this pins the console to one palette rather than letting
-   the shadcn components' `dark:` rules fire off the reader's OS preference against tokens
-   that have no dark values yet. */
+/* Selects descendants of `.dark` rather than `.dark` itself, so the class has to
+   land on <html> for the document to be covered. */
 @custom-variant dark (&:is(.dark *));
 
+/* Colours are literals, never `var()`. A custom property whose value is `var(--x)`
+   is substituted where it is *declared*, so a token declared at `:root` as
+   `var(--x)` keeps the `:root` result even on an element where `.dark` redefined
+   `--x`; and the chart wrapper reads these through `getComputedStyle`, which
+   returns declared text rather than a resolved colour. DESIGN.md at the
+   repository root carries what each token is for and the contrast computed for
+   it. */
 @theme {
-  /* The minimum the shadcn catalog needs to be legible, and no more. Data-dense and
-     unstyled beyond legibility is the target for this slice; a deferred slice owns the
-     design system, and that is where a real palette belongs. */
-  --color-background: oklch(1 0 0);
-  --color-foreground: oklch(0.21 0 0);
+  /* Nine neutral steps, ordered back to front. Achromatic on purpose: the brand
+     hue is the only chromatic thing on a normal screen. */
+  --color-surface-sunken: oklch(0.972 0 0);
+  --color-surface: oklch(1 0 0);
+  --color-surface-subtle: oklch(0.962 0 0);
+  --color-surface-emphasis: oklch(0.93 0 0);
+  --color-line: oklch(0.885 0 0);
+  --color-line-strong: oklch(0.615 0 0);
+  --color-ink-muted: oklch(0.485 0 0);
+  --color-ink-secondary: oklch(0.4 0 0);
+  --color-ink: oklch(0.2 0 0);
+
+  /* 265 degrees, outside the 30-145 arc the status palette occupies, so the
+     brand can never be read as a verdict. */
+  --color-brand: oklch(0.475 0.19 265);
+  --color-brand-surface: oklch(0.955 0.017 265);
+
+  /* Reserved. One value in both modes, because a status colour that shifts with
+     the theme is a different claim on a different screen. Never a series
+     colour; never rendered without an icon and a word. */
+  --color-good: #0ca30c;
+  --color-warning: #fab219;
+  --color-serious: #ec835a;
+  --color-critical: #d03b3b;
+
+  /* The text-and-icon step of each status hue. The mark above is sized for area;
+     warning and serious sit below 3:1 on a light surface by design. */
+  --color-good-ink: #006300;
+  --color-warning-ink: oklch(0.5 0.105 72);
+  --color-serious-ink: oklch(0.51 0.145 42);
+  --color-critical-ink: oklch(0.51 0.19 27.5);
+
+  --color-good-surface: oklch(0.958 0.033 145);
+  --color-warning-surface: oklch(0.968 0.033 85);
+  --color-serious-surface: oklch(0.962 0.02 45);
+  --color-critical-surface: oklch(0.958 0.02 27.5);
+
+  /* Fixed slot order, assigned in sequence, never cycled. The order is the
+     colour-blindness gate, not a preference: re-ordering these requires
+     re-running the validator in both modes. */
+  --color-series-1: #1baf7a;
+  --color-series-2: #eb6834;
+  --color-series-3: #2a78d6;
+  --color-series-4: #008300;
+  --color-series-5: #e87ba4;
+  --color-series-6: #eda100;
+  --color-series-7: #4a3aa7;
+  --color-series-8: #e34948;
+
+  --color-chart-grid: oklch(0.925 0 0);
+  --color-chart-axis: oklch(0.8 0 0);
+
+  /* The drop colour of the floating level, carried as a colour token because
+     the `shadow-*` utility resolves its theme value at build time: a literal
+     written into --shadow-float is baked into the class and the dark column
+     never reaches it, whereas a colour token is resolved per element. */
+  --color-shadow: oklch(0.2 0 0 / 0.3);
+
+  /* The names the shadcn catalog consumes. Each is a position on the ramp
+     above; renaming one breaks the catalog, so they stay. */
+  --color-background: oklch(0.972 0 0);
+  --color-foreground: oklch(0.2 0 0);
   --color-card: oklch(1 0 0);
-  --color-card-foreground: oklch(0.21 0 0);
-  --color-muted: oklch(0.97 0 0);
-  --color-muted-foreground: oklch(0.52 0 0);
-  --color-border: oklch(0.88 0 0);
-  --color-input: oklch(0.88 0 0);
-  --color-ring: oklch(0.6 0 0);
-  --color-primary: oklch(0.21 0 0);
-  --color-primary-foreground: oklch(0.99 0 0);
-  --color-secondary: oklch(0.97 0 0);
-  --color-secondary-foreground: oklch(0.21 0 0);
+  --color-card-foreground: oklch(0.2 0 0);
+  --color-muted: oklch(0.962 0 0);
+  --color-muted-foreground: oklch(0.485 0 0);
+  --color-border: oklch(0.885 0 0);
+  --color-input: oklch(0.615 0 0);
+  --color-ring: oklch(0.475 0.19 265);
+  --color-primary: oklch(0.475 0.19 265);
+  --color-primary-foreground: oklch(1 0 0);
+  --color-secondary: oklch(0.962 0 0);
+  --color-secondary-foreground: oklch(0.2 0 0);
   --color-destructive: oklch(0.51 0.19 27.5);
+  --color-destructive-foreground: oklch(1 0 0);
+
+  /* Six steps. 12px is a floor rather than the small end of a range: being on
+     this ramp does not exempt a value from it, and nothing renders below it. */
+  --text-meta: 0.75rem;
+  --text-meta--line-height: 1rem;
+  --text-body: 0.875rem;
+  --text-body--line-height: 1.25rem;
+  --text-emphasis: 1rem;
+  --text-emphasis--line-height: 1.375rem;
+  --text-emphasis--font-weight: 600;
+  --text-section: 1.125rem;
+  --text-section--line-height: 1.5rem;
+  --text-section--font-weight: 600;
+  --text-page: 1.5rem;
+  --text-page--line-height: 1.875rem;
+  --text-page--font-weight: 600;
+  --text-page--letter-spacing: -0.01em;
+  --text-figure: 2rem;
+  --text-figure--line-height: 2.25rem;
+  --text-figure--font-weight: 600;
+  --text-figure--letter-spacing: -0.02em;
+
+  --font-sans: system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: ui-monospace, "Cascadia Code", "Segoe UI Mono", Menlo, Consolas,
+    "Liberation Mono", monospace;
+
+  /* Three. A fourth is a decision recorded in DESIGN.md, not a value added in
+     passing. */
+  --spacing-field: 0.25rem;
+  --spacing-row: 0.5rem;
+  --spacing-section: 1rem;
+
+  --radius-control: 0.375rem;
+  --radius-surface: 0.625rem;
+
+  /* Two levels. The ring is the mechanism at both; the floating level adds a
+     shadow, and only a thing that occludes content may take it. */
+  --shadow-flat: 0 0 0 1px var(--color-line);
+  --shadow-float: 0 0 0 1px var(--color-line), 0 12px 32px -12px var(--color-shadow);
+}
+
+/* Outside any layer on purpose: `@theme` compiles into `@layer theme`, and an
+   unlayered rule beats a layered one whatever the specificity. Re-stepped
+   against the dark surface rather than inverted from the column above — an
+   inverted ramp puts the wrong lightness against the wrong surface and the
+   contrast stops holding. */
+.dark {
+  color-scheme: dark;
+
+  --color-surface-sunken: oklch(0.155 0 0);
+  --color-surface: oklch(0.205 0 0);
+  --color-surface-subtle: oklch(0.255 0 0);
+  --color-surface-emphasis: oklch(0.305 0 0);
+  --color-line: oklch(0.345 0 0);
+  --color-line-strong: oklch(0.578 0 0);
+  --color-ink-muted: oklch(0.715 0 0);
+  --color-ink-secondary: oklch(0.83 0 0);
+  --color-ink: oklch(0.955 0 0);
+
+  --color-brand: oklch(0.775 0.113 265);
+  --color-brand-surface: oklch(0.285 0.055 265);
+
+  --color-good-ink: oklch(0.72 0.17 145);
+  --color-warning-ink: #fab219;
+  --color-serious-ink: #ec835a;
+  --color-critical-ink: oklch(0.72 0.155 27.5);
+
+  --color-good-surface: oklch(0.29 0.05 145);
+  --color-warning-surface: oklch(0.3 0.05 78);
+  --color-serious-surface: oklch(0.298 0.05 42);
+  --color-critical-surface: oklch(0.29 0.055 27.5);
+
+  --color-series-1: #199e70;
+  --color-series-2: #d95926;
+  --color-series-3: #3987e5;
+  --color-series-4: #008300;
+  --color-series-5: #d55181;
+  --color-series-6: #c98500;
+  --color-series-7: #9085e9;
+  --color-series-8: #e66767;
+
+  --color-chart-grid: oklch(0.29 0 0);
+  --color-chart-axis: oklch(0.42 0 0);
+
+  --color-shadow: oklch(0 0 0 / 0.72);
+
+  --color-background: oklch(0.155 0 0);
+  --color-foreground: oklch(0.955 0 0);
+  --color-card: oklch(0.205 0 0);
+  --color-card-foreground: oklch(0.955 0 0);
+  --color-muted: oklch(0.255 0 0);
+  --color-muted-foreground: oklch(0.715 0 0);
+  --color-border: oklch(0.345 0 0);
+  --color-input: oklch(0.578 0 0);
+  --color-ring: oklch(0.775 0.113 265);
+  --color-primary: oklch(0.775 0.113 265);
+  --color-primary-foreground: oklch(0.155 0 0);
+  --color-secondary: oklch(0.255 0 0);
+  --color-secondary-foreground: oklch(0.955 0 0);
+  --color-destructive: oklch(0.72 0.155 27.5);
+  --color-destructive-foreground: oklch(0.155 0 0);
 }
 
 @layer base {
+  :root {
+    color-scheme: light;
+  }
+
   body {
     background-color: var(--color-background);
     color: var(--color-foreground);
