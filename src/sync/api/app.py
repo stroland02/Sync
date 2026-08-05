@@ -1,14 +1,21 @@
-"""Starlette app: one route per graph level, each a thin call into `GraphSurface`.
+"""Starlette app: the transport for the operator console, over two answer sources.
 
-The transport holds no logic. Every handler pulls its arguments off the request, calls one
-method on the surface (or the workflow reader), and returns the payload. Errors that the
-surface expresses as `None` become 404 with a JSON body -- HTML would confuse a JSON client
-into treating a missing finding as a broken deployment.
+The transport holds no logic. Per-finding and per-vendor routes are a thin call into
+`GraphSurface`, which answers questions about one repository an agent is already pointed
+at. Fleet-wide routes -- `/api/runs`, `/api/corpus`, `/api/repositories` -- answer a
+different grain, every run or every attempt across repositories, which the frozen surface
+answers no question about; those go through reader callables backed by `sync.dashboard`
+instead. `app.py` constructs neither the surface nor the dashboard view model -- both are
+built by the caller and handed in. Errors that a reader expresses as `None` become 404 with
+a JSON body -- HTML would confuse a JSON client into treating a missing finding as a broken
+deployment.
 
-`workflow_reader` is a callable rather than a class because the checkpointer lives outside
-`GraphSurface`: the graph and the checkpoint store are two databases, and asking the surface
-to speak both would fold two responsibilities into one abstraction. The reader is `str ->
-dict | None`, matching the shape the console consumes.
+Every reader is a callable rather than a class for the same reason `workflow_reader` is: the
+checkpointer, the corpus and the repository roll-up each live outside `GraphSurface`, in
+stores the surface does not speak, and asking one abstraction to speak all of them would
+fold unrelated responsibilities into it. `WorkflowReader` is `str -> dict | None`, matching
+the shape the console consumes; the fleet readers below take the shape their own route
+needs.
 """
 
 from __future__ import annotations

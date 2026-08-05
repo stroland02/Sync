@@ -725,3 +725,35 @@ def test_the_consoles_run_disposition_matches_the_finished_outcomes():
     assert match is not None, "web/src/api/types.ts no longer declares RunDisposition"
     members = set(re.findall(r'"([^"]+)"', match.group(1)))
     assert members == set(_FINISHED)
+
+
+def _normalized(path: str) -> str:
+    """A route path with its one parameterisation collapsed to `{param}`.
+
+    Starlette spells a parameter `{vendor_id}`; `client.ts` spells the same slot
+    `${encodeURIComponent(vendorId)}`. Collapsing both to one token is what lets a path from
+    either side compare equal to its counterpart.
+    """
+    path = re.sub(r"\$\{[^}]*\}", "{param}", path)
+    return re.sub(r"\{[^}]*\}", "{param}", path)
+
+
+def test_the_consoles_fetched_paths_match_the_apps_declared_routes():
+    # `web/src/api/client.ts` writes the eight paths as string and template literals because
+    # the console cannot import Python, and `create_app` declares them by hand at the bottom
+    # of this module. Nothing else holds the two lists together: a path renamed on one side
+    # and not the other is a 404 in the browser, and `web/` has no test runner and no CI gate
+    # that would catch it before a human loads the page.
+    app = _build_app(surface=GraphSurface(FakeGraph(), feed_fetched_at=FETCHED))
+    app_paths = {_normalized(route.path) for route in app.routes}
+
+    source = _web_source("src/api/client.ts")
+    fetched_literals = re.findall(r'[`"](/api[^`"]*)[`"]', source)
+    console_paths = {_normalized(literal) for literal in fetched_literals}
+
+    missing_from_console = app_paths - console_paths
+    missing_from_app = console_paths - app_paths
+    assert not missing_from_console and not missing_from_app, (
+        f"routes create_app declares that client.ts never fetches: {sorted(missing_from_console)}; "
+        f"paths client.ts fetches that create_app never declares: {sorted(missing_from_app)}"
+    )
