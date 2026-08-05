@@ -83,7 +83,14 @@ export function RunsCard() {
                         <TableCell className="font-mono text-xs">
                           {orAbsent(run.current_node)}
                         </TableCell>
-                        <TableCell>{describeOutcome(run.outcome)}</TableCell>
+                        <TableCell>
+                          {describeOutcome(run.outcome)}
+                          {run.outcome === "abandoned" && (
+                            <div className="mt-1 font-mono text-xs text-muted-foreground">
+                              {orAbsent(run.abandon_reason)}
+                            </div>
+                          )}
+                        </TableCell>
                         <TableCell className="font-mono text-xs">
                           {formatElapsed(run.last_checkpoint_at)}
                         </TableCell>
