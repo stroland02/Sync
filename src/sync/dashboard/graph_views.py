@@ -54,6 +54,14 @@ def binding_surface(
 
     An operation nobody calls, or one the vendor has never changed, returns empty lists rather
     than an error: "nothing recorded" is a true answer for either half of this payload.
+
+    **This surface cannot see a call site the code used to have.** `call_sites_for_operation`
+    excludes a retracted row and takes no parameter to include it, so nothing here can report
+    that a position was ever occupied and then given up -- not as an empty field, not at all.
+    That silence is the correct answer to what this view asks ("what does my code depend on
+    now"), but it means an absent call site reads identically whether the code never bound this
+    operation or bound it and later stopped. A reader after the second story wants
+    `GraphStore.get_call_site`, by the id a finding already holds, not this view.
     """
     sites = store.call_sites_for_operation(vendor_id, operation_id, repo_id=repo_id)
     changes = [
@@ -78,7 +86,6 @@ def binding_surface(
                 "loop_depth": site.loop_depth,
                 "binding_rung": "static",
                 "indexed_at": site.indexed_at.isoformat(),
-                "retracted_at": site.retracted_at.isoformat() if site.retracted_at else None,
             }
             for site in sites
         ],

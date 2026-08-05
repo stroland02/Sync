@@ -160,6 +160,22 @@ def test_binding_surface_on_an_operation_nobody_calls_is_empty_not_an_error(stor
     assert result["changes"] == []
 
 
+def test_binding_surface_excludes_retracted_call_sites(store):
+    # A retracted call site is a position the code no longer occupies -- `binding_surface`
+    # reads `call_sites_for_operation`, whose own contract excludes it, and this pins that the
+    # exclusion actually reaches this view rather than being assumed from the store's docstring.
+    live_id = store.upsert_call_site(_site(path="src/a.ts", line=1))
+    retracted_id = store.upsert_call_site(_site(path="src/b.ts", line=2))
+    with store._connect().cursor() as cur:
+        cur.execute("UPDATE call_site SET retracted_at = now() WHERE id = %s", (retracted_id,))
+
+    result = binding_surface(store, "stripe", "PostCharges")
+
+    paths = {row["path"] for row in result["call_sites"]}
+    assert paths == {"src/a.ts"}
+    assert live_id != retracted_id  # guards against a copy-paste that reused one id for both
+
+
 # -- index_coverage ---------------------------------------------------------------
 
 
