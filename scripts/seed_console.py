@@ -74,6 +74,7 @@ import os
 import sys
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
+from time import perf_counter as _perf_counter
 
 import psycopg
 from langgraph.checkpoint.postgres import PostgresSaver
@@ -95,6 +96,28 @@ REPO_A = f"{MARKER}-repo-a"
 REPO_B = f"{MARKER}-repo-b"
 VENDOR_STRIPE = f"{MARKER}-stripe"
 VENDOR_TWILIO = f"{MARKER}-twilio"
+
+# The scale repository, kept out of REPO_A/REPO_B on purpose: a caller measuring what ten
+# thousand call sites cost the console must be able to remove exactly that load without
+# touching the small, hand-shaped fixture the rest of this module writes.
+SCALE_REPO_ID = f"{MARKER}-scale"
+
+# Four vendors, several operations each, so a scale run exercises more than one row of the
+# binding surface and more than one shape of path -- a uniform fixture would not have caught
+# `packages/billing-service/src/infrastructure/adapters/stripe/charges/create-charge-handler.ts`,
+# the longest path any fixture in this repository has carried before this one.
+_SCALE_VENDORS = (
+    (f"{MARKER}-scale-stripe", "stripe", ("charges", "subscriptions", "refunds", "payouts")),
+    (f"{MARKER}-scale-twilio", "twilio", ("messages", "verify", "calls")),
+    (f"{MARKER}-scale-github", "github", ("issues", "pulls", "actions")),
+    (f"{MARKER}-scale-sendgrid", "sendgrid", ("mail", "templates")),
+)
+_SCALE_SERVICES = (
+    "billing-service", "notifications-service", "identity-service", "orders-service",
+)
+_SCALE_SEVERITIES = ("breaking", "warning", "deprecation")
+_SCALE_RUNGS = ("static", "resolved", "observed")
+_SCALE_SDK_VERSIONS = ("14.0.0", "4.19.0", "2.3.1", "7.0.0")
 
 # The checkpointer never sees a real host or a real repository. `sync.cli`'s convention is
 # `{finding_id}:{run_id or head_sha[:12]}:{generation}` -- MARKER stands in for the run id, which
@@ -616,11 +639,126 @@ def remove(graph_dsn: str, checkpointer_dsn: str) -> None:
             conn.execute(f"DELETE FROM {table} WHERE thread_id LIKE %s", (pattern,))
 
 
+def _executemany_values(
+    conn: psycopg.Connection, prefix: str, suffix: str, columns_count: int,
+    rows: list[tuple], *, chunk_size: int = 1000,
+) -> None:
+    """One multi-row `INSERT ... VALUES (...), (...), ...` per chunk, not one `INSERT` per row.
+
+    `chunk_size` keeps each statement's parameter count (`columns_count * chunk_size`) well
+    under Postgres's protocol limit of 65535 -- the widest table here is 13 columns, so 1000
+    rows is 13000 parameters, comfortably inside it. Chunked round trips rather than one
+    statement for all ten thousand rows for the same reason: the parameter count for the whole
+    set would exceed the limit long before the row count did.
+    """
+    if not rows:
+        return
+    placeholder_row = "(" + ", ".join(["%s"] * columns_count) + ")"
+    for start in range(0, len(rows), chunk_size):
+        chunk = rows[start : start + chunk_size]
+        values_sql = ", ".join([placeholder_row] * len(chunk))
+        flat_params = [value for row in chunk for value in row]
+        conn.execute(f"{prefix} {values_sql} {suffix}", flat_params)
+
+
+def _scale_call_site_row(index: int) -> tuple:
+    vendor_id, vendor_slug, resources = _SCALE_VENDORS[index % len(_SCALE_VENDORS)]
+    resource = resources[index % len(resources)]
+    service = _SCALE_SERVICES[index % len(_SCALE_SERVICES)]
+    operation_id = f"Post{resource.capitalize()}"
+    path = (
+        f"packages/{service}/src/infrastructure/adapters/{vendor_slug}/{resource}/"
+        f"create-{resource}-handler-{index:06d}.ts"
+    )
+    # Every third row carries the args/response detail the finding-detail screen looks for,
+    # so a scale run has more than one call site shaped like that case -- the rest are the
+    # common case, a call site with no static evidence beyond its own identity.
+    if index % 3 == 0:
+        args_keys = ["customer", "amount", "currency"]
+        response_fields_read = ["id", "status"]
+    else:
+        args_keys, response_fields_read = [], []
+    return (
+        f"{MARKER}-scale-site-{index:06d}", SCALE_REPO_ID, path, (index % 500) + 1,
+        (index % 20) + 1, vendor_id, operation_id, f"{vendor_slug}.{resource}.create",
+        args_keys, response_fields_read, _SCALE_SDK_VERSIONS[index % len(_SCALE_SDK_VERSIONS)],
+        f"{MARKER}-scale-hash-{index:06d}", index % 3,
+    )
+
+
+def _scale_finding_row(index: int) -> tuple:
+    return (
+        f"{MARKER}-scale-finding-{index:06d}", "vendor-change", f"synthetic-scale-load-{index % 7}",
+        f"{MARKER}-scale-site-{index:06d}", None,
+        _SCALE_SEVERITIES[index % len(_SCALE_SEVERITIES)], "synthetic finding seeded to measure",
+        "open", _SCALE_RUNGS[index % len(_SCALE_RUNGS)],
+    )
+
+
+def seed_scale(graph_dsn: str, n: int) -> int:
+    """Seed `n` synthetic call sites and `n` findings into `SCALE_REPO_ID`, beside the base
+    fixture rather than instead of it. Returns `n`.
+
+    Batched raw `INSERT`s rather than `upsert_call_site`/`insert_finding`, unlike everywhere
+    else in this module -- those are one round trip per row, and looping them for ten thousand
+    rows is the difference between seconds and minutes. Ids are computed from `index` rather
+    than from content, the same idempotence argument `_checkpoint_id` makes: a fixed id per
+    position converges a second run onto the same rows instead of accumulating a second set,
+    and `ON CONFLICT (id) DO NOTHING` is sufficient because every column a given index produces
+    is itself a deterministic function of that index.
+    """
+    store = GraphStore(graph_dsn)
+    store.apply_schema()
+
+    call_site_rows = [_scale_call_site_row(i) for i in range(n)]
+    finding_rows = [_scale_finding_row(i) for i in range(n)]
+
+    with psycopg.connect(graph_dsn, autocommit=True) as conn:
+        _executemany_values(
+            conn,
+            "INSERT INTO call_site (id, repo_id, path, line, col, vendor_id, operation_id, "
+            "symbol, args_keys, response_fields_read, sdk_version, content_hash, "
+            "loop_depth) VALUES",
+            "ON CONFLICT (id) DO NOTHING",
+            13, call_site_rows,
+        )
+        _executemany_values(
+            conn,
+            "INSERT INTO finding (id, detector, claim, call_site_id, vendor_change_id, "
+            "severity, rationale, status, binding_rung) VALUES",
+            "ON CONFLICT (id) DO NOTHING",
+            9, finding_rows,
+        )
+
+    return n
+
+
+def remove_scale(graph_dsn: str) -> None:
+    """Delete exactly the rows `seed_scale` writes, and nothing the base fixture wrote.
+
+    An exact match on `SCALE_REPO_ID` rather than `remove`'s `LIKE f"{MARKER}%"` -- that pattern
+    also matches `REPO_A`/`REPO_B`, so a `LIKE` here would delete the base fixture's call sites
+    too. `finding.call_site_id REFERENCES call_site (id) ON DELETE CASCADE` removes the scale
+    findings for free, the same reasoning `remove` gives for the base fixture's findings.
+    """
+    with psycopg.connect(graph_dsn, autocommit=True) as conn:
+        conn.execute("DELETE FROM call_site WHERE repo_id = %s", (SCALE_REPO_ID,))
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument(
         "--remove", action="store_true",
         help="delete the seeded rows instead of writing them",
+    )
+    parser.add_argument(
+        "--scale", type=int, metavar="N", default=None,
+        help=(
+            "seed N call sites (and N findings) into a synthetic scale repository, beside the "
+            "base fixture rather than instead of it. Combine with --remove to delete them again "
+            "-- N is not read on removal, only whether the flag is present. Does not affect what "
+            "a plain run with no flags writes."
+        ),
     )
     args = parser.parse_args(argv)
 
@@ -629,6 +767,23 @@ def main(argv: list[str] | None = None) -> int:
 
     _require_dev_dsn(graph_dsn, "SYNC_GRAPH_DSN")
     _require_dev_dsn(checkpointer_dsn, "SYNC_CHECKPOINTER_DSN")
+
+    if args.scale is not None:
+        if args.remove:
+            print(f"removing scale rows tagged '{SCALE_REPO_ID}' from:")
+            print(f"  graph: {_describe(graph_dsn)}")
+            remove_scale(graph_dsn)
+            print("done.")
+            return 0
+
+        print(f"seeding {args.scale} scale call sites tagged '{SCALE_REPO_ID}' into:")
+        print(f"  graph: {_describe(graph_dsn)}")
+        started = _perf_counter()
+        count = seed_scale(graph_dsn, args.scale)
+        elapsed = _perf_counter() - started
+        print(f"wrote {count} call sites and {count} findings in {elapsed:.1f}s.")
+        print(f"run with --scale {args.scale} --remove to delete them.")
+        return 0
 
     if args.remove:
         print(f"removing rows tagged '{MARKER}' from:")

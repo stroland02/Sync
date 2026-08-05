@@ -17,7 +17,7 @@ import os
 import psycopg
 import pytest
 
-from scripts.seed_console import MARKER, remove, seed
+from scripts.seed_console import MARKER, SCALE_REPO_ID, remove, remove_scale, seed, seed_scale
 from sync.dashboard import fleet, graph_views
 from sync.dashboard.queries import workflow_state
 from sync.graph.store import GraphStore
@@ -150,10 +150,11 @@ def test_seeded_binding_surface_has_call_sites_on_a_shared_operation(store):
     vendor_id, operation_id = summary.shared_operation
     result = graph_views.binding_surface(store, vendor_id, operation_id)
 
-    assert len(result["call_sites"]) > 1, (
+    call_sites = result["call_sites"]["items"]
+    assert len(call_sites) > 1, (
         "the binding surface's minimum bar is an operation more than one call site is bound to"
     )
-    repo_ids = {row["repo_id"] for row in result["call_sites"]}
+    repo_ids = {row["repo_id"] for row in call_sites}
     assert len(repo_ids) > 1, "the shared operation should span more than one repository"
 
 
@@ -175,7 +176,7 @@ def test_seeded_observed_calls_include_an_uncorrelated_one(store):
 
     calls = []
     for repo_id in summary.repo_ids:
-        calls.extend(graph_views.observed_telemetry(store, repo_id)["calls"])
+        calls.extend(graph_views.observed_telemetry(store, repo_id)["calls"]["items"])
 
     unresolved = [row for row in calls if row["binding_rung"] == "unresolved"]
     assert unresolved, "seed wrote no uncorrelated observed call"
@@ -202,3 +203,54 @@ def test_remove_without_a_prior_seed_is_a_no_op(store):
     remove(DSN, DSN)
 
     assert _row_counts() == before
+
+
+# --- scale mode --------------------------------------------------------------
+#
+# These test the properties `--scale` promises rather than an exact row count: convergence on a
+# second run, independence from the base fixture, and silence when nobody asked for it. `store`
+# already tears down anything tagged `MARKER` afterwards, and `SCALE_REPO_ID` is `f"{MARKER}-scale"`,
+# so that teardown reaches the scale rows too without a second fixture.
+
+
+def test_scale_seeding_twice_converges_rather_than_doubling(store):
+    seed_scale(DSN, 50)
+    once_call_sites = graph_views.index_coverage(store, SCALE_REPO_ID)["total_call_sites"]
+    once_findings = graph_views.detector_accountability(store)["total_open_findings"]
+
+    seed_scale(DSN, 50)
+
+    assert graph_views.index_coverage(store, SCALE_REPO_ID)["total_call_sites"] == once_call_sites
+    assert graph_views.detector_accountability(store)["total_open_findings"] == once_findings
+
+
+def test_scale_rows_are_removable_without_disturbing_the_base_fixture(store):
+    seed(DSN, DSN)
+    base_repos_before = fleet.repositories(store)
+    base_rungs_before = set()
+    for finding in store.open_findings():
+        site = store.get_call_site(finding.call_site_id)
+        if site.repo_id != SCALE_REPO_ID:
+            base_rungs_before.add(finding.binding_rung)
+
+    seed_scale(DSN, 50)
+    assert SCALE_REPO_ID in fleet.repositories(store)["repo_ids"], "scale seeding wrote no rows"
+
+    remove_scale(DSN)
+
+    assert fleet.repositories(store) == base_repos_before
+    base_rungs_after = set()
+    for finding in store.open_findings():
+        site = store.get_call_site(finding.call_site_id)
+        if site.repo_id != SCALE_REPO_ID:
+            base_rungs_after.add(finding.binding_rung)
+    assert base_rungs_after == base_rungs_before
+    assert len(base_rungs_after) > 1, "the base fixture's own multi-rung assertion should still hold"
+
+
+def test_scale_flag_absent_leaves_the_default_seed_unchanged(store):
+    seed(DSN, DSN)
+
+    result = fleet.repositories(store)
+
+    assert SCALE_REPO_ID not in result["repo_ids"], "seed() without --scale wrote scale rows"
