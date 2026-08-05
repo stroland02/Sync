@@ -20,7 +20,8 @@ stated as directories rather than intentions.
 
 **Subagents.** Dispatched per task by whichever session owns the plan. Fresh context every time,
 carrying a brief file, a report file path, and the interfaces the brief cannot know. One implementer
-at a time per worktree — two implementers in one tree is how a morning gets lost.
+at a time per worktree, **unless they are partitioned by file** — see *Many agents in one tree*
+below. Two implementers who can both reach the same file is how a morning gets lost.
 
 **Workflows.** A scripted fan-out for work that is wide rather than deep: auditing fifteen
 references, sweeping a codebase for a pattern, reviewing along several dimensions at once. Use one
@@ -69,6 +70,48 @@ work was blocked, and every firing still paid for the reading.
 
 **Do not re-dispatch into a limit.** A resumed workflow re-runs its failed agents rather than
 skipping them, so a resume during an outage pays the full price for the same failure twice.
+
+## Many agents in one tree, partitioned by file
+
+Measured on 2026-08-05. Eleven agents built the console's design system in this worktree across
+about seventy minutes and roughly a million tokens, with a console-improvement tick committing
+alongside them the whole time. Nothing collided and nothing was swept. The design is worth copying
+and the parts of it that are load-bearing are not the obvious ones.
+
+**Partition by file, not by task.** The plan had eight tasks and they overlapped on eleven files —
+`app-shell.tsx` belonged to two of them, `card.tsx` to two, `states.tsx` and `provenance.tsx` and
+`error-surface.tsx` and `page-controls.tsx` each to two. Sharding by task would have put two agents
+in one file six times over. Sharding by file instead means each agent owns a disjoint set and
+carries whichever slices of whichever tasks touch it, and the brief states the set explicitly:
+*these files and nothing else, not even a one-line import fix in a file that is obviously wrong.*
+An agent that finds a defect outside its set reports it and leaves it alone.
+
+That inverts the usual instinct, which is to hand an agent a coherent task. A coherent task is
+easier to brief and it is the wrong unit, because the thing two agents actually contend for is a
+file.
+
+**Phase on the dependency, gate serially between phases.** One agent first for whatever everything
+else reads from — here the token layer, which every other agent's work depended on and which no
+amount of parallelism could start before. Then the disjoint sets in parallel. Then a phase for work
+that had to follow them.
+
+**The gate between phases is not optional and it is not about review.** `npm run build` runs
+`tsc -b`, which writes build state, and `vite build`, which writes `dist/`. Two agents running that
+at once corrupt each other. So phase agents verify with `npx tsc --noEmit`, which writes nothing,
+and one serial gate agent per phase runs the real build, fixes the integration breakage that
+inevitably exists — each agent typechecked alone, so a changed component signature only surfaces
+when they meet — and drives the console in a browser. Expect the gate to find something every time.
+It did, twice.
+
+**Every agent commits path-limited.** `git commit -- <paths>`. A bare `git commit` in a shared tree
+sweeps whatever else is staged.
+
+**What the controller must still do by hand.** Rulings the plan left open have to be made and
+committed *before* dispatch, because eleven agents cannot each stop and ask — this fan-out was
+blocked on five owner questions and they were settled into the plan file first, so every agent read
+a decision rather than a question. And the review at the end has to be told where to look: agents
+that each saw only their own files cannot produce a defect that spans two of them, which is exactly
+where the surviving defects live.
 
 ## Reaching the other terminal
 
