@@ -746,7 +746,12 @@ def test_a_forgeless_run_that_would_have_pushed_reports_the_halt():
     assert forge_less["pr_url"] is None
     reason = forge_less["report_reason"]
     assert "without a forge" in reason
-    assert "push_branch" in reason
+    # Both halves, because each fails differently. Dropping the cause leaves "was not pushed"
+    # alone, which reads as a failure and sends an operator looking for one. Naming a node
+    # spends the line on internals that appear on no operator-facing surface, and `cli.py`
+    # renders this verbatim.
+    assert "cannot reach a remote" in reason
+    assert not [node for node in REMOTE_NODES if node in reason]
     # The finding is what an operator is looking at; a reason that names only the harness
     # says nothing about what was left unrepaired.
     assert "response-property-removed" in reason

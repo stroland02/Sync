@@ -23,12 +23,10 @@ from sync.remediate.state import RunState
 
 
 # What a run says when it verified a patch and the assembly it was run by has nowhere to
-# push it. It names the cause rather than the symptom: "not pushed" alone reads as a failure
-# and sends an operator looking for one.
-_NO_FORGE = (
-    "this graph was built without a forge, so it has no push_branch, await_ci or open_pr "
-    "node and no run of it can reach a remote"
-)
+# push it. `cli.py` renders it verbatim to an operator, so it names the cause in terms of the
+# run's configuration: "not pushed" alone reads as a failure and sends an operator looking for
+# one, and a node name is an internal that appears on no surface they can see.
+_NO_FORGE = "this run was configured without a forge, so it cannot reach a remote"
 
 
 def build_graph(store, adapter, remediator, forge, checkpointer, catalogue=None):
