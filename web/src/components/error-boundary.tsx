@@ -9,6 +9,7 @@
 import { Component, type ErrorInfo, type ReactNode } from "react"
 
 import { reportError } from "@/lib/error-log"
+import { Status, statusSurfaceClass } from "@/components/status"
 
 interface Props {
   children: ReactNode
@@ -36,11 +37,8 @@ export class ErrorBoundary extends Component<Props, State> {
     const { error } = this.state
     if (error === null) return this.props.children
     return (
-      <div
-        role="alert"
-        className="rounded border border-destructive bg-destructive/10 p-4 text-destructive"
-      >
-        <p className="font-medium">This part of the console crashed.</p>
+      <div role="alert" className={`rounded border p-4 ${statusSurfaceClass("critical")}`}>
+        <Status tone="critical" label="This part of the console crashed." className="font-medium" />
         <p className="mt-1 text-sm">
           {error.message} — recorded on the error surface above, with the full stack.
         </p>

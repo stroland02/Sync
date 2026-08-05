@@ -185,6 +185,11 @@ function Row({
   )
 }
 
+// A node's evidence boolean is a fact this node recorded about itself — not a verdict on the
+// run. `verifiable` describes the customer's repository, and `verify_ok: false` is often the
+// retry loop sending a patch back, working as designed. `RunOutcome` is what carries the run's
+// disposition, and this reaches for the reserved status palette only there — a node fact earns
+// it only by composing into that outcome, never on its own.
 function Flag({ field, value }: { field: Field; value: unknown }) {
   if (typeof value !== "boolean") {
     return <span className="font-mono">{scalarOrAbsent(value)}</span>
@@ -193,13 +198,7 @@ function Flag({ field, value }: { field: Field; value: unknown }) {
     ? (field.trueLabel ?? "yes")
     : (field.falseLabel ?? "no")
   return (
-    <span
-      className={
-        value
-          ? "rounded border border-border px-1.5 py-0.5 text-meta"
-          : "rounded border border-destructive px-1.5 py-0.5 text-meta text-destructive"
-      }
-    >
+    <span className="rounded border border-border px-1.5 py-0.5 text-meta">
       {value ? "PASS" : "FAIL"} — {wording}
     </span>
   )
