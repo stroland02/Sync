@@ -14,6 +14,7 @@ import { useRuns } from "@/api/queries"
 import type { RunDisposition } from "@/api/types"
 import { PageControls } from "@/components/page-controls"
 import { EmptyState, ErrorState, LoadingState } from "@/components/states"
+import { Formatted } from "@/components/status"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import {
   Table,
@@ -81,18 +82,18 @@ export function RunsCard() {
                           </Link>
                         </TableCell>
                         <TableCell className="font-mono text-body">
-                          {orAbsent(run.current_node)}
+                          <Formatted value={orAbsent(run.current_node)} />
                         </TableCell>
                         <TableCell className="text-body">
                           {describeOutcome(run.outcome)}
                           {run.outcome === "abandoned" && (
                             <div className="mt-1 font-mono text-meta text-muted-foreground">
-                              {orAbsent(run.abandon_reason)}
+                              <Formatted value={orAbsent(run.abandon_reason)} />
                             </div>
                           )}
                         </TableCell>
                         <TableCell className="font-mono text-meta">
-                          {formatElapsed(run.last_checkpoint_at)}
+                          <Formatted value={formatElapsed(run.last_checkpoint_at)} />
                         </TableCell>
                       </TableRow>
                     ))}

@@ -1,8 +1,9 @@
 /**
- * Rendering helpers whose job is to never render a blank where a value is absent.
- *
- * An empty cell reads as "nothing here" when the truth may be "not recorded", and a
- * console that blurs those two is worse than the payload it renders.
+ * Formatting helpers whose job is to never let a caller render a blank where a value is
+ * absent. They format; they do not render. A helper that returned the absence glyph as a
+ * bare string once let two call sites paint it two different colours — this module knows
+ * only `string | null` now, and `<Formatted>` in `@/components/status` is the one place a
+ * `null` becomes ink. There is nothing left for a call site to forget.
  */
 
 import type { BindingSource } from "@/api/types"
@@ -10,14 +11,14 @@ import type { BindingSource } from "@/api/types"
 /** What a missing value looks like. One glyph everywhere, so absence is recognisable. */
 export const ABSENT = "—"
 
-/** A string, or the absence marker. Never an empty cell. */
-export function orAbsent(value: string | null | undefined): string {
-  return value === null || value === undefined || value === "" ? ABSENT : value
+/** A string, or null for absence. Render through `<Formatted>`, never as bare text. */
+export function orAbsent(value: string | null | undefined): string | null {
+  return value === null || value === undefined || value === "" ? null : value
 }
 
-/** An ISO 8601 timestamp in the reader's locale, or the absence marker. */
-export function formatTimestamp(iso: string | null | undefined): string {
-  if (!iso) return ABSENT
+/** An ISO 8601 timestamp in the reader's locale, or null for absence. */
+export function formatTimestamp(iso: string | null | undefined): string | null {
+  if (!iso) return null
   const parsed = new Date(iso)
   return Number.isNaN(parsed.getTime()) ? iso : parsed.toLocaleString()
 }
@@ -29,10 +30,10 @@ export function formatTimestamp(iso: string | null | undefined): string {
  * it describes is still going. The fleet screen's legend carries why that distinction
  * matters for a checkpoint specifically; this function only formats the duration.
  */
-export function formatElapsed(iso: string | null | undefined): string {
-  if (!iso) return ABSENT
+export function formatElapsed(iso: string | null | undefined): string | null {
+  if (!iso) return null
   const parsed = new Date(iso)
-  if (Number.isNaN(parsed.getTime())) return ABSENT
+  if (Number.isNaN(parsed.getTime())) return null
 
   const seconds = Math.max(0, Math.round((Date.now() - parsed.getTime()) / 1000))
   if (seconds < 60) return `${seconds}s ago`

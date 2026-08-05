@@ -10,7 +10,7 @@
 import { AnimatePresence, motion } from "framer-motion"
 import { useEffect, useSyncExternalStore } from "react"
 
-import { Status } from "@/components/status"
+import { Formatted, Status } from "@/components/status"
 import { Button } from "@/components/ui/button"
 import { describeFailure } from "@/lib/describe-failure"
 import {
@@ -64,9 +64,9 @@ function Entry({ entry, onDismiss }: { entry: ErrorEntry; onDismiss: () => void 
         </button>
       </div>
       <p className="mt-1 font-mono text-meta text-ink-muted">
-        {orAbsent(entry.path)}
+        <Formatted value={orAbsent(entry.path)} />
         {entry.status !== undefined ? ` — HTTP ${entry.status}` : ""} —{" "}
-        {formatTimestamp(entry.timestamp)}
+        <Formatted value={formatTimestamp(entry.timestamp)} />
       </p>
       <pre className="mt-1 max-h-32 overflow-auto text-meta whitespace-pre-wrap text-foreground">
         {entry.detail}

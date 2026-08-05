@@ -14,6 +14,7 @@ import { NotFoundError } from "@/api/errors"
 import { useFinding } from "@/api/queries"
 import { ProvenanceStrip, RungBadge } from "@/components/provenance"
 import { ErrorState, LoadingState, NotFoundState } from "@/components/states"
+import { Formatted } from "@/components/status"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import {
   Table,
@@ -133,19 +134,25 @@ function FindingDetail({ findingId }: { findingId: string }) {
                   <dt className="text-meta tracking-wide text-muted-foreground uppercase">
                     Operation
                   </dt>
-                  <dd className="font-mono text-body">{orAbsent(query.data.operation)}</dd>
+                  <dd className="font-mono text-body">
+                    <Formatted value={orAbsent(query.data.operation)} />
+                  </dd>
                 </div>
                 <div>
                   <dt className="text-meta tracking-wide text-muted-foreground uppercase">
                     Symbol
                   </dt>
-                  <dd className="font-mono text-body">{orAbsent(query.data.symbol)}</dd>
+                  <dd className="font-mono text-body">
+                    <Formatted value={orAbsent(query.data.symbol)} />
+                  </dd>
                 </div>
                 <div>
                   <dt className="text-meta tracking-wide text-muted-foreground uppercase">
                     SDK version
                   </dt>
-                  <dd className="font-mono text-body">{orAbsent(query.data.sdk_version)}</dd>
+                  <dd className="font-mono text-body">
+                    <Formatted value={orAbsent(query.data.sdk_version)} />
+                  </dd>
                 </div>
                 <div>
                   <dt className="text-meta tracking-wide text-muted-foreground uppercase">

@@ -14,6 +14,7 @@ import { useVendorChanges } from "@/api/queries"
 import { PageControls } from "@/components/page-controls"
 import { ProvenanceStrip } from "@/components/provenance"
 import { EmptyState, ErrorState, LoadingState } from "@/components/states"
+import { Formatted } from "@/components/status"
 import {
   Table,
   TableBody,
@@ -63,19 +64,24 @@ export function VendorChangesTable({ vendorId }: { vendorId: string }) {
                 >
                   <TableCell className="text-meta">
                     <time dateTime={change.published_at}>
-                      {formatTimestamp(change.published_at)}
+                      <Formatted value={formatTimestamp(change.published_at)} />
                     </time>
                   </TableCell>
-                  <TableCell>{orAbsent(change.change_kind)}</TableCell>
-                  <TableCell>{orAbsent(change.severity)}</TableCell>
-                  <TableCell className="font-mono">
-                    {orAbsent(change.operation)}
+                  <TableCell>
+                    <Formatted value={orAbsent(change.change_kind)} />
+                  </TableCell>
+                  <TableCell>
+                    <Formatted value={orAbsent(change.severity)} />
                   </TableCell>
                   <TableCell className="font-mono">
-                    {orAbsent(change.path_ptr)}
+                    <Formatted value={orAbsent(change.operation)} />
                   </TableCell>
                   <TableCell className="font-mono">
-                    {orAbsent(change.from_version)} → {orAbsent(change.to_version)}
+                    <Formatted value={orAbsent(change.path_ptr)} />
+                  </TableCell>
+                  <TableCell className="font-mono">
+                    <Formatted value={orAbsent(change.from_version)} /> →{" "}
+                    <Formatted value={orAbsent(change.to_version)} />
                   </TableCell>
                 </TableRow>
               ))}

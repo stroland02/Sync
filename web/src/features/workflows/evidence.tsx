@@ -13,7 +13,8 @@
 
 import type { ReactNode } from "react"
 
-import { ABSENT, orAbsent } from "@/lib/format"
+import { Absent, Formatted } from "@/components/status"
+import { orAbsent } from "@/lib/format"
 import { cn } from "@/lib/utils"
 
 type FieldKind = "text" | "flag" | "url" | "block"
@@ -158,8 +159,8 @@ function asScalarText(value: unknown): string | null {
   return null
 }
 
-/** The absence marker unless the value is a non-empty scalar. `orAbsent` owns what absent means. */
-function scalarOrAbsent(value: unknown): string {
+/** The scalar as a string, or null for absence. `orAbsent` owns what absent means; render through `<Formatted>`. */
+function scalarOrAbsent(value: unknown): string | null {
   return orAbsent(asScalarText(value))
 }
 
@@ -192,7 +193,11 @@ function Row({
 // it only by composing into that outcome, never on its own.
 function Flag({ field, value }: { field: Field; value: unknown }) {
   if (typeof value !== "boolean") {
-    return <span className="font-mono">{scalarOrAbsent(value)}</span>
+    return (
+      <span className="font-mono">
+        <Formatted value={scalarOrAbsent(value)} />
+      </span>
+    )
   }
   const wording = value
     ? (field.trueLabel ?? "yes")
@@ -215,12 +220,12 @@ function Block({ value }: { value: unknown }) {
   // "null", which is non-empty and would draw the word `null` inside a box styled as
   // compiler output — a reader could take that for something tsc said.
   if (value === null || value === undefined) {
-    return <span className="text-muted-foreground">{ABSENT}</span>
+    return <Absent />
   }
   const text = asScalarText(value)
   const rendered = text === null ? JSON.stringify(value, null, 2) : text
   if (rendered === undefined || rendered === "") {
-    return <span className="text-muted-foreground">{ABSENT}</span>
+    return <Absent />
   }
   return (
     <pre className="max-h-72 overflow-auto rounded border border-border bg-muted p-2 font-mono text-meta whitespace-pre-wrap">
@@ -233,7 +238,11 @@ function ExternalLink({ value }: { value: unknown }) {
   const href = asHttpUrl(value)
   if (href === null) {
     // Present but not a followable URL — show what the run recorded, do not repair it.
-    return <span className="font-mono text-body">{scalarOrAbsent(value)}</span>
+    return (
+      <span className="font-mono text-body">
+        <Formatted value={scalarOrAbsent(value)} />
+      </span>
+    )
   }
   return (
     <a
@@ -256,7 +265,11 @@ function FieldValue({ field, value }: { field: Field; value: unknown }) {
     case "url":
       return <ExternalLink value={value} />
     case "text":
-      return <span className="font-mono text-body">{scalarOrAbsent(value)}</span>
+      return (
+        <span className="font-mono text-body">
+          <Formatted value={scalarOrAbsent(value)} />
+        </span>
+      )
   }
 }
 

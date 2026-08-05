@@ -13,6 +13,7 @@ import { useVendorFindings } from "@/api/queries"
 import { PageControls } from "@/components/page-controls"
 import { ProvenanceStrip, RungBadge } from "@/components/provenance"
 import { EmptyState, ErrorState, LoadingState } from "@/components/states"
+import { Formatted } from "@/components/status"
 import {
   Table,
   TableBody,
@@ -71,12 +72,14 @@ export function VendorFindingsTable({ vendorId }: { vendorId: string }) {
                     {row.file}:{row.line}
                   </TableCell>
                   <TableCell className="font-mono">
-                    {orAbsent(row.symbol)}
+                    <Formatted value={orAbsent(row.symbol)} />
                   </TableCell>
                   <TableCell className="font-mono">
-                    {orAbsent(row.operation)}
+                    <Formatted value={orAbsent(row.operation)} />
                   </TableCell>
-                  <TableCell>{orAbsent(row.change_kind)}</TableCell>
+                  <TableCell>
+                    <Formatted value={orAbsent(row.change_kind)} />
+                  </TableCell>
                   <TableCell>
                     <Link
                       to={`/findings/${encodeURIComponent(row.finding_id)}`}

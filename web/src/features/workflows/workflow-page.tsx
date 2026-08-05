@@ -16,6 +16,7 @@ import { Link, useParams } from "react-router"
 import { NotFoundError } from "@/api/errors"
 import { isRunTerminal, useWorkflow } from "@/api/queries"
 import { ErrorState, LoadingState, NotFoundState } from "@/components/states"
+import { Formatted } from "@/components/status"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { NodeSequence } from "@/features/workflows/node-sequence"
@@ -58,7 +59,7 @@ function StaleBanner({
     >
       <p>
         Could not refresh. Showing the run as of{" "}
-        {formatTimestamp(new Date(fetchedAt).toISOString())} —{" "}
+        <Formatted value={formatTimestamp(new Date(fetchedAt).toISOString())} /> —{" "}
         {live
           ? "the run is still live, so polling continues in the background and this will clear on its own once a request succeeds."
           : "the run has reached a terminal outcome, so nothing is polling in the background."}

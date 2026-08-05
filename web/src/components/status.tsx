@@ -70,3 +70,15 @@ export function Absent({ children }: { children?: ReactNode }) {
     </span>
   )
 }
+
+/**
+ * A formatted value, or the absence marker when the formatter had nothing to format.
+ *
+ * `orAbsent`, `formatTimestamp` and `formatElapsed` in `@/lib/format` return `string | null`
+ * rather than a glyph, so a call site has no bare string to render by accident and no class
+ * to remember to attach. This is the one place `null` turns into `<Absent>`; everywhere else
+ * a `string | null` from those helpers should pass straight through here.
+ */
+export function Formatted({ value }: { value: string | null }) {
+  return value === null ? <Absent /> : value
+}

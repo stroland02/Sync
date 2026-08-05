@@ -14,7 +14,7 @@
 import type { ReactNode } from "react"
 
 import type { BindingSource, Provenance } from "@/api/types"
-import { Absent } from "@/components/status"
+import { Absent, Formatted } from "@/components/status"
 import { describeRung, formatTimestamp } from "@/lib/format"
 
 /**
@@ -69,14 +69,18 @@ export function ProvenanceStrip({
         {indexed_at === null ? (
           <Absent>{indexedNullLabel}</Absent>
         ) : (
-          <time dateTime={indexed_at}>{formatTimestamp(indexed_at)}</time>
+          <time dateTime={indexed_at}>
+            <Formatted value={formatTimestamp(indexed_at)} />
+          </time>
         )}
       </Field>
       <Field label="Feed fetched at">
         {feed_fetched_at === null ? (
           <Absent>no feed recorded</Absent>
         ) : (
-          <time dateTime={feed_fetched_at}>{formatTimestamp(feed_fetched_at)}</time>
+          <time dateTime={feed_fetched_at}>
+            <Formatted value={formatTimestamp(feed_fetched_at)} />
+          </time>
         )}
       </Field>
       <Field label="Context savings">{`${context_savings.toLocaleString()} tokens`}</Field>
