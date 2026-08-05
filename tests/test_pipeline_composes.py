@@ -238,8 +238,11 @@ def _drive(finding: Finding, repo: RepoRef, store: GraphStore, adapter, remediat
             return state
         if destination == "patch":
             continue
-        # `push_branch` is the decision, and this driver has nothing to push with.
-        state["outcome"] = "verified"
+        # `push_branch` is the decision, and this driver has nothing to push with. Its own key
+        # rather than `RunState["outcome"]`: `Outcome` declares four words and none of them is
+        # this, and `sync.dashboard.queries` reads that key against a three-word finished set,
+        # so a fifth word there renders every run of this driver as one still in flight.
+        state["driver_stopped_at"] = "push_boundary"
         return state
 
 
@@ -293,7 +296,7 @@ def test_a_finding_reaches_a_verified_patch_through_the_real_graph(tmp_path, sto
     """
     state, repo, _ = _verified_run(tmp_path, store)
 
-    assert state["outcome"] == "verified", _why(state)
+    assert state["driver_stopped_at"] == "push_boundary", _why(state)
     assert state["verify_ok"] is True, _why(state)
     source = Path(repo.local_path, "src", "summarise.ts").read_text(encoding="utf-8")
     assert REPLACEMENT in source

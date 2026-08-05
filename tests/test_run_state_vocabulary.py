@@ -44,6 +44,7 @@ from sync.remediate.state import Outcome
 SRC = Path(__file__).resolve().parents[1] / "src" / "sync"
 REMEDIATE = SRC / "remediate"
 MCP = SRC / "mcp"
+TESTS = Path(__file__).resolve().parent
 
 # The pipeline's key alone in `sync.remediate`; both names in `sync.mcp`, where
 # `preview_outcome` rides the state the driver returns and `outcome` is the published
@@ -342,6 +343,37 @@ def _setdefault_key(node: ast.Call, keys: set[str]) -> str | None:
     return node.args[0].value if node.args[0].value in keys else None
 
 
+def _subscript_words(directory: Path, key: str) -> dict[str, list[str]]:
+    """`file:line` to the words each `something[key] = ...` in these modules resolves to.
+
+    The modules themselves and not `fixtures/` beneath them: a fixture is a customer
+    repository this suite hands to an adapter, not a driver writing `RunState`.
+
+    Subscript writes alone, deliberately. The word-set assertions above are scoped to `src/`
+    and should stay there -- run over `tests/` they collect a locally declared `_RunState`
+    with `outcome: str` and a JSON payload with an `outcome` field, neither of which is a
+    write into the pipeline's state. A subscript write is, and there is no ambiguity in it.
+    """
+    trees = {
+        path: ast.parse(path.read_text(encoding="utf-8"))
+        for path in sorted(directory.glob("*.py"))
+    }
+    constants = _constants(trees)
+
+    found: dict[str, list[str]] = {}
+    for path, tree in trees.items():
+        for node in ast.walk(tree):
+            if not isinstance(node, (ast.Assign, ast.AnnAssign, ast.AugAssign)):
+                continue
+            targets = node.targets if isinstance(node, ast.Assign) else [node.target]
+            if not any(_subscript_key(target) == key for target in targets):
+                continue
+            value = None if isinstance(node, ast.AugAssign) else node.value
+            words = _resolve(value, path.stem, constants) if value is not None else set()
+            found[f"{path.name}:{node.lineno}"] = sorted(words)
+    return found
+
+
 def _words_written_to(package: Path, keys: set[str]) -> set[str]:
     """Every word this package writes into one of `keys`."""
     found: set[str] = set()
@@ -477,6 +509,31 @@ def test_no_two_unresolvable_writes_share_a_census_key():
 
     assert not collisions, "these writes cannot be told apart by census key:\n  " + "\n  ".join(
         f"{key} at {', '.join(positions)}" for key, positions in collisions.items()
+    )
+
+
+def test_no_test_writes_a_word_the_pipeline_does_not_declare():
+    """The one violation the `src/`-only scope cannot see, held where it can.
+
+    A test driver writing `state["outcome"]` writes the pipeline's key, and the word it puts
+    there is read by everything downstream that reads a finished run. `sync.dashboard.queries`
+    keys against a three-word finished set, so a fifth word here is a driver whose runs render
+    as still in flight -- and a green suite saying that is the shape of the finding this whole
+    file exists to make impossible.
+    """
+    vocabulary = set(get_args(Outcome))
+    offending = {
+        position: words
+        for position, words in _subscript_words(TESTS, "outcome").items()
+        if not words or set(words) - vocabulary
+    }
+
+    assert not offending, (
+        "these write RunState's outcome key with something Outcome does not declare:\n  "
+        + "\n  ".join(f"{position}: {words or 'nothing this scan can resolve'}"
+                      for position, words in sorted(offending.items())) + "\n"
+        "A run that stopped somewhere the pipeline's vocabulary has no word for wants its own "
+        "key, not a fifth word in this one."
     )
 
 
