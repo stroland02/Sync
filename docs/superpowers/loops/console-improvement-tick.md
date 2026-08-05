@@ -109,6 +109,39 @@ are working in, not the list.
 | Running or hosting the console somewhere | [awesome-selfhosted/awesome-selfhosted](https://github.com/awesome-selfhosted/awesome-selfhosted), [ripienaar/free-for-dev](https://github.com/ripienaar/free-for-dev) |
 | General tooling and operational knowledge | [trimstray/the-book-of-secret-knowledge](https://github.com/trimstray/the-book-of-secret-knowledge) |
 
+## Skills to invoke while building this console
+
+These are installed and apply to console work. Invoke the relevant one before writing code, not
+after, because each changes what you would write rather than reviewing what you wrote.
+
+| Skill | Invoke it when |
+|---|---|
+| `dataviz` | **Before the first line of any chart, plot, stat tile, sparkline, meter or dashboard layout.** `echarts` and `echarts-for-react` are installed and unused; the corpus and benchmark views in the plan are the first real call for them. Read it before choosing a chart form or a colour, not after. |
+| `elements-of-style:writing-clearly-and-concisely` | Writing or revising any words a person reads on screen — an empty state, an error sentence, a node's purpose, a button. The console's honesty argument is carried in its sentences as much as in its data, and this milestone has already shipped two sentences that were false. |
+| `superpowers:test-driven-development` | Any change with a test. The failing test comes first and must be watched failing. |
+| `superpowers:systematic-debugging` | Any bug, failing test, or behaviour you cannot explain — before proposing a fix. |
+| `superpowers-chrome:browsing` | Verifying a change on screen against a running API. Cheaper than reasoning about what a view will do, and this milestone's worst defects were all invisible in the diff. |
+
+`superpowers:brainstorming` comes before any new screen or capability, and `superpowers:writing-plans`
+after it. A tick does not invent a screen; it implements one a plan already argued for.
+
+## The reference notes that apply right now
+
+`docs/superpowers/references/` holds nineteen notes. Three bear on console work as it stands today,
+and the rest are for questions this milestone is not asking:
+
+- **`notes/impeccable-interface-quality.md`** — the checklist to run the console against. This is the
+  one to open on a tick whose item is quality rather than correctness.
+- **`notes/roadmap-frontend-skills.md`** — which frontend concept the console needs next, ordered
+  against what it already does.
+- **`notes/competitor-interfaces.md`** — concepts only, and read `.claude/rules/interface-originality.md`
+  first. Useful for how a run in progress, a refusal, and evidence for a claim are *conceived*, never
+  for how they are drawn.
+
+The engineering notes are mostly backend-facing. Two exceptions earn a look from here:
+`engineering/testing-strategy.md` when writing a test that asserts on the console, and
+`engineering/ci-and-release-engineering.md` when touching the `web` job.
+
 ## The interface is ours
 
 `.claude/rules/interface-originality.md` binds every tick. Competitors are studied for concepts,
