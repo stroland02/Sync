@@ -463,38 +463,41 @@ class GraphStore:
         ).fetchall()
         return {row["vendor_id"]: row["sites"] for row in rows}
 
-    def call_site_last_indexed(self, repo_id: str) -> dict[str, datetime]:
-        """The newest `indexed_at` among current call sites, per vendor, for one repository.
+    def call_site_coverage(self, repo_id: str) -> dict[str, tuple[int, datetime]]:
+        """How many current call sites reach each vendor, and when the newest of them was
+        indexed, for one repository -- both facts read off the same rows in one round trip.
 
-        Same grain as `call_site_counts` -- one repository, retracted rows excluded -- on
-        purpose: a caller reading both by `vendor_id` is reading one population twice rather
-        than reconciling two different definitions of "current," so `index_coverage` composes
-        them with no join of its own.
+        This used to be two separate reads, `call_site_counts` plus a `call_site_last_indexed`
+        that no longer exists, composed by a caller keying one by the other's result. Both
+        queries shared the same `WHERE repo_id = %s AND retracted_at IS NULL GROUP BY vendor_id`,
+        so their key sets agreed only if nothing wrote to `call_site` between the two round
+        trips -- and Postgres's default READ COMMITTED gives every statement its own snapshot,
+        so even wrapping both in one transaction would not have closed the gap. A call site
+        indexed for a vendor between the two reads landed in one result and not the other, and
+        the caller's `{v: last_indexed[v] for v in counts}` raised `KeyError`. One query has one
+        snapshot, so the two facts cannot disagree and there is no key to be missing.
 
-        **A vendor with no call sites is absent, not present with `None`.** `call_site_counts`
-        already carries the reason: absence has two causes this query cannot separate -- the
-        indexer looked and found nothing, or it never looked at all -- and a timestamp attached
-        to an absent vendor would assert the first. This mirrors that rather than resolving it.
+        **A vendor with no call sites is absent from the result, not present with a zero or a
+        `None`.** `call_site_counts`'s own contract is why: that absence has two causes a query
+        cannot separate -- the indexer looked and found nothing, or it never looked because
+        nothing declares which package to look for -- and either a zero count or a null
+        timestamp would assert the first.
 
-        **What the value means, and does not.** It is when the indexer last wrote a row for
-        this vendor in this repository -- not a promise the index is current, and not evidence
-        the code has not changed since. A repository re-scanned three weeks ago reports the
-        same value it reported the day after that scan; only another re-index moves it.
-
-        Retracted rows are excluded for the reason `call_site_counts` excludes them: a call site
-        the last pass stopped finding is not part of what the repository currently has, so its
-        timestamp must not win against a surviving row merely for being newer.
+        Retracted rows are excluded for the same reason `call_site_counts` excludes them: a
+        call site the last pass stopped finding is not part of what the repository currently
+        has, so it must contribute neither to the count nor to the timestamp -- a retracted
+        row's `indexed_at` must not win against a surviving row merely for being newer.
         """
         rows = self._connect().execute(
             """
-            SELECT vendor_id, max(indexed_at) AS last_indexed
+            SELECT vendor_id, count(*) AS sites, max(indexed_at) AS last_indexed
               FROM call_site
              WHERE repo_id = %s AND retracted_at IS NULL
              GROUP BY vendor_id
             """,
             (repo_id,),
         ).fetchall()
-        return {row["vendor_id"]: row["last_indexed"] for row in rows}
+        return {row["vendor_id"]: (row["sites"], row["last_indexed"]) for row in rows}
 
     def get_call_site(self, call_site_id: str) -> CallSite:
         """One call site by id, retracted or not.

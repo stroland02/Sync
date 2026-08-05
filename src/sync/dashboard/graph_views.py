@@ -101,18 +101,24 @@ def index_coverage(store: GraphStore, repo_id: str) -> dict:
     """How many indexed call sites one repository has per vendor, and when the index last wrote
     a row for each.
 
-    Reads `call_site_counts` and `call_site_last_indexed`, both `GraphStore` reads sharing one
-    grain -- one repository, retracted rows excluded -- so a vendor present in one is present in
-    the other and this composes them by `vendor_id` with no SQL of its own.
+    Reads `call_site_coverage`, one `GraphStore` round trip that returns both facts per vendor
+    together. This view used to read `call_site_counts` and a since-removed
+    `call_site_last_indexed` separately and key one by the other's result -- two round trips
+    against the same table have no shared snapshot even inside one transaction, since Postgres's
+    default READ COMMITTED gives every statement its own, so a call site indexed for a vendor
+    between the two reads put that vendor in one result and not the other and the composition
+    raised `KeyError`. One query cannot disagree with itself, so `by_vendor` and `last_indexed`
+    below are built from the same rows and share their key set by construction rather than by
+    the two reads happening to land close enough together.
 
-    `by_vendor` is `call_site_counts` reported unaltered, exactly as before this field existed:
-    the console's `Tally` type (`web/src/api/types.ts`) is `Record<string, number>` and several
-    screens already read this route against that shape, so the count stays a plain int rather
-    than growing a nested object that would break every one of them for a repository this
-    change did not need to touch. `last_indexed` is new and sits beside it, keyed the same way.
+    `by_vendor` reports the same counts `call_site_counts` always did, unaltered: the console's
+    `Tally` type (`web/src/api/types.ts`) is `Record<string, number>` and several screens already
+    read this route against that shape, so the count stays a plain int rather than growing a
+    nested object that would break every one of them for a repository this change did not need
+    to touch. `last_indexed` sits beside it, keyed the same way.
 
     **A vendor with no call sites is absent from both `by_vendor` and `last_indexed` -- no zero
-    count, no null timestamp.** `call_site_counts`'s own contract is that this absence has two
+    count, no null timestamp.** `call_site_coverage`'s own contract is that this absence has two
     causes a query cannot separate: the indexer looked and found nothing, or it never looked
     because nothing declares which package to look for. Either a zero or a null would assert the
     first, so neither is invented here. `sync.signals.reachability` is where that resolution
@@ -120,7 +126,7 @@ def index_coverage(store: GraphStore, repo_id: str) -> dict:
 
     **What `last_indexed` means, and what it does not.** It is when the indexer last wrote a row
     for that vendor in this repository -- the newest `indexed_at` among the call sites
-    `call_site_counts` just counted. It is **not** a promise that the index is current, and it
+    `call_site_coverage` just counted. It is **not** a promise that the index is current, and it
     is **not** evidence the code has not changed since: a repository re-scanned three weeks ago
     reports the same value the day after that scan and every day after, until another re-index
     moves it. A reader who takes it as either has been misled by a field that looks more
@@ -132,15 +138,14 @@ def index_coverage(store: GraphStore, repo_id: str) -> dict:
     silently, while the timestamp it would have come from does not. The console formats the age
     against its own clock; this view hands over the fact it can actually stand behind.
     """
-    counts = store.call_site_counts(repo_id)
-    last_indexed = store.call_site_last_indexed(repo_id)
+    coverage = store.call_site_coverage(repo_id)
     return {
         "repo_id": repo_id,
-        "by_vendor": dict(counts),
+        "by_vendor": {vendor_id: count for vendor_id, (count, _) in coverage.items()},
         "last_indexed": {
-            vendor_id: last_indexed[vendor_id].isoformat() for vendor_id in counts
+            vendor_id: last_indexed.isoformat() for vendor_id, (_, last_indexed) in coverage.items()
         },
-        "total_call_sites": sum(counts.values()),
+        "total_call_sites": sum(count for count, _ in coverage.values()),
     }
 
 

@@ -210,6 +210,24 @@ def test_index_coverage_reports_last_indexed_as_an_iso_string(store):
     datetime.fromisoformat(indexed_at)  # does not raise
 
 
+def test_index_coverage_by_vendor_and_last_indexed_always_share_the_same_keys(store):
+    """`by_vendor` and `last_indexed` are built from one `GraphStore.call_site_coverage` read
+    now, so they cannot disagree about which vendors are present -- there is no second round
+    trip whose result could name a different key set. This is the property that makes the
+    original defect structurally impossible rather than merely unlikely: with one query there
+    is only one snapshot, and nothing else to race against it. That is argued here, not
+    triggered -- reproducing the actual race would mean patching internals to simulate a write
+    landing between two reads, which proves nothing about the real code.
+    """
+    store.upsert_call_site(_site(vendor_id="stripe", path="src/a.ts", line=1))
+    store.upsert_call_site(_site(vendor_id="twilio", operation_id="SendSms", path="src/b.ts", line=2))
+    store.upsert_call_site(_site(vendor_id="sendgrid", operation_id="SendEmail", path="src/c.ts", line=3))
+
+    result = index_coverage(store, "r1")
+
+    assert set(result["by_vendor"]) == set(result["last_indexed"]) == {"stripe", "twilio", "sendgrid"}
+
+
 def test_index_coverage_pairs_the_newest_timestamp_with_its_own_vendor(store):
     """A test that checked `by_vendor` and `last_indexed` independently would pass on an
     implementation that paired one vendor's count with another vendor's timestamp -- so the two
