@@ -21,8 +21,8 @@ export function FleetPage() {
   return (
     <section className="flex flex-col gap-4">
       <Breadcrumbs trail={[{ label: "Fleet" }]} />
-      <h1 className="text-lg font-medium">Fleet</h1>
-      <p className="text-sm text-muted-foreground">
+      <h1 className="text-page">Fleet</h1>
+      <p className="text-body text-muted-foreground">
         Every run the checkpointer holds, the repair record aggregated across all of them,
         and every repository the index has seen. Runs come from the LangGraph checkpointer;
         the repair record and the repository list come from the graph's own tables, read

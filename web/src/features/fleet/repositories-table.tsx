@@ -29,11 +29,11 @@ export function RepositoriesCard() {
       {query.isSuccess && (
         <Card>
           <CardHeader>
-            <CardTitle>
+            <CardTitle className="text-emphasis">
               {query.data.repo_ids.length}{" "}
               {query.data.repo_ids.length === 1 ? "repository" : "repositories"} indexed
             </CardTitle>
-            <CardDescription>
+            <CardDescription className="text-body">
               Every repository the API Dependency Graph holds at least one call site from.
               A repository that was configured but never indexed has no row here — the same
               absence as one that was never configured at all, because the index cannot
@@ -50,13 +50,13 @@ export function RepositoriesCard() {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Repository</TableHead>
+                    <TableHead className="text-meta">Repository</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {query.data.repo_ids.map((repoId) => (
                     <TableRow key={repoId}>
-                      <TableCell className="font-mono text-xs">{repoId}</TableCell>
+                      <TableCell className="font-mono text-body">{repoId}</TableCell>
                     </TableRow>
                   ))}
                 </TableBody>

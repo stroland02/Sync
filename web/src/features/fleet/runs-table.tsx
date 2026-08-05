@@ -43,10 +43,10 @@ export function RunsCard() {
       {query.isSuccess && (
         <Card>
           <CardHeader>
-            <CardTitle>
+            <CardTitle className="text-emphasis">
               {query.data.total} {query.data.total === 1 ? "run" : "runs"}
             </CardTitle>
-            <CardDescription>
+            <CardDescription className="text-body">
               One row per checkpoint thread, not one per finding — a finding retried across
               generations writes a new thread each generation, and each generation is its
               own row here.
@@ -63,16 +63,16 @@ export function RunsCard() {
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>Finding</TableHead>
-                      <TableHead>Node the graph owes</TableHead>
-                      <TableHead>Outcome</TableHead>
-                      <TableHead>Last checkpoint</TableHead>
+                      <TableHead className="text-meta">Finding</TableHead>
+                      <TableHead className="text-meta">Node the graph owes</TableHead>
+                      <TableHead className="text-meta">Outcome</TableHead>
+                      <TableHead className="text-meta">Last checkpoint</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {query.data.items.map((run) => (
                       <TableRow key={run.thread_id}>
-                        <TableCell className="font-mono text-xs">
+                        <TableCell className="font-mono text-body">
                           <Link
                             to={`/findings/${encodeURIComponent(run.finding_id)}/workflow`}
                             className="underline underline-offset-2"
@@ -80,18 +80,18 @@ export function RunsCard() {
                             {run.finding_id}
                           </Link>
                         </TableCell>
-                        <TableCell className="font-mono text-xs">
+                        <TableCell className="font-mono text-body">
                           {orAbsent(run.current_node)}
                         </TableCell>
-                        <TableCell>
+                        <TableCell className="text-body">
                           {describeOutcome(run.outcome)}
                           {run.outcome === "abandoned" && (
-                            <div className="mt-1 font-mono text-xs text-muted-foreground">
+                            <div className="mt-1 font-mono text-meta text-muted-foreground">
                               {orAbsent(run.abandon_reason)}
                             </div>
                           )}
                         </TableCell>
-                        <TableCell className="font-mono text-xs">
+                        <TableCell className="font-mono text-meta">
                           {formatElapsed(run.last_checkpoint_at)}
                         </TableCell>
                       </TableRow>
@@ -110,7 +110,7 @@ export function RunsCard() {
               </>
             )}
 
-            <p className="border-t border-border pt-3 text-sm text-muted-foreground">
+            <p className="border-t border-border pt-3 text-body text-muted-foreground">
               There is no heartbeat and no process registry — the only evidence a run exists
               is a checkpoint row, and "last checkpoint" is staleness, not liveness. A run
               parked at <code className="font-mono">await_ci</code> blocks inside that node
