@@ -491,8 +491,44 @@ values above.
 `ink` on each tint: good 12.16, warning 12.05, serious 12.30, critical 12.60, brand 12.66.
 `brand` on `brand-surface` 7.00. `primary-foreground` on `primary` 9.48.
 
+**The two tables above enumerate declared tokens, not rendered pixels.** Most of the console
+composes exactly what they say — a solid ink on a solid surface — and for those the tables are the
+whole story. But a component that blends a token through an alpha modifier (`bg-x/10`, `text-y/70`)
+or inherits an ink through a wrapper renders a colour no token table contains, and only checking the
+class names would miss it. The pairings below were read from a running instance — `getComputedStyle`
+on the actual element, not the source — and the alpha ones were confirmed against sampled rendered
+pixels, because Chrome composites `background-color` alpha in gamma-encoded sRGB, not in linear
+light; blending the same two colours in linear light and gamma space gives visibly different
+answers, and only the gamma one matches what the screen shows.
+
+### Composed pairings, rendered
+
+| Composition | Light | Dark |
+|---|---|---|
+| `ink` on `surface-subtle/50` over the card (a hovered/selected table row) | 17.14 | 14.80 |
+| `foreground` on `input/30` (outline button, resting — dark only, no light-mode alpha) | — | 12.09 |
+| `foreground` on `input/50` (outline button, hover — dark only) | — | 8.70 |
+| `primary-foreground` on `bg-primary` mixed 15% toward `foreground` (default button, hover) | 8.46 | 10.37 |
+| `secondary-foreground` on `bg-secondary` mixed 5% toward `foreground` (secondary button, hover) | 14.46 | 12.38 |
+| `critical-ink` on `bg-critical-surface` (destructive button, resting) | 5.58 | 5.44 |
+| `critical-ink` on `bg-critical-surface` mixed 25% toward the surface extreme (destructive button, hover) | 5.76 | 6.02 |
+
+Every rendered composition found still clears the 5.05 floor, and the lowest of them (5.44) sits
+above the declared-token worst case below — so "worst pairing anywhere" stays true once "anywhere"
+is checked against what actually renders, not assumed from it.
+
+**Two of these rows document a fix, not a finding that stood.** `button.tsx`'s `default` variant
+hover was `hover:bg-primary/80` — a wash toward whatever sits behind the button — which measured
+**4.49:1 on a card and 4.61:1 on the page**, both below the floor, in a variant no screen used yet.
+`destructive` was worse: `bg-destructive/10` and its `/20` hover measured as low as **4.18–4.97**
+depending on mode and backdrop. Both were rewritten to compose against a fixed reference —
+`color-mix(…, var(--color-foreground) 15%)` for `default`, and the already-verified
+`critical-surface`/`critical-ink` pair for `destructive` — so the result no longer depends on
+whatever the button happens to sit on. The rows above are what those variants render now.
+
 **Worst pairing anywhere: 5.21:1**, `ink-muted` on `surface-emphasis` in light mode. Above the
-5.05 floor, and above WCAG AA for body text.
+5.05 floor, and above WCAG AA for body text. Verified, not merely declared: the lowest composed
+pairing found by rendering the tree is 5.44, so 5.21 remains the true minimum.
 
 ### Non-text, against the 3:1 floor
 
