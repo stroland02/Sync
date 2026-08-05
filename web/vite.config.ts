@@ -12,4 +12,10 @@ export default defineConfig({
     // will not have.
     proxy: { "/api": { target: "http://127.0.0.1:8787", changeOrigin: true } },
   },
+  build: {
+    // echarts is lazy-loaded into its own chunk (see corpus-summary.tsx) so it
+    // never lands in the initial bundle; the default 500kB warning still fires
+    // on that chunk alone because echarts itself is that large minified.
+    chunkSizeWarningLimit: 1200,
+  },
 })

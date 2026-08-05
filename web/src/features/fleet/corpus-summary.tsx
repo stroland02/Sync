@@ -8,6 +8,8 @@
  * this table.
  */
 
+import { lazy, Suspense } from "react"
+
 import { useCorpus } from "@/api/queries"
 import type { Tally } from "@/api/types"
 import { EmptyState, ErrorState, LoadingState } from "@/components/states"
@@ -20,7 +22,13 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
-import { CorpusChart } from "@/features/fleet/corpus-chart"
+
+// Lazy so echarts and echarts-for-react — the corpus chart's only heavy
+// dependency — land in their own chunk instead of the console's initial
+// bundle.
+const CorpusChart = lazy(() =>
+  import("@/features/fleet/corpus-chart").then((mod) => ({ default: mod.CorpusChart })),
+)
 
 function TallyTable({ heading, tally }: { heading: string; tally: Tally }) {
   const entries = Object.entries(tally).sort(([a], [b]) => a.localeCompare(b))
@@ -74,7 +82,9 @@ export function CorpusSummaryCard() {
               />
             ) : (
               <>
-                <CorpusChart data={query.data} />
+                <Suspense fallback={null}>
+                  <CorpusChart data={query.data} />
+                </Suspense>
                 <div className="grid gap-4 sm:grid-cols-3">
                   <TallyTable heading="By disposition" tally={query.data.by_terminal_status} />
                   <TallyTable heading="By strategy" tally={query.data.by_strategy} />
