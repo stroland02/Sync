@@ -208,6 +208,43 @@ real checkpoint and `migration_outcome` rows to the configured database, opens n
 covered by a test that watches the rows arrive. Whether the fabricated pull-request number counts
 up across runs is a question for whoever consumes it.
 
+**Task 2 of the dogfooding plan has landed** — the merge above `cc35120`. `build_graph` now accepts
+`forge=None` and omits `push_branch`, `await_ci` and `open_pr` from the compiled graph rather than
+guarding them at runtime, and a verified patch with nowhere to push routes `replay → report` and
+records `terminal_status="halted"`. Two facts that came out of it and are worth carrying:
+
+- **Before it, `forge=None` did not crash — it abandoned.** `None.push_branch(...)` raised inside
+  the node's own handler, which set `fatal` and routed to `abandon`. So anyone who ran forge-less
+  got a plausible-looking `abandoned` run with a Python traceback fragment in `abandon_reason`.
+- **`"halted"` is a fourth `terminal_status`**, alongside `retried`, `opened` and `abandoned`. The
+  column is plain `TEXT` with no `CHECK`, and `benchmark.axes` branches on `"abandoned"` alone, so a
+  halted row lands in `counts.attempts` and in `routing_accuracy` and is excluded from every merge
+  rate. Additive, no migration. It touches the run-state vocabulary spec, which the console session
+  owns.
+
+What remains for B78 is the entry point itself — Task 3 and the tasks below it.
+
+### B79 — a rehearsal row and a production row collide on the corpus natural key
+
+`migration_outcome` is upserted on `(finding_id, attempt_index)` with `ON CONFLICT DO NOTHING`
+(`store.py:546`). That clause is the idempotence guarantee the pipeline discipline requires and is
+not the defect.
+
+The defect is that a run has no identity in that key. A forge-less rehearsal writes
+`(f, 1, halted, pr_number=NULL)`; if the same finding at the same attempt index is later run with a
+forge against the same database, `open_pr`'s `(f, 1, opened, pr_number=1)` is dropped silently and
+that pull request never enters `merge_rate` or `counts.pull_requests_opened`.
+
+Pre-existing rather than introduced — before the Task 2 merge the same path wrote
+`(f, 1, abandoned)` — but B78's whole point is to make rehearsal runs routine, which turns a
+theoretical collision into an expected one. It bites only when a rehearsal and a production run
+share a database and a finding id.
+
+**Closes when:** either a rehearsal's rows are distinguishable from a production run's at the grain
+the corpus declares, or `schema.sql` states as a comment why sharing a database between the two is
+not supported and something refuses it. Deciding which is the work; do not change the conflict
+clause.
+
 ### B76 — three small truths about how this CLI reads files, left over from B73
 
 Recorded rather than folded into B73, because each is a decision and none is a typo.
@@ -236,8 +273,10 @@ sees `ValueError`-spelled chains or says in its own text that it cannot.
 
 ## In flight
 
-- **B76** — branch `b76-cli-read-truths`, worktree `m1-static-gate`.
-- **B77** — branch `b77-keep-the-red`, worktree `m1-forge`.
+- **B77** — branch `b77-keep-the-red`, worktree `m1-forge`. Its session died mid-task: the branch
+  carries one commit, an uncommitted `tests/test_red_run_capture.py`, and an untracked `red-runs/`
+  at the worktree root — which is the exact failure mode its own brief said not to introduce. Needs
+  finishing or reverting; do not dispatch a second worker at it without reading that tree first.
 
 Both dispatched through the Agent tool with the brief written to a file in the worktree's `.claude/`
 and the path handed over. Orca dispatch is still not delivering — see HANDOFF.md — and every agent
