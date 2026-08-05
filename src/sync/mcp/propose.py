@@ -71,7 +71,7 @@ def run_to_static_verify(
     adapter: Any,
     remediator: Any,
     catalogue: Any = None,
-) -> RunState:
+) -> PreviewState:
     """Drive `locate -> prepare -> patch -> static_verify` under the pipeline's own routing.
 
     The retry loop between `patch` and `static_verify` is the pipeline's, including its
@@ -87,7 +87,7 @@ def run_to_static_verify(
     patch = make_patch(remediator)
     static_verify = make_static_verify(adapter)
 
-    state: RunState = {"finding": finding, "repo": repo}
+    state: PreviewState = {"finding": finding, "repo": repo}
 
     state.update(locate(state))
     if route_after_locate(state) == "abandon":
@@ -120,6 +120,6 @@ def run_to_static_verify(
             return _finish(state, PROPOSED)
 
 
-def _finish(state: RunState, outcome: str) -> RunState:
-    state["outcome"] = outcome
+def _finish(state: PreviewState, outcome: PreviewOutcome) -> PreviewState:
+    state["preview_outcome"] = outcome
     return state

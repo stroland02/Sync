@@ -321,7 +321,7 @@ class GraphSurface:
         return self._envelope(
             {
                 "finding_id": finding_id,
-                "outcome": state["outcome"],
+                "outcome": state["preview_outcome"],
                 "diff": patch.diff if patch else None,
                 "strategy": patch.strategy if patch else None,
                 # `passed` rather than `ok`: the spec names this field, and an agent composes

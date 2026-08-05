@@ -106,7 +106,7 @@ def _run(*, verdicts, diffs, store=None):
 
 def test_a_verified_patch_comes_back_proposed_with_its_diff():
     state, _, _ = _run(verdicts=[VerifyResult(ok=True)], diffs=["--- a/src/pay.ts\n+++ b/src/pay.ts\n"])
-    assert state["outcome"] == PROPOSED
+    assert state["preview_outcome"] == PROPOSED
     assert state["patch"].diff.startswith("--- a/src/pay.ts")
     assert state["verify_ok"] is True
 
@@ -131,7 +131,7 @@ def test_a_patch_that_fails_typechecking_retries_and_then_reports_unverified():
         verdicts=[VerifyResult(ok=False, diagnostics="TS2339")] * 3,
         diffs=["diff-1", "diff-2", "diff-3"],
     )
-    assert state["outcome"] == UNVERIFIED
+    assert state["preview_outcome"] == UNVERIFIED
     assert remediator.calls == ["propose"] * 3
     assert adapter.calls == ["prepare", "static_verify", "static_verify", "static_verify"]
     assert "TS2339" in state["diagnostics"]
@@ -163,7 +163,7 @@ def test_a_finding_whose_change_cannot_be_loaded_is_blocked_rather_than_raising(
             raise KeyError("gone")
 
     state, adapter, remediator = _run(verdicts=[], diffs=[], store=Broken())
-    assert state["outcome"] == BLOCKED
+    assert state["preview_outcome"] == BLOCKED
     assert remediator.calls == []
     assert adapter.calls == []
 
@@ -181,7 +181,7 @@ def test_a_checkout_that_cannot_be_prepared_is_blocked_before_any_patch_is_attem
     state = run_to_static_verify(
         _finding(), REPO, store=FakeStore(), adapter=adapter, remediator=remediator
     )
-    assert state["outcome"] == BLOCKED
+    assert state["preview_outcome"] == BLOCKED
     assert remediator.calls == []
     assert "pnpm" in state["diagnostics"]
 
@@ -194,7 +194,7 @@ def test_a_remediator_that_produces_nothing_does_not_reach_verification():
     to verify -- and a no-op diff that reached it would typecheck clean and look like success.
     """
     state, adapter, remediator = _run(verdicts=[], diffs=["", "   ", "\n"])
-    assert state["outcome"] == UNVERIFIED
+    assert state["preview_outcome"] == UNVERIFIED
     assert remediator.calls == ["propose"] * 3
     assert adapter.calls == ["prepare"]
     assert state["patch"] is None
@@ -217,7 +217,7 @@ def test_verification_that_could_not_run_is_blocked_rather_than_retried():
     state = run_to_static_verify(
         _finding(), REPO, store=FakeStore(), adapter=adapter, remediator=remediator
     )
-    assert state["outcome"] == BLOCKED
+    assert state["preview_outcome"] == BLOCKED
     assert adapter.calls == ["prepare", "static_verify"]
     assert remediator.calls == ["propose"]
 
@@ -257,7 +257,7 @@ def test_a_change_the_table_says_needs_no_patch_never_reaches_the_patch_node():
         _finding(), REPO, store=LifecycleStore(), adapter=adapter, remediator=remediator,
         catalogue={"sunset-deleted": {"id": "sunset-deleted", "kind": "lifecycle"}},
     )
-    assert state["outcome"] == NO_PATCH_WARRANTED
+    assert state["preview_outcome"] == NO_PATCH_WARRANTED
     assert state["tier"] == -1
     assert remediator.calls == []
 
