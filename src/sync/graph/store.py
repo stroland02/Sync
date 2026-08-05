@@ -799,6 +799,21 @@ class GraphStore:
         ).fetchall()
         return [ObservedErrorWindow(**row) for row in rows]
 
+    def repo_ids(self) -> list[str]:
+        """Every repository the index has seen, sorted.
+
+        `DISTINCT repo_id` over `call_site`, retracted rows included. That is what lets a
+        repository whose every finding has closed still appear -- `open_findings` cannot, since
+        it filters on finding status rather than on the repository. **What this cannot see:** a
+        repository that was configured but never indexed has no call site row at all, so it is
+        absent here exactly as it is absent from the graph -- indistinguishable from a
+        repository that was never configured in the first place.
+        """
+        rows = self._connect().execute(
+            "SELECT DISTINCT repo_id FROM call_site ORDER BY repo_id"
+        ).fetchall()
+        return [row["repo_id"] for row in rows]
+
     def observed_shapes(
         self, vendor_id: str, operation_id: str, *, traffic_only: bool = True
     ) -> list[ObservedShape]:

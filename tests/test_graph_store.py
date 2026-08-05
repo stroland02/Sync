@@ -476,6 +476,22 @@ def test_a_removal_does_not_reach_the_window_beside_the_one_it_was_given(store):
     assert [(row.window_start, row.window_end) for row in rows] == [(_HOUR_15, _HOUR_16)]
 
 
+def test_repo_ids_lists_every_repository_the_index_has_seen(store):
+    """`repo_ids` is `DISTINCT repo_id` over `call_site`, which is what makes it see a
+    repository even when every one of its findings has closed -- `open_findings` cannot,
+    because it filters on finding status and joins away nothing about the repository itself.
+    """
+    store.upsert_call_site(_site(repo_id="r-a"))
+    store.upsert_call_site(_site(repo_id="r-b", path="src/sms.ts", content_hash="hash-b"))
+    store.upsert_call_site(_site(repo_id="r-a", path="src/other.ts", content_hash="hash-c"))
+
+    assert store.repo_ids() == ["r-a", "r-b"]
+
+
+def test_repo_ids_of_an_empty_graph_is_empty_not_an_error(store):
+    assert store.repo_ids() == []
+
+
 def test_a_removal_reports_how_many_rows_it_took_out(store):
     """The count has a caller: an ingest that wrote nothing and deleted three rows reads exactly
     like one that held nothing for this vendor, and the operator sees only the writes. Scoped the
