@@ -22,6 +22,7 @@ import { NodeSequence } from "@/features/workflows/node-sequence"
 import { RunOutcome } from "@/features/workflows/run-outcome"
 import { Breadcrumbs } from "@/layouts/breadcrumbs"
 import { UnknownRoute } from "@/layouts/unknown-route"
+import { formatTimestamp } from "@/lib/format"
 
 export function WorkflowPage() {
   // The identifier comes out of the URL, so it is checked before a request is made for it.
@@ -30,9 +31,57 @@ export function WorkflowPage() {
   return <Workflow findingId={findingId} />
 }
 
+/**
+ * A background refetch failed, but the last good run is still in hand.
+ *
+ * React Query keeps `data` across a failed refetch, so the honest move is to keep showing
+ * it rather than swap the screen for an alarm the reviewer would read as "the run broke" —
+ * it is the console's refresh that broke, not the run. Whether the view heals itself differs
+ * by case: a live run is still being polled and the next successful hit clears this on its
+ * own, but a terminal run has no background poll left to do that, so it gets the retry.
+ */
+function StaleBanner({
+  fetchedAt,
+  live,
+  isFetching,
+  onRetry,
+}: {
+  fetchedAt: number
+  live: boolean
+  isFetching: boolean
+  onRetry: () => void
+}) {
+  return (
+    <div
+      role="status"
+      className="rounded border border-border bg-muted p-3 text-sm text-muted-foreground"
+    >
+      <p>
+        Could not refresh. Showing the run as of{" "}
+        {formatTimestamp(new Date(fetchedAt).toISOString())} —{" "}
+        {live
+          ? "the run is still live, so polling continues in the background and this will clear on its own once a request succeeds."
+          : "the run has reached a terminal outcome, so nothing is polling in the background."}
+      </p>
+      {!live && (
+        <Button
+          variant="outline"
+          size="sm"
+          className="mt-2"
+          disabled={isFetching}
+          onClick={onRetry}
+        >
+          {isFetching ? "Asking…" : "Check again"}
+        </Button>
+      )}
+    </div>
+  )
+}
+
 function Workflow({ findingId }: { findingId: string }) {
   const query = useWorkflow(findingId)
-  const terminal = isRunTerminal(query.data)
+  const data = query.data
+  const terminal = isRunTerminal(data)
 
   return (
     <section className="flex flex-col gap-4">
@@ -47,7 +96,8 @@ function Workflow({ findingId }: { findingId: string }) {
 
       {query.isPending && <LoadingState what={`the run for finding ${findingId}`} />}
 
-      {query.isError &&
+      {data === undefined &&
+        query.isError &&
         (query.error instanceof NotFoundError ? (
           <div className="flex flex-col items-start gap-3">
             <NotFoundState
@@ -68,12 +118,18 @@ function Workflow({ findingId }: { findingId: string }) {
           <ErrorState error={query.error} what={`the run for finding ${findingId}`} />
         ))}
 
-      {query.isSuccess && (
+      {data !== undefined && (
         <>
-          <RunOutcome
-            outcome={query.data.outcome}
-            abandonReason={query.data.abandon_reason}
-          />
+          {query.isError && (
+            <StaleBanner
+              fetchedAt={query.dataUpdatedAt}
+              live={!terminal}
+              isFetching={query.isFetching}
+              onRetry={() => void query.refetch()}
+            />
+          )}
+
+          <RunOutcome outcome={data.outcome} abandonReason={data.abandon_reason} />
 
           <Card>
             <CardHeader>
@@ -86,7 +142,7 @@ function Workflow({ findingId }: { findingId: string }) {
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <NodeSequence nodes={query.data.nodes} terminal={terminal} />
+              <NodeSequence nodes={data.nodes} terminal={terminal} />
             </CardContent>
           </Card>
 

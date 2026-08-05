@@ -15,7 +15,7 @@ import {
   fetchVendorFindings,
   fetchWorkflow,
 } from "@/api/client"
-import type { ChangeParams, PageParams } from "@/api/client"
+import type { PageParams } from "@/api/client"
 import type { WorkflowState } from "@/api/types"
 
 export function useOverview() {
@@ -34,13 +34,12 @@ export function useVendorFindings(vendorId: string, params: PageParams = {}) {
   })
 }
 
-export function useVendorChanges(vendorId: string, params: ChangeParams = {}) {
+export function useVendorChanges(vendorId: string, params: PageParams = {}) {
   const limit = params.limit ?? DEFAULT_LIMIT
   const offset = params.offset ?? 0
-  const since = params.since
   return useQuery({
-    queryKey: ["vendors", vendorId, "changes", limit, offset, since ?? null],
-    queryFn: ({ signal }) => fetchVendorChanges(vendorId, { limit, offset, since }, signal),
+    queryKey: ["vendors", vendorId, "changes", limit, offset],
+    queryFn: ({ signal }) => fetchVendorChanges(vendorId, { limit, offset }, signal),
   })
 }
 

@@ -30,11 +30,6 @@ export interface PageParams {
   offset?: number
 }
 
-export interface ChangeParams extends PageParams {
-  /** ISO 8601. The transport compares it as a string against `detected_at`. */
-  since?: string
-}
-
 async function getJson<T>(path: string, signal?: AbortSignal): Promise<T> {
   let response: Response
   try {
@@ -70,11 +65,10 @@ async function readNotFoundBody(response: Response, path: string): Promise<NotFo
   }
 }
 
-function withPageParams(path: string, params: ChangeParams): string {
+function withPageParams(path: string, params: PageParams): string {
   const query = new URLSearchParams()
   if (params.limit !== undefined) query.set("limit", String(params.limit))
   if (params.offset !== undefined) query.set("offset", String(params.offset))
-  if (params.since !== undefined) query.set("since", params.since)
   const rendered = query.toString()
   return rendered ? `${path}?${rendered}` : path
 }
@@ -94,7 +88,7 @@ export function fetchVendorFindings(
 
 export function fetchVendorChanges(
   vendorId: string,
-  params: ChangeParams,
+  params: PageParams,
   signal?: AbortSignal,
 ): Promise<Page<VendorChangeRow>> {
   const path = withPageParams(

@@ -35,6 +35,8 @@ export function describeRung(rung: BindingSource): string {
       return "an observation that correlated to nothing"
     case "unattributed":
       return "recorded before the rung was tracked"
+    default:
+      return "a rung this console does not recognise — the provenance vocabulary has changed since this view was written"
   }
 }
 
