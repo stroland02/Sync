@@ -65,18 +65,43 @@ function labelInkFor(fill: string, ink: string): string {
  */
 const INLINE_LABEL_SHARE_FLOOR = 0.15
 
+/**
+ * Disposition -> series slot, keyed on the value itself rather than where it lands in the
+ * sorted tally, so a colour is the segment's identity and not its alphabetical rank.
+ * `sync.remediate.nodes` writes exactly three `terminal_status` literals — "retried"
+ * (nodes.py:217), "opened" (nodes.py:571), "abandoned" (nodes.py:653) — and
+ * `sync.dashboard.fleet._grouped` synthesises "null" for a row whose column was never
+ * written; check this table against those four call sites before changing it.
+ *
+ * "opened" and "abandoned" are the pair an operator most needs to tell apart at a glance —
+ * a repair that landed versus one Sync gave up on — so they sit five slots apart in the
+ * fixed series order rather than next to each other. Neither takes the green or red slot:
+ * `DESIGN.md`'s series palette is identity, not a verdict, the same rule `run-outcome.tsx:21-23`
+ * applies to this same field, and an abandoned run is not an error.
+ */
+const DISPOSITION_SLOT: Record<string, number> = {
+  opened: 0, // slot 1, aqua — the disposition that closes the loop
+  retried: 1, // slot 2, orange — still in motion, not yet opened or abandoned
+  null: 2, // slot 3, blue — never written on purpose; a data gap, not an outcome
+  abandoned: 4, // slot 5, magenta — held far from "opened" on purpose, see above
+}
+
+// A disposition outside the vocabulary above — none exist today — lands here instead of
+// displacing one of the four known slots. Fixed regardless of how many such values ever
+// show up, so a fifth value cannot renumber the ones already on screen.
+const OTHER_SLOT = 6 // slot 7, violet
+
 function buildDispositionOption(tally: Tally, tokens: ChartTokens) {
-  // Alphabetical, matching the `TallyTable` sort below it — a reader comparing the
-  // chart to the table finds the same order in both. Not hardcoded to the three
-  // known values, so a disposition this view has never seen still gets a slot
-  // instead of being dropped.
+  // Alphabetical, matching the `TallyTable` sort below it — a reader comparing the chart to
+  // the table finds the same order in both. This governs layout only; colour comes from
+  // `DISPOSITION_SLOT` and does not depend on this order or on what else is present.
   const entries = Object.entries(tally).sort(([a], [b]) => a.localeCompare(b))
   const total = entries.reduce((sum, [, count]) => sum + count, 0)
 
   const series = entries.map(([name, count], index) => {
     const isFirst = index === 0
     const isLast = index === entries.length - 1
-    const color = tokens.series[index % tokens.series.length]
+    const color = tokens.series[DISPOSITION_SLOT[name] ?? OTHER_SLOT]
     const share = total === 0 ? 0 : count / total
 
     return {
