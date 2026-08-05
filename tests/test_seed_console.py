@@ -82,29 +82,30 @@ def test_seeded_repos_and_vendors_carry_the_marker(store):
 def test_seeded_findings_span_more_than_one_binding_rung(store):
     summary = seed(DSN, DSN)
 
+    # `sync.dashboard.queries.vendor_detail` used to do this join; read straight off the
+    # graph now that nothing else routes through that view model.
     rungs = set()
-    for vendor_id in summary.vendor_ids:
-        from sync.dashboard.queries import vendor_detail
-
-        detail = vendor_detail(store, vendor_id)
-        rungs.update(f["binding_rung"] for f in detail["findings"])
+    for finding in store.open_findings():
+        site = store.get_call_site(finding.call_site_id)
+        if site.vendor_id in summary.vendor_ids:
+            rungs.add(finding.binding_rung)
 
     assert len(rungs) > 1, f"every seeded finding shares one rung: {rungs}"
 
 
 def test_seeded_finding_detail_has_args_keys_and_a_known_change(store):
-    from sync.dashboard.queries import finding_detail
-
     summary = seed(DSN, DSN)
 
-    detail = finding_detail(store, summary.detailed_finding_id)
-    assert detail is not None
-    assert detail["change"] is not None, "the detail-screen finding has no known change"
+    # `sync.dashboard.queries.finding_detail` used to fan this out; read straight off the
+    # graph now that nothing else routes through that view model.
+    finding = next(
+        (f for f in store.open_findings() if f.id == summary.detailed_finding_id), None
+    )
+    assert finding is not None, "the detail-screen finding is not open in the graph"
+    assert finding.vendor_change_id is not None, "the detail-screen finding has no known change"
+    store.get_vendor_change(finding.vendor_change_id)  # raises KeyError if the change is gone
 
-    # `_shallow_site` (queries.py) deliberately does not project args_keys/response_fields_read,
-    # so the underlying claim -- that the site carries them -- is checked against the model
-    # `finding_detail`'s site id names, through the store's own read rather than raw SQL.
-    site = store.get_call_site(detail["site"]["id"])
+    site = store.get_call_site(finding.call_site_id)
     assert site.args_keys, "the detail-screen finding's call site has no args_keys"
     assert site.response_fields_read, (
         "the detail-screen finding's call site has no response_fields_read"
