@@ -67,8 +67,8 @@ export function VendorChangesTable({ vendorId }: { vendorId: string }) {
                       {formatTimestamp(change.published_at)}
                     </time>
                   </TableCell>
-                  <TableCell>{change.change_kind}</TableCell>
-                  <TableCell>{change.severity}</TableCell>
+                  <TableCell>{orAbsent(change.change_kind)}</TableCell>
+                  <TableCell>{orAbsent(change.severity)}</TableCell>
                   <TableCell className="font-mono text-xs">
                     {orAbsent(change.operation)}
                   </TableCell>

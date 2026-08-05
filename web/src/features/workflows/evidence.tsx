@@ -216,12 +216,12 @@ function Block({ value }: { value: unknown }) {
   // "null", which is non-empty and would draw the word `null` inside a box styled as
   // compiler output — a reader could take that for something tsc said.
   if (value === null || value === undefined) {
-    return <span className="text-muted-foreground">{ABSENT} nothing recorded</span>
+    return <span className="text-muted-foreground">{ABSENT}</span>
   }
   const text = asScalarText(value)
   const rendered = text === null ? JSON.stringify(value, null, 2) : text
   if (rendered === undefined || rendered === "") {
-    return <span className="text-muted-foreground">{ABSENT} nothing recorded</span>
+    return <span className="text-muted-foreground">{ABSENT}</span>
   }
   return (
     <pre className="max-h-72 overflow-auto rounded border border-border bg-muted p-2 font-mono text-xs whitespace-pre-wrap">
