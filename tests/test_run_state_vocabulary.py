@@ -39,14 +39,16 @@ def _subscript_key(node: ast.AST) -> str | None:
     return None
 
 
-def _constants(trees: dict[Path, ast.Module]) -> dict[str, str]:
-    """Module-level `NAME = "literal"` across the package, under `NAME` and `module.NAME`.
+def _constants(trees: dict[Path, ast.Module]) -> dict[tuple[str, str], str]:
+    """Module-level `NAME = "literal"`, keyed by the module that defines it.
 
-    Both spellings, because a word is defined in one module and used from another:
-    `tools.py` writes `propose.UNAVAILABLE` into the response, and a scan resolving bare
-    names alone would report that word as never written.
+    One flat namespace per package would let two modules defining the same name with
+    different values resolve to whichever sorts last, which makes the word this reports a
+    property of a filename. A bare name means the definition in its own module; the
+    qualified `module.NAME` spelling is what crosses modules, and it is the form `tools.py`
+    uses to write `propose.UNAVAILABLE` into the response.
     """
-    found: dict[str, str] = {}
+    found: dict[tuple[str, str], str] = {}
     for path, tree in trees.items():
         for node in tree.body:
             if not isinstance(node, ast.Assign) or not isinstance(node.value, ast.Constant):
@@ -55,12 +57,11 @@ def _constants(trees: dict[Path, ast.Module]) -> dict[str, str]:
                 continue
             for target in node.targets:
                 if isinstance(target, ast.Name):
-                    found[target.id] = node.value.value
-                    found[f"{path.stem}.{target.id}"] = node.value.value
+                    found[(path.stem, target.id)] = node.value.value
     return found
 
 
-def _resolve(node: ast.AST, constants: dict[str, str]) -> set[str]:
+def _resolve(node: ast.AST, module: str, constants: dict[tuple[str, str], str]) -> set[str]:
     """The words an expression can evaluate to, or nothing where the source cannot say.
 
     Unresolvable is empty rather than guessed. `state["preview_outcome"]` copied into a
@@ -70,24 +71,28 @@ def _resolve(node: ast.AST, constants: dict[str, str]) -> set[str]:
     if isinstance(node, ast.Constant):
         return {node.value} if isinstance(node.value, str) else set()
     if isinstance(node, ast.Name):
-        value = constants.get(node.id)
+        value = constants.get((module, node.id))
         return {value} if value is not None else set()
     if isinstance(node, ast.Attribute) and isinstance(node.value, ast.Name):
-        value = constants.get(f"{node.value.id}.{node.attr}")
+        value = constants.get((node.value.id, node.attr))
         return {value} if value is not None else set()
     if isinstance(node, ast.IfExp):
-        return _resolve(node.body, constants) | _resolve(node.orelse, constants)
+        return _resolve(node.body, module, constants) | _resolve(node.orelse, module, constants)
     return set()
 
 
-def _writers(trees: dict[Path, ast.Module], keys: set[str]) -> dict[str, int]:
+def _writers(trees: dict[Path, ast.Module], keys: set[str]) -> dict[tuple[str, str], int]:
     """Functions that assign one of their own parameters to one of `keys`, by position.
 
     Without this hop the scan sees `_finish(state, PROPOSED)` and one assignment of an
     unresolvable name, and reports an empty vocabulary for a module that writes five words.
+
+    Keyed by the module that defines the function, because a package is not one namespace: a
+    second `_finish` elsewhere in `sync/mcp/` writes nothing, and feeding its argument into
+    the vocabulary fails the gate naming a word no outcome key ever held.
     """
-    found: dict[str, int] = {}
-    for tree in trees.values():
+    found: dict[tuple[str, str], int] = {}
+    for path, tree in trees.items():
         for node in ast.walk(tree):
             if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
                 continue
@@ -98,7 +103,7 @@ def _writers(trees: dict[Path, ast.Module], keys: set[str]) -> dict[str, int]:
                 if sub.value.id not in params:
                     continue
                 if any(_subscript_key(target) in keys for target in sub.targets):
-                    found[node.name] = params.index(sub.value.id)
+                    found[(path.stem, node.name)] = params.index(sub.value.id)
     return found
 
 
@@ -113,19 +118,20 @@ def _words_written_to(package: Path, keys: set[str]) -> set[str]:
     writers = _writers(trees, keys)
 
     found: set[str] = set()
-    for tree in trees.values():
+    for path, tree in trees.items():
+        module = path.stem
         for node in ast.walk(tree):
             if isinstance(node, ast.Assign):
                 if any(_subscript_key(target) in keys for target in node.targets):
-                    found |= _resolve(node.value, constants)
+                    found |= _resolve(node.value, module, constants)
             elif isinstance(node, ast.Dict):
                 for key, value in zip(node.keys, node.values):
                     if isinstance(key, ast.Constant) and key.value in keys:
-                        found |= _resolve(value, constants)
+                        found |= _resolve(value, module, constants)
             elif isinstance(node, ast.Call) and isinstance(node.func, ast.Name):
-                index = writers.get(node.func.id)
+                index = writers.get((module, node.func.id))
                 if index is not None and index < len(node.args):
-                    found |= _resolve(node.args[index], constants)
+                    found |= _resolve(node.args[index], module, constants)
     return found
 
 
@@ -189,3 +195,54 @@ def test_the_scan_would_notice_a_word_outside_the_vocabulary(tmp_path):
     assert _words_written_to(tmp_path, {"outcome", "preview_outcome"}) == {
         "timed_out", "unavailable", "blocked",
     }
+
+
+def test_a_writer_is_a_writer_only_inside_the_module_that_defines_it(tmp_path):
+    """A name is registered per module, because the package is not one namespace.
+
+    `_finish` here writes the preview key; the `_finish` next to it is a different function
+    that writes nothing. Resolving writers by bare name across the package feeds the second
+    one's argument into the vocabulary and fails the gate naming a word no outcome key ever
+    held -- a false red, which costs a gate the same trust a false green does.
+    """
+    (tmp_path / "preview.py").write_text(
+        'PROPOSED = "proposed"\n'
+        "def _finish(state, outcome):\n"
+        '    state["preview_outcome"] = outcome\n'
+        "def run(state):\n"
+        "    return _finish(state, PROPOSED)\n",
+        encoding="utf-8",
+    )
+    (tmp_path / "reporting.py").write_text(
+        "def _finish(state, note):\n"
+        "    return note\n"
+        "def log(state):\n"
+        '    return _finish(state, "not-an-outcome")\n',
+        encoding="utf-8",
+    )
+
+    assert _words_written_to(tmp_path, {"outcome", "preview_outcome"}) == {"proposed"}
+
+
+def test_a_constant_resolves_only_where_it_is_defined_or_where_it_is_qualified(tmp_path):
+    """Two modules, one constant name, two values -- and a bare use means the local one.
+
+    Keyed flat, the two collide and whichever module sorts last decides, so the word the
+    gate reports depends on a filename. The qualified spelling still crosses modules, which
+    is the form `tools.py` uses to write `propose.UNAVAILABLE` into the response.
+    """
+    (tmp_path / "alpha.py").write_text(
+        'WORD = "proposed"\n'
+        "def a(state):\n"
+        '    state["preview_outcome"] = WORD\n',
+        encoding="utf-8",
+    )
+    (tmp_path / "zulu.py").write_text(
+        "import alpha\n"
+        'WORD = "not-an-outcome"\n'
+        "def z(state):\n"
+        '    return {"outcome": alpha.WORD}\n',
+        encoding="utf-8",
+    )
+
+    assert _words_written_to(tmp_path, {"outcome", "preview_outcome"}) == {"proposed"}
