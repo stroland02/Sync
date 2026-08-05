@@ -367,11 +367,16 @@ export interface BindingSurfaceResponse {
  *
  * `by_vendor` names only a vendor with at least one indexed call site — a vendor absent from
  * this object is not "zero", it is a question this route cannot answer: whether the indexer
- * looked and found nothing, or nothing declares which package to look for.
+ * looked and found nothing, or nothing declares which package to look for. `last_indexed`
+ * shares that same key set by construction (`sync.dashboard.graph_views.index_coverage` builds
+ * both from one `GraphStore.call_site_coverage` read) and is the newest `indexed_at` among that
+ * vendor's call sites — staleness, not a promise the index is current: a repository re-scanned
+ * weeks ago reports the same value every day after, until another re-index moves it.
  */
 export interface IndexCoverageResponse {
   repo_id: string
   by_vendor: Tally
+  last_indexed: Record<string, string>
   total_call_sites: number
 }
 
