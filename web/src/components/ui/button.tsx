@@ -22,10 +22,10 @@ const buttonVariants = cva(
       },
       size: {
         default:
-          "h-8 gap-1.5 px-2.5 has-data-[icon=inline-end]:pr-2 has-data-[icon=inline-start]:pl-2",
-        xs: "h-6 gap-1 rounded-[min(var(--radius-md),10px)] px-2 text-xs in-data-[slot=button-group]:rounded-lg has-data-[icon=inline-end]:pr-1.5 has-data-[icon=inline-start]:pl-1.5 [&_svg:not([class*='size-'])]:size-3",
-        sm: "h-7 gap-1 rounded-[min(var(--radius-md),12px)] px-2.5 text-[0.8rem] in-data-[slot=button-group]:rounded-lg has-data-[icon=inline-end]:pr-1.5 has-data-[icon=inline-start]:pl-1.5 [&_svg:not([class*='size-'])]:size-3.5",
-        lg: "h-9 gap-1.5 px-2.5 has-data-[icon=inline-end]:pr-2 has-data-[icon=inline-start]:pl-2",
+          "h-8 gap-field px-row has-data-[icon=inline-end]:pr-row has-data-[icon=inline-start]:pl-row",
+        xs: "h-6 gap-field rounded-[min(var(--radius-md),10px)] px-row text-meta in-data-[slot=button-group]:rounded-lg has-data-[icon=inline-end]:pr-field has-data-[icon=inline-start]:pl-field [&_svg:not([class*='size-'])]:size-3",
+        sm: "h-7 gap-field rounded-[min(var(--radius-md),12px)] px-row text-meta in-data-[slot=button-group]:rounded-lg has-data-[icon=inline-end]:pr-field has-data-[icon=inline-start]:pl-field [&_svg:not([class*='size-'])]:size-3.5",
+        lg: "h-9 gap-field px-row has-data-[icon=inline-end]:pr-row has-data-[icon=inline-start]:pl-row",
         icon: "size-8",
         "icon-xs":
           "size-6 rounded-[min(var(--radius-md),10px)] in-data-[slot=button-group]:rounded-lg [&_svg:not([class*='size-'])]:size-3",
