@@ -23,7 +23,7 @@ by content, because items were never tagged with a milestone as they landed.
 | **M1** | Runtime signals, efficiency detector | **~85%** | Built; the dollar estimate is deliberately unbuilt |
 | **M2** | Production error detector | **~85%** | Built; never exercised against real telemetry |
 | **M3** | Multi-vendor, MCP, plugin SDK | **~95%** | Packaging closed 2026-07-30; nothing structural left |
-| **M4** | Hosted control plane (**the front end**) | **0%** | Not started, and has no plan file yet |
+| **M4** | Hosted control plane (**the front end**) | **~45%** | Eight screens and the honesty discipline are built; nothing is hosted and the interface is one idiom |
 | **M5** | Integration layer | **~25%** | Feed and registry exist; nothing correlates anything |
 | **M6** | Show it, rather than describe it | **0%** | Needs a UI to film |
 
@@ -81,13 +81,49 @@ packaging level, not only the import level.
 **Remaining.** Publishing `sync-core` anywhere is public and irreversible and is the user's call. The
 wheel builds and installs; nobody has uploaded it.
 
-### M4 — Hosted control plane · 0% — **this is where the front end lives**
+### M4 — Hosted control plane · ~45% — **this is where the front end lives**
 
-Nothing started. No plan file exists either: every other milestone got a spec before it got built,
-and M4 has only its design-document section.
+Reconciled against the tree on 2026-08-05. The previous entry said "0%, nothing started, no plan file
+exists", which was true when written and has been false for about seventy commits.
 
-**Nothing in the engine blocks starting it.** What is missing is data: a dashboard renders findings,
-runs and merge outcomes, and today every panel would read zero. `B7` is what changes that.
+**Done: the read surface, and it is substantial.** Eight screens on branch `m4-dashboard` —
+fleet, codebase, vendor, finding, solution workflow, binding surface, observed telemetry, detector
+accountability. Twelve GET routes over `sync.dashboard`, all covered by a behavioural read-only test
+that has been proven able to fail. Three plan files, not none:
+`2026-07-30-sync-m4-dashboard.md`, `2026-08-04-sync-m4-slice-2.md`,
+`2026-08-05-sync-console-design-system.md`, plus a dogfooding plan and a run-state specification.
+
+A design system landed with it: a validated palette in both modes, a six-step type scale, three
+spacing tokens, two elevation levels, and `DESIGN.md` recording every decision with the validator's
+output pasted in.
+
+**The honesty discipline is the part that was expensive and is worth protecting.** Provenance renders
+wherever a binding is shown, at two levels. A screen that cannot support a claim says so instead:
+absence is distinguished from zero, staleness from liveness, "never measured" from "nothing here".
+Six separate defects of the form *the console asserts something the data does not hold* were found
+and closed, several by removing a field or a column rather than adding one.
+
+**Not done, and the gap is bigger than the percentage suggests.**
+
+- **Nothing is hosted.** No deployment, no auth, no user model; the API binds `127.0.0.1`. "Hosted
+  control plane" is the milestone's name and that half is at zero.
+- **No write path.** Every route is read-only by design and by test. An operator cannot start a run,
+  retry one, or close a finding from the console.
+- **The interface is one idiom, eight times.** Measured: 21 `<Card>`, 17 `<Table>`, 1 chart across
+  5,781 lines. Three shadcn primitives exist — button, card, table. The whole frontend contains 7
+  `onChange`, 3 `<Button>`, 2 `onClick` and 1 `<input>`. There is no filtering, sorting, search,
+  drill-down, tab, dialog, skeleton or command palette anywhere, on a console whose tables will
+  hold thousands of call sites.
+
+**The condition on the deferred *premium components* row is now met.** That row said: after the data
+model is visible. It is — eight screens cover the graph end to end. It retires now, and the work it
+gates is the next real front-end slice rather than another polish pass.
+
+**What no longer blocks it.** The old entry said the blocker was data — every panel would read zero.
+That is closed: `scripts/seed_console.py` populates every screen with call sites, findings across
+three rungs, vendor changes, observed calls, shapes, error windows, migration attempts and multi-
+generation runs, idempotently, with an exact `--remove`. `B7` is still worth running, but it is no
+longer what stands between M4 and progress.
 
 ### M5 — The integration layer · ~35%
 
@@ -123,6 +159,54 @@ confidently instead of refusing.
 ---
 
 ## Ready
+
+### B90 — The console is one idiom repeated eight times, and the resources to fix it are already installed
+
+Measured on 2026-08-05 across `web/src`: **21 `<Card>`, 17 `<Table>`, 1 chart, 5,781 lines.** The
+whole frontend contains 7 `onChange`, 3 `<Button>`, 2 `onClick` and 1 `<input>`. Three shadcn
+primitives exist — `button`, `card`, `table`.
+
+So the console is a read-only table renderer. That was the right first version, and the *information
+architecture* it produced is genuinely good: eight screens that map the graph, provenance rendered at
+two levels, and six false-claim defects found and closed. **What is missing is not structure, it is
+interface.** There is no filtering, sorting, search, drill-down, tab, dialog, skeleton, tooltip or
+command palette anywhere — on a console whose tables will hold thousands of call sites from a real
+customer repository, where the fixture holds five.
+
+**The leverage here is that almost nothing needs installing.** `shadcn` is already in
+`devDependencies` and `radix-ui` is already a dependency, and shadcn vendors component source into
+the repository rather than adding a package. Dialog, tabs, command, tooltip, badge, skeleton,
+separator, scroll-area, dropdown-menu and sheet cost **zero new dependencies**. `lucide-react`,
+`framer-motion` and `echarts` are installed and barely used — one chart in eight screens, against a
+`dataviz` skill that has been invoked exactly once.
+
+The one thing genuinely not installed is a headless table library. Seventeen tables with no sorting
+or filtering is the strongest argument for TanStack Table, and it is a real dependency decision that
+should be argued rather than assumed — `docs/superpowers/references/engineering/dependencies-and-packaging.md`
+is the note that governs it.
+
+**Evidence that closes this:** a slice that picks the two or three screens where the absence actually
+costs an operator something — the vendor findings table and the binding surface are the candidates,
+because both will be long — and gives them the affordances the data demands, with each addition
+argued from the operator rather than from the component catalogue. **Not a sweep that adds a
+component to every screen.** `.claude/rules/interface-originality.md` still binds: the interface is
+ours, and a component earns its place from the graph and the operator, never from a competitor's
+screen or from being available.
+
+### B91 — Two screens read one payload and disagree about what they show
+
+`observed-calls-table.tsx` renders `max_resend_count` and not `trace_id`. The embedded observed-calls
+card in `repository-coverage-page.tsx` renders `trace_id` and not `max_resend_count`, `http_method`
+or `first_seen`. Both read `GET /api/repositories/{repo}/observed`. **Neither says it is partial.**
+
+Not a payload mismatch — the same *a reader cannot tell what this view can see* class the milestone
+has closed six times, duplicated across two implementations of one dataset. Also sent and rendered
+nowhere: `server_address` and `url_template` on observed calls, and `args_keys`,
+`response_fields_read` and `loop_depth` on binding call sites.
+
+**Evidence that closes this:** one component reads that payload, or each view states which subset it
+shows and why. A field the transport sends and no screen renders is either a screen gap or a payload
+that should stop sending it; decide which per field and record the ruling.
 
 ### B7 — The M0 acceptance run has not executed since the pipeline changed underneath it
 
