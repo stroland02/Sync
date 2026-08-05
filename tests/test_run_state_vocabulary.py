@@ -356,6 +356,20 @@ def _writes(package: Path, keys: set[str]) -> list[_Write]:
                         record(
                             node, key_node.value, _resolve(value, module, constants), key_node
                         )
+            # Three statements that bind the key without assigning to it. Each resolves to no
+            # word on purpose: what a loop, a context manager or a comprehension binds comes
+            # out of an iterable or an `__enter__` this resolver holds nothing of, and a gate
+            # that guessed there would put a word in the vocabulary no line of source chose.
+            elif isinstance(node, (ast.For, ast.AsyncFor)):
+                if _subscript_key(node.target) in keys:
+                    record(node, _subscript_key(node.target), set())
+            elif isinstance(node, (ast.With, ast.AsyncWith)):
+                for item in node.items:
+                    if item.optional_vars is not None and _subscript_key(item.optional_vars) in keys:
+                        record(node, _subscript_key(item.optional_vars), set())
+            elif isinstance(node, ast.DictComp):
+                if isinstance(node.key, ast.Constant) and node.key.value in keys:
+                    record(node, node.key.value, set())
             elif isinstance(node, ast.Call):
                 named = _called_writer(node, module, writers)
                 if named is not None:
@@ -876,6 +890,37 @@ def test_a_writer_called_through_a_name_bound_to_it_carries_its_word(tmp_path):
 
     assert _words_written_to(package, {"outcome"}) == {"wordA", "wordB"}
     assert [w for w in _writes(package, {"outcome"}) if not w.words] == []
+
+
+def test_a_statement_that_binds_the_key_without_assigning_it_is_reported(tmp_path):
+    """Three forms that bind an outcome key where the scan looked only at assignments.
+
+    A `for` target, a `with ... as` target and a dict comprehension's key all put a word in
+    the key and none of them is an `ast.Assign`, so all three were invisible. Reported and not
+    followed: what a loop or a comprehension binds is an element of something this resolver
+    holds nothing of, so no word can be attributed and the honest answer is to fail here.
+    """
+    package = _synthetic(
+        tmp_path,
+        "def from_loop(state, words):\n"
+        '    for state["outcome"] in words:\n'
+        "        pass\n"
+        "def from_context(state, cm):\n"
+        '    with cm as state["outcome"]:\n'
+        "        pass\n"
+        "def from_comprehension(pairs):\n"
+        '    return {"outcome": w for w in pairs}\n',
+    )
+
+    assert sorted(
+        (write.line, write.census_key)
+        for write in _writes(package, {"outcome"})
+        if not write.words
+    ) == [
+        (2, "drifted/driver.py::from_loop::outcome"),
+        (5, "drifted/driver.py::from_context::outcome"),
+        (8, "drifted/driver.py::from_comprehension::outcome"),
+    ]
 
 
 def test_two_modules_sharing_a_basename_one_directory_apart_are_two_modules(tmp_path):
