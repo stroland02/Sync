@@ -33,8 +33,8 @@ _NO_FORGE = (
 
 def build_graph(store, adapter, remediator, forge, checkpointer, catalogue=None):
     # Built from the store this already receives, so no caller learns a new argument and no
-    # run can be configured with the corpus recording silently switched off. The three
-    # nodes that take it are the three places an attempt ends.
+    # run can be configured with the corpus recording silently switched off. The four
+    # nodes that take it are the four places an attempt ends.
     record = make_recorder(store)
 
     remote = forge is not None
@@ -57,7 +57,7 @@ def build_graph(store, adapter, remediator, forge, checkpointer, catalogue=None)
         builder.add_node("push_branch", nodes.make_push_branch(forge))
         builder.add_node("await_ci", nodes.make_await_ci(forge))
         builder.add_node("open_pr", nodes.make_open_pr(forge, record))
-    builder.add_node("report", nodes.make_report(None if remote else _NO_FORGE))
+    builder.add_node("report", nodes.make_report(None if remote else _NO_FORGE, record))
     # `abandon` is built with whatever forge there is, which with none is none. It deletes a
     # branch only when the state carries one, and only `push_branch` writes that -- so with
     # no push node there is no branch and nothing to delete.

@@ -6,7 +6,9 @@ from pydantic import BaseModel
 
 from sync.core import CallSite, Finding, Patch, RepoRef, VendorChange, VerifyResult
 from sync.forge.github import PullRequest
+from sync.remediate import nodes
 from sync.remediate.graph import build_graph
+from sync.route.matrix import NO_PATCH
 
 SITE = CallSite(
     repo_id="r1", path="src/billing.ts", line=6, col=8, vendor_id="stripe",
@@ -36,13 +38,14 @@ def _fail(diagnostics: str = "error TS2339") -> VerifyResult:
 
 
 class StubStore:
-    def __init__(self):
+    def __init__(self, change: VendorChange = CHANGE):
+        self.change = change
         self.status: str | None = None
         self.status_calls: list[tuple[str, str]] = []
         self.outcomes: list = []
 
     def get_call_site(self, _id): return SITE
-    def get_vendor_change(self, _id): return CHANGE
+    def get_vendor_change(self, _id): return self.change
 
     def set_finding_status(self, _id, _status):
         self.status = _status
@@ -120,10 +123,10 @@ class StubForge:
         return PullRequest(number=1, url=self.pr_url)
 
 
-def _run(adapter, remediator, forge, store=None):
+def _run(adapter, remediator, forge, store=None, catalogue=None):
     graph = build_graph(
         store=store or StubStore(), adapter=adapter, remediator=remediator,
-        forge=forge, checkpointer=InMemorySaver(),
+        forge=forge, checkpointer=InMemorySaver(), catalogue=catalogue,
     )
     return graph.invoke(
         {"finding": FINDING, "repo": REPO},
@@ -770,3 +773,80 @@ def test_a_forgeless_graph_still_reports_tier_minus_one_in_its_own_words():
     assert result["outcome"] == "reported"
     assert "sync cannot typecheck Python" in result["report_reason"]
     assert "without a forge" not in result["report_reason"]
+
+
+# --- the corpus row a halted attempt owes ------------------------------------------
+
+# A real oasdiff record rather than an invented one, so the tier this routes to is the tier
+# the shipped table assigns. `kind=lifecycle` is what carries it to -1.
+LIFECYCLE_RULE = {
+    "id": "api-deprecated-sunset-missing", "level": "error", "direction": "none",
+    "area": "paths", "kind": "lifecycle", "action": "change",
+    "description": "endpoint deprecated without sunset date",
+}
+CATALOGUE = {LIFECYCLE_RULE["id"]: LIFECYCLE_RULE}
+LIFECYCLE_CHANGE = VendorChange(
+    vendor_id="stripe", from_version="v1", to_version="v2",
+    kind="api-deprecated-sunset-missing", operation_id="PostCharges",
+    path_ptr="/v1/charges", severity="breaking", source="oasdiff",
+    raw={"id": "api-deprecated-sunset-missing"},
+)
+
+
+def test_a_forgeless_run_that_verified_a_patch_records_the_attempt():
+    """`report` is terminal for an attempt that ran, so it owes the corpus a row.
+
+    Every rehearsal against a fixture ends here. A run that patched, typechecked and had
+    nowhere to push still spent an attempt, and the corpus is the table whose grain is one
+    attempt -- so without this row `Counts.attempts` counts zero over exactly the runs that
+    verified, and `routing_accuracy` learns nothing from them.
+    """
+    store = StubStore()
+    result = _run(StubAdapter(), StubRemediator(), None, store=store)
+
+    assert result["outcome"] == "reported"
+    assert result["static_attempts"] == 1
+    assert result["attempt_strategy"] == "agent"
+    assert result["verify_ok"] is True
+
+    assert len(store.outcomes) == 1
+    row = store.outcomes[0]
+    assert row.terminal_status == "halted"
+    assert row.attempt_index == 1
+    assert row.static_verify_passed is True
+    # A halt passes neither field that belongs to another terminal: nothing was abandoned,
+    # and `pr_number` null is what keeps this row out of every merge rate.
+    assert row.abandon_reason is None
+    assert row.pr_number is None
+
+
+def test_a_forgeless_tier_minus_one_run_records_nothing():
+    """The other caller of `report`, which must stay silent.
+
+    Tier -1 attempted nothing, and a row at this table's grain would be a fabrication.
+    """
+    store = StubStore(change=LIFECYCLE_CHANGE)
+    result = _run(StubAdapter(), StubRemediator(), None, store=store, catalogue=CATALOGUE)
+
+    assert result["outcome"] == "reported"
+    assert result["tier"] == NO_PATCH
+    assert result["static_attempts"] == 0
+    assert store.outcomes == []
+
+
+def test_only_the_halt_branch_of_report_reaches_the_recorder():
+    """What the graph-level pair above cannot show on its own.
+
+    `corpus._record` already drops any call describing zero attempts, so a `report` that
+    recorded on both branches would still write no row for tier -1 and satisfy the negative
+    test. The discrimination has to be observed at the call, which is where the branch is.
+    """
+    calls: list[dict] = []
+    report = nodes.make_report("nowhere to push", lambda state, **kw: calls.append(kw))
+
+    report({"change": CHANGE, "verify_ok": True, "static_attempts": 1})
+    assert calls == [{"terminal_status": "halted"}]
+
+    calls.clear()
+    report({"change": CHANGE, "tier": NO_PATCH, "routing_row": "r1"})
+    assert calls == []

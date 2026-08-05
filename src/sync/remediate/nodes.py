@@ -206,12 +206,12 @@ def _attempted_strategy(exc: Exception, remediator) -> str | None:
 def _close_previous_attempt(state: RunState, record) -> None:
     """Write the row for the attempt this one is replacing.
 
-    An attempt ends at exactly one of three places -- another attempt starting, `abandon`,
-    or `open_pr` succeeding -- and those three are mutually exclusive, which is what makes
-    "one row per attempt" hold with no de-duplicating bookkeeping here. `abandon` and
-    `open_pr` are both terminal, so neither can be followed by another attempt, and the
-    first `patch` call has no previous attempt to close. `corpus.record` drops a call that
-    describes no attempt.
+    An attempt ends at exactly one of four places -- another attempt starting, `abandon`,
+    `open_pr` succeeding, or `report` halting a verified patch an assembly with no forge
+    cannot push -- and those four are mutually exclusive, which is what makes "one row per
+    attempt" hold with no de-duplicating bookkeeping here. The last three are terminal, so
+    none can be followed by another attempt, and the first `patch` call has no previous
+    attempt to close. `corpus.record` drops a call that describes no attempt.
     """
     if record is not None:
         record(state, terminal_status="retried")
@@ -591,7 +591,7 @@ def route_after_open_pr(state: RunState) -> str:
     return "end"
 
 
-def make_report(halt_reason: str | None = None):
+def make_report(halt_reason: str | None = None, record=None):
     """Tier -1: the table found no patch is warranted, so the run says so and stops.
 
     `halt_reason` is supplied only by an assembly that removed the push path, and it is what
@@ -614,20 +614,28 @@ def make_report(halt_reason: str | None = None):
     finding is real and unremediated, which is what `open` already says. Marking it
     `abandoned` would be the same corruption in the store rather than in the state.
 
-    It writes no `migration_outcome` row. One row is one repair *attempt*, and tier -1
-    attempted nothing; a row at that grain would be a fabrication, by the same rule that
-    already gives a run abandoned before any attempt no row at all. The consequence is a
-    real gap rather than a tidy omission: the routing decision reaches `RunState` and stops
-    there, so a tier -1 outcome is invisible to any benchmark computed off the corpus.
-    Recording it needs a `strategy` value that does not exist -- `PatchStrategy` is a
-    two-value Literal and the column is `NOT NULL` -- which is a change to `sync.core` and
-    `remediate.corpus`, not to this node.
+    Reached from `prepare`, it writes no `migration_outcome` row. One row is one repair
+    *attempt*, and tier -1 attempted nothing; a row at that grain would be a fabrication, by
+    the same rule that already gives a run abandoned before any attempt no row at all. The
+    consequence is a real gap rather than a tidy omission: the routing decision reaches
+    `RunState` and stops there, so a tier -1 outcome is invisible to any benchmark computed
+    off the corpus. Recording it needs a `strategy` value that does not exist --
+    `PatchStrategy` is a two-value Literal and the column is `NOT NULL` -- which is a change
+    to `sync.core` and `remediate.corpus`, not to this node.
+
+    Reached on the halt branch it owes one, and that is why it holds a recorder. That run
+    made an attempt, so this node is where the attempt ends, and a terminal that ends an
+    attempt without recording it is a row the corpus can never recover. `"halted"` is its
+    own terminal status: not `"abandoned"`, which would put it in `findings_abandoned` and
+    claim Sync tried and could not finish, when it finished and had nowhere to deliver.
     """
 
     def report(state: RunState) -> RunState:
         change = state["change"]
         gap = state.get("verify_gap", "")
         if halt_reason and state.get("verify_ok"):
+            if record is not None:
+                record(state, terminal_status="halted")
             reason = (
                 f"a verified patch for {change.kind} on {change.operation_id} was not "
                 f"pushed: {halt_reason}"

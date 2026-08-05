@@ -24,7 +24,7 @@ null-because-the-writer-vanished.
 
 Raising from `record` would not fix it, because `record` is where the swallowing lives -- the
 exception would be caught by the same handler that exists to protect the run, logged, and lost.
-And moving the check to the write is the one place it must not be: two of the three call sites
+And moving the check to the write is the one place it must not be: three of the four call sites
 are inside terminal nodes, and one of those runs *after* `forge.open_pull_request` has already
 opened a pull request. So the contract is stated at `make_recorder`, which `build_graph` calls
 before any node runs. A store that cannot record fails while there is still no run to lose.
