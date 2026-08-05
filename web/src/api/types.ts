@@ -331,7 +331,6 @@ export interface BindingCallSite {
   loop_depth: number
   binding_rung: BindingSource
   indexed_at: string
-  retracted_at: string | null
 }
 
 /** One vendor change `GET .../bindings` reports, already filtered to the operation the URL names. */

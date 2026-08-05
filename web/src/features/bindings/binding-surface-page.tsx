@@ -127,7 +127,6 @@ function BindingSurfaceDetail({
                       <TableHead>SDK version</TableHead>
                       <TableHead>Rung</TableHead>
                       <TableHead>Indexed at</TableHead>
-                      <TableHead>Retracted at</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -149,15 +148,16 @@ function BindingSurfaceDetail({
                         <TableCell className="font-mono text-meta">
                           <Formatted value={formatTimestamp(site.indexed_at)} />
                         </TableCell>
-                        <TableCell className="font-mono text-meta">
-                          <Formatted value={formatTimestamp(site.retracted_at)} />
-                        </TableCell>
                       </TableRow>
                     ))}
                   </TableBody>
                 </Table>
               )}
               <RungNote data={query.data} />
+              <p className="text-body text-muted-foreground">
+                Either this operation has never had a call site here, or it had one that was
+                later retracted — this table cannot tell the two apart.
+              </p>
             </CardContent>
           </Card>
 
