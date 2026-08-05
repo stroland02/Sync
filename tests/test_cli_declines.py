@@ -46,7 +46,9 @@ from sync.cli import (
     benchmark,
     feed_public_key,
     ingest,
+    intake,
     merge_outcome,
+    publish_feed,
     run,
     shapes,
 )
@@ -796,6 +798,36 @@ def test_an_unreadable_secret_file_refuses_rather_than_falling_back_to_the_envir
     assert webhook_secret.decode("ascii")[:8] not in printed.err
 
 
+def test_a_secret_file_holding_only_whitespace_is_refused_naming_the_file(
+    tmp_path, webhook_secret, capsys
+):
+    """The other half of the same read, and the one that opened successfully.
+
+    `echo secret > file` is why `_webhook_secret` strips, so a file holding a lone newline holds
+    nothing -- which is also what a truncated write and an empty fetch leave behind. The command
+    already fails closed on it; what was wrong was the message. `None` reached the both-sources
+    text, which tells an operator to set the environment variable or pass `--secret-file`, and
+    that is advice the operator reading it has already taken.
+
+    The file's contents are not described beyond the fact that there was nothing usable in it.
+    That is the rule this read is under whatever the file turns out to hold.
+    """
+    body = json.dumps({"action": "closed"}).encode("utf-8")
+    payload = tmp_path / "delivery.json"
+    payload.write_bytes(body)
+    empty = tmp_path / "empty.secret"
+    empty.write_text("\n", encoding="utf-8")
+
+    assert merge_outcome(_merge_args(
+        payload, _sign(body, webhook_secret), secret_file=str(empty), dsn=UNSERVED_DSN
+    )) == 2
+
+    printed = capsys.readouterr()
+    assert printed.out == ""
+    assert str(empty) in printed.err
+    assert cli.WEBHOOK_SECRET_ENV not in printed.err
+
+
 # --- `sync feed-public-key`: the subcommand nothing had ever run --------------------
 
 
@@ -860,6 +892,56 @@ def test_feed_public_key_refuses_when_there_is_no_usable_key(monkeypatch, capsys
     assert cli.FEED_SIGNING_KEY_ENV in printed.err
 
 
+def test_feed_public_key_refuses_a_key_file_it_cannot_open_naming_it(
+    signing_key, tmp_path, capsys
+):
+    """The one read on this path that was never guarded.
+
+    `_signing_key` opens the file outside its own `try`, so a `--key-file` an operator mistyped
+    raises rather than answering `None`, and the operator receives a traceback where every other
+    file this CLI reads answers exit 2 and the path. Both commands that load a key are affected
+    and both refuse the same way; a traceback here also says nothing about whether anything was
+    published, which is the question `publish-feed` leaves behind.
+
+    The message names the path and the class of failure and stops. An `OSError` carries a path
+    and an errno rather than any byte of the file, but the subject is still a private key, so
+    nothing beyond the class is repeated.
+    """
+    absent = tmp_path / "absent.pem"
+
+    assert feed_public_key(argparse.Namespace(key_file=str(absent))) == 2
+
+    printed = capsys.readouterr()
+    assert printed.out == ""
+    assert str(absent) in printed.err
+    # The environment holds a usable key throughout, and this command must not answer with it:
+    # an operator who named a file is asking about that file.
+    assert cli.FEED_SIGNING_KEY_ENV not in printed.err
+
+
+def test_publish_feed_refuses_a_key_file_it_cannot_open_before_writing_anything(
+    signing_key, tmp_path, capsys
+):
+    """The same read on the command where the refusal has to arrive first.
+
+    A half-written pair is worse than nothing -- a consumer may fetch a payload whose signature
+    does not exist yet, which is indistinguishable from one whose signature was stripped -- so
+    the output directory is asserted not to exist at all. The unserved DSN is the other half of
+    that: a run that reached the database would fail against it rather than pass.
+    """
+    out_dir = tmp_path / "feed"
+    absent = tmp_path / "absent.pem"
+
+    assert publish_feed(argparse.Namespace(
+        vendor=VENDOR, out_dir=str(out_dir), key_file=str(absent), dsn=UNSERVED_DSN
+    )) == 2
+
+    printed = capsys.readouterr()
+    assert printed.out == ""
+    assert str(absent) in printed.err
+    assert not out_dir.exists()
+
+
 def test_feed_public_key_says_nothing_that_narrows_the_private_half(signing_key, capsys):
     """The docstring's stated reason for the command being this narrow: one that emitted the
     private half for convenience is how a key reaches a terminal scrollback. Asserted over both
@@ -881,6 +963,61 @@ def test_feed_public_key_says_nothing_that_narrows_the_private_half(signing_key,
     for line in os.environ[cli.FEED_SIGNING_KEY_ENV].splitlines():
         if line and "-----" not in line:
             assert line not in said
+
+
+# --- `sync intake`: the directory document it reads before it assesses anything -----
+#
+# The read was unguarded, so a `--registry-directory` an operator mistyped was a traceback. What
+# a swallowed one would cost is worse than the traceback: the directory is what promotes a
+# declared dependency into the watchable category, so a document nobody could read reports a
+# smaller work queue and no fault -- and the docstring calls that category a sales asset as much
+# as an engineering one. Both refusals fire before the repository is assessed.
+
+
+def _intake_args(repo: Path, **overrides):
+    fields = dict(
+        repo=str(repo), evidence=None, registry_directory=None, registry_evidence=None,
+        registry_moved_since=None, rank_by_repo_id=None, dsn=UNSERVED_DSN,
+    )
+    fields.update(overrides)
+    return argparse.Namespace(**fields)
+
+
+def test_intake_refuses_a_registry_directory_that_is_not_there(tmp_path, capsys):
+    """The path an operator mistyped, which is the ordinary way this fires."""
+    absent = tmp_path / "absent-directory.json"
+
+    assert intake(_intake_args(tmp_path, registry_directory=str(absent))) == 2
+
+    printed = capsys.readouterr()
+    assert printed.out == ""
+    assert "could not read" in printed.err
+    assert str(absent) in printed.err
+
+
+def test_intake_refuses_a_registry_directory_that_is_not_utf8_at_all(tmp_path, capsys):
+    """A document fetched and saved through a tool that wrote it in another encoding.
+
+    Nothing is printed on stdout, which is the property a wrapper reads: this command's whole
+    output is one JSON report, and a report that omitted the directory silently would be a
+    coverage claim over evidence the run never had.
+    """
+    directory = tmp_path / "directory.json"
+    directory.write_bytes(json.dumps({"apis": {}}).encode("utf-16"))
+
+    assert intake(_intake_args(tmp_path, registry_directory=str(directory))) == 2
+
+    printed = capsys.readouterr()
+    assert printed.out == ""
+    assert str(directory) in printed.err
+
+
+def test_intake_reports_when_no_registry_directory_is_asked_for(tmp_path, capsys):
+    """The control. Without it both assertions above pass against an `intake` that refuses
+    everything, which is the same command with its only output removed."""
+    assert intake(_intake_args(tmp_path)) == 0
+
+    assert capsys.readouterr().out != ""
 
 
 # --- `sync benchmark --score-pair`: the specification that cannot be honoured -------
@@ -952,6 +1089,58 @@ def test_a_pair_specification_whose_change_is_incomplete_is_refused_the_same_way
     assert "pair specification: " in printed.err
     assert "change names no" in printed.err
     assert "operation" in printed.err and "field" in printed.err
+
+
+def test_a_pair_specification_that_is_not_there_is_refused_naming_the_file(
+    tmp_path, store, capsys
+):
+    """The read itself, which had no handler: a `--score-pair` an operator mistyped raised out of
+    the command where every missing field inside the file is already refused by name."""
+    absent = tmp_path / "absent-corpus.yaml"
+
+    assert benchmark(_benchmark_args(absent)) == 2
+
+    printed = capsys.readouterr()
+    assert printed.out == ""
+    assert str(absent) in printed.err
+
+
+def test_a_pair_specification_that_is_not_utf8_at_all_is_refused_naming_the_file(
+    tmp_path, store, capsys
+):
+    """The decode arm, and it is the one that was already refusing for the wrong reason.
+
+    `UnicodeDecodeError` is a `ValueError`, so the chain around `_score_corpus` caught it and
+    printed the codec's complaint -- which names a byte offset and no file. Two paths reach this
+    command and an operator told only that byte 0 is invalid has to guess which.
+    """
+    spec = tmp_path / "corpus.yaml"
+    spec.write_bytes(yaml.safe_dump(_COMPLETE_SPEC).encode("utf-16"))
+
+    assert benchmark(_benchmark_args(spec)) == 2
+
+    printed = capsys.readouterr()
+    assert printed.out == ""
+    assert str(spec) in printed.err
+    assert "UnicodeDecodeError" in printed.err
+
+
+def test_a_pair_specification_that_is_not_yaml_is_refused_rather_than_raised(
+    tmp_path, store, capsys
+):
+    """A YAML parse failure is not a `json.JSONDecodeError` and is not a `ValueError` either --
+    `yaml.YAMLError` inherits straight from `Exception` -- so it passed through the chain around
+    `_score_corpus` untouched and reached the operator as a traceback. A tab where a space
+    belongs is the ordinary way an operator writes one."""
+    spec = tmp_path / "corpus.yaml"
+    spec.write_text("repo: /nowhere\n\tvendor: stripe\n", encoding="utf-8")
+
+    assert benchmark(_benchmark_args(spec)) == 2
+
+    printed = capsys.readouterr()
+    assert printed.out == ""
+    assert str(spec) in printed.err
+    assert "ScannerError" in printed.err
 
 
 def test_a_refused_pair_specification_prints_no_report_at_all(tmp_path, store, capsys):

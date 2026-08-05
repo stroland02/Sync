@@ -1475,6 +1475,10 @@ def _webhook_secret(secret_file: str | None) -> bytes | None:
     `--secret-file` has already taken. Swallowing the read would also fall through to the
     environment, and verifying against a credential the operator did not name is a signature
     check that passed for the wrong reason.
+
+    A named file that held only whitespace answers `None` too, and the caller tells that from an
+    absent secret by the argument rather than by the return: the two have different remedies and
+    only one of them is the advice that message carries.
     """
     if secret_file:
         return Path(secret_file).read_bytes().strip() or None
@@ -1511,6 +1515,19 @@ def merge_outcome(args: argparse.Namespace) -> int:
         print(
             f"could not read the webhook secret from {args.secret_file}: "
             f"{type(exc).__name__}",
+            file=sys.stderr,
+        )
+        return 2
+
+    if secret is None and args.secret_file:
+        # A file that opened and held nothing is not a secret nobody supplied. The message below
+        # answers the second and names both sources, which is advice an operator who passed
+        # --secret-file has already taken. What the file held is not described: trailing
+        # whitespace is stripped before this, so there is nothing to describe and nothing that
+        # could be said about a longer file without narrowing a credential.
+        print(
+            f"the webhook secret file {args.secret_file} holds nothing usable. "
+            "Refusing rather than processing an unverified delivery.",
             file=sys.stderr,
         )
         return 2
@@ -1586,9 +1603,14 @@ def _signing_key(key_file: str | None):
     the right response to it is a loader that does not need the call rather than an exception
     to the rule.
 
-    A key that is present and unreadable answers `None` like an absent one. The caller's job is
-    to refuse, and the two cases have the same remedy -- supply a usable key -- so telling them
+    Material this cannot parse answers `None` like absent material. The caller's job is to
+    refuse, and the two cases have the same remedy -- supply a usable key -- so telling them
     apart would only be an invitation to describe what was wrong with the bytes.
+
+    A file that cannot be *opened* is a third case and is left to raise, which is the rule
+    `_webhook_secret` already established: nothing has been parsed and nothing was read, so an
+    `OSError` describes a path and an errno rather than any byte of the key. The caller refuses
+    on it by name.
     """
     from cryptography.hazmat.primitives import serialization
     from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
@@ -1639,7 +1661,18 @@ def publish_feed(args: argparse.Namespace) -> int:
     that went out through a text mode on this platform would carry translated line endings and
     fail verification in a way that reads as forgery.
     """
-    key = _signing_key(args.key_file)
+    try:
+        key = _signing_key(args.key_file)
+    except OSError as exc:
+        # The path and the kind of failure, and nothing else. `None` is spoken for -- it means no
+        # usable key material -- and the message that answers it names both sources, which is
+        # advice an operator who passed --key-file has already taken.
+        print(
+            f"could not read the feed signing key from {args.key_file}: {type(exc).__name__}",
+            file=sys.stderr,
+        )
+        return 2
+
     if key is None:
         print(
             f"no usable feed signing key: set {FEED_SIGNING_KEY_ENV} or pass --key-file with an "
@@ -1680,7 +1713,18 @@ def feed_public_key(args: argparse.Namespace) -> int:
     Nothing is written and nothing else is printed. A command that also emitted the private half
     "for convenience" is how a key reaches a terminal scrollback.
     """
-    key = _signing_key(args.key_file)
+    try:
+        key = _signing_key(args.key_file)
+    except OSError as exc:
+        # Duplicated rather than shared, for the reason every refusal in this module is: what a
+        # wrong reading costs differs per command, and here it is a trust anchor an operator was
+        # about to paste into `sync.core.keys`.
+        print(
+            f"could not read the feed signing key from {args.key_file}: {type(exc).__name__}",
+            file=sys.stderr,
+        )
+        return 2
+
     if key is None:
         print(
             f"no usable feed signing key: set {FEED_SIGNING_KEY_ENV} or pass --key-file.",
@@ -1735,6 +1779,11 @@ def benchmark(args: argparse.Namespace) -> int:
     try:
         scored = _score_corpus(Path(args.score_pair), args.score_dsn)
     except (KeyError, LookupError, ValueError) as exc:
+        # `UnicodeDecodeError` is a `ValueError`, so this chain catches one -- and
+        # `tests/test_decode_handlers.py` inventories chains by the names they list, which makes
+        # this handler invisible to it. The specification's own read is guarded inside
+        # `_score_corpus` where that gate can see it; a decode failure from anywhere else under
+        # this call lands here and is counted by nothing.
         print(f"pair specification: {exc}", file=sys.stderr)
         return 2
 
@@ -1830,7 +1879,16 @@ def _score_corpus(spec_path: Path, score_dsn: str):
     `generate_pair` refuses to choose targets itself, deliberately, and a harness that picked a
     subset would be choosing a distribution without saying so.
     """
-    spec = yaml.safe_load(spec_path.read_text(encoding="utf-8")) or {}
+    try:
+        spec = yaml.safe_load(spec_path.read_text(encoding="utf-8")) or {}
+    except (OSError, UnicodeDecodeError, yaml.YAMLError) as exc:
+        # Raised rather than printed, because the caller owns the refusal and every other
+        # unusable specification arrives there the same way. `yaml.YAMLError` inherits from
+        # `Exception` rather than from `ValueError`, so a tab where a space belongs was a
+        # traceback; the decode was caught by the caller and reported the codec's byte offset
+        # with no file named, which is unhelpful when two paths reach that command.
+        raise ValueError(f"could not read {spec_path}: {type(exc).__name__}: {exc}") from exc
+
     required = ("repo", "vendor", "cache", "from_version", "to_version", "change")
     missing = [key for key in required if key not in spec]
     if missing:
@@ -1913,10 +1971,24 @@ def intake(args: argparse.Namespace) -> int:
     # The directory is a document somebody fetched, parsed here rather than downloaded: this
     # command reports what the deployment already knows, and a fetch inside it would make a
     # report of what is on disk quietly online.
-    directory, directory_unreadable = (
-        parse_directory(json.loads(Path(args.registry_directory).read_text(encoding="utf-8")))
-        if args.registry_directory else ([], ())
-    )
+    if args.registry_directory:
+        try:
+            document = json.loads(Path(args.registry_directory).read_text(encoding="utf-8"))
+        except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+            # Refused rather than reported as a directory holding nothing. An entry the document
+            # declines already reaches the operator through `report.unreadable`, but a document
+            # that never parsed has no entries to decline: the directory is what promotes a
+            # declared dependency into the watchable category, so an empty one shrinks the work
+            # queue this command exists to print and nothing anywhere says why.
+            print(
+                f"could not read {args.registry_directory}: {type(exc).__name__}: {exc}",
+                file=sys.stderr,
+            )
+            return 2
+        directory, directory_unreadable = parse_directory(document)
+    else:
+        directory, directory_unreadable = [], ()
+
     registry_apis = (
         read_registry_apis(Path(args.registry_evidence)) if args.registry_evidence else {}
     )
