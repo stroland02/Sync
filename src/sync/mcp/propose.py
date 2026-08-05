@@ -74,6 +74,12 @@ def run_to_static_verify(
 ) -> PreviewState:
     """Drive `locate -> prepare -> patch -> static_verify` under the pipeline's own routing.
 
+    `catalogue` and `remediator` are independent arguments and the caller has to match them:
+    the catalogue reaches `locate` alone, so a `TieredRemediator` holding the table while this
+    is `None` leaves `route_after_prepare` no tier to read, and a tier -1 change runs `patch`,
+    lands `NoPatchWarranted` in `diagnostics` and returns `'unverified'` where the matched
+    configuration returns `'no_patch_warranted'`.
+
     The retry loop between `patch` and `static_verify` is the pipeline's, including its
     attempt budget: a failed typecheck feeds its diagnostics back into the next patch, which
     is the only reason a second attempt differs from the first.
