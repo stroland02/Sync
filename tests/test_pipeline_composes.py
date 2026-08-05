@@ -33,6 +33,7 @@ import subprocess
 from pathlib import Path
 
 import pytest
+from langgraph.checkpoint.memory import InMemorySaver
 
 from sync.benchmark import compute_axes
 from sync.benchmark.report import render_report
@@ -42,6 +43,7 @@ from sync.graph.store import GraphStore
 from sync.index.typescript import TypeScriptAdapter
 from sync.remediate import nodes
 from sync.remediate.corpus import make_recorder
+from sync.remediate.graph import build_graph
 from sync.remediate.literal_swap import LiteralSwapRemediator
 from sync.remediate.state import MAX_STATIC_ATTEMPTS, RunState
 from sync.remediate.tiered import TieredRemediator
@@ -206,6 +208,9 @@ def _drive(finding: Finding, repo: RepoRef, store: GraphStore, adapter, remediat
         state.update(abandon(state))
         return state
     if destination == "report":
+        # Tier -1, not the halt path below: `prepare` found no patch warranted, so nothing
+        # was attempted and this call takes no `record` on purpose. `build_graph`'s `report`
+        # node is not bare -- it always takes one -- so this omission is local to this branch.
         state.update(nodes.make_report()(state))
         return state
 
@@ -310,24 +315,37 @@ def test_no_run_here_ever_reaches_a_forge(tmp_path, store):
         assert state.get("pr_url") is None
 
 
-def test_a_verified_patch_writes_no_corpus_row_without_a_forge(tmp_path, store):
-    """A composition finding, pinned here so it stays visible rather than living in a report.
+def test_this_hand_composed_driver_writes_no_row_that_build_graph_would(tmp_path, store):
+    """`_drive` stops short of a row on purpose, and that is a property of this file, not of
+    the pipeline it exercises.
 
-    Only two nodes write a terminal row: `open_pr` and `abandon`. Both take a `Forge`, and only
-    the first records a success -- so a run that verifies a patch and stops at the push boundary
-    writes nothing at all, and the whole positive class of the corpus is unreachable from any
-    test that does not push. `merge_rate` and cost-per-merged-patch follow it: both divide by
-    pull requests, and neither can leave null without a network-touching run.
-
-    That is not obviously wrong. A row describes a migration attempt that went somewhere, and
-    `sync.mcp.propose` deliberately records nothing for a preview. It is stated because the
-    consequence is easy to misread: an empty positive class in the default suite looks exactly
-    like a pipeline that never succeeds.
+    This driver returns at the push boundary and never calls `report`, so it writes nothing --
+    but `build_graph(forge=None)` over the same shape routes `replay -> report` at that same
+    boundary and records exactly one `halted` row. Collapsing the two would reopen the finding
+    a prior round fixed: an agent asking whether a forge-less verified run records anything must
+    not grep this file, find a green test whose name generalises to the pipeline, and answer no.
+    Composing the pipeline by hand here is `_drive`'s whole purpose; making it call `report` too
+    would make it a second copy of `build_graph`; the two are asserted apart instead.
     """
-    state, _, finding = _verified_run(tmp_path, store)
+    driven, _, finding = _verified_run(tmp_path, store)
 
-    assert state["verify_ok"] is True
+    assert driven["verify_ok"] is True
     assert [row for row in store.migration_outcomes() if row.finding_id == finding.id] == []
+
+    repo = _clone(tmp_path, "verified", into="verified-via-build-graph")
+    graph_finding = _seed(store, repo, "src/summarise.ts")
+    graph = build_graph(
+        store=store, adapter=_adapter(tmp_path), remediator=build_remediator(),
+        forge=None, checkpointer=InMemorySaver(),
+    )
+    result = graph.invoke(
+        {"finding": graph_finding, "repo": repo},
+        config={"configurable": {"thread_id": graph_finding.id}},
+    )
+
+    assert result["verify_ok"] is True
+    rows = [row for row in store.migration_outcomes() if row.finding_id == graph_finding.id]
+    assert [row.terminal_status for row in rows] == ["halted"]
 
 
 # --- the corpus ------------------------------------------------------------------

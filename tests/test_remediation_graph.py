@@ -6,7 +6,9 @@ from pydantic import BaseModel
 
 from sync.core import CallSite, Finding, Patch, RepoRef, VendorChange, VerifyResult
 from sync.forge.github import PullRequest
+from sync.remediate import nodes
 from sync.remediate.graph import build_graph
+from sync.route.matrix import NO_PATCH
 
 SITE = CallSite(
     repo_id="r1", path="src/billing.ts", line=6, col=8, vendor_id="stripe",
@@ -36,13 +38,14 @@ def _fail(diagnostics: str = "error TS2339") -> VerifyResult:
 
 
 class StubStore:
-    def __init__(self):
+    def __init__(self, change: VendorChange = CHANGE):
+        self.change = change
         self.status: str | None = None
         self.status_calls: list[tuple[str, str]] = []
         self.outcomes: list = []
 
     def get_call_site(self, _id): return SITE
-    def get_vendor_change(self, _id): return CHANGE
+    def get_vendor_change(self, _id): return self.change
 
     def set_finding_status(self, _id, _status):
         self.status = _status
@@ -120,10 +123,10 @@ class StubForge:
         return PullRequest(number=1, url=self.pr_url)
 
 
-def _run(adapter, remediator, forge, store=None):
+def _run(adapter, remediator, forge, store=None, catalogue=None):
     graph = build_graph(
         store=store or StubStore(), adapter=adapter, remediator=remediator,
-        forge=forge, checkpointer=InMemorySaver(),
+        forge=forge, checkpointer=InMemorySaver(), catalogue=catalogue,
     )
     return graph.invoke(
         {"finding": FINDING, "repo": REPO},
@@ -641,3 +644,214 @@ def test_a_failed_cleanup_does_not_replace_the_reason_the_finding_abandoned():
     assert result["outcome"] == "abandoned"
     assert "CI" in result["abandon_reason"]
     assert "hung up" not in result["abandon_reason"]
+
+
+# --- the graph that ships, pinned, and the graph that cannot push -------------------
+
+# Read off the shipped assembly rather than transcribed from `graph.py`, so a router whose
+# destination moves moves this pin with it. `__start__` and `__end__` are langgraph's and are
+# part of the compiled shape, so they are pinned alongside the ten Sync writes.
+SHIPPED_NODES = (
+    "__start__", "locate", "prepare", "patch", "static_verify", "replay",
+    "push_branch", "await_ci", "open_pr", "report", "abandon", "__end__",
+)
+
+# `data` carries the router's decision only where the decision and its destination differ.
+# The shipped graph has two such edges and both are load-bearing: `static_verify` decides
+# "push_branch" and reaches `replay`, and `open_pr` decides "end" and reaches `__end__`.
+SHIPPED_EDGES = frozenset({
+    ("__start__", "locate", None, False),
+    ("locate", "prepare", None, True),
+    ("locate", "abandon", None, True),
+    ("prepare", "patch", None, True),
+    ("prepare", "report", None, True),
+    ("prepare", "abandon", None, True),
+    ("patch", "static_verify", None, True),
+    ("patch", "patch", None, True),
+    ("patch", "abandon", None, True),
+    ("static_verify", "patch", None, True),
+    ("static_verify", "replay", "push_branch", True),
+    ("static_verify", "abandon", None, True),
+    ("replay", "patch", None, True),
+    ("replay", "push_branch", None, True),
+    ("replay", "abandon", None, True),
+    ("push_branch", "await_ci", None, True),
+    ("push_branch", "abandon", None, True),
+    ("await_ci", "patch", None, True),
+    ("await_ci", "open_pr", None, True),
+    ("await_ci", "abandon", None, True),
+    ("open_pr", "__end__", "end", True),
+    ("open_pr", "abandon", None, True),
+    ("report", "__end__", None, False),
+    ("abandon", "__end__", None, False),
+})
+
+REMOTE_NODES = frozenset({"push_branch", "await_ci", "open_pr"})
+
+
+def _topology(graph):
+    drawable = graph.get_graph()
+    return tuple(drawable.nodes), frozenset(
+        (edge.source, edge.target, edge.data, edge.conditional) for edge in drawable.edges
+    )
+
+
+def _build(forge):
+    return build_graph(
+        store=StubStore(), adapter=StubAdapter(), remediator=StubRemediator(),
+        forge=forge, checkpointer=InMemorySaver(),
+    )
+
+
+def test_a_graph_built_with_a_forge_is_the_graph_that_ships():
+    """The regression surface, not the change.
+
+    A real run drives this assembly and the acceptance run that would notice a narrowing
+    costs a model budget and a pull request. Pinning the whole compiled shape -- every node
+    in order, every edge with its condition -- is what makes a node quietly dropped from the
+    forge-carrying path a red test here rather than a discovery there.
+    """
+    graph_nodes, edges = _topology(_build(StubForge()))
+
+    assert graph_nodes == SHIPPED_NODES
+    assert edges == SHIPPED_EDGES
+
+
+def test_a_graph_built_without_a_forge_has_no_node_that_can_push():
+    """Absent from the compiled graph, not guarded inside it.
+
+    A guard leaves the node present, and a present node is resumable: an interrupted run
+    checkpointed at `push_branch` resumes straight into a push the moment a caller holding a
+    forge picks it up. Absence is not resumable, which is the whole of the safety argument.
+    """
+    graph_nodes, edges = _topology(_build(None))
+
+    assert REMOTE_NODES.isdisjoint(graph_nodes)
+    # Nothing else moved: the three named nodes are the only difference.
+    assert set(graph_nodes) == set(SHIPPED_NODES) - REMOTE_NODES
+    assert not [
+        edge for edge in edges if REMOTE_NODES & {edge[0], edge[1]}
+    ]
+    # The decision keeps its name and only its destination moves. `route_after_static` and
+    # `sync.mcp.propose` both read the literal "push_branch" as the verdict "this patch is
+    # verified", which is a claim about the patch and not a request for a remote.
+    assert ("static_verify", "replay", "push_branch", True) in edges
+    assert ("replay", "report", "push_branch", True) in edges
+
+
+def test_a_forgeless_run_that_would_have_pushed_reports_the_halt():
+    forge_less = _run(StubAdapter(), StubRemediator(), None)
+
+    assert forge_less["outcome"] == "reported"
+    assert forge_less["pr_url"] is None
+    reason = forge_less["report_reason"]
+    assert "without a forge" in reason
+    # Both halves, because each fails differently. Dropping the cause leaves "was not pushed"
+    # alone, which reads as a failure and sends an operator looking for one. Naming a node
+    # spends the line on internals that appear on no operator-facing surface, and `cli.py`
+    # renders this verbatim.
+    assert "cannot reach a remote" in reason
+    assert not [node for node in REMOTE_NODES if node in reason]
+    # The finding is what an operator is looking at; a reason that names only the harness
+    # says nothing about what was left unrepaired.
+    assert "response-property-removed" in reason
+    assert "PostCharges" in reason
+    # And it must not borrow tier -1's sentence. A verified patch that was not pushed is the
+    # opposite claim to "no patch was warranted", and the console renders this verbatim.
+    assert "no patch is warranted" not in reason
+
+
+def test_a_forgeless_graph_still_reports_tier_minus_one_in_its_own_words():
+    """The halt reason must discriminate rather than decorate.
+
+    `report` is reached from two places in a forge-less graph -- a run that had nothing to
+    try, and a run that verified a patch and had nowhere to push it. Both are `reported`, and
+    a reason that cannot tell them apart makes the outcome unreadable.
+    """
+
+    @dataclass
+    class Unverifiable(StubAdapter):
+        unverifiable_reason: str = "sync cannot typecheck Python"
+
+    result = _run(Unverifiable(), StubRemediator(), None)
+
+    assert result["outcome"] == "reported"
+    assert "sync cannot typecheck Python" in result["report_reason"]
+    assert "without a forge" not in result["report_reason"]
+
+
+# --- the corpus row a halted attempt owes ------------------------------------------
+
+# A real oasdiff record rather than an invented one, so the tier this routes to is the tier
+# the shipped table assigns. `kind=lifecycle` is what carries it to -1.
+LIFECYCLE_RULE = {
+    "id": "api-deprecated-sunset-missing", "level": "error", "direction": "none",
+    "area": "paths", "kind": "lifecycle", "action": "change",
+    "description": "endpoint deprecated without sunset date",
+}
+CATALOGUE = {LIFECYCLE_RULE["id"]: LIFECYCLE_RULE}
+LIFECYCLE_CHANGE = VendorChange(
+    vendor_id="stripe", from_version="v1", to_version="v2",
+    kind="api-deprecated-sunset-missing", operation_id="PostCharges",
+    path_ptr="/v1/charges", severity="breaking", source="oasdiff",
+    raw={"id": "api-deprecated-sunset-missing"},
+)
+
+
+def test_a_forgeless_run_that_verified_a_patch_records_the_attempt():
+    """`report` is terminal for an attempt that ran, so it owes the corpus a row.
+
+    Every rehearsal against a fixture ends here. A run that patched, typechecked and had
+    nowhere to push still spent an attempt, and the corpus is the table whose grain is one
+    attempt -- so without this row `Counts.attempts` counts zero over exactly the runs that
+    verified, and `routing_accuracy` learns nothing from them.
+    """
+    store = StubStore()
+    result = _run(StubAdapter(), StubRemediator(), None, store=store)
+
+    assert result["outcome"] == "reported"
+    assert result["static_attempts"] == 1
+    assert result["attempt_strategy"] == "agent"
+    assert result["verify_ok"] is True
+
+    assert len(store.outcomes) == 1
+    row = store.outcomes[0]
+    assert row.terminal_status == "halted"
+    assert row.attempt_index == 1
+    assert row.static_verify_passed is True
+    # A halt passes neither field that belongs to another terminal: nothing was abandoned,
+    # and `pr_number` null is what keeps this row out of every merge rate.
+    assert row.abandon_reason is None
+    assert row.pr_number is None
+
+
+def test_a_forgeless_tier_minus_one_run_records_nothing():
+    """The other caller of `report`, which must stay silent.
+
+    Tier -1 attempted nothing, and a row at this table's grain would be a fabrication.
+    """
+    store = StubStore(change=LIFECYCLE_CHANGE)
+    result = _run(StubAdapter(), StubRemediator(), None, store=store, catalogue=CATALOGUE)
+
+    assert result["outcome"] == "reported"
+    assert result["tier"] == NO_PATCH
+    assert result["static_attempts"] == 0
+    assert store.outcomes == []
+
+
+def test_only_the_halt_branch_of_report_reaches_the_recorder():
+    """What the graph-level pair above cannot show on its own.
+
+    `corpus._record` already drops any call describing zero attempts, so a `report` that
+    recorded on both branches would still write no row for tier -1 and satisfy the negative
+    test. The discrimination has to be observed at the call, which is where the branch is.
+    """
+    calls: list[dict] = []
+    report = nodes.make_report("nowhere to push", lambda state, **kw: calls.append(kw))
+
+    report({"change": CHANGE, "verify_ok": True, "static_attempts": 1})
+    assert calls == [{"terminal_status": "halted"}]
+
+    calls.clear()
+    report({"change": CHANGE, "tier": NO_PATCH, "routing_row": "r1"})
+    assert calls == []

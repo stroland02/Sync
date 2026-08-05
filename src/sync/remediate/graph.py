@@ -3,6 +3,13 @@
 `await_ci` is the reason this is a graph and not a loop: a CI run takes minutes,
 and a worker restart during that wait must not lose the run. The checkpointer
 persists state at every node, so a restarted run resumes where it stopped.
+
+That same persistence is why `forge=None` removes nodes rather than disabling them.
+`push_branch`, `await_ci` and `open_pr` are the only nodes that reach a remote, and every
+one of them is a call on the `Forge` this function is handed. A guard inside them, or an
+`interrupt_before`, would leave them in the compiled graph and therefore in the checkpoint:
+a run halted at `push_branch` resumes into a push the moment any caller holding a forge
+picks up its thread. A node that is not there cannot be resumed into.
 """
 
 from __future__ import annotations
@@ -15,11 +22,20 @@ from sync.remediate.serde import with_sync_types
 from sync.remediate.state import RunState
 
 
+# What a run says when it verified a patch and the assembly it was run by has nowhere to
+# push it. `cli.py` renders it verbatim to an operator, so it names the cause in terms of the
+# run's configuration: "not pushed" alone reads as a failure and sends an operator looking for
+# one, and a node name is an internal that appears on no surface they can see.
+_NO_FORGE = "this run was configured without a forge, so it cannot reach a remote"
+
+
 def build_graph(store, adapter, remediator, forge, checkpointer, catalogue=None):
     # Built from the store this already receives, so no caller learns a new argument and no
-    # run can be configured with the corpus recording silently switched off. The three
-    # nodes that take it are the three places an attempt ends.
+    # run can be configured with the corpus recording silently switched off. Every node that
+    # takes it is a place an attempt ends -- three of them with no forge, one more with one.
     record = make_recorder(store)
+
+    remote = forge is not None
 
     builder = StateGraph(RunState)
 
@@ -35,10 +51,14 @@ def build_graph(store, adapter, remediator, forge, checkpointer, catalogue=None)
     # process rather than a CI run. The store is passed for the observed baseline the mock
     # prefers over the specification.
     builder.add_node("replay", nodes.make_replay(store))
-    builder.add_node("push_branch", nodes.make_push_branch(forge))
-    builder.add_node("await_ci", nodes.make_await_ci(forge))
-    builder.add_node("open_pr", nodes.make_open_pr(forge, record))
-    builder.add_node("report", nodes.make_report())
+    if remote:
+        builder.add_node("push_branch", nodes.make_push_branch(forge))
+        builder.add_node("await_ci", nodes.make_await_ci(forge))
+        builder.add_node("open_pr", nodes.make_open_pr(forge, record))
+    builder.add_node("report", nodes.make_report(None if remote else _NO_FORGE, record))
+    # `abandon` is built with whatever forge there is, which with none is none. It deletes a
+    # branch only when the state carries one, and only `push_branch` writes that -- so with
+    # no push node there is no branch and nothing to delete.
     builder.add_node("abandon", nodes.make_abandon(store, forge, record))
 
     builder.add_edge(START, "locate")
@@ -75,29 +95,38 @@ def build_graph(store, adapter, remediator, forge, checkpointer, catalogue=None)
     # A replay failure is a patch that is wrong, so it re-enters the same retry loop a failed
     # typecheck does. A replay that could not run is not a failure and does not: it reaches
     # the push path carrying the fact that this run was not replay-verified.
+    #
+    # With no forge that path ends at `report`, for the same reason `static_verify` already
+    # decides "push_branch" and reaches `replay`: the decision names the verdict on the patch,
+    # and where the verdict goes is this file's to say.
     builder.add_conditional_edges(
         "replay",
         nodes.route_after_replay,
-        {"patch": "patch", "push_branch": "push_branch", "abandon": "abandon"},
+        {
+            "patch": "patch",
+            "push_branch": "push_branch" if remote else "report",
+            "abandon": "abandon",
+        },
     )
 
-    builder.add_conditional_edges(
-        "push_branch",
-        nodes.route_after_push,
-        {"await_ci": "await_ci", "abandon": "abandon"},
-    )
+    if remote:
+        builder.add_conditional_edges(
+            "push_branch",
+            nodes.route_after_push,
+            {"await_ci": "await_ci", "abandon": "abandon"},
+        )
 
-    builder.add_conditional_edges(
-        "await_ci",
-        nodes.route_after_ci,
-        {"patch": "patch", "open_pr": "open_pr", "abandon": "abandon"},
-    )
+        builder.add_conditional_edges(
+            "await_ci",
+            nodes.route_after_ci,
+            {"patch": "patch", "open_pr": "open_pr", "abandon": "abandon"},
+        )
 
-    builder.add_conditional_edges(
-        "open_pr",
-        nodes.route_after_open_pr,
-        {"end": END, "abandon": "abandon"},
-    )
+        builder.add_conditional_edges(
+            "open_pr",
+            nodes.route_after_open_pr,
+            {"end": END, "abandon": "abandon"},
+        )
 
     builder.add_edge("report", END)
     builder.add_edge("abandon", END)
