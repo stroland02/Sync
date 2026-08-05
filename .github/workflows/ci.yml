@@ -80,6 +80,13 @@ jobs:
       - name: Dead links
         run: uv run python scripts/lint_dead_links.py src --baseline scripts/dead_links_baseline.txt
 
+      # A skipped test reports as neither pass nor fail, so a skip with no real reason is a
+      # test that cannot fail wearing a different shape. Every skip in `tests/` must name a
+      # platform or an absent local toolchain -- `.claude/rules/test-discipline.md` carries
+      # the doctrine, this is the gate.
+      - name: Test skip discipline
+        run: uv run python scripts/lint_test_skips.py tests
+
       - name: Tests
         run: uv run pytest
 
