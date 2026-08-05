@@ -1,5 +1,5 @@
 /**
- * The console's only data source: eight GET routes over the Python transport.
+ * The console's only data source: twelve GET routes over the Python transport.
  *
  * Paths are relative so one origin in development is one origin in production — the Vite
  * proxy in `vite.config.ts` exists so that nothing here depends on a cross-origin
@@ -13,9 +13,13 @@ import {
   UnreachableApiError,
 } from "@/api/errors"
 import type {
+  BindingSurfaceResponse,
   CorpusSummary,
+  DetectorAccountabilityResponse,
   FindingDetail,
+  IndexCoverageResponse,
   NotFoundBody,
+  ObservedTelemetryResponse,
   OverviewResponse,
   Page,
   RepositoriesResponse,
@@ -136,4 +140,53 @@ export function fetchCorpus(signal?: AbortSignal): Promise<CorpusSummary> {
 /** The `repo_id` roll-up from the index. */
 export function fetchRepositories(signal?: AbortSignal): Promise<RepositoriesResponse> {
   return getJson<RepositoriesResponse>("/api/repositories", signal)
+}
+
+function withRepoIdParam(path: string, repoId: string | undefined): string {
+  return repoId === undefined ? path : `${path}?repo_id=${encodeURIComponent(repoId)}`
+}
+
+/**
+ * Every call site the index holds against one vendor operation, and what the vendor has
+ * changed about it. `repoId` narrows to one repository; omitted, the answer spans every
+ * repository the index has seen calling this operation.
+ */
+export function fetchBindingSurface(
+  vendorId: string,
+  operationId: string,
+  params: { repoId?: string } = {},
+  signal?: AbortSignal,
+): Promise<BindingSurfaceResponse> {
+  const path = withRepoIdParam(
+    `/api/vendors/${encodeURIComponent(vendorId)}/operations/${encodeURIComponent(operationId)}/bindings`,
+    params.repoId,
+  )
+  return getJson<BindingSurfaceResponse>(path, signal)
+}
+
+/** How many indexed call sites one repository has, per vendor. */
+export function fetchRepositoryCoverage(
+  repoId: string,
+  signal?: AbortSignal,
+): Promise<IndexCoverageResponse> {
+  return getJson<IndexCoverageResponse>(
+    `/api/repositories/${encodeURIComponent(repoId)}/coverage`,
+    signal,
+  )
+}
+
+/** What traffic showed up for one repository, what shape it had, and how often it failed. */
+export function fetchRepositoryObserved(
+  repoId: string,
+  signal?: AbortSignal,
+): Promise<ObservedTelemetryResponse> {
+  return getJson<ObservedTelemetryResponse>(
+    `/api/repositories/${encodeURIComponent(repoId)}/observed`,
+    signal,
+  )
+}
+
+/** Every open finding, aggregated by the detector that raised it. */
+export function fetchDetectors(signal?: AbortSignal): Promise<DetectorAccountabilityResponse> {
+  return getJson<DetectorAccountabilityResponse>("/api/detectors", signal)
 }

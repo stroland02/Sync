@@ -310,3 +310,162 @@ export interface CorpusSummary {
 export interface RepositoriesResponse {
   repo_ids: string[]
 }
+
+/**
+ * One call site `GET /api/vendors/{vendor_id}/operations/{operation_id}/bindings` reports.
+ *
+ * `binding_rung` is always `"static"` here — a call site is what the static index found, and
+ * nothing about this row rests on a resolution or a correlation step. A stronger rung for the
+ * same operation, when traffic has been observed calling it, is a fact about the repository's
+ * telemetry (`ObservedCallRow.binding_rung`), never blended into this row.
+ */
+export interface BindingCallSite {
+  repo_id: string
+  path: string
+  line: number
+  col: number
+  symbol: string | null
+  sdk_version: string | null
+  args_keys: string[]
+  response_fields_read: string[]
+  loop_depth: number
+  binding_rung: BindingSource
+  indexed_at: string
+  retracted_at: string | null
+}
+
+/** One vendor change `GET .../bindings` reports, already filtered to the operation the URL names. */
+export interface BindingChange {
+  change_id: string
+  kind: string
+  severity: string
+  from_version: string | null
+  to_version: string | null
+  path_ptr: string | null
+  detected_at: string
+}
+
+/**
+ * `GET /api/vendors/{vendor_id}/operations/{operation_id}/bindings`.
+ *
+ * Not a `Provenance`: this route reads `sync.dashboard.graph_views`, never `GraphSurface`, and
+ * carries no feed-fetch timestamp and no context-savings figure — inheriting the envelope would
+ * invent two fields the transport never sends, the reasoning that already keeps `WorkflowState`
+ * and `RunsPage` off it. `repo_id` here is the filter the request was made with, not a fact
+ * about the answer: null when the caller asked for every repository.
+ */
+export interface BindingSurfaceResponse {
+  vendor_id: string
+  operation_id: string
+  repo_id: string | null
+  call_sites: BindingCallSite[]
+  changes: BindingChange[]
+}
+
+/**
+ * `GET /api/repositories/{repo_id}/coverage`.
+ *
+ * `by_vendor` names only a vendor with at least one indexed call site — a vendor absent from
+ * this object is not "zero", it is a question this route cannot answer: whether the indexer
+ * looked and found nothing, or nothing declares which package to look for.
+ */
+export interface IndexCoverageResponse {
+  repo_id: string
+  by_vendor: Tally
+  total_call_sites: number
+}
+
+/**
+ * One row of `GET /api/repositories/{repo_id}/observed`'s `calls`: one unit of work's use of
+ * one vendor operation. Every derived count — `call_count`, `distinct_targets`,
+ * `repeated_calls`, `max_resend_count`, `error_count` — is `ObservedCall`'s own property on the
+ * Python side, not recomputed here.
+ *
+ * `operation_id` is `""` and `binding_rung` is `"unresolved"` for a request nothing could
+ * attribute to an operation — a named absence, not a missing value.
+ */
+export interface ObservedCallRow {
+  repo_id: string
+  vendor_id: string
+  operation_id: string
+  binding_rung: BindingSource
+  server_address: string
+  http_method: string
+  trace_id: string
+  url_template: string
+  call_count: number
+  distinct_targets: number
+  repeated_calls: number
+  max_resend_count: number
+  error_count: number
+  first_seen: string
+  last_seen: string
+}
+
+/** One row of `.../observed`'s `shapes`: what one vendor operation's traffic has looked like. */
+export interface ObservedShapeRow {
+  vendor_id: string
+  operation_id: string
+  field_path: string
+  json_type: string
+  nullable_seen: boolean
+  spec_enum_values: string[]
+  source: string
+  sample_count: number
+  first_seen: string
+  last_seen: string
+}
+
+/**
+ * One row of `.../observed`'s `error_windows`. `error_count` has no denominator in this table —
+ * the schema's own grain note — and this row does not invent one.
+ */
+export interface ObservedErrorWindowRow {
+  repo_id: string
+  vendor_id: string
+  operation_id: string
+  binding_rung: BindingSource
+  source: string
+  status_class: string
+  window_start: string
+  window_end: string
+  error_count: number
+  issue_count: number
+}
+
+/**
+ * `GET /api/repositories/{repo_id}/observed`.
+ *
+ * Not a `Provenance`, for the same reason `BindingSurfaceResponse` is not: this route reads
+ * `sync.dashboard.graph_views` and carries no feed-fetch timestamp or context-savings figure.
+ */
+export interface ObservedTelemetryResponse {
+  repo_id: string
+  calls: ObservedCallRow[]
+  shapes: ObservedShapeRow[]
+  error_windows: ObservedErrorWindowRow[]
+}
+
+/**
+ * One detector's roll-up in `GET /api/detectors`: how many open findings, at which rungs, with
+ * what claims and severities.
+ */
+export interface DetectorRow {
+  detector: string
+  total: number
+  by_rung: Tally
+  by_claim: Tally
+  by_severity: Tally
+}
+
+/**
+ * `GET /api/detectors`.
+ *
+ * Scoped to open findings, the only findings read `GraphStore` offers: a closed finding is
+ * invisible here exactly as it is everywhere else in the console today. Not a `Provenance`,
+ * for the same reason as the other two graph views above.
+ */
+export interface DetectorAccountabilityResponse {
+  detectors: DetectorRow[]
+  total_open_findings: number
+}

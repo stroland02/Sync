@@ -9,10 +9,14 @@ import { useQuery } from "@tanstack/react-query"
 
 import {
   DEFAULT_LIMIT,
+  fetchBindingSurface,
   fetchCorpus,
+  fetchDetectors,
   fetchFinding,
   fetchOverview,
   fetchRepositories,
+  fetchRepositoryCoverage,
+  fetchRepositoryObserved,
   fetchRuns,
   fetchVendorChanges,
   fetchVendorFindings,
@@ -150,5 +154,48 @@ export function useRepositories() {
   return useQuery({
     queryKey: ["repositories"],
     queryFn: ({ signal }) => fetchRepositories(signal),
+  })
+}
+
+/**
+ * Every call site the index holds against one vendor operation, and what the vendor has
+ * changed about it. Not polled: this view moves only when INDEX or SIGNAL runs, neither of
+ * which this screen would learn about sooner than a manual refresh.
+ */
+export function useBindingSurface(
+  vendorId: string,
+  operationId: string,
+  params: { repoId?: string } = {},
+) {
+  return useQuery({
+    queryKey: ["bindings", vendorId, operationId, params.repoId ?? null],
+    queryFn: ({ signal }) => fetchBindingSurface(vendorId, operationId, params, signal),
+  })
+}
+
+/**
+ * How many indexed call sites one repository has, per vendor. Not polled, for the same reason
+ * as `useRepositories`.
+ */
+export function useRepositoryCoverage(repoId: string) {
+  return useQuery({
+    queryKey: ["repositories", repoId, "coverage"],
+    queryFn: ({ signal }) => fetchRepositoryCoverage(repoId, signal),
+  })
+}
+
+/** What traffic this repository has shown, what shape it had, and how often it failed. */
+export function useRepositoryObserved(repoId: string) {
+  return useQuery({
+    queryKey: ["repositories", repoId, "observed"],
+    queryFn: ({ signal }) => fetchRepositoryObserved(repoId, signal),
+  })
+}
+
+/** Every open finding, aggregated by the detector that raised it. */
+export function useDetectors() {
+  return useQuery({
+    queryKey: ["detectors"],
+    queryFn: ({ signal }) => fetchDetectors(signal),
   })
 }
