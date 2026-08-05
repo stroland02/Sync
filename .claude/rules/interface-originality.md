@@ -13,7 +13,7 @@ exists so nobody conflates them under deadline.
 
 ## Why this is written down rather than assumed
 
-This repository contains eighteen screenshots of six competitors' shipping interfaces, captured
+This repository contains twenty-two screenshots of six competitors' shipping interfaces, captured
 deliberately and committed on purpose. They are a research artifact. Without a stated rule, an
 agent arriving cold — reasonably, helpfully — reads a directory of competitor screenshots as a
 design target, because that is what a directory of screenshots usually is.
