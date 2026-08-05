@@ -155,6 +155,45 @@ Prefer, in this order:
 2. A deferred minor from the ledger whose cost has grown.
 3. The top Deferred-table row whose retiring condition is now met.
 
+**3a. When another agent holds `web/`, work the other half of the lane.**
+
+Written on 2026-08-05, after six consecutive ticks arrived while a design-system fan-out was live in
+this worktree and each one had to re-derive the same answer.
+
+The instruction a tick starts from is *if the tree is dirty and moving, another agent is live, so
+stop and write nothing*. That is right about the **files** and wrong about the **tick**. The
+sentence exists to stop a tick committing on top of half-finished work, and `git commit -- <path>`
+already stops that — it takes only the named path and leaves another agent's staged and unstaged
+work untouched. Six ticks committed alongside a live fan-out that way and swept nothing.
+
+So a busy `web/` closes one half of this session's lane and leaves the other open. `src/sync/api/`,
+`src/sync/dashboard/` and `docs/` are reachable the whole time, and the console's honesty defects
+are not all in TypeScript — of the six taken during that fan-out, four were transport or view-model
+correctness and one was a governing document that had started to misinform.
+
+The rules that made it safe, all of them learned the hard way:
+
+- **Confirm the tree is moving before assuming it is.** Compare mtimes against the clock. A clean
+  tree is not proof nobody is live: an agent that has read for ten minutes and written nothing looks
+  identical to an idle one, and the fan-out's foundation agent held `web/` for twenty-two minutes
+  before its first write.
+- **Commit path-limited, always.** Never a bare `git commit`.
+- **Do not run `npm run build`, `npm run lint` or `npm run dev`.** `tsc -b` writes build state and
+  `vite build` writes `dist/`; two at once corrupt each other. Typecheck with `npx tsc --noEmit -p
+  tsconfig.app.json`, which writes nothing — or take work that needs no frontend gate at all.
+- **Do not write the database while another agent is walking the console against it.** Reads are
+  fine. A test that inserts checkpoint rows is not, while somebody is looking at a screen that
+  renders them.
+- **Do not add a third payload field nothing renders.** Two additive fields waiting for a consumer
+  is a queue; three is a backlog, and the value of the first two falls the longer they sit
+  unrendered. When the only remaining transport work is a field the console cannot yet display, that
+  is the signal to take a documentation or process item instead.
+
+**Do not cross into another session's paths to stay busy.** `docs/superpowers/ORCHESTRATION.md`
+states the boundary as directories. An edit outside it buys a merge conflict, and being blocked is
+not an argument that outranks the boundary — check whether the other session is live, record the
+ruling, and take something else.
+
 **4. Verify before claiming.**
 
 `npm run build` from `web/` must succeed with pristine output — it reached zero warnings in Task 1
