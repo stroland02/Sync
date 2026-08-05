@@ -8,8 +8,12 @@
  * has to see before trusting a pull request.
  */
 
+import { motion } from "framer-motion"
+import { useEffect, useRef, useState } from "react"
+
 import type { WorkflowNode, WorkflowNodeName, WorkflowNodeStatus } from "@/api/types"
 import { NodeEvidence } from "@/features/workflows/evidence"
+import { CHANGE_WASH_DURATION, EASE_STANDARD, useReducedMotion } from "@/lib/motion"
 
 /**
  * What each node does, for a reader who has not read `sync.remediate.nodes`.
@@ -79,6 +83,43 @@ function appearanceOf(status: WorkflowNodeStatus, terminal: boolean): Appearance
   }
 }
 
+/**
+ * A ~600ms wash over a node whose status just changed under a poll — a checkpoint was
+ * written. Compares `status` across renders rather than reacting to the poll itself, so an
+ * unchanged refetch, or this component's own first mount, washes nothing.
+ */
+function ChangeWash({ status }: { status: WorkflowNodeStatus }) {
+  const reduceMotion = useReducedMotion()
+  const mounted = useRef(false)
+  const previous = useRef(status)
+  const [changeCount, setChangeCount] = useState(0)
+
+  useEffect(() => {
+    if (!mounted.current) {
+      mounted.current = true
+      previous.current = status
+      return
+    }
+    if (previous.current !== status) {
+      previous.current = status
+      setChangeCount((count) => count + 1)
+    }
+  }, [status])
+
+  if (reduceMotion || changeCount === 0) return null
+
+  return (
+    <motion.span
+      key={changeCount}
+      aria-hidden="true"
+      className="absolute inset-0 rounded-full bg-foreground/15"
+      initial={{ opacity: 1 }}
+      animate={{ opacity: 0 }}
+      transition={{ duration: CHANGE_WASH_DURATION, ease: EASE_STANDARD }}
+    />
+  )
+}
+
 function Step({
   node,
   isLast,
@@ -96,8 +137,9 @@ function Step({
       <div className="flex flex-col items-center">
         <span
           aria-hidden="true"
-          className={`flex size-7 shrink-0 items-center justify-center rounded-full border text-xs ${look.markerClass}`}
+          className={`relative flex size-7 shrink-0 items-center justify-center rounded-full border text-xs ${look.markerClass}`}
         >
+          <ChangeWash status={node.status} />
           {look.glyph}
         </span>
         {!isLast && <span aria-hidden="true" className="w-px flex-1 bg-border" />}

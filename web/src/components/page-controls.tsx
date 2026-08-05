@@ -5,8 +5,11 @@
  * returns null on the last page precisely so a client cannot walk past the end.
  */
 
+import { motion } from "framer-motion"
+
 import { Button } from "@/components/ui/button"
 import { describeRange } from "@/lib/format"
+import { EASE_STANDARD, HEIGHT_TRANSITION_DURATION, useReducedMotion } from "@/lib/motion"
 
 export function PageControls({
   offset,
@@ -25,8 +28,14 @@ export function PageControls({
   busy: boolean
   onOffsetChange: (offset: number) => void
 }) {
+  const reduceMotion = useReducedMotion()
+
   return (
-    <div className="flex items-center gap-3 text-body">
+    <motion.div
+      layout={!reduceMotion}
+      transition={{ duration: HEIGHT_TRANSITION_DURATION, ease: EASE_STANDARD }}
+      className="flex items-center gap-3 text-body"
+    >
       <span className="text-ink-muted">{describeRange(offset, shown, total)}</span>
       <Button
         variant="outline"
@@ -44,6 +53,6 @@ export function PageControls({
       >
         Next
       </Button>
-    </div>
+    </motion.div>
   )
 }
