@@ -151,17 +151,18 @@ def test_the_grain_is_one_row_per_attempt():
 
 # --- part two: what recording a success actually requires -------------------------
 #
-# These document today's behaviour. **Each is written to fail when the gap closes, and that
-# failing is the point** -- delete or invert the one that fires, do not adjust it back to
-# green.
+# The gap these once documented has closed: `report` now records `halted` for a verified
+# patch with no forge. These pin the corpus's terminal vocabulary and the call sites the AST
+# scan holds it against -- a test here that fires on a new status is a vocabulary that grew,
+# so update it, do not delete or invert it.
 
 
 def _terminal_statuses_recorded_by(path: Path) -> set[str]:
     """Every literal a `record(...)` call in `path` passes as `terminal_status`.
 
-    Read from the syntax rather than by running the graph, because the fact being asserted is
-    exactly the one no run can reach: a success needs a forge, so a test that could observe it
-    behaviourally would be a test that pushes.
+    Read from the syntax rather than by running the graph, because `opened` is still the one
+    status no run can reach behaviourally: it needs a forge, so a test that could observe it
+    would be a test that pushes.
     """
     tree = ast.parse(path.read_text(encoding="utf-8"))
     found: set[str] = set()
@@ -189,12 +190,12 @@ def test_the_verification_boundary_records_without_a_push():
     }
 
 
-def test_the_status_scan_would_notice_a_fourth_call_site(tmp_path):
+def test_the_status_scan_would_notice_a_fifth_call_site(tmp_path):
     """The gap test above is only worth having if it can fail. Proven against a synthetic
-    module rather than by editing `nodes.py`, which another task owns -- a mutation there
-    would be a collision, and the property under test belongs to the scan either way.
+    module rather than by editing `nodes.py`, since the property under test belongs to the
+    scan either way.
     """
-    module = tmp_path / "nodes_with_a_fourth.py"
+    module = tmp_path / "nodes_with_a_fifth.py"
     module.write_text(
         "def open_pr(state):\n"
         "    record(state, terminal_status='opened')\n"

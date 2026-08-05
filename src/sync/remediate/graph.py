@@ -31,8 +31,8 @@ _NO_FORGE = "this run was configured without a forge, so it cannot reach a remot
 
 def build_graph(store, adapter, remediator, forge, checkpointer, catalogue=None):
     # Built from the store this already receives, so no caller learns a new argument and no
-    # run can be configured with the corpus recording silently switched off. The four
-    # nodes that take it are the four places an attempt ends.
+    # run can be configured with the corpus recording silently switched off. Every node that
+    # takes it is a place an attempt ends -- three of them with no forge, one more with one.
     record = make_recorder(store)
 
     remote = forge is not None

@@ -711,9 +711,9 @@ def test_a_graph_built_with_a_forge_is_the_graph_that_ships():
     in order, every edge with its condition -- is what makes a node quietly dropped from the
     forge-carrying path a red test here rather than a discovery there.
     """
-    nodes, edges = _topology(_build(StubForge()))
+    graph_nodes, edges = _topology(_build(StubForge()))
 
-    assert nodes == SHIPPED_NODES
+    assert graph_nodes == SHIPPED_NODES
     assert edges == SHIPPED_EDGES
 
 
@@ -724,11 +724,11 @@ def test_a_graph_built_without_a_forge_has_no_node_that_can_push():
     checkpointed at `push_branch` resumes straight into a push the moment a caller holding a
     forge picks it up. Absence is not resumable, which is the whole of the safety argument.
     """
-    nodes, edges = _topology(_build(None))
+    graph_nodes, edges = _topology(_build(None))
 
-    assert REMOTE_NODES.isdisjoint(nodes)
+    assert REMOTE_NODES.isdisjoint(graph_nodes)
     # Nothing else moved: the three named nodes are the only difference.
-    assert set(nodes) == set(SHIPPED_NODES) - REMOTE_NODES
+    assert set(graph_nodes) == set(SHIPPED_NODES) - REMOTE_NODES
     assert not [
         edge for edge in edges if REMOTE_NODES & {edge[0], edge[1]}
     ]
