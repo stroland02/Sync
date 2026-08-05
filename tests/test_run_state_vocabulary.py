@@ -133,31 +133,46 @@ class _Writer(NamedTuple):
     `bound` is whether the first parameter is `self` or `cls`, which a call through the
     instance supplies rather than passing: `self._finish(state, PROPOSED)` puts the word one
     position earlier than the signature does.
+
+    `origin` names the assignment rather than the function that holds it, because a function
+    can perform more than one. Keyed by the function, a writer assigning two keys registered
+    only whichever assignment came last while the body scan skipped both, so the word the
+    first one carried was dropped at the call site and never reported anywhere.
     """
 
     index: int
     parameter: str
     key: str
     bound: bool
+    origin: tuple[str, str, int]
 
 
 def _writers(
     trees: dict[Path, ast.Module], keys: set[str]
-) -> tuple[dict[tuple[str, str], _Writer], dict[int, tuple[str, str]]]:
+) -> tuple[dict[tuple[str, str], list[_Writer]], dict[tuple[int, str], tuple[str, str, int]]]:
     """Functions that assign one of their own parameters to one of `keys`, and those writes.
 
     Without this hop the scan sees `_finish(state, PROPOSED)` and one assignment of an
     unresolvable name, and reports an empty vocabulary for a module that writes five words.
-    The assignment inside the helper is returned alongside so the survey can skip it: it is
-    accounted for at every call site, and demanding that it resolve on its own would fail a
-    gate on the one write the registry exists to follow.
+    The assignments inside the helper are returned alongside so the survey can skip them: each
+    is accounted for at every call site, and demanding that they resolve on their own would
+    fail a gate on the writes the registry exists to follow.
+
+    A list per function and one entry per assignment. `_finish(state, OPENED, PROPOSED)` is
+    two registered writes travelling in two argument positions, and either of them can be the
+    only place a word appears.
 
     Keyed by the module that defines the function, because a package is not one namespace: a
     second `_finish` elsewhere in `sync/mcp/` writes nothing, and feeding its argument into
     the vocabulary fails the gate naming a word no outcome key ever held.
+
+    A module-level `alias = _finish` is registered under the second name as well, carrying the
+    first name's origins so a call through either accounts for the same body write. The
+    binding is an assignment in the source rather than a run-time value, so following it
+    cannot resolve to a word the source did not choose.
     """
-    found: dict[tuple[str, str], _Writer] = {}
-    bodies: dict[int, tuple[str, str]] = {}
+    found: dict[tuple[str, str], list[_Writer]] = {}
+    bodies: dict[tuple[int, str], tuple[str, str, int]] = {}
     for path, tree in trees.items():
         for node in ast.walk(tree):
             if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
@@ -172,10 +187,22 @@ def _writers(
                 for target in sub.targets:
                     key = _subscript_key(target)
                     if key in keys:
-                        found[(path.stem, node.name)] = _Writer(
-                            params.index(sub.value.id), sub.value.id, key, bound
+                        registered = found.setdefault((path.stem, node.name), [])
+                        origin = (path.stem, node.name, len(registered))
+                        registered.append(
+                            _Writer(params.index(sub.value.id), sub.value.id, key, bound, origin)
                         )
-                        bodies[id(sub)] = (path.stem, node.name)
+                        bodies[(id(sub), key)] = origin
+    for path, tree in trees.items():
+        for node in tree.body:
+            if not isinstance(node, ast.Assign) or not isinstance(node.value, ast.Name):
+                continue
+            registered = found.get((path.stem, node.value.id))
+            if registered is None:
+                continue
+            for target in node.targets:
+                if isinstance(target, ast.Name):
+                    found.setdefault((path.stem, target.id), []).extend(registered)
     return found, bodies
 
 
@@ -206,9 +233,9 @@ class _Write(NamedTuple):
 
 
 def _called_writer(
-    node: ast.Call, module: str, writers: dict[tuple[str, str], _Writer]
-) -> tuple[tuple[str, str], _Writer] | None:
-    """The writer a call names, however the call spells it.
+    node: ast.Call, module: str, writers: dict[tuple[str, str], list[_Writer]]
+) -> list[_Writer] | None:
+    """The writes a call performs, however the call spells it.
 
     `self._finish(...)` and `propose._finish(...)` reach the same function a bare
     `_finish(...)` does. `self` and `cls` mean this module; any other qualifier names the
@@ -221,8 +248,32 @@ def _called_writer(
         name = (owner, node.func.attr)
     else:
         return None
-    writer = writers.get(name)
-    return None if writer is None else (name, writer)
+    return writers.get(name)
+
+
+def _keys_a_writer_of_this_name_writes(
+    node: ast.Call, writers: dict[tuple[str, str], list[_Writer]]
+) -> set[str]:
+    """The keys at risk when a call names a writer through a receiver the scan cannot read.
+
+    `h.helper._finish(state, BLOCKED)` reaches a registered writer through a receiver that is
+    a run-time value, so no reading of the source says which function it holds. Reported as a
+    write resolving to no word rather than skipped: a sibling `_finish(state, PROPOSED)`
+    already accounts for the body write, so skipping this one drops `blocked` out of the
+    vocabulary with nothing to show for it.
+
+    Attribute calls alone. A bare `_finish(...)` names this module or a name bound in it, both
+    of which `_called_writer` resolves; refusing those too would red the module next door
+    whose own unrelated `_finish` writes nothing.
+    """
+    if not isinstance(node.func, ast.Attribute):
+        return set()
+    return {
+        writer.key
+        for (_, name), registered in writers.items()
+        if name == node.func.attr
+        for writer in registered
+    }
 
 
 def _unpacked_keys(target: ast.AST, keys: set[str]) -> Iterator[str]:
@@ -249,8 +300,10 @@ def _writes(package: Path, keys: set[str]) -> list[_Write]:
     # A registered writer's own `state[key] = parameter` is accounted for at its call sites, so
     # it is held here and emitted only if nothing ever calls it -- a helper nobody calls carries
     # no word, and dropping it outright would be the silence this file exists to remove.
-    deferred: dict[tuple[str, str], list[_Write]] = {}
-    called: set[tuple[str, str]] = set()
+    # Held per assignment and never per function: a writer performing two of them has two words
+    # travelling, and a call site carrying one accounts for that one alone.
+    deferred: dict[tuple[str, str, int], list[_Write]] = {}
+    called: set[tuple[str, str, int]] = set()
 
     for path, tree in trees.items():
         module = path.stem
@@ -262,7 +315,7 @@ def _writes(package: Path, keys: set[str]) -> list[_Write]:
             key: str,
             words: set[str],
             anchor: ast.AST | None = None,
-            writer: tuple[str, str] | None = None,
+            writer: tuple[str, str, int] | None = None,
         ) -> None:
             # The scope comes from the statement and the line from whatever a reader would
             # look at -- for a dict that is the entry, not the brace several lines above it.
@@ -275,7 +328,6 @@ def _writes(package: Path, keys: set[str]) -> list[_Write]:
 
         for node in ast.walk(tree):
             if isinstance(node, (ast.Assign, ast.AnnAssign, ast.AugAssign)):
-                owner = bodies.get(id(node))
                 targets = node.targets if isinstance(node, ast.Assign) else [node.target]
                 # An augmented assignment builds its value out of the old one, which this
                 # resolver holds nothing of, so it resolves to no word and says so.
@@ -284,7 +336,7 @@ def _writes(package: Path, keys: set[str]) -> list[_Write]:
                     key = _subscript_key(target)
                     if key in keys:
                         words = _resolve(value, module, constants) if value is not None else set()
-                        record(node, key, words, writer=owner)
+                        record(node, key, words, writer=bodies.get((id(node), key)))
                     for unpacked in _unpacked_keys(target, keys):
                         record(node, unpacked, set())
             elif isinstance(node, ast.Dict):
@@ -296,13 +348,15 @@ def _writes(package: Path, keys: set[str]) -> list[_Write]:
             elif isinstance(node, ast.Call):
                 named = _called_writer(node, module, writers)
                 if named is not None:
-                    name, writer = named
-                    called.add(name)
-                    record(
-                        node, writer.key,
-                        _resolve_argument(node, writer, module, constants),
-                    )
+                    for writer in named:
+                        called.add(writer.origin)
+                        record(
+                            node, writer.key,
+                            _resolve_argument(node, writer, module, constants),
+                        )
                     continue
+                for key in sorted(_keys_a_writer_of_this_name_writes(node, writers) & keys):
+                    record(node, key, set())
                 setdefault = _setdefault_key(node, keys)
                 if setdefault is not None:
                     words = _resolve(node.args[1], module, constants) if len(node.args) > 1 else set()
@@ -720,6 +774,77 @@ def test_a_writer_is_a_writer_only_inside_the_module_that_defines_it(tmp_path):
     )
 
     assert _words_written_to(tmp_path, {"outcome", "preview_outcome"}) == {"proposed"}
+
+
+def test_every_write_a_writer_registers_is_carried_by_its_call_sites(tmp_path):
+    """A writer that writes twice had one of the two dropped, and the word with it.
+
+    The registry held one `_Writer` per function while the body scan held both writes, so the
+    call site carried whichever assignment came last and the other was skipped as accounted
+    for. Measured: `_finish(state, OPENED, PROPOSED)` reported `{'proposed'}` alone.
+    """
+    package = _synthetic(
+        tmp_path,
+        'OPENED = "opened"\n'
+        'PROPOSED = "proposed"\n'
+        "def _finish(state, outcome, preview):\n"
+        '    state["outcome"] = outcome\n'
+        '    state["preview_outcome"] = preview\n'
+        "def run(state):\n"
+        "    return _finish(state, OPENED, PROPOSED)\n",
+    )
+
+    assert _words_written_to(package, {"outcome", "preview_outcome"}) == {"opened", "proposed"}
+
+
+def test_a_call_naming_a_writer_through_a_receiver_the_scan_cannot_read_is_refused(tmp_path):
+    """The second way a call site stops carrying the word it was trusted to carry.
+
+    `_finish(state, WORD_A)` marks the writer called, which drops its body write; a second call
+    spelled `h.helper._finish(state, WORD_B)` reaches the same function through a receiver that
+    is a run-time value. Measured at `{'wordA'}` with no failure. Refused where it sits rather
+    than followed: no reading of the source says which function that receiver holds, and a
+    guess there puts a word in the vocabulary no line of source chose.
+    """
+    package = _synthetic(
+        tmp_path,
+        'WORD_A = "wordA"\n'
+        'WORD_B = "wordB"\n'
+        "def _finish(state, outcome):\n"
+        '    state["outcome"] = outcome\n'
+        "def run(state, h):\n"
+        "    _finish(state, WORD_A)\n"
+        "    h.helper._finish(state, WORD_B)\n",
+    )
+
+    assert _words_written_to(package, {"outcome"}) == {"wordA"}
+    assert [(w.line, w.census_key) for w in _writes(package, {"outcome"}) if not w.words] == [
+        (7, "drifted/driver.py::run::outcome")
+    ]
+
+
+def test_a_writer_called_through_a_name_bound_to_it_carries_its_word(tmp_path):
+    """`alias = _finish` reaches the writer under a name the registry never knew.
+
+    Followed rather than refused, because unlike a receiver the binding is a module-level
+    assignment sitting in the source. Refusing it would red a package whose only sin is
+    exporting a helper under a second name, and a false red costs a gate what a false green
+    does.
+    """
+    package = _synthetic(
+        tmp_path,
+        'WORD_A = "wordA"\n'
+        'WORD_B = "wordB"\n'
+        "def _finish(state, outcome):\n"
+        '    state["outcome"] = outcome\n'
+        "alias = _finish\n"
+        "def run(state):\n"
+        "    _finish(state, WORD_A)\n"
+        "    alias(state, WORD_B)\n",
+    )
+
+    assert _words_written_to(package, {"outcome"}) == {"wordA", "wordB"}
+    assert [w for w in _writes(package, {"outcome"}) if not w.words] == []
 
 
 def test_a_constant_resolves_only_where_it_is_defined_or_where_it_is_qualified(tmp_path):
