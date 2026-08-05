@@ -115,7 +115,7 @@ budgeting time against that claim.
 
 ## Screenshots
 
-[`screenshots/`](screenshots/) holds eighteen PNGs captured on 2026-08-04 by driving a real browser
+[`screenshots/`](screenshots/) holds twenty-two PNGs captured on 2026-08-04 by driving a real browser
 against six shipping products — CodeRabbit, Greptile, Devin, Stage, Superlog and Pentagon. They are
 the durable record behind the competitor survey: landing pages, and then the specific surfaces that
 matter, including CodeRabbit's pre-merge checks table and its review-details provenance block,
