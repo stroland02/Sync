@@ -407,3 +407,88 @@ exit 2. Nothing to do with your paths; noted so you know that tree is held.
 Unchanged from HANDOFF.md: a terminal accepts a dispatch, `dispatch-show` reports `dispatched`, and
 no agent runs. I have stopped using it entirely. Every agent in this session went through the Agent
 tool with the brief written to a file and the path handed over, and all of them did real work.
+
+---
+
+## 2026-08-05 — the fixture-run dependency is on `main`, and a vocabulary you own gained a word
+
+### Dogfooding Task 2 landed
+
+`main` at `86ee520`. `build_graph` now takes `forge=None` and omits `push_branch`, `await_ci` and
+`open_pr` from the compiled graph rather than guarding them at runtime. A verified patch with nowhere
+to push routes `replay -> report`, ends `outcome == "reported"`, and records a corpus row.
+
+Absence rather than an interrupt, deliberately: `interrupt_before=["push_branch"]` leaves the run
+resumable and the node present, so a later caller holding a forge resumes it straight into a push.
+Absence is not resumable.
+
+That unblocks Task 3 and the three tasks under it. The entry point itself is still unbuilt — B78 in
+the backlog carries what remains.
+
+**Two things from it you need rather than want.**
+
+**`forge=None` never crashed. It abandoned.** Before this, `None.push_branch(...)` raised inside the
+node's own handler, which set `fatal` and routed to `abandon`. So any forge-less run anyone did
+before today produced a plausible-looking `abandoned` run with a Python traceback fragment sitting in
+`abandon_reason`. If the console is rendering rows from any earlier experiment, that is what they
+are — not a pipeline failure.
+
+**`"halted"` is a fourth `terminal_status`**, alongside `retried`, `opened` and `abandoned`. It is
+what a verified-but-unpushed attempt records. This touches
+`2026-08-04-sync-run-state-and-abandonment-vocabulary.md`, which is yours — I picked the word and am
+telling you rather than asking, but say so here if you want a different one and I will change it
+while it is one branch old. What I checked before choosing it: the column is plain `TEXT` with no
+`CHECK`, so no migration; `benchmark.axes` branches on `"abandoned"` alone, so a halted row lands in
+`counts.attempts` and in `routing_accuracy` and is excluded from every merge rate; and nothing under
+`web/`, `src/sync/api/` or `src/sync/dashboard/` reads `terminal_status` at all.
+
+Note that `RunState["outcome"]` is unchanged — a halted run still reports `"reported"`. Only the
+corpus gained a word.
+
+### The two run-state contradictions are fixed, and one of them touches your file
+
+Branch `b80-run-state-vocabulary`, in review, not yet on `main`.
+
+`sync.mcp.propose` was writing five values — `proposed`, `unverified`, `blocked`,
+`no_patch_warranted`, `unavailable` — into `RunState["outcome"]`, whose declared type holds four
+entirely different ones. The vocabulary is right and stays; what changed is that it now has its own
+key and its own `Literal`, so `RunState["outcome"]` stops claiming to hold words it cannot.
+
+**The published MCP response is untouched.** `sync_propose_patch` still answers `"outcome"` spelled
+exactly as before. The four tools are frozen and I treated them that way.
+
+Relevant to you: `dashboard/queries.py:206` reads `outcome` from a checkpoint and compares it against
+`_FINISHED`. A preview state could never reach a checkpoint — `run_to_static_verify` composes node
+factories directly with no checkpointer — so this was never a live console bug. Verified twice, once
+by the implementer and once by an independent reviewer. Nothing for you to change.
+
+**One thing in your lane that I am not touching.** `src/sync/api/__main__.py:25` builds
+`GraphSurface(store)` with no `repo`, `adapter` or `remediator`. `src/sync/mcp/server.py:316` does
+the same. The consequence is that `sync_propose_patch` returns `unavailable` on every shipped
+deployment — no server can currently reach the propose path at all. That may be exactly what you
+intend for a read-only console, and it is your call either way. Flagging it because the tool
+advertises a capability nothing can currently exercise.
+
+### `src/sync/mcp/` — I took it
+
+Neither of us claimed it. I have been in it for B74 and now B80, so I am claiming it rather than
+leaving it ambiguous. Say the word if you would rather have it; `GraphSurface` is the seam your
+console reads through, so the argument for it being yours is not weak.
+
+### B79 queued: a rehearsal row and a production row collide
+
+`migration_outcome` is upserted on `(finding_id, attempt_index)` with `ON CONFLICT DO NOTHING`. A run
+has no identity in that key. So a forge-less rehearsal writes `(f, 1, halted, pr_number=NULL)`, and
+if that same finding is later run with a forge against the same database, `open_pr`'s
+`(f, 1, opened, pr_number=1)` is dropped silently — and that pull request never enters `merge_rate`
+or `counts.pull_requests_opened`.
+
+Pre-existing rather than introduced, but B78's whole point is to make rehearsal runs routine, which
+turns a theoretical collision into an expected one. **It matters to you directly**: if you drive
+fixture runs against the same Postgres the console reads, the corpus rows you see may not be the ones
+the last run wrote. Until B79 lands, use a separate database for rehearsals.
+
+### Still open to you, from earlier
+
+Whether the fabricated pull-request number should count up across runs, and whether the branch should
+be left in the fixture origin. Both are consumer decisions and the consumer is the console.
