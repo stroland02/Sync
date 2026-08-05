@@ -1,0 +1,63 @@
+/**
+ * What this screen cannot tell you, permanently — not a footnote and not behind a
+ * disclosure. Every figure below has an honest scope; this panel is the standing set of
+ * things no figure on this screen can answer at all, at the same visual weight as the
+ * figures themselves.
+ */
+
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+
+const LIMITS: readonly { headline: string; detail: string }[] = [
+  {
+    headline: "A repository the index never indexed is invisible.",
+    detail:
+      "It has no row in the repository list below — the same absence as a repository " +
+      "nobody ever configured. Nothing in this data tells the two apart.",
+  },
+  {
+    headline: "The repair record's denominator excludes the earliest failures.",
+    detail:
+      "Three abandonment classes never write a migration_outcome row: an abandonment " +
+      "before any attempt, one with no tier applied, and one whose state was missing its " +
+      "finding, site or change. Those runs are real — the runs table above still names " +
+      "them through an abandon reason — but they leave no attempt for the repair record " +
+      "to count.",
+  },
+  {
+    headline: "“Last checkpoint” is staleness, not liveness.",
+    detail:
+      "There is no heartbeat and no process registry. A run waiting on the customer's CI " +
+      "writes no checkpoint for as long as that takes, by design, and a run that has " +
+      "actually died looks identical here. Nothing on this screen guesses which is which.",
+  },
+  {
+    headline: "Findings cannot be ordered by severity across every vendor yet.",
+    detail:
+      "GET /api/overview counts open findings per vendor; no route yet accepts the " +
+      "severity filter the frozen surface already offers. Until one does, the vendor " +
+      "panel above orders by open finding count, not by how severe those findings are.",
+  },
+]
+
+export function ScreenLimitsCard() {
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-emphasis">What this screen cannot tell you</CardTitle>
+        <CardDescription className="text-body">
+          Four standing limits of the data behind this page, not gaps in how it is drawn.
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        <dl className="grid gap-4 sm:grid-cols-2">
+          {LIMITS.map((limit) => (
+            <div key={limit.headline} className="flex flex-col gap-1">
+              <dt className="text-body text-foreground">{limit.headline}</dt>
+              <dd className="text-body text-muted-foreground">{limit.detail}</dd>
+            </div>
+          ))}
+        </dl>
+      </CardContent>
+    </Card>
+  )
+}

@@ -6,6 +6,8 @@
  * here — indistinguishable from one that was never configured at all.
  */
 
+import { Link } from "react-router"
+
 import { useRepositories } from "@/api/queries"
 import { EmptyState, ErrorState, LoadingState } from "@/components/states"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -17,6 +19,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
+import { CardinalityStatement, describeCardinality, sliceForDisplay } from "@/features/fleet/cardinality"
 
 export function RepositoriesCard() {
   const query = useRepositories()
@@ -47,20 +50,37 @@ export function RepositoriesCard() {
                 detail="The API answered, and no call site in the graph names a repository. That is an answer, not a failure — either nothing has been indexed yet, or nothing indexed carries a repository identifier."
               />
             ) : (
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead className="text-meta">Repository</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {query.data.repo_ids.map((repoId) => (
-                    <TableRow key={repoId}>
-                      <TableCell className="font-mono text-body">{repoId}</TableCell>
+              <>
+                <CardinalityStatement
+                  text={describeCardinality(
+                    query.data.repo_ids.length,
+                    "repository",
+                    "repositories",
+                    "repository id, alphabetically",
+                  )}
+                />
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead className="text-meta">Repository</TableHead>
                     </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
+                  </TableHeader>
+                  <TableBody>
+                    {sliceForDisplay(query.data.repo_ids).map((repoId) => (
+                      <TableRow key={repoId}>
+                        <TableCell className="font-mono text-body">
+                          <Link
+                            to={`/bindings/repositories/${encodeURIComponent(repoId)}`}
+                            className="underline underline-offset-2"
+                          >
+                            {repoId}
+                          </Link>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </>
             )}
           </CardContent>
         </Card>

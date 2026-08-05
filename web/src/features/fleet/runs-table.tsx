@@ -11,7 +11,7 @@ import { Link } from "react-router"
 
 import { DEFAULT_LIMIT } from "@/api/client"
 import { useRuns } from "@/api/queries"
-import type { RunDisposition } from "@/api/types"
+import type { RunDisposition, RunRow } from "@/api/types"
 import { PageControls } from "@/components/page-controls"
 import { EmptyState, ErrorState, LoadingState } from "@/components/states"
 import { Formatted } from "@/components/status"
@@ -24,12 +24,31 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
+import {
+  CardinalityStatement,
+  describeCardinality,
+  isCompleteListing,
+} from "@/features/fleet/cardinality"
 import { formatElapsed, orAbsent } from "@/lib/format"
 import { useOffsetParam } from "@/lib/use-offset-param"
 
 /** "in flight" for a run with no disposition yet — never "running", which never arrives here. */
 function describeOutcome(outcome: RunDisposition | null): string {
   return outcome === null ? "in flight" : outcome
+}
+
+/**
+ * How many runs on the fetched page ended each way, or are still in flight. Counted over the
+ * page this request returned, never over the fleet — `GET /api/runs` paginates and carries no
+ * total-by-disposition figure, so a total here would have to be invented.
+ */
+function tallyDispositionsOnThisPage(items: readonly RunRow[]): Record<string, number> {
+  const counts: Record<string, number> = {}
+  for (const run of items) {
+    const key = describeOutcome(run.outcome)
+    counts[key] = (counts[key] ?? 0) + 1
+  }
+  return counts
 }
 
 export function RunsCard() {
@@ -61,6 +80,30 @@ export function RunsCard() {
               />
             ) : (
               <>
+                <div className="flex flex-col gap-1">
+                  <span className="text-meta uppercase tracking-wide text-muted-foreground">
+                    By disposition, this page only
+                  </span>
+                  <p className="font-mono text-body">
+                    {Object.entries(tallyDispositionsOnThisPage(query.data.items))
+                      .sort(([a], [b]) => a.localeCompare(b))
+                      .map(([outcome, count]) => `${outcome}: ${count}`)
+                      .join(", ")}
+                  </p>
+                  <p className="text-meta text-muted-foreground">
+                    Counted across the {query.data.items.length} runs shown below, not the
+                    fleet — the fleet's true disposition mix is not in this payload.
+                  </p>
+                </div>
+                <CardinalityStatement
+                  text={describeCardinality(
+                    query.data.total,
+                    "run",
+                    "runs",
+                    "newest checkpoint first",
+                    query.data.items.length,
+                  )}
+                />
                 <Table>
                   <TableHeader>
                     <TableRow>
@@ -99,15 +142,17 @@ export function RunsCard() {
                     ))}
                   </TableBody>
                 </Table>
-                <PageControls
-                  offset={offset}
-                  limit={DEFAULT_LIMIT}
-                  shown={query.data.items.length}
-                  total={query.data.total}
-                  nextOffset={query.data.next_offset}
-                  busy={query.isFetching}
-                  onOffsetChange={setOffset}
-                />
+                {!isCompleteListing(query.data.total) && (
+                  <PageControls
+                    offset={offset}
+                    limit={DEFAULT_LIMIT}
+                    shown={query.data.items.length}
+                    total={query.data.total}
+                    nextOffset={query.data.next_offset}
+                    busy={query.isFetching}
+                    onOffsetChange={setOffset}
+                  />
+                )}
               </>
             )}
 

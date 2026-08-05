@@ -8,20 +8,11 @@
  * selector here would be a control over data that does not exist.
  */
 
-import { Link } from "react-router"
-
 import { useOverview } from "@/api/queries"
 import { ProvenanceStrip } from "@/components/provenance"
 import { EmptyState, ErrorState, LoadingState } from "@/components/states"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table"
+import { VendorFindingsTable } from "@/features/fleet/vendor-distribution"
 import { Breadcrumbs } from "@/layouts/breadcrumbs"
 
 export function OverviewPage() {
@@ -56,31 +47,7 @@ export function OverviewPage() {
                 detail="The API answered, and the graph holds no open findings. That is a result, not a failure — nothing indexed is currently broken, drifting, or wasting money."
               />
             ) : (
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Vendor</TableHead>
-                    <TableHead>Open findings</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {query.data.vendors.map((vendor) => (
-                    <TableRow key={vendor.vendor_id}>
-                      <TableCell>
-                        <Link
-                          to={`/vendors/${encodeURIComponent(vendor.vendor_id)}`}
-                          className="font-mono underline underline-offset-2"
-                        >
-                          {vendor.vendor_id}
-                        </Link>
-                      </TableCell>
-                      <TableCell className="font-mono">
-                        {vendor.open_finding_count}
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
+              <VendorFindingsTable vendors={query.data.vendors} />
             )}
             <ProvenanceStrip
               provenance={query.data}
