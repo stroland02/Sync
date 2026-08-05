@@ -93,9 +93,12 @@ class NoPatchWarranted(RuntimeError):
     Raised rather than returned as an empty patch, for the reason this module already gives
     empty diffs the opposite meaning. It answers a caller holding a `TieredRemediator`
     directly, which is where nothing has established a tier ahead of it. Inside the graph
-    nothing catches it and nothing needs to: `locate` stores the tier and `route_after_prepare`
-    sends tier -1 to `report` before `patch` runs, so the row that decided travels on
-    `RunState["routing_row"]` and `make_report` renders it.
+    nothing catches it, so long as `locate` was given the same catalogue as the cascade that
+    raises it -- `build_graph` and `GraphSurface` take `remediator` and `catalogue` as
+    independent arguments, so that is a constraint on the caller rather than a guarantee:
+    `locate` stores the tier and `route_after_prepare` sends tier -1 to `report` before `patch`
+    runs, so the row that decided travels on `RunState["routing_row"]` and `make_report`
+    renders it.
 
     This message must never reach `abandon_reason`. Abandonment means Sync tried and could not
     finish, and that field is where routing learns which change kinds are not mechanically
