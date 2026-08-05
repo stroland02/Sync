@@ -24,6 +24,14 @@ from sync.mcp.tools import DEFAULT_LIMIT, GraphSurface
 
 WorkflowReader = Callable[[str], Optional[dict[str, Any]]]
 
+# The fleet roll-ups read the checkpointer and the graph store directly, outside `GraphSurface`
+# -- same reasoning as `WorkflowReader`: a run, a repair record and a repo_id roll-up are not
+# graph-surface questions, and folding them into the surface would ask one abstraction to speak
+# three databases' worth of shape.
+RunsReader = Callable[..., dict[str, Any]]
+CorpusReader = Callable[[], dict[str, Any]]
+RepositoriesReader = Callable[[], dict[str, Any]]
+
 
 # Upper bound on a single scan of `whats_at_risk` when the transport needs to look up a
 # finding by id. The surface does not offer a by-id read; the overview and finding routes
@@ -71,11 +79,18 @@ def create_app(
     *,
     surface: GraphSurface,
     workflow_reader: WorkflowReader,
+    runs_reader: RunsReader,
+    corpus_reader: CorpusReader,
+    repositories_reader: RepositoriesReader,
 ) -> Starlette:
-    """Build the Starlette app bound to a particular surface and workflow reader.
+    """Build the Starlette app bound to a particular surface and readers.
 
-    Constructed rather than module-global so a test substitutes a fake surface without
-    reaching into module state, and a deployment configures the surface once at start-up.
+    Constructed rather than module-global so a test substitutes fakes without reaching into
+    module state, and a deployment configures each reader once at start-up.
+
+    Every reader is required rather than defaulted. A deployment that forgets one should fail
+    at start-up with a `TypeError` naming the missing argument, not serve a route that 500s the
+    first time a customer opens it.
     """
 
     async def overview(request: Request) -> JSONResponse:
@@ -98,6 +113,7 @@ def create_app(
                 "indexed_at": page["indexed_at"],
                 "feed_fetched_at": page["feed_fetched_at"],
                 "binding_source": page["binding_source"],
+                "context_savings": page["context_savings"],
             }
         )
 
@@ -153,11 +169,25 @@ def create_app(
             return _not_found("workflow", finding_id)
         return JSONResponse(payload)
 
+    async def runs(request: Request) -> JSONResponse:
+        limit = _limit_param(request)
+        offset = _int_param(request, "offset", 0)
+        return JSONResponse(runs_reader(limit=limit, offset=offset))
+
+    async def corpus(request: Request) -> JSONResponse:
+        return JSONResponse(corpus_reader())
+
+    async def repositories(request: Request) -> JSONResponse:
+        return JSONResponse(repositories_reader())
+
     routes = [
         Route("/api/overview", overview, methods=["GET"]),
         Route("/api/vendors/{vendor_id}", vendor_detail, methods=["GET"]),
         Route("/api/vendors/{vendor_id}/changes", vendor_changes, methods=["GET"]),
         Route("/api/findings/{finding_id}", finding_detail, methods=["GET"]),
         Route("/api/workflows/{finding_id}", workflow, methods=["GET"]),
+        Route("/api/runs", runs, methods=["GET"]),
+        Route("/api/corpus", corpus, methods=["GET"]),
+        Route("/api/repositories", repositories, methods=["GET"]),
     ]
     return Starlette(routes=routes)

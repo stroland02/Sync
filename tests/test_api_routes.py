@@ -13,12 +13,14 @@ from __future__ import annotations
 import re
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Any
 
 import pytest
+from starlette.applications import Starlette
 from starlette.testclient import TestClient
 
 from sync.api.__main__ import DEFAULT_PORT
-from sync.api.app import _MAX_LIMIT, create_app
+from sync.api.app import _MAX_LIMIT, _SCAN_LIMIT, create_app
 from sync.core import CallSite, Finding, VendorChange
 from sync.mcp.tools import DEFAULT_LIMIT, GraphSurface
 
@@ -87,10 +89,53 @@ def _web_source(relative: str) -> str:
     return path.read_text(encoding="utf-8")
 
 
+def _fake_runs_reader(*, limit: int, offset: int) -> dict[str, Any]:
+    return {"items": [], "total": 0, "next_offset": None}
+
+
+def _fake_corpus_reader() -> dict[str, Any]:
+    return {
+        "attempts": 0,
+        "distinct_findings": 0,
+        "by_terminal_status": {},
+        "by_strategy": {},
+        "by_tier": {},
+    }
+
+
+def _fake_repositories_reader() -> dict[str, Any]:
+    return {"repo_ids": []}
+
+
+def _build_app(
+    *,
+    surface: GraphSurface,
+    workflow_reader=lambda finding_id: None,
+    runs_reader=_fake_runs_reader,
+    corpus_reader=_fake_corpus_reader,
+    repositories_reader=_fake_repositories_reader,
+) -> Starlette:
+    """`create_app` with every reader defaulted to a fake, so a test naming one override is
+    not forced to restate the other four.
+
+    `create_app` keeps all five readers required -- a deployment that forgets one should fail
+    at start-up rather than serve a route that breaks on first use. That signature stays as
+    written; this helper exists only so the test file does not repeat the full argument list
+    at every call site.
+    """
+    return create_app(
+        surface=surface,
+        workflow_reader=workflow_reader,
+        runs_reader=runs_reader,
+        corpus_reader=corpus_reader,
+        repositories_reader=repositories_reader,
+    )
+
+
 def _client(**graph_kw) -> TestClient:
     graph = FakeGraph(**graph_kw)
     surface = GraphSurface(graph, feed_fetched_at=FETCHED)
-    app = create_app(surface=surface, workflow_reader=lambda finding_id: None)
+    app = _build_app(surface=surface)
     return TestClient(app)
 
 
@@ -136,6 +181,22 @@ def test_overview_carries_the_surfaces_envelope_fields_unaltered():
     body = client.get("/api/overview").json()
 
     assert body["feed_fetched_at"] == FETCHED.isoformat()
+
+
+def test_overview_carries_the_envelopes_context_savings_not_a_hardcoded_number():
+    # `overview` composes its payload by hand from `whats_at_risk`'s page; the page it reads
+    # already carries a real `context_savings` from the envelope, and the route must forward
+    # that value rather than drop it or invent one.
+    site = _site("s1")
+    change = _change("c1")
+    findings = [_finding("f1", "s1", "c1")]
+    surface = GraphSurface(FakeGraph(findings=findings, sites=[site], changes=[change]), feed_fetched_at=FETCHED)
+    client = TestClient(_build_app(surface=surface))
+    expected = surface.whats_at_risk(limit=_SCAN_LIMIT, offset=0)["context_savings"]
+
+    body = client.get("/api/overview").json()
+
+    assert body["context_savings"] == expected
 
 
 # -- vendor detail --------------------------------------------------------------
@@ -288,7 +349,7 @@ def test_workflow_route_returns_reader_payload_unaltered():
         "abandon_reason": None,
     }
     surface = GraphSurface(FakeGraph(), feed_fetched_at=FETCHED)
-    app = create_app(surface=surface, workflow_reader=lambda finding_id: payload)
+    app = _build_app(surface=surface, workflow_reader=lambda finding_id: payload)
     client = TestClient(app)
 
     response = client.get("/api/workflows/f1")
@@ -299,7 +360,7 @@ def test_workflow_route_returns_reader_payload_unaltered():
 
 def test_workflow_route_returns_404_when_reader_yields_none():
     surface = GraphSurface(FakeGraph(), feed_fetched_at=FETCHED)
-    app = create_app(surface=surface, workflow_reader=lambda finding_id: None)
+    app = _build_app(surface=surface, workflow_reader=lambda finding_id: None)
     client = TestClient(app)
 
     response = client.get("/api/workflows/unknown")
@@ -308,6 +369,154 @@ def test_workflow_route_returns_404_when_reader_yields_none():
     assert response.headers["content-type"].startswith("application/json")
     body = response.json()
     assert "error" in body
+
+
+# -- fleet roll-ups: runs, corpus, repositories ---------------------------------
+
+
+def test_runs_route_returns_the_readers_payload_unaltered():
+    payload = {
+        "items": [{"thread_id": "f1:0", "finding_id": "f1", "outcome": "opened"}],
+        "total": 1,
+        "next_offset": None,
+    }
+    app = _build_app(
+        surface=GraphSurface(FakeGraph(), feed_fetched_at=FETCHED),
+        runs_reader=lambda *, limit, offset: payload,
+    )
+    client = TestClient(app)
+
+    response = client.get("/api/runs")
+
+    assert response.status_code == 200
+    assert response.json() == payload
+
+
+def test_corpus_route_returns_the_readers_payload_unaltered():
+    payload = {
+        "attempts": 3,
+        "distinct_findings": 2,
+        "by_terminal_status": {"opened": 2, "abandoned": 1},
+        "by_strategy": {"patch": 3},
+        "by_tier": {"low": 3},
+    }
+    app = _build_app(
+        surface=GraphSurface(FakeGraph(), feed_fetched_at=FETCHED),
+        corpus_reader=lambda: payload,
+    )
+    client = TestClient(app)
+
+    response = client.get("/api/corpus")
+
+    assert response.status_code == 200
+    assert response.json() == payload
+
+
+def test_repositories_route_returns_the_readers_payload_unaltered():
+    payload = {"repo_ids": ["r1", "r2"]}
+    app = _build_app(
+        surface=GraphSurface(FakeGraph(), feed_fetched_at=FETCHED),
+        repositories_reader=lambda: payload,
+    )
+    client = TestClient(app)
+
+    response = client.get("/api/repositories")
+
+    assert response.status_code == 200
+    assert response.json() == payload
+
+
+def _recording_runs_reader():
+    calls: list[dict[str, int]] = []
+
+    def reader(*, limit: int, offset: int) -> dict[str, Any]:
+        calls.append({"limit": limit, "offset": offset})
+        return {"items": [], "total": 0, "next_offset": None}
+
+    return reader, calls
+
+
+def test_runs_route_passes_limit_and_offset_to_its_reader():
+    reader, calls = _recording_runs_reader()
+    app = _build_app(surface=GraphSurface(FakeGraph(), feed_fetched_at=FETCHED), runs_reader=reader)
+    client = TestClient(app)
+
+    client.get("/api/runs?limit=7&offset=3")
+
+    assert calls == [{"limit": 7, "offset": 3}]
+
+
+def test_runs_route_limit_above_the_ceiling_is_clamped():
+    reader, calls = _recording_runs_reader()
+    app = _build_app(surface=GraphSurface(FakeGraph(), feed_fetched_at=FETCHED), runs_reader=reader)
+    client = TestClient(app)
+
+    client.get(f"/api/runs?limit={_MAX_LIMIT * 1000}")
+
+    assert calls == [{"limit": _MAX_LIMIT, "offset": 0}]
+
+
+def test_runs_route_a_limit_under_the_ceiling_passes_through_untouched():
+    reader, calls = _recording_runs_reader()
+    app = _build_app(surface=GraphSurface(FakeGraph(), feed_fetched_at=FETCHED), runs_reader=reader)
+    client = TestClient(app)
+
+    client.get("/api/runs?limit=9")
+
+    assert calls == [{"limit": 9, "offset": 0}]
+
+
+def test_runs_route_a_negative_limit_is_floored():
+    reader, calls = _recording_runs_reader()
+    app = _build_app(surface=GraphSurface(FakeGraph(), feed_fetched_at=FETCHED), runs_reader=reader)
+    client = TestClient(app)
+
+    client.get("/api/runs?limit=-1")
+
+    assert calls == [{"limit": 1, "offset": 0}]
+
+
+def test_runs_route_a_zero_limit_is_floored():
+    reader, calls = _recording_runs_reader()
+    app = _build_app(surface=GraphSurface(FakeGraph(), feed_fetched_at=FETCHED), runs_reader=reader)
+    client = TestClient(app)
+
+    client.get("/api/runs?limit=0")
+
+    assert calls == [{"limit": 1, "offset": 0}]
+
+
+def test_corpus_route_reaches_its_reader_exactly_once_with_no_arguments():
+    calls: list[None] = []
+
+    def corpus_reader():
+        calls.append(None)
+        return _fake_corpus_reader()
+
+    app = _build_app(surface=GraphSurface(FakeGraph(), feed_fetched_at=FETCHED), corpus_reader=corpus_reader)
+    client = TestClient(app)
+
+    client.get("/api/corpus")
+
+    assert calls == [None]
+
+
+def test_repositories_route_reaches_its_reader_exactly_once_with_no_arguments():
+    calls: list[None] = []
+
+    def repositories_reader():
+        calls.append(None)
+        return _fake_repositories_reader()
+
+    app = _build_app(
+        surface=GraphSurface(FakeGraph(), feed_fetched_at=FETCHED),
+        repositories_reader=repositories_reader,
+    )
+    client = TestClient(app)
+
+    client.get("/api/repositories")
+
+    assert calls == [None]
 
 
 # -- the read-only constraint, as a test rather than a promise ------------------
@@ -347,16 +556,76 @@ class RecordingSurface:
         return {name for name, _ in self.calls}
 
 
-def _recording_client(**graph_kw) -> tuple[TestClient, RecordingSurface, list[str]]:
+class _RecordingClient:
+    """Everything a read-only-guarantee test needs from one `_recording_client()` call.
+
+    Named fields rather than a wider tuple: the third slice-2 growth of this fixture is the
+    reason the plan calls out, and a test that only cares about `workflow_reads` should not
+    have to spell out four more names it never touches.
+    """
+
+    def __init__(
+        self,
+        client: TestClient,
+        surface: "RecordingSurface",
+        workflow_reads: list[str],
+        runs_reads: list[dict[str, int]],
+        corpus_reads: list[None],
+        repositories_reads: list[None],
+    ) -> None:
+        self.client = client
+        self.surface = surface
+        self.workflow_reads = workflow_reads
+        self.runs_reads = runs_reads
+        self.corpus_reads = corpus_reads
+        self.repositories_reads = repositories_reads
+
+    def __iter__(self):
+        return iter(
+            (
+                self.client,
+                self.surface,
+                self.workflow_reads,
+                self.runs_reads,
+                self.corpus_reads,
+                self.repositories_reads,
+            )
+        )
+
+
+def _recording_client(**graph_kw) -> _RecordingClient:
     surface = RecordingSurface(GraphSurface(FakeGraph(**graph_kw), feed_fetched_at=FETCHED))
     workflow_reads: list[str] = []
+    runs_reads: list[dict[str, int]] = []
+    corpus_reads: list[None] = []
+    repositories_reads: list[None] = []
 
     def workflow_reader(finding_id: str):
         workflow_reads.append(finding_id)
         return {"nodes": [], "outcome": None, "abandon_reason": None}
 
-    app = create_app(surface=surface, workflow_reader=workflow_reader)
-    return TestClient(app), surface, workflow_reads
+    def runs_reader(*, limit: int, offset: int):
+        runs_reads.append({"limit": limit, "offset": offset})
+        return {"items": [], "total": 0, "next_offset": None}
+
+    def corpus_reader():
+        corpus_reads.append(None)
+        return _fake_corpus_reader()
+
+    def repositories_reader():
+        repositories_reads.append(None)
+        return _fake_repositories_reader()
+
+    app = create_app(
+        surface=surface,
+        workflow_reader=workflow_reader,
+        runs_reader=runs_reader,
+        corpus_reader=corpus_reader,
+        repositories_reader=repositories_reader,
+    )
+    return _RecordingClient(
+        TestClient(app), surface, workflow_reads, runs_reads, corpus_reads, repositories_reads
+    )
 
 
 def test_no_route_reaches_past_the_read_surface():
@@ -366,7 +635,7 @@ def test_no_route_reaches_past_the_read_surface():
     # the customer's repository all the same.
     site = _site("s1")
     change = _change("c1")
-    client, surface, workflow_reads = _recording_client(
+    client, surface, workflow_reads, runs_reads, corpus_reads, repositories_reads = _recording_client(
         findings=[_finding("f1", "s1", "c1")], sites=[site], changes=[change]
     )
 
@@ -375,16 +644,25 @@ def test_no_route_reaches_past_the_read_surface():
     assert client.get("/api/vendors/stripe/changes").status_code == 200
     assert client.get("/api/findings/f1").status_code == 200
     assert client.get("/api/workflows/f1").status_code == 200
+    assert client.get("/api/runs").status_code == 200
+    assert client.get("/api/corpus").status_code == 200
+    assert client.get("/api/repositories").status_code == 200
 
     unexpected = surface.method_names() - _READ_ONLY_METHODS
     assert not unexpected, f"routes reached beyond the read surface: {sorted(unexpected)}"
     assert workflow_reads == ["f1"]
+    # Each fleet reader was reached by exactly the one request naming its own route -- if any
+    # route had reached another's reader instead of (or in addition to) its own, one of these
+    # counts would read 0 or 2 rather than 1.
+    assert len(runs_reads) == 1, "the runs route must reach its own reader exactly once"
+    assert len(corpus_reads) == 1, "the corpus route must reach its own reader exactly once"
+    assert len(repositories_reads) == 1, "the repositories route must reach its own reader exactly once"
 
 
 def test_a_404_route_reaches_past_nothing_either():
     # The unhappy paths get the same treatment: a route that fell back to a heavier call
     # when its cheap read came up empty would pass the test above and fail the constraint.
-    client, surface, _ = _recording_client()
+    client, surface, *_ = _recording_client()
 
     assert client.get("/api/findings/nope").status_code == 404
     assert client.get("/api/vendors/nobody").status_code == 200
@@ -396,7 +674,7 @@ def test_a_404_route_reaches_past_nothing_either():
 
 
 def test_limit_above_the_ceiling_is_clamped():
-    client, surface, _ = _recording_client()
+    client, surface, *_ = _recording_client()
 
     client.get(f"/api/vendors/stripe?limit={_MAX_LIMIT * 1000}")
     client.get(f"/api/vendors/stripe/changes?limit={_MAX_LIMIT * 1000}")
@@ -406,7 +684,7 @@ def test_limit_above_the_ceiling_is_clamped():
 
 
 def test_a_limit_under_the_ceiling_passes_through_untouched():
-    client, surface, _ = _recording_client()
+    client, surface, *_ = _recording_client()
 
     client.get("/api/vendors/stripe?limit=7")
 
@@ -417,7 +695,7 @@ def test_a_negative_limit_is_floored_not_turned_into_a_negative_slice():
     # `rows[offset : offset + limit]` in the surface turns a negative limit into a negative
     # slice stop, which trims from the end instead of returning nothing. The ceiling alone
     # does not stop this -- a floor does.
-    client, surface, _ = _recording_client()
+    client, surface, *_ = _recording_client()
 
     client.get("/api/vendors/stripe?limit=-1")
 
@@ -427,7 +705,7 @@ def test_a_negative_limit_is_floored_not_turned_into_a_negative_slice():
 def test_a_zero_limit_is_floored_so_the_cursor_terminates():
     # `next_offset` only reaches `None` once a window is non-empty; a limit of zero never
     # consumes a row, so the cursor the console would page with never advances.
-    client, surface, _ = _recording_client()
+    client, surface, *_ = _recording_client()
 
     client.get("/api/vendors/stripe?limit=0")
 

@@ -76,13 +76,7 @@ export function ProvenanceStrip({
           <time dateTime={feed_fetched_at}>{formatTimestamp(feed_fetched_at)}</time>
         )}
       </Field>
-      <Field label="Context savings">
-        {context_savings === undefined ? (
-          <span className="text-muted-foreground">{ABSENT} not reported</span>
-        ) : (
-          `${context_savings.toLocaleString()} tokens`
-        )}
-      </Field>
+      <Field label="Context savings">{`${context_savings.toLocaleString()} tokens`}</Field>
     </dl>
   )
 }

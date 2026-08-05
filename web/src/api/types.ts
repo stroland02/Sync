@@ -27,15 +27,15 @@ export type BindingSource =
  * holds no binding at all, or the page mixes rungs. Null is a fact, not a missing value,
  * and every render site is required to say which fact it means.
  *
- * `context_savings` is optional because `/api/overview` is the one route that composes its
- * payload by hand rather than through `_envelope`, and omits the field. The other four
- * always carry it.
+ * `context_savings` is required. `/api/overview` used to compose its payload by hand and drop
+ * the field; it now forwards the figure from the `whats_at_risk` page it already reads, so
+ * every route carries it the same way the other four always have.
  */
 export interface Provenance {
   indexed_at: string | null
   feed_fetched_at: string | null
   binding_source: BindingSource | null
-  context_savings?: number
+  context_savings: number
 }
 
 /** A paginated answer. `next_offset` is null on the last page — an offset that always exists is a loop. */

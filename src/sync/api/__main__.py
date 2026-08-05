@@ -13,6 +13,7 @@ import os
 import uvicorn
 
 from sync.api.app import create_app
+from sync.dashboard import fleet
 from sync.dashboard.queries import workflow_state
 from sync.graph.store import GraphStore
 from sync.mcp.tools import GraphSurface
@@ -31,7 +32,22 @@ def main() -> None:
     def workflow_reader(finding_id: str):
         return workflow_state(checkpointer_dsn, finding_id)
 
-    app = create_app(surface=surface, workflow_reader=workflow_reader)
+    def runs_reader(*, limit: int, offset: int):
+        return fleet.runs(checkpointer_dsn, limit=limit, offset=offset)
+
+    def corpus_reader():
+        return fleet.corpus_summary(store)
+
+    def repositories_reader():
+        return fleet.repositories(store)
+
+    app = create_app(
+        surface=surface,
+        workflow_reader=workflow_reader,
+        runs_reader=runs_reader,
+        corpus_reader=corpus_reader,
+        repositories_reader=repositories_reader,
+    )
     host = os.environ.get("SYNC_API_HOST", "127.0.0.1")
     port = int(os.environ.get("SYNC_API_PORT", DEFAULT_PORT))
     uvicorn.run(app, host=host, port=port)
