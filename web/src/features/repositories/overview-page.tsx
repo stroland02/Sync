@@ -30,7 +30,7 @@ export function OverviewPage() {
   return (
     <section className="flex flex-col gap-4">
       <Breadcrumbs trail={[{ label: "Fleet", to: "/" }, { label: "Codebase" }]} />
-      <h1 className="text-lg font-medium">Codebase overview</h1>
+      <h1 className="text-page">Codebase overview</h1>
 
       {query.isPending && <LoadingState what="the codebase overview" />}
       {query.isError && <ErrorState error={query.error} what="the codebase overview" />}

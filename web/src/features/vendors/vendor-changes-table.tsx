@@ -61,20 +61,20 @@ export function VendorChangesTable({ vendorId }: { vendorId: string }) {
                 <TableRow
                   key={`${change.published_at}-${change.operation ?? ABSENT}-${change.change_kind}-${index}`}
                 >
-                  <TableCell className="text-xs">
+                  <TableCell className="text-meta">
                     <time dateTime={change.published_at}>
                       {formatTimestamp(change.published_at)}
                     </time>
                   </TableCell>
                   <TableCell>{orAbsent(change.change_kind)}</TableCell>
                   <TableCell>{orAbsent(change.severity)}</TableCell>
-                  <TableCell className="font-mono text-xs">
+                  <TableCell className="font-mono">
                     {orAbsent(change.operation)}
                   </TableCell>
-                  <TableCell className="font-mono text-xs">
+                  <TableCell className="font-mono">
                     {orAbsent(change.path_ptr)}
                   </TableCell>
-                  <TableCell className="font-mono text-xs">
+                  <TableCell className="font-mono">
                     {orAbsent(change.from_version)} → {orAbsent(change.to_version)}
                   </TableCell>
                 </TableRow>

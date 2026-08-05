@@ -30,13 +30,13 @@ import { UnknownRoute } from "@/layouts/unknown-route"
 function FieldList({ label, values }: { label: string; values: string[] }) {
   return (
     <div className="flex flex-col gap-1">
-      <h3 className="text-xs tracking-wide text-muted-foreground uppercase">{label}</h3>
+      <h3 className="text-meta tracking-wide text-muted-foreground uppercase">{label}</h3>
       {values.length === 0 ? (
-        <p className="text-sm text-muted-foreground">{ABSENT} none recorded</p>
+        <p className="text-body text-muted-foreground">{ABSENT} none recorded</p>
       ) : (
         <ul className="flex flex-wrap gap-2">
           {values.map((value) => (
-            <li key={value} className="rounded border border-border px-1.5 py-0.5 font-mono text-xs">
+            <li key={value} className="rounded border border-border px-1.5 py-0.5 font-mono text-meta">
               {value}
             </li>
           ))}
@@ -74,13 +74,13 @@ function FindingDetail({ findingId }: { findingId: string }) {
   return (
     <section className="flex flex-col gap-4">
       <Breadcrumbs trail={trail} />
-      <h1 className="font-mono text-lg font-medium">{findingId}</h1>
+      <h1 className="font-mono text-page">{findingId}</h1>
 
       {/* Outside the success branch on purpose. A finding that has been patched or
           abandoned is no longer open, so this page 404s for it — and that is exactly the
           finding whose run is most worth reading. The workflow lives in the checkpointer,
           which does not care whether the graph still holds the finding. */}
-      <p className="text-sm">
+      <p className="text-body">
         <Link
           to={`/findings/${encodeURIComponent(findingId)}/workflow`}
           className="underline underline-offset-2"
@@ -117,10 +117,10 @@ function FindingDetail({ findingId }: { findingId: string }) {
             <CardContent className="flex flex-col gap-4">
               <dl className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
                 <div>
-                  <dt className="text-xs tracking-wide text-muted-foreground uppercase">
+                  <dt className="text-meta tracking-wide text-muted-foreground uppercase">
                     Vendor
                   </dt>
-                  <dd className="font-mono text-sm">
+                  <dd className="font-mono text-body">
                     <Link
                       to={`/vendors/${encodeURIComponent(query.data.vendor)}`}
                       className="underline underline-offset-2"
@@ -130,28 +130,28 @@ function FindingDetail({ findingId }: { findingId: string }) {
                   </dd>
                 </div>
                 <div>
-                  <dt className="text-xs tracking-wide text-muted-foreground uppercase">
+                  <dt className="text-meta tracking-wide text-muted-foreground uppercase">
                     Operation
                   </dt>
-                  <dd className="font-mono text-sm">{orAbsent(query.data.operation)}</dd>
+                  <dd className="font-mono text-body">{orAbsent(query.data.operation)}</dd>
                 </div>
                 <div>
-                  <dt className="text-xs tracking-wide text-muted-foreground uppercase">
+                  <dt className="text-meta tracking-wide text-muted-foreground uppercase">
                     Symbol
                   </dt>
-                  <dd className="font-mono text-sm">{orAbsent(query.data.symbol)}</dd>
+                  <dd className="font-mono text-body">{orAbsent(query.data.symbol)}</dd>
                 </div>
                 <div>
-                  <dt className="text-xs tracking-wide text-muted-foreground uppercase">
+                  <dt className="text-meta tracking-wide text-muted-foreground uppercase">
                     SDK version
                   </dt>
-                  <dd className="font-mono text-sm">{orAbsent(query.data.sdk_version)}</dd>
+                  <dd className="font-mono text-body">{orAbsent(query.data.sdk_version)}</dd>
                 </div>
                 <div>
-                  <dt className="text-xs tracking-wide text-muted-foreground uppercase">
+                  <dt className="text-meta tracking-wide text-muted-foreground uppercase">
                     This finding's rung
                   </dt>
-                  <dd className="text-sm">
+                  <dd className="text-body">
                     <RungBadge rung={query.data.finding.binding_source} />
                   </dd>
                 </div>
@@ -190,7 +190,7 @@ function FindingDetail({ findingId }: { findingId: string }) {
             </CardHeader>
             <CardContent>
               {query.data.known_changes.length === 0 ? (
-                <p className="text-sm text-muted-foreground">
+                <p className="text-body text-muted-foreground">
                   {ABSENT} No vendor change names this call site. The finding was raised by
                   something other than a spec diff.
                 </p>
@@ -206,7 +206,7 @@ function FindingDetail({ findingId }: { findingId: string }) {
                   <TableBody>
                     {query.data.known_changes.map((change) => (
                       <TableRow key={change.change_id}>
-                        <TableCell className="font-mono text-xs">
+                        <TableCell className="font-mono">
                           {change.change_id}
                         </TableCell>
                         <TableCell>{change.kind}</TableCell>

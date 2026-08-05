@@ -54,7 +54,7 @@ function StaleBanner({
   return (
     <div
       role="status"
-      className="rounded border border-border bg-muted p-3 text-sm text-muted-foreground"
+      className="rounded border border-border bg-muted p-3 text-body text-muted-foreground"
     >
       <p>
         Could not refresh. Showing the run as of{" "}
@@ -93,7 +93,7 @@ function Workflow({ findingId }: { findingId: string }) {
           { label: "Solution workflow" },
         ]}
       />
-      <h1 className="font-mono text-lg font-medium">{findingId} — solution workflow</h1>
+      <h1 className="font-mono text-page">{findingId} — solution workflow</h1>
 
       {query.isPending && <LoadingState what={`the run for finding ${findingId}`} />}
 
@@ -151,7 +151,7 @@ function Workflow({ findingId }: { findingId: string }) {
             </CardContent>
           </Card>
 
-          <p className="text-sm text-muted-foreground">
+          <p className="text-body text-muted-foreground">
             Read from the checkpointer, which is a different database from the API
             Dependency Graph — this screen carries no indexing timestamp and no binding rung
             for that reason.{" "}

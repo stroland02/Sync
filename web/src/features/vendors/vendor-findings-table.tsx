@@ -48,11 +48,15 @@ export function VendorFindingsTable({ vendorId }: { vendorId: string }) {
             <TableHeader>
               <TableRow>
                 <TableHead>Severity</TableHead>
+                {/* Rung sits ahead of the call site so it stays on screen at 1280px without a
+                    sideways scroll: the call site is the widest cell in this table — a path
+                    from a customer repository — and no fixture here is long enough to prove
+                    that on its own. */}
+                <TableHead>Rung</TableHead>
                 <TableHead>Call site</TableHead>
                 <TableHead>Symbol</TableHead>
                 <TableHead>Operation</TableHead>
                 <TableHead>Change kind</TableHead>
-                <TableHead>Rung</TableHead>
                 <TableHead>Finding</TableHead>
               </TableRow>
             </TableHeader>
@@ -60,23 +64,23 @@ export function VendorFindingsTable({ vendorId }: { vendorId: string }) {
               {page.items.map((row) => (
                 <TableRow key={row.finding_id}>
                   <TableCell>{row.severity}</TableCell>
-                  <TableCell className="font-mono text-xs">
+                  <TableCell>
+                    <RungBadge rung={row.binding_source} />
+                  </TableCell>
+                  <TableCell className="font-mono">
                     {row.file}:{row.line}
                   </TableCell>
-                  <TableCell className="font-mono text-xs">
+                  <TableCell className="font-mono">
                     {orAbsent(row.symbol)}
                   </TableCell>
-                  <TableCell className="font-mono text-xs">
+                  <TableCell className="font-mono">
                     {orAbsent(row.operation)}
                   </TableCell>
                   <TableCell>{orAbsent(row.change_kind)}</TableCell>
                   <TableCell>
-                    <RungBadge rung={row.binding_source} />
-                  </TableCell>
-                  <TableCell>
                     <Link
                       to={`/findings/${encodeURIComponent(row.finding_id)}`}
-                      className="font-mono text-xs underline underline-offset-2"
+                      className="font-mono underline underline-offset-2"
                     >
                       {row.finding_id}
                     </Link>

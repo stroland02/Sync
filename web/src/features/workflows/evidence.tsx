@@ -176,10 +176,10 @@ function Row({
 }) {
   return (
     <div className={cn("flex flex-col gap-1", className)}>
-      <dt className="text-xs tracking-wide text-muted-foreground uppercase">{label}</dt>
-      <dd className="flex flex-col gap-1 text-sm">
+      <dt className="text-meta tracking-wide text-muted-foreground uppercase">{label}</dt>
+      <dd className="flex flex-col gap-1 text-body">
         {children}
-        {help !== undefined && <p className="text-xs text-muted-foreground">{help}</p>}
+        {help !== undefined && <p className="text-meta text-muted-foreground">{help}</p>}
       </dd>
     </div>
   )
@@ -196,8 +196,8 @@ function Flag({ field, value }: { field: Field; value: unknown }) {
     <span
       className={
         value
-          ? "rounded border border-border px-1.5 py-0.5"
-          : "rounded border border-destructive px-1.5 py-0.5 text-destructive"
+          ? "rounded border border-border px-1.5 py-0.5 text-meta"
+          : "rounded border border-destructive px-1.5 py-0.5 text-meta text-destructive"
       }
     >
       {value ? "PASS" : "FAIL"} — {wording}
@@ -224,7 +224,7 @@ function Block({ value }: { value: unknown }) {
     return <span className="text-muted-foreground">{ABSENT}</span>
   }
   return (
-    <pre className="max-h-72 overflow-auto rounded border border-border bg-muted p-2 font-mono text-xs whitespace-pre-wrap">
+    <pre className="max-h-72 overflow-auto rounded border border-border bg-muted p-2 font-mono text-meta whitespace-pre-wrap">
       {rendered}
     </pre>
   )
@@ -234,14 +234,14 @@ function ExternalLink({ value }: { value: unknown }) {
   const href = asHttpUrl(value)
   if (href === null) {
     // Present but not a followable URL — show what the run recorded, do not repair it.
-    return <span className="font-mono text-xs">{scalarOrAbsent(value)}</span>
+    return <span className="font-mono text-body">{scalarOrAbsent(value)}</span>
   }
   return (
     <a
       href={href}
       target="_blank"
       rel="noreferrer noopener"
-      className="font-mono text-xs underline underline-offset-2"
+      className="font-mono text-body underline underline-offset-2"
     >
       {href}
     </a>
@@ -257,7 +257,7 @@ function FieldValue({ field, value }: { field: Field; value: unknown }) {
     case "url":
       return <ExternalLink value={value} />
     case "text":
-      return <span className="font-mono text-xs">{scalarOrAbsent(value)}</span>
+      return <span className="font-mono text-body">{scalarOrAbsent(value)}</span>
   }
 }
 
@@ -297,7 +297,7 @@ export function NodeEvidence({
       ))}
       {unnamed.map((key) => (
         <Row key={key} label={key}>
-          <span className="font-mono text-xs">
+          <span className="font-mono text-body">
             {asScalarText(evidence[key]) ?? JSON.stringify(evidence[key])}
           </span>
         </Row>

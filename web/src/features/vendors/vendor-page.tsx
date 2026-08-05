@@ -26,7 +26,7 @@ export function VendorPage() {
           { label: vendorId },
         ]}
       />
-      <h1 className="font-mono text-lg font-medium">{vendorId}</h1>
+      <h1 className="font-mono text-page">{vendorId}</h1>
 
       <Card>
         <CardHeader>
