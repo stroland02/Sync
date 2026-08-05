@@ -59,6 +59,15 @@ def _parse(package: Path) -> dict[Path, ast.Module]:
     return {path: ast.parse(path.read_text(encoding="utf-8")) for path in sorted(package.rglob("*.py"))}
 
 
+def _module_name(path: Path, root: Path) -> str:
+    """The name a module is keyed by, which is its path below the package and not its stem.
+
+    `_parse` walks with `rglob`, so a stem puts `driver.py` and `sub/driver.py` in one slot and
+    the word a constant reports becomes a property of a basename.
+    """
+    return path.relative_to(root).with_suffix("").as_posix()
+
+
 def _subscript_key(node: ast.AST) -> str | None:
     if isinstance(node, ast.Subscript) and isinstance(node.slice, ast.Constant):
         return node.slice.value
@@ -85,7 +94,7 @@ def _scopes(tree: ast.Module) -> dict[int, str]:
     return trails
 
 
-def _constants(trees: dict[Path, ast.Module]) -> dict[tuple[str, str], str]:
+def _constants(trees: dict[Path, ast.Module], root: Path) -> dict[tuple[str, str], str]:
     """Module-level `NAME = "literal"`, keyed by the module that defines it.
 
     One flat namespace per package would let two modules defining the same name with
@@ -103,7 +112,7 @@ def _constants(trees: dict[Path, ast.Module]) -> dict[tuple[str, str], str]:
                 continue
             for target in node.targets:
                 if isinstance(target, ast.Name):
-                    found[(path.stem, target.id)] = node.value.value
+                    found[(_module_name(path, root), target.id)] = node.value.value
     return found
 
 
@@ -148,7 +157,7 @@ class _Writer(NamedTuple):
 
 
 def _writers(
-    trees: dict[Path, ast.Module], keys: set[str]
+    trees: dict[Path, ast.Module], keys: set[str], root: Path
 ) -> tuple[dict[tuple[str, str], list[_Writer]], dict[tuple[int, str], tuple[str, str, int]]]:
     """Functions that assign one of their own parameters to one of `keys`, and those writes.
 
@@ -174,6 +183,7 @@ def _writers(
     found: dict[tuple[str, str], list[_Writer]] = {}
     bodies: dict[tuple[int, str], tuple[str, str, int]] = {}
     for path, tree in trees.items():
+        module = _module_name(path, root)
         for node in ast.walk(tree):
             if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
                 continue
@@ -187,22 +197,23 @@ def _writers(
                 for target in sub.targets:
                     key = _subscript_key(target)
                     if key in keys:
-                        registered = found.setdefault((path.stem, node.name), [])
-                        origin = (path.stem, node.name, len(registered))
+                        registered = found.setdefault((module, node.name), [])
+                        origin = (module, node.name, len(registered))
                         registered.append(
                             _Writer(params.index(sub.value.id), sub.value.id, key, bound, origin)
                         )
                         bodies[(id(sub), key)] = origin
     for path, tree in trees.items():
+        module = _module_name(path, root)
         for node in tree.body:
             if not isinstance(node, ast.Assign) or not isinstance(node.value, ast.Name):
                 continue
-            registered = found.get((path.stem, node.value.id))
+            registered = found.get((module, node.value.id))
             if registered is None:
                 continue
             for target in node.targets:
                 if isinstance(target, ast.Name):
-                    found.setdefault((path.stem, target.id), []).extend(registered)
+                    found.setdefault((module, target.id), []).extend(registered)
     return found, bodies
 
 
@@ -293,8 +304,8 @@ def _unpacked_keys(target: ast.AST, keys: set[str]) -> Iterator[str]:
 def _writes(package: Path, keys: set[str]) -> list[_Write]:
     """Every write into one of `keys` this package makes, resolved as far as the source says."""
     trees = _parse(package)
-    constants = _constants(trees)
-    writers, bodies = _writers(trees, keys)
+    constants = _constants(trees, package)
+    writers, bodies = _writers(trees, keys, package)
 
     found: list[_Write] = []
     # A registered writer's own `state[key] = parameter` is accounted for at its call sites, so
@@ -306,7 +317,7 @@ def _writes(package: Path, keys: set[str]) -> list[_Write]:
     called: set[tuple[str, str, int]] = set()
 
     for path, tree in trees.items():
-        module = path.stem
+        module = _module_name(path, package)
         relative = f"{package.name}/{path.relative_to(package).as_posix()}"
         scopes = _scopes(tree)
 
@@ -416,7 +427,11 @@ def _subscript_words(directory: Path, key: str) -> dict[str, list[str]]:
     """`file:line` to the words each `something[key] = ...` in these modules resolves to.
 
     The modules themselves and not `fixtures/` beneath them: a fixture is a customer
-    repository this suite hands to an adapter, not a driver writing `RunState`.
+    repository this suite hands to an adapter, not a driver writing `RunState`. This walk is
+    non-recursive where `_parse` recurses, and the difference is the point rather than an
+    oversight -- 66 modules sit under `tests/fixtures/` and `tests/golden/`, and a package
+    scan that swept them in would be reading somebody else's repository for this pipeline's
+    vocabulary.
 
     Subscript writes alone, deliberately. The word-set assertions above are scoped to `src/`
     and should stay there -- run over `tests/` they collect a locally declared `_RunState`
@@ -427,10 +442,11 @@ def _subscript_words(directory: Path, key: str) -> dict[str, list[str]]:
         path: ast.parse(path.read_text(encoding="utf-8"))
         for path in sorted(directory.glob("*.py"))
     }
-    constants = _constants(trees)
+    constants = _constants(trees, directory)
 
     found: dict[str, list[str]] = {}
     for path, tree in trees.items():
+        module = _module_name(path, directory)
         for node in ast.walk(tree):
             if not isinstance(node, (ast.Assign, ast.AnnAssign, ast.AugAssign)):
                 continue
@@ -438,7 +454,7 @@ def _subscript_words(directory: Path, key: str) -> dict[str, list[str]]:
             if not any(_subscript_key(target) == key for target in targets):
                 continue
             value = None if isinstance(node, ast.AugAssign) else node.value
-            words = _resolve(value, path.stem, constants) if value is not None else set()
+            words = _resolve(value, module, constants) if value is not None else set()
             found[f"{path.name}:{node.lineno}"] = sorted(words)
     return found
 
@@ -860,6 +876,33 @@ def test_a_writer_called_through_a_name_bound_to_it_carries_its_word(tmp_path):
 
     assert _words_written_to(package, {"outcome"}) == {"wordA", "wordB"}
     assert [w for w in _writes(package, {"outcome"}) if not w.words] == []
+
+
+def test_two_modules_sharing_a_basename_one_directory_apart_are_two_modules(tmp_path):
+    """The per-module keying, carried down a subpackage rather than stopping at the top.
+
+    `_parse` walks with `rglob`, so `driver.py` and `sub/driver.py` are both in the survey
+    while a key built from the basename cannot tell them apart. Measured: both writes resolved
+    to `nested`, and which one won was decided by the order the walk happened to read them in.
+    Neither `sync/remediate` nor `sync/mcp` has a subpackage today, so this is the same defect
+    the per-module keying closed, waiting one directory down.
+    """
+    package = tmp_path / "drifted"
+    (package / "sub").mkdir(parents=True)
+    (package / "driver.py").write_text(
+        'WORD = "top"\n'
+        "def a(state):\n"
+        '    state["preview_outcome"] = WORD\n',
+        encoding="utf-8",
+    )
+    (package / "sub" / "driver.py").write_text(
+        'WORD = "nested"\n'
+        "def b(state):\n"
+        '    state["preview_outcome"] = WORD\n',
+        encoding="utf-8",
+    )
+
+    assert _words_written_to(package, {"preview_outcome"}) == {"top", "nested"}
 
 
 def test_a_keyword_handed_to_update_is_a_write_into_the_key_it_names(tmp_path):
