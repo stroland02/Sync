@@ -758,6 +758,26 @@ def test_the_consoles_run_disposition_matches_the_finished_outcomes():
     assert members == set(_FINISHED)
 
 
+def test_the_consoles_theme_block_declares_static_so_every_token_reaches_the_build():
+    # `web/src/index.css` declares tokens such as `--color-series-*` and `--color-brand`
+    # that are read only dynamically -- through `getComputedStyle` in `echart.tsx`, or not
+    # yet read by anything -- and never appear as a Tailwind utility class name anywhere in
+    # `web/src`. Tailwind v4's on-demand `@theme` block omits a variable that no generated
+    # utility references, so a bare `@theme {` silently drops that token's light-mode value
+    # from the compiled CSS while its `.dark` counterpart survives untouched, because the
+    # `.dark` rule is plain CSS outside `@theme` and is never subject to the same pruning.
+    # `static` is Tailwind's documented escape hatch and has to cover the whole block; this
+    # checks the source declaration rather than `web/dist`, which is gitignored and absent
+    # from a fresh checkout, so a check against it would either skip everywhere or need a
+    # build step run first -- fragile in exactly the way this file's other checks are not.
+    source = _web_source("src/index.css")
+    assert "@theme static {" in source, (
+        "index.css declares `@theme` without `static`; any theme token read only "
+        "dynamically, or not yet read by anything, silently drops its light-mode value "
+        "from the compiled CSS the moment nothing generates a utility class for it"
+    )
+
+
 def _normalized(path: str) -> str:
     """A route path with its one parameterisation collapsed to `{param}`.
 

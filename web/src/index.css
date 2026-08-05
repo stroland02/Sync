@@ -11,7 +11,13 @@
    returns declared text rather than a resolved colour. DESIGN.md at the
    repository root carries what each token is for and the contrast computed for
    it. */
-@theme {
+/* `static`, not the bare directive: Tailwind v4 otherwise treats a theme variable
+   as unused, and drops it from output, whenever no generated utility class
+   references it. Several tokens here are read only dynamically, through
+   `getComputedStyle` in echart.tsx, or are reserved for a component that does not
+   exist yet — a bare `@theme` block silently ships those with no light-mode value
+   at all. */
+@theme static {
   /* Nine neutral steps, ordered back to front. Achromatic on purpose: the brand
      hue is the only chromatic thing on a normal screen. */
   --color-surface-sunken: oklch(0.972 0 0);
