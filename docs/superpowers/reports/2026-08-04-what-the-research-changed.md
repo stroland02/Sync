@@ -3,6 +3,11 @@
 Written 2026-08-04, closing the reference programme. It answers three questions the project's owner
 asked: what was learned, what changed because of it, and whether it was worth the money.
 
+**Reconciled 2026-08-05 against `a87cbf3`.** The findings and the cost accounting below are unchanged.
+What changed is status: the design-system and slice-2 open questions have since been ruled, and the
+fleet view named below as the biggest remaining gap has since shipped. The security finding has not
+changed — it is still open, and still the most important row in this document.
+
 ## The verdict, first
 
 **Worth it, but roughly half of what was spent was waste, and the waste was avoidable.** The research
@@ -127,9 +132,11 @@ inherits the assumptions that produced the problem and arrives looking like the 
   reasoning can be steered by a hostile changelog.
 - **Goal (2), process as a CI benchmark.** Sync asserts test discipline in prose and enforces it by
   review. The audit found no reference doing better, which is a comfort rather than an answer.
-- **The console renders a run, not a fleet.** Everything built so far answers "what happened to this
-  finding". Nothing answers "what is this system doing right now, across everything" — and that is
-  the question an operator with fifty repositories actually opens a console to ask.
+- **The console renders a run, not a fleet — this has since shipped.** `sync.dashboard.fleet`
+  (`7f8661d`) added three read-only view models — runs, corpus summary, repositories — and
+  `f6fbc93` put routes over them. `12cbaf0` built the fleet screen and made it the console's index
+  route, moving the earlier overview to `/codebase`; `7535fbf` fixed it to render `abandon_reason`
+  where it had claimed to but did not. The gap this bullet named is closed.
 
 ## What it cost, and what it should have cost
 
