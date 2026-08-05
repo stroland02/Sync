@@ -6,6 +6,12 @@ import { BrowserRouter } from 'react-router'
 import './index.css'
 import App from '@/App'
 import { queryClient } from '@/lib/query-client'
+import { initTheme } from '@/lib/theme'
+
+/* index.html already stamped the class before this module loaded, to beat first paint.
+   This call is what attaches the "system" listener, so an OS-level change is followed
+   without a reload. */
+initTheme()
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
