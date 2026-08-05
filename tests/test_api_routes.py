@@ -108,6 +108,25 @@ def _fake_repositories_reader() -> dict[str, Any]:
     return {"repo_ids": []}
 
 
+def _fake_binding_reader(vendor_id: str, operation_id: str, *, repo_id=None) -> dict[str, Any]:
+    return {
+        "vendor_id": vendor_id, "operation_id": operation_id, "repo_id": repo_id,
+        "call_sites": [], "changes": [],
+    }
+
+
+def _fake_coverage_reader(repo_id: str) -> dict[str, Any]:
+    return {"repo_id": repo_id, "by_vendor": {}, "total_call_sites": 0}
+
+
+def _fake_observed_reader(repo_id: str) -> dict[str, Any]:
+    return {"repo_id": repo_id, "calls": [], "shapes": [], "error_windows": []}
+
+
+def _fake_detector_reader() -> dict[str, Any]:
+    return {"detectors": [], "total_open_findings": 0}
+
+
 def _build_app(
     *,
     surface: GraphSurface,
@@ -115,11 +134,15 @@ def _build_app(
     runs_reader=_fake_runs_reader,
     corpus_reader=_fake_corpus_reader,
     repositories_reader=_fake_repositories_reader,
+    binding_reader=_fake_binding_reader,
+    coverage_reader=_fake_coverage_reader,
+    observed_reader=_fake_observed_reader,
+    detector_reader=_fake_detector_reader,
 ) -> Starlette:
     """`create_app` with every reader defaulted to a fake, so a test naming one override is
-    not forced to restate the other four.
+    not forced to restate the other eight.
 
-    `create_app` keeps all five readers required -- a deployment that forgets one should fail
+    `create_app` keeps every reader required -- a deployment that forgets one should fail
     at start-up rather than serve a route that breaks on first use. That signature stays as
     written; this helper exists only so the test file does not repeat the full argument list
     at every call site.
@@ -130,6 +153,10 @@ def _build_app(
         runs_reader=runs_reader,
         corpus_reader=corpus_reader,
         repositories_reader=repositories_reader,
+        binding_reader=binding_reader,
+        coverage_reader=coverage_reader,
+        observed_reader=observed_reader,
+        detector_reader=detector_reader,
     )
 
 
@@ -551,6 +578,148 @@ def test_repositories_route_reaches_its_reader_exactly_once_with_no_arguments():
     assert calls == [None]
 
 
+# -- the graph views: bindings, coverage, observed telemetry, detectors --------
+
+
+def test_binding_route_returns_the_readers_payload_unaltered():
+    payload = {
+        "vendor_id": "stripe", "operation_id": "PostCharges", "repo_id": None,
+        "call_sites": [{"path": "src/pay.ts", "binding_rung": "static"}], "changes": [],
+    }
+    app = _build_app(
+        surface=GraphSurface(FakeGraph(), feed_fetched_at=FETCHED),
+        binding_reader=lambda vendor_id, operation_id, *, repo_id=None: payload,
+    )
+    client = TestClient(app)
+
+    response = client.get("/api/vendors/stripe/operations/PostCharges/bindings")
+
+    assert response.status_code == 200
+    assert response.json() == payload
+
+
+def test_binding_route_passes_the_path_segments_and_the_repo_id_query_param():
+    calls: list[tuple[str, str, str | None]] = []
+
+    def reader(vendor_id: str, operation_id: str, *, repo_id=None):
+        calls.append((vendor_id, operation_id, repo_id))
+        return _fake_binding_reader(vendor_id, operation_id, repo_id=repo_id)
+
+    app = _build_app(surface=GraphSurface(FakeGraph(), feed_fetched_at=FETCHED), binding_reader=reader)
+    client = TestClient(app)
+
+    client.get("/api/vendors/stripe/operations/PostCharges/bindings?repo_id=r1")
+
+    assert calls == [("stripe", "PostCharges", "r1")]
+
+
+def test_binding_route_repo_id_defaults_to_none_when_the_query_param_is_absent():
+    calls: list[tuple[str, str, str | None]] = []
+
+    def reader(vendor_id: str, operation_id: str, *, repo_id=None):
+        calls.append((vendor_id, operation_id, repo_id))
+        return _fake_binding_reader(vendor_id, operation_id, repo_id=repo_id)
+
+    app = _build_app(surface=GraphSurface(FakeGraph(), feed_fetched_at=FETCHED), binding_reader=reader)
+    client = TestClient(app)
+
+    client.get("/api/vendors/stripe/operations/PostCharges/bindings")
+
+    assert calls == [("stripe", "PostCharges", None)]
+
+
+def test_coverage_route_returns_the_readers_payload_unaltered():
+    payload = {"repo_id": "r1", "by_vendor": {"stripe": 3}, "total_call_sites": 3}
+    app = _build_app(
+        surface=GraphSurface(FakeGraph(), feed_fetched_at=FETCHED),
+        coverage_reader=lambda repo_id: payload,
+    )
+    client = TestClient(app)
+
+    response = client.get("/api/repositories/r1/coverage")
+
+    assert response.status_code == 200
+    assert response.json() == payload
+
+
+def test_coverage_route_passes_the_path_repo_id_to_its_reader():
+    calls: list[str] = []
+
+    def reader(repo_id: str):
+        calls.append(repo_id)
+        return _fake_coverage_reader(repo_id)
+
+    app = _build_app(surface=GraphSurface(FakeGraph(), feed_fetched_at=FETCHED), coverage_reader=reader)
+    client = TestClient(app)
+
+    client.get("/api/repositories/r1/coverage")
+
+    assert calls == ["r1"]
+
+
+def test_observed_route_returns_the_readers_payload_unaltered():
+    payload = {"repo_id": "r1", "calls": [{"trace_id": "t1"}], "shapes": [], "error_windows": []}
+    app = _build_app(
+        surface=GraphSurface(FakeGraph(), feed_fetched_at=FETCHED),
+        observed_reader=lambda repo_id: payload,
+    )
+    client = TestClient(app)
+
+    response = client.get("/api/repositories/r1/observed")
+
+    assert response.status_code == 200
+    assert response.json() == payload
+
+
+def test_observed_route_passes_the_path_repo_id_to_its_reader():
+    calls: list[str] = []
+
+    def reader(repo_id: str):
+        calls.append(repo_id)
+        return _fake_observed_reader(repo_id)
+
+    app = _build_app(surface=GraphSurface(FakeGraph(), feed_fetched_at=FETCHED), observed_reader=reader)
+    client = TestClient(app)
+
+    client.get("/api/repositories/r1/observed")
+
+    assert calls == ["r1"]
+
+
+def test_detectors_route_returns_the_readers_payload_unaltered():
+    payload = {
+        "detectors": [{"detector": "vendor-change", "total": 2, "by_rung": {"static": 2}}],
+        "total_open_findings": 2,
+    }
+    app = _build_app(
+        surface=GraphSurface(FakeGraph(), feed_fetched_at=FETCHED),
+        detector_reader=lambda: payload,
+    )
+    client = TestClient(app)
+
+    response = client.get("/api/detectors")
+
+    assert response.status_code == 200
+    assert response.json() == payload
+
+
+def test_detectors_route_reaches_its_reader_exactly_once_with_no_arguments():
+    calls: list[None] = []
+
+    def detector_reader():
+        calls.append(None)
+        return _fake_detector_reader()
+
+    app = _build_app(
+        surface=GraphSurface(FakeGraph(), feed_fetched_at=FETCHED), detector_reader=detector_reader
+    )
+    client = TestClient(app)
+
+    client.get("/api/detectors")
+
+    assert calls == [None]
+
+
 # -- the read-only constraint, as a test rather than a promise ------------------
 
 # The three surface methods a read-only console is allowed to reach. `propose_patch` is
@@ -602,6 +771,10 @@ class _RecordingClient(NamedTuple):
     runs_reads: list[dict[str, int]]
     corpus_reads: list[None]
     repositories_reads: list[None]
+    binding_reads: list[tuple[str, str, str | None]]
+    coverage_reads: list[str]
+    observed_reads: list[str]
+    detector_reads: list[None]
 
 
 def _recording_client(**graph_kw) -> _RecordingClient:
@@ -610,6 +783,10 @@ def _recording_client(**graph_kw) -> _RecordingClient:
     runs_reads: list[dict[str, int]] = []
     corpus_reads: list[None] = []
     repositories_reads: list[None] = []
+    binding_reads: list[tuple[str, str, str | None]] = []
+    coverage_reads: list[str] = []
+    observed_reads: list[str] = []
+    detector_reads: list[None] = []
 
     def workflow_reader(finding_id: str):
         workflow_reads.append(finding_id)
@@ -627,15 +804,36 @@ def _recording_client(**graph_kw) -> _RecordingClient:
         repositories_reads.append(None)
         return _fake_repositories_reader()
 
+    def binding_reader(vendor_id: str, operation_id: str, *, repo_id=None):
+        binding_reads.append((vendor_id, operation_id, repo_id))
+        return _fake_binding_reader(vendor_id, operation_id, repo_id=repo_id)
+
+    def coverage_reader(repo_id: str):
+        coverage_reads.append(repo_id)
+        return _fake_coverage_reader(repo_id)
+
+    def observed_reader(repo_id: str):
+        observed_reads.append(repo_id)
+        return _fake_observed_reader(repo_id)
+
+    def detector_reader():
+        detector_reads.append(None)
+        return _fake_detector_reader()
+
     app = create_app(
         surface=surface,
         workflow_reader=workflow_reader,
         runs_reader=runs_reader,
         corpus_reader=corpus_reader,
         repositories_reader=repositories_reader,
+        binding_reader=binding_reader,
+        coverage_reader=coverage_reader,
+        observed_reader=observed_reader,
+        detector_reader=detector_reader,
     )
     return _RecordingClient(
-        TestClient(app), surface, workflow_reads, runs_reads, corpus_reads, repositories_reads
+        TestClient(app), surface, workflow_reads, runs_reads, corpus_reads, repositories_reads,
+        binding_reads, coverage_reads, observed_reads, detector_reads,
     )
 
 
@@ -646,9 +844,10 @@ def test_no_route_reaches_past_the_read_surface():
     # the customer's repository all the same.
     site = _site("s1")
     change = _change("c1")
-    client, surface, workflow_reads, runs_reads, corpus_reads, repositories_reads = _recording_client(
-        findings=[_finding("f1", "s1", "c1")], sites=[site], changes=[change]
-    )
+    (
+        client, surface, workflow_reads, runs_reads, corpus_reads, repositories_reads,
+        binding_reads, coverage_reads, observed_reads, detector_reads,
+    ) = _recording_client(findings=[_finding("f1", "s1", "c1")], sites=[site], changes=[change])
 
     assert client.get("/api/overview").status_code == 200
     assert client.get("/api/vendors/stripe").status_code == 200
@@ -658,16 +857,24 @@ def test_no_route_reaches_past_the_read_surface():
     assert client.get("/api/runs").status_code == 200
     assert client.get("/api/corpus").status_code == 200
     assert client.get("/api/repositories").status_code == 200
+    assert client.get("/api/vendors/stripe/operations/PostCharges/bindings").status_code == 200
+    assert client.get("/api/repositories/r1/coverage").status_code == 200
+    assert client.get("/api/repositories/r1/observed").status_code == 200
+    assert client.get("/api/detectors").status_code == 200
 
     unexpected = surface.method_names() - _READ_ONLY_METHODS
     assert not unexpected, f"routes reached beyond the read surface: {sorted(unexpected)}"
     assert workflow_reads == ["f1"]
-    # Each fleet reader was reached by exactly the one request naming its own route -- if any
-    # route had reached another's reader instead of (or in addition to) its own, one of these
-    # counts would read 0 or 2 rather than 1.
+    # Each fleet or graph-view reader was reached by exactly the one request naming its own
+    # route -- if any route had reached another's reader instead of (or in addition to) its
+    # own, one of these counts would read 0 or 2 rather than 1.
     assert len(runs_reads) == 1, "the runs route must reach its own reader exactly once"
     assert len(corpus_reads) == 1, "the corpus route must reach its own reader exactly once"
     assert len(repositories_reads) == 1, "the repositories route must reach its own reader exactly once"
+    assert len(binding_reads) == 1, "the bindings route must reach its own reader exactly once"
+    assert len(coverage_reads) == 1, "the coverage route must reach its own reader exactly once"
+    assert len(observed_reads) == 1, "the observed route must reach its own reader exactly once"
+    assert len(detector_reads) == 1, "the detectors route must reach its own reader exactly once"
 
 
 def test_a_404_route_reaches_past_nothing_either():

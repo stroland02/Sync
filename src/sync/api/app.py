@@ -5,17 +5,19 @@ The transport holds no logic. Per-finding and per-vendor routes are a thin call 
 at. Fleet-wide routes -- `/api/runs`, `/api/corpus`, `/api/repositories` -- answer a
 different grain, every run or every attempt across repositories, which the frozen surface
 answers no question about; those go through reader callables backed by `sync.dashboard`
-instead. `app.py` constructs neither the surface nor the dashboard view model -- both are
-built by the caller and handed in. Errors that a reader expresses as `None` become 404 with
-a JSON body -- HTML would confuse a JSON client into treating a missing finding as a broken
-deployment.
+instead. The graph-rendering routes below -- bindings, per-repository coverage and observed
+telemetry, detector accountability -- are the same amendment applied a second time: they read
+`sync.dashboard.graph_views`, never the frozen surface and never SQL of their own. `app.py`
+constructs neither the surface nor a dashboard view model -- all of it is built by the caller
+and handed in. Errors that a reader expresses as `None` become 404 with a JSON body -- HTML
+would confuse a JSON client into treating a missing finding as a broken deployment.
 
 Every reader is a callable rather than a class for the same reason `workflow_reader` is: the
-checkpointer, the corpus and the repository roll-up each live outside `GraphSurface`, in
-stores the surface does not speak, and asking one abstraction to speak all of them would
-fold unrelated responsibilities into it. `WorkflowReader` is `str -> dict | None`, matching
-the shape the console consumes; the fleet readers below take the shape their own route
-needs.
+checkpointer, the corpus, the repository roll-up and the graph views each live outside
+`GraphSurface`, in stores the surface does not speak, and asking one abstraction to speak all
+of them would fold unrelated responsibilities into it. `WorkflowReader` is `str -> dict | None`,
+matching the shape the console consumes; every other reader below takes the shape its own
+route needs.
 """
 
 from __future__ import annotations
@@ -38,6 +40,16 @@ WorkflowReader = Callable[[str], Optional[dict[str, Any]]]
 RunsReader = Callable[..., dict[str, Any]]
 CorpusReader = Callable[[], dict[str, Any]]
 RepositoriesReader = Callable[[], dict[str, Any]]
+
+# The graph-rendering readers back `sync.dashboard.graph_views`, outside `GraphSurface` for the
+# same reason the fleet readers above are: a binding surface, a per-repo coverage count and a
+# detector roll-up are questions about the whole graph or about one repository, not the frozen
+# surface's per-finding shape, and folding them in would ask one abstraction to speak a fourth
+# question it was not built to answer.
+BindingReader = Callable[..., dict[str, Any]]
+CoverageReader = Callable[[str], dict[str, Any]]
+ObservedReader = Callable[[str], dict[str, Any]]
+DetectorReader = Callable[[], dict[str, Any]]
 
 
 # Upper bound on a single scan of `whats_at_risk` when the transport needs to look up a
@@ -89,6 +101,10 @@ def create_app(
     runs_reader: RunsReader,
     corpus_reader: CorpusReader,
     repositories_reader: RepositoriesReader,
+    binding_reader: BindingReader,
+    coverage_reader: CoverageReader,
+    observed_reader: ObservedReader,
+    detector_reader: DetectorReader,
 ) -> Starlette:
     """Build the Starlette app bound to a particular surface and readers.
 
@@ -195,6 +211,21 @@ def create_app(
     async def repositories(request: Request) -> JSONResponse:
         return JSONResponse(repositories_reader())
 
+    async def binding(request: Request) -> JSONResponse:
+        vendor_id = request.path_params["vendor_id"]
+        operation_id = request.path_params["operation_id"]
+        repo_id = request.query_params.get("repo_id")
+        return JSONResponse(binding_reader(vendor_id, operation_id, repo_id=repo_id))
+
+    async def repository_coverage(request: Request) -> JSONResponse:
+        return JSONResponse(coverage_reader(request.path_params["repo_id"]))
+
+    async def repository_observed(request: Request) -> JSONResponse:
+        return JSONResponse(observed_reader(request.path_params["repo_id"]))
+
+    async def detectors(request: Request) -> JSONResponse:
+        return JSONResponse(detector_reader())
+
     routes = [
         Route("/api/overview", overview, methods=["GET"]),
         Route("/api/vendors/{vendor_id}", vendor_detail, methods=["GET"]),
@@ -204,5 +235,13 @@ def create_app(
         Route("/api/runs", runs, methods=["GET"]),
         Route("/api/corpus", corpus, methods=["GET"]),
         Route("/api/repositories", repositories, methods=["GET"]),
+        Route(
+            "/api/vendors/{vendor_id}/operations/{operation_id}/bindings",
+            binding,
+            methods=["GET"],
+        ),
+        Route("/api/repositories/{repo_id}/coverage", repository_coverage, methods=["GET"]),
+        Route("/api/repositories/{repo_id}/observed", repository_observed, methods=["GET"]),
+        Route("/api/detectors", detectors, methods=["GET"]),
     ]
     return Starlette(routes=routes)

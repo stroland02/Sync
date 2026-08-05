@@ -22,23 +22,40 @@ The marker
 ----------
 Every row this script writes is reachable by one string: `MARKER` (`"seed-console"`), carried in
 `call_site.repo_id`, `vendor_change.vendor_id` (and therefore `migration_outcome.vendor_id`, which
-copies it from the change), and the run-id segment of every checkpoint `thread_id`. `finding` rows
-are not marked directly -- they cascade-delete from `call_site` via the foreign key `schema.sql`
-declares (`ON DELETE CASCADE`), which is also why the removal order below deletes call sites
-before vendor changes. Marking the two columns that are already an *identity* (the repository, the
-vendor) rather than adding a sentinel column means removal is a plain `LIKE` query against columns
-the schema already has, and needs no schema change to stay exact.
+copies it from the change), `observed_call.repo_id`, `observed_shape.vendor_id`,
+`observed_error_window.repo_id`, and the run-id segment of every checkpoint `thread_id`. `finding`
+rows are not marked directly -- they cascade-delete from `call_site` via the foreign key
+`schema.sql` declares (`ON DELETE CASCADE`), which is also why the removal order below deletes
+call sites before vendor changes. Marking columns that are already an *identity* (the repository,
+the vendor) rather than adding a sentinel column means removal is a plain `LIKE` query against
+columns the schema already has, and needs no schema change to stay exact.
+
+`observed_shape` carries no `repo_id` at all -- it is a vendor-wide baseline, not a per-repository
+table (`schema.sql`'s own grain note) -- so its rows are marked and removed by `vendor_id` alone,
+the same column `vendor_change` already uses.
 
 Idempotent, because this pipeline's rule is
 --------------------------------------------
 Every `GraphStore` write used here already carries a natural key and a conflict clause --
-`upsert_call_site`, `upsert_vendor_change`, `insert_finding`, `record_migration_outcome` -- so
-running this script twice converges instead of doubling, without this script doing anything extra
-to arrange it. The checkpoint rows get the same property by using a checkpoint id computed from a
-fixed position in a fixed sequence (`_checkpoint_id`) rather than from wall-clock time or a random
-UUID: `PostgresSaver.put`'s own conflict clause is keyed on `(thread_id, checkpoint_ns,
-checkpoint_id)`, so the same id on the second run updates the same row instead of inserting a
-second one.
+`upsert_call_site`, `upsert_vendor_change`, `insert_finding`, `record_migration_outcome`,
+`record_observed_call`, `record_observed_shape`, `record_observed_error_window` -- so running this
+script twice converges on the same rows instead of doubling them, without this script doing
+anything extra to arrange it. The checkpoint rows get the same property by using a checkpoint id
+computed from a fixed position in a fixed sequence (`_checkpoint_id`) rather than from wall-clock
+time or a random UUID: `PostgresSaver.put`'s own conflict clause is keyed on `(thread_id,
+checkpoint_ns, checkpoint_id)`, so the same id on the second run updates the same row instead of
+inserting a second one.
+
+**One column does not converge on a value, by the table's own design, and it is named here rather
+than left to be discovered.** `record_observed_shape` adds to `sample_count` for a traffic source
+(`sync.graph.sources.TRAFFIC_SOURCES`) rather than holding it, because for real traffic a second
+write is genuine evidence of a second response -- that is the whole point of the counter. The
+seeded shape rows below use a traffic source so they are visible through
+`GraphStore.observed_shapes`'s default (`traffic_only=True`), which every reader in
+`sync.dashboard.graph_views` relies on, so `sample_count` grows by a fixed amount on every re-run
+of this script. The row itself still converges -- same natural key, same identity, no duplicate --
+and every other column on it is a fixed value that is unaffected. This is `record_observed_shape`
+working as documented, not a defect in this script.
 
 Real models and real store methods throughout, deliberately
 -------------------------------------------------------------
@@ -56,11 +73,20 @@ import argparse
 import os
 import sys
 from dataclasses import dataclass, field
+from datetime import datetime, timezone
 
 import psycopg
 from langgraph.checkpoint.postgres import PostgresSaver
 
-from sync.core import CallSite, Finding, MigrationOutcome, VendorChange
+from sync.core import (
+    CallSite,
+    Finding,
+    MigrationOutcome,
+    ObservedCall,
+    ObservedErrorWindow,
+    ObservedShape,
+    VendorChange,
+)
 from sync.graph.store import GraphStore
 
 MARKER = "seed-console"
@@ -95,6 +121,9 @@ class SeedSummary:
     live_finding_id: str
     # The finding with exactly one, finished run.
     terminal_finding_id: str
+    # `(vendor_id, operation_id)` more than one seeded call site is bound to -- the binding
+    # surface's minimum bar, the way `detailed_finding_id` is the finding-detail screen's.
+    shared_operation: tuple[str, str] = ("", "")
     thread_ids: tuple[str, ...] = field(default_factory=tuple)
 
 
@@ -180,6 +209,14 @@ def _seed_graph(store: GraphStore) -> tuple:
         symbol="twilio.verify.v2.create", sdk_version="4.19.0",
         content_hash=f"{MARKER}-hash-s5",
     ))
+    # A second repository calling the same vendor operation as `s1` -- the binding surface's
+    # whole reason to exist is a question that has more than one answer, and every other call
+    # site above is the only site on its own operation.
+    s6 = store.upsert_call_site(_site(
+        repo_id=REPO_B, path="src/payments/create-charge.ts", line=21, col=6,
+        vendor_id=VENDOR_STRIPE, operation_id="PostCharges", symbol="stripe.charges.create",
+        content_hash=f"{MARKER}-hash-s6",
+    ))
 
     c1 = store.upsert_vendor_change(_change(
         vendor_id=VENDOR_STRIPE, from_version="2024-04-10", to_version="2024-06-20",
@@ -223,6 +260,17 @@ def _seed_graph(store: GraphStore) -> tuple:
         severity="warning",
         rationale="the call runs inside a loop with no batching available",
         binding_rung="static",
+    ))
+    # A fourth detector, reading telemetry rather than the static index or a vendor change --
+    # `detector_accountability`'s whole point is that a detector's rung mix is a fact about the
+    # kind of claim it makes, and one detector all-static plus one detector all-observed proves
+    # less than a corpus where the same claim kind (`vendor-change`) shows up at more than one
+    # rung, which `f_a` (static) and `f_b` (resolved) already give it.
+    f_e = store.insert_finding(_finding(
+        detector="status-rate", claim="error-rate-spike", call_site_id=s6,
+        severity="warning",
+        rationale="observed error rate for PostCharges exceeded its recorded baseline",
+        binding_rung="observed",
     ))
 
     outcomes = [
@@ -274,7 +322,92 @@ def _seed_graph(store: GraphStore) -> tuple:
     for outcome in outcomes:
         store.record_migration_outcome(outcome)
 
-    return s1, s2, s3, s4, s5, c1, c2, f_a, f_b, f_c
+    return s1, s2, s3, s4, s5, s6, c1, c2, f_a, f_b, f_c, f_e
+
+
+# --- the observed rung ----------------------------------------------------------
+
+# Fixed rather than `_now()`, for the same reason `_checkpoint_id` is fixed: `record_observed_call`
+# and `record_observed_error_window` merge `first_seen`/`last_seen` with LEAST/GREATEST, so a
+# wall-clock value would make every second run widen the window instead of converging on it.
+_OBSERVED_SEEN = datetime(2026, 8, 1, tzinfo=timezone.utc)
+_OBSERVED_LATER = datetime(2026, 8, 2, tzinfo=timezone.utc)
+_WINDOW_START = datetime(2026, 8, 1, tzinfo=timezone.utc)
+_WINDOW_END = datetime(2026, 8, 2, tzinfo=timezone.utc)
+
+
+def _seed_observed(store: GraphStore) -> None:
+    """The telemetry rung: what traffic showed up, what shape it had, how often it failed.
+
+    Three tables, `sync.dashboard.graph_views.observed_telemetry`'s three reads:
+
+    `observed_call` gets three rows. Two are `REPO_A` and `REPO_B` both calling Stripe's
+    `PostCharges` -- the same shared operation `s1` and `s6` above give the binding surface,
+    now with a telemetry rung on top of the static one. The third is deliberately uncorrelated
+    (`operation_id=""`, `binding_rung="unresolved"`) so the console can render the case
+    `ObservedCall`'s own docstring names: a request nothing could attribute to an operation.
+
+    `observed_shape` gets two rows for Stripe's `PostCharges`, using a traffic source
+    (`"interceptor"`) so `GraphStore.observed_shapes`'s traffic-only default surfaces them --
+    see the module docstring for what that costs `sample_count` on a re-run.
+
+    `observed_error_window` gets one row per repository, over the same fixed window, so
+    `observed_telemetry` has a failure count to render for both repositories seeded above.
+    """
+    store.record_observed_call(ObservedCall(
+        repo_id=REPO_A, vendor_id=VENDOR_STRIPE, operation_id="PostCharges",
+        binding_rung="observed", server_address="api.stripe.com", http_method="post",
+        trace_id=f"{MARKER}-trace-a", url_template="/v1/charges",
+        spans={
+            "span-1": {"target": f"{MARKER}-digest-1", "status": 200, "resend": 0},
+            "span-2": {"target": f"{MARKER}-digest-2", "status": 500, "resend": 1},
+        },
+        first_seen=_OBSERVED_SEEN, last_seen=_OBSERVED_LATER,
+    ))
+    store.record_observed_call(ObservedCall(
+        repo_id=REPO_B, vendor_id=VENDOR_STRIPE, operation_id="PostCharges",
+        binding_rung="observed", server_address="api.stripe.com", http_method="post",
+        trace_id=f"{MARKER}-trace-b", url_template="/v1/charges",
+        # Two spans at the same target -- one repeated call, which is what
+        # `ObservedCall.repeated_calls` exists to report.
+        spans={
+            "span-1": {"target": f"{MARKER}-digest-3", "status": 200, "resend": 0},
+            "span-2": {"target": f"{MARKER}-digest-3", "status": 200, "resend": 0},
+        },
+        first_seen=_OBSERVED_SEEN, last_seen=_OBSERVED_LATER,
+    ))
+    store.record_observed_call(ObservedCall(
+        repo_id=REPO_B, vendor_id=VENDOR_TWILIO, operation_id="", binding_rung="unresolved",
+        server_address="api.twilio.com", http_method="post",
+        trace_id=f"{MARKER}-trace-uncorrelated", url_template="",
+        spans={"span-1": {"target": f"{MARKER}-digest-4", "status": None, "resend": 0}},
+        first_seen=_OBSERVED_SEEN, last_seen=_OBSERVED_SEEN,
+    ))
+
+    store.record_observed_shape(ObservedShape(
+        vendor_id=VENDOR_STRIPE, operation_id="PostCharges", field_path="/status",
+        json_type="string", nullable_seen=False, spec_enum_values=["succeeded", "pending"],
+        source="interceptor", sample_count=1,
+        first_seen=_OBSERVED_SEEN, last_seen=_OBSERVED_LATER,
+    ))
+    store.record_observed_shape(ObservedShape(
+        vendor_id=VENDOR_STRIPE, operation_id="PostCharges", field_path="/amount",
+        json_type="number", nullable_seen=False, source="interceptor", sample_count=1,
+        first_seen=_OBSERVED_SEEN, last_seen=_OBSERVED_LATER,
+    ))
+
+    store.record_observed_error_window(ObservedErrorWindow(
+        repo_id=REPO_A, vendor_id=VENDOR_STRIPE, operation_id="PostCharges",
+        binding_rung="observed", source="error-tracker-group", status_class="5xx",
+        window_start=_WINDOW_START, window_end=_WINDOW_END,
+        error_count=12, issue_count=2,
+    ))
+    store.record_observed_error_window(ObservedErrorWindow(
+        repo_id=REPO_B, vendor_id=VENDOR_TWILIO, operation_id="CreateMessage",
+        binding_rung="observed", source="error-tracker-group", status_class="4xx",
+        window_start=_WINDOW_START, window_end=_WINDOW_END,
+        error_count=3, issue_count=1,
+    ))
 
 
 # --- the checkpointer side -----------------------------------------------------
@@ -432,19 +565,21 @@ def seed(graph_dsn: str, checkpointer_dsn: str) -> SeedSummary:
     """Write the fixture, converging if it is already there. Returns what got written."""
     store = GraphStore(graph_dsn)
     store.apply_schema()
-    s1, s2, s3, s4, s5, c1, c2, f_a, f_b, f_c = _seed_graph(store)
+    s1, s2, s3, s4, s5, s6, c1, c2, f_a, f_b, f_c, f_e = _seed_graph(store)
+    _seed_observed(store)
     threads = _seed_checkpoints(checkpointer_dsn, f_a, f_b, f_c)
 
     return SeedSummary(
         repo_ids=(REPO_A, REPO_B),
         vendor_ids=(VENDOR_STRIPE, VENDOR_TWILIO),
-        call_site_ids=(s1, s2, s3, s4, s5),
+        call_site_ids=(s1, s2, s3, s4, s5, s6),
         vendor_change_ids=(c1, c2),
-        finding_ids=(f_a, f_b, f_c),
+        finding_ids=(f_a, f_b, f_c, f_e),
         detailed_finding_id=f_b,
         retried_finding_id=f_a,
         live_finding_id=f_b,
         terminal_finding_id=f_c,
+        shared_operation=(VENDOR_STRIPE, "PostCharges"),
         thread_ids=threads,
     )
 
@@ -459,12 +594,18 @@ def remove(graph_dsn: str, checkpointer_dsn: str) -> None:
     Deletion order matters for one reason: `finding.call_site_id REFERENCES call_site (id) ON
     DELETE CASCADE`, so deleting the marked call sites removes their findings for free, and the
     marked vendor changes and migration-outcome rows can be deleted afterwards with nothing left
-    pointing at them.
+    pointing at them. `observed_call`, `observed_shape` and `observed_error_window` have no
+    foreign key to anything else this script writes, so their order relative to the rest does not
+    matter -- they are deleted here for the same reason everything else is: every row this script
+    writes must have a way back to nothing.
     """
     with psycopg.connect(graph_dsn, autocommit=True) as conn:
         conn.execute("DELETE FROM call_site WHERE repo_id LIKE %s", (f"{MARKER}%",))
         conn.execute("DELETE FROM vendor_change WHERE vendor_id LIKE %s", (f"{MARKER}%",))
         conn.execute("DELETE FROM migration_outcome WHERE vendor_id LIKE %s", (f"{MARKER}%",))
+        conn.execute("DELETE FROM observed_call WHERE repo_id LIKE %s", (f"{MARKER}%",))
+        conn.execute("DELETE FROM observed_shape WHERE vendor_id LIKE %s", (f"{MARKER}%",))
+        conn.execute("DELETE FROM observed_error_window WHERE repo_id LIKE %s", (f"{MARKER}%",))
 
     with psycopg.connect(checkpointer_dsn, autocommit=True) as conn:
         has_checkpoints = conn.execute("SELECT to_regclass('checkpoints')").fetchone()[0]
