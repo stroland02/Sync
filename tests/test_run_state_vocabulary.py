@@ -357,6 +357,8 @@ def _writes(package: Path, keys: set[str]) -> list[_Write]:
                     continue
                 for key in sorted(_keys_a_writer_of_this_name_writes(node, writers) & keys):
                     record(node, key, set())
+                for key, value in _update_keywords(node, keys):
+                    record(node, key, _resolve(value, module, constants))
                 setdefault = _setdefault_key(node, keys)
                 if setdefault is not None:
                     words = _resolve(node.args[1], module, constants) if len(node.args) > 1 else set()
@@ -386,6 +388,19 @@ def _resolve_argument(
         if keyword.arg == writer.parameter:
             return _resolve(keyword.value, module, constants)
     return set()
+
+
+def _update_keywords(node: ast.Call, keys: set[str]) -> list[tuple[str, ast.AST]]:
+    """The keys a `state.update(outcome=...)` writes, paired with the word each is handed.
+
+    Keywords alone. A `state.update({"outcome": WORD})` is a dict literal and the scan already
+    reads it as one; the keyword spelling has no literal to read and was invisible.
+    """
+    if not isinstance(node.func, ast.Attribute) or node.func.attr != "update":
+        return []
+    return [
+        (keyword.arg, keyword.value) for keyword in node.keywords if keyword.arg in keys
+    ]
 
 
 def _setdefault_key(node: ast.Call, keys: set[str]) -> str | None:
@@ -845,6 +860,28 @@ def test_a_writer_called_through_a_name_bound_to_it_carries_its_word(tmp_path):
 
     assert _words_written_to(package, {"outcome"}) == {"wordA", "wordB"}
     assert [w for w in _writes(package, {"outcome"}) if not w.words] == []
+
+
+def test_a_keyword_handed_to_update_is_a_write_into_the_key_it_names(tmp_path):
+    """`state.update(outcome=...)` was neither resolved nor reported.
+
+    A `TypedDict` is idiomatically written this way and this pipeline's nodes already merge
+    dicts, so the form is ordinary rather than exotic. Read the way `setdefault` is: the
+    keyword names the key where it sits, and the word it carries resolves or fails.
+    """
+    package = _synthetic(
+        tmp_path,
+        'PROPOSED = "proposed"\n'
+        "def run(state, word):\n"
+        "    state.update(preview_outcome=PROPOSED)\n"
+        "    state.update(outcome=word)\n",
+    )
+    keys = {"outcome", "preview_outcome"}
+
+    assert _words_written_to(package, keys) == {"proposed"}
+    assert [(w.line, w.census_key) for w in _writes(package, keys) if not w.words] == [
+        (4, "drifted/driver.py::run::outcome")
+    ]
 
 
 def test_a_constant_resolves_only_where_it_is_defined_or_where_it_is_qualified(tmp_path):
