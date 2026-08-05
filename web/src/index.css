@@ -196,6 +196,25 @@
   --color-destructive-foreground: oklch(0.155 0 0);
 }
 
+/* Outside any layer on purpose, same reasoning as `.dark` above: `@theme` and every Tailwind
+   utility compile into layers, and an unlayered rule beats every layered rule regardless of
+   specificity — so this needs no `!important` to win against `transition-all` or
+   `transition-colors`. `web/src/lib/motion.ts` gates the three framer-motion usages from
+   script; this is the CSS half, covering every Tailwind transition and animation utility
+   document-wide. Zeroed, not shortened — a 0.01s transition still renders a frame of motion.
+   `Button`'s `active:...translate-y-px` is deliberately untouched: with its transition gone
+   it lands in one frame, an instant position change rather than a motion effect, no different
+   from any other state swap this query already makes instant. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    transition-duration: 0s;
+    animation-duration: 0s;
+    scroll-behavior: auto;
+  }
+}
+
 @layer base {
   :root {
     color-scheme: light;

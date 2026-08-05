@@ -105,7 +105,7 @@ export function ErrorSurface() {
               : { duration: ERROR_SURFACE_DURATION, ease: EASE_STANDARD }
           }
         >
-          <div className="max-h-[70vh] w-full max-w-2xl overflow-hidden rounded border border-critical-ink/40 bg-background shadow-lg">
+          <div className="max-h-[70vh] w-full max-w-2xl overflow-hidden rounded border border-critical-ink/40 bg-background shadow-float">
             <div className="flex items-center justify-between gap-2 border-b border-critical-ink/30 bg-critical-surface px-3 py-2">
               <Status
                 tone="critical"

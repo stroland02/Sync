@@ -291,7 +291,37 @@ floats: `ErrorSurface`, which is `fixed` over the viewport.
 resolves a `shadow-*` theme value at build time and bakes it into the class, so a literal colour
 written into `--shadow-float` is frozen at its light value and the dark column never reaches it —
 silently. `--color-shadow` (light `oklch(0.2 0 0 / 0.3)`, dark `oklch(0 0 0 / 0.72)`) exists for
-exactly this reason and has no other use.
+exactly this reason and has no other use. `ErrorSurface` reads `shadow-float`, and it is wired
+through this indirection correctly: `--shadow-float`'s own colour components stay `var()`
+references rather than literals, so each resolves against whichever theme's `--color-line` and
+`--color-shadow` are live on the element, in both modes.
+
+---
+
+## Motion
+
+Two mechanisms, because two different kinds of motion need two different gates.
+
+`web/src/lib/motion.ts` owns the three deliberate, framer-motion-driven usages: `ErrorSurface`
+arriving and leaving, the changed-under-poll wash, and the paged table container settling into
+its new height. Each reads `useReducedMotion()` from that file and, under reduced motion,
+substitutes a duration of `0` for its animated prop set rather than shortening it — a fade or a
+colour wash that merely sped up would still be motion. This is code, not a token, because the
+branch is the token: there is no CSS value that expresses "skip this prop entirely."
+
+Everything else — every Tailwind `transition-*` and `animate-*` utility the shadcn catalog and
+the console's own components use — is gated by a `@media (prefers-reduced-motion: reduce)` block
+in `web/src/index.css`, sitting unlayered next to `.dark` for the same reason `.dark` is unlayered:
+`@theme` and every Tailwind utility compile into layers, and an unlayered rule beats every layered
+rule regardless of specificity, so the block wins against `transition-all` and `transition-colors`
+without needing `!important`. It zeroes `transition-duration`, `animation-duration` and
+`scroll-behavior` document-wide — zeroed, not shortened, matching the framer half's rule.
+
+`Button`'s `active:not-aria-[haspopup]:translate-y-px` is deliberately left alone. A `transform` is
+not a transition: it moves the element on `:active` whether or not a transition is running. With
+the transition gone under reduced motion, the 1px press lands in a single frame — an instant state
+change indistinguishable from any other instant style swap this query already makes (a colour, a
+border), not an animation. It stays.
 
 ---
 
@@ -484,8 +514,9 @@ is mandatory and why the mark is not a border. Against the dark card all four cl
 - **A texture fill.** The accessibility channel for the CVD, print and `forced-colors` cases. Not
   needed while every chart carries direct labels and a table beneath it; add it with the chart that
   needs it.
-- **Motion tokens.** Durations and easings live in `web/src/lib/motion.ts`, not here, because the
-  reduced-motion gate is code rather than a value.
+- **Motion tokens.** Durations and easings live in `web/src/lib/motion.ts`, not here — see
+  "Motion" above for how the reduced-motion gate splits between that file's code and a media
+  query in `index.css`.
 - **A composite score, a health number, a traffic light, a liveness dot.** Rejected on the merits.
   A design system is exactly the moment somebody reaches for a coloured badge, which is why it is
   named here.
