@@ -17,13 +17,24 @@ from sync.dashboard import fleet
 from sync.dashboard.queries import workflow_state
 from sync.graph.store import GraphStore
 from sync.mcp.tools import GraphSurface
+from sync.obs.log import configure as configure_logging
 
 # The port `web/vite.config.ts` proxies `/api` to. Named rather than inlined so
 # tests/test_api_routes.py can bind the two together instead of asking them to agree by hand.
 DEFAULT_PORT = 8787
 
+# INFO rather than the stdlib's WARNING default: the module loggers beneath this transport
+# call `log.info`, and a quieter default would leave them exactly as unreachable as before
+# this module existed.
+DEFAULT_LOG_LEVEL = "INFO"
+DEFAULT_LOG_FORMAT = "text"
+
 
 def main() -> None:
+    configure_logging(
+        level=os.environ.get("SYNC_LOG_LEVEL", DEFAULT_LOG_LEVEL),
+        fmt=os.environ.get("SYNC_LOG_FORMAT", DEFAULT_LOG_FORMAT),
+    )
     dsn = os.environ["SYNC_GRAPH_DSN"]
     checkpointer_dsn = os.environ.get("SYNC_CHECKPOINTER_DSN", dsn)
     store = GraphStore(dsn=dsn)

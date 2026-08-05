@@ -115,4 +115,5 @@ forbidden_modules = [
     "sync.forge",
     "sync.route",
     "sync.cli",
+    "sync.obs",
 ]
