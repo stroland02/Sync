@@ -22,7 +22,7 @@ stopping is returned to the caller instead.
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Literal
 
 from sync.core import Finding, RepoRef
 from sync.remediate.nodes import (
@@ -47,6 +47,20 @@ NO_PATCH_WARRANTED = "no_patch_warranted"
 # A server with no checkout configured. Distinct from `BLOCKED`, which is a run that started
 # and could not finish: nothing was attempted here, and an agent should stop asking.
 UNAVAILABLE = "unavailable"
+
+PreviewOutcome = Literal["proposed", "unverified", "blocked", "no_patch_warranted", "unavailable"]
+
+
+class PreviewState(RunState, total=False):
+    """A truncated run, and the word that says where it stopped.
+
+    Its own key rather than `RunState["outcome"]`, whose type is the pipeline's four words and
+    holds none of these. The pipeline's state type does not learn this server's vocabulary
+    either, which is why both live here. `tests/test_run_state_vocabulary.py` holds the two
+    apart, since no typechecker runs in this repository.
+    """
+
+    preview_outcome: PreviewOutcome
 
 
 def run_to_static_verify(
