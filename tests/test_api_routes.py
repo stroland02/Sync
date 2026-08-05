@@ -13,7 +13,7 @@ from __future__ import annotations
 import re
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, NamedTuple
 
 import pytest
 from starlette.applications import Starlette
@@ -556,41 +556,20 @@ class RecordingSurface:
         return {name for name, _ in self.calls}
 
 
-class _RecordingClient:
-    """Everything a read-only-guarantee test needs from one `_recording_client()` call.
+class _RecordingClient(NamedTuple):
+    """What one `_recording_client()` call hands back to a test.
 
-    Named fields rather than a wider tuple: the third slice-2 growth of this fixture is the
-    reason the plan calls out, and a test that only cares about `workflow_reads` should not
-    have to spell out four more names it never touches.
+    Still unpacks positionally (`client, surface, *_ = ...`) for the call sites that only
+    want the first two fields, and now supports named access (`.workflow_reads`) for any
+    that want more.
     """
 
-    def __init__(
-        self,
-        client: TestClient,
-        surface: "RecordingSurface",
-        workflow_reads: list[str],
-        runs_reads: list[dict[str, int]],
-        corpus_reads: list[None],
-        repositories_reads: list[None],
-    ) -> None:
-        self.client = client
-        self.surface = surface
-        self.workflow_reads = workflow_reads
-        self.runs_reads = runs_reads
-        self.corpus_reads = corpus_reads
-        self.repositories_reads = repositories_reads
-
-    def __iter__(self):
-        return iter(
-            (
-                self.client,
-                self.surface,
-                self.workflow_reads,
-                self.runs_reads,
-                self.corpus_reads,
-                self.repositories_reads,
-            )
-        )
+    client: TestClient
+    surface: "RecordingSurface"
+    workflow_reads: list[str]
+    runs_reads: list[dict[str, int]]
+    corpus_reads: list[None]
+    repositories_reads: list[None]
 
 
 def _recording_client(**graph_kw) -> _RecordingClient:
