@@ -52,15 +52,16 @@ Every commit below was verified against `git log main..HEAD`.
 |---|---|---|---|
 | A value two components must agree on needs one source of truth, and **no reference solves this** — `codebase-memory-mcp` carries the identical defect, a port duplicated between a C header and a Vite config | `engineering/configuration-and-secrets.md` | `DEFAULT_PORT` extracted in `src/sync/api/__main__.py`; a mirror test binds it to the target parsed from `web/vite.config.ts`, proven able to fail by mutating one side to 9999 | `ffdabfb` |
 | Confidence is more honest when defined by the class of evidence behind it than by a feeling | `notes/competitor-interfaces.md` (Superlog's 0–10 scale, defined by evidence class) | **Nothing, deliberately.** The specification argues Sync's provenance rung already *is* the evidence-class claim, and is enforced where Superlog's number is only emitted. A numeric score would be false precision and would collapse `replay_outcome`'s deliberate three-way split | `b4b488d` |
-| A reason for giving up should be a closed vocabulary, because free text cannot be aggregated | `notes/competitor-interfaces.md` (Superlog's `noiseClassification` / `resolutionClassification`) | Specification proposing sixteen codes, **derived from Sync's own routing predicates, not borrowed** — the shape transferred, the values did not. Awaiting the owner's ruling | `b4b488d` |
-| A run-state vocabulary should distinguish liveness from disposition | `notes/competitor-interfaces.md` + the Critical's root cause | Specification moving `Disposition` to `sync.core.models` and deleting `running` from it. The instance was already fixed in `259906b`; the specification closes the class | `b4b488d` |
+| A reason for giving up should be a closed vocabulary, because free text cannot be aggregated | `notes/competitor-interfaces.md` (Superlog's `noiseClassification` / `resolutionClassification`) | Specification proposing sixteen codes, **derived from Sync's own routing predicates, not borrowed** — the shape transferred, the values did not. **Accepted** in `ff41faa`; not yet implemented in `src/sync/remediate/` | `b4b488d`, `ff41faa` |
+| A run-state vocabulary should distinguish liveness from disposition | `notes/competitor-interfaces.md` + the Critical's root cause | Specification moving `Disposition` to `sync.core.models` and deleting `running` from it. The instance was already fixed in `259906b`; the specification closes the class. **Accepted** in `ff41faa`; the move itself has not landed | `b4b488d`, `ff41faa` |
 | Untrusted text reaching a model that can write needs a defence | `engineering/llm-engineering-practice.md` (PageIndex's three-layer defence) | **Not yet fixed.** Handed to the session that owns `src/sync/remediate/`. See below — this is the most important row in the table | — |
 | A markup convention nobody validates drifts | `engineering/documentation-and-onboarding.md`, and two independent reviews | The evidence `<dl>` on the workflow view given a valid HTML5 content model, verified by rendering three payloads through an SSR entry and walking the emitted tree against the spec rule | `b553bd9` |
 | A polyglot repository needs a gate on both languages, or the constants mirrored between them rot silently | `engineering/ci-and-release-engineering.md` | A `web` CI job pinning Node to the lockfile's exact `engines` floor, running `npm ci`, lint and build — `web/` previously had **no gate of any kind** | `0902571` |
 | A test that has never been shown to fail has not been shown to test anything | `engineering/testing-strategy.md`, and the repository's own rule | The read-only guarantee moved from a grep that could not match `insert_finding` to a behavioural test with a recording fake, plus three mirror tests binding Python constants to TypeScript. All proven able to fail | `259906b`, `0a1c8bc`, `ffdabfb` |
 
-Four findings reached shipped code. Two produced a specification awaiting a ruling. One was rejected
-on the merits. One is a live security gap.
+Four findings reached shipped code. Two produced a specification that has since been ruled — accepted
+in `ff41faa` — and now await implementation rather than a decision. One was rejected on the merits.
+One is a live security gap.
 
 ## The security finding, stated plainly
 
@@ -101,10 +102,10 @@ work masquerading as a decision is how a backlog rots:
 
 | Item | Owner | Cost |
 |---|---|---|
-| Prompt-injection defence for the patch agent | the `src/sync/remediate/` session | Days. Needs a threat model first — which inputs, which boundary, what a refusal looks like |
-| The abandonment vocabulary and `Disposition` move | Owner's ruling, then either session | A day, plus a migration decision for existing free-text rows |
-| The two contradictions the specification found in `src/sync/remediate/` — `state.py` versus `tiered.py` on `NoPatchWarranted`, and `sync.mcp.propose` writing five values outside the `Outcome` literal | the `src/sync/remediate/` session | Hours each; the second now reads as a permanently in-flight run |
-| Process-as-CI-benchmark, goal (2) above | Unassigned | The audit measured other people's processes but did not turn Sync's own into anything CI asserts |
+| Prompt-injection defence for the patch agent | the `src/sync/remediate/` session | Days. Needs a threat model first — which inputs, which boundary, what a refusal looks like. **Still not started**: no commit on `m4-dashboard` touches `src/sync/remediate/` |
+| The abandonment vocabulary and `Disposition` move | Ruled — the `src/sync/remediate/` session | The owner's ruling landed in `ff41faa`: accept the `Disposition` move and the sixteen codes, existing free-text rows left NULL rather than backfilled. What is left is a day of implementation, no longer a decision |
+| The two contradictions the specification found in `src/sync/remediate/` — `state.py` versus `tiered.py` on `NoPatchWarranted`, and `sync.mcp.propose` writing five values outside the `Outcome` literal | the `src/sync/remediate/` session | Hours each; the second now reads as a permanently in-flight run. Unchanged — neither file has moved |
+| Process-as-CI-benchmark, goal (2) above | Partly started | `e7ee2b7` gated CI on one measurable claim — no unqualified test skips (`scripts/lint_test_skips.py`). That is one claim, not the benchmark goal (2) asked for as a whole |
 
 ## How the platform is different
 
@@ -128,15 +129,22 @@ inherits the assumptions that produced the problem and arrives looking like the 
 
 ### Where the position is not yet earned
 
+This section originally named three gaps. One of them has since closed — the fleet view, described
+below the two that remain open.
+
 - **The patch agent's untrusted-input surface.** Showing your reasoning is worth less if the
-  reasoning can be steered by a hostile changelog.
+  reasoning can be steered by a hostile changelog. Still open; see *The security finding* above.
 - **Goal (2), process as a CI benchmark.** Sync asserts test discipline in prose and enforces it by
-  review. The audit found no reference doing better, which is a comfort rather than an answer.
-- **The console renders a run, not a fleet — this has since shipped.** `sync.dashboard.fleet`
-  (`7f8661d`) added three read-only view models — runs, corpus summary, repositories — and
-  `f6fbc93` put routes over them. `12cbaf0` built the fleet screen and made it the console's index
-  route, moving the earlier overview to `/codebase`; `7535fbf` fixed it to render `abandon_reason`
-  where it had claimed to but did not. The gap this bullet named is closed.
+  review. `e7ee2b7` closed one instance of this — a CI gate against unqualified test skips — which is
+  one measurable claim turned into something CI asserts, not the benchmark goal (2) asked for as a
+  whole. The audit found no reference doing better on the larger goal, which is a comfort rather than
+  an answer.
+
+**Closed: the console rendered a run, not a fleet.** It now renders both. `sync.dashboard.fleet`
+(`7f8661d`) added three read-only view models — runs, corpus summary, repositories — and `f6fbc93`
+put routes over them. `12cbaf0` built the fleet screen and made it the console's index route, moving
+the earlier overview to `/codebase`; `7535fbf` fixed it to render `abandon_reason` where it had
+claimed to but did not.
 
 ## What it cost, and what it should have cost
 
@@ -191,8 +199,8 @@ New, from this programme, and not yet written down:
 
 | Decision | Recommendation |
 |---|---|
-| Fix the patch agent's prompt-injection exposure | **Yes, and first.** Write a threat model before code — which inputs are untrusted, where the boundary sits, what a refusal looks like |
-| Accept, amend or reject the run-state and abandonment specification | Accept the `Disposition` move and the sixteen codes; leave existing free-text rows NULL rather than backfilling |
-| Merge `m4-dashboard` to `main` | Yes. Merge gate is green, twenty-two commits, tree clean. Not done here because pushing is the human's |
-| Fund another research round | Not now. The next round should be one repository per agent and aimed at one question — the fleet-level view is the strongest candidate |
-| Turn process into a CI benchmark, goal (2) | Worth a small slice. Start with one measurable claim, such as every new test being shown to fail before it is trusted |
+| Fix the patch agent's prompt-injection exposure | **Yes, and first — still unfixed as of `a87cbf3`.** Write a threat model before code — which inputs are untrusted, where the boundary sits, what a refusal looks like |
+| Accept, amend or reject the run-state and abandonment specification | **Settled.** Ruled in `ff41faa`: accept the `Disposition` move and the sixteen codes; leave existing free-text rows NULL rather than backfilling. Implementation in `src/sync/remediate/` is still outstanding |
+| Merge `m4-dashboard` to `main` | Was **yes** when this was written, against a twenty-two-commit branch with a green merge gate. The branch has since grown past fifty commits — the fleet screen and both slices' open questions ruled — and has not been re-evaluated for merge-readiness at its current tip. That re-check, not the recommendation itself, is what is open |
+| Fund another research round | The strongest candidate named here — the fleet-level view — has since shipped without a further research round; it came from ruling the open questions this document already carried. Not now, on the same reasoning: aim the next round at one specific question if one arises |
+| Turn process into a CI benchmark, goal (2) | Worth a small slice. **A first step has been taken:** `e7ee2b7` gates CI on one measurable claim, that no test is skipped without a qualifying reason. The goal as a whole is still short of "Sync's own processes are a CI benchmark" |
