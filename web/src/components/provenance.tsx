@@ -14,13 +14,20 @@
 import type { ReactNode } from "react"
 
 import type { BindingSource, Provenance } from "@/api/types"
-import { ABSENT, describeRung, formatTimestamp } from "@/lib/format"
+import { Absent } from "@/components/status"
+import { describeRung, formatTimestamp } from "@/lib/format"
 
-/** The rung of one binding. Never null at this level — a finding always carries one. */
+/**
+ * The rung of one binding. Never null at this level — a finding always carries one.
+ *
+ * The rung records how a binding was established (static / resolved / observed / …), not
+ * how much to trust it. Colouring it would restate the scalar confidence score this project
+ * rejected twice, so it takes the design system's weight and spacing and never its hue.
+ */
 export function RungBadge({ rung }: { rung: BindingSource }) {
   return (
     <span
-      className="rounded border border-border px-1.5 py-0.5 font-mono text-xs"
+      className="rounded-control border border-line px-field py-0.5 font-mono text-meta"
       title={describeRung(rung)}
     >
       {rung}
@@ -31,8 +38,8 @@ export function RungBadge({ rung }: { rung: BindingSource }) {
 function Field({ label, children }: { label: string; children: ReactNode }) {
   return (
     <div className="flex flex-col gap-0.5">
-      <dt className="text-xs tracking-wide text-muted-foreground uppercase">{label}</dt>
-      <dd className="font-mono text-xs">{children}</dd>
+      <dt className="text-meta tracking-wide text-ink-muted uppercase">{label}</dt>
+      <dd className="font-mono text-meta">{children}</dd>
     </div>
   )
 }
@@ -53,25 +60,21 @@ export function ProvenanceStrip({
     <dl className="flex flex-wrap gap-x-8 gap-y-3 border-t border-border pt-3">
       <Field label="Binding source">
         {binding_source === null ? (
-          <span className="text-muted-foreground">
-            {ABSENT} {bindingNullLabel}
-          </span>
+          <Absent>{bindingNullLabel}</Absent>
         ) : (
           <span title={describeRung(binding_source)}>{binding_source}</span>
         )}
       </Field>
       <Field label="Indexed at">
         {indexed_at === null ? (
-          <span className="text-muted-foreground">
-            {ABSENT} {indexedNullLabel}
-          </span>
+          <Absent>{indexedNullLabel}</Absent>
         ) : (
           <time dateTime={indexed_at}>{formatTimestamp(indexed_at)}</time>
         )}
       </Field>
       <Field label="Feed fetched at">
         {feed_fetched_at === null ? (
-          <span className="text-muted-foreground">{ABSENT} no feed recorded</span>
+          <Absent>no feed recorded</Absent>
         ) : (
           <time dateTime={feed_fetched_at}>{formatTimestamp(feed_fetched_at)}</time>
         )}

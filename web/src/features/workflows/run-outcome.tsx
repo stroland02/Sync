@@ -16,35 +16,16 @@ import type { ReactNode } from "react"
 
 import { WORKFLOW_POLL_MS } from "@/api/queries"
 import type { WorkflowOutcome } from "@/api/types"
-import { ABSENT } from "@/lib/format"
+import { Absent } from "@/components/status"
 
-function Panel({
-  headline,
-  tone,
-  children,
-}: {
-  headline: string
-  tone: "neutral" | "abandoned"
-  children: ReactNode
-}) {
+// A run's disposition — running, abandoned, opened, reported — is identity, not a verdict:
+// an abandoned run is not an error, it is data routing learns from. So this panel never
+// reaches for the reserved status colour; every outcome gets the same neutral treatment.
+function Panel({ headline, children }: { headline: string; children: ReactNode }) {
   return (
-    <div
-      className={
-        tone === "abandoned"
-          ? "rounded border-2 border-destructive p-4"
-          : "rounded border border-border p-4"
-      }
-    >
-      <h2
-        className={
-          tone === "abandoned"
-            ? "text-base font-semibold text-destructive"
-            : "text-base font-semibold"
-        }
-      >
-        {headline}
-      </h2>
-      <div className="mt-2 flex flex-col gap-2 text-sm text-muted-foreground">{children}</div>
+    <div className="max-w-prose rounded border border-border p-4">
+      <h2 className="text-emphasis">{headline}</h2>
+      <div className="mt-2 flex flex-col gap-2 text-body text-ink-secondary">{children}</div>
     </div>
   )
 }
@@ -60,7 +41,7 @@ export function RunOutcome({
 }) {
   if (outcome === null || outcome === "running") {
     return (
-      <Panel headline="This run is still in flight." tone="neutral">
+      <Panel headline="This run is still in flight.">
         <p>
           No outcome has been written yet. The sequence below is the last state the
           checkpointer recorded, re-read every {WORKFLOW_POLL_MS / 1000} seconds until the
@@ -72,19 +53,17 @@ export function RunOutcome({
 
   if (outcome === "abandoned") {
     return (
-      <Panel headline="Sync abandoned this run." tone="abandoned">
+      <Panel headline="Sync abandoned this run.">
         <p>
           The attempt is still below in full, with everything each node produced. An
           abandoned run is kept rather than hidden: the reason is what teaches routing which
           change kinds are not mechanically safe.
         </p>
         <div>
-          <p className="text-xs tracking-wide uppercase">Reason it was abandoned</p>
-          <p className="mt-1 font-mono text-base whitespace-pre-wrap text-foreground">
+          <p className="text-meta tracking-wide text-ink-muted uppercase">Reason it was abandoned</p>
+          <p className="mt-1 font-mono text-body whitespace-pre-wrap text-foreground">
             {abandonReason === null || abandonReason === "" ? (
-              <span className="text-muted-foreground">
-                {ABSENT} the run recorded no reason, which is itself a gap worth chasing
-              </span>
+              <Absent>the run recorded no reason, which is itself a gap worth chasing</Absent>
             ) : (
               abandonReason
             )}
@@ -96,7 +75,7 @@ export function RunOutcome({
 
   if (outcome === "opened") {
     return (
-      <Panel headline="This run opened a pull request." tone="neutral">
+      <Panel headline="This run opened a pull request.">
         <p>
           Every node below ran to completion and the patch passed both <code>tsc</code> and
           the customer's own CI. The pull request is under <code>open_pr</code>.
@@ -107,18 +86,16 @@ export function RunOutcome({
 
   if (outcome === "reported") {
     return (
-      <Panel headline="This run reported rather than patched." tone="neutral">
+      <Panel headline="This run reported rather than patched.">
         <p>
           Routing found no patch was warranted, so nothing was attempted. That is not an
           abandonment: the finding stays open and unremediated, which is the honest state.
         </p>
         <div>
-          <p className="text-xs tracking-wide uppercase">Reason it reported</p>
-          <p className="mt-1 font-mono text-base whitespace-pre-wrap text-foreground">
+          <p className="text-meta tracking-wide text-ink-muted uppercase">Reason it reported</p>
+          <p className="mt-1 font-mono text-body whitespace-pre-wrap text-foreground">
             {reportReason === null || reportReason === "" ? (
-              <span className="text-muted-foreground">
-                {ABSENT} the run reported without recording why
-              </span>
+              <Absent>the run reported without recording why</Absent>
             ) : (
               reportReason
             )}
@@ -133,7 +110,7 @@ export function RunOutcome({
   // last: an unknown outcome rendered as a known one is a confident wrong verdict, which
   // is the failure this whole view exists to replace.
   return (
-    <Panel headline="This run ended in a way the console does not recognise." tone="neutral">
+    <Panel headline="This run ended in a way the console does not recognise.">
       <p>
         The checkpointer recorded{" "}
         <code className="font-mono">{String(outcome)}</code>, which is not an outcome this

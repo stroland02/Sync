@@ -9,6 +9,7 @@
 
 import { useEffect, useSyncExternalStore } from "react"
 
+import { Status } from "@/components/status"
 import { Button } from "@/components/ui/button"
 import { describeFailure } from "@/lib/describe-failure"
 import {
@@ -44,30 +45,35 @@ function useUnhandledRejections(): void {
 
 function Entry({ entry, onDismiss }: { entry: ErrorEntry; onDismiss: () => void }) {
   return (
-    <li className="border-b border-destructive/30 p-3 last:border-b-0">
+    <li className="border-b border-border p-3 last:border-b-0">
       <div className="flex items-start justify-between gap-2">
-        <p className="text-sm font-medium text-destructive">{entry.summary}</p>
+        <p className="text-body font-medium">{entry.summary}</p>
         <button
           type="button"
           onClick={onDismiss}
-          className="shrink-0 text-xs text-muted-foreground underline underline-offset-2 hover:text-foreground"
+          className="shrink-0 text-meta text-ink-muted underline underline-offset-2 hover:text-foreground"
         >
           Dismiss
         </button>
       </div>
-      <p className="mt-1 font-mono text-xs text-muted-foreground">
+      <p className="mt-1 font-mono text-meta text-ink-muted">
         {orAbsent(entry.path)}
         {entry.status !== undefined ? ` — HTTP ${entry.status}` : ""} —{" "}
         {formatTimestamp(entry.timestamp)}
       </p>
-      <pre className="mt-1 max-h-32 overflow-auto text-xs whitespace-pre-wrap text-foreground">
+      <pre className="mt-1 max-h-32 overflow-auto text-meta whitespace-pre-wrap text-foreground">
         {entry.detail}
       </pre>
     </li>
   )
 }
 
-/** Renders nothing while the log is empty — an absent failure is not a dismissed one. */
+/**
+ * Renders nothing while the log is empty — an absent failure is not a dismissed one.
+ *
+ * Every entry accumulated here is a genuine failure, so the header carries the one status
+ * claim for the whole panel; individual rows are its detail and stay in plain ink.
+ */
 export function ErrorSurface() {
   useUnhandledRejections()
   const entries = useSyncExternalStore(subscribeErrors, getErrorEntries, getErrorEntries)
@@ -76,11 +82,13 @@ export function ErrorSurface() {
 
   return (
     <div className="fixed inset-x-0 top-16 z-50 flex justify-center px-4" role="alert">
-      <div className="max-h-[70vh] w-full max-w-2xl overflow-hidden rounded border border-destructive bg-background shadow-lg">
-        <div className="flex items-center justify-between gap-2 border-b border-destructive/30 bg-destructive/10 px-3 py-2">
-          <p className="text-sm font-medium text-destructive">
-            {entries.length} {entries.length === 1 ? "error" : "errors"}
-          </p>
+      <div className="max-h-[70vh] w-full max-w-2xl overflow-hidden rounded border border-critical-ink/40 bg-background shadow-lg">
+        <div className="flex items-center justify-between gap-2 border-b border-critical-ink/30 bg-critical-surface px-3 py-2">
+          <Status
+            tone="critical"
+            label={`${entries.length} ${entries.length === 1 ? "error" : "errors"}`}
+            className="text-body font-medium"
+          />
           <Button variant="outline" size="sm" onClick={() => clearErrors()}>
             Clear all
           </Button>

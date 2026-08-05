@@ -26,8 +26,8 @@ export function PageControls({
   onOffsetChange: (offset: number) => void
 }) {
   return (
-    <div className="flex items-center gap-3 text-sm">
-      <span className="text-muted-foreground">{describeRange(offset, shown, total)}</span>
+    <div className="flex items-center gap-3 text-body">
+      <span className="text-ink-muted">{describeRange(offset, shown, total)}</span>
       <Button
         variant="outline"
         size="sm"

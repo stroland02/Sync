@@ -14,27 +14,33 @@ import {
   NotFoundError,
   UnreachableApiError,
 } from "@/api/errors"
+import { Status, statusSurfaceClass, type StatusTone } from "@/components/status"
 
 function Panel({
-  tone,
+  status,
   headline,
   children,
 }: {
-  tone: "neutral" | "alarm"
+  /** Present only for a genuine failure. Absent, the headline is identity, not a verdict. */
+  status?: StatusTone
   headline: string
   children: ReactNode
 }) {
   return (
     <div
-      role={tone === "alarm" ? "alert" : undefined}
+      role={status ? "alert" : undefined}
       className={
-        tone === "alarm"
-          ? "rounded border border-destructive bg-destructive/10 p-4 text-destructive"
-          : "rounded border border-border p-4 text-muted-foreground"
+        status
+          ? `max-w-prose rounded border p-4 ${statusSurfaceClass(status)}`
+          : "max-w-prose rounded border border-border p-4 text-muted-foreground"
       }
     >
-      <p className="font-medium">{headline}</p>
-      <div className="mt-1 text-sm">{children}</div>
+      {status ? (
+        <Status tone={status} label={headline} className="text-emphasis" />
+      ) : (
+        <p className="text-emphasis text-foreground">{headline}</p>
+      )}
+      <div className="mt-1 text-body">{children}</div>
     </div>
   )
 }
@@ -42,7 +48,7 @@ function Panel({
 /** The request is in flight. Says what is being asked for, so a stuck screen names itself. */
 export function LoadingState({ what }: { what: string }) {
   return (
-    <Panel tone="neutral" headline={`Loading ${what}…`}>
+    <Panel headline={`Loading ${what}…`}>
       <p>Waiting for the API to answer.</p>
     </Panel>
   )
@@ -51,7 +57,7 @@ export function LoadingState({ what }: { what: string }) {
 /** The API answered, and the answer was nothing. A true answer, not a failure. */
 export function EmptyState({ headline, detail }: { headline: string; detail: string }) {
   return (
-    <Panel tone="neutral" headline={headline}>
+    <Panel headline={headline}>
       <p>{detail}</p>
     </Panel>
   )
@@ -68,9 +74,9 @@ export function NotFoundState({
   identifier: string
 }) {
   return (
-    <Panel tone="neutral" headline={headline}>
+    <Panel headline={headline}>
       <p>{detail}</p>
-      <p className="mt-1 font-mono text-xs">{identifier}</p>
+      <p className="mt-1 font-mono text-meta">{identifier}</p>
     </Panel>
   )
 }
@@ -127,7 +133,7 @@ function explain(error: unknown, what: string): Explanation {
 export function ErrorState({ error, what }: { error: unknown; what: string }) {
   const { headline, detail } = explain(error, what)
   return (
-    <Panel tone="alarm" headline={headline}>
+    <Panel status="critical" headline={headline}>
       <p>{detail}</p>
     </Panel>
   )
