@@ -116,4 +116,9 @@ forbidden_modules = [
     "sync.route",
     "sync.cli",
     "sync.obs",
+    "sync.api",
+    "sync.benchmark",
+    "sync.dashboard",
+    "sync.mcp",
+    "sync.verify",
 ]
