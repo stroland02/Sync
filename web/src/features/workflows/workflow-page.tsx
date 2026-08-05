@@ -129,7 +129,11 @@ function Workflow({ findingId }: { findingId: string }) {
             />
           )}
 
-          <RunOutcome outcome={data.outcome} abandonReason={data.abandon_reason} />
+          <RunOutcome
+            outcome={data.outcome}
+            abandonReason={data.abandon_reason}
+            reportReason={data.report_reason}
+          />
 
           <Card>
             <CardHeader>

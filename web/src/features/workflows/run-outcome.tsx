@@ -6,9 +6,10 @@
  * mechanically safe — so a reader who came to find out why Sync gave up should not have to
  * scroll eight nodes to find out.
  *
- * The reason renders under `abandoned` and nowhere else. `reported` deliberately writes no
- * reason (tier -1 means no patch was warranted, which is not a failure), and on `opened`
- * whatever the channel holds describes a superseded attempt.
+ * `abandon_reason` renders under `abandoned` and `report_reason` renders under `reported` --
+ * routing writes a reason even when the answer is "no patch was warranted", because that is
+ * still a decision a reviewer can audit. On `opened` whatever either channel holds describes a
+ * superseded attempt.
  */
 
 import type { ReactNode } from "react"
@@ -51,9 +52,11 @@ function Panel({
 export function RunOutcome({
   outcome,
   abandonReason,
+  reportReason,
 }: {
   outcome: WorkflowOutcome | null
   abandonReason: string | null
+  reportReason: string | null
 }) {
   if (outcome === null || outcome === "running") {
     return (
@@ -107,9 +110,20 @@ export function RunOutcome({
       <Panel headline="This run reported rather than patched." tone="neutral">
         <p>
           Routing found no patch was warranted, so nothing was attempted. That is not an
-          abandonment and carries no reason: the finding stays open and unremediated, which is
-          the honest state.
+          abandonment: the finding stays open and unremediated, which is the honest state.
         </p>
+        <div>
+          <p className="text-xs tracking-wide uppercase">Reason it reported</p>
+          <p className="mt-1 font-mono text-base whitespace-pre-wrap text-foreground">
+            {reportReason === null || reportReason === "" ? (
+              <span className="text-muted-foreground">
+                {ABSENT} the run reported without recording why
+              </span>
+            ) : (
+              reportReason
+            )}
+          </p>
+        </div>
       </Panel>
     )
   }

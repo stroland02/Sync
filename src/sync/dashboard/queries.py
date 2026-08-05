@@ -224,6 +224,7 @@ def workflow_state(checkpointer_dsn: str, finding_id: str) -> dict | None:
         "nodes": nodes,
         "outcome": outcome,
         "abandon_reason": values.get("abandon_reason"),
+        "report_reason": values.get("report_reason"),
     }
 
 

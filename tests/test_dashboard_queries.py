@@ -348,6 +348,54 @@ def test_workflow_state_of_an_abandoned_run_carries_the_reason(checkpointer_tabl
     assert all(n["status"] != "current" for n in state["nodes"])
 
 
+def test_workflow_state_of_a_reported_run_carries_the_reason(checkpointer_tables):
+    _insert_checkpoint(
+        f"{FINDING_ID}:abc123def456:0",
+        "1f069000-0000-6000-8000-000000000008",
+        channel_values={
+            "outcome": "reported",
+            "report_reason": "no patch is warranted for request-parameter-removed on "
+                              "PostCharges: routed to tier -1 by row 'unrouted'",
+            "tier": -1,
+        },
+        channel_versions={"branch:to:report": _version(6)},
+        versions_seen={
+            "__input__": {},
+            "locate": {"branch:to:locate": _version(1)},
+            "report": {"branch:to:report": _version(5)},
+        },
+        step=6,
+    )
+
+    state = workflow_state(DSN, FINDING_ID)
+
+    assert state["outcome"] == "reported"
+    assert state["report_reason"] == (
+        "no patch is warranted for request-parameter-removed on PostCharges: "
+        "routed to tier -1 by row 'unrouted'"
+    )
+
+
+def test_workflow_state_of_a_reported_run_without_a_reason_reports_none(checkpointer_tables):
+    _insert_checkpoint(
+        f"{FINDING_ID}:abc123def456:0",
+        "1f069000-0000-6000-8000-000000000006",
+        channel_values={"outcome": "reported"},
+        channel_versions={"branch:to:report": _version(6)},
+        versions_seen={
+            "__input__": {},
+            "locate": {"branch:to:locate": _version(1)},
+            "report": {"branch:to:report": _version(5)},
+        },
+        step=6,
+    )
+
+    state = workflow_state(DSN, FINDING_ID)
+
+    assert state["outcome"] == "reported"
+    assert state["report_reason"] is None
+
+
 def test_workflow_state_reads_the_newest_run_not_the_first(checkpointer_tables):
     _insert_checkpoint(
         f"{FINDING_ID}:aaa111bbb222:0",

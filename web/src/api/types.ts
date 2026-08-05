@@ -148,8 +148,8 @@ export type WorkflowNodeStatus = "done" | "current" | "pending"
  * stopped filtering it would send a value this type had no branch for. Only the three
  * terminal values end a run.
  *
- * `abandon_reason` is meaningful under `abandoned` alone; on the others it is whatever the
- * channel happened to hold and means nothing.
+ * `abandon_reason` is meaningful under `abandoned` alone, and `report_reason` under `reported`
+ * alone; on any other outcome each is whatever the channel happened to hold and means nothing.
  */
 export type WorkflowOutcome = "opened" | "abandoned" | "reported" | "running"
 
@@ -181,6 +181,7 @@ export interface WorkflowState {
   nodes: WorkflowNode[]
   outcome: WorkflowOutcome | null
   abandon_reason: string | null
+  report_reason: string | null
 }
 
 /**
