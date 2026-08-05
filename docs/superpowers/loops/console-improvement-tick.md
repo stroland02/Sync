@@ -206,7 +206,27 @@ SYNC_GRAPH_DSN=postgresql://sync:sync@localhost:5433/sync SYNC_API_PORT=8787 uv 
 cd web && npm run dev
 ```
 
+If the database this points at is empty, every screen renders an honest-but-useless empty state and
+nothing checked above is actually being verified. Four separate rounds hit exactly that, each one
+writing a throwaway script to insert some rows and deleting it afterward. That knowledge is now
+committed: `scripts/seed_console.py` writes at least two vendors, several call sites and vendor
+changes, open findings across more than one `binding_rung`, a finding retried across two
+checkpointer generations, a live run and a terminal run, and `migration_outcome` rows where
+`attempts` and `distinct_findings` differ — enough for every console screen to show something real.
+Every row it writes is tagged `seed-console`, so it removes exactly what it inserted and nothing
+else:
+
+```bash
+uv run python scripts/seed_console.py            # write the fixture (idempotent -- safe to re-run)
+uv run python scripts/seed_console.py --remove    # delete it again, leaving everything else alone
+```
+
 Record what you saw, not that you looked.
+
+**Stop both processes when the check is done.** A `python -m sync.api` or `npm run dev` left
+listening past the end of a tick is not idle — it holds port 8787 or 5173 for the next session, which
+then has to `taskkill` it before it can run its own verification. Ctrl-C both, or `taskkill` by PID,
+before closing the tick.
 
 **5. Close the tick.**
 
