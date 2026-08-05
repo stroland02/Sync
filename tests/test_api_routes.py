@@ -19,7 +19,7 @@ import pytest
 from starlette.applications import Starlette
 from starlette.testclient import TestClient
 
-from sync.api.__main__ import DEFAULT_PORT
+from sync.api.__main__ import DEFAULT_PORT, _reload_enabled, app_factory
 from sync.api.app import _MAX_LIMIT, _SCAN_LIMIT, create_app
 from sync.core import CallSite, Finding, VendorChange
 from sync.dashboard.queries import _FINISHED
@@ -1015,3 +1015,51 @@ def test_the_consoles_fetched_paths_match_the_apps_declared_routes():
         f"routes create_app declares that client.ts never fetches: {sorted(missing_from_console)}; "
         f"paths client.ts fetches that create_app never declares: {sorted(missing_from_app)}"
     )
+
+
+# -- dev-only reload mode --------------------------------------------------------
+#
+# uvicorn's `reload=True` re-imports and re-calls a factory in a subprocess rather than
+# reusing an app object, so `main()` and the reload path must build the app the same way or
+# the two silently diverge. `app_factory` is that one construction route; these tests pin
+# the property that would catch a drift (the route table) and the environment contract that
+# keeps reload off by default.
+
+
+def test_app_factory_builds_the_same_routes_as_create_app(monkeypatch):
+    # `GraphStore` opens its connection lazily on first use (sync/graph/store.py), so building
+    # the app from a DSN that is never queried is safe here -- this test only compares the
+    # route table, which is fixed by `create_app` regardless of what the readers do.
+    monkeypatch.setenv("SYNC_GRAPH_DSN", "postgresql://sync:sync@localhost:5433/sync")
+    monkeypatch.delenv("SYNC_CHECKPOINTER_DSN", raising=False)
+    monkeypatch.delenv("SYNC_API_RELOAD", raising=False)
+
+    factory_app = app_factory()
+    reference_app = _build_app(surface=GraphSurface(FakeGraph(), feed_fetched_at=FETCHED))
+
+    factory_routes = {(route.path, frozenset(route.methods)) for route in factory_app.routes}
+    reference_routes = {(route.path, frozenset(route.methods)) for route in reference_app.routes}
+    assert factory_routes == reference_routes
+
+
+def test_reload_defaults_to_off(monkeypatch):
+    monkeypatch.delenv("SYNC_API_RELOAD", raising=False)
+
+    assert _reload_enabled() is False
+
+
+def test_reload_turns_on_when_the_environment_asks_for_it(monkeypatch):
+    monkeypatch.setenv("SYNC_API_RELOAD", "true")
+
+    assert _reload_enabled() is True
+
+
+def test_reload_unrecognised_value_raises_rather_than_silently_enabling(monkeypatch):
+    # sync/obs/log.py established the ruling for an unparseable value at this same kind of
+    # boundary: raise, rather than fall back to a default the caller never asked for and
+    # would not see. An unrecognised value here must not be treated as truthy just because a
+    # production deployment did not intend to set it at all.
+    monkeypatch.setenv("SYNC_API_RELOAD", "yes")
+
+    with pytest.raises(ValueError):
+        _reload_enabled()
