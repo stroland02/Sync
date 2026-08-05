@@ -878,6 +878,15 @@ approved by eye. The reasoning is a constraint rather than a taste:
 The hue is the input. `--color-primary` and the focus ring derive from it, and nothing else in the
 console is chromatic on a normal screen. Reversing this ruling means regenerating one ramp.
 
+**Restraint is part of the ruling, not a matter of taste applied afterwards.** The owner's
+direction is professional, clean and simple, and that constrains the ramp as much as the hue does:
+low chroma, so the brand reads as considered rather than as decoration; a screen that is neutral
+grey everywhere the data is not asking for attention; no gradient, no second accent, no tint on a
+surface. If the blue-violet reads as purple rather than as a restrained blue once it is on screen,
+pull it toward 255° and regenerate — the structure does not change, only the input does. A reader
+should be able to look at a full table and not be able to say what the brand colour is without
+finding a link.
+
 **3. The reversal is confirmed: the packages stay installed and unimported, and their retiring
 conditions stand as written.** `@react-three/fiber`, `@react-three/drei`, `three` and
 `react-grid-layout` are wanted in the sense the owner meant — the project is not committing to a
