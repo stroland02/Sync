@@ -7,10 +7,11 @@ checks, which is how `RunState["outcome"]` came to be declared as four words whi
 `sync.mcp.propose` wrote five different ones into it.
 
 What the scan can see is a write whose key is a literal string where it sits: a subscript
-assignment plain or annotated, an entry in a dict literal a node returns, a `setdefault`, and
-an argument to a helper that performs the subscript itself. What it cannot see is a key
-computed at run time or a whole dict merged in under a name, and no census can enumerate
-those -- the sentence above is bounded by that and by nothing else.
+assignment plain or annotated, an entry in a dict literal a node returns, a `setdefault`, a
+keyword handed to `update`, and an argument to a helper that performs the subscript itself.
+What it cannot see is a key computed at run time or a whole dict merged in under a name, and
+no census can enumerate those. Those bound the sentence above, along with the one limit named
+at the end of this docstring.
 
 Inside those forms, silence is not an answer. A write that resolves to no word at all fails
 naming its position, so the next reader either extends `_resolve` or records the case in
@@ -30,6 +31,18 @@ The members are read with `typing.get_args` rather than copied, so a word added 
 `Literal` cannot leave this asserting the old set. Maintained the same way as the corpus scan:
 a failure here is a vocabulary that grew, so add the word to the `Literal` and this follows.
 Widening an assertion instead retires the check.
+
+**A qualifier is assumed to name a module, and a parameter of the same name is
+indistinguishable from one.** `propose.UNAVAILABLE` is how `tools.py` reads a constant across
+modules, so any `NAME.attr` resolves against `NAME.py`'s constants. Measured on a synthetic
+package: `state["outcome"] = propose.UNAVAILABLE` inside `def run(state, propose)` resolved to
+`'unavailable'`, and nothing was reported. That is the one case here that answers wrongly
+rather than declining to answer, which is why it is named here and not in `UNRESOLVED` -- that
+census holds writes resolving to no word, and an entry for this one would describe nothing.
+Separating the two needs an import table and the scope of every parameter name, which is more
+machinery than a gate over two `Literal`s totalling nine words can carry. Named rather than
+solved, the way `tests/test_decode_handlers.py` names the chain that catches a
+`UnicodeDecodeError` without spelling it.
 """
 
 from __future__ import annotations
