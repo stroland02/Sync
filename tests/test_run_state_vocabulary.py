@@ -95,7 +95,7 @@ def _scopes(tree: ast.Module) -> dict[int, str]:
 
 
 def _constants(trees: dict[Path, ast.Module], root: Path) -> dict[tuple[str, str], str]:
-    """Module-level `NAME = "literal"`, keyed by the module that defines it.
+    """Module-level `NAME = "literal"`, annotated or not, keyed by the module that defines it.
 
     One flat namespace per package would let two modules defining the same name with
     different values resolve to whichever sorts last, which makes the word this reports a
@@ -106,11 +106,15 @@ def _constants(trees: dict[Path, ast.Module], root: Path) -> dict[tuple[str, str
     found: dict[tuple[str, str], str] = {}
     for path, tree in trees.items():
         for node in tree.body:
-            if not isinstance(node, ast.Assign) or not isinstance(node.value, ast.Constant):
+            if isinstance(node, ast.Assign):
+                targets = node.targets
+            elif isinstance(node, ast.AnnAssign):
+                targets = [node.target]
+            else:
                 continue
-            if not isinstance(node.value.value, str):
+            if not isinstance(node.value, ast.Constant) or not isinstance(node.value.value, str):
                 continue
-            for target in node.targets:
+            for target in targets:
                 if isinstance(target, ast.Name):
                     found[(_module_name(path, root), target.id)] = node.value.value
     return found
@@ -890,6 +894,24 @@ def test_a_writer_called_through_a_name_bound_to_it_carries_its_word(tmp_path):
 
     assert _words_written_to(package, {"outcome"}) == {"wordA", "wordB"}
     assert [w for w in _writes(package, {"outcome"}) if not w.words] == []
+
+
+def test_an_annotated_module_constant_is_a_module_constant(tmp_path):
+    """`WORD: str = "annword"` was never registered, so every use of it failed the gate.
+
+    A false red rather than a hole, and worth closing anyway: the commit that taught the
+    subscript scans to read `AnnAssign` missed this one, and `Outcome` and `PreviewOutcome`
+    are exactly the kind of module constant an annotation attaches itself to.
+    """
+    package = _synthetic(
+        tmp_path,
+        'WORD: str = "annword"\n'
+        "def run(state):\n"
+        '    state["outcome"] = WORD\n',
+    )
+
+    assert _words_written_to(package, {"outcome"}) == {"annword"}
+    assert [write for write in _writes(package, {"outcome"}) if not write.words] == []
 
 
 def test_a_statement_that_binds_the_key_without_assigning_it_is_reported(tmp_path):
