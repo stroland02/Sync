@@ -25,6 +25,7 @@ from sync.dashboard.graph_views import (
     detector_accountability,
     index_coverage,
     observed_telemetry,
+    severity_rollup,
 )
 from sync.graph.store import GraphStore
 
@@ -41,6 +42,23 @@ def store():
     s.apply_schema()
     s.truncate_all()
     return s
+
+
+def _query_count(monkeypatch) -> list[str]:
+    """How many round trips a read made -- proves an N+1 join collapsed to one query rather
+    than merely running fast enough that nobody counted.
+    """
+    import sync.graph.store as store_module
+
+    calls: list[str] = []
+    real_execute = store_module.psycopg.Connection.execute
+
+    def counting_execute(self, query, *args, **kwargs):
+        calls.append(query)
+        return real_execute(self, query, *args, **kwargs)
+
+    monkeypatch.setattr(store_module.psycopg.Connection, "execute", counting_execute)
+    return calls
 
 
 def _site(**over) -> CallSite:
@@ -117,7 +135,7 @@ def test_binding_surface_lists_call_sites_bound_to_one_vendor_operation(store):
 
     result = binding_surface(store, "stripe", "PostCharges")
 
-    paths = {row["path"] for row in result["call_sites"]}
+    paths = {row["path"] for row in result["call_sites"]["items"]}
     assert paths == {"src/a.ts", "src/b.ts"}
     assert {site_a, site_b}  # both ids were used; guards against a copy-paste that reused one
 
@@ -129,8 +147,8 @@ def test_binding_surface_every_call_site_row_reports_the_static_rung(store):
 
     result = binding_surface(store, "stripe", "PostCharges")
 
-    assert result["call_sites"], "the fixture wrote no call site"
-    assert all(row["binding_rung"] == "static" for row in result["call_sites"])
+    assert result["call_sites"]["items"], "the fixture wrote no call site"
+    assert all(row["binding_rung"] == "static" for row in result["call_sites"]["items"])
 
 
 def test_binding_surface_filters_call_sites_by_repo_id_when_asked(store):
@@ -139,7 +157,58 @@ def test_binding_surface_filters_call_sites_by_repo_id_when_asked(store):
 
     result = binding_surface(store, "stripe", "PostCharges", repo_id="r1")
 
-    assert [row["path"] for row in result["call_sites"]] == ["src/a.ts"]
+    assert [row["path"] for row in result["call_sites"]["items"]] == ["src/a.ts"]
+    assert result["call_sites"]["total"] == 1
+
+
+def test_binding_surface_a_binding_rung_other_than_static_is_an_empty_page_not_an_error(store):
+    # Every call site row this view builds reports 'static' unconditionally -- a call site is
+    # what the static index found, and nothing about it rests on a resolution step or on
+    # watched traffic. Asking for a different rung is a real question with a real answer: none
+    # of these rows carry it, so it is an empty page, matching every other "nothing recorded"
+    # answer in this module -- never an error and never silently the unfiltered set.
+    store.upsert_call_site(_site())
+
+    result = binding_surface(store, "stripe", "PostCharges", binding_rung="observed")
+
+    assert result["call_sites"] == {"items": [], "total": 0, "next_offset": None}
+
+
+def test_binding_surface_a_binding_rung_of_static_returns_the_normal_page(store):
+    store.upsert_call_site(_site())
+
+    result = binding_surface(store, "stripe", "PostCharges", binding_rung="static")
+
+    assert result["call_sites"]["total"] == 1
+
+
+def test_binding_surface_paginates_call_sites_independently_of_changes(store):
+    for i in range(5):
+        store.upsert_call_site(_site(path=f"src/{i}.ts", line=i))
+    store.upsert_vendor_change(_change(operation_id="PostCharges"))
+
+    result = binding_surface(
+        store, "stripe", "PostCharges", call_sites_limit=2, call_sites_offset=0
+    )
+
+    assert len(result["call_sites"]["items"]) == 2
+    assert result["call_sites"]["total"] == 5
+    assert result["call_sites"]["next_offset"] == 2
+    # The changes page is untouched by the call-sites page size -- they are two questions.
+    assert result["changes"]["total"] == 1
+    assert result["changes"]["next_offset"] is None
+
+
+def test_binding_surface_call_sites_next_offset_is_null_on_the_last_page(store):
+    for i in range(3):
+        store.upsert_call_site(_site(path=f"src/{i}.ts", line=i))
+
+    result = binding_surface(
+        store, "stripe", "PostCharges", call_sites_limit=2, call_sites_offset=2
+    )
+
+    assert len(result["call_sites"]["items"]) == 1
+    assert result["call_sites"]["next_offset"] is None
 
 
 def test_binding_surface_reports_only_changes_matching_the_operation(store):
@@ -149,15 +218,33 @@ def test_binding_surface_reports_only_changes_matching_the_operation(store):
 
     result = binding_surface(store, "stripe", "PostCharges")
 
-    kinds = {row["kind"] for row in result["changes"]}
+    kinds = {row["kind"] for row in result["changes"]["items"]}
     assert kinds == {"response-field-type-changed"}
+    assert result["changes"]["total"] == 1
+
+
+def test_binding_surface_paginates_changes_independently_of_call_sites(store):
+    store.upsert_call_site(_site())
+    for i in range(4):
+        store.upsert_vendor_change(
+            _change(operation_id="PostCharges", raw={"text": f"change {i}"})
+        )
+
+    result = binding_surface(store, "stripe", "PostCharges", changes_limit=2, changes_offset=0)
+
+    assert len(result["changes"]["items"]) == 2
+    assert result["changes"]["total"] == 4
+    assert result["changes"]["next_offset"] == 2
+    # The call-sites page is untouched by the changes page size.
+    assert result["call_sites"]["total"] == 1
+    assert result["call_sites"]["next_offset"] is None
 
 
 def test_binding_surface_on_an_operation_nobody_calls_is_empty_not_an_error(store):
     result = binding_surface(store, "stripe", "GetNothing")
 
-    assert result["call_sites"] == []
-    assert result["changes"] == []
+    assert result["call_sites"] == {"items": [], "total": 0, "next_offset": None}
+    assert result["changes"] == {"items": [], "total": 0, "next_offset": None}
 
 
 def test_binding_surface_excludes_retracted_call_sites(store):
@@ -171,7 +258,7 @@ def test_binding_surface_excludes_retracted_call_sites(store):
 
     result = binding_surface(store, "stripe", "PostCharges")
 
-    paths = {row["path"] for row in result["call_sites"]}
+    paths = {row["path"] for row in result["call_sites"]["items"]}
     assert paths == {"src/a.ts"}
     assert live_id != retracted_id  # guards against a copy-paste that reused one id for both
 
@@ -277,13 +364,17 @@ def test_index_coverage_pairs_the_newest_timestamp_with_its_own_vendor(store):
 # -- observed_telemetry ------------------------------------------------------------
 
 
+_EMPTY_PAGE = {"items": [], "total": 0, "next_offset": None}
+
+
 def test_observed_telemetry_reports_calls_for_one_repository(store):
     store.record_observed_call(_observed_call(repo_id="r1", trace_id="t1"))
     store.record_observed_call(_observed_call(repo_id="r2", trace_id="t2"))
 
     result = observed_telemetry(store, "r1")
 
-    assert [row["trace_id"] for row in result["calls"]] == ["t1"]
+    assert [row["trace_id"] for row in result["calls"]["items"]] == ["t1"]
+    assert result["calls"]["total"] == 1
 
 
 def test_observed_telemetry_call_rows_carry_the_derived_evidence_counts(store):
@@ -297,12 +388,28 @@ def test_observed_telemetry_call_rows_carry_the_derived_evidence_counts(store):
 
     result = observed_telemetry(store, "r1")
 
-    row = result["calls"][0]
+    row = result["calls"]["items"][0]
     assert row["call_count"] == 2
     assert row["distinct_targets"] == 1
     assert row["repeated_calls"] == 1
     assert row["error_count"] == 1
     assert row["max_resend_count"] == 1
+
+
+def test_observed_telemetry_calls_paginate_independently_of_shapes_and_windows(store):
+    for i in range(5):
+        store.record_observed_call(_observed_call(trace_id=f"t{i}"))
+    store.record_observed_shape(_shape())
+    store.record_observed_error_window(_error_window())
+
+    result = observed_telemetry(store, "r1", calls_limit=2, calls_offset=0)
+
+    assert len(result["calls"]["items"]) == 2
+    assert result["calls"]["total"] == 5
+    assert result["calls"]["next_offset"] == 2
+    # Shapes and error windows are untouched by the calls page size.
+    assert result["shapes"]["total"] == 1
+    assert result["error_windows"]["total"] == 1
 
 
 def test_observed_telemetry_shapes_are_scoped_to_operations_this_repo_was_seen_calling(store):
@@ -315,8 +422,57 @@ def test_observed_telemetry_shapes_are_scoped_to_operations_this_repo_was_seen_c
 
     result = observed_telemetry(store, "r1")
 
-    fields = {row["field_path"] for row in result["shapes"]}
+    fields = {row["field_path"] for row in result["shapes"]["items"]}
     assert fields == {"/amount"}
+
+
+def test_observed_telemetry_shapes_are_not_scoped_to_the_calls_page(store):
+    """Shapes are joined through every operation this repository's calls have ever named, not
+    just the ones on the current page of calls -- the two are independent questions, and a
+    shape must not disappear because its call happened to sort onto page two.
+    """
+    store.record_observed_call(_observed_call(trace_id="t-a", operation_id="OpA"))
+    store.record_observed_call(_observed_call(trace_id="t-b", operation_id="OpB"))
+    store.record_observed_shape(_shape(operation_id="OpA", field_path="/a"))
+    store.record_observed_shape(_shape(operation_id="OpB", field_path="/b"))
+
+    result = observed_telemetry(store, "r1", calls_limit=1, calls_offset=0)
+
+    fields = {row["field_path"] for row in result["shapes"]["items"]}
+    assert fields == {"/a", "/b"}
+
+
+def test_observed_telemetry_shapes_paginate_independently(store):
+    for i in range(5):
+        store.record_observed_shape(_shape(field_path=f"/f{i}"))
+    store.record_observed_call(_observed_call())
+
+    result = observed_telemetry(store, "r1", shapes_limit=2, shapes_offset=0)
+
+    assert len(result["shapes"]["items"]) == 2
+    assert result["shapes"]["total"] == 5
+    assert result["shapes"]["next_offset"] == 2
+
+
+def test_observed_telemetry_shape_join_makes_a_flat_number_of_queries_not_one_per_pair(
+    store, monkeypatch
+):
+    """The N+1 this replaces issued one query per distinct `(vendor_id, operation_id)` pair a
+    repository's calls named -- ten operations used to cost ten round trips for one page. The
+    replacement makes exactly two: one `SELECT` for the page and one `count(*)` for the total,
+    which is the "a separate count" the store's own contract promises -- flat at ten pairs and
+    flat at a thousand, never one query per pair either way.
+    """
+    for i in range(10):
+        store.record_observed_call(_observed_call(trace_id=f"t{i}", operation_id=f"Op{i}"))
+        store.record_observed_shape(_shape(operation_id=f"Op{i}", field_path="/amount"))
+
+    calls = _query_count(monkeypatch)
+    result = observed_telemetry(store, "r1")
+
+    shape_queries = [q for q in calls if "observed_shape" in q]
+    assert len(shape_queries) == 2, f"expected exactly two shape queries, made {len(shape_queries)}"
+    assert result["shapes"]["total"] == 10
 
 
 def test_observed_telemetry_an_uncorrelated_call_does_not_crash_the_shape_join(store):
@@ -329,9 +485,9 @@ def test_observed_telemetry_an_uncorrelated_call_does_not_crash_the_shape_join(s
 
     result = observed_telemetry(store, "r1")
 
-    assert result["calls"][0]["operation_id"] == ""
-    assert result["calls"][0]["binding_rung"] == "unresolved"
-    assert result["shapes"] == []
+    assert result["calls"]["items"][0]["operation_id"] == ""
+    assert result["calls"]["items"][0]["binding_rung"] == "unresolved"
+    assert result["shapes"] == _EMPTY_PAGE
 
 
 def test_observed_telemetry_reports_error_windows_for_one_repository(store):
@@ -340,15 +496,30 @@ def test_observed_telemetry_reports_error_windows_for_one_repository(store):
 
     result = observed_telemetry(store, "r1")
 
-    assert len(result["error_windows"]) == 1
-    assert result["error_windows"][0]["repo_id"] == "r1"
+    assert len(result["error_windows"]["items"]) == 1
+    assert result["error_windows"]["items"][0]["repo_id"] == "r1"
+
+
+def test_observed_telemetry_error_windows_paginate_independently(store):
+    for i in range(5):
+        store.record_observed_error_window(_error_window(status_class=f"{i}xx"))
+    store.record_observed_call(_observed_call())
+
+    result = observed_telemetry(store, "r1", error_windows_limit=2, error_windows_offset=0)
+
+    assert len(result["error_windows"]["items"]) == 2
+    assert result["error_windows"]["total"] == 5
+    assert result["error_windows"]["next_offset"] == 2
 
 
 def test_observed_telemetry_of_a_repository_with_no_traffic_is_all_empty(store):
     result = observed_telemetry(store, "never-observed")
 
     assert result == {
-        "repo_id": "never-observed", "calls": [], "shapes": [], "error_windows": [],
+        "repo_id": "never-observed",
+        "calls": _EMPTY_PAGE,
+        "shapes": _EMPTY_PAGE,
+        "error_windows": _EMPTY_PAGE,
     }
 
 
@@ -420,3 +591,36 @@ def test_detector_accountability_with_no_findings_is_empty_not_an_error(store):
     result = detector_accountability(store)
 
     assert result == {"detectors": [], "total_open_findings": 0}
+
+
+# -- severity_rollup ----------------------------------------------------------------
+
+
+def test_severity_rollup_counts_open_findings_per_severity(store):
+    site_a = store.upsert_call_site(_site(path="src/a.ts", line=1))
+    site_b = store.upsert_call_site(_site(path="src/b.ts", line=2))
+    site_c = store.upsert_call_site(_site(path="src/c.ts", line=3))
+    store.insert_finding(_finding(site_a, claim="c1", severity="breaking"))
+    store.insert_finding(_finding(site_b, claim="c2", severity="breaking"))
+    store.insert_finding(_finding(site_c, claim="c3", severity="warning"))
+
+    result = severity_rollup(store)
+
+    assert result["by_severity"] == {"breaking": 2, "warning": 1}
+    assert result["total"] == 3
+
+
+def test_severity_rollup_excludes_findings_that_are_no_longer_open(store):
+    site = store.upsert_call_site(_site())
+    finding_id = store.insert_finding(_finding(site))
+    store.set_finding_status(finding_id, "patched")
+
+    result = severity_rollup(store)
+
+    assert result == {"by_severity": {}, "total": 0}
+
+
+def test_severity_rollup_with_no_findings_is_empty_not_an_error(store):
+    result = severity_rollup(store)
+
+    assert result == {"by_severity": {}, "total": 0}

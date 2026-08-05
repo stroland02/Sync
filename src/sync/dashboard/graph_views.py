@@ -32,18 +32,80 @@ from __future__ import annotations
 from collections import Counter
 
 from sync.graph.store import GraphStore
+from sync.mcp.tools import DEFAULT_LIMIT
+
+# The only rung a row built from `call_site` alone can honestly carry -- see `binding_surface`'s
+# own docstring. Named so the `binding_rung` filter has one place to compare against rather than
+# a literal repeated at the filter and at the row-building below.
+_CALL_SITE_RUNG = "static"
+
+
+def _page(items: list[dict], total: int, offset: int) -> dict:
+    """One page, shaped identically everywhere this module paginates something: the items, the
+    true total the page was drawn from, and the offset of the next page or `None` on the last
+    one. A shared shape is what lets three independent sets on one screen (`observed_telemetry`)
+    or two on one screen (`binding_surface`) page without a caller having to learn a fourth
+    envelope shape for each new set.
+    """
+    consumed = offset + len(items)
+    return {"items": items, "total": total, "next_offset": consumed if consumed < total else None}
+
+
+_EMPTY_PAGE = {"items": [], "total": 0, "next_offset": None}
+
+
+def _call_site_row(site) -> dict:
+    return {
+        "repo_id": site.repo_id,
+        "path": site.path,
+        "line": site.line,
+        "col": site.col,
+        "symbol": site.symbol,
+        "sdk_version": site.sdk_version,
+        "args_keys": list(site.args_keys),
+        "response_fields_read": list(site.response_fields_read),
+        "loop_depth": site.loop_depth,
+        "binding_rung": _CALL_SITE_RUNG,
+        "indexed_at": site.indexed_at.isoformat(),
+    }
+
+
+def _change_row(change) -> dict:
+    return {
+        "change_id": change.id,
+        "kind": change.kind,
+        "severity": change.severity,
+        "from_version": change.from_version,
+        "to_version": change.to_version,
+        "path_ptr": change.path_ptr,
+        "detected_at": change.detected_at.isoformat(),
+    }
 
 
 def binding_surface(
-    store: GraphStore, vendor_id: str, operation_id: str, *, repo_id: str | None = None
+    store: GraphStore,
+    vendor_id: str,
+    operation_id: str,
+    *,
+    repo_id: str | None = None,
+    binding_rung: str | None = None,
+    call_sites_limit: int = DEFAULT_LIMIT,
+    call_sites_offset: int = 0,
+    changes_limit: int = DEFAULT_LIMIT,
+    changes_offset: int = 0,
 ) -> dict:
     """Every call site the index currently holds against one vendor operation, and what the
-    vendor has changed about it.
+    vendor has changed about it -- each half its own independent page.
 
-    Reads `call_sites_for_operation` and `all_vendor_changes`, exactly as `GraphStore` already
-    answers them -- no new store method, no SQL of its own. `repo_id` is optional and its
-    absence means every repository, matching `call_sites_for_operation`'s own contract: an
-    aggregate across customers is a real question and a detector is not what is asking it here.
+    Reads `call_sites_for_operation` and `vendor_changes_for_operation`, both with a real SQL
+    `LIMIT`, plus their matching `_count` reads for the true total each page is drawn from. The
+    two pages are independent on purpose: call sites and changes are different questions with
+    different cardinalities, and a customer with a long feed history but few call sites (or the
+    reverse) must be able to page one without the other's size leaking in.
+
+    `repo_id` is optional and its absence means every repository, matching
+    `call_sites_for_operation`'s own contract: an aggregate across customers is a real question
+    and a detector is not what is asking it here.
 
     **Every call site row reports `binding_rung: "static"`, unconditionally.** A call site is
     what the static index found; nothing about the row rests on a resolution step or on watched
@@ -52,7 +114,12 @@ def binding_surface(
     binding would come from `observed_telemetry` on this same repository and vendor operation,
     as a second, separate kind of evidence, never as a replacement written here.
 
-    An operation nobody calls, or one the vendor has never changed, returns empty lists rather
+    `binding_rung`, when given, is a real question with a real answer rather than a filter this
+    view merely tolerates: since every call site row carries `"static"`, asking for any other
+    value is answered with an empty page of call sites -- not silently the unfiltered set, and
+    not an error. Changes carry no rung at all and are untouched by this filter.
+
+    An operation nobody calls, or one the vendor has never changed, returns empty pages rather
     than an error: "nothing recorded" is a true answer for either half of this payload.
 
     **This surface cannot see a call site the code used to have.** `call_sites_for_operation`
@@ -63,44 +130,31 @@ def binding_surface(
     operation or bound it and later stopped. A reader after the second story wants
     `GraphStore.get_call_site`, by the id a finding already holds, not this view.
     """
-    sites = store.call_sites_for_operation(vendor_id, operation_id, repo_id=repo_id)
-    changes = [
-        change
-        for change in store.all_vendor_changes(vendor_id)
-        if change.operation_id == operation_id
-    ]
+    call_sites_offset = max(call_sites_offset, 0)
+    changes_offset = max(changes_offset, 0)
+
+    if binding_rung is not None and binding_rung != _CALL_SITE_RUNG:
+        call_sites_page = dict(_EMPTY_PAGE)
+    else:
+        sites = store.call_sites_for_operation(
+            vendor_id, operation_id, repo_id=repo_id,
+            limit=call_sites_limit, offset=call_sites_offset,
+        )
+        sites_total = store.call_sites_for_operation_count(vendor_id, operation_id, repo_id=repo_id)
+        call_sites_page = _page([_call_site_row(s) for s in sites], sites_total, call_sites_offset)
+
+    changes = store.vendor_changes_for_operation(
+        vendor_id, operation_id, limit=changes_limit, offset=changes_offset
+    )
+    changes_total = store.vendor_changes_for_operation_count(vendor_id, operation_id)
+    changes_page = _page([_change_row(c) for c in changes], changes_total, changes_offset)
+
     return {
         "vendor_id": vendor_id,
         "operation_id": operation_id,
         "repo_id": repo_id,
-        "call_sites": [
-            {
-                "repo_id": site.repo_id,
-                "path": site.path,
-                "line": site.line,
-                "col": site.col,
-                "symbol": site.symbol,
-                "sdk_version": site.sdk_version,
-                "args_keys": list(site.args_keys),
-                "response_fields_read": list(site.response_fields_read),
-                "loop_depth": site.loop_depth,
-                "binding_rung": "static",
-                "indexed_at": site.indexed_at.isoformat(),
-            }
-            for site in sites
-        ],
-        "changes": [
-            {
-                "change_id": change.id,
-                "kind": change.kind,
-                "severity": change.severity,
-                "from_version": change.from_version,
-                "to_version": change.to_version,
-                "path_ptr": change.path_ptr,
-                "detected_at": change.detected_at.isoformat(),
-            }
-            for change in changes
-        ],
+        "call_sites": call_sites_page,
+        "changes": changes_page,
     }
 
 
@@ -156,22 +210,85 @@ def index_coverage(store: GraphStore, repo_id: str) -> dict:
     }
 
 
-def observed_telemetry(store: GraphStore, repo_id: str) -> dict:
-    """The telemetry rung of the graph for one repository: what traffic showed up, what shape it
-    had, and how often it failed.
+def _observed_call_row(call) -> dict:
+    return {
+        "repo_id": call.repo_id,
+        "vendor_id": call.vendor_id,
+        "operation_id": call.operation_id,
+        "binding_rung": call.binding_rung,
+        "server_address": call.server_address,
+        "http_method": call.http_method,
+        "trace_id": call.trace_id,
+        "url_template": call.url_template,
+        "call_count": call.call_count,
+        "distinct_targets": call.distinct_targets,
+        "repeated_calls": call.repeated_calls,
+        "max_resend_count": call.max_resend_count,
+        "error_count": call.error_count,
+        "first_seen": call.first_seen.isoformat(),
+        "last_seen": call.last_seen.isoformat(),
+    }
 
-    Three reads, three tables, one repository:
+
+def _observed_shape_row(shape) -> dict:
+    return {
+        "vendor_id": shape.vendor_id,
+        "operation_id": shape.operation_id,
+        "field_path": shape.field_path,
+        "json_type": shape.json_type,
+        "nullable_seen": shape.nullable_seen,
+        "spec_enum_values": list(shape.spec_enum_values),
+        "source": shape.source,
+        "sample_count": shape.sample_count,
+        "first_seen": shape.first_seen.isoformat(),
+        "last_seen": shape.last_seen.isoformat(),
+    }
+
+
+def _observed_error_window_row(window) -> dict:
+    return {
+        "repo_id": window.repo_id,
+        "vendor_id": window.vendor_id,
+        "operation_id": window.operation_id,
+        "binding_rung": window.binding_rung,
+        "source": window.source,
+        "status_class": window.status_class,
+        "window_start": window.window_start.isoformat(),
+        "window_end": window.window_end.isoformat(),
+        "error_count": window.error_count,
+        "issue_count": window.issue_count,
+    }
+
+
+def observed_telemetry(
+    store: GraphStore,
+    repo_id: str,
+    *,
+    calls_limit: int = DEFAULT_LIMIT,
+    calls_offset: int = 0,
+    shapes_limit: int = DEFAULT_LIMIT,
+    shapes_offset: int = 0,
+    error_windows_limit: int = DEFAULT_LIMIT,
+    error_windows_offset: int = 0,
+) -> dict:
+    """The telemetry rung of the graph for one repository: what traffic showed up, what shape it
+    had, and how often it failed -- three independent pages, because they are three questions of
+    different cardinality stacked on one screen.
 
     - `observed_calls` -- one row per unit of work's use of one operation. Every derived count
       on a row (`call_count`, `distinct_targets`, `repeated_calls`, `max_resend_count`,
       `error_count`) is read off the model's own properties rather than recomputed from `spans`
       here, so this view cannot disagree with `ObservedCall` about what its own data means.
-    - `observed_shapes` -- **not** repository-scoped in the schema; a shape is a fact about what
-      a vendor operation sends, independent of who calls it. So this joins in through the
-      `(vendor_id, operation_id)` pairs this repository's own observed calls actually name,
-      which is what makes "the baseline for what this repo's traffic looks like" answerable
-      without inventing a `repo_id` column the table does not have. An uncorrelated call -- empty
-      `operation_id`, rung `unresolved` -- names no pair and joins nothing.
+    - `observed_shapes_for_operations` -- **not** repository-scoped in the schema; a shape is a
+      fact about what a vendor operation sends, independent of who calls it. So this joins in
+      through `observed_operation_pairs`, the `(vendor_id, operation_id)` pairs this
+      repository's *entire* observed history actually names -- not just the pairs on the current
+      page of calls, which is what makes the shapes page independent of the calls page rather
+      than a subset of it that happens to move when a reader changes `calls_offset`.
+      `GraphStore.observed_shapes_for_operations` is one query regardless of how many pairs are
+      named, which is what replaces the one-query-per-pair this view used to issue. An
+      uncorrelated call -- empty `operation_id`, rung `unresolved` -- names no pair and joins
+      nothing: `observed_operation_pairs` excludes it before this ever runs.
     - `observed_error_windows` -- one row per operation's failure count over one window this
       repository's tracker was asked about. Reported as-is: `error_count` has no denominator in
       this table (`schema.sql`'s own grain note), and this view does not compute one.
@@ -182,72 +299,50 @@ def observed_telemetry(store: GraphStore, repo_id: str) -> dict:
     which of those two claims this is, `observed` for a correlation that ran or `unresolved` for
     a request nothing could attribute. Neither is a verdict; the reader weighs the finding by it.
     """
-    calls = store.observed_calls(repo_id)
+    calls_offset = max(calls_offset, 0)
+    shapes_offset = max(shapes_offset, 0)
+    error_windows_offset = max(error_windows_offset, 0)
 
-    operation_pairs = sorted({
-        (call.vendor_id, call.operation_id) for call in calls if call.operation_id
-    })
-    shapes = [
-        shape
-        for vendor_id, operation_id in operation_pairs
-        for shape in store.observed_shapes(vendor_id, operation_id)
-    ]
+    calls = store.observed_calls(repo_id, limit=calls_limit, offset=calls_offset)
+    calls_total = store.observed_calls_count(repo_id)
+    calls_page = _page([_observed_call_row(c) for c in calls], calls_total, calls_offset)
 
-    windows = store.observed_error_windows(repo_id)
+    operation_pairs = store.observed_operation_pairs(repo_id)
+    shapes = store.observed_shapes_for_operations(
+        operation_pairs, limit=shapes_limit, offset=shapes_offset
+    )
+    shapes_total = store.observed_shapes_for_operations_count(operation_pairs)
+    shapes_page = _page([_observed_shape_row(s) for s in shapes], shapes_total, shapes_offset)
+
+    windows = store.observed_error_windows(
+        repo_id, limit=error_windows_limit, offset=error_windows_offset
+    )
+    windows_total = store.observed_error_windows_count(repo_id)
+    windows_page = _page(
+        [_observed_error_window_row(w) for w in windows], windows_total, error_windows_offset
+    )
 
     return {
         "repo_id": repo_id,
-        "calls": [
-            {
-                "repo_id": call.repo_id,
-                "vendor_id": call.vendor_id,
-                "operation_id": call.operation_id,
-                "binding_rung": call.binding_rung,
-                "server_address": call.server_address,
-                "http_method": call.http_method,
-                "trace_id": call.trace_id,
-                "url_template": call.url_template,
-                "call_count": call.call_count,
-                "distinct_targets": call.distinct_targets,
-                "repeated_calls": call.repeated_calls,
-                "max_resend_count": call.max_resend_count,
-                "error_count": call.error_count,
-                "first_seen": call.first_seen.isoformat(),
-                "last_seen": call.last_seen.isoformat(),
-            }
-            for call in calls
-        ],
-        "shapes": [
-            {
-                "vendor_id": shape.vendor_id,
-                "operation_id": shape.operation_id,
-                "field_path": shape.field_path,
-                "json_type": shape.json_type,
-                "nullable_seen": shape.nullable_seen,
-                "spec_enum_values": list(shape.spec_enum_values),
-                "source": shape.source,
-                "sample_count": shape.sample_count,
-                "first_seen": shape.first_seen.isoformat(),
-                "last_seen": shape.last_seen.isoformat(),
-            }
-            for shape in shapes
-        ],
-        "error_windows": [
-            {
-                "repo_id": window.repo_id,
-                "vendor_id": window.vendor_id,
-                "operation_id": window.operation_id,
-                "binding_rung": window.binding_rung,
-                "source": window.source,
-                "status_class": window.status_class,
-                "window_start": window.window_start.isoformat(),
-                "window_end": window.window_end.isoformat(),
-                "error_count": window.error_count,
-                "issue_count": window.issue_count,
-            }
-            for window in windows
-        ],
+        "calls": calls_page,
+        "shapes": shapes_page,
+        "error_windows": windows_page,
     }
+
+
+def severity_rollup(store: GraphStore) -> dict:
+    """Every open finding's severity, tallied once: a count per severity and the total.
+
+    Reads `open_findings` unpaginated -- the same full read `detector_accountability` already
+    makes -- because `total` below is the length of that read, not a sum over `by_severity`'s
+    values. Those two numbers agree today, since `finding.severity` is `NOT NULL`
+    (`schema.sql`), but the code path computing `total` is independent of the breakdown on
+    purpose: a sum over a filtered or paginated set silently understates the true total the
+    moment either is introduced, which is the recurring defect this milestone keeps closing
+    (`app.py`'s own `overview` route carries the fix for the same shape of bug).
+    """
+    findings = store.open_findings()
+    return {"by_severity": dict(Counter(f.severity for f in findings)), "total": len(findings)}
 
 
 def detector_accountability(store: GraphStore) -> dict:

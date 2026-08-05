@@ -90,17 +90,49 @@ def app_factory() -> Starlette:
     def repositories_reader():
         return fleet.repositories(store)
 
-    def binding_reader(vendor_id: str, operation_id: str, *, repo_id: str | None = None):
-        return graph_views.binding_surface(store, vendor_id, operation_id, repo_id=repo_id)
+    def binding_reader(
+        vendor_id: str,
+        operation_id: str,
+        *,
+        repo_id: str | None = None,
+        binding_rung: str | None = None,
+        call_sites_limit: int,
+        call_sites_offset: int,
+        changes_limit: int,
+        changes_offset: int,
+    ):
+        return graph_views.binding_surface(
+            store, vendor_id, operation_id,
+            repo_id=repo_id, binding_rung=binding_rung,
+            call_sites_limit=call_sites_limit, call_sites_offset=call_sites_offset,
+            changes_limit=changes_limit, changes_offset=changes_offset,
+        )
 
     def coverage_reader(repo_id: str):
         return graph_views.index_coverage(store, repo_id)
 
-    def observed_reader(repo_id: str):
-        return graph_views.observed_telemetry(store, repo_id)
+    def observed_reader(
+        repo_id: str,
+        *,
+        calls_limit: int,
+        calls_offset: int,
+        shapes_limit: int,
+        shapes_offset: int,
+        error_windows_limit: int,
+        error_windows_offset: int,
+    ):
+        return graph_views.observed_telemetry(
+            store, repo_id,
+            calls_limit=calls_limit, calls_offset=calls_offset,
+            shapes_limit=shapes_limit, shapes_offset=shapes_offset,
+            error_windows_limit=error_windows_limit, error_windows_offset=error_windows_offset,
+        )
 
     def detector_reader():
         return graph_views.detector_accountability(store)
+
+    def severity_reader():
+        return graph_views.severity_rollup(store)
 
     return create_app(
         surface=surface,
@@ -112,6 +144,7 @@ def app_factory() -> Starlette:
         coverage_reader=coverage_reader,
         observed_reader=observed_reader,
         detector_reader=detector_reader,
+        severity_reader=severity_reader,
     )
 
 

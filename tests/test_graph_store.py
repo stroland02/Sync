@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 import psycopg
 import pytest
 
-from sync.core import CallSite, Finding, ObservedErrorWindow, VendorChange
+from sync.core import CallSite, Finding, ObservedCall, ObservedErrorWindow, ObservedShape, VendorChange
 from sync.graph.store import GraphStore
 
 DSN = os.environ.get("SYNC_DSN", "postgresql://sync:sync@localhost:5433/sync")
@@ -17,6 +17,44 @@ def store():
     s.apply_schema()
     s.truncate_all()
     return s
+
+
+@pytest.fixture()
+def fetch_counts(monkeypatch):
+    """How many rows crossed the wire on each `fetchall()`, independent of what a caller's
+    Python goes on to do with them afterwards -- slicing a result after it already arrived
+    does not change how many rows arrived. This is what makes "rows read" a different
+    measurement from "rows returned": a page carved out of an unbounded fetch in Python
+    returns a short list while this still records the long one, which is the divergence a
+    real SQL `LIMIT` is supposed to close.
+    """
+    counts: list[int] = []
+    real_fetchall = psycopg.Cursor.fetchall
+
+    def counting_fetchall(self):
+        result = real_fetchall(self)
+        counts.append(len(result))
+        return result
+
+    monkeypatch.setattr(psycopg.Cursor, "fetchall", counting_fetchall)
+    return counts
+
+
+def _execute_count(monkeypatch):
+    """How many round trips a read made -- the metric that proves an N+1 join collapsed to
+    one query rather than merely getting fast enough not to notice.
+    """
+    import sync.graph.store as store_module
+
+    calls: list[str] = []
+    real_execute = store_module.psycopg.Connection.execute
+
+    def counting_execute(self, query, *args, **kwargs):
+        calls.append(query)
+        return real_execute(self, query, *args, **kwargs)
+
+    monkeypatch.setattr(store_module.psycopg.Connection, "execute", counting_execute)
+    return calls
 
 
 def test_many_calls_open_one_connection(monkeypatch):
@@ -555,6 +593,244 @@ def test_call_site_coverage_excludes_a_retracted_rows_count_and_timestamp(store)
     coverage = store.call_site_coverage("r1")
 
     assert coverage["stripe"] == (1, datetime(2020, 1, 1, tzinfo=timezone.utc))
+
+
+# -- pagination reaches the store: a real SQL LIMIT, not a Python slice -----------------------
+#
+# Every test below asserts on *rows returned* (the list length, which a Python slice would
+# also satisfy) and on *rows read* (`fetch_counts`, which only a real `LIMIT` keeps small).
+# A test that checked returned length alone would pass unchanged against the Python-slice
+# implementation these methods replace -- CLAUDE.md's own words for that: "a test that has
+# never failed has never been shown to test anything."
+
+
+def test_call_sites_for_operation_limit_is_sql_not_a_python_slice(store, fetch_counts):
+    for i in range(5):
+        store.upsert_call_site(_site(path=f"src/{i}.ts", line=i, content_hash=f"hash-{i}"))
+
+    sites = store.call_sites_for_operation("stripe", "PostCharges", limit=2, offset=0)
+
+    assert len(sites) == 2, "rows returned"
+    assert fetch_counts[-1] == 2, "rows read off the wire"
+
+
+def test_call_sites_for_operation_paginates_past_the_first_page(store):
+    for i in range(5):
+        store.upsert_call_site(_site(path=f"src/{i}.ts", line=i, content_hash=f"hash-{i}"))
+
+    first = store.call_sites_for_operation("stripe", "PostCharges", limit=2, offset=0)
+    second = store.call_sites_for_operation("stripe", "PostCharges", limit=2, offset=2)
+
+    assert [s.path for s in first] == ["src/0.ts", "src/1.ts"]
+    assert [s.path for s in second] == ["src/2.ts", "src/3.ts"]
+
+
+def test_call_sites_for_operation_with_no_limit_returns_every_row(store):
+    """Every existing caller -- three detectors and `binding_surface` -- calls this with no
+    `limit` at all and must keep getting everything, unbounded, exactly as before.
+    """
+    for i in range(5):
+        store.upsert_call_site(_site(path=f"src/{i}.ts", line=i, content_hash=f"hash-{i}"))
+
+    assert len(store.call_sites_for_operation("stripe", "PostCharges")) == 5
+
+
+def test_call_sites_for_operation_count_matches_the_filter_not_the_page(store):
+    for i in range(5):
+        store.upsert_call_site(_site(path=f"src/{i}.ts", line=i, content_hash=f"hash-{i}"))
+
+    assert store.call_sites_for_operation_count("stripe", "PostCharges") == 5
+    assert len(store.call_sites_for_operation("stripe", "PostCharges", limit=2)) == 2
+
+
+def test_vendor_changes_for_operation_limit_is_sql_not_a_python_slice(store, fetch_counts):
+    for i in range(4):
+        store.upsert_vendor_change(_change(operation_id="PostCharges", raw={"text": f"t{i}"}))
+
+    changes = store.vendor_changes_for_operation("stripe", "PostCharges", limit=1, offset=0)
+
+    assert len(changes) == 1, "rows returned"
+    assert fetch_counts[-1] == 1, "rows read off the wire"
+
+
+def test_vendor_changes_for_operation_count_matches_the_filter_not_the_page(store):
+    for i in range(4):
+        store.upsert_vendor_change(_change(operation_id="PostCharges", raw={"text": f"t{i}"}))
+
+    assert store.vendor_changes_for_operation_count("stripe", "PostCharges") == 4
+    assert len(store.vendor_changes_for_operation("stripe", "PostCharges", limit=1)) == 1
+
+
+def test_vendor_changes_for_operation_excludes_a_different_operation(store):
+    """A sibling of `all_vendor_changes`, not a parameter on it: that method's exact
+    `(self, vendor_id)` signature is pinned by `sync.mcp.tools.GraphReader`'s structural
+    protocol, so `binding_surface`'s operation scoping has to be its own query.
+    """
+    store.upsert_vendor_change(_change(operation_id="PostCharges"))
+    store.upsert_vendor_change(_change(operation_id="PostRefunds"))
+
+    scoped = store.vendor_changes_for_operation("stripe", "PostCharges")
+
+    assert [c.operation_id for c in scoped] == ["PostCharges"]
+    assert store.vendor_changes_for_operation_count("stripe", "PostCharges") == 1
+    assert store.all_vendor_changes("stripe")  # the wide method is unaffected and still works
+    assert len(store.all_vendor_changes("stripe")) == 2
+
+
+def test_observed_calls_limit_is_sql_not_a_python_slice(store, fetch_counts):
+    for i in range(5):
+        store.record_observed_call(_observed_call(trace_id=f"t{i}"))
+
+    calls = store.observed_calls("r1", limit=2, offset=0)
+
+    assert len(calls) == 2, "rows returned"
+    assert fetch_counts[-1] == 2, "rows read off the wire"
+
+
+def test_observed_calls_count_matches_the_filter_not_the_page(store):
+    for i in range(5):
+        store.record_observed_call(_observed_call(trace_id=f"t{i}"))
+
+    assert store.observed_calls_count("r1") == 5
+    assert len(store.observed_calls("r1", limit=2)) == 2
+
+
+def test_observed_error_windows_limit_is_sql_not_a_python_slice(store, fetch_counts):
+    for i in range(5):
+        store.record_observed_error_window(_error_window(status_class=f"{i}xx"))
+
+    windows = store.observed_error_windows("r1", limit=2, offset=0)
+
+    assert len(windows) == 2, "rows returned"
+    assert fetch_counts[-1] == 2, "rows read off the wire"
+
+
+def test_observed_error_windows_count_matches_the_filter_not_the_page(store):
+    for i in range(5):
+        store.record_observed_error_window(_error_window(status_class=f"{i}xx"))
+
+    assert store.observed_error_windows_count("r1") == 5
+    assert len(store.observed_error_windows("r1", limit=2)) == 2
+
+
+def _finding_for_open(site_id: str, **kw) -> Finding:
+    base = dict(
+        detector="vendor-change", claim="response-field", call_site_id=site_id,
+        severity="breaking", rationale="status removed", binding_rung="static",
+    )
+    base.update(kw)
+    return Finding(**base)
+
+
+def test_open_findings_page_limit_is_sql_not_a_python_slice(store, fetch_counts):
+    for i in range(5):
+        site_id = store.upsert_call_site(_site(path=f"src/{i}.ts", line=i, content_hash=f"hash-{i}"))
+        store.insert_finding(_finding_for_open(site_id, claim=f"claim-{i}"))
+
+    findings = store.open_findings_page(limit=2, offset=0)
+
+    assert len(findings) == 2, "rows returned"
+    assert fetch_counts[-1] == 2, "rows read off the wire"
+
+
+def test_open_findings_count_matches_the_filter_not_the_page(store):
+    for i in range(5):
+        site_id = store.upsert_call_site(_site(path=f"src/{i}.ts", line=i, content_hash=f"hash-{i}"))
+        store.insert_finding(_finding_for_open(site_id, claim=f"claim-{i}"))
+
+    assert store.open_findings_count() == 5
+    assert len(store.open_findings_page(limit=2)) == 2
+    assert len(store.open_findings()) == 5  # the unpaginated method is unaffected
+
+
+def test_open_findings_count_excludes_a_retracted_call_sites_finding(store):
+    """The count must agree with the join `open_findings` itself reads through, not just
+    with `finding.status` -- a retracted call site's finding is invisible to both or neither.
+    """
+    site_id = store.upsert_call_site(_site())
+    store.insert_finding(_finding_for_open(site_id))
+    with store._connect().cursor() as cur:
+        cur.execute("UPDATE call_site SET retracted_at = now() WHERE id = %s", (site_id,))
+
+    assert store.open_findings_count() == 0
+    assert store.open_findings() == []
+
+
+# -- the observed-shape join collapses from N+1 to one query -----------------------------------
+
+
+def _observed_call(**over) -> ObservedCall:
+    base = dict(
+        repo_id="r1", vendor_id="stripe", operation_id="PostCharges", binding_rung="observed",
+        server_address="api.stripe.com", http_method="post", trace_id="t1",
+        url_template="/v1/charges", spans={"s1": {"target": "d1", "status": 200, "resend": 0}},
+        first_seen=_HOUR_14, last_seen=_HOUR_14,
+    )
+    base.update(over)
+    return ObservedCall(**base)
+
+
+def _shape(**over) -> ObservedShape:
+    base = dict(
+        vendor_id="stripe", operation_id="PostCharges", field_path="/amount",
+        json_type="number", source="interceptor", sample_count=1,
+        first_seen=_HOUR_14, last_seen=_HOUR_14,
+    )
+    base.update(over)
+    return ObservedShape(**base)
+
+
+def test_observed_operation_pairs_excludes_the_uncorrelated_empty_operation(store):
+    store.record_observed_call(_observed_call(operation_id="PostCharges", trace_id="t1"))
+    store.record_observed_call(_observed_call(operation_id="", binding_rung="unresolved", trace_id="t2"))
+
+    assert store.observed_operation_pairs("r1") == [("stripe", "PostCharges")]
+
+
+def test_observed_shapes_for_operations_reads_every_pair_in_one_query(store, monkeypatch):
+    """The N+1 this replaces issued one query per distinct `(vendor_id, operation_id)` pair.
+    Ten pairs must not cost ten round trips -- the property is asserted by counting queries,
+    which is the only way to distinguish "collapsed" from "merely fast enough not to notice".
+    """
+    pairs = [("stripe", f"Op{i}") for i in range(10)]
+    for vendor_id, operation_id in pairs:
+        store.record_observed_shape(_shape(vendor_id=vendor_id, operation_id=operation_id))
+
+    calls = _execute_count(monkeypatch)
+    shapes = store.observed_shapes_for_operations(pairs)
+
+    assert len(shapes) == 10
+    assert len(calls) == 1, f"expected one query for ten pairs, made {len(calls)}"
+
+
+def test_observed_shapes_for_operations_with_no_pairs_makes_no_query(store, monkeypatch):
+    """An uncorrelated call names no pair, and `observed_telemetry` must not turn that
+    absence into a query that joins against nothing.
+    """
+    calls = _execute_count(monkeypatch)
+
+    assert store.observed_shapes_for_operations([]) == []
+    assert calls == []
+
+
+def test_observed_shapes_for_operations_limit_is_sql_not_a_python_slice(store, fetch_counts):
+    for i in range(5):
+        store.record_observed_shape(_shape(field_path=f"/f{i}"))
+    pairs = [("stripe", "PostCharges")]
+
+    shapes = store.observed_shapes_for_operations(pairs, limit=2, offset=0)
+
+    assert len(shapes) == 2, "rows returned"
+    assert fetch_counts[-1] == 2, "rows read off the wire"
+
+
+def test_observed_shapes_for_operations_count_matches_the_filter_not_the_page(store):
+    for i in range(5):
+        store.record_observed_shape(_shape(field_path=f"/f{i}"))
+    pairs = [("stripe", "PostCharges")]
+
+    assert store.observed_shapes_for_operations_count(pairs) == 5
+    assert len(store.observed_shapes_for_operations(pairs, limit=2)) == 2
 
 
 def test_a_removal_reports_how_many_rows_it_took_out(store):

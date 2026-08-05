@@ -42,11 +42,26 @@ def _run_row(thread_id: str, checkpoint: dict) -> dict:
 
 
 def runs(checkpointer_dsn: str, *, limit: int = 50, offset: int = 0) -> dict:
-    """Every run the checkpointer holds, one row per thread, newest first.
+    """Every run the checkpointer holds, one row per thread, newest first -- paginated by a real
+    SQL `LIMIT`, plus a disposition roll-up computed across every run rather than the page.
 
     A finding retried across generations has one thread per generation, and this does not
     collapse them the way `workflow_state` does -- that answers a per-finding question and this
     answers a per-run one, so a retried finding is two rows here and one there.
+
+    Three round trips rather than one, on purpose: `total` is a `count(DISTINCT thread_id)` that
+    never fetches a checkpoint body, the page is a `LIMIT`/`OFFSET` over the same newest-per-
+    thread subquery the old single-query form used, and `by_disposition` reads only the one JSON
+    field it needs (`channel_values->>'outcome'`) across every thread rather than every column of
+    every checkpoint. The old form fetched every row's full JSONB into Python and sliced the
+    result -- `rows[offset : offset + limit]`, in a variable literally named after the mistake --
+    so a fleet of ten thousand runs read ten thousand rows to return fifty; this reads ten
+    thousand only for the roll-up, and only the one string column that roll-up needs.
+
+    `by_disposition` is `_grouped` over `outcome`, the same field `_run_row` derives per item,
+    computed independently across every thread rather than by tallying the current page -- the
+    same reasoning `app.py`'s `overview` route already applies to `total_findings`: a count over
+    a page and reported as a fleet-wide fact is the defect this milestone keeps closing.
     """
     limit = max(limit, 1)
 
@@ -55,7 +70,11 @@ def runs(checkpointer_dsn: str, *, limit: int = 50, offset: int = 0) -> dict:
         # answer as an empty fleet, not an error -- `queries.workflow_state`'s guard applies
         # here identically.
         if conn.execute("SELECT to_regclass('checkpoints') AS t").fetchone()["t"] is None:
-            return {"items": [], "total": 0, "next_offset": None}
+            return {"items": [], "total": 0, "next_offset": None, "by_disposition": {}}
+
+        total = conn.execute(
+            "SELECT count(DISTINCT thread_id) AS n FROM checkpoints WHERE checkpoint_ns = ''"
+        ).fetchone()["n"]
 
         rows = conn.execute(
             """
@@ -66,16 +85,31 @@ def runs(checkpointer_dsn: str, *, limit: int = 50, offset: int = 0) -> dict:
                  ORDER BY thread_id, checkpoint_id DESC
             ) AS newest_per_thread
             ORDER BY checkpoint_id DESC
+            LIMIT %s OFFSET %s
+            """,
+            (limit, offset),
+        ).fetchall()
+
+        outcome_rows = conn.execute(
+            """
+            SELECT DISTINCT ON (thread_id)
+                   checkpoint->'channel_values'->>'outcome' AS outcome
+              FROM checkpoints
+             WHERE checkpoint_ns = ''
+             ORDER BY thread_id, checkpoint_id DESC
             """
         ).fetchall()
 
     items = [_run_row(row["thread_id"], row["checkpoint"]) for row in rows]
-    window = items[offset : offset + limit]
-    consumed = offset + len(window)
+    consumed = offset + len(items)
+    by_disposition = _grouped(
+        [row["outcome"] if row["outcome"] in _FINISHED else None for row in outcome_rows]
+    )
     return {
-        "items": window,
-        "total": len(items),
-        "next_offset": consumed if consumed < len(items) else None,
+        "items": items,
+        "total": total,
+        "next_offset": consumed if consumed < total else None,
+        "by_disposition": by_disposition,
     }
 
 

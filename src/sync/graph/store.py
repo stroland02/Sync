@@ -395,7 +395,13 @@ class GraphStore:
         return finding_id
 
     def call_sites_for_operation(
-        self, vendor_id: str, operation_id: str, *, repo_id: str | None = None
+        self,
+        vendor_id: str,
+        operation_id: str,
+        *,
+        repo_id: str | None = None,
+        limit: int | None = None,
+        offset: int = 0,
     ) -> list[CallSite]:
         """Call sites the code currently has on one vendor operation, in one repository or in all.
 
@@ -415,18 +421,45 @@ class GraphStore:
         `tests/test_reindex_convergence.py` reads the detector sources and fails on a call here that
         omits it, because the parameter staying optional is what lets a fifth detector reacquire the
         defect silently.
+
+        `limit` is a real SQL `LIMIT`, not a slice applied to a fetch that already happened --
+        `limit=None`, the default, carries no bound at all, which is what every existing caller
+        (three detectors, `binding_surface`) needs: each of them ranks or counts over the whole
+        set, and a page of it would rank the wrong thing. `call_sites_for_operation_count` is the
+        matching denominator, read without fetching a single row's columns.
         """
         clause = "" if repo_id is None else " AND repo_id = %s"
-        parameters = (vendor_id, operation_id) if repo_id is None else (
-            vendor_id, operation_id, repo_id
-        )
+        parameters: list[object] = [vendor_id, operation_id]
+        if repo_id is not None:
+            parameters.append(repo_id)
+        limit_clause = ""
+        if limit is not None:
+            limit_clause = " LIMIT %s OFFSET %s"
+            parameters += [limit, offset]
         rows = self._connect().execute(
             f"SELECT * FROM call_site "
             f"WHERE vendor_id = %s AND operation_id = %s AND retracted_at IS NULL{clause} "
-            f"ORDER BY path, line",
+            f"ORDER BY path, line{limit_clause}",
             parameters,
         ).fetchall()
         return [CallSite(**row) for row in rows]
+
+    def call_sites_for_operation_count(
+        self, vendor_id: str, operation_id: str, *, repo_id: str | None = None
+    ) -> int:
+        """How many rows `call_sites_for_operation` would return unbounded -- the denominator a
+        page of it is drawn from, read without a single column of any row.
+        """
+        clause = "" if repo_id is None else " AND repo_id = %s"
+        parameters: list[object] = [vendor_id, operation_id]
+        if repo_id is not None:
+            parameters.append(repo_id)
+        row = self._connect().execute(
+            f"SELECT count(*) AS n FROM call_site "
+            f"WHERE vendor_id = %s AND operation_id = %s AND retracted_at IS NULL{clause}",
+            parameters,
+        ).fetchone()
+        return row["n"]
 
     def call_site_counts(self, repo_id: str) -> dict[str, int]:
         """How many indexed call sites reach each vendor, for one repository.
@@ -528,6 +561,41 @@ class GraphStore:
         ).fetchall()
         return [VendorChange(**row) for row in rows]
 
+    def vendor_changes_for_operation(
+        self, vendor_id: str, operation_id: str, *, limit: int | None = None, offset: int = 0
+    ) -> list[VendorChange]:
+        """One vendor's changes naming one operation -- what `binding_surface` actually shows,
+        as its own query rather than a Python filter over `all_vendor_changes`'s wide answer.
+
+        A sibling method rather than a parameter on `all_vendor_changes`, because
+        `all_vendor_changes(self, vendor_id: str)` is pinned exactly by
+        `sync.mcp.tools.GraphReader`, the frozen surface's structural protocol --
+        `tests/test_mcp_tools.py::test_the_real_graph_store_satisfies_the_reader_protocol` fails
+        the moment that signature grows a parameter the protocol does not declare. `cli.py`'s feed
+        render and `VendorChangeDetector` keep calling the wide method unchanged.
+
+        `limit=None` is unbounded. `vendor_changes_for_operation_count` is the matching
+        denominator.
+        """
+        parameters: list[object] = [vendor_id, operation_id]
+        limit_clause = ""
+        if limit is not None:
+            limit_clause = " LIMIT %s OFFSET %s"
+            parameters += [limit, offset]
+        rows = self._connect().execute(
+            f"SELECT * FROM vendor_change WHERE vendor_id = %s AND operation_id = %s "
+            f"ORDER BY detected_at{limit_clause}",
+            parameters,
+        ).fetchall()
+        return [VendorChange(**row) for row in rows]
+
+    def vendor_changes_for_operation_count(self, vendor_id: str, operation_id: str) -> int:
+        row = self._connect().execute(
+            "SELECT count(*) AS n FROM vendor_change WHERE vendor_id = %s AND operation_id = %s",
+            (vendor_id, operation_id),
+        ).fetchone()
+        return row["n"]
+
     def open_findings(self) -> list[Finding]:
         """Findings still to act on: open status, and a call site the code still has.
 
@@ -551,6 +619,46 @@ class GraphStore:
             """
         ).fetchall()
         return [Finding(**row) for row in rows]
+
+    def open_findings_page(self, *, limit: int | None = None, offset: int = 0) -> list[Finding]:
+        """`open_findings`, windowed by a real SQL `LIMIT` -- a sibling rather than a parameter
+        on `open_findings` itself, because `open_findings(self)` is pinned exactly by
+        `sync.mcp.tools.GraphReader`'s structural protocol and gaining a parameter there fails
+        `tests/test_mcp_tools.py::test_the_real_graph_store_satisfies_the_reader_protocol`.
+        `detector_accountability` keeps reading the whole set through the unpaginated method,
+        which is the shape its aggregate needs.
+
+        `limit=None` is unbounded, matching `open_findings`. `open_findings_count` is the
+        matching denominator.
+        """
+        parameters: list[object] = []
+        limit_clause = ""
+        if limit is not None:
+            limit_clause = " LIMIT %s OFFSET %s"
+            parameters = [limit, offset]
+        rows = self._connect().execute(
+            f"""
+            SELECT finding.* FROM finding
+              JOIN call_site ON call_site.id = finding.call_site_id
+             WHERE finding.status = 'open' AND call_site.retracted_at IS NULL
+             ORDER BY finding.created_at{limit_clause}
+            """,
+            parameters,
+        ).fetchall()
+        return [Finding(**row) for row in rows]
+
+    def open_findings_count(self) -> int:
+        """How many rows `open_findings`/`open_findings_page` return unbounded, through the same
+        join -- a retracted call site's finding is invisible to both or neither.
+        """
+        row = self._connect().execute(
+            """
+            SELECT count(*) AS n FROM finding
+              JOIN call_site ON call_site.id = finding.call_site_id
+             WHERE finding.status = 'open' AND call_site.retracted_at IS NULL
+            """
+        ).fetchone()
+        return row["n"]
 
     def set_finding_status(self, finding_id: str, status: FindingStatus) -> None:
         self._connect().execute("UPDATE finding SET status = %s WHERE id = %s", (status, finding_id))
@@ -719,21 +827,57 @@ class GraphStore:
             ),
         )
 
-    def observed_calls(self, repo_id: str) -> list[ObservedCall]:
+    def observed_calls(
+        self, repo_id: str, *, limit: int | None = None, offset: int = 0
+    ) -> list[ObservedCall]:
         """Every observed call for one repository.
 
         Scoped to a repository because that is the unit a finding is raised against, and a query
         that leaked another customer's traffic in would produce findings naming the wrong code.
+
+        `limit=None` is unbounded, matching the efficiency and status-rate detectors, which both
+        need every call to compute a per-trace count and would undercount from a page of them.
+        `observed_calls_count` is the matching denominator.
+        """
+        parameters: list[object] = [repo_id]
+        limit_clause = ""
+        if limit is not None:
+            limit_clause = " LIMIT %s OFFSET %s"
+            parameters += [limit, offset]
+        rows = self._connect().execute(
+            f"""
+            SELECT * FROM observed_call
+             WHERE repo_id = %s
+             ORDER BY trace_id, operation_id, http_method{limit_clause}
+            """,
+            parameters,
+        ).fetchall()
+        return [ObservedCall(**row) for row in rows]
+
+    def observed_calls_count(self, repo_id: str) -> int:
+        row = self._connect().execute(
+            "SELECT count(*) AS n FROM observed_call WHERE repo_id = %s", (repo_id,)
+        ).fetchone()
+        return row["n"]
+
+    def observed_operation_pairs(self, repo_id: str) -> list[tuple[str, str]]:
+        """Every `(vendor_id, operation_id)` this repository's observed traffic actually names.
+
+        Bounded by how many operations a repository calls, not by how many times it called
+        them -- the cardinality `observed_shapes_for_operations` needs in order to join the
+        baseline in with one query instead of one per pair. An uncorrelated span writes an empty
+        `operation_id`, and that is excluded here rather than left for the caller to filter: it
+        names no operation, so it must not manufacture a pair nothing can join against.
         """
         rows = self._connect().execute(
             """
-            SELECT * FROM observed_call
-             WHERE repo_id = %s
-             ORDER BY trace_id, operation_id, http_method
+            SELECT DISTINCT vendor_id, operation_id FROM observed_call
+             WHERE repo_id = %s AND operation_id <> ''
+             ORDER BY vendor_id, operation_id
             """,
             (repo_id,),
         ).fetchall()
-        return [ObservedCall(**row) for row in rows]
+        return [(row["vendor_id"], row["operation_id"]) for row in rows]
 
     def record_observed_error_window(self, window: ObservedErrorWindow) -> None:
         """Record one operation's failure count over one window.
@@ -818,22 +962,38 @@ class GraphStore:
             (repo_id, vendor_id, source, window_start, window_end, operations, classes),
         ).rowcount
 
-    def observed_error_windows(self, repo_id: str) -> list[ObservedErrorWindow]:
+    def observed_error_windows(
+        self, repo_id: str, *, limit: int | None = None, offset: int = 0
+    ) -> list[ObservedErrorWindow]:
         """Every failure count recorded for one repository.
 
         Scoped to a repository for the reason `observed_calls` is: it is the unit a finding is
         raised against, and a query leaking another customer's error volume in would produce
         findings naming the wrong code.
+
+        `limit=None` is unbounded, the only shape any caller before this needed.
+        `observed_error_windows_count` is the matching denominator.
         """
+        parameters: list[object] = [repo_id]
+        limit_clause = ""
+        if limit is not None:
+            limit_clause = " LIMIT %s OFFSET %s"
+            parameters += [limit, offset]
         rows = self._connect().execute(
-            """
+            f"""
             SELECT * FROM observed_error_window
              WHERE repo_id = %s
-             ORDER BY window_start, window_end, operation_id, status_class, source
+             ORDER BY window_start, window_end, operation_id, status_class, source{limit_clause}
             """,
-            (repo_id,),
+            parameters,
         ).fetchall()
         return [ObservedErrorWindow(**row) for row in rows]
+
+    def observed_error_windows_count(self, repo_id: str) -> int:
+        row = self._connect().execute(
+            "SELECT count(*) AS n FROM observed_error_window WHERE repo_id = %s", (repo_id,)
+        ).fetchone()
+        return row["n"]
 
     def repo_ids(self) -> list[str]:
         """Every repository the index has seen, sorted.
@@ -891,3 +1051,70 @@ class GraphStore:
             parameters,
         ).fetchall()
         return [ObservedShape(**row) for row in rows]
+
+    def _shapes_for_operations_clause(
+        self, pairs: Sequence[tuple[str, str]], *, traffic_only: bool
+    ) -> tuple[str, list[object]]:
+        vendor_ids = [vendor_id for vendor_id, _ in pairs]
+        operation_ids = [operation_id for _, operation_id in pairs]
+        where = " AND source = ANY(%s)" if traffic_only else ""
+        parameters: list[object] = [vendor_ids, operation_ids]
+        if traffic_only:
+            parameters.append(sorted(TRAFFIC_SOURCES))
+        return where, parameters
+
+    def observed_shapes_for_operations(
+        self,
+        pairs: Sequence[tuple[str, str]],
+        *,
+        traffic_only: bool = True,
+        limit: int | None = None,
+        offset: int = 0,
+    ) -> list[ObservedShape]:
+        """The baseline across every `(vendor_id, operation_id)` pair named, in one query.
+
+        This is what `observed_telemetry` reads instead of calling `observed_shapes` once per
+        pair -- a repository touching two hundred operations used to cost two hundred and one
+        round trips for one page load. `(vendor_id, operation_id) IN (SELECT * FROM
+        unnest(%s::text[], %s::text[]))` is the same tupled-unnest join
+        `remove_observed_error_windows_outside` already uses for exclusion; here it is inclusion,
+        one query regardless of how many pairs are named.
+
+        An empty `pairs` makes no query at all and returns empty -- the property
+        `observed_telemetry` depends on for a repository whose observed traffic is entirely
+        uncorrelated: nothing here mints a pair to join against.
+
+        `limit=None` is unbounded, matching `observed_shapes`'s own default.
+        `observed_shapes_for_operations_count` is the matching denominator.
+        """
+        if not pairs:
+            return []
+        where, parameters = self._shapes_for_operations_clause(pairs, traffic_only=traffic_only)
+        limit_clause = ""
+        if limit is not None:
+            limit_clause = " LIMIT %s OFFSET %s"
+            parameters += [limit, offset]
+        rows = self._connect().execute(
+            f"""
+            SELECT * FROM observed_shape
+             WHERE (vendor_id, operation_id) IN (SELECT * FROM unnest(%s::text[], %s::text[])){where}
+             ORDER BY vendor_id, operation_id, field_path, json_type, source{limit_clause}
+            """,
+            parameters,
+        ).fetchall()
+        return [ObservedShape(**row) for row in rows]
+
+    def observed_shapes_for_operations_count(
+        self, pairs: Sequence[tuple[str, str]], *, traffic_only: bool = True
+    ) -> int:
+        if not pairs:
+            return 0
+        where, parameters = self._shapes_for_operations_clause(pairs, traffic_only=traffic_only)
+        row = self._connect().execute(
+            f"""
+            SELECT count(*) AS n FROM observed_shape
+             WHERE (vendor_id, operation_id) IN (SELECT * FROM unnest(%s::text[], %s::text[])){where}
+            """,
+            parameters,
+        ).fetchone()
+        return row["n"]

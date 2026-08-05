@@ -48,8 +48,15 @@ RepositoriesReader = Callable[[], dict[str, Any]]
 # question it was not built to answer.
 BindingReader = Callable[..., dict[str, Any]]
 CoverageReader = Callable[[str], dict[str, Any]]
-ObservedReader = Callable[[str], dict[str, Any]]
+ObservedReader = Callable[..., dict[str, Any]]
 DetectorReader = Callable[[], dict[str, Any]]
+
+# The severity roll-up backs `sync.dashboard.graph_views.severity_rollup`, outside `GraphSurface`
+# for the same reason every reader above is: it is a fleet-wide aggregate over open findings, not
+# a per-finding question the frozen surface answers, and it is read once per `/api/overview` call
+# rather than derived from `whats_at_risk`'s own page so the two stay two questions rather than
+# one route quietly answering both from data shaped for the first.
+SeverityReader = Callable[[], dict[str, Any]]
 
 
 # Upper bound on a single scan of `whats_at_risk` when the transport needs to look up a
@@ -79,13 +86,24 @@ def _int_param(request: Request, name: str, default: int) -> int:
         return default
 
 
-def _limit_param(request: Request) -> int:
+def _limit_param(request: Request, name: str = "limit") -> int:
     # `rows[offset : offset + limit]` in the surface treats a limit below 1 as a slice
     # bound, not a page size: negative turns the stop negative (an unbounded page from the
     # other end), zero returns nothing and never advances `next_offset`. The floor sits
     # here rather than in the surface because the frozen "paginate every list" rule belongs
     # to the transport, and `sync/mcp/tools.py` is not the surface to change.
-    return min(max(_int_param(request, "limit", DEFAULT_LIMIT), 1), _MAX_LIMIT)
+    #
+    # `name` defaults to "limit" for the one-cursor routes and is overridden by the routes that
+    # paginate more than one set on the same screen (`binding`, `repository_observed`), each of
+    # which needs its own query-parameter name because one cursor cannot serve two questions.
+    return min(max(_int_param(request, name, DEFAULT_LIMIT), 1), _MAX_LIMIT)
+
+
+def _offset_param(request: Request, name: str = "offset") -> int:
+    # `_int_param` returns whatever an out-of-range value parses to and clamps nothing --
+    # unlike `limit`, `offset` was never floored, so a negative value reached the surface's own
+    # `rows[offset : offset + limit]` slice as a slice bound rather than a page position.
+    return max(_int_param(request, name, 0), 0)
 
 
 def _not_found(what: str, identifier: str) -> JSONResponse:
@@ -105,6 +123,7 @@ def create_app(
     coverage_reader: CoverageReader,
     observed_reader: ObservedReader,
     detector_reader: DetectorReader,
+    severity_reader: SeverityReader,
 ) -> Starlette:
     """Build the Starlette app bound to a particular surface and readers.
 
@@ -137,10 +156,16 @@ def create_app(
             {"vendor_id": vendor_id, "open_finding_count": count}
             for vendor_id, count in sorted(vendor_counts.items())
         ]
+        # `severity_rollup` reads `open_findings` itself rather than tallying `page["items"]`
+        # above -- two different reads of the same table, kept apart on purpose so the vendor
+        # distribution and the severity distribution stay two independently-computed questions
+        # rather than one route quietly answering both from data shaped for the first.
+        severity = severity_reader()
         return JSONResponse(
             {
                 "vendors": vendors,
                 "total_findings": page["total"],
+                "severity_counts": severity["by_severity"],
                 "indexed_at": page["indexed_at"],
                 "feed_fetched_at": page["feed_fetched_at"],
                 "binding_source": page["binding_source"],
@@ -151,8 +176,12 @@ def create_app(
     async def vendor_detail(request: Request) -> JSONResponse:
         vendor_id = request.path_params["vendor_id"]
         limit = _limit_param(request)
-        offset = _int_param(request, "offset", 0)
-        page = surface.whats_at_risk(vendor=vendor_id, limit=limit, offset=offset)
+        offset = _offset_param(request)
+        severity = request.query_params.get("severity")
+        path = request.query_params.get("path")
+        page = surface.whats_at_risk(
+            vendor=vendor_id, severity=severity, path=path, limit=limit, offset=offset
+        )
         return JSONResponse(page)
 
     async def finding_detail(request: Request) -> JSONResponse:
@@ -188,7 +217,7 @@ def create_app(
     async def vendor_changes(request: Request) -> JSONResponse:
         vendor_id = request.path_params["vendor_id"]
         limit = _limit_param(request)
-        offset = _int_param(request, "offset", 0)
+        offset = _offset_param(request)
         since = request.query_params.get("since")
         page = surface.whats_changed(vendor=vendor_id, since=since, limit=limit, offset=offset)
         return JSONResponse(page)
@@ -202,7 +231,7 @@ def create_app(
 
     async def runs(request: Request) -> JSONResponse:
         limit = _limit_param(request)
-        offset = _int_param(request, "offset", 0)
+        offset = _offset_param(request)
         return JSONResponse(runs_reader(limit=limit, offset=offset))
 
     async def corpus(request: Request) -> JSONResponse:
@@ -215,13 +244,35 @@ def create_app(
         vendor_id = request.path_params["vendor_id"]
         operation_id = request.path_params["operation_id"]
         repo_id = request.query_params.get("repo_id")
-        return JSONResponse(binding_reader(vendor_id, operation_id, repo_id=repo_id))
+        binding_rung = request.query_params.get("binding_rung")
+        return JSONResponse(
+            binding_reader(
+                vendor_id,
+                operation_id,
+                repo_id=repo_id,
+                binding_rung=binding_rung,
+                call_sites_limit=_limit_param(request, "call_sites_limit"),
+                call_sites_offset=_offset_param(request, "call_sites_offset"),
+                changes_limit=_limit_param(request, "changes_limit"),
+                changes_offset=_offset_param(request, "changes_offset"),
+            )
+        )
 
     async def repository_coverage(request: Request) -> JSONResponse:
         return JSONResponse(coverage_reader(request.path_params["repo_id"]))
 
     async def repository_observed(request: Request) -> JSONResponse:
-        return JSONResponse(observed_reader(request.path_params["repo_id"]))
+        return JSONResponse(
+            observed_reader(
+                request.path_params["repo_id"],
+                calls_limit=_limit_param(request, "calls_limit"),
+                calls_offset=_offset_param(request, "calls_offset"),
+                shapes_limit=_limit_param(request, "shapes_limit"),
+                shapes_offset=_offset_param(request, "shapes_offset"),
+                error_windows_limit=_limit_param(request, "error_windows_limit"),
+                error_windows_offset=_offset_param(request, "error_windows_offset"),
+            )
+        )
 
     async def detectors(request: Request) -> JSONResponse:
         return JSONResponse(detector_reader())

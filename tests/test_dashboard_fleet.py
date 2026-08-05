@@ -7,6 +7,7 @@ Follows `tests/test_dashboard_queries.py`'s fixture pattern for the checkpointer
 
 import json
 import os
+import unittest.mock
 
 import psycopg
 import pytest
@@ -290,7 +291,82 @@ def test_runs_is_an_empty_page_when_the_checkpointer_has_no_tables():
 
     page = runs(DSN)
 
-    assert page == {"items": [], "total": 0, "next_offset": None}
+    assert page == {"items": [], "total": 0, "next_offset": None, "by_disposition": {}}
+
+
+# --- pagination reaches SQL, not a Python slice -----------------------------
+
+
+def test_runs_limit_is_sql_not_a_python_slice(checkpointer_tables):
+    """`items[offset : offset + limit]` in Python still fetches every row off the wire before
+    throwing most of it away -- this is the same "rows read vs rows returned" proof
+    `test_graph_store.py` uses, applied to the checkpointer connection `runs` opens directly.
+    """
+    for i in range(5):
+        _insert_checkpoint(
+            f"{FINDING_ID}:run{i}:0",
+            f"1f069000-0000-6000-8000-00000000000{i}",
+            channel_values={"outcome": "opened"},
+        )
+    counts: list[int] = []
+    real_fetchall = psycopg.Cursor.fetchall
+
+    def counting_fetchall(self):
+        result = real_fetchall(self)
+        counts.append(len(result))
+        return result
+
+    with unittest.mock.patch.object(psycopg.Cursor, "fetchall", counting_fetchall):
+        page = runs(DSN, limit=2, offset=0)
+
+    assert len(page["items"]) == 2, "rows returned"
+    # The item-page query is not the only `fetchall()` in `runs` (the disposition roll-up and
+    # the empty-table probe both call it too), so the property under test is that *some* query
+    # fetched exactly the page size, not that every recorded count did.
+    assert 2 in counts, f"no fetchall() returned exactly the page size; saw {counts}"
+
+
+# --- the fleet-wide disposition roll-up -------------------------------------
+
+
+def test_runs_by_disposition_counts_every_run_not_just_the_current_page(checkpointer_tables):
+    for i, outcome in enumerate(["opened", "opened", "abandoned"]):
+        _insert_checkpoint(
+            f"{FINDING_ID}:run{i}:0",
+            f"1f069000-0000-6000-8000-00000000000{i}",
+            channel_values={"outcome": outcome},
+        )
+
+    page = runs(DSN, limit=1, offset=0)
+
+    assert len(page["items"]) == 1  # the page itself is narrow
+    assert page["by_disposition"] == {"opened": 2, "abandoned": 1}  # the roll-up is not
+
+
+def test_runs_by_disposition_buckets_a_live_run_under_null(checkpointer_tables):
+    # A run still in flight, or one whose outcome is not in `_FINISHED`, is neither 'opened'
+    # nor 'abandoned' -- `_grouped`'s existing null-bucket convention applies here too, the same
+    # way it already does for `corpus_summary`'s `by_terminal_status`.
+    _insert_checkpoint(
+        f"{FINDING_ID}:run0:0",
+        "1f069000-0000-6000-8000-000000000000",
+        channel_values={"outcome": "running"},
+    )
+    _insert_checkpoint(
+        f"{FINDING_ID}:run1:0",
+        "1f069000-0000-6000-8000-000000000001",
+        channel_values={"outcome": "opened"},
+    )
+
+    page = runs(DSN)
+
+    assert page["by_disposition"] == {"null": 1, "opened": 1}
+
+
+def test_runs_by_disposition_of_an_empty_fleet_is_empty_not_an_error(checkpointer_tables):
+    page = runs(DSN)
+
+    assert page["by_disposition"] == {}
 
 
 # --- the corpus -----------------------------------------------------------
