@@ -463,6 +463,39 @@ class GraphStore:
         ).fetchall()
         return {row["vendor_id"]: row["sites"] for row in rows}
 
+    def call_site_last_indexed(self, repo_id: str) -> dict[str, datetime]:
+        """The newest `indexed_at` among current call sites, per vendor, for one repository.
+
+        Same grain as `call_site_counts` -- one repository, retracted rows excluded -- on
+        purpose: a caller reading both by `vendor_id` is reading one population twice rather
+        than reconciling two different definitions of "current," so `index_coverage` composes
+        them with no join of its own.
+
+        **A vendor with no call sites is absent, not present with `None`.** `call_site_counts`
+        already carries the reason: absence has two causes this query cannot separate -- the
+        indexer looked and found nothing, or it never looked at all -- and a timestamp attached
+        to an absent vendor would assert the first. This mirrors that rather than resolving it.
+
+        **What the value means, and does not.** It is when the indexer last wrote a row for
+        this vendor in this repository -- not a promise the index is current, and not evidence
+        the code has not changed since. A repository re-scanned three weeks ago reports the
+        same value it reported the day after that scan; only another re-index moves it.
+
+        Retracted rows are excluded for the reason `call_site_counts` excludes them: a call site
+        the last pass stopped finding is not part of what the repository currently has, so its
+        timestamp must not win against a surviving row merely for being newer.
+        """
+        rows = self._connect().execute(
+            """
+            SELECT vendor_id, max(indexed_at) AS last_indexed
+              FROM call_site
+             WHERE repo_id = %s AND retracted_at IS NULL
+             GROUP BY vendor_id
+            """,
+            (repo_id,),
+        ).fetchall()
+        return {row["vendor_id"]: row["last_indexed"] for row in rows}
+
     def get_call_site(self, call_site_id: str) -> CallSite:
         """One call site by id, retracted or not.
 

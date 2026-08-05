@@ -180,6 +180,7 @@ def test_index_coverage_a_vendor_with_no_call_sites_is_absent_not_zero(store):
     result = index_coverage(store, "r1")
 
     assert "twilio" not in result["by_vendor"]
+    assert "twilio" not in result["last_indexed"]
 
 
 def test_index_coverage_is_scoped_to_one_repository(store):
@@ -195,7 +196,48 @@ def test_index_coverage_of_an_unindexed_repository_is_all_zero(store):
     result = index_coverage(store, "never-indexed")
 
     assert result["by_vendor"] == {}
+    assert result["last_indexed"] == {}
     assert result["total_call_sites"] == 0
+
+
+def test_index_coverage_reports_last_indexed_as_an_iso_string(store):
+    store.upsert_call_site(_site(vendor_id="stripe"))
+
+    result = index_coverage(store, "r1")
+
+    indexed_at = result["last_indexed"]["stripe"]
+    assert isinstance(indexed_at, str)
+    datetime.fromisoformat(indexed_at)  # does not raise
+
+
+def test_index_coverage_pairs_the_newest_timestamp_with_its_own_vendor(store):
+    """A test that checked `by_vendor` and `last_indexed` independently would pass on an
+    implementation that paired one vendor's count with another vendor's timestamp -- so the two
+    vendors are seeded with their counts and their timestamps in opposite rank order, and the
+    assertion checks both fields for one vendor together.
+    """
+    store.upsert_call_site(_site(vendor_id="stripe", path="src/a.ts", line=1))
+    store.upsert_call_site(_site(vendor_id="stripe", path="src/b.ts", line=2))
+    twilio_id = store.upsert_call_site(
+        _site(vendor_id="twilio", operation_id="SendSms", path="src/c.ts", line=3)
+    )
+
+    with store._connect().cursor() as cur:
+        cur.execute(
+            "UPDATE call_site SET indexed_at = %s WHERE repo_id = 'r1' AND vendor_id = 'stripe'",
+            (datetime(2020, 1, 1, tzinfo=timezone.utc),),
+        )
+        cur.execute(
+            "UPDATE call_site SET indexed_at = %s WHERE id = %s",
+            (datetime(2030, 1, 1, tzinfo=timezone.utc), twilio_id),
+        )
+
+    result = index_coverage(store, "r1")
+
+    assert result["by_vendor"]["stripe"] == 2
+    assert result["last_indexed"]["stripe"] == "2020-01-01T00:00:00+00:00"
+    assert result["by_vendor"]["twilio"] == 1
+    assert result["last_indexed"]["twilio"] == "2030-01-01T00:00:00+00:00"
 
 
 # -- observed_telemetry ------------------------------------------------------------

@@ -492,6 +492,78 @@ def test_repo_ids_of_an_empty_graph_is_empty_not_an_error(store):
     assert store.repo_ids() == []
 
 
+def test_call_site_last_indexed_reports_the_newest_timestamp_per_vendor(store):
+    """The reducer is 'newest', not 'oldest' and not 'whichever row the query happens to
+    return first' -- the two rows are seeded with timestamps far enough apart, and in the
+    opposite order from insertion, that any implementation but MAX would fail this.
+    """
+    older_id = store.upsert_call_site(_site(path="src/a.ts", line=1, content_hash="hash-a"))
+    newer_id = store.upsert_call_site(_site(path="src/b.ts", line=2, content_hash="hash-b"))
+    with store._connect().cursor() as cur:
+        cur.execute(
+            "UPDATE call_site SET indexed_at = %s WHERE id = %s",
+            (datetime(2020, 1, 1, tzinfo=timezone.utc), older_id),
+        )
+        cur.execute(
+            "UPDATE call_site SET indexed_at = %s WHERE id = %s",
+            (datetime(2026, 6, 1, tzinfo=timezone.utc), newer_id),
+        )
+
+    last_indexed = store.call_site_last_indexed("r1")
+
+    assert last_indexed["stripe"] == datetime(2026, 6, 1, tzinfo=timezone.utc)
+
+
+def test_call_site_last_indexed_a_vendor_with_no_call_sites_is_absent(store):
+    store.upsert_call_site(_site(vendor_id="stripe"))
+
+    last_indexed = store.call_site_last_indexed("r1")
+
+    assert "twilio" not in last_indexed
+
+
+def test_call_site_last_indexed_of_an_unindexed_repository_is_empty(store):
+    assert store.call_site_last_indexed("never-indexed") == {}
+
+
+def test_call_site_last_indexed_agrees_with_call_site_counts_about_retraction(store):
+    """Two reads over one table must not disagree about which rows are current -- disagreeing
+    would report a timestamp for a position the code no longer occupies.
+    """
+    site_id = store.upsert_call_site(_site())
+    with store._connect().cursor() as cur:
+        cur.execute("UPDATE call_site SET retracted_at = now() WHERE id = %s", (site_id,))
+
+    assert "stripe" not in store.call_site_counts("r1")
+    assert "stripe" not in store.call_site_last_indexed("r1")
+
+
+def test_call_site_last_indexed_ignores_a_retracted_rows_timestamp_even_when_newer(store):
+    """A retracted row is not part of what the repository currently has, and a later pass over
+    a surviving call site must not lose to a stale row's timestamp just because that row is
+    more recent than the last time a current row was written.
+    """
+    surviving_id = store.upsert_call_site(
+        _site(path="src/a.ts", line=1, content_hash="hash-a")
+    )
+    retracted_id = store.upsert_call_site(
+        _site(path="src/b.ts", line=2, content_hash="hash-b")
+    )
+    with store._connect().cursor() as cur:
+        cur.execute(
+            "UPDATE call_site SET indexed_at = %s WHERE id = %s",
+            (datetime(2020, 1, 1, tzinfo=timezone.utc), surviving_id),
+        )
+        cur.execute(
+            "UPDATE call_site SET indexed_at = %s, retracted_at = now() WHERE id = %s",
+            (datetime(2099, 1, 1, tzinfo=timezone.utc), retracted_id),
+        )
+
+    last_indexed = store.call_site_last_indexed("r1")
+
+    assert last_indexed["stripe"] == datetime(2020, 1, 1, tzinfo=timezone.utc)
+
+
 def test_a_removal_reports_how_many_rows_it_took_out(store):
     """The count has a caller: an ingest that wrote nothing and deleted three rows reads exactly
     like one that held nothing for this vendor, and the operator sees only the writes. Scoped the

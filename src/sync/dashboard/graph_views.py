@@ -12,8 +12,9 @@ Three functions, three questions:
 
 - `binding_surface` -- given a vendor operation, which call sites currently depend on it, and
   what has the vendor changed about it. The API Dependency Graph made visible.
-- `index_coverage` -- for one repository, how many call sites the index holds per vendor. What
-  Sync actually knows about a codebase, which today has no answer anywhere in the console.
+- `index_coverage` -- for one repository, how many call sites the index holds per vendor and
+  when it last indexed each one. What Sync actually knows about a codebase, and how current
+  that knowledge is -- neither had an answer anywhere in the console before this.
 - `observed_telemetry` -- for one repository, what traffic showed up, what shape it had, and how
   often it failed. The telemetry rung of the graph, which has no surface at all before this.
 - `detector_accountability` -- across every open finding, which detector raised how many, at
@@ -97,25 +98,48 @@ def binding_surface(
 
 
 def index_coverage(store: GraphStore, repo_id: str) -> dict:
-    """How many indexed call sites one repository has, per vendor.
+    """How many indexed call sites one repository has per vendor, and when the index last wrote
+    a row for each.
 
-    Reads `call_site_counts` and reports it unaltered plus a total. That is the whole of what
-    this function can answer: `call_site_counts`'s own contract is that a vendor with no call
-    sites is *absent*, not present at zero, because the query cannot tell "the indexer looked
-    and found nothing" from "nothing declares which package to look for" -- and neither can this
-    view model, which is why it does not invent a zero to fill the gap.
+    Reads `call_site_counts` and `call_site_last_indexed`, both `GraphStore` reads sharing one
+    grain -- one repository, retracted rows excluded -- so a vendor present in one is present in
+    the other and this composes them by `vendor_id` with no SQL of its own.
 
-    **No last-indexed timestamp.** `GraphStore` exposes no read that reports the most recent
-    `indexed_at` per vendor for a repository, and adding one is a change to a file this task does
-    not own -- other sessions work the store's file concurrently. Reporting one here would mean
-    fabricating it from `call_sites_for_operation`, which needs an `operation_id` this function
-    does not have and cannot enumerate. Left out rather than guessed; a future `GraphStore` read
-    is what closes the gap honestly.
+    `by_vendor` is `call_site_counts` reported unaltered, exactly as before this field existed:
+    the console's `Tally` type (`web/src/api/types.ts`) is `Record<string, number>` and several
+    screens already read this route against that shape, so the count stays a plain int rather
+    than growing a nested object that would break every one of them for a repository this
+    change did not need to touch. `last_indexed` is new and sits beside it, keyed the same way.
+
+    **A vendor with no call sites is absent from both `by_vendor` and `last_indexed` -- no zero
+    count, no null timestamp.** `call_site_counts`'s own contract is that this absence has two
+    causes a query cannot separate: the indexer looked and found nothing, or it never looked
+    because nothing declares which package to look for. Either a zero or a null would assert the
+    first, so neither is invented here. `sync.signals.reachability` is where that resolution
+    happens, not this view.
+
+    **What `last_indexed` means, and what it does not.** It is when the indexer last wrote a row
+    for that vendor in this repository -- the newest `indexed_at` among the call sites
+    `call_site_counts` just counted. It is **not** a promise that the index is current, and it
+    is **not** evidence the code has not changed since: a repository re-scanned three weeks ago
+    reports the same value the day after that scan and every day after, until another re-index
+    moves it. A reader who takes it as either has been misled by a field that looks more
+    definitive than it is -- which is exactly why it is reported at all: a count with no sense
+    of when it was taken invites treating a stale answer as a current one.
+
+    **No staleness or age figure is computed here.** A duration derived from `last_indexed` at
+    response time goes wrong the instant this payload is cached or read later than it was built,
+    silently, while the timestamp it would have come from does not. The console formats the age
+    against its own clock; this view hands over the fact it can actually stand behind.
     """
     counts = store.call_site_counts(repo_id)
+    last_indexed = store.call_site_last_indexed(repo_id)
     return {
         "repo_id": repo_id,
         "by_vendor": dict(counts),
+        "last_indexed": {
+            vendor_id: last_indexed[vendor_id].isoformat() for vendor_id in counts
+        },
         "total_call_sites": sum(counts.values()),
     }
 
