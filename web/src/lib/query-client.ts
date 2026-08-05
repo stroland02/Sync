@@ -1,6 +1,8 @@
-import { QueryClient } from "@tanstack/react-query"
+import { QueryCache, QueryClient } from "@tanstack/react-query"
 
 import { ApiStatusError, NotFoundError } from "@/api/errors"
+import { describeFailure } from "@/lib/describe-failure"
+import { reportError } from "@/lib/error-log"
 
 /**
  * Retrying a 404 delays an answer the API already gave.
@@ -15,7 +17,17 @@ function shouldRetry(failureCount: number, error: Error): boolean {
   return failureCount < 1
 }
 
+/**
+ * Every query failure passes through here, including a background poll's — the one case
+ * an inline `isError` branch never sees, because nothing is re-rendering to show it.
+ */
 export const queryClient = new QueryClient({
+  queryCache: new QueryCache({
+    onError: (error) => {
+      const failure = describeFailure(error)
+      if (failure) reportError(failure)
+    },
+  }),
   defaultOptions: {
     queries: {
       retry: shouldRetry,

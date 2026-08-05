@@ -7,9 +7,13 @@
 
 import { Link, Outlet } from "react-router"
 
+import { ErrorBoundary } from "@/components/error-boundary"
+import { ErrorSurface } from "@/components/error-surface"
+
 export function AppShell() {
   return (
     <div className="min-h-screen bg-background text-foreground">
+      <ErrorSurface />
       <header className="border-b border-border">
         <div className="mx-auto flex max-w-7xl flex-wrap items-baseline justify-between gap-2 px-4 py-3">
           <Link to="/" className="text-base font-medium">
@@ -21,7 +25,9 @@ export function AppShell() {
         </div>
       </header>
       <main className="mx-auto max-w-7xl px-4 py-6">
-        <Outlet />
+        <ErrorBoundary>
+          <Outlet />
+        </ErrorBoundary>
       </main>
     </div>
   )
