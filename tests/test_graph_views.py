@@ -16,6 +16,7 @@ from datetime import datetime, timezone
 import pytest
 
 from sync.core import CallSite, Finding, ObservedCall, ObservedErrorWindow, ObservedShape, VendorChange
+from sync.core.models import SEVERITY_ORDER
 from sync.dashboard.graph_views import (
     binding_surface,
     detector_accountability,
@@ -905,6 +906,69 @@ def test_vendor_findings_scoped_by_severity_and_by_path_prefix(store):
 
     assert vendor_findings(store, "stripe", severity="breaking")["total"] == 1
     assert vendor_findings(store, "stripe", path="src/billing")["total"] == 1
+
+
+def test_vendor_findings_names_the_ordering_it_applied_even_when_nobody_chose_one(store):
+    """The envelope carries the ordering because the screen has to state it.
+
+    An unordered table is not unordered -- it is in the order Sync raised the findings, and it said
+    so nowhere. A reader who cannot see the ordering cannot tell a page boundary that moved from a
+    finding that changed, which is the same class of unsayable claim as a total counted off a page.
+    """
+    site_id = store.upsert_call_site(_site())
+    store.insert_finding(_finding(site_id))
+
+    assert vendor_findings(store, "stripe")["order"] == "first-seen"
+    assert vendor_findings(store, "stripe", order="severity")["order"] == "severity"
+
+
+def test_vendor_findings_carries_the_severity_rank_it_would_order_by(store):
+    """The rank travels in the payload rather than being restated in TypeScript.
+
+    It is a declared judgement, not a fact the graph stores, so B100 requires it be put somewhere a
+    reader can see -- and the console cannot import Python. The two ways to get it on screen are a
+    second copy in `types.ts` held to this one by a guard, or the query sending the rank it used.
+    The second is strictly more honest: the sentence a reader gets is derived from the ordering that
+    actually ran, so there is no version of this where the screen names an order the rows are not
+    in. It rides every page, chosen or not, because the control has to describe the choice before it
+    is made.
+    """
+    site_id = store.upsert_call_site(_site())
+    store.insert_finding(_finding(site_id))
+
+    assert vendor_findings(store, "stripe")["severity_order"] == list(SEVERITY_ORDER)
+    assert vendor_findings(store, "stripe", order="severity")["severity_order"] == list(SEVERITY_ORDER)
+
+
+def test_vendor_findings_orders_by_severity_in_sql_ahead_of_its_own_limit(store):
+    """The page has to be the first page of the ordered set, not an ordering of the first page.
+    Inserted least-severe-first so a Python sort over the page window could not produce this.
+    """
+    for i, severity in enumerate(["info", "deprecation", "breaking"]):
+        site_id = store.upsert_call_site(
+            _site(path=f"src/{i}.ts", line=i, content_hash=f"hash-{i}")
+        )
+        store.insert_finding(_finding(site_id, claim=f"c{i}", severity=severity))
+
+    page = vendor_findings(store, "stripe", order="severity", limit=1)
+
+    assert [row["severity"] for row in page["items"]] == ["breaking"]
+    assert page["total"] == 3, "the total is the ordered set's, not the page's"
+
+
+def test_vendor_findings_falls_back_to_the_default_ordering_and_says_which_it_used(store):
+    """`order` reaches this from a query string, so an unrecognised value is a boundary condition
+    rather than a bug. It resolves to the default rather than raising, and the envelope reports the
+    ordering that was *applied* -- so a hand-edited URL cannot leave the screen naming an ordering
+    the rows are not in. The store raises on the same value, because a typo in our own call site
+    has no echo to catch it.
+    """
+    site_id = store.upsert_call_site(_site())
+    store.insert_finding(_finding(site_id))
+
+    page = vendor_findings(store, "stripe", order="severty")
+
+    assert page["order"] == "first-seen"
 
 
 def test_vendor_findings_pages_with_a_real_sql_limit(store):

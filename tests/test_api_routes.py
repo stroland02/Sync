@@ -26,7 +26,7 @@ from sync.api.__main__ import DEFAULT_PORT, _reload_enabled, app_factory
 from sync.api.app import _MAX_LIMIT, create_app
 from sync.core import CallSite, Finding, VendorChange
 from sync.dashboard.queries import _FINISHED
-from sync.graph.store import GraphStore
+from sync.graph.store import FINDING_ORDERS, GraphStore
 from sync.mcp.tools import DEFAULT_LIMIT, GraphSurface
 
 INDEXED = datetime(2026, 7, 28, 6, 0, tzinfo=timezone.utc)
@@ -170,6 +170,7 @@ def _fake_vendor_findings_reader(
     repo_id=None,
     severity=None,
     path=None,
+    order=None,
     limit=DEFAULT_LIMIT,
     offset=0,
 ) -> dict[str, Any]:
@@ -393,6 +394,38 @@ def _recording_vendor_findings_reader() -> tuple[Any, list[dict[str, Any]]]:
     return reader, calls
 
 
+def test_the_vendor_route_hands_the_ordering_to_the_reader():
+    """`order` is a query parameter like the filters beside it, so it reaches the view the same
+    way. The view -- not the transport -- resolves an unrecognised value, because the view is what
+    echoes the ordering it applied and the two answers have to come from one place.
+    """
+    reader, calls = _recording_vendor_findings_reader()
+    client = TestClient(
+        _build_app(
+            surface=GraphSurface(FakeGraph(), feed_fetched_at=FETCHED),
+            vendor_findings_reader=reader,
+        )
+    )
+
+    client.get("/api/vendors/stripe?order=severity")
+
+    assert calls[0]["order"] == "severity"
+
+
+def test_the_vendor_route_defaults_the_ordering_when_the_url_names_none():
+    reader, calls = _recording_vendor_findings_reader()
+    client = TestClient(
+        _build_app(
+            surface=GraphSurface(FakeGraph(), feed_fetched_at=FETCHED),
+            vendor_findings_reader=reader,
+        )
+    )
+
+    client.get("/api/vendors/stripe")
+
+    assert calls[0]["order"] is None
+
+
 def test_vendor_route_returns_the_vendor_findings_readers_payload():
     payload = {
         "items": [{"finding_id": "f1", "vendor": "stripe"}],
@@ -433,6 +466,7 @@ def test_vendor_route_passes_the_vendor_and_its_filters_to_the_reader():
             "repo_id": "r1",
             "severity": "breaking",
             "path": "src/billing",
+            "order": None,
             "limit": 2,
             "offset": 1,
         }
@@ -1521,9 +1555,18 @@ def test_the_consoles_proxy_target_matches_the_apis_default_port():
     # `web/vite.config.ts` proxies `/api` to a hardcoded host:port because the dev server
     # cannot import Python. Nothing else holds the two together: a port changed on one side
     # and not the other turns every console request into a proxy error, silently.
+    #
+    # The literal is now the fallback behind a `SYNC_API_ORIGIN ?? ...`, added by M4-W151 so a
+    # session on a busy machine points the proxy at a free port through the environment instead of
+    # editing this tracked file and being trusted to revert it. **This assertion went red the
+    # moment that landed and stayed red**, because it matched the bare `target: "http://..."` shape
+    # the override replaced -- so it read as "the console no longer proxies to a fixed port" while
+    # the fixed port was sitting two tokens to the right. The override does not weaken what this
+    # guards: an unset environment variable is the normal case, so the fallback is still the port
+    # that has to agree with Python, and it is still the only copy of it on this side.
     source = _web_source("vite.config.ts")
-    match = re.search(r'target:\s*"http://127\.0\.0\.1:(\d+)"', source)
-    assert match is not None, "web/vite.config.ts no longer proxies /api to a fixed port"
+    match = re.search(r'target:\s*[^\n]*\?\?\s*"http://127\.0\.0\.1:(\d+)"', source)
+    assert match is not None, "web/vite.config.ts no longer proxies /api to a fixed fallback port"
     assert int(match.group(1)) == DEFAULT_PORT
 
 
@@ -1537,6 +1580,19 @@ def test_the_consoles_run_disposition_matches_the_finished_outcomes():
     assert match is not None, "web/src/api/types.ts no longer declares RunDisposition"
     members = set(re.findall(r'"([^"]+)"', match.group(1)))
     assert members == set(_FINISHED)
+
+
+def test_the_consoles_finding_order_matches_the_orderings_the_store_offers():
+    # `web/src/api/types.ts` restates `FINDING_ORDERS` as `FindingOrder` because the console
+    # cannot import Python. Same shape and same reason as `RunDisposition` above: an ordering added
+    # on one side and forgotten on the other reaches the console as a string the compiler never
+    # checked, and the failure is a control offering an arrangement the API resolves away -- which
+    # the screen would then contradict, because it names the ordering that was applied.
+    source = _web_source("src/api/types.ts")
+    match = re.search(r"export type FindingOrder\s*=([^\n]+)", source)
+    assert match is not None, "web/src/api/types.ts no longer declares FindingOrder"
+    members = set(re.findall(r'"([^"]+)"', match.group(1)))
+    assert members == set(FINDING_ORDERS)
 
 
 def test_the_consoles_theme_block_declares_static_so_every_token_reaches_the_build():

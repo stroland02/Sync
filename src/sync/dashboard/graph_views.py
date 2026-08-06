@@ -41,7 +41,8 @@ from __future__ import annotations
 
 from collections import Counter
 
-from sync.graph.store import GraphStore
+from sync.core.models import SEVERITY_ORDER
+from sync.graph.store import DEFAULT_FINDING_ORDER, FINDING_ORDERS, GraphStore
 from sync.mcp.tools import DEFAULT_LIMIT, _TOKENS_PER_AVOIDED_READ
 
 # The only rung a row built from `call_site` alone can honestly carry -- see `binding_surface`'s
@@ -368,6 +369,7 @@ def vendor_findings(
     repo_id: str | None = None,
     severity: str | None = None,
     path: str | None = None,
+    order: str | None = None,
     limit: int = DEFAULT_LIMIT,
     offset: int = 0,
 ) -> dict:
@@ -405,8 +407,15 @@ def vendor_findings(
       `sync.mcp.tools` rather than restated so the two cannot drift.
     """
     offset = max(offset, 0)
+    # `None` is a caller that named no ordering and an unrecognised string is a caller that named
+    # one this does not have; both resolve to the default here, once, and the resolved value is
+    # what the envelope reports. That is the whole mechanism: the ordering on screen is the
+    # ordering the rows are in, because it is read off the same variable the query used.
+    applied_order = order if order in FINDING_ORDERS else DEFAULT_FINDING_ORDER
     filters = dict(repo_id=repo_id, vendor_id=vendor_id, severity=severity, path_prefix=path)
-    rows = store.open_findings_at_risk(**filters, limit=limit, offset=offset)
+    rows = store.open_findings_at_risk(
+        **filters, order=applied_order, limit=limit, offset=offset
+    )
     total = store.open_findings_at_risk_count(**filters)
     summary = store.open_findings_summary(**filters)
     indexed_at = summary["indexed_at"]
@@ -430,6 +439,13 @@ def vendor_findings(
             offset,
         ),
         "repo_id": repo_id,
+        "order": applied_order,
+        # The rank travels with the page rather than being restated in TypeScript. It is a declared
+        # judgement -- `SEVERITY_ORDER` says so -- and B100 requires an invented ranking be put
+        # where a reader can see it. Sending it means the sentence on screen is derived from the
+        # ordering that ran, so there is no version of this where the screen names an order the rows
+        # are not in. Five short strings, and it removes a whole drift class.
+        "severity_order": list(SEVERITY_ORDER),
         "indexed_at": indexed_at.isoformat() if indexed_at else None,
         "feed_fetched_at": None,
         "binding_source": summary["binding_rung"],
