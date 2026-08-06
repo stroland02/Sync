@@ -33,6 +33,9 @@ export function ObservedCallsTable({ calls }: { calls: ObservedCallRow[] }) {
           <TableHead>Rung</TableHead>
           <TableHead>Operation</TableHead>
           <TableHead>Method</TableHead>
+          <TableHead>Trace</TableHead>
+          <TableHead>Server</TableHead>
+          <TableHead>URL template</TableHead>
           <TableHead>Calls</TableHead>
           <TableHead>Distinct targets</TableHead>
           <TableHead>Repeated</TableHead>
@@ -50,6 +53,13 @@ export function ObservedCallsTable({ calls }: { calls: ObservedCallRow[] }) {
             <TableCell className="font-mono">{describeOperation(call)}</TableCell>
             <TableCell className="font-mono uppercase">
               <Formatted value={orAbsent(call.http_method)} />
+            </TableCell>
+            <TableCell className="font-mono text-meta">{call.trace_id}</TableCell>
+            <TableCell className="font-mono">
+              <Formatted value={orAbsent(call.server_address)} />
+            </TableCell>
+            <TableCell className="font-mono">
+              <Formatted value={orAbsent(call.url_template)} />
             </TableCell>
             <TableCell className="font-mono">{call.call_count.toLocaleString()}</TableCell>
             <TableCell className="font-mono">

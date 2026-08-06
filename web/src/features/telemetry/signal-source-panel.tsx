@@ -25,19 +25,11 @@
 import { DEFAULT_LIMIT } from "@/api/client"
 import { useRepositoryObserved } from "@/api/queries"
 import { PageControls } from "@/components/page-controls"
-import { RungBadge } from "@/components/provenance"
 import { ErrorState, LoadingState } from "@/components/states"
-import { Absent, Formatted } from "@/components/status"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table"
-import { formatTimestamp, orAbsent } from "@/lib/format"
+import { ErrorWindowsTable } from "@/features/telemetry/error-windows-table"
+import { ObservedCallsTable } from "@/features/telemetry/observed-calls-table"
+import { ObservedShapesTable } from "@/features/telemetry/observed-shapes-table"
 import { useOffsetParam } from "@/lib/use-offset-param"
 
 function NothingRecorded({ what, repoId }: { what: string; repoId: string }) {
@@ -86,45 +78,7 @@ export function SignalSourcePanel({ repoId }: { repoId: string }) {
                 <NothingRecorded what="observed calls" repoId={repoId} />
               ) : (
                 <div className="flex flex-col gap-section">
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Rung</TableHead>
-                        <TableHead>Vendor / operation</TableHead>
-                        <TableHead>Trace</TableHead>
-                        <TableHead>Calls</TableHead>
-                        <TableHead>Distinct targets</TableHead>
-                        <TableHead>Repeated</TableHead>
-                        <TableHead>Errors</TableHead>
-                        <TableHead>Last seen</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {query.data.calls.items.map((call) => (
-                        <TableRow key={call.trace_id}>
-                          <TableCell>
-                            <RungBadge rung={call.binding_rung} />
-                          </TableCell>
-                          <TableCell className="font-mono">
-                            {call.vendor_id} /{" "}
-                            {call.operation_id === "" ? (
-                              <Absent>uncorrelated</Absent>
-                            ) : (
-                              call.operation_id
-                            )}
-                          </TableCell>
-                          <TableCell className="font-mono text-meta">{call.trace_id}</TableCell>
-                          <TableCell className="font-mono">{call.call_count}</TableCell>
-                          <TableCell className="font-mono">{call.distinct_targets}</TableCell>
-                          <TableCell className="font-mono">{call.repeated_calls}</TableCell>
-                          <TableCell className="font-mono">{call.error_count}</TableCell>
-                          <TableCell className="font-mono text-meta">
-                            <Formatted value={formatTimestamp(call.last_seen)} />
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
+                  <ObservedCallsTable calls={query.data.calls.items} />
                   <PageControls
                     offset={callsOffset}
                     limit={DEFAULT_LIMIT}
@@ -153,34 +107,7 @@ export function SignalSourcePanel({ repoId }: { repoId: string }) {
                 <NothingRecorded what="response shapes" repoId={repoId} />
               ) : (
                 <div className="flex flex-col gap-section">
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Vendor / operation</TableHead>
-                        <TableHead>Field</TableHead>
-                        <TableHead>Type</TableHead>
-                        <TableHead>Nullable seen</TableHead>
-                        <TableHead>Source</TableHead>
-                        <TableHead>Samples</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {query.data.shapes.items.map((shape) => (
-                        <TableRow
-                          key={`${shape.vendor_id}-${shape.operation_id}-${shape.field_path}`}
-                        >
-                          <TableCell className="font-mono">
-                            {shape.vendor_id} / {shape.operation_id}
-                          </TableCell>
-                          <TableCell className="font-mono">{shape.field_path}</TableCell>
-                          <TableCell className="font-mono">{shape.json_type}</TableCell>
-                          <TableCell>{shape.nullable_seen ? "yes" : "no"}</TableCell>
-                          <TableCell className="font-mono">{shape.source}</TableCell>
-                          <TableCell className="font-mono">{shape.sample_count}</TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
+                  <ObservedShapesTable shapes={query.data.shapes.items} />
                   <PageControls
                     offset={shapesOffset}
                     limit={DEFAULT_LIMIT}
@@ -209,40 +136,7 @@ export function SignalSourcePanel({ repoId }: { repoId: string }) {
                 <NothingRecorded what="error windows" repoId={repoId} />
               ) : (
                 <div className="flex flex-col gap-section">
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Rung</TableHead>
-                        <TableHead>Vendor / operation</TableHead>
-                        <TableHead>Status class</TableHead>
-                        <TableHead>Window</TableHead>
-                        <TableHead>Errors</TableHead>
-                        <TableHead>Issues</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {query.data.error_windows.items.map((window, index) => (
-                        <TableRow
-                          key={`${window.vendor_id}-${window.operation_id}-${window.window_start}-${index}`}
-                        >
-                          <TableCell>
-                            <RungBadge rung={window.binding_rung} />
-                          </TableCell>
-                          <TableCell className="font-mono">
-                            {window.vendor_id} /{" "}
-                            <Formatted value={orAbsent(window.operation_id)} />
-                          </TableCell>
-                          <TableCell className="font-mono">{window.status_class}</TableCell>
-                          <TableCell className="font-mono text-meta">
-                            <Formatted value={formatTimestamp(window.window_start)} /> →{" "}
-                            <Formatted value={formatTimestamp(window.window_end)} />
-                          </TableCell>
-                          <TableCell className="font-mono">{window.error_count}</TableCell>
-                          <TableCell className="font-mono">{window.issue_count}</TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
+                  <ErrorWindowsTable windows={query.data.error_windows.items} />
                   <PageControls
                     offset={errorWindowsOffset}
                     limit={DEFAULT_LIMIT}
