@@ -408,6 +408,109 @@ to be made again.
 proving it passes a real vendor entry, or this entry is closed as declined with the sample of
 recorded attempts that justified declining.
 
+### B100 — The table primitive spends 10px on padding the contract never named, and a row costs twice what it declares
+
+Measured 2026-08-06 at `7d8e798`, Chrome 1440×900, `getComputedStyle` over every visible element on
+all nine routes (`reports/2026-08-06-console-conformance.md`).
+
+`table.tsx:103` and `:122` spell `px-row py-2.5`. **`py-2.5` is 10px**, so every `th` and `td`
+renders 10px of vertical padding — off the 4px base the design system is built on, and on the
+table-bearing routes it is the *second most frequent padding value in the document*: **918
+occurrences against 926 of 8px** on the binding surface, **714 against 722** on the vendor page.
+Nine distinct spacing values render where `DESIGN.md` names three tokens and two exceptions.
+
+That is the small half. The large half is what it costs a reader. `DESIGN.md`'s *Row height* section
+says `row-md` is "the existing arithmetic made explicit — `TableCell` already renders a 36px row from
+`text-body` and `p-row`; it was simply never named." **It never rendered 36px.** With 10px padding a
+single-line row is **40px**, and on the vendor findings table, where `break-words` wraps a call-site
+path to two lines, the measured row is **80px** and the header row **52.5px**. At 80px a 900px
+viewport holds about ten rows of the ten-thousand-row table the `--scale 10000` fixture produces —
+roughly a third of the viewport spent on padding nobody chose.
+
+The wrapping is not the defect and must not be removed to fix this: `break-words` is what keeps the
+`Rung` column on screen at 1280px on a nine-column table, structurally rather than by fixture luck,
+because a customer's 200-character path makes a row taller instead of pushing provenance out of the
+viewport. **The row gets shorter by spending 8px instead of 10, not by letting the table overflow.**
+
+**Closes when:** both cells take `py-row`, the rendered single-line row measures 36px, and a Python
+guard bans fractional Tailwind spacing utilities (`p-2.5`, `py-0.5`, `px-1.5`) under
+`components/ui/` and `features/` — proven red by reintroducing `py-2.5` and watching it name the
+file and line. The guard cannot land before the fix, because it fails on the current tree; that is
+why it ships with it.
+
+### B101 — Four statements in `DESIGN.md`'s rendered-pixel section are contradicted by the rendered pixels
+
+Same measurement as B100. This is the one section of the contract whose whole purpose is to be
+checkable against a screen, and four of its claims do not survive being checked.
+
+- **The focus ring: 8.69 claimed, 3.08 measured.** *Non-text, against the 3:1 floor* says the ring
+  "clears it comfortably: 8.69, against `--color-surface`". The token does — 8.70. What renders is
+  `focus-visible:ring-ring/50`, the brand hue at half strength, compositing to `rgb(84, 101, 139)`:
+  **3.08:1** against the card, **3.12:1** against the page plane. It clears the non-text floor by
+  0.08. It is also the only channel — `outline-style` is `none` and the border stays
+  `--color-input` under focus — so 3.08 is the whole of what a keyboard user sees.
+- **The outline button: 12.09 and 8.70 claimed, 10.76 and 8.03 measured.** In the gamma-encoded sRGB
+  Chrome composites in, `oklab(0.578 0 0)` is `#7a7a7a`, so `input/30` over `--color-surface` is
+  `0.3 × 122 + 0.7 × 23 = 53` and `#f0f0f0` on it measures **10.76**; `input/50` is 72 and measures
+  **8.03**. No backdrop in the ramp reproduces 12.09 — over `--color-surface-sunken` the resting
+  fill is 45 and the pairing is 11.6. Both still clear 5.05, so these are wrong numbers rather than
+  unsafe colours.
+- **`TableRow`'s hover fill is documented in the present tense and is gone.** The table keeps `ink`
+  on `surface-subtle/50` at 14.80 "as the measurement of what the tree renders today". A real
+  pointer on a row now leaves `background-color` at `rgba(0, 0, 0, 0)` with the row's own
+  `transition-duration` at 0s — section 15.5's ruling, correctly built, and the document has not
+  caught up.
+
+Why this is not pedantry: the contract's own argument for the section is that "a pairing that passes
+on declared tokens can fail on rendered colour once opacity, layering or a chart fill is involved."
+A published 8.69 that renders 3.08 is that failure, in the section written to prevent it, and the
+next reader has no way to tell which of the seven rows to trust.
+
+**Closes when:** either the ring renders at full strength — `ring-ring`, at which point 8.70 becomes
+true rather than restated — or the section carries the composed figures with the arithmetic beside
+them, and the retired `TableRow` row is rewritten as history rather than as current. Whichever is
+chosen, the four numbers are re-read off a running instance, not recomputed from tokens.
+
+### B102 — Every route's heading list opens with the title of a dialog that is not open
+
+Same measurement. No route skips a heading level. But on all nine, the first heading in the document
+is `h2 "Jump to a destination"` — the command palette's title — ahead of the page's own `h1`.
+
+`command.tsx:49` puts `DialogHeader` **outside** `DialogContent`. Radix unmounts the content when
+the dialog is closed; the `sr-only` header is not inside it, so the title and its description sit in
+the document permanently. A screen reader's heading list therefore begins with a closed dialog, and
+the description ("Search the console's declared routes.") is a permanent 37-character paragraph in a
+1px-wide container that every prose measurement has to filter out.
+
+The console's navigation hierarchy *is* the dependency graph, and the heading tree is the only
+machine-readable assertion of which level of it you are looking at
+(`loops/console-improvement-tick.md`, item 3). An `h2` from a closed overlay in front of the `h1` is
+that assertion starting with something that is not a level.
+
+**Closes when:** the palette's accessible name comes from inside `DialogContent`, or from an
+`aria-label` rather than a heading, and a walk of every route finds `h1` first.
+
+### B103 — A third neutral ink renders on the two screens carrying the densest evidence
+
+Same measurement. Section 8's invariant is two ink levels plus one accent, never three, and the
+console holds it on seven of nine routes: `--color-ink` and `--color-ink-muted`, plus the brand hue
+on exactly one element where a link exists.
+
+On the solution workflow and pull request screens a third appears — **`oklch(0.83 0 0)`,
+`--color-ink-secondary`, on 3 elements each** — from the wrapper at `run-outcome.tsx:28`, which sets
+`text-body text-ink-secondary` on a container the abandoned-run prose inherits from. `DESIGN.md`
+says two ink levels hold for text and names a `graphics` allocation rather than a third text step,
+so this is the one place the ramp's own promise does not render.
+
+It is worth a line rather than a shrug because of *where* it lands: these are the two screens whose
+argument is that a reviewer can see what the system did and why, and a third grey there means a
+reader cannot tell recessive prose from a deliberate second voice.
+
+**Closes when:** the wrapper takes `text-ink-muted` or nothing, the ink census on both routes reads
+two plus an accent, and the choice is recorded — if `ink-secondary` is the right step for
+abandoned-run prose, `DESIGN.md` gains the third text level as an argued decision rather than as a
+class that arrived without one.
+
 ## In flight
 
 
