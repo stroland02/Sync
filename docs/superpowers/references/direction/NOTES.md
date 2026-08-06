@@ -269,3 +269,67 @@ demonstrate: Superlog puts a 360px fact rail beside its content, Supabase puts a
 beside its tiles.
 
 That is the defect. Not a cap — an absence of arrangement.
+
+---
+
+## 5. Supabase — seven screens, and the system underneath them (2026-08-06)
+
+Table Editor, SQL Editor, Schema Visualizer, Functions, Extensions, Indexes, Settings. Seven screens
+is enough to stop describing screens and describe **the system that generates them** — which is what
+this console needs, because our problem is not one bad page.
+
+### The chassis, present on all seven
+
+1. **Two-tier navigation.** A 40px **icon rail** for the product's top-level areas, plus a ~215px
+   **contextual sidebar** for the area you are in. The sidebar carries the area's name as a heading
+   at its top (`Database`, `Table Editor`, `SQL Editor`) and groups its items under **small-caps
+   letterspaced labels** — `DATABASE MANAGEMENT`, `ACCESS CONTROL`, `CONFIGURATION`, `PLATFORM`.
+   The rail never changes; the sidebar is the level you are inside.
+2. **A page header of exactly two lines**: a display-size title and a one-sentence subtitle saying
+   what the page is for — *"Manage what extensions are installed in your database"*, *"Improve query
+   performance against your database"*, *"Connections, security, and network configuration"*.
+3. **A control bar directly beneath it**: scope selectors and a search on the left, secondary
+   actions in the middle, **one green primary action on the right**. Never two greens.
+4. **Tables with uppercase letterspaced column headers**, the identifying column as a link, a `⋮`
+   overflow at the row's end, and the type printed beside the column name where a type exists
+   (`id uuid`, `metadata jsonb`, `embedding vector`).
+5. **Chips for enumerated values** — `FREE`, `PRODUCTION`, `NANO`, `SHARED`, `NEW`, `Invoker`. A
+   closed vocabulary renders as a chip; an open one renders as text.
+6. **Keyboard hints inline, on the surface they belong to** — `Ctrl K`, `G then D`, `Ctrl ⏎`,
+   `Hit CTRL+SHIFT+K to generate query`.
+
+### Four patterns we have no equivalent of
+
+- **An empty section is a card with an explanation and the way out.** *"No shared queries — share
+  queries with your team by right-clicking on the query."* Ours are single sentences; theirs tell
+  you what would fill the space and how.
+- **A detail opens in a right drawer and the page dims behind it.** The Indexes screen shows the
+  index's `CREATE UNIQUE INDEX …` as syntax-highlighted SQL in a panel with `Cancel` at the bottom,
+  without leaving the list. We navigate away for every detail.
+- **A settings screen is one card per setting**: title, a prose explanation of what it does and what
+  it costs, the control at the right, and the card's own `Cancel`/`Save`. Not a form.
+- **A footer bar on a data view** carrying pagination, page size, the record count, and a
+  Data/Definition toggle. Our pagination sits inside the card with no fixed home.
+
+### The schema visualizer, and what it does to Task 11
+
+The Database screen renders a **node-link diagram**: three table nodes, each a card with a header
+and one row per column, orthogonal connectors between foreign keys, a minimap, `Auto layout`, and
+`Copy as SQL`. It is the best thing in these seven screens and it is genuinely useful.
+
+`2026-08-05-sync-console-architecture.md` Task 11 ruled against a layered bipartite diagram of call
+sites against operations. **This is a real counter-example and it should be weighed rather than
+waved away** — but the ruling stands, and the reason is cardinality, not principle. Their diagram
+draws three tables and about fifteen columns. Ours would draw thousands of call sites against
+hundreds of operations, and the plan's argument at `:1364-1372` is exactly that a diagram at that
+cardinality becomes a hairball that answers nothing a table cannot.
+
+What transfers is narrower and real: **a node card whose header is the entity and whose rows are its
+fields, with the relationship drawn rather than described.** At *one* binding — one call site, one
+operation, one vendor change, the rungs between them — that is a picture worth having, and it is not
+the fleet-wide diagram Task 11 refused.
+
+### Where this leaves the plan
+
+Every one of the four properties above, plus the chassis, is buildable against data we already hold.
+None of it needs a write path except the settings pattern, which needs one and therefore waits.
