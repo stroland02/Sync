@@ -5,9 +5,13 @@ fixture: idempotent, exactly reversible, and honest about what it claims to cove
 through the view models (`sync.dashboard.queries`, `sync.dashboard.fleet`) rather than through SQL,
 because a fixture that satisfies the SQL but not the view model is not a fixture for the console.
 
-Runs against a throwaway database, never the shared `sync` one another agent may be using:
-
-    docker exec sync-postgres-1 psql -U sync -d postgres -c "CREATE DATABASE sync_seed_check"
+`SYNC_DSN`, read the same way every other test module reads it, not a database this file names
+for itself. `conftest.pytest_configure` hands every run -- and, under `-n auto`, every worker --
+its own throwaway database before this module's tests execute; a name this file picked on its own
+would opt back out of that isolation and be the one database every worker shares. Measured: run
+serial the seed/remove cycle here is silent, but under the default `-n auto` scheduler it raced
+every other worker's own seed/remove cycle against the same rows, and 12 to 15 of these 16 tests
+failed on every run.
 """
 
 from __future__ import annotations
@@ -22,9 +26,7 @@ from sync.dashboard import fleet, graph_views
 from sync.dashboard.queries import workflow_state
 from sync.graph.store import GraphStore
 
-DSN = os.environ.get(
-    "SYNC_SEED_TEST_DSN", "postgresql://sync:sync@localhost:5433/sync_seed_check"
-)
+DSN = os.environ.get("SYNC_DSN", "postgresql://sync:sync@localhost:5433/sync")
 
 _GRAPH_TABLES = (
     "call_site", "vendor_change", "finding", "migration_outcome",
@@ -34,8 +36,19 @@ _GRAPH_TABLES = (
 
 @pytest.fixture()
 def store():
+    # `DSN` is now shared with every other module that reads `SYNC_DSN` in this worker, not a
+    # database this file owns alone -- a marker-only teardown leaves whatever an earlier test in
+    # the same worker wrote (a non-marker `repo_id`, a stray checkpoint row) for this test to read
+    # as if it were the seed's own. Truncating on setup, the convention `test_graph_store.py` and
+    # `test_dashboard_fleet.py` already use for this same shared database, is what makes that
+    # earlier test's leftovers irrelevant instead of a source of an assertion that depends on
+    # which test happened to run first.
     s = GraphStore(DSN)
     s.apply_schema()
+    s.truncate_all()
+    with psycopg.connect(DSN, autocommit=True) as conn:
+        if conn.execute("SELECT to_regclass('checkpoints')").fetchone()[0] is not None:
+            conn.execute("TRUNCATE checkpoints, checkpoint_blobs, checkpoint_writes")
     yield s
     # Belt and braces: a failed assertion mid-test must not leave rows for the next test.
     remove(DSN, DSN)

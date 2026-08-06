@@ -264,13 +264,18 @@ def test_no_private_key_is_committed_anywhere_in_the_repository():
         capture_output=True, check=True,
     ).stdout.split(b"\0")
 
-    # Key material, scanned everywhere. A PEM block is a private key wherever it sits, and a
-    # documentation file is not a safe place to keep one.
+    # Key material, scanned everywhere. A committed PEM key carries both its header and its
+    # footer -- that is the shape `ssh-keygen`, `openssl`, and every vendor console emit, body
+    # lines of base64 in between. A note that quotes the header alone, to name the format a
+    # secret would take, is not that shape: it is prose about a hazard, not the hazard. Requiring
+    # the pair rather than the header alone is what tells them apart, and it does not cost
+    # anything on the positive side -- a real key pasted into the same file still carries both
+    # markers and is still caught.
     material = (
-        b"-----BEGIN PRIVATE KEY-----",
-        b"-----BEGIN OPENSSH PRIVATE KEY-----",
-        b"-----BEGIN RSA PRIVATE KEY-----",
-        b"-----BEGIN EC PRIVATE KEY-----",
+        (b"-----BEGIN PRIVATE KEY-----", b"-----END PRIVATE KEY-----"),
+        (b"-----BEGIN OPENSSH PRIVATE KEY-----", b"-----END OPENSSH PRIVATE KEY-----"),
+        (b"-----BEGIN RSA PRIVATE KEY-----", b"-----END RSA PRIVATE KEY-----"),
+        (b"-----BEGIN EC PRIVATE KEY-----", b"-----END EC PRIVATE KEY-----"),
     )
     # A key built in source, scanned in source only. This one is a call, so prose naming it is
     # discussing the hazard rather than committing one -- the task archive quotes it inside the
@@ -287,8 +292,35 @@ def test_no_private_key_is_committed_anywhere_in_the_repository():
         if not path.is_file():
             continue
         body = path.read_bytes()
-        markers = material + (in_source if path.suffix == ".py" else ())
-        if any(marker in body for marker in markers) and path != Path(__file__):
+        has_pem_pair = any(begin in body and end in body for begin, end in material)
+        has_in_source = path.suffix == ".py" and any(marker in body for marker in in_source)
+        if (has_pem_pair or has_in_source) and path != Path(__file__):
             offenders.append(str(path.relative_to(root)))
 
     assert offenders == []
+
+
+def test_the_key_scanner_still_catches_a_full_pem_pair_in_the_same_documentation_file():
+    """The narrowing above must not have bought its silence on the reference note by going
+    blind to a real key -- so this pins the positive case directly against the pairing rule,
+    independent of what happens to be committed today.
+    """
+    header_only = b"...) says GITHUB_APP_PRIVATE_KEY | Contents of the .pem file " \
+        b"(including -----BEGIN RSA PRIVATE KEY----- ...)"
+    full_pair = (
+        b"-----BEGIN RSA PRIVATE KEY-----\n"
+        b"MIIEowIBAAKCAQEAsyntheticsyntheticsyntheticsyntheticsynthetic==\n"
+        b"-----END RSA PRIVATE KEY-----\n"
+    )
+
+    def has_pem_pair(body: bytes) -> bool:
+        pairs = (
+            (b"-----BEGIN PRIVATE KEY-----", b"-----END PRIVATE KEY-----"),
+            (b"-----BEGIN OPENSSH PRIVATE KEY-----", b"-----END OPENSSH PRIVATE KEY-----"),
+            (b"-----BEGIN RSA PRIVATE KEY-----", b"-----END RSA PRIVATE KEY-----"),
+            (b"-----BEGIN EC PRIVATE KEY-----", b"-----END EC PRIVATE KEY-----"),
+        )
+        return any(begin in body and end in body for begin, end in pairs)
+
+    assert has_pem_pair(header_only) is False, "a quoted header alone must not read as a key"
+    assert has_pem_pair(full_pair) is True, "a header paired with its footer must still be caught"

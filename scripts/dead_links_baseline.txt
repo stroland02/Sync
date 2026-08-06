@@ -20,31 +20,38 @@
 # collapsed distinction, which is worse than a baselined line.
 src/sync/route/templates.py:omit_property_at
 
-# A deferral rather than an acceptance, which makes it a different kind of entry from the one
-# above. `ea8f869` landed the M4 dashboard view models with their caller still unwritten. The
-# HTTP transport now wired in `src/sync/api/app.py` reaches `vendor_detail`, `finding_detail`,
-# and `workflow_state` through the graph surface and the checkpoint reader, so those three
-# lines were deleted here in the same commit that wired them -- per this file's own rule that
-# a repaired entry has to be removed by whoever repaired it. `repository_overview` stayed
-# behind: the overview route composes its answer from `whats_at_risk` because the plan binds
-# the console to `GraphSurface` and not to `sync.dashboard`, so this function is dead in
-# `src/` for a reason the surface makes structural. It leaves when Task 3 or a followup either
-# wires it or removes it.
-src/sync/dashboard/queries.py:repository_overview
+# `repository_overview` (was `src/sync/dashboard/queries.py:repository_overview`) and
+# `GraphStore.observed_error_windows` were both entries here as of the same date this file's
+# header carries. Neither describes anything any more: `repository_overview` is gone from
+# `queries.py` outright, and `observed_error_windows` is now called from
+# `src/sync/dashboard/graph_views.py:317` (`observed_telemetry`'s windows page). Deleted per
+# this file's own rule -- a repaired entry is removed by whoever notices the repair, in the
+# commit that notices it, and the deletion is the thing that keeps this list load-bearing
+# rather than accumulating names nobody re-checks.
 
-# `observed_error_windows` is a deferral like the entry above, but a weaker one, and the
-# difference is worth stating rather than borrowing the stronger framing. `repository_overview`
-# leaves when Task 3 or a followup wires it or removes it, so a written task decides its fate.
-# This one has no such task: B71 landed the Sentry error-count ingest deliberately without a
-# detector, because a detector written against the single fixture that exists would be a
-# detector tuned to that fixture. So the consumer is intended but unplanned, and no document
-# names the commit that deletes this line.
+# `open_findings_page` and `open_findings_count` are paginated siblings `071a590` gave
+# `open_findings`, for the same reason `call_sites_for_operation` and its `_count` sibling got
+# one: `open_findings(self)` is pinned exactly by `sync.mcp.tools.GraphReader`'s structural
+# protocol (`test_mcp_tools.py::test_the_real_graph_store_satisfies_the_reader_protocol` proves
+# it), so a widened signature there is not available and the paginated capability has to live
+# under a new name instead.
 #
-# The reader stays rather than the tests reading SQL directly. Every assertion about what the
-# ingest wrote goes through this method; replacing it with a query in the test file would put a
-# second copy of the row mapping there, and a test that builds its own expected row out of the
-# same SELECT it is checking is the shape of test this repository has twice found cannot fail.
-#
-# What retires this line is the first M5 detector querying these counts. Until then the entry is
-# the honest record: the write path is wired and the read path is not.
-src/sync/graph/store.py:GraphStore.observed_error_windows
+# Nothing calls them yet because nothing today wants a bounded page of open findings on its
+# own. `GraphSurface.whats_at_risk` -- the one console route slow enough to want this
+# (9-19s at scale, measured against `/api/overview`) -- reads `open_findings()` to build a
+# per-finding call-site join and a vendor-count aggregate; a page of *findings* does not shrink
+# that work, because the join and the aggregate both need every row regardless of how many are
+# eventually returned, and `whats_at_risk` talks to the graph only through the frozen
+# `GraphReader` protocol these two methods were built to not touch. `severity_rollup` and
+# `detector_accountability` read the whole set for the identical reason, by the same
+# reasoning their own docstrings already carry.
+# What retires this: a console screen that wants a raw page of open findings without the
+# per-finding join `whats_at_risk` does today -- filed as follow-up, not attempted here.
+src/sync/graph/store.py:GraphStore.open_findings_page
+src/sync/graph/store.py:GraphStore.open_findings_count
+
+# `_SafeStreamHandler.emit` overrides `logging.StreamHandler.emit`. The logging framework calls
+# it by the base class's contract whenever a record reaches the handler, never by name from
+# anywhere `src/` would show a caller for -- the same shape as `__init__`, `__repr__`, or any
+# other dunder a scanner built on static call-graph reachability cannot see reflection reach.
+src/sync/obs/log.py:_SafeStreamHandler.emit

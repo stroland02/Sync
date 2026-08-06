@@ -1,15 +1,11 @@
 """View models for the three graph screens: the binding surface, the observed rung, detector
 accountability.
 
-Runs against a dedicated database, never the shared `sync` one a developer's console may be
-watching live:
-
-    docker exec sync-postgres-1 psql -U sync -d postgres -c "CREATE DATABASE sync_graph_views_check"
-
-`tests/test_dashboard_fleet.py` truncates the shared `sync` database directly, which is fine in
-CI but not here -- this module follows `tests/test_seed_console.py`'s pattern of a throwaway
-database instead, because a `truncate_all()` against `sync` would erase a running console's seed
-data out from under an operator watching it.
+`SYNC_DSN`, read the same way every other test module reads it, not a database this file names
+for itself. `conftest.pytest_configure` hands every run -- and, under `-n auto`, every worker --
+its own throwaway database before this module's tests execute; a hardcoded `sync_graph_views_check`
+name would opt back out of that isolation and be the one database every worker shares, racing
+every other worker's `truncate_all()` and insert against the same rows.
 """
 
 from __future__ import annotations
@@ -29,9 +25,7 @@ from sync.dashboard.graph_views import (
 )
 from sync.graph.store import GraphStore
 
-DSN = os.environ.get(
-    "SYNC_GRAPH_VIEWS_TEST_DSN", "postgresql://sync:sync@localhost:5433/sync_graph_views_check"
-)
+DSN = os.environ.get("SYNC_DSN", "postgresql://sync:sync@localhost:5433/sync")
 
 SEEN = datetime(2026, 7, 20, 12, tzinfo=timezone.utc)
 
