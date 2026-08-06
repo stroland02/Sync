@@ -31,7 +31,12 @@ human's.
 - `git log --oneline -15` on `main`. Several sessions push here. Something you are about to build
   may already exist.
 - The plan's SDD ledger under `.superpowers/sdd/2026-07-30-sync-m4-dashboard/progress.md`, which
-  carries every ruling and every deferred minor from earlier ticks.
+  carries every ruling and every deferred minor from earlier ticks. **It is gitignored**, so it exists
+  in one worktree on one machine and a worker in an Orca workspace has no copy of it. When you cannot
+  open it, that is why, and it is not a sign that nothing was recorded.
+- `docs/superpowers/reports/2026-08-06-m4-session-record.md` and any later dated sibling — the tracked
+  half of the same record, which every checkout can actually read. A session that lands something
+  another session must know about writes it there, not only into the ledger.
 
 **2. Measure the console against the product position, not against taste.**
 
