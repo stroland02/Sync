@@ -93,7 +93,8 @@ scan silently did nothing. Never record a clean result without the first line pa
 
 2. **At a 1280px window, on the Errors & Incidents table, is the Rung column on screen without
    scrolling the table sideways?** (No rule id; `text-overflow` is structurally blind to this — see
-   the note's section 5.) `vendor-findings-table.tsx` renders seven columns with Rung sixth, and
+   the note's section 5.) `vendor-findings-table.tsx` renders six columns with Rung second (moved there by M4-W135, and the
+   opaque finding-id column removed by M4.5-W141), and
    every header and cell carries `whitespace-nowrap` inside a `w-full overflow-x-auto` container.
    The widest cell is `{row.file}:{row.line}`, a path supplied by a customer repository, and no
    fixture will be long enough to catch it. The failure is that the provenance column — non-

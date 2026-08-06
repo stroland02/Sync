@@ -58,7 +58,7 @@ published.
 
 | Item | Task | State |
 |---|---|---|
-| M4.5-W141 | The affordance layer — the table layer and progressive disclosure, closing on an operator question answered in one interaction at `--scale 10000` | dispatched |
+| M4.5-W141 | The affordance layer — a severity ordering in SQL and the ordering stated on screen, and the row that cost three wrapped lines to say nothing. B100 and B109 closed, B110 filed | pushed, `m45-affordance`, not merged |
 | M4.5-W142 | Type, ink and space measured against rendered pixels — B104 and B107 closed, B108 filed | pushed, `m4-tokens`, not merged |
 | M4.5-W143 | Motion, and the discipline of not having any — at most one keyframe, nothing decorative running at rest, no transition on a primary action | reserved |
 | M4.5-W144 | Density that is legible — the 11px floor held, the provenance column on screen at 1280px, prose wrapping at 1920px | reserved |
