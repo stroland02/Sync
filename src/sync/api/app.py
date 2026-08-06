@@ -58,6 +58,15 @@ DetectorReader = Callable[[], dict[str, Any]]
 # one route quietly answering both from data shaped for the first.
 SeverityReader = Callable[[], dict[str, Any]]
 
+# The overview reader backs `sync.dashboard.graph_views.overview_summary`: the fleet screen's
+# vendor distribution and its bounded total, read straight from `GraphStore` in real SQL rather
+# than from the frozen surface. `whats_at_risk` always walks every open finding doing one
+# `get_call_site` round trip per row to build its shallow rows, so no `limit` passed to it bounds
+# that scan -- this route used to call it twice (a probe, then a page sized to the probe's own
+# total) and tally vendors in a Python loop over the result, which is the 9-19 second fleet screen
+# `overview_summary`'s own docstring measures and fixes.
+OverviewReader = Callable[[], dict[str, Any]]
+
 
 # Upper bound on a single scan of `whats_at_risk` when the transport needs to look up a
 # finding by id. The surface does not offer a by-id read; `finding_detail` fans through one
@@ -124,6 +133,7 @@ def create_app(
     observed_reader: ObservedReader,
     detector_reader: DetectorReader,
     severity_reader: SeverityReader,
+    overview_reader: OverviewReader,
 ) -> Starlette:
     """Build the Starlette app bound to a particular surface and readers.
 
@@ -136,42 +146,21 @@ def create_app(
     """
 
     async def overview(request: Request) -> JSONResponse:
-        # Composed from `whats_at_risk` because the surface offers no aggregate read: the
-        # overview is "what open findings do we hold, grouped by vendor". A separate
-        # aggregate on the surface would repeat what the page already reports.
+        # `overview_reader` answers "what open findings do we hold, grouped by vendor, and how
+        # many" straight from `GraphStore` in real SQL -- `overview_summary`'s own docstring
+        # carries why this no longer reaches `whats_at_risk` at all: that method always walks
+        # every open finding doing one `get_call_site` round trip per row, so no `limit` bounds
+        # the scan underneath it, which is what made this route 9-19 seconds at ten thousand
+        # call sites before this fix.
         #
-        # `_page` sets `total` to the full unpaginated count regardless of `limit`, so one
-        # probe at `limit=1` learns it; the second call then asks for exactly that many rows,
-        # bounding this at two calls at any scale rather than looping `next_offset` through a
-        # read that re-materialises every row on each call. `total_findings` below is read
-        # from the second call, not the probe, so both halves of the payload come from the
-        # same read and agree with each other even under a concurrent write between the two.
-        probe = surface.whats_at_risk(limit=1, offset=0)
-        page = surface.whats_at_risk(limit=max(probe["total"], 1), offset=0)
-        vendor_counts: dict[str, int] = {}
-        for row in page["items"]:
-            vendor = row["vendor"]
-            vendor_counts[vendor] = vendor_counts.get(vendor, 0) + 1
-        vendors = [
-            {"vendor_id": vendor_id, "open_finding_count": count}
-            for vendor_id, count in sorted(vendor_counts.items())
-        ]
-        # `severity_rollup` reads `open_findings` itself rather than tallying `page["items"]`
-        # above -- two different reads of the same table, kept apart on purpose so the vendor
-        # distribution and the severity distribution stay two independently-computed questions
-        # rather than one route quietly answering both from data shaped for the first.
+        # `severity_reader` stays a second, independent reader rather than a field folded into
+        # `overview_reader`'s own payload -- the same reasoning that already kept it separate
+        # from `page["items"]`: the vendor distribution and the severity distribution are two
+        # independently-computed questions, and merging them into one reader's return value
+        # would let one route quietly answer both from data shaped for the first.
+        payload = overview_reader()
         severity = severity_reader()
-        return JSONResponse(
-            {
-                "vendors": vendors,
-                "total_findings": page["total"],
-                "severity_counts": severity["by_severity"],
-                "indexed_at": page["indexed_at"],
-                "feed_fetched_at": page["feed_fetched_at"],
-                "binding_source": page["binding_source"],
-                "context_savings": page["context_savings"],
-            }
-        )
+        return JSONResponse({**payload, "severity_counts": severity["by_severity"]})
 
     async def vendor_detail(request: Request) -> JSONResponse:
         vendor_id = request.path_params["vendor_id"]
@@ -296,3 +285,4 @@ def create_app(
         Route("/api/detectors", detectors, methods=["GET"]),
     ]
     return Starlette(routes=routes)
+

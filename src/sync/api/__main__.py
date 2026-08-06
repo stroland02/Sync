@@ -134,6 +134,9 @@ def app_factory() -> Starlette:
     def severity_reader():
         return graph_views.severity_rollup(store)
 
+    def overview_reader():
+        return graph_views.overview_summary(store)
+
     return create_app(
         surface=surface,
         workflow_reader=workflow_reader,
@@ -145,6 +148,7 @@ def app_factory() -> Starlette:
         observed_reader=observed_reader,
         detector_reader=detector_reader,
         severity_reader=severity_reader,
+        overview_reader=overview_reader,
     )
 
 

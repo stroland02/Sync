@@ -8,7 +8,7 @@ alone and never `sync.remediate`, matching the convention both of those modules 
 every function returns primitives -- dicts, lists, strings, numbers -- never a live model, so a
 page that received one could not lazily re-query or mutate it.
 
-Three functions, three questions:
+Six functions, six questions:
 
 - `binding_surface` -- given a vendor operation, which call sites currently depend on it, and
   what has the vendor changed about it. The API Dependency Graph made visible.
@@ -20,6 +20,11 @@ Three functions, three questions:
 - `detector_accountability` -- across every open finding, which detector raised how many, at
   which rungs, with what claims. `CLAUDE.md` requires a false positive be attributable to a rung;
   this is what lets an operator see that per detector rather than per row.
+- `severity_rollup` -- across every open finding, a count per severity and the true total, each
+  its own SQL aggregate rather than two numbers read off one Python list.
+- `overview_summary` -- the fleet screen's lead answer: open findings by vendor, and a total
+  that is honest about whether it stopped counting early. `overview_summary`'s own docstring
+  carries why this reads `GraphStore` directly rather than the frozen `GraphSurface`.
 
 **What none of these may claim.** An observed call is evidence a call site was exercised. It is
 not proof the binding is correct -- the correlation that produced it can itself be wrong, which
@@ -32,7 +37,7 @@ from __future__ import annotations
 from collections import Counter
 
 from sync.graph.store import GraphStore
-from sync.mcp.tools import DEFAULT_LIMIT
+from sync.mcp.tools import DEFAULT_LIMIT, _TOKENS_PER_AVOIDED_READ
 
 # The only rung a row built from `call_site` alone can honestly carry -- see `binding_surface`'s
 # own docstring. Named so the `binding_rung` filter has one place to compare against rather than
@@ -333,16 +338,83 @@ def observed_telemetry(
 def severity_rollup(store: GraphStore) -> dict:
     """Every open finding's severity, tallied once: a count per severity and the total.
 
-    Reads `open_findings` unpaginated -- the same full read `detector_accountability` already
-    makes -- because `total` below is the length of that read, not a sum over `by_severity`'s
-    values. Those two numbers agree today, since `finding.severity` is `NOT NULL`
-    (`schema.sql`), but the code path computing `total` is independent of the breakdown on
-    purpose: a sum over a filtered or paginated set silently understates the true total the
-    moment either is introduced, which is the recurring defect this milestone keeps closing
-    (`app.py`'s own `overview` route carries the fix for the same shape of bug).
+    `by_severity` is `open_findings_severity_counts`, a real SQL `GROUP BY` -- not a `Counter`
+    over a full Python fetch of every `Finding`, which is what this read until the fleet screen's
+    scale defect (section 24, `2026-08-05-sync-console-architecture.md`) named it as one more
+    instance of the same shape: a question whose cardinality is the number of severities, answered
+    by materialising a row per finding. `total` is `open_findings_count`, its own separate
+    aggregate, read independently of the breakdown on purpose -- a sum over a filtered or
+    paginated set silently understates the true total the moment either is introduced, which is
+    the recurring defect this milestone keeps closing (`overview_summary` carries the same
+    independence for the vendor breakdown beside it).
     """
-    findings = store.open_findings()
-    return {"by_severity": dict(Counter(f.severity for f in findings)), "total": len(findings)}
+    return {"by_severity": store.open_findings_severity_counts(), "total": store.open_findings_count()}
+
+
+# Ceiling on how many open findings `/api/overview`'s total counts before it stops looking and
+# reports the bound instead of an exact number, mirroring Sentry's `MAX_HITS_LIMIT`
+# (`paginator.py:26`): ten thousand matching rows cost the same as one thousand once the count is
+# a real SQL `LIMIT` rather than a full scan, and a bounded count that says so is more honest than
+# an exact one that took nineteen seconds of scanning to produce (section 24 of
+# `2026-08-05-sync-console-architecture.md` carries the argument).
+OPEN_FINDING_COUNT_BOUND = 1000
+
+
+def overview_summary(store: GraphStore, *, bound: int = OPEN_FINDING_COUNT_BOUND) -> dict:
+    """The fleet screen's lead answer: open findings by vendor, and a total that says honestly
+    whether it stopped counting early.
+
+    This is what `/api/overview` reads instead of the frozen `GraphSurface.whats_at_risk` --
+    `sync.mcp.tools` is frozen and `whats_at_risk` always walks every open finding doing one
+    `get_call_site` round trip per row to build its shallow rows, so no `limit` passed to it
+    bounds the underlying scan; the route used to call it twice (a probe, then a page sized to
+    the probe's own total) and tally vendors in a Python loop over the result, which is section
+    24's defect measured at 9-19 seconds against ten thousand call sites. This view answers the
+    same question against `GraphStore` directly, as `binding_surface` and `observed_telemetry`
+    already do for their own screens, entirely in real SQL:
+
+    - `total_findings` is `open_findings_count_bounded` -- a `count(*)` over a subquery Postgres
+      stops scanning at `bound`, so the total costs the same at any true count above it.
+      `total_findings_bound` and `total_findings_bound_reached` travel with it so the console can
+      render "1,000+" rather than a bare number a nineteen-second scan would have implied was
+      exact.
+    - `vendors` is `open_findings_vendor_counts`, a `GROUP BY` over the whole table and
+      deliberately **not** bounded: the caveat in section 24.2 is written in hard for exactly this
+      pairing -- a distribution derived from a bounded page is the distribution of whichever rows
+      the ordering reached, not of the population, and a bounded total is honest where a bounded
+      breakdown presented as the breakdown is not. Vendor cardinality does not grow with finding
+      count, so this `GROUP BY` is cheap at any scale the bounded total is protecting against.
+    - `indexed_at` and `binding_source` are `open_findings_summary`'s one-query snapshot over
+      every open finding -- unbounded for the reason the vendor breakdown is: they describe the
+      whole answer, not a truncated page of it.
+    - `feed_fetched_at` is always `None`. `sync/api/__main__.py` constructs the frozen
+      `GraphSurface` with no `feed_fetched_at` anywhere in this deployment, so the field this
+      route has always reported was already always null; this keeps reporting the same true
+      absence instead of inventing a value the surface it replaces never had either.
+    - `context_savings` is `total_findings * _TOKENS_PER_AVOIDED_READ` -- the same constant
+      `whats_at_risk`'s own envelope multiplies by, read from `sync.mcp.tools` rather than
+      restated, so the two routes' claims about the cost of a file read they avoided cannot drift
+      apart. Built from the *bounded* total rather than the true one: past `bound` this
+      understates the real savings, which is the honest direction for a number the console
+      already renders beside a total that says it stopped counting early.
+    """
+    total, bound_reached = store.open_findings_count_bounded(bound)
+    vendor_counts = store.open_findings_vendor_counts()
+    summary = store.open_findings_summary()
+    indexed_at = summary["indexed_at"]
+    return {
+        "vendors": [
+            {"vendor_id": vendor_id, "open_finding_count": count}
+            for vendor_id, count in vendor_counts.items()
+        ],
+        "total_findings": total,
+        "total_findings_bound": bound,
+        "total_findings_bound_reached": bound_reached,
+        "indexed_at": indexed_at.isoformat() if indexed_at else None,
+        "feed_fetched_at": None,
+        "binding_source": summary["binding_rung"],
+        "context_savings": total * _TOKENS_PER_AVOIDED_READ,
+    }
 
 
 def detector_accountability(store: GraphStore) -> dict:

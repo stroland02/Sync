@@ -660,6 +660,110 @@ class GraphStore:
         ).fetchone()
         return row["n"]
 
+    def open_findings_count_bounded(self, bound: int) -> tuple[int, bool]:
+        """How many open findings there are, up to `bound` -- and whether the true count reaches
+        it.
+
+        `open_findings_count` is already a single aggregate and materialises nothing, but it
+        still walks the whole join to produce an exact answer, and the fleet screen does not
+        need an exact answer to render -- it needs one fast enough to load in the time an
+        operator will wait. This is Sentry's `count_hits` pattern (`paginator.py:30-48`): the
+        join is truncated with a real SQL `LIMIT` before it is counted, so Postgres stops
+        scanning at `bound` rows however many actually match, and the count costs the same at
+        ten thousand matching rows as it does at one thousand.
+
+        The second element is the fact the count alone cannot carry: whether the scan stopped
+        because it ran out of rows or because it hit `bound`. `n == bound` is the only way to
+        tell -- the `LIMIT` makes `n` never exceed it, so equality means the bound was reached
+        rather than merely approached. A caller that wants a bound-free answer already has
+        `open_findings_count`; this is a different question, not a faster version of that one.
+        """
+        row = self._connect().execute(
+            """
+            SELECT count(*) AS n FROM (
+                SELECT finding.id FROM finding
+                  JOIN call_site ON call_site.id = finding.call_site_id
+                 WHERE finding.status = 'open' AND call_site.retracted_at IS NULL
+                 LIMIT %s
+            ) AS bounded
+            """,
+            (bound,),
+        ).fetchone()
+        n = row["n"]
+        return n, n >= bound
+
+    def open_findings_vendor_counts(self) -> dict[str, int]:
+        """Every open finding, tallied by vendor -- one `GROUP BY`, never a loop over findings.
+
+        The vendor cardinality a customer integrates against does not grow with how many
+        findings are open against it, so this is cheap at any scale `open_findings_count_bounded`
+        is not: a customer with ten thousand open findings across six vendors still returns six
+        rows here. That is what makes it safe to leave this distribution unbounded while the
+        total beside it is truncated -- a `GROUP BY` over the whole table is not the defect a
+        full materialisation of every row into Python is, which is what this replaces: the old
+        `/api/overview` read every open finding, looked up its call site one row at a time, and
+        tallied vendors in a Python loop.
+        """
+        rows = self._connect().execute(
+            """
+            SELECT call_site.vendor_id AS vendor_id, count(*) AS n
+              FROM finding
+              JOIN call_site ON call_site.id = finding.call_site_id
+             WHERE finding.status = 'open' AND call_site.retracted_at IS NULL
+             GROUP BY call_site.vendor_id
+             ORDER BY call_site.vendor_id
+            """
+        ).fetchall()
+        return {row["vendor_id"]: row["n"] for row in rows}
+
+    def open_findings_severity_counts(self) -> dict[str, int]:
+        """Every open finding, tallied by severity -- the same reasoning
+        `open_findings_vendor_counts` carries, over `finding.severity` instead of
+        `call_site.vendor_id`.
+
+        A distribution derived from a bounded page understates whichever severities the ordering
+        happened not to reach before the bound -- exactly the failure `open_findings_count_bounded`
+        is not asked to avoid, because a total is a single honest number at whatever ceiling it
+        stopped at and a breakdown is not: a bounded breakdown presented as the breakdown is a
+        falsehood the truncation introduced, not a smaller version of the truth. So this reads
+        every row's severity, aggregated in SQL, rather than counting a `Counter` in Python over
+        a full fetch of every `Finding`.
+        """
+        rows = self._connect().execute(
+            """
+            SELECT finding.severity AS severity, count(*) AS n
+              FROM finding
+              JOIN call_site ON call_site.id = finding.call_site_id
+             WHERE finding.status = 'open' AND call_site.retracted_at IS NULL
+             GROUP BY finding.severity
+             ORDER BY finding.severity
+            """
+        ).fetchall()
+        return {row["severity"]: row["n"] for row in rows}
+
+    def open_findings_summary(self) -> dict:
+        """The newest `indexed_at` among every open finding's call site, and the rung they all
+        share -- `None` when there are none or when they disagree -- read together in one round
+        trip.
+
+        `call_site_coverage`'s docstring carries why this is one query rather than two: two
+        separate aggregate reads of the same join have no shared snapshot under READ COMMITTED,
+        so a write landing between them could pair one fact with a revision the other fact does
+        not describe -- here that would mean an `indexed_at` newer than the finding set
+        `binding_rung` was computed over. One query has one snapshot, so the two cannot disagree.
+        """
+        row = self._connect().execute(
+            """
+            SELECT max(call_site.indexed_at) AS indexed_at,
+                   CASE WHEN count(DISTINCT finding.binding_rung) = 1
+                        THEN max(finding.binding_rung) END AS binding_rung
+              FROM finding
+              JOIN call_site ON call_site.id = finding.call_site_id
+             WHERE finding.status = 'open' AND call_site.retracted_at IS NULL
+            """
+        ).fetchone()
+        return {"indexed_at": row["indexed_at"], "binding_rung": row["binding_rung"]}
+
     def set_finding_status(self, finding_id: str, status: FindingStatus) -> None:
         self._connect().execute("UPDATE finding SET status = %s WHERE id = %s", (status, finding_id))
 

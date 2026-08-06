@@ -756,6 +756,153 @@ def test_open_findings_count_excludes_a_retracted_call_sites_finding(store):
     assert store.open_findings() == []
 
 
+# -- the overview's total is a bounded SQL count, not a Python min() over an exact one ---------
+
+
+def test_open_findings_count_bounded_reports_the_bound_once_the_true_count_exceeds_it(store):
+    for i in range(5):
+        site_id = store.upsert_call_site(_site(path=f"src/{i}.ts", line=i, content_hash=f"hash-{i}"))
+        store.insert_finding(_finding_for_open(site_id, claim=f"claim-{i}"))
+
+    assert store.open_findings_count_bounded(3) == (3, True)
+
+
+def test_open_findings_count_bounded_reports_the_true_count_when_under_the_bound(store):
+    for i in range(3):
+        site_id = store.upsert_call_site(_site(path=f"src/{i}.ts", line=i, content_hash=f"hash-{i}"))
+        store.insert_finding(_finding_for_open(site_id, claim=f"claim-{i}"))
+
+    assert store.open_findings_count_bounded(10) == (3, False)
+
+
+def test_open_findings_count_bounded_the_bound_reaches_postgres_as_a_real_limit(store, monkeypatch):
+    """A `count(*)` over an *unbounded* subquery followed by `min(n, bound)` in Python returns
+    the same two numbers this method does for every case above -- the only way to tell that
+    implementation apart from Sentry's `count_hits` pattern is to prove the query sent to
+    Postgres actually carries the `LIMIT` that stops the scan at `bound`, which is what keeps
+    this cheap at ten thousand matching rows rather than merely returning the right answer once
+    it has already paid to look at all ten thousand.
+    """
+    site_id = store.upsert_call_site(_site())
+    store.insert_finding(_finding_for_open(site_id))
+    calls = _execute_count(monkeypatch)
+
+    store.open_findings_count_bounded(1)
+
+    assert any("LIMIT" in query for query in calls), "the bound must reach Postgres as a real LIMIT"
+
+
+def test_open_findings_count_bounded_excludes_a_retracted_call_sites_finding(store):
+    site_id = store.upsert_call_site(_site())
+    store.insert_finding(_finding_for_open(site_id))
+    with store._connect().cursor() as cur:
+        cur.execute("UPDATE call_site SET retracted_at = now() WHERE id = %s", (site_id,))
+
+    assert store.open_findings_count_bounded(10) == (0, False)
+
+
+# -- the vendor and severity distributions are real GROUP BYs, never a page tallied in Python --
+
+
+def test_open_findings_vendor_counts_tallies_by_vendor(store):
+    stripe_a = store.upsert_call_site(_site(path="src/a.ts", line=1, vendor_id="stripe"))
+    stripe_b = store.upsert_call_site(_site(path="src/b.ts", line=2, vendor_id="stripe"))
+    shopify = store.upsert_call_site(
+        _site(path="src/c.ts", line=3, vendor_id="shopify", operation_id="GetOrders")
+    )
+    store.insert_finding(_finding_for_open(stripe_a, claim="c1"))
+    store.insert_finding(_finding_for_open(stripe_b, claim="c2"))
+    store.insert_finding(_finding_for_open(shopify, claim="c3"))
+
+    assert store.open_findings_vendor_counts() == {"shopify": 1, "stripe": 2}
+
+
+def test_open_findings_vendor_counts_is_one_query_regardless_of_finding_count(store, monkeypatch):
+    """The defect this replaces read every open finding into Python and tallied vendors in a
+    loop, which materialised a row per finding to answer a question whose cardinality is the
+    number of vendors, not the number of findings. Ten findings against one vendor must cost the
+    same one query as one finding does.
+    """
+    for i in range(10):
+        site_id = store.upsert_call_site(_site(path=f"src/{i}.ts", line=i, content_hash=f"hash-{i}"))
+        store.insert_finding(_finding_for_open(site_id, claim=f"claim-{i}"))
+
+    calls = _execute_count(monkeypatch)
+    counts = store.open_findings_vendor_counts()
+
+    assert counts == {"stripe": 10}
+    assert len(calls) == 1, f"expected one query for ten findings, made {len(calls)}"
+
+
+def test_open_findings_vendor_counts_excludes_a_retracted_call_sites_finding(store):
+    site_id = store.upsert_call_site(_site())
+    store.insert_finding(_finding_for_open(site_id))
+    with store._connect().cursor() as cur:
+        cur.execute("UPDATE call_site SET retracted_at = now() WHERE id = %s", (site_id,))
+
+    assert store.open_findings_vendor_counts() == {}
+
+
+def test_open_findings_severity_counts_tallies_by_severity(store):
+    site_a = store.upsert_call_site(_site(path="src/a.ts", line=1))
+    site_b = store.upsert_call_site(_site(path="src/b.ts", line=2))
+    site_c = store.upsert_call_site(_site(path="src/c.ts", line=3))
+    store.insert_finding(_finding_for_open(site_a, claim="c1", severity="breaking"))
+    store.insert_finding(_finding_for_open(site_b, claim="c2", severity="breaking"))
+    store.insert_finding(_finding_for_open(site_c, claim="c3", severity="warning"))
+
+    assert store.open_findings_severity_counts() == {"breaking": 2, "warning": 1}
+
+
+def test_open_findings_severity_counts_of_an_empty_graph_is_empty(store):
+    assert store.open_findings_severity_counts() == {}
+
+
+# -- one snapshot of the fleet-wide indexed_at and shared binding rung -------------------------
+
+
+def test_open_findings_summary_reports_the_newest_indexed_at_among_open_findings(store):
+    older = store.upsert_call_site(_site(path="src/a.ts", line=1))
+    newer = store.upsert_call_site(_site(path="src/b.ts", line=2))
+    with store._connect().cursor() as cur:
+        cur.execute(
+            "UPDATE call_site SET indexed_at = %s WHERE id = %s",
+            (datetime(2020, 1, 1, tzinfo=timezone.utc), older),
+        )
+        cur.execute(
+            "UPDATE call_site SET indexed_at = %s WHERE id = %s",
+            (datetime(2030, 1, 1, tzinfo=timezone.utc), newer),
+        )
+    store.insert_finding(_finding_for_open(older, claim="c1"))
+    store.insert_finding(_finding_for_open(newer, claim="c2"))
+
+    summary = store.open_findings_summary()
+
+    assert summary["indexed_at"] == datetime(2030, 1, 1, tzinfo=timezone.utc)
+
+
+def test_open_findings_summary_binding_rung_is_none_when_findings_disagree(store):
+    site_a = store.upsert_call_site(_site(path="src/a.ts", line=1))
+    site_b = store.upsert_call_site(_site(path="src/b.ts", line=2))
+    store.insert_finding(_finding_for_open(site_a, claim="c1", binding_rung="static"))
+    store.insert_finding(_finding_for_open(site_b, claim="c2", binding_rung="observed"))
+
+    assert store.open_findings_summary()["binding_rung"] is None
+
+
+def test_open_findings_summary_binding_rung_is_the_shared_rung_when_every_finding_agrees(store):
+    site_a = store.upsert_call_site(_site(path="src/a.ts", line=1))
+    site_b = store.upsert_call_site(_site(path="src/b.ts", line=2))
+    store.insert_finding(_finding_for_open(site_a, claim="c1", binding_rung="observed"))
+    store.insert_finding(_finding_for_open(site_b, claim="c2", binding_rung="observed"))
+
+    assert store.open_findings_summary()["binding_rung"] == "observed"
+
+
+def test_open_findings_summary_of_an_empty_graph_is_all_none(store):
+    assert store.open_findings_summary() == {"indexed_at": None, "binding_rung": None}
+
+
 # -- the observed-shape join collapses from N+1 to one query -----------------------------------
 
 

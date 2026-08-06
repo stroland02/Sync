@@ -21,6 +21,7 @@ from sync.dashboard.graph_views import (
     detector_accountability,
     index_coverage,
     observed_telemetry,
+    overview_summary,
     severity_rollup,
 )
 from sync.graph.store import GraphStore
@@ -618,3 +619,159 @@ def test_severity_rollup_with_no_findings_is_empty_not_an_error(store):
     result = severity_rollup(store)
 
     assert result == {"by_severity": {}, "total": 0}
+
+
+def test_severity_rollup_reaches_the_store_in_a_flat_number_of_queries(store, monkeypatch):
+    """The defect this replaces read every open `Finding` into Python and tallied severities in
+    a `Counter` -- one row materialised per finding for a question whose cardinality is the
+    number of severities. Ten findings must not cost more round trips than one does.
+    """
+    for i in range(10):
+        site_id = store.upsert_call_site(_site(path=f"src/{i}.ts", line=i))
+        store.insert_finding(_finding(site_id, claim=f"c{i}"))
+
+    calls = _query_count(monkeypatch)
+    result = severity_rollup(store)
+
+    assert result["total"] == 10
+    assert len(calls) <= 2, f"expected at most two queries for ten findings, made {len(calls)}"
+
+
+# -- overview_summary ----------------------------------------------------------------
+
+
+def test_overview_summary_tallies_vendors_as_a_real_group_by(store):
+    stripe_a = store.upsert_call_site(_site(path="src/a.ts", line=1, vendor_id="stripe"))
+    stripe_b = store.upsert_call_site(_site(path="src/b.ts", line=2, vendor_id="stripe"))
+    shopify = store.upsert_call_site(
+        _site(path="src/c.ts", line=3, vendor_id="shopify", operation_id="GetOrders")
+    )
+    store.insert_finding(_finding(stripe_a, claim="c1"))
+    store.insert_finding(_finding(stripe_b, claim="c2"))
+    store.insert_finding(_finding(shopify, claim="c3"))
+
+    result = overview_summary(store)
+
+    vendors = {row["vendor_id"]: row["open_finding_count"] for row in result["vendors"]}
+    assert vendors == {"stripe": 2, "shopify": 1}
+    assert result["total_findings"] == 3
+
+
+def test_overview_summary_total_is_bounded_but_the_vendor_distribution_is_not(store):
+    """The caveat section 24.2 states in hard: a distribution must never be derived from a
+    bounded page. Three findings against one vendor and two against another, with `bound=3`,
+    must report a bounded `total_findings` of 3 while `vendors` still sums to the true
+    population of 5 -- proving the breakdown was computed by its own unbounded `GROUP BY`
+    rather than tallied from whichever rows the bounded count happened to touch.
+    """
+    for i in range(3):
+        site_id = store.upsert_call_site(_site(path=f"src/a{i}.ts", line=i, vendor_id="stripe"))
+        store.insert_finding(_finding(site_id, claim=f"stripe-{i}"))
+    for i in range(2):
+        site_id = store.upsert_call_site(
+            _site(path=f"src/b{i}.ts", line=i, vendor_id="shopify", operation_id="GetOrders")
+        )
+        store.insert_finding(_finding(site_id, claim=f"shopify-{i}"))
+
+    result = overview_summary(store, bound=3)
+
+    assert result["total_findings"] == 3
+    assert result["total_findings_bound"] == 3
+    assert result["total_findings_bound_reached"] is True
+    vendors = {row["vendor_id"]: row["open_finding_count"] for row in result["vendors"]}
+    assert vendors == {"stripe": 3, "shopify": 2}
+    assert sum(vendors.values()) == 5
+
+
+def test_overview_summary_bound_not_reached_when_the_true_count_is_under_it(store):
+    site_id = store.upsert_call_site(_site())
+    store.insert_finding(_finding(site_id))
+
+    result = overview_summary(store, bound=1000)
+
+    assert result["total_findings"] == 1
+    assert result["total_findings_bound"] == 1000
+    assert result["total_findings_bound_reached"] is False
+
+
+def test_overview_summary_context_savings_is_derived_from_the_bounded_total(store):
+    from sync.mcp.tools import _TOKENS_PER_AVOIDED_READ
+
+    for i in range(4):
+        site_id = store.upsert_call_site(_site(path=f"src/{i}.ts", line=i))
+        store.insert_finding(_finding(site_id, claim=f"c{i}"))
+
+    result = overview_summary(store, bound=2)
+
+    assert result["total_findings"] == 2
+    assert result["context_savings"] == 2 * _TOKENS_PER_AVOIDED_READ
+
+
+def test_overview_summary_indexed_at_and_binding_source_reflect_every_open_finding(store):
+    site_a = store.upsert_call_site(_site(path="src/a.ts", line=1))
+    site_b = store.upsert_call_site(_site(path="src/b.ts", line=2))
+    with store._connect().cursor() as cur:
+        cur.execute(
+            "UPDATE call_site SET indexed_at = %s WHERE id = %s",
+            (datetime(2030, 1, 1, tzinfo=timezone.utc), site_b),
+        )
+    store.insert_finding(_finding(site_a, claim="c1", binding_rung="observed"))
+    store.insert_finding(_finding(site_b, claim="c2", binding_rung="observed"))
+
+    result = overview_summary(store)
+
+    assert result["indexed_at"] == "2030-01-01T00:00:00+00:00"
+    assert result["binding_source"] == "observed"
+
+
+def test_overview_summary_binding_source_is_none_when_findings_disagree(store):
+    site_a = store.upsert_call_site(_site(path="src/a.ts", line=1))
+    site_b = store.upsert_call_site(_site(path="src/b.ts", line=2))
+    store.insert_finding(_finding(site_a, claim="c1", binding_rung="static"))
+    store.insert_finding(_finding(site_b, claim="c2", binding_rung="observed"))
+
+    result = overview_summary(store)
+
+    assert result["binding_source"] is None
+
+
+def test_overview_summary_feed_fetched_at_is_always_null(store):
+    """The frozen `GraphSurface` this replaces is constructed with no `feed_fetched_at` anywhere
+    in this deployment (`sync/api/__main__.py`), so the field this route has always reported was
+    already always null; this view keeps reporting the same true absence rather than inventing a
+    value the frozen surface never had either.
+    """
+    result = overview_summary(store)
+
+    assert result["feed_fetched_at"] is None
+
+
+def test_overview_summary_with_no_findings_is_empty_not_an_error(store):
+    result = overview_summary(store)
+
+    assert result == {
+        "vendors": [],
+        "total_findings": 0,
+        "total_findings_bound": 1000,
+        "total_findings_bound_reached": False,
+        "indexed_at": None,
+        "feed_fetched_at": None,
+        "binding_source": None,
+        "context_savings": 0,
+    }
+
+
+def test_overview_summary_reaches_the_store_in_a_flat_number_of_queries(store, monkeypatch):
+    """The defect this replaces read every open finding, looked up its call site one row at a
+    time and counted vendors in a Python loop -- a route whose query count grew with the number
+    of open findings. Ten open findings must cost the same handful of queries as one does.
+    """
+    for i in range(10):
+        site_id = store.upsert_call_site(_site(path=f"src/{i}.ts", line=i))
+        store.insert_finding(_finding(site_id, claim=f"c{i}"))
+
+    calls = _query_count(monkeypatch)
+    result = overview_summary(store)
+
+    assert result["total_findings"] == 10
+    assert len(calls) <= 4, f"expected at most four queries for ten findings, made {len(calls)}"

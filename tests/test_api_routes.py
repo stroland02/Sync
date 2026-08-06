@@ -158,6 +158,19 @@ def _fake_severity_reader() -> dict[str, Any]:
     return {"by_severity": {}, "total": 0}
 
 
+def _fake_overview_reader() -> dict[str, Any]:
+    return {
+        "vendors": [],
+        "total_findings": 0,
+        "total_findings_bound": 1000,
+        "total_findings_bound_reached": False,
+        "indexed_at": None,
+        "feed_fetched_at": None,
+        "binding_source": None,
+        "context_savings": 0,
+    }
+
+
 def _build_app(
     *,
     surface: GraphSurface,
@@ -170,6 +183,7 @@ def _build_app(
     observed_reader=_fake_observed_reader,
     detector_reader=_fake_detector_reader,
     severity_reader=_fake_severity_reader,
+    overview_reader=_fake_overview_reader,
 ) -> Starlette:
     """`create_app` with every reader defaulted to a fake, so a test naming one override is
     not forced to restate the other nine.
@@ -190,6 +204,7 @@ def _build_app(
         observed_reader=observed_reader,
         detector_reader=detector_reader,
         severity_reader=severity_reader,
+        overview_reader=overview_reader,
     )
 
 
@@ -201,103 +216,63 @@ def _client(**graph_kw) -> TestClient:
 
 
 # -- overview -------------------------------------------------------------------
+#
+# `/api/overview` no longer reaches `GraphSurface.whats_at_risk` at all -- `sync.mcp.tools` is
+# frozen and `whats_at_risk` always walks every open finding doing one `get_call_site` round trip
+# per row, so no `limit` bounds the scan underneath it. `sync.dashboard.graph_views.overview_summary`
+# answers the same question straight from `GraphStore` in real SQL instead (its own docstring and
+# `tests/test_graph_views.py` carry the bounded-count and unbounded-distribution behaviour); these
+# tests hold only the route's half of the contract -- it forwards its `overview_reader` verbatim,
+# merges in `severity_counts` from its own separate reader, and reaches each reader exactly once.
 
 
-def test_overview_returns_vendors_and_counts_from_the_surface():
-    site_a = _site("s1", vendor="stripe")
-    site_b = _site("s2", vendor="stripe", path="src/other.ts", line=44)
-    site_c = _site("s3", vendor="shopify", op="GetOrders")
-    change_stripe = _change("c1", vendor="stripe")
-    change_shopify = _change("c2", vendor="shopify", op="GetOrders")
-    findings = [
-        _finding("f1", "s1", "c1"),
-        _finding("f2", "s2", "c1"),
-        _finding("f3", "s3", "c2"),
-    ]
-    client = _client(
-        findings=findings,
-        sites=[site_a, site_b, site_c],
-        changes=[change_stripe, change_shopify],
+def test_overview_returns_the_overview_readers_payload():
+    payload = {
+        "vendors": [{"vendor_id": "stripe", "open_finding_count": 2}],
+        "total_findings": 2,
+        "total_findings_bound": 1000,
+        "total_findings_bound_reached": False,
+        "indexed_at": "2026-07-28T06:00:00+00:00",
+        "feed_fetched_at": None,
+        "binding_source": "static",
+        "context_savings": 800,
+    }
+    app = _build_app(
+        surface=GraphSurface(FakeGraph(), feed_fetched_at=FETCHED), overview_reader=lambda: payload
     )
+    client = TestClient(app)
 
     response = client.get("/api/overview")
 
     assert response.status_code == 200
     body = response.json()
-    assert body["total_findings"] == 3
-    vendors = {v["vendor_id"]: v for v in body["vendors"]}
-    assert vendors["stripe"]["open_finding_count"] == 2
-    assert vendors["shopify"]["open_finding_count"] == 1
+    for key, value in payload.items():
+        assert body[key] == value, key
 
 
-def test_overview_carries_the_surfaces_envelope_fields_unaltered():
-    site = _site("s1")
-    change = _change("c1")
-    client = _client(
-        findings=[_finding("f1", "s1", "c1")],
-        sites=[site],
-        changes=[change],
+def test_overview_reports_the_bound_and_whether_it_was_reached():
+    payload = {
+        **_fake_overview_reader(),
+        "total_findings": 1000,
+        "total_findings_bound": 1000,
+        "total_findings_bound_reached": True,
+    }
+    app = _build_app(
+        surface=GraphSurface(FakeGraph(), feed_fetched_at=FETCHED), overview_reader=lambda: payload
     )
+    client = TestClient(app)
 
     body = client.get("/api/overview").json()
 
-    assert body["feed_fetched_at"] == FETCHED.isoformat()
-
-
-def test_overview_carries_the_envelopes_context_savings_not_a_hardcoded_number():
-    # `overview` composes its payload by hand from `whats_at_risk`'s page; the page it reads
-    # already carries a real `context_savings` from the envelope, and the route must forward
-    # that value rather than drop it or invent one.
-    site = _site("s1")
-    change = _change("c1")
-    findings = [_finding("f1", "s1", "c1")]
-    surface = GraphSurface(FakeGraph(findings=findings, sites=[site], changes=[change]), feed_fetched_at=FETCHED)
-    client = TestClient(_build_app(surface=surface))
-    expected = surface.whats_at_risk(limit=_SCAN_LIMIT, offset=0)["context_savings"]
-
-    body = client.get("/api/overview").json()
-
-    assert body["context_savings"] == expected
-
-
-def test_overview_aggregates_past_the_scan_limit_not_just_the_first_page():
-    # `_page` sets `total` to the full unpaginated count no matter what `limit` was asked
-    # for, so a single call at `limit=_SCAN_LIMIT` used to build `vendors` from only the
-    # first `_SCAN_LIMIT` rows while reporting `total_findings` from the true count -- the
-    # two halves of the payload disagreed once open findings passed the limit. A vendor
-    # named only beyond row `_SCAN_LIMIT` is the sharpest case: it vanished from `vendors`
-    # entirely while still being counted in `total_findings`.
-    stripe_site = _site("s-stripe", vendor="stripe")
-    stripe_change = _change("c-stripe", vendor="stripe")
-    shopify_site = _site(
-        "s-shopify", vendor="shopify", op="GetOrders", path="src/orders.ts", line=9
-    )
-    shopify_change = _change("c-shopify", vendor="shopify", op="GetOrders")
-
-    findings = [_finding(f"f-stripe-{i}", "s-stripe", "c-stripe") for i in range(_SCAN_LIMIT)]
-    findings.append(_finding("f-shopify-0", "s-shopify", "c-shopify"))
-
-    client = _client(
-        findings=findings,
-        sites=[stripe_site, shopify_site],
-        changes=[stripe_change, shopify_change],
-    )
-
-    body = client.get("/api/overview").json()
-
-    assert body["total_findings"] == _SCAN_LIMIT + 1
-    vendors = {v["vendor_id"]: v for v in body["vendors"]}
-    assert vendors["stripe"]["open_finding_count"] == _SCAN_LIMIT
-    assert vendors["shopify"]["open_finding_count"] == 1
+    assert body["total_findings"] == 1000
+    assert body["total_findings_bound"] == 1000
+    assert body["total_findings_bound_reached"] is True
 
 
 def test_overview_includes_the_severity_counts_from_its_own_reader():
-    site = _site("s1")
-    change = _change("c1")
     payload = {"by_severity": {"breaking": 3, "warning": 1}, "total": 4}
     app = _build_app(
-        surface=GraphSurface(FakeGraph(findings=[_finding("f1", "s1", "c1")], sites=[site], changes=[change]), feed_fetched_at=FETCHED),
-        severity_reader=lambda: payload,
+        surface=GraphSurface(FakeGraph(), feed_fetched_at=FETCHED), severity_reader=lambda: payload
     )
     client = TestClient(app)
 
@@ -321,6 +296,36 @@ def test_overview_reaches_its_severity_reader_exactly_once_with_no_arguments():
     client.get("/api/overview")
 
     assert calls == [None]
+
+
+def test_overview_reaches_its_overview_reader_exactly_once_with_no_arguments():
+    calls: list[None] = []
+
+    def overview_reader():
+        calls.append(None)
+        return _fake_overview_reader()
+
+    app = _build_app(
+        surface=GraphSurface(FakeGraph(), feed_fetched_at=FETCHED), overview_reader=overview_reader
+    )
+    client = TestClient(app)
+
+    client.get("/api/overview")
+
+    assert calls == [None]
+
+
+def test_overview_never_reaches_the_frozen_surface():
+    # The behavioural half of the same claim `overview_summary`'s docstring makes: this route
+    # must not fall back to `whats_at_risk` for anything, including on an overview reader that
+    # returns an empty payload -- a surface reached here at all is the scan defect regressing.
+    surface = RecordingSurface(GraphSurface(FakeGraph(), feed_fetched_at=FETCHED))
+    app = _build_app(surface=surface)
+    client = TestClient(app)
+
+    client.get("/api/overview")
+
+    assert surface.method_names() == set()
 
 
 # -- vendor detail --------------------------------------------------------------
@@ -1030,6 +1035,7 @@ class _RecordingClient(NamedTuple):
     observed_reads: list[str]
     detector_reads: list[None]
     severity_reads: list[None]
+    overview_reads: list[None]
 
 
 def _recording_client(**graph_kw) -> _RecordingClient:
@@ -1043,6 +1049,7 @@ def _recording_client(**graph_kw) -> _RecordingClient:
     observed_reads: list[str] = []
     detector_reads: list[None] = []
     severity_reads: list[None] = []
+    overview_reads: list[None] = []
 
     def workflow_reader(finding_id: str):
         workflow_reads.append(finding_id)
@@ -1080,6 +1087,10 @@ def _recording_client(**graph_kw) -> _RecordingClient:
         severity_reads.append(None)
         return _fake_severity_reader()
 
+    def overview_reader():
+        overview_reads.append(None)
+        return _fake_overview_reader()
+
     app = create_app(
         surface=surface,
         workflow_reader=workflow_reader,
@@ -1091,10 +1102,11 @@ def _recording_client(**graph_kw) -> _RecordingClient:
         observed_reader=observed_reader,
         detector_reader=detector_reader,
         severity_reader=severity_reader,
+        overview_reader=overview_reader,
     )
     return _RecordingClient(
         TestClient(app), surface, workflow_reads, runs_reads, corpus_reads, repositories_reads,
-        binding_reads, coverage_reads, observed_reads, detector_reads, severity_reads,
+        binding_reads, coverage_reads, observed_reads, detector_reads, severity_reads, overview_reads,
     )
 
 
@@ -1107,7 +1119,7 @@ def test_no_route_reaches_past_the_read_surface():
     change = _change("c1")
     (
         client, surface, workflow_reads, runs_reads, corpus_reads, repositories_reads,
-        binding_reads, coverage_reads, observed_reads, detector_reads, severity_reads,
+        binding_reads, coverage_reads, observed_reads, detector_reads, severity_reads, overview_reads,
     ) = _recording_client(findings=[_finding("f1", "s1", "c1")], sites=[site], changes=[change])
 
     assert client.get("/api/overview").status_code == 200
@@ -1137,6 +1149,7 @@ def test_no_route_reaches_past_the_read_surface():
     assert len(observed_reads) == 1, "the observed route must reach its own reader exactly once"
     assert len(detector_reads) == 1, "the detectors route must reach its own reader exactly once"
     assert len(severity_reads) == 1, "the overview route must reach the severity reader exactly once"
+    assert len(overview_reads) == 1, "the overview route must reach the overview reader exactly once"
 
 
 def test_a_404_route_reaches_past_nothing_either():
