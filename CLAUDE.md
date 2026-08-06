@@ -174,6 +174,34 @@ is why the gate that shipped is a `PreToolUse` hook instead
 
 `temperature`, `top_p`, and `budget_tokens` return HTTP 400 on this model on either surface. Steer with prompting instead. Thinking is on by default, and on the Messages API `max_tokens` caps thinking plus output together, which is why that ceiling is generous.
 
+## Technical debt is the scaling constraint, and it is paid down continuously
+
+This is the platform's integrity condition, not a preference. A product stops scaling when the cost
+of the next change is set by the accumulated shape of the last hundred, and that is what debt is.
+Sync is built by one person; there is no team here to absorb an interest payment later. So the
+standing instruction is to keep debt near zero as the work happens, rather than to schedule paying
+it down.
+
+What that means concretely, and each of these has cost this repository time:
+
+- **Factor at the second use, not the third.** The third is where the two copies have already
+  drifted, and reconciling drift is a different and more expensive job than extracting a function.
+- **Delete rather than deprecate.** A dead path still typechecks, still gets read, still gets
+  maintained by someone who cannot tell it is dead. `retracted_at` survived removal from the payload
+  because a TypeScript type kept describing it and the build stayed green.
+- **A fact written twice will disagree with itself.** This is the same rule as *prefer a pointer to
+  a copy* in *Where a convention goes*, and it is the most expensive form of debt here because the
+  disagreement is silent.
+- **Build for the case that exists.** An abstraction, a flag, or a hook added for an anticipated
+  second caller is debt with no asset behind it. Wait for the caller.
+- **A workaround ships with a backlog entry naming what retires it, or it does not ship.** The
+  oasdiff idempotency exemption is the model: written down, scoped, with the condition that ends it.
+
+The counterweight, because this instruction can be over-applied: the test is whether the debt would
+make a later change slower or a defect quieter. Work that fails that test is polish, and polish
+competes with the milestone. Nine ticks went to design-system refinement while two specified levels
+of the console did not exist.
+
 ## Code style
 
 Comment to state a constraint the code cannot show — never to narrate what the next line does, where something came from, or why a change is correct. That last one is talking to a reviewer, and it becomes noise the moment the pull request merges.
