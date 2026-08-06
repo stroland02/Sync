@@ -419,3 +419,180 @@ def test_the_colour_literal_guard_permits_colour_mix_composed_from_tokens(tmp_pa
     violations = _colour_literal_violations(tmp_path)
 
     assert not violations
+
+
+# -- assertion 6: no arbitrary font size beneath the ramp's floor --------------------------------
+#
+# Both guards below landed with the 2026-08-06 conformance measurement
+# (`docs/superpowers/reports/2026-08-06-console-conformance.md`), which read every visible
+# element on all nine routes through `getComputedStyle` and found the rendered census already
+# inside both limits: no size under 12px anywhere, and no weight above 600 anywhere. They exist
+# to keep it that way, because both limits are the kind that regress under pressure rather than
+# by mistake -- a crowded table wants a smaller step and a heading that will not stand out wants
+# a heavier one, and each is one class away.
+
+
+def _text_size_floor_px() -> float:
+    """The floor from DESIGN.md's Type table, rather than a 12 written here.
+
+    The row is the one the table itself marks as the floor; reading the number off that mark
+    means a decision to move the floor moves this guard with it, and a decision to remove the
+    mark fails here loudly instead of silently freezing an old number.
+    """
+    match = re.search(
+        r"\|\s*`--text-\w+`\s*\|\s*(\d+)px\s*\|[^|]*\|[^|]*\|[^|]*\|[^|\n]*\*\*The floor\.\*\*",
+        _design_md_text(),
+    )
+    assert match, "DESIGN.md's Type table no longer marks a step as **The floor.**"
+    return float(match.group(1))
+
+
+# `text-[…]` is the only spelling that reaches a size off the ramp: the six named utilities and
+# Tailwind's stock steps all resolve to declared values. A bracket carrying anything but a length
+# is a different utility (`text-[color-mix(…)]`, `text-[--var]`) and is not this guard's business.
+_ARBITRARY_TEXT_SIZE = re.compile(r"(?<![\w-])text-\[(\d*\.?\d+)(px|rem)\]")
+
+
+def _undersized_text_violations(root: Path, floor_px: float) -> list[str]:
+    violations = []
+    for path in _iter_source_files(root, suffixes=(".ts", ".tsx", ".css")):
+        text = _read_stripped(path)
+        for match in _ARBITRARY_TEXT_SIZE.finditer(text):
+            px = float(match.group(1)) * (16 if match.group(2) == "rem" else 1)
+            if px >= floor_px:
+                continue
+            violations.append(
+                f"{path}:{_line_at(text, match.start())} renders {px:g}px as "
+                f"`{match.group(0)}`, beneath DESIGN.md's {floor_px:g}px floor"
+            )
+    return violations
+
+
+def test_nothing_renders_beneath_the_text_size_floor():
+    _require_web_src()
+    _require_examined(_iter_source_files(_WEB_SRC, suffixes=(".ts", ".tsx", ".css")), _WEB_SRC)
+    violations = _undersized_text_violations(_WEB_SRC, _text_size_floor_px())
+    assert not violations, (
+        "12px is a floor, not the small end of a range, and being on DESIGN.md's ramp does not "
+        "exempt a value from it -- a table that has run out of width takes fewer columns or a "
+        "narrower one, never a smaller step:\n" + "\n".join(violations)
+    )
+
+
+def test_the_text_size_guard_rejects_a_ten_pixel_step(tmp_path: Path) -> None:
+    (tmp_path / "crowded-table.tsx").write_text(
+        '<td className="text-[10px] font-mono">{row.file}</td>\n', encoding="utf-8"
+    )
+
+    violations = _undersized_text_violations(tmp_path, 12)
+
+    assert violations and "text-[10px]" in violations[0]
+
+
+def test_the_text_size_guard_reads_a_rem_spelling_too(tmp_path: Path) -> None:
+    # `text-[0.625rem]` is 10px under a 16px root and would otherwise walk straight past a guard
+    # that only knew the `px` spelling.
+    (tmp_path / "badge.tsx").write_text(
+        '<span className="text-[0.625rem]">static</span>\n', encoding="utf-8"
+    )
+
+    violations = _undersized_text_violations(tmp_path, 12)
+
+    assert violations and "10px" in violations[0]
+
+
+def test_the_text_size_guard_permits_a_size_at_or_above_the_floor(tmp_path: Path) -> None:
+    (tmp_path / "ok.tsx").write_text(
+        '<p className="text-[12px]">at the floor</p>\n'
+        '<p className="text-[1rem]">above it</p>\n'
+        '<p className="text-[color-mix(in_oklch,var(--color-ink),transparent)]">not a size</p>\n',
+        encoding="utf-8",
+    )
+
+    violations = _undersized_text_violations(tmp_path, 12)
+
+    assert not violations
+
+
+# -- assertion 7: no font weight above the ramp's heaviest step ----------------------------------
+
+
+_TAILWIND_WEIGHTS = {
+    "thin": 100, "extralight": 200, "light": 300, "normal": 400, "medium": 500,
+    "semibold": 600, "bold": 700, "extrabold": 800, "black": 900,
+}
+_FONT_WEIGHT = re.compile(
+    r"(?<![\w-])font-(?:(" + "|".join(_TAILWIND_WEIGHTS) + r")|\[(\d{3})\])(?![\w-])"
+)
+
+
+def _weight_ceiling() -> int:
+    """The heaviest weight DESIGN.md's Type table declares.
+
+    Section 8 of `2026-08-05-sync-console-architecture.md` measured two weights and no 600 on
+    three landing pages; section 15.1 overturned that against a control plane and against this
+    console's own 2.67:1 type range, where weight does work size cannot. So the ceiling belongs
+    to the token contract, and this reads it from there rather than restating either number.
+    """
+    weights = [int(w) for w in re.findall(r"\| `--text-\w+` \|[^|]*\|[^|]*\| (\d{3}) \|", _design_md_text())]
+    assert weights, "DESIGN.md's Type table no longer declares a numeric weight on any step"
+    return max(weights)
+
+
+def _heavy_weight_violations(root: Path, ceiling: int) -> list[str]:
+    violations = []
+    for path in _iter_source_files(root, suffixes=(".ts", ".tsx", ".css")):
+        text = _read_stripped(path)
+        for match in _FONT_WEIGHT.finditer(text):
+            weight = _TAILWIND_WEIGHTS[match.group(1)] if match.group(1) else int(match.group(2))
+            if weight <= ceiling:
+                continue
+            violations.append(
+                f"{path}:{_line_at(text, match.start())} asks for weight {weight} as "
+                f"`{match.group(0)}`; DESIGN.md's heaviest step is {ceiling}"
+            )
+    return violations
+
+
+def test_no_font_weight_above_the_heaviest_declared_step():
+    _require_web_src()
+    _require_examined(_iter_source_files(_WEB_SRC, suffixes=(".ts", ".tsx", ".css")), _WEB_SRC)
+    violations = _heavy_weight_violations(_WEB_SRC, _weight_ceiling())
+    assert not violations, (
+        "weight is a channel this console spends deliberately, and it has exactly three values "
+        "to spend: 400, 500 and the 600 its four heading steps carry. A fourth is a heading role "
+        "argued in DESIGN.md, not a class:\n" + "\n".join(violations)
+    )
+
+
+def test_the_weight_guard_rejects_font_bold(tmp_path: Path) -> None:
+    (tmp_path / "headline.tsx").write_text(
+        '<h1 className="text-page font-bold">Fleet</h1>\n', encoding="utf-8"
+    )
+
+    violations = _heavy_weight_violations(tmp_path, 600)
+
+    assert violations and "700" in violations[0]
+
+
+def test_the_weight_guard_rejects_a_bracketed_weight(tmp_path: Path) -> None:
+    (tmp_path / "figure.tsx").write_text(
+        '<span className="text-figure font-[800]">4,000</span>\n', encoding="utf-8"
+    )
+
+    violations = _heavy_weight_violations(tmp_path, 600)
+
+    assert violations and "800" in violations[0]
+
+
+def test_the_weight_guard_permits_the_three_weights_the_console_spends(tmp_path: Path) -> None:
+    (tmp_path / "row.tsx").write_text(
+        '<th className="font-medium">Rung</th>\n'
+        '<h2 className="font-semibold">Errors and incidents</h2>\n'
+        '<p className="font-normal">prose</p>\n',
+        encoding="utf-8",
+    )
+
+    violations = _heavy_weight_violations(tmp_path, 600)
+
+    assert not violations
