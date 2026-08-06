@@ -11,7 +11,6 @@ import { Link, Outlet } from "react-router"
 
 import { ErrorBoundary } from "@/components/error-boundary"
 import { ErrorSurface } from "@/components/error-surface"
-import { ThemeToggle } from "@/components/theme-toggle"
 import { CommandPalette } from "@/layouts/command-palette"
 import { SiteNav } from "@/layouts/site-nav"
 
@@ -38,7 +37,6 @@ export function AppShell() {
               </kbd>{" "}
               to jump to a screen
             </span>
-            <ThemeToggle />
           </div>
         </div>
       </header>

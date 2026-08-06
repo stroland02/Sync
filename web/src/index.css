@@ -1,98 +1,99 @@
 @import "tailwindcss";
 
-/* Selects descendants of `.dark` rather than `.dark` itself, so the class has to
-   land on <html> for the document to be covered. */
+/* The class the shadcn catalog's `dark:` utilities key off (button.tsx, input.tsx,
+   textarea.tsx, input-group.tsx elsewhere in this tree read it). Selects descendants of
+   `.dark` rather than `.dark` itself, so the class has to land on an ancestor -- `<html>`,
+   stamped there once in index.html -- for the document to be covered. The console is
+   dark-only and the class is never removed, so this variant now names a permanent state
+   rather than a toggle; it stays declared because those `dark:` utilities are compiled
+   against it and this file does not own the components that use them. */
 @custom-variant dark (&:is(.dark *));
 
-/* Colours are literals, never `var()`. A custom property whose value is `var(--x)`
-   is substituted where it is *declared*, so a token declared at `:root` as
-   `var(--x)` keeps the `:root` result even on an element where `.dark` redefined
-   `--x`; and the chart wrapper reads these through `getComputedStyle`, which
-   returns declared text rather than a resolved colour. DESIGN.md at the
-   repository root carries what each token is for and the contrast computed for
-   it. */
-/* `static`, not the bare directive: Tailwind v4 otherwise treats a theme variable
-   as unused, and drops it from output, whenever no generated utility class
-   references it. Several tokens here are read only dynamically, through
-   `getComputedStyle` in echart.tsx, or are reserved for a component that does not
-   exist yet — a bare `@theme` block silently ships those with no light-mode value
-   at all. */
+/* Colours are literals, never `var()`. A custom property whose value is `var(--x)` is
+   substituted where it is *declared*, and the chart wrapper reads these through
+   `getComputedStyle` in echart.tsx, which returns declared text rather than a resolved
+   colour -- a `var()` reference would come back unresolved. DESIGN.md at the repository
+   root carries what each token is for and the contrast computed for it. */
+/* `static`, not the bare directive: Tailwind v4 otherwise treats a theme variable as unused,
+   and drops it from output, whenever no generated utility class references it. Several
+   tokens here are read only dynamically, through `getComputedStyle` in echart.tsx, or are
+   reserved for a component that does not exist yet -- a bare `@theme` block silently ships
+   those with no value at all. */
 @theme static {
   /* Nine neutral steps, ordered back to front. Achromatic on purpose: the brand
      hue is the only chromatic thing on a normal screen. */
-  --color-surface-sunken: oklch(0.972 0 0);
-  --color-surface: oklch(1 0 0);
-  --color-surface-subtle: oklch(0.962 0 0);
-  --color-surface-emphasis: oklch(0.93 0 0);
-  --color-line: oklch(0.885 0 0);
-  --color-line-strong: oklch(0.615 0 0);
-  --color-ink-muted: oklch(0.485 0 0);
-  --color-ink-secondary: oklch(0.4 0 0);
-  --color-ink: oklch(0.2 0 0);
+  --color-surface-sunken: oklch(0.155 0 0);
+  --color-surface: oklch(0.205 0 0);
+  --color-surface-subtle: oklch(0.255 0 0);
+  --color-surface-emphasis: oklch(0.305 0 0);
+  --color-line: oklch(0.345 0 0);
+  --color-line-strong: oklch(0.578 0 0);
+  --color-ink-muted: oklch(0.715 0 0);
+  --color-ink-secondary: oklch(0.83 0 0);
+  --color-ink: oklch(0.955 0 0);
 
   /* 265 degrees, outside the 30-145 arc the status palette occupies, so the
      brand can never be read as a verdict. */
-  --color-brand: oklch(0.475 0.19 265);
-  --color-brand-surface: oklch(0.955 0.017 265);
+  --color-brand: oklch(0.775 0.113 265);
+  --color-brand-surface: oklch(0.285 0.055 265);
 
-  /* Reserved. One value in both modes, because a status colour that shifts with
-     the theme is a different claim on a different screen. Never a series
-     colour; never rendered without an icon and a word. */
+  /* Reserved. One value regardless of surface, because a status colour that shifts
+     is a different claim on a different screen. Never a series colour; never
+     rendered without an icon and a word. */
   --color-good: #0ca30c;
   --color-warning: #fab219;
   --color-serious: #ec835a;
   --color-critical: #d03b3b;
 
-  /* The text-and-icon step of each status hue. The mark above is sized for area;
-     warning and serious sit below 3:1 on a light surface by design. */
-  --color-good-ink: #006300;
-  --color-warning-ink: oklch(0.5 0.105 72);
-  --color-serious-ink: oklch(0.51 0.145 42);
-  --color-critical-ink: oklch(0.51 0.19 27.5);
+  /* The text-and-icon step of each status hue. */
+  --color-good-ink: oklch(0.72 0.17 145);
+  --color-warning-ink: #fab219;
+  --color-serious-ink: #ec835a;
+  --color-critical-ink: oklch(0.72 0.155 27.5);
 
-  --color-good-surface: oklch(0.958 0.033 145);
-  --color-warning-surface: oklch(0.968 0.033 85);
-  --color-serious-surface: oklch(0.962 0.02 45);
-  --color-critical-surface: oklch(0.958 0.02 27.5);
+  --color-good-surface: oklch(0.29 0.05 145);
+  --color-warning-surface: oklch(0.3 0.05 78);
+  --color-serious-surface: oklch(0.298 0.05 42);
+  --color-critical-surface: oklch(0.29 0.055 27.5);
 
   /* Fixed slot order, assigned in sequence, never cycled. The order is the
      colour-blindness gate, not a preference: re-ordering these requires
-     re-running the validator in both modes. */
-  --color-series-1: #1baf7a;
-  --color-series-2: #eb6834;
-  --color-series-3: #2a78d6;
+     re-running the validator. */
+  --color-series-1: #199e70;
+  --color-series-2: #d95926;
+  --color-series-3: #3987e5;
   --color-series-4: #008300;
-  --color-series-5: #e87ba4;
-  --color-series-6: #eda100;
-  --color-series-7: #4a3aa7;
-  --color-series-8: #e34948;
+  --color-series-5: #d55181;
+  --color-series-6: #c98500;
+  --color-series-7: #9085e9;
+  --color-series-8: #e66767;
 
-  --color-chart-grid: oklch(0.925 0 0);
-  --color-chart-axis: oklch(0.8 0 0);
+  --color-chart-grid: oklch(0.29 0 0);
+  --color-chart-axis: oklch(0.42 0 0);
 
   /* The drop colour of the floating level, carried as a colour token because
      the `shadow-*` utility resolves its theme value at build time: a literal
-     written into --shadow-float is baked into the class and the dark column
-     never reaches it, whereas a colour token is resolved per element. */
-  --color-shadow: oklch(0.2 0 0 / 0.3);
+     written into --shadow-float would be baked into the class, whereas a
+     colour token is resolved per element. */
+  --color-shadow: oklch(0 0 0 / 0.72);
 
   /* The names the shadcn catalog consumes. Each is a position on the ramp
      above; renaming one breaks the catalog, so they stay. */
-  --color-background: oklch(0.972 0 0);
-  --color-foreground: oklch(0.2 0 0);
-  --color-card: oklch(1 0 0);
-  --color-card-foreground: oklch(0.2 0 0);
-  --color-muted: oklch(0.962 0 0);
-  --color-muted-foreground: oklch(0.485 0 0);
-  --color-border: oklch(0.885 0 0);
-  --color-input: oklch(0.615 0 0);
-  --color-ring: oklch(0.475 0.19 265);
-  --color-primary: oklch(0.475 0.19 265);
-  --color-primary-foreground: oklch(1 0 0);
-  --color-secondary: oklch(0.962 0 0);
-  --color-secondary-foreground: oklch(0.2 0 0);
-  --color-destructive: oklch(0.51 0.19 27.5);
-  --color-destructive-foreground: oklch(1 0 0);
+  --color-background: oklch(0.155 0 0);
+  --color-foreground: oklch(0.955 0 0);
+  --color-card: oklch(0.205 0 0);
+  --color-card-foreground: oklch(0.955 0 0);
+  --color-muted: oklch(0.255 0 0);
+  --color-muted-foreground: oklch(0.715 0 0);
+  --color-border: oklch(0.345 0 0);
+  --color-input: oklch(0.578 0 0);
+  --color-ring: oklch(0.775 0.113 265);
+  --color-primary: oklch(0.775 0.113 265);
+  --color-primary-foreground: oklch(0.155 0 0);
+  --color-secondary: oklch(0.255 0 0);
+  --color-secondary-foreground: oklch(0.955 0 0);
+  --color-destructive: oklch(0.72 0.155 27.5);
+  --color-destructive-foreground: oklch(0.155 0 0);
 
   /* Six steps. 12px is a floor rather than the small end of a range: being on
      this ramp does not exempt a value from it, and nothing renders below it. */
@@ -134,77 +135,15 @@
   --shadow-float: 0 0 0 1px var(--color-line), 0 12px 32px -12px var(--color-shadow);
 }
 
-/* Outside any layer on purpose: `@theme` compiles into `@layer theme`, and an
-   unlayered rule beats a layered one whatever the specificity. Re-stepped
-   against the dark surface rather than inverted from the column above — an
-   inverted ramp puts the wrong lightness against the wrong surface and the
-   contrast stops holding. */
-.dark {
-  color-scheme: dark;
-
-  --color-surface-sunken: oklch(0.155 0 0);
-  --color-surface: oklch(0.205 0 0);
-  --color-surface-subtle: oklch(0.255 0 0);
-  --color-surface-emphasis: oklch(0.305 0 0);
-  --color-line: oklch(0.345 0 0);
-  --color-line-strong: oklch(0.578 0 0);
-  --color-ink-muted: oklch(0.715 0 0);
-  --color-ink-secondary: oklch(0.83 0 0);
-  --color-ink: oklch(0.955 0 0);
-
-  --color-brand: oklch(0.775 0.113 265);
-  --color-brand-surface: oklch(0.285 0.055 265);
-
-  --color-good-ink: oklch(0.72 0.17 145);
-  --color-warning-ink: #fab219;
-  --color-serious-ink: #ec835a;
-  --color-critical-ink: oklch(0.72 0.155 27.5);
-
-  --color-good-surface: oklch(0.29 0.05 145);
-  --color-warning-surface: oklch(0.3 0.05 78);
-  --color-serious-surface: oklch(0.298 0.05 42);
-  --color-critical-surface: oklch(0.29 0.055 27.5);
-
-  --color-series-1: #199e70;
-  --color-series-2: #d95926;
-  --color-series-3: #3987e5;
-  --color-series-4: #008300;
-  --color-series-5: #d55181;
-  --color-series-6: #c98500;
-  --color-series-7: #9085e9;
-  --color-series-8: #e66767;
-
-  --color-chart-grid: oklch(0.29 0 0);
-  --color-chart-axis: oklch(0.42 0 0);
-
-  --color-shadow: oklch(0 0 0 / 0.72);
-
-  --color-background: oklch(0.155 0 0);
-  --color-foreground: oklch(0.955 0 0);
-  --color-card: oklch(0.205 0 0);
-  --color-card-foreground: oklch(0.955 0 0);
-  --color-muted: oklch(0.255 0 0);
-  --color-muted-foreground: oklch(0.715 0 0);
-  --color-border: oklch(0.345 0 0);
-  --color-input: oklch(0.578 0 0);
-  --color-ring: oklch(0.775 0.113 265);
-  --color-primary: oklch(0.775 0.113 265);
-  --color-primary-foreground: oklch(0.155 0 0);
-  --color-secondary: oklch(0.255 0 0);
-  --color-secondary-foreground: oklch(0.955 0 0);
-  --color-destructive: oklch(0.72 0.155 27.5);
-  --color-destructive-foreground: oklch(0.155 0 0);
-}
-
-/* Outside any layer on purpose, same reasoning as `.dark` above: `@theme` and every Tailwind
-   utility compile into layers, and an unlayered rule beats every layered rule regardless of
-   specificity — so this needs no `!important` to win against `transition-all` or
-   `transition-colors`. `web/src/lib/motion.ts` gates the three framer-motion usages from
-   script; this is the CSS half, covering every Tailwind transition and animation utility
-   document-wide. Zeroed, not shortened — a 0.01s transition still renders a frame of motion.
-   `Button`'s `active:...translate-y-px` is deliberately untouched: with its transition gone
-   it lands in one frame, an instant position change rather than a motion effect, no different
-   from any other state swap this query already makes instant. */
+/* `web/src/lib/motion.ts` gates the three framer-motion usages from script; this is the CSS
+   half, covering every Tailwind transition and animation utility document-wide. Outside any
+   layer on purpose: `@theme` and every Tailwind utility compile into layers, and an unlayered
+   rule beats every layered rule regardless of specificity, so this needs no `!important` to
+   win against `transition-all` or `transition-colors`. Zeroed, not shortened -- a 0.01s
+   transition still renders a frame of motion. `Button`'s `active:...translate-y-px` is
+   deliberately untouched: with its transition gone it lands in one frame, an instant position
+   change rather than a motion effect, no different from any other state swap this query
+   already makes instant. */
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
@@ -217,7 +156,7 @@
 
 @layer base {
   :root {
-    color-scheme: light;
+    color-scheme: dark;
   }
 
   body {

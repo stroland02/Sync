@@ -8,6 +8,15 @@ The test of whether a decision belongs here: **if two agents building two differ
 reasonably choose differently, and the difference would be visible, it is a token.** If they could
 not, it is a class.
 
+**Dark-only as of 2026-08-05.** The owner's instruction was explicit: "remove light and dark mode,
+we only want dark mode." The light column that used to sit beside every value below is deleted, not
+hidden — every table here now carries the one column that survives. Where a fact in this document
+used to be argued from a light-mode measurement and that measurement has no dark-mode equivalent on
+record, this document says so rather than inventing a replacement number. `web/src/lib/theme.ts`,
+`theme-toggle.tsx`, the `sync-theme` `localStorage` key, and the `prefers-color-scheme` listener
+that resolved a `"system"` preference are removed with it — see *How the theme is wired* below for
+what replaced the mechanism.
+
 ---
 
 ## The rules that outrank taste
@@ -24,9 +33,14 @@ run's *disposition* — applied, abandoned, verified — is identity, and identi
 palette. Painting `abandoned` red says the run went wrong; it did not, and its reason is where
 routing learns which change kinds are not mechanically safe.
 
-**A status colour never travels alone.** It ships with a `lucide-react` icon and a word, always. On
-a light surface `--color-warning` and `--color-serious` sit below 3:1 against the card by design;
-the icon-and-word pairing is what makes that legal, and it is not optional.
+**A status colour never travels alone.** It ships with a `lucide-react` icon and a word, always —
+colour alone is not a safe channel for a colour-blind reader, whatever its contrast measures. In
+the surviving dark palette all four marks in fact clear 3:1 against the card (good 5.34, warning
+9.77, serious 6.80, critical 3.73 — see *Non-text, against the 3:1 floor* below), so the pairing is
+not optional because of contrast arithmetic here; it is not optional because colour is never the
+only channel. (The retired light column had `--color-warning` and `--color-serious` below 3:1
+against the card, which is the historical reason this rule was first written down. That number's
+provenance is the deleted light column and is not restated.)
 
 **The provenance rung stays monochrome.** `static` / `resolved` / `observed` / `unresolved` /
 `unattributed` is an evidence-class scale, not a good-to-bad one. Colouring it smuggles back the
@@ -54,31 +68,30 @@ What grows is the *range* — the page title, the value-versus-label distinction
 
 ## Colour
 
-### The neutral ramp — nine steps, both modes
+### The neutral ramp — nine steps
 
 Achromatic on purpose. The brand hue is the only chromatic thing on a normal screen, and a tinted
 neutral would make that sentence false by degrees.
 
 The steps are ordered back to front: surface, then line, then ink. **A raised surface is lighter
-than the plane behind it in both modes**, which is why `--color-surface` is the lightest value in
-light mode and `--color-surface-sunken` is the darkest in dark mode.
+than the plane behind it**, which is why `--color-surface` is lighter than `--color-surface-sunken`.
 
-| # | Token | Job | Light | Dark |
-|---|---|---|---|---|
-| 1 | `--color-surface-sunken` | the page plane, behind everything | `oklch(0.972 0 0)` `#f6f6f6` | `oklch(0.155 0 0)` `#0c0c0c` |
-| 2 | `--color-surface` | a card, a panel, a chart's plotting area | `oklch(1 0 0)` `#ffffff` | `oklch(0.205 0 0)` `#171717` |
-| 3 | `--color-surface-subtle` | a table header, a `<pre>`, a muted fill | `oklch(0.962 0 0)` `#f2f2f2` | `oklch(0.255 0 0)` `#232323` |
-| 4 | `--color-surface-emphasis` | a hovered or selected row | `oklch(0.93 0 0)` `#e8e8e8` | `oklch(0.305 0 0)` `#2f2f2f` |
-| 5 | `--color-line` | the hairline: dividers, card rings, table rules | `oklch(0.885 0 0)` `#d9d9d9` | `oklch(0.345 0 0)` `#393939` |
-| 6 | `--color-line-strong` | the boundary of a control, which must clear 3:1 | `oklch(0.615 0 0)` `#848484` | `oklch(0.578 0 0)` `#7a7a7a` |
-| 7 | `--color-ink-muted` | metadata, `<dt>` labels, timestamps, the absence marker | `oklch(0.485 0 0)` `#5f5f5f` | `oklch(0.715 0 0)` `#a3a3a3` |
-| 8 | `--color-ink-secondary` | prose that is not the headline value | `oklch(0.4 0 0)` `#484848` | `oklch(0.83 0 0)` `#c7c7c7` |
-| 9 | `--color-ink` | the primary ink | `oklch(0.2 0 0)` `#161616` | `oklch(0.955 0 0)` `#f0f0f0` |
+| # | Token | Job | Value |
+|---|---|---|---|
+| 1 | `--color-surface-sunken` | the page plane, behind everything | `oklch(0.155 0 0)` `#0c0c0c` |
+| 2 | `--color-surface` | a card, a panel, a chart's plotting area | `oklch(0.205 0 0)` `#171717` |
+| 3 | `--color-surface-subtle` | a table header, a `<pre>`, a muted fill | `oklch(0.255 0 0)` `#232323` |
+| 4 | `--color-surface-emphasis` | a hovered or selected row | `oklch(0.305 0 0)` `#2f2f2f` |
+| 5 | `--color-line` | the hairline: dividers, card rings, table rules | `oklch(0.345 0 0)` `#393939` |
+| 6 | `--color-line-strong` | the boundary of a control, which must clear 3:1 | `oklch(0.578 0 0)` `#7a7a7a` |
+| 7 | `--color-ink-muted` | metadata, `<dt>` labels, timestamps, the absence marker | `oklch(0.715 0 0)` `#a3a3a3` |
+| 8 | `--color-ink-secondary` | prose that is not the headline value | `oklch(0.83 0 0)` `#c7c7c7` |
+| 9 | `--color-ink` | the primary ink | `oklch(0.955 0 0)` `#f0f0f0` |
 
-The dark column was **re-stepped against the dark surface, not inverted from the light column**. An
-inverted ramp puts the wrong lightness against the wrong surface and the contrast arithmetic stops
-holding — the light ink steps and the dark ink steps are not mirror images of each other, and the
-table below is why.
+This ramp was **re-stepped against the dark surface**, not produced by inverting the light ramp the
+console shipped before 2026-08-05. An inverted ramp puts the wrong lightness against the wrong
+surface and the contrast arithmetic stops holding; the values above are the ones separately verified
+to hold, not a mirror of the retired light-mode values.
 
 `ABSENT` — the console's one absence marker — wears `--color-ink-muted`. One glyph, one appearance.
 
@@ -90,10 +103,10 @@ protanopia and deuteranopia 265 stays separable from all four status colours; a 
 would collapse toward *good* for a substantial share of readers, and the brand hue marks the
 current node, which is a position rather than a judgement.
 
-| Token | Job | Light | Dark |
-|---|---|---|---|
-| `--color-brand` | links, focus rings, the current node | `oklch(0.475 0.19 265)` `#254fc5` | `oklch(0.775 0.113 265)` `#92b4fe` |
-| `--color-brand-surface` | the tint behind a current or selected thing | `oklch(0.955 0.017 265)` `#ebf0fc` | `oklch(0.285 0.055 265)` `#1d2945` |
+| Token | Job | Value |
+|---|---|---|
+| `--color-brand` | links, focus rings, the current node | `oklch(0.775 0.113 265)` `#92b4fe` |
+| `--color-brand-surface` | the tint behind a current or selected thing | `oklch(0.285 0.055 265)` `#1d2945` |
 
 Used sparingly is part of the decision, not a note on it. Links, focus, the current node. Nothing
 else on a normal screen is chromatic.
@@ -102,25 +115,25 @@ else on a normal screen is chromatic.
 
 Four roles, and they mean what they say. Never a series colour. Never without an icon and a word.
 
-The **mark** carries one value in both modes. A status colour that shifts with the theme is a
-different claim on a different screen, and the four marks were selected as a set that stays
-distinct from the series slots. The **ink** and the **surface** are per-mode, because text and
-tints have to be selected against the surface they land on.
+The **mark** carries one value regardless of surface — a status colour that shifted with the theme
+would be a different claim on a different screen, and the four marks were selected as a set that
+stays distinct from the series slots. The **ink** and the **surface** are selected against the
+surface they land on.
 
-| Role | Mark (both modes) | Ink light | Ink dark | Surface light | Surface dark |
-|---|---|---|---|---|---|
-| good | `#0ca30c` | `#006300` | `oklch(0.72 0.17 145)` `#54bf5c` | `oklch(0.958 0.033 145)` `#e4f7e4` | `oklch(0.29 0.05 145)` `#1a321b` |
-| warning | `#fab219` | `oklch(0.5 0.105 72)` `#875806` | `#fab219` | `oklch(0.968 0.033 85)` `#fff3dc` | `oklch(0.3 0.05 78)` `#3c2a0d` |
-| serious | `#ec835a` | `oklch(0.51 0.145 42)` `#a74210` | `#ec835a` | `oklch(0.962 0.02 45)` `#ffefe8` | `oklch(0.298 0.05 42)` `#422419` |
-| critical | `#d03b3b` | `oklch(0.51 0.19 27.5)` `#ba1f1e` | `oklch(0.72 0.155 27.5)` `#f67a6d` | `oklch(0.958 0.02 27.5)` `#feecea` | `oklch(0.29 0.055 27.5)` `#43201c` |
+| Role | Mark | Ink | Surface |
+|---|---|---|---|
+| good | `#0ca30c` | `oklch(0.72 0.17 145)` `#54bf5c` | `oklch(0.29 0.05 145)` `#1a321b` |
+| warning | `#fab219` | `#fab219` | `oklch(0.3 0.05 78)` `#3c2a0d` |
+| serious | `#ec835a` | `#ec835a` | `oklch(0.298 0.05 42)` `#422419` |
+| critical | `#d03b3b` | `oklch(0.72 0.155 27.5)` `#f67a6d` | `oklch(0.29 0.055 27.5)` `#43201c` |
 
 Tokens: `--color-good`, `--color-good-ink`, `--color-good-surface`, and the same three for
 `warning`, `serious` and `critical`.
 
 **Which of the three to reach for.** Text and icons take the `-ink` step — it is the only one
 computed to clear 5.05:1. A panel's tint takes the `-surface` step. The bare mark is for a chart
-fill or a filled dot large enough that area carries it; a 1px rule in `--color-warning` on a light
-card measures 1.83:1 and is not a border, it is a rumour.
+fill or a filled dot large enough that area carries it — never a hairline rule; a 1px rule in
+`--color-warning` reads as a rumour of colour, not a border, however it measures.
 
 `--color-destructive` is kept for the shadcn catalog and holds the same value as
 `--color-critical-ink`. New code should say `critical`.
@@ -131,25 +144,26 @@ Charts only. Assigned in sequence: one series takes slot 1, four series take slo
 series is never a generated hue — it folds into "Other", or the chart becomes small multiples, or
 it becomes a table.
 
-| Slot | Hue | Light | Dark |
-|---|---|---|---|
-| 1 | aqua | `#1baf7a` | `#199e70` |
-| 2 | orange | `#eb6834` | `#d95926` |
-| 3 | blue | `#2a78d6` | `#3987e5` |
-| 4 | green | `#008300` | `#008300` |
-| 5 | magenta | `#e87ba4` | `#d55181` |
-| 6 | yellow | `#eda100` | `#c98500` |
-| 7 | violet | `#4a3aa7` | `#9085e9` |
-| 8 | red | `#e34948` | `#e66767` |
+| Slot | Hue | Value |
+|---|---|---|
+| 1 | aqua | `#199e70` |
+| 2 | orange | `#d95926` |
+| 3 | blue | `#3987e5` |
+| 4 | green | `#008300` |
+| 5 | magenta | `#d55181` |
+| 6 | yellow | `#c98500` |
+| 7 | violet | `#9085e9` |
+| 8 | red | `#e66767` |
 
 Tokens `--color-series-1` … `--color-series-8`.
 
 **The order is the colour-blindness mechanism, not a preference.** Adjacent slots touch in a stack,
 a bar group and a line chart, so adjacent pairs are what the gate measures. All eight orderings of
-these hues were enumerated and scored with the `dataviz` skill's validator in both modes; 36 clear
-every hard gate with the brand constraint applied. This one was chosen among the passing orders by
-the skill's own tie-break — maximise the minimum adjacent CVD ΔE — and then, among the orders tied
-at that maximum, by two constraints this console has and the skill does not:
+these hues were enumerated and scored with the `dataviz` skill's validator in both modes, before
+this slice retired one of them; 36 clear every hard gate with the brand constraint applied. This one
+was chosen among the passing orders by the skill's own tie-break — maximise the minimum adjacent CVD
+ΔE — and then, among the orders tied at that maximum, by two constraints this console has and the
+skill does not:
 
 - **Slot 1 is neither blue nor violet.** Those are the two families nearest the brand hue, and slot
   1 is the colour a single-series chart wears. Violet sits at slot 7, which the "more than about
@@ -158,24 +172,28 @@ at that maximum, by two constraints this console has and the skill does not:
   9.8 ΔE from the nearest status colour; orange sits 5.8.
 
 **Known adjacencies, stated rather than hidden.** Series and status are different palettes measured
-against different gates, and several cross-palette pairs sit close: in light mode slot 2 orange is
-5.8 from `--color-serious`, slot 8 red is 4.8 from `--color-critical`, and slot 6 yellow is 4.8
-from `--color-warning`. This is not fixed by hue avoidance and is not meant to be. It is fixed by
-the rule above: a status colour always arrives with an icon and a word, a series colour never does,
-and a chart carries direct labels and a legend.
+against different gates, and cross-palette pairs can sit close enough to matter. The light column
+carried three such measurements, naming specific ΔE distances between light-mode series hues and
+the status marks. That column and those numbers are retired as of 2026-08-05, and they were never
+re-run against the dark series values above, so they are not restated here. The fix does not depend
+on the distance regardless: a status colour always arrives with an icon and a word, a series colour
+never does, and a chart carries direct labels and a legend.
 
 **The series cap for scatter, bubble, choropleth and small multiples is three.** In those forms any
 two marks can sit side by side, so the gate is all-pairs rather than adjacent, and it is strictly
-harder. The first three slots clear it in both modes; the fourth does not — adding green next to
-orange fails at ΔE 3.2 in light. Past three in an all-pairs form, cut series or facet. Do not
-change the palette.
+harder. The first three slots clear it (see *The validator's report* below). A four-slot run before
+this slice failed against the light hex values at ΔE 3.2 (protan); that run's inputs are retired
+with the light column, and the dark palette has not been separately re-run at four slots. The cap of
+three is kept regardless — adding a slot only makes the all-pairs gate harder, never easier, so the
+absence of a fresh failing run is not read as permission. Past three in an all-pairs form, cut
+series or facet. Do not change the palette.
 
 ### Chart chrome
 
-| Token | Job | Light | Dark |
-|---|---|---|---|
-| `--color-chart-grid` | gridlines, recessive | `oklch(0.925 0 0)` `#e6e6e6` | `oklch(0.29 0 0)` `#2b2b2b` |
-| `--color-chart-axis` | the baseline and axis rule | `oklch(0.8 0 0)` `#bebebe` | `oklch(0.42 0 0)` `#4d4d4d` |
+| Token | Job | Value |
+|---|---|---|
+| `--color-chart-grid` | gridlines, recessive | `oklch(0.29 0 0)` `#2b2b2b` |
+| `--color-chart-axis` | the baseline and axis rule | `oklch(0.42 0 0)` `#4d4d4d` |
 
 The chart's plotting surface is `--color-surface`. Text on a chart — values, labels, legend entries
 — wears the ink tokens, never the series colour; a coloured mark beside the text carries identity.
@@ -187,28 +205,28 @@ fewer.
 These are positions on the ramp above, kept under their existing names because renaming one breaks
 components across the tree. Prefer the ramp names in new code.
 
-| shadcn name | Is | Light | Dark |
-|---|---|---|---|
-| `--color-background` | `surface-sunken` | `oklch(0.972 0 0)` | `oklch(0.155 0 0)` |
-| `--color-foreground` | `ink` | `oklch(0.2 0 0)` | `oklch(0.955 0 0)` |
-| `--color-card` | `surface` | `oklch(1 0 0)` | `oklch(0.205 0 0)` |
-| `--color-card-foreground` | `ink` | `oklch(0.2 0 0)` | `oklch(0.955 0 0)` |
-| `--color-muted` | `surface-subtle` | `oklch(0.962 0 0)` | `oklch(0.255 0 0)` |
-| `--color-muted-foreground` | `ink-muted` | `oklch(0.485 0 0)` | `oklch(0.715 0 0)` |
-| `--color-border` | `line` | `oklch(0.885 0 0)` | `oklch(0.345 0 0)` |
-| `--color-input` | `line-strong` | `oklch(0.615 0 0)` | `oklch(0.578 0 0)` |
-| `--color-ring` | `brand` | `oklch(0.475 0.19 265)` | `oklch(0.775 0.113 265)` |
-| `--color-primary` | `brand` | `oklch(0.475 0.19 265)` | `oklch(0.775 0.113 265)` |
-| `--color-primary-foreground` | reads on `brand` | `oklch(1 0 0)` | `oklch(0.155 0 0)` |
-| `--color-secondary` | `surface-subtle` | `oklch(0.962 0 0)` | `oklch(0.255 0 0)` |
-| `--color-secondary-foreground` | `ink` | `oklch(0.2 0 0)` | `oklch(0.955 0 0)` |
-| `--color-destructive` | `critical-ink` | `oklch(0.51 0.19 27.5)` | `oklch(0.72 0.155 27.5)` |
-| `--color-destructive-foreground` | reads on `destructive` | `oklch(1 0 0)` | `oklch(0.155 0 0)` |
+| shadcn name | Is | Value |
+|---|---|---|
+| `--color-background` | `surface-sunken` | `oklch(0.155 0 0)` |
+| `--color-foreground` | `ink` | `oklch(0.955 0 0)` |
+| `--color-card` | `surface` | `oklch(0.205 0 0)` |
+| `--color-card-foreground` | `ink` | `oklch(0.955 0 0)` |
+| `--color-muted` | `surface-subtle` | `oklch(0.255 0 0)` |
+| `--color-muted-foreground` | `ink-muted` | `oklch(0.715 0 0)` |
+| `--color-border` | `line` | `oklch(0.345 0 0)` |
+| `--color-input` | `line-strong` | `oklch(0.578 0 0)` |
+| `--color-ring` | `brand` | `oklch(0.775 0.113 265)` |
+| `--color-primary` | `brand` | `oklch(0.775 0.113 265)` |
+| `--color-primary-foreground` | reads on `brand` | `oklch(0.155 0 0)` |
+| `--color-secondary` | `surface-subtle` | `oklch(0.255 0 0)` |
+| `--color-secondary-foreground` | `ink` | `oklch(0.955 0 0)` |
+| `--color-destructive` | `critical-ink` | `oklch(0.72 0.155 27.5)` |
+| `--color-destructive-foreground` | reads on `destructive` | `oklch(0.155 0 0)` |
 
-Three of these changed value rather than only gaining a dark column, and each is a visible change:
-`--color-background` moved off pure white so a white card separates from the page; `--color-input`
-darkened to clear 3:1 as a control boundary; `--color-primary` and `--color-ring` became the brand
-hue, which is what makes focus visible and makes the `link` button variant a link.
+Three of these are a visible design decision rather than a Tailwind default: `--color-background`
+sits off pure black so a card separates from the page; `--color-input` is bright enough to clear
+3:1 as a control boundary; `--color-primary` and `--color-ring` are the brand hue, which is what
+makes focus visible and makes the `link` button variant a link.
 
 ---
 
@@ -289,12 +307,11 @@ floats: `ErrorSurface`, which is `fixed` over the viewport.
 
 **A shadow token must express its colour through a colour token, never as a literal.** Tailwind
 resolves a `shadow-*` theme value at build time and bakes it into the class, so a literal colour
-written into `--shadow-float` is frozen at its light value and the dark column never reaches it —
-silently. `--color-shadow` (light `oklch(0.2 0 0 / 0.3)`, dark `oklch(0 0 0 / 0.72)`) exists for
-exactly this reason and has no other use. `ErrorSurface` reads `shadow-float`, and it is wired
-through this indirection correctly: `--shadow-float`'s own colour components stay `var()`
-references rather than literals, so each resolves against whichever theme's `--color-line` and
-`--color-shadow` are live on the element, in both modes.
+written into `--shadow-float` would be frozen forever, immune to any value `--color-shadow` is later
+given. `--color-shadow` (`oklch(0 0 0 / 0.72)`) exists for exactly this reason and has no other use.
+`ErrorSurface` reads `shadow-float`, and it is wired through this indirection correctly:
+`--shadow-float`'s own colour components stay `var()` references rather than literals, so each
+resolves against whichever value `--color-line` and `--color-shadow` are live on the element.
 
 ---
 
@@ -311,11 +328,11 @@ branch is the token: there is no CSS value that expresses "skip this prop entire
 
 Everything else — every Tailwind `transition-*` and `animate-*` utility the shadcn catalog and
 the console's own components use — is gated by a `@media (prefers-reduced-motion: reduce)` block
-in `web/src/index.css`, sitting unlayered next to `.dark` for the same reason `.dark` is unlayered:
-`@theme` and every Tailwind utility compile into layers, and an unlayered rule beats every layered
-rule regardless of specificity, so the block wins against `transition-all` and `transition-colors`
-without needing `!important`. It zeroes `transition-duration`, `animation-duration` and
-`scroll-behavior` document-wide — zeroed, not shortened, matching the framer half's rule.
+in `web/src/index.css`, sitting unlayered on purpose: `@theme` and every Tailwind utility compile
+into layers, and an unlayered rule beats every layered rule regardless of specificity, so the block
+wins against `transition-all` and `transition-colors` without needing `!important`. It zeroes
+`transition-duration`, `animation-duration` and `scroll-behavior` document-wide — zeroed, not
+shortened, matching the framer half's rule.
 
 `Button`'s `active:not-aria-[haspopup]:translate-y-px` is deliberately left alone. A `transform` is
 not a transition: it moves the element on `:active` whether or not a transition is running. With
@@ -325,60 +342,54 @@ border), not an animation. It stays.
 
 ---
 
-## How the two modes are wired
+## How the theme is wired
 
-`web/src/index.css` declares the light column inside `@theme` and the dark column in a `.dark` rule
-at the top level of the file. Two facts make that work, and both are easy to break by tidying:
+`web/src/index.css` declares every token once, inside `@theme static` at `:root` — there is no
+second column left to switch to. `web/index.html` stamps `class="dark"` on `<html>` directly in the
+markup, permanently, rather than resolving it at runtime: there is no preference to read and no
+flash-of-wrong-theme to beat before first paint.
 
-**The `.dark` rule is outside every layer on purpose.** `@theme` compiles into `@layer theme`, and
-an unlayered rule beats a layered one whatever the specificity — `:root` and `.dark` have identical
-specificity and both match `<html>`, so the layer is the only thing deciding it.
+The class stays for a reason that has nothing to do with switching: the shadcn catalog's own
+components — `button.tsx`, `input.tsx`, `textarea.tsx`, `input-group.tsx`, none of them owned by
+this document — carry `dark:`-prefixed utility classes, and `@custom-variant dark (&:is(.dark *))`
+in `index.css` is what makes those classes match anything. Removing the class, or the variant,
+would silently drop those components' `dark:` rules rather than remove a toggle; keeping both is
+what leaves them coherent. `:is(.dark *)` matches every descendant of `<html>`, so the one class
+stamped once covers the whole document.
 
-**Every value is a literal.** A custom property whose value is `var(--x)` is substituted where it
-is *declared*, so a token declared at `:root` as `var(--x)` keeps the `:root` result even on an
-element where `.dark` has redefined `--x`. The two columns therefore repeat their values rather
-than aliasing each other. The chart wrapper also reads these through `getComputedStyle`, which
-returns declared text rather than a resolved colour.
+Every value is a literal, not a `var()` reference: the chart wrapper in `echart.tsx` reads these
+through `getComputedStyle`, which returns declared text rather than a resolved colour, and a
+`var()` reference would come back unresolved.
 
-`@custom-variant dark (&:is(.dark *))` is unchanged from slice 1 and must stay as written; the
-theme resolver stamps `.dark` on `<html>`, so `:is(.dark *)` covers the document.
+There used to be a `.dark` rule here, unlayered on purpose so it would beat `@theme`'s layered
+declarations regardless of specificity, overriding `:root`'s light values for every token above.
+That rule is deleted along with the light values it overrode: the values it held are now the only
+ones declared, at `:root`, and nothing overrides them.
+
+The three-state theme control (`light` / `dark` / `system`), `web/src/lib/theme.ts`,
+`theme-toggle.tsx`, the `sync-theme` `localStorage` key, and the `prefers-color-scheme` listener
+that resolved a `"system"` preference are all removed, not merely unused — a console that still
+branched on `prefers-color-scheme` anywhere would not have honoured the owner's instruction that
+the console has exactly one mode.
 
 ---
 
 ## Changing a colour
 
-1. Change the value in `web/src/index.css`, both columns.
-2. Recompute every text-on-surface pairing in both modes. Nothing may fall below **5.05:1**, the
-   console's measured worst case before this slice. A pairing that regresses is a bug in the ramp,
-   not an acceptable trade.
-3. If a series slot moved, re-run the validator in both modes against the surfaces below and paste
-   the new report here.
+1. Change the value in `web/src/index.css`.
+2. Recompute every text-on-surface pairing. Nothing may fall below **5.05:1**, the console's
+   measured worst case before this slice. A pairing that regresses is a bug in the ramp, not an
+   acceptable trade.
+3. If a series slot moved, re-run the validator against the surfaces below and paste the new
+   report here.
 4. If you changed the slot *order*, re-run the enumeration: the order is a gate, not a preference.
 
 ---
 
 ## The validator's report
 
-From the `dataviz` skill, `scripts/validate_palette.js`. Light surface `#ffffff`, dark surface
-`#171717` — the console's own `--color-surface` in each mode, which is what a chart renders on.
-
-```
-$ node <dataviz>/scripts/validate_palette.js \
-    "#1baf7a,#eb6834,#2a78d6,#008300,#e87ba4,#eda100,#4a3aa7,#e34948" \
-    --mode light --surface "#ffffff"
-
-Palette (light, surface #ffffff, categorical): 8 slots
-  [PASS] Lightness band         all 8 inside L 0.43–0.77
-  [PASS] Chroma floor           all 8 >= 0.1
-  [PASS] CVD separation         worst adjacent #eb6834↔#1baf7a ΔE 9.2 (deutan) · tritan 5.8
-  [PASS] Normal-vision floor    worst adjacent #eda100↔#e87ba4 ΔE 19.6 (normal)
-  [WARN] Contrast vs surface    below 3:1 — relief required (visible labels or table view): [["#1baf7a",2.82],["#e87ba4",2.69],["#eda100",2.17]]
-
-  → ALL CHECKS PASS  (CVD in the 6–8 floor band is legal ONLY with secondary encoding: direct labels, gaps, or texture)
-  scope: categorical palettes only. For a lone status/text color check WCAG text contrast; for a sequential ramp, lightness monotonicity.
-
-exit 0
-```
+From the `dataviz` skill, `scripts/validate_palette.js`. Surface `#171717` — the console's own
+`--color-surface`, which is what a chart renders on.
 
 ```
 $ node <dataviz>/scripts/validate_palette.js \
@@ -398,43 +409,26 @@ Palette (dark, surface #171717, categorical): 8 slots
 exit 0
 ```
 
-**The light-mode contrast WARN is not dismissable.** Three slots sit below 3:1 against a white
-card. It obligates a relief channel — visible direct labels, or the table view staying on the page
-beneath the chart. Shipping the fill with neither is a failure, not a warning.
+The retired light-hex run reported a contrast WARN — three slots below 3:1 against a white card,
+obligating a relief channel. That finding's provenance is the light column; against the dark card
+above, contrast vs surface is a clean PASS at all 8 slots and there is nothing to relieve.
 
 ### The all-pairs cap
 
 ```
-$ node <dataviz>/scripts/validate_palette.js "#1baf7a,#eb6834,#2a78d6" --mode light --surface "#ffffff" --pairs all
-  [PASS] CVD separation         worst all-pairs #eb6834↔#1baf7a ΔE 9.2 (deutan) · tritan 9.6
-  [PASS] Normal-vision floor    worst all-pairs #2a78d6↔#1baf7a ΔE 24.0 (normal)
-  → ALL CHECKS PASS                                                        exit 0
-
 $ node <dataviz>/scripts/validate_palette.js "#199e70,#d95926,#3987e5" --mode dark --surface "#171717" --pairs all
   [PASS] CVD separation         worst all-pairs #d95926↔#199e70 ΔE 9.4 (deutan) · tritan 4.0
   [PASS] Normal-vision floor    worst all-pairs #3987e5↔#199e70 ΔE 20.9 (normal)
   → ALL CHECKS PASS                                                        exit 0
-
-$ node <dataviz>/scripts/validate_palette.js "#1baf7a,#eb6834,#2a78d6,#008300" --mode light --surface "#ffffff" --pairs all
-  [FAIL] CVD separation         worst all-pairs #008300↔#eb6834 ΔE 3.2 (protan) · tritan 7.6
-  → FAILED — fix the marked checks                                         exit 1
 ```
 
 ### The validator was shown to reject
 
 A validator that has never rejected a palette has not been shown to validate one. Slot 4 (green)
-was moved to slot 2, beside slot 1 (aqua), and the run was repeated. **Both modes failed and both
-exited 1.** The change was reverted.
+was moved to slot 2, beside slot 1 (aqua), and the run was repeated against the dark hex values.
+The run failed and exited 1.
 
 ```
-$ node <dataviz>/scripts/validate_palette.js \
-    "#1baf7a,#008300,#eb6834,#2a78d6,#e87ba4,#eda100,#4a3aa7,#e34948" \
-    --mode light --surface "#ffffff"
-
-  [FAIL] CVD separation         worst adjacent #eb6834↔#008300 ΔE 3.2 (protan) · tritan 5.8
-  → FAILED — fix the marked checks
-exit 1
-
 $ node <dataviz>/scripts/validate_palette.js \
     "#199e70,#008300,#d95926,#3987e5,#d55181,#c98500,#9085e9,#e66767" \
     --mode dark --surface "#171717"
@@ -445,34 +439,14 @@ $ node <dataviz>/scripts/validate_palette.js \
 exit 1
 ```
 
+The change was reverted.
+
 ---
 
 ## Contrast, computed
 
-WCAG ratios for every text-on-surface pairing, both modes, against the floor of **5.05:1** — the
-console's worst case before this slice, which must not regress. Ratios computed from the sRGB
-values above.
-
-### Light
-
-| Ink | on sunken | on surface | on subtle | on emphasis | on subtle/50 over card | on subtle/50 over page |
-|---|---|---|---|---|---|---|
-| `ink` | 16.74 | 18.10 | 16.16 | 14.77 | 17.19 | 16.45 |
-| `ink-secondary` | 8.46 | 9.15 | 8.17 | 7.46 | 8.69 | 8.32 |
-| `ink-muted` | 5.91 | 6.39 | 5.70 | **5.21** | 6.07 | 5.81 |
-| `brand` | 6.47 | 6.99 | 6.25 | 5.71 | 6.64 | 6.36 |
-
-| Status ink | on its own tint | on surface | on sunken | on a 10% wash of itself |
-|---|---|---|---|---|
-| `good-ink` | 6.72 | 7.54 | 6.98 | 6.41 |
-| `warning-ink` | 5.57 | 6.12 | 5.67 | 5.30 |
-| `serious-ink` | 5.47 | 6.12 | 5.67 | **5.27** |
-| `critical-ink` | 5.57 | 6.36 | 5.88 | 5.40 |
-
-`ink` on each tint: good 16.13, warning 16.46, serious 16.17, critical 15.86, brand 15.86.
-`brand` on `brand-surface` 6.13. `primary-foreground` on `primary` 6.99.
-
-### Dark
+WCAG ratios for every text-on-surface pairing, against the floor of **5.05:1** — the console's
+worst case before this slice, which must not regress. Ratios computed from the sRGB values above.
 
 | Ink | on sunken | on surface | on subtle | on emphasis | on subtle/50 over card | on subtle/50 over page |
 |---|---|---|---|---|---|---|
@@ -503,15 +477,15 @@ answers, and only the gamma one matches what the screen shows.
 
 ### Composed pairings, rendered
 
-| Composition | Light | Dark |
-|---|---|---|
-| `ink` on `surface-subtle/50` over the card (a hovered/selected table row) | 17.14 | 14.80 |
-| `foreground` on `input/30` (outline button, resting — dark only, no light-mode alpha) | — | 12.09 |
-| `foreground` on `input/50` (outline button, hover — dark only) | — | 8.70 |
-| `primary-foreground` on `bg-primary` mixed 15% toward `foreground` (default button, hover) | 8.46 | 10.37 |
-| `secondary-foreground` on `bg-secondary` mixed 5% toward `foreground` (secondary button, hover) | 14.46 | 12.38 |
-| `critical-ink` on `bg-critical-surface` (destructive button, resting) | 5.58 | 5.44 |
-| `critical-ink` on `bg-critical-surface` mixed 25% toward the surface extreme (destructive button, hover) | 5.76 | 6.02 |
+| Composition | Value |
+|---|---|
+| `ink` on `surface-subtle/50` over the card (a hovered/selected table row) | 14.80 |
+| `foreground` on `input/30` (outline button, resting) | 12.09 |
+| `foreground` on `input/50` (outline button, hover) | 8.70 |
+| `primary-foreground` on `bg-primary` mixed 15% toward `foreground` (default button, hover) | 10.37 |
+| `secondary-foreground` on `bg-secondary` mixed 5% toward `foreground` (secondary button, hover) | 12.38 |
+| `critical-ink` on `bg-critical-surface` (destructive button, resting) | 5.44 |
+| `critical-ink` on `bg-critical-surface` mixed 25% toward the surface extreme (destructive button, hover) | 6.02 |
 
 Every rendered composition found still clears the 5.05 floor, and the lowest of them (5.44) sits
 above the declared-token worst case below — so "worst pairing anywhere" stays true once "anywhere"
@@ -521,25 +495,27 @@ is checked against what actually renders, not assumed from it.
 hover was `hover:bg-primary/80` — a wash toward whatever sits behind the button — which measured
 **4.49:1 on a card and 4.61:1 on the page**, both below the floor, in a variant no screen used yet.
 `destructive` was worse: `bg-destructive/10` and its `/20` hover measured as low as **4.18–4.97**
-depending on mode and backdrop. Both were rewritten to compose against a fixed reference —
-`color-mix(…, var(--color-foreground) 15%)` for `default`, and the already-verified
-`critical-surface`/`critical-ink` pair for `destructive` — so the result no longer depends on
-whatever the button happens to sit on. The rows above are what those variants render now.
+depending on mode and backdrop, back when there were two modes to measure. Both were rewritten to
+compose against a fixed reference — `color-mix(…, var(--color-foreground) 15%)` for `default`, and
+the already-verified `critical-surface`/`critical-ink` pair for `destructive` — so the result no
+longer depends on whatever the button happens to sit on. The rows above are what those variants
+render now.
 
-**Worst pairing anywhere: 5.21:1**, `ink-muted` on `surface-emphasis` in light mode. Above the
-5.05 floor, and above WCAG AA for body text. Verified, not merely declared: the lowest composed
-pairing found by rendering the tree is 5.44, so 5.21 remains the true minimum.
+**Worst pairing anywhere: 5.31:1** — `ink-muted` on `surface-emphasis`, and separately `serious-ink`
+on its own tint, both land here. Above the 5.05 floor, and above WCAG AA for body text. Verified,
+not merely declared: the lowest composed pairing found by rendering the tree is 5.44, so 5.31
+remains the true minimum. (The light column's worst case, 5.21, is retired with it and is no longer
+the number this floor is checked against.)
 
 ### Non-text, against the 3:1 floor
 
-`--color-line-strong` clears 3:1 against every surface a control sits on, in both modes: light
-3.05–3.74, dark 3.12–4.56. The focus ring (`--color-ring`, the brand hue) clears it comfortably:
-6.99 light, 8.69 dark, against `--color-surface`.
+`--color-line-strong` clears 3:1 against every surface a control sits on: 3.12–4.56. The focus ring
+(`--color-ring`, the brand hue) clears it comfortably: 8.69, against `--color-surface`.
 
-The status **marks** against the light card: good 3.35, warning **1.83**, serious **2.64**,
-critical 4.80. Warning and serious are below 3:1 by design, which is why the icon-and-word pairing
-is mandatory and why the mark is not a border. Against the dark card all four clear it: 5.34, 9.77,
-6.80, 3.73.
+The status **marks** against the card: good 5.34, warning 9.77, serious 6.80, critical 3.73 — all
+four clear 3:1 in the surviving palette. (The retired light column had warning at 1.83 and serious
+at 2.64, both below 3:1 by design, which is the origin of the icon-and-word-always rule above; the
+rule is kept for colour-blind readers regardless of what the surviving palette measures.)
 
 ---
 
@@ -558,3 +534,7 @@ is mandatory and why the mark is not a border. Against the dark card all four cl
   named here.
 - **A third elevation level, a fourth spacing value, a seventh type step.** Each is a decision to
   be argued in this file, not a value to be added.
+- **A light mode.** Retired 2026-08-05 on explicit instruction. Not a placeholder for a future
+  toggle — the theme resolver, its storage key and its `prefers-color-scheme` listener are deleted,
+  not disabled, and a component that branches on `prefers-color-scheme` again would be a regression
+  against this decision, not a new feature.
