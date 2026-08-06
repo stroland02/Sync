@@ -239,3 +239,7 @@ editing — nothing else.
 ## Commits
 
 Conventional Commits (`feat:`, `fix:`, `test:`, `docs:`, `chore:`). Write the body in normal prose explaining why, not what — the diff already says what.
+
+**Carry the work item in the subject:** `feat: M4-W131 the expansion slice and four cold-start briefs`. The register is `docs/superpowers/WORKLOG.md`; take the next number, add the row before starting, and put the identifier on every commit belonging to that item. The sequence is one series across the whole project rather than one per milestone, so a number identifies work without its milestone having to disambiguate it — `M3-W125` and `M4-W126` are consecutive.
+
+A work item is one reviewable unit: what a brief asks for, or what a tick takes. Several commits under one number is normal. Two numbers for one change is not.
