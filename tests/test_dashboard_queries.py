@@ -18,7 +18,12 @@ from pathlib import Path
 import psycopg
 import pytest
 
-from sync.dashboard.queries import WORKFLOW_NODES, _EVIDENCE_KEYS, workflow_state
+from sync.dashboard.queries import (
+    NODE_STANDINGS,
+    WORKFLOW_NODES,
+    _EVIDENCE_KEYS,
+    workflow_state,
+)
 
 DSN = os.environ.get("SYNC_DSN", "postgresql://sync:sync@localhost:5433/sync")
 
@@ -143,6 +148,102 @@ def test_workflow_state_reports_nodes_with_evidence_once_rows_exist(checkpointer
     assert evidence["locate"]["tier"] == 2
     assert state["outcome"] is None
     assert state["abandon_reason"] is None
+
+
+def test_a_current_node_with_no_evidence_is_due_rather_than_running(checkpointer_tables):
+    # The classification the console got wrong in two spellings: `current` says the graph owes
+    # this node a visit, and nothing in a checkpoint says whether anything is executing. A run
+    # parked on the customer's CI and one that died write the same nothing.
+    _insert_checkpoint(
+        f"{FINDING_ID}:abc123def456:0",
+        "1f069000-0000-6000-8000-00000000000a",
+        channel_values={"outcome": "running", "tier": 2, "prepare_ok": True},
+        channel_versions={"branch:to:static_verify": _version(4)},
+        versions_seen={
+            "__input__": {},
+            "locate": {"branch:to:locate": _version(1)},
+            "prepare": {"branch:to:prepare": _version(2)},
+            "patch": {"branch:to:patch": _version(3)},
+        },
+        step=4,
+    )
+
+    standing = {n["name"]: n["standing"] for n in workflow_state(DSN, FINDING_ID)["nodes"]}
+
+    assert standing["static_verify"] == "due"
+    assert standing["locate"] == "ran"
+    # The run is in flight, so a node it has not reached may still be reached.
+    assert standing["open_pr"] == "not_reached_yet"
+
+
+def test_a_current_node_that_already_produced_evidence_is_due_again(checkpointer_tables):
+    # `patch` ran, static verification rejected it, and the graph owes `patch` another visit.
+    # Rendering that as a first visit would render a retry as progress.
+    _insert_checkpoint(
+        f"{FINDING_ID}:abc123def456:0",
+        "1f069000-0000-6000-8000-00000000000b",
+        channel_values={
+            "outcome": "running",
+            "static_attempts": 1,
+            "attempt_strategy": "literal-swap",
+            "verify_ok": False,
+            "diagnostics": "src/billing.ts(42,8): error TS2345",
+        },
+        channel_versions={"branch:to:patch": _version(5)},
+        versions_seen={
+            "__input__": {},
+            "locate": {"branch:to:locate": _version(1)},
+            "prepare": {"branch:to:prepare": _version(2)},
+            "patch": {"branch:to:patch": _version(3)},
+            "static_verify": {"branch:to:static_verify": _version(4)},
+        },
+        step=5,
+    )
+
+    standing = {n["name"]: n["standing"] for n in workflow_state(DSN, FINDING_ID)["nodes"]}
+
+    assert standing["patch"] == "due_again"
+    assert standing["static_verify"] == "ran"
+
+
+def test_a_node_a_finished_run_never_reached_says_so(checkpointer_tables):
+    # The same `pending` status means two different things, and only the run's outcome
+    # separates them: a finished run will never come back for this node.
+    _insert_checkpoint(
+        f"{FINDING_ID}:abc123def456:0",
+        "1f069000-0000-6000-8000-00000000000c",
+        channel_values={"outcome": "reported", "report_reason": "no patch is warranted"},
+        channel_versions={"branch:to:report": _version(5)},
+        versions_seen={
+            "__input__": {},
+            "locate": {"branch:to:locate": _version(1)},
+            "report": {"branch:to:report": _version(4)},
+        },
+        step=5,
+    )
+
+    standing = {n["name"]: n["standing"] for n in workflow_state(DSN, FINDING_ID)["nodes"]}
+
+    assert standing["open_pr"] == "never_reached"
+    assert standing["locate"] == "ran"
+    # A finished run has no node the graph still owes a visit, whatever the triggers say.
+    assert not any(s in ("due", "due_again") for s in standing.values())
+
+
+def test_every_node_carries_a_standing_from_the_declared_vocabulary(checkpointer_tables):
+    _insert_checkpoint(
+        f"{FINDING_ID}:abc123def456:0",
+        "1f069000-0000-6000-8000-00000000000d",
+        channel_values={"outcome": "opened", "pr_url": "https://github.com/x/y/pull/3"},
+        channel_versions={},
+        versions_seen={"__input__": {}, "open_pr": {"branch:to:open_pr": _version(1)}},
+        step=9,
+    )
+
+    nodes = workflow_state(DSN, FINDING_ID)["nodes"]
+
+    assert len(nodes) == len(WORKFLOW_NODES)
+    assert all(node["standing"] in NODE_STANDINGS for node in nodes)
 
 
 def test_workflow_state_of_a_live_run_reports_no_outcome(checkpointer_tables):
@@ -380,6 +481,22 @@ def test_the_consoles_node_order_matches_this_modules():
 def test_the_consoles_node_purposes_name_every_node_and_no_others():
     purposes = _object_literal(_web_source("src/features/workflows/node-sequence.tsx"), "PURPOSE")
     assert re.findall(r"^\s*([a-z_]+):", purposes, re.M) == list(WORKFLOW_NODES)
+
+
+def test_the_consoles_standing_vocabulary_matches_this_modules():
+    order = _array_literal(_web_source("src/api/types.ts"), "NODE_STANDINGS")
+    assert re.findall(r'"([a-z_]+)"', order) == list(NODE_STANDINGS)
+
+
+def test_the_console_spells_every_standing_in_one_place():
+    # The Critical this field exists to close: two screens each classified `current` for
+    # themselves and disagreed about what it meant. One label per standing, in one module both
+    # screens read, is the whole mechanism -- so a standing this module gains and the console
+    # does not is a node rendering nothing rather than a node rendering a guess.
+    labels = _object_literal(
+        _web_source("src/features/workflows/node-standing.ts"), "STANDING_LABEL"
+    )
+    assert re.findall(r"^\s*([a-z_]+):", labels, re.M) == list(NODE_STANDINGS)
 
 
 def test_the_consoles_evidence_fields_match_this_modules_keys():

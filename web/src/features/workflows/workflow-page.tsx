@@ -173,7 +173,7 @@ function Workflow({ findingId }: { findingId: string }) {
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <NodeSequence nodes={data.nodes} terminal={terminal} />
+              <NodeSequence nodes={data.nodes} />
             </CardContent>
           </Card>
 

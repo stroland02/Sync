@@ -17,7 +17,7 @@
 import { Link, useParams } from "react-router"
 
 import { NotFoundError } from "@/api/errors"
-import { isRunTerminal, useWorkflow } from "@/api/queries"
+import { useWorkflow } from "@/api/queries"
 import { ErrorState, LoadingState, NotFoundState } from "@/components/states"
 import { Button } from "@/components/ui/button"
 import { EvidenceBundle } from "@/features/pullrequests/evidence-bundle"
@@ -35,7 +35,6 @@ export function PullRequestPage() {
 function PullRequest({ findingId }: { findingId: string }) {
   const query = useWorkflow(findingId)
   const data = query.data
-  const terminal = isRunTerminal(data)
 
   const trail = [
     { label: "Fleet", to: "/" },
@@ -97,7 +96,7 @@ function PullRequest({ findingId }: { findingId: string }) {
             reportReason={data.report_reason}
           />
 
-          <EvidenceBundle nodes={data.nodes} terminal={terminal} />
+          <EvidenceBundle nodes={data.nodes} />
 
           <p className="max-w-prose text-body text-muted-foreground">
             Read from the checkpointer, the same source as{" "}

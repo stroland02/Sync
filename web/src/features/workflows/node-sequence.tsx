@@ -11,8 +11,14 @@
 import { motion } from "framer-motion"
 import { useEffect, useRef, useState } from "react"
 
-import type { WorkflowNode, WorkflowNodeName, WorkflowNodeStatus } from "@/api/types"
+import type {
+  NodeStanding,
+  WorkflowNode,
+  WorkflowNodeName,
+  WorkflowNodeStatus,
+} from "@/api/types"
 import { NodeEvidence } from "@/features/workflows/evidence"
+import { STANDING_LABEL, STANDING_SENTENCE } from "@/features/workflows/node-standing"
 import { CHANGE_WASH_DURATION, EASE_STANDARD, useReducedMotion } from "@/lib/motion"
 
 /**
@@ -51,32 +57,34 @@ function purposeFor(name: string): string {
 
 interface Appearance {
   glyph: string
-  /** What the status means here, in words, because a glyph alone is a legend to memorise. */
-  label: string
   markerClass: string
   nameClass: string
 }
 
-function appearanceOf(status: WorkflowNodeStatus, terminal: boolean): Appearance {
-  switch (status) {
-    case "done":
+/**
+ * How a standing is drawn. The words it is drawn beside are `STANDING_LABEL`'s, not this
+ * file's — three appearances carry five standings, because `due` and `due_again` are the same
+ * mark and differ in what they say, and so are the two kinds of never-visited.
+ */
+function appearanceOf(standing: NodeStanding): Appearance {
+  switch (standing) {
+    case "ran":
       return {
         glyph: "✓",
-        label: "ran",
         markerClass: "border-foreground text-foreground",
         nameClass: "text-foreground",
       }
-    case "current":
+    case "due":
+    case "due_again":
       return {
         glyph: "▶",
-        label: "due now — the graph owes this node a visit",
         markerClass: "border-foreground bg-foreground text-background",
         nameClass: "text-foreground font-semibold",
       }
-    case "pending":
+    case "not_reached_yet":
+    case "never_reached":
       return {
         glyph: "○",
-        label: terminal ? "never ran" : "not started",
         markerClass: "border-border text-muted-foreground",
         nameClass: "text-muted-foreground",
       }
@@ -120,17 +128,8 @@ function ChangeWash({ status }: { status: WorkflowNodeStatus }) {
   )
 }
 
-function Step({
-  node,
-  isLast,
-  terminal,
-}: {
-  node: WorkflowNode
-  isLast: boolean
-  terminal: boolean
-}) {
-  const look = appearanceOf(node.status, terminal)
-  const revisited = node.status === "current" && Object.keys(node.evidence).length > 0
+function Step({ node, isLast }: { node: WorkflowNode; isLast: boolean }) {
+  const look = appearanceOf(node.standing)
 
   return (
     <li className="grid grid-cols-[auto_1fr] gap-section">
@@ -148,16 +147,13 @@ function Step({
       <div className={isLast ? "" : "pb-section"}>
         <div className="flex flex-wrap items-baseline gap-x-row gap-y-field">
           <h3 className={`font-mono text-body ${look.nameClass}`}>{node.name}</h3>
-          <p className="text-meta text-muted-foreground">{look.label}</p>
+          <p className="text-meta text-muted-foreground">{STANDING_LABEL[node.standing]}</p>
         </div>
         <p className="mt-field max-w-prose text-body text-muted-foreground">
           {purposeFor(node.name)}
         </p>
-        {revisited && (
-          <p className="mt-field max-w-prose text-body">
-            This node has already produced evidence and the graph owes it another visit — it
-            is a retry, not a finished step.
-          </p>
+        {node.standing === "due_again" && (
+          <p className="mt-field max-w-prose text-body">{STANDING_SENTENCE.due_again}</p>
         )}
         <NodeEvidence name={node.name} evidence={node.evidence} />
       </div>
@@ -165,22 +161,11 @@ function Step({
   )
 }
 
-export function NodeSequence({
-  nodes,
-  terminal,
-}: {
-  nodes: WorkflowNode[]
-  terminal: boolean
-}) {
+export function NodeSequence({ nodes }: { nodes: WorkflowNode[] }) {
   return (
     <ol className="flex flex-col">
       {nodes.map((node, index) => (
-        <Step
-          key={node.name}
-          node={node}
-          isLast={index === nodes.length - 1}
-          terminal={terminal}
-        />
+        <Step key={node.name} node={node} isLast={index === nodes.length - 1} />
       ))}
     </ol>
   )

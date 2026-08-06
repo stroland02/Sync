@@ -47,6 +47,25 @@ _EVIDENCE_KEYS = {
 
 _FINISHED = ("opened", "abandoned", "reported")
 
+# Where a node stands, which is `status` joined against the two facts that change what
+# `status` means. Both joins were being made in the console, separately, in two components
+# that then disagreed: `current` was rendered as "running now" on one screen and as "due" on
+# the other, and nothing in a checkpoint says a node is executing. This is the classification
+# with a wrong answer, so it is computed here, where `uv run pytest` holds it, and the console
+# renders one label per value.
+NODE_STANDINGS = ("ran", "due", "due_again", "not_reached_yet", "never_reached")
+
+
+def _standing(status: str, has_evidence: bool, finished: bool) -> str:
+    if status == "done":
+        return "ran"
+    if status == "current":
+        # A node the graph owes a *second* visit already produced evidence, and that evidence
+        # describes the attempt that was rejected. Rendering it as a first visit renders a
+        # retry as progress.
+        return "due_again" if has_evidence else "due"
+    return "never_reached" if finished else "not_reached_yet"
+
 
 def _like_prefix(finding_id: str) -> str:
     escaped = (
@@ -112,7 +131,12 @@ def workflow_state(checkpointer_dsn: str, finding_id: str) -> dict | None:
         else:
             status = "pending"
         evidence = {key: values[key] for key in _EVIDENCE_KEYS[name] if key in values}
-        nodes.append({"name": name, "status": status, "evidence": evidence})
+        nodes.append({
+            "name": name,
+            "status": status,
+            "standing": _standing(status, bool(evidence), outcome is not None),
+            "evidence": evidence,
+        })
 
     return {
         "nodes": nodes,

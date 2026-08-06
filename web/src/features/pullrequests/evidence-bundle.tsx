@@ -12,6 +12,7 @@
 
 import type { WorkflowNode, WorkflowNodeName } from "@/api/types"
 import { NodeEvidence } from "@/features/workflows/evidence"
+import { STANDING_SENTENCE } from "@/features/workflows/node-standing"
 
 type BundleNodeName = Extract<
   WorkflowNodeName,
@@ -62,71 +63,59 @@ function findNode(nodes: WorkflowNode[], name: BundleNodeName): WorkflowNode | u
 /**
  * A node this bundle names, but the checkpoint holds no evidence for.
  *
- * Three different facts wear this same shape and must not be said the same way: the graph
- * has not reached the node yet and may still; the graph reached it and the run then ended
- * without it ever producing this bundle's fields, so it never will for this generation; or
- * the node is running right now. Collapsing any two of these into one sentence is the
- * "nearly right label" defect this milestone keeps finding.
+ * Four different facts wear this same shape and must not be said the same way: the graph has
+ * not reached the node yet and may still; the graph reached it and the run then ended without
+ * it ever producing this bundle's fields, so it never will for this generation; the graph owes
+ * it a visit; or the payload does not carry a node under this name at all. Collapsing any two
+ * of these into one sentence is the "nearly right label" defect this milestone keeps finding —
+ * and this component collapsed the third onto "Running now.", a liveness claim no checkpoint
+ * supports. The first three now arrive as `standing` from `sync.dashboard.queries` and are
+ * worded once in `node-standing.ts`, because the same three were also being classified
+ * separately on the Solution Workflow screen.
  */
-function EmptyStage({
-  node,
-  terminal,
-}: {
-  node: WorkflowNode | undefined
-  terminal: boolean
-}) {
-  const status = node?.status ?? "pending"
-  if (status === "current") {
-    return <p className="text-body text-muted-foreground">Running now.</p>
-  }
-  if (status === "pending") {
+function EmptyStage({ node }: { node: WorkflowNode | undefined }) {
+  if (node === undefined) {
     return (
       <p className="text-body text-muted-foreground">
-        {terminal ? "Never reached — the run ended before the graph got here." : "Not reached yet."}
+        The run carries no node under this name — the remediation graph has changed since this
+        bundle was written.
       </p>
     )
   }
-  // status === "done" and evidence is still empty: the node ran and produced none of this
-  // bundle's fields, which happens only when it failed before writing them — an exception
-  // out of push_branch, await_ci or open_pr returns "fatal" without the field this bundle
-  // names. The reason is the run's own abandon_reason, not a field this node carries.
-  return (
-    <p className="text-body text-muted-foreground">
-      This node ran and produced none of the fields this bundle names — see the run's outcome
-      above for why.
-    </p>
-  )
+  if (node.standing === "ran") {
+    // The node ran and produced none of this bundle's fields, which happens only when it
+    // failed before writing them — an exception out of push_branch, await_ci or open_pr
+    // returns "fatal" without the field this bundle names. The reason is the run's own
+    // abandon_reason, not a field this node carries.
+    return (
+      <p className="text-body text-muted-foreground">
+        This node ran and produced none of the fields this bundle names — see the run's outcome
+        above for why.
+      </p>
+    )
+  }
+  return <p className="text-body text-muted-foreground">{STANDING_SENTENCE[node.standing]}</p>
 }
 
-export function EvidenceBundle({
-  nodes,
-  terminal,
-}: {
-  nodes: WorkflowNode[]
-  terminal: boolean
-}) {
+export function EvidenceBundle({ nodes }: { nodes: WorkflowNode[] }) {
   return (
     <ol className="flex flex-col gap-section">
       {BUNDLE_STAGES.map((stage) => {
         const node = findNode(nodes, stage.name)
         const hasEvidence = node !== undefined && Object.keys(node.evidence).length > 0
-        const revisiting = node?.status === "current" && hasEvidence
 
         return (
           <li key={stage.name} className="rounded border border-border p-section">
             <h3 className="text-emphasis">{stage.title}</h3>
             <p className="mt-field max-w-prose text-body text-muted-foreground">{stage.blurb}</p>
-            {revisiting && (
-              <p className="mt-field max-w-prose text-body">
-                This is what the previous attempt produced — the graph owes this node another
-                visit, so it is not the finished answer.
-              </p>
+            {node?.standing === "due_again" && (
+              <p className="mt-field max-w-prose text-body">{STANDING_SENTENCE.due_again}</p>
             )}
             {hasEvidence ? (
               <NodeEvidence name={stage.name} evidence={node.evidence} />
             ) : (
               <div className="mt-field">
-                <EmptyStage node={node} terminal={terminal} />
+                <EmptyStage node={node} />
               </div>
             )}
           </li>
