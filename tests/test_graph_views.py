@@ -966,3 +966,170 @@ def test_vendor_findings_reaches_the_store_in_a_flat_number_of_queries(store, mo
 
     assert page["total"] == 10
     assert len(calls) <= 3, f"expected at most three queries for ten findings, made {len(calls)}"
+
+# -- narrowing a long surface ---------------------------------------------------
+#
+# A call-site table over a real customer repository is thousands of rows long, and the two
+# questions an operator actually arrives with -- "which repository" and "which part of the
+# tree" -- are both facts the graph already stores. Both narrowings are real SQL predicates
+# with matching denominators, for the reason `binding_surface` already pages in SQL: a filter
+# applied to whichever page arrived reports a total drawn from a set it did not filter.
+
+
+def test_binding_surface_narrows_call_sites_to_a_path_prefix(store):
+    store.upsert_call_site(_site(path="src/billing/charge.ts", line=1))
+    store.upsert_call_site(_site(path="src/reporting/export.ts", line=2))
+
+    result = binding_surface(store, "stripe", "PostCharges", path_prefix="src/billing/")
+
+    assert [row["path"] for row in result["call_sites"]["items"]] == ["src/billing/charge.ts"]
+
+
+def test_binding_surface_call_sites_total_follows_the_path_prefix(store):
+    """The denominator is what tells a reader whether the page in front of them is the whole
+    filtered answer or the first window on it. Left unfiltered beside a filtered page it
+    reports a set the page is not drawn from.
+    """
+    store.upsert_call_site(_site(path="src/billing/charge.ts", line=1))
+    store.upsert_call_site(_site(path="src/reporting/export.ts", line=2))
+
+    result = binding_surface(store, "stripe", "PostCharges", path_prefix="src/billing/")
+
+    assert result["call_sites"]["total"] == 1
+
+
+def test_binding_surface_path_prefix_leaves_vendor_changes_untouched(store):
+    """A vendor change has no position in the customer's codebase -- `path_ptr` is a pointer
+    into the vendor's own specification. Narrowing the call sites to a directory must not be
+    read as narrowing what the vendor changed.
+    """
+    store.upsert_call_site(_site(path="src/reporting/export.ts"))
+    store.upsert_vendor_change(_change())
+
+    result = binding_surface(store, "stripe", "PostCharges", path_prefix="src/billing/")
+
+    assert result["call_sites"]["total"] == 0
+    assert result["changes"]["total"] == 1
+
+
+def test_binding_surface_path_prefix_combines_with_repo_id(store):
+    store.upsert_call_site(_site(repo_id="r1", path="src/billing/a.ts", line=1))
+    store.upsert_call_site(_site(repo_id="r2", path="src/billing/b.ts", line=2))
+
+    result = binding_surface(
+        store, "stripe", "PostCharges", repo_id="r1", path_prefix="src/billing/"
+    )
+
+    assert [row["path"] for row in result["call_sites"]["items"]] == ["src/billing/a.ts"]
+    assert result["call_sites"]["total"] == 1
+
+
+def test_binding_surface_reports_which_repositories_hold_a_call_site(store):
+    store.upsert_call_site(_site(repo_id="r1", path="src/a.ts", line=1))
+    store.upsert_call_site(_site(repo_id="r1", path="src/b.ts", line=2))
+    store.upsert_call_site(_site(repo_id="r2", path="src/c.ts", line=3))
+
+    result = binding_surface(store, "stripe", "PostCharges")
+
+    assert result["repositories"] == [
+        {"repo_id": "r1", "call_site_count": 2},
+        {"repo_id": "r2", "call_site_count": 1},
+    ]
+
+
+def test_binding_surface_repositories_ignore_the_filters_they_are_the_options_for(store):
+    """The facet is the option list a repository filter is set from. Narrowed by the filter it
+    sets, it collapses to whatever is already selected and there is no way back to the others.
+    Its counts are therefore counts over the whole operation, not over the filtered page.
+    """
+    store.upsert_call_site(_site(repo_id="r1", path="src/billing/a.ts", line=1))
+    store.upsert_call_site(_site(repo_id="r2", path="src/reporting/b.ts", line=2))
+
+    result = binding_surface(
+        store, "stripe", "PostCharges", repo_id="r1", path_prefix="src/billing/"
+    )
+
+    assert result["repositories"] == [
+        {"repo_id": "r1", "call_site_count": 1},
+        {"repo_id": "r2", "call_site_count": 1},
+    ]
+
+
+def test_binding_surface_on_an_operation_nobody_calls_reports_no_repositories(store):
+    result = binding_surface(store, "stripe", "PostCharges")
+
+    assert result["repositories"] == []
+
+
+def test_binding_surface_a_rung_other_than_static_still_reports_the_repositories(store):
+    """The empty call-site page that answers a non-static rung is the filtered answer, not the
+    absence of any call site. The facet says so: a reader looking at nothing can still see the
+    operation is called from two repositories, which is what tells the two apart.
+    """
+    store.upsert_call_site(_site(repo_id="r1", path="src/a.ts", line=1))
+    store.upsert_call_site(_site(repo_id="r2", path="src/b.ts", line=2))
+
+    result = binding_surface(store, "stripe", "PostCharges", binding_rung="observed")
+
+    assert result["call_sites"]["items"] == []
+    assert [row["repo_id"] for row in result["repositories"]] == ["r1", "r2"]
+
+
+def test_severity_rollup_narrows_to_one_vendor(store):
+    stripe_site = store.upsert_call_site(_site(vendor_id="stripe", path="src/a.ts", line=1))
+    twilio_site = store.upsert_call_site(_site(vendor_id="twilio", path="src/b.ts", line=2))
+    store.insert_finding(_finding(stripe_site, claim="c1", severity="breaking"))
+    store.insert_finding(_finding(twilio_site, claim="c2", severity="warning"))
+
+    assert severity_rollup(store, vendor_id="stripe") == {
+        "by_severity": {"breaking": 1},
+        "total": 1,
+    }
+
+
+def test_severity_rollup_for_a_vendor_with_nothing_open_is_zero_not_the_fleet_total(store):
+    """A vendor screen asking for a breakdown it has no findings for must not fall back to the
+    fleet's -- an unscoped answer served for a scoped question is the failure mode a filter
+    that silently does nothing always has.
+    """
+    site = store.upsert_call_site(_site(vendor_id="stripe"))
+    store.insert_finding(_finding(site, severity="breaking"))
+
+    assert severity_rollup(store, vendor_id="twilio") == {"by_severity": {}, "total": 0}
+
+
+def test_severity_rollup_composes_the_repository_scope_with_the_vendor(store):
+    """The two narrow together. A vendor screen opened inside a selected repository asks for
+    that vendor *in* that repository -- either scope alone answers a question nobody asked and
+    renders it under a heading that claims the other.
+    """
+    here = store.upsert_call_site(_site(repo_id="r1", vendor_id="stripe", path="src/a.ts", line=1))
+    elsewhere = store.upsert_call_site(
+        _site(repo_id="r2", vendor_id="stripe", path="src/b.ts", line=2)
+    )
+    other_vendor = store.upsert_call_site(
+        _site(repo_id="r1", vendor_id="twilio", path="src/c.ts", line=3)
+    )
+    store.insert_finding(_finding(here, claim="c1", severity="breaking"))
+    store.insert_finding(_finding(elsewhere, claim="c2", severity="warning"))
+    store.insert_finding(_finding(other_vendor, claim="c3", severity="warning"))
+
+    both = severity_rollup(store, repo_id="r1", vendor_id="stripe")
+
+    assert both == {"by_severity": {"breaking": 1}, "total": 1}
+    assert severity_rollup(store, vendor_id="stripe")["total"] == 2, "vendor alone spans repos"
+    assert severity_rollup(store, repo_id="r1")["total"] == 2, "repository alone spans vendors"
+
+
+def test_severity_rollup_total_and_breakdown_are_two_aggregates_under_one_scope(store):
+    """The total is its own SQL read rather than the sum of the breakdown beside it. Two numbers
+    that cannot contradict each other are two numbers that can never reveal one of them is wrong.
+    """
+    for i, severity in enumerate(("breaking", "warning", "warning")):
+        site = store.upsert_call_site(_site(repo_id="r1", path=f"src/{i}.ts", line=i))
+        store.insert_finding(_finding(site, claim=f"c{i}", severity=severity))
+
+    result = severity_rollup(store, repo_id="r1", vendor_id="stripe")
+
+    assert result["by_severity"] == {"breaking": 1, "warning": 2}
+    assert result["total"] == 3

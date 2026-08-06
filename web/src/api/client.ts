@@ -84,12 +84,24 @@ async function readNotFoundBody(response: Response, path: string): Promise<NotFo
   }
 }
 
-function withPageParams(path: string, params: PageParams): string {
+/**
+ * A path with whatever query parameters the caller has, and none it does not.
+ *
+ * `undefined` drops the parameter rather than sending an empty value, because absent is what
+ * every route on the Python side reads as "unfiltered" — an empty string would be a filter
+ * matching nothing.
+ */
+function withQueryParams(path: string, params: Record<string, string | number | undefined>): string {
   const query = new URLSearchParams()
-  if (params.limit !== undefined) query.set("limit", String(params.limit))
-  if (params.offset !== undefined) query.set("offset", String(params.offset))
+  for (const [key, value] of Object.entries(params)) {
+    if (value !== undefined) query.set(key, String(value))
+  }
   const rendered = query.toString()
   return rendered ? `${path}?${rendered}` : path
+}
+
+function withPageParams(path: string, params: PageParams): string {
+  return withQueryParams(path, { limit: params.limit, offset: params.offset })
 }
 
 /**
@@ -107,15 +119,36 @@ export function fetchOverview(
   return getJson<OverviewResponse>(withQueryParams("/api/overview", { repo_id: params.repoId }), signal)
 }
 
+export interface VendorFindingsParams extends PageParams, ScopeParams {
+  /** One value out of the severities this scope actually holds; absent means every severity. */
+  severity?: string
+  /** A path prefix matched against the call site, never a substring; absent means every path. */
+  path?: string
+}
+
+/**
+ * Open findings for one vendor, in one repository or across the fleet, optionally narrowed.
+ *
+ * `repoId` is the scope every level below Codebase inherits and the other two are filters the
+ * operator sets, and they compose: a severity chosen inside a selected repository narrows that
+ * repository's findings rather than replacing the scope with a fleet-wide answer.
+ *
+ * All three are query parameters rather than a filter over the returned rows, and that is
+ * load-bearing: `sync.dashboard.graph_views.vendor_findings` applies them as SQL predicates
+ * ahead of its own `LIMIT`, so a filtered page's `total` is the filtered total. Filtering here
+ * instead would leave `total` describing a set the rows on screen were not drawn from.
+ */
 export function fetchVendorFindings(
   vendorId: string,
-  params: PageParams & ScopeParams,
+  params: VendorFindingsParams,
   signal?: AbortSignal,
 ): Promise<VendorFindingsPage> {
   const path = withQueryParams(`/api/vendors/${encodeURIComponent(vendorId)}`, {
     limit: params.limit,
     offset: params.offset,
     repo_id: params.repoId,
+    severity: params.severity,
+    path: params.path,
   })
   return getJson<VendorFindingsPage>(path, signal)
 }
@@ -169,17 +202,10 @@ export function fetchRepositories(signal?: AbortSignal): Promise<RepositoriesRes
   return getJson<RepositoriesResponse>("/api/repositories", signal)
 }
 
-function withQueryParams(path: string, params: Record<string, string | number | undefined>): string {
-  const query = new URLSearchParams()
-  for (const [key, value] of Object.entries(params)) {
-    if (value !== undefined) query.set(key, String(value))
-  }
-  const rendered = query.toString()
-  return rendered ? `${path}?${rendered}` : path
-}
-
 export interface BindingSurfaceParams {
   repoId?: string
+  /** A path prefix matched against the call site, never a substring; absent means every path. */
+  pathPrefix?: string
   callSitesLimit?: number
   callSitesOffset?: number
   changesLimit?: number
@@ -194,6 +220,10 @@ export interface BindingSurfaceParams {
  * Call sites and changes page independently, matching `binding_surface`'s own contract: a
  * customer with a long feed history but few call sites (or the reverse) can page one set
  * without the other's size leaking in.
+ *
+ * `pathPrefix` narrows the call sites and their total together, and leaves the changes alone: a
+ * vendor change has no position in the customer's codebase, so narrowing it by a source path
+ * would answer nobody's question with whichever rows happened to share a prefix.
  */
 export function fetchBindingSurface(
   vendorId: string,
@@ -205,6 +235,7 @@ export function fetchBindingSurface(
     `/api/vendors/${encodeURIComponent(vendorId)}/operations/${encodeURIComponent(operationId)}/bindings`,
     {
       repo_id: params.repoId,
+      path_prefix: params.pathPrefix,
       call_sites_limit: params.callSitesLimit,
       call_sites_offset: params.callSitesOffset,
       changes_limit: params.changesLimit,

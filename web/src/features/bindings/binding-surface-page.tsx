@@ -25,6 +25,7 @@ import { useParams, useSearchParams } from "react-router"
 import { DEFAULT_LIMIT } from "@/api/client"
 import { useBindingSurface } from "@/api/queries"
 import type { BindingSurfaceResponse } from "@/api/types"
+import { ActiveFilters, FacetChips, FilterBar, PrefixFilter } from "@/components/filters"
 import { PageControls } from "@/components/page-controls"
 import { RungBadge } from "@/components/provenance"
 import { EmptyState, ErrorState, LoadingState } from "@/components/states"
@@ -41,7 +42,25 @@ import {
 import { ABSENT, formatTimestamp, orAbsent } from "@/lib/format"
 import { Breadcrumbs } from "@/layouts/breadcrumbs"
 import { UnknownRoute } from "@/layouts/unknown-route"
+import { useClearFilters, useFilterParam } from "@/lib/use-filter-param"
 import { useOffsetParam } from "@/lib/use-offset-param"
+
+const CALL_SITES_OFFSET_KEY = "call_sites_offset"
+const PATH_PREFIX_KEY = "path_prefix"
+
+/**
+ * The repository scope, which arrives as a link parameter and is now also a control.
+ *
+ * `repo_id` was already read here — a link from a repository's own screen carries it so the
+ * surface that opens is scoped to where the operator started. It was never settable from this
+ * page, so the only way back out of that scope was the browser's Back button. The chips make
+ * it a filter, reading and writing the same parameter every existing link already builds.
+ */
+const REPO_KEY = "repo_id"
+
+/** Both call-site filters clear the call-site page position and leave the changes page alone:
+ * the two sets page independently, and narrowing one says nothing about where the other is. */
+const CALL_SITE_RESETS = [CALL_SITES_OFFSET_KEY]
 
 /** A string list joined for a table cell, or the absence glyph when the site recorded none. */
 function joinOrAbsent(values: string[]): string {
@@ -62,7 +81,18 @@ function describeScope(vendorId: string, operationId: string, repoId: string | n
  * makes the page-level claim provable rather than merely asserted: there is nothing here for
  * the rungs to mix over, unlike a page assembled from more than one detector's findings.
  */
-function RungNote({ data }: { data: BindingSurfaceResponse }) {
+function RungNote({ data, filtered }: { data: BindingSurfaceResponse; filtered: boolean }) {
+  if (data.call_sites.total === 0 && filtered) {
+    // The unfiltered sentence below would be false here: call sites are bound, the filter
+    // excluded them. A rung claim about rows a filter removed is a claim about the filter.
+    return (
+      <p className="max-w-prose text-body text-muted-foreground">
+        No call site carries a rung under this filter. That is a fact about the filter and not
+        about the operation — the repositories above are the ones the index holds call sites in,
+        and they are counted without it.
+      </p>
+    )
+  }
   if (data.call_sites.total === 0) {
     return (
       <p className="max-w-prose text-body text-muted-foreground">
@@ -81,6 +111,61 @@ function RungNote({ data }: { data: BindingSurfaceResponse }) {
   )
 }
 
+/**
+ * Which kind of nothing the call-site table is showing.
+ *
+ * Three, and each is a different fact. Nothing bound at all is an answer about the index. A
+ * filter that matched nothing is an answer about the filter, and the repository facet beside
+ * it proves the operation is called from somewhere. A page position past the end of a narrowed
+ * set is an answer about the URL: the table is not empty, the window is.
+ */
+function CallSitesEmptyState({
+  data,
+  repoId,
+  filters,
+  offset,
+}: {
+  data: BindingSurfaceResponse
+  repoId: string | null
+  filters: { label: string; value: string }[]
+  offset: number
+}) {
+  const bound = data.repositories.reduce((sum, repo) => sum + repo.call_site_count, 0)
+
+  if (data.call_sites.total > 0) {
+    return (
+      <EmptyState
+        headline={`This page is past the end of the ${data.call_sites.total.toLocaleString()} call sites that match.`}
+        detail={`The API answered with an empty list at offset ${offset}. Call sites match here — this window is not over them. Go back to the first page to see them.`}
+      />
+    )
+  }
+  if (filters.length > 0) {
+    return (
+      <EmptyState
+        headline="No call site matches this filter."
+        detail={
+          `The API answered with an empty list for ${filters.map((f) => `${f.label} ${f.value}`).join(" and ")}. ` +
+          `The index holds ${bound.toLocaleString()} call ${bound === 1 ? "site" : "sites"} on this ` +
+          `operation across ${data.repositories.length} ` +
+          `${data.repositories.length === 1 ? "repository" : "repositories"}, so this is what the ` +
+          "filter excluded and not what the index is missing — clear it to see the rest."
+        }
+      />
+    )
+  }
+  return (
+    <EmptyState
+      headline="No call site in the index is bound to this operation."
+      detail={
+        repoId === null
+          ? "The API answered with an empty list. Either nothing in any indexed repository calls this operation, or nothing indexed does — the index cannot tell the two apart."
+          : `The API answered with an empty list scoped to ${repoId}. Either nothing in this repository calls the operation, or this repository has not been indexed at all — the index cannot tell the two apart.`
+      }
+    />
+  )
+}
+
 function BindingSurfaceDetail({
   vendorId,
   operationId,
@@ -90,15 +175,24 @@ function BindingSurfaceDetail({
   operationId: string
   repoId: string | null
 }) {
-  const [callSitesOffset, setCallSitesOffset] = useOffsetParam("call_sites_offset")
+  const [callSitesOffset, setCallSitesOffset] = useOffsetParam(CALL_SITES_OFFSET_KEY)
   const [changesOffset, setChangesOffset] = useOffsetParam("changes_offset")
+  const [pathPrefix, setPathPrefix] = useFilterParam(PATH_PREFIX_KEY, CALL_SITE_RESETS)
+  const setRepoId = useFilterParam(REPO_KEY, CALL_SITE_RESETS)[1]
+  const clearCallSiteFilters = useClearFilters([REPO_KEY, PATH_PREFIX_KEY], CALL_SITE_RESETS)
   const query = useBindingSurface(vendorId, operationId, {
     repoId: repoId ?? undefined,
+    pathPrefix: pathPrefix ?? undefined,
     callSitesLimit: DEFAULT_LIMIT,
     callSitesOffset,
     changesLimit: DEFAULT_LIMIT,
     changesOffset,
   })
+
+  const activeFilters = [
+    ...(repoId === null ? [] : [{ label: "repository", value: repoId }]),
+    ...(pathPrefix === null ? [] : [{ label: "path", value: pathPrefix }]),
+  ]
 
   return (
     <section className="flex flex-col gap-8">
@@ -131,14 +225,33 @@ function BindingSurfaceDetail({
               </CardDescription>
             </CardHeader>
             <CardContent className="flex flex-col gap-section">
-              {query.data.call_sites.total === 0 ? (
-                <EmptyState
-                  headline="No call site in the index is bound to this operation."
-                  detail={
-                    repoId === null
-                      ? "The API answered with an empty list. Either nothing in any indexed repository calls this operation, or nothing indexed does — the index cannot tell the two apart."
-                      : `The API answered with an empty list scoped to ${repoId}. Either nothing in this repository calls the operation, or this repository has not been indexed at all — the index cannot tell the two apart.`
-                  }
+              <FilterBar>
+                <FacetChips
+                  legend="Repository"
+                  options={query.data.repositories.map((repo) => ({
+                    value: repo.repo_id,
+                    count: repo.call_site_count,
+                  }))}
+                  selected={repoId}
+                  onSelect={setRepoId}
+                  allLabel="Every repository"
+                  countScope="Counted over every call site the index holds on this operation, not over the table below — these are the choices available, so they stay the same whichever one is selected and whatever the path filter is set to."
+                />
+                <PrefixFilter
+                  legend="Call site path"
+                  value={pathPrefix}
+                  onSubmit={setPathPrefix}
+                  placeholder="src/billing/"
+                  note="Matched as a prefix of the call site's path, never as a substring. It narrows the call sites only: a vendor change has no position in your codebase, so the table below it is untouched."
+                />
+              </FilterBar>
+              <ActiveFilters filters={activeFilters} onClear={clearCallSiteFilters} />
+              {query.data.call_sites.items.length === 0 ? (
+                <CallSitesEmptyState
+                  data={query.data}
+                  repoId={repoId}
+                  filters={activeFilters}
+                  offset={callSitesOffset}
                 />
               ) : (
                 <>
@@ -197,7 +310,7 @@ function BindingSurfaceDetail({
                   />
                 </>
               )}
-              <RungNote data={query.data} />
+              <RungNote data={query.data} filtered={activeFilters.length > 0} />
               <p className="max-w-prose text-body text-muted-foreground">
                 Either this operation has never had a call site here, or it had one that was
                 later retracted — this table cannot tell the two apart.

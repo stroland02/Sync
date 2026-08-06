@@ -60,11 +60,16 @@ ObservedReader = Callable[..., dict[str, Any]]
 DetectorReader = Callable[[], dict[str, Any]]
 
 # The severity roll-up backs `sync.dashboard.graph_views.severity_rollup`, outside `GraphSurface`
-# for the same reason every reader above is: it is a fleet-wide aggregate over open findings, not
-# a per-finding question the frozen surface answers, and it is read once per `/api/overview` call
-# rather than derived from `whats_at_risk`'s own page so the two stay two questions rather than
-# one route quietly answering both from data shaped for the first.
-SeverityReader = Callable[[], dict[str, Any]]
+# for the same reason every reader above is: it is an aggregate over open findings, not a
+# per-finding question the frozen surface answers, and it is read once per call rather than
+# derived from `whats_at_risk`'s own page so the two stay two questions rather than one route
+# quietly answering both from data shaped for the first.
+#
+# Two routes read it at two scopes, and the scopes compose: `/api/overview` narrows by repository
+# alone, `/api/vendors/{vendor_id}` by that repository *and* the vendor in its path. One reader
+# rather than two, because the join deciding which findings count as open is the part with a wrong
+# answer and a second copy of it is a second place for two totals to drift.
+SeverityReader = Callable[..., dict[str, Any]]
 
 # The vendor-findings reader backs `sync.dashboard.graph_views.vendor_findings`, and it is here
 # for the reason `overview_reader` is: `sync.mcp.tools` is frozen, and `whats_at_risk` cannot
@@ -179,15 +184,32 @@ def create_app(
         return JSONResponse({**payload, "severity_counts": severity["by_severity"]})
 
     async def vendor_detail(request: Request) -> JSONResponse:
+        # `severity_reader` is scoped to the repository and the vendor the URL names, and to
+        # nothing else. It is the option list this screen's severity filter is built from, so
+        # narrowing it by the severity or the path currently selected would collapse it to
+        # whatever is already chosen and leave no way back to the rest.
+        #
+        # The two scopes it does take compose rather than replace each other: dropping the
+        # repository would put a fleet-wide breakdown under a repository's heading, and dropping
+        # the vendor would put every vendor's severities beside one vendor's findings. Both are
+        # the same false claim the repository scoping exists to remove, one axis at a time.
+        vendor_id = request.path_params["vendor_id"]
+        repo_id = request.query_params.get("repo_id")
+        page = vendor_findings_reader(
+            vendor_id,
+            repo_id=repo_id,
+            severity=request.query_params.get("severity"),
+            path=request.query_params.get("path"),
+            limit=_limit_param(request),
+            offset=_offset_param(request),
+        )
+        breakdown = severity_reader(repo_id=repo_id, vendor_id=vendor_id)
         return JSONResponse(
-            vendor_findings_reader(
-                request.path_params["vendor_id"],
-                repo_id=request.query_params.get("repo_id"),
-                severity=request.query_params.get("severity"),
-                path=request.query_params.get("path"),
-                limit=_limit_param(request),
-                offset=_offset_param(request),
-            )
+            {
+                **page,
+                "severity_counts": breakdown["by_severity"],
+                "severity_total": breakdown["total"],
+            }
         )
 
     async def finding_detail(request: Request) -> JSONResponse:
@@ -250,12 +272,14 @@ def create_app(
         vendor_id = request.path_params["vendor_id"]
         operation_id = request.path_params["operation_id"]
         repo_id = request.query_params.get("repo_id")
+        path_prefix = request.query_params.get("path_prefix")
         binding_rung = request.query_params.get("binding_rung")
         return JSONResponse(
             binding_reader(
                 vendor_id,
                 operation_id,
                 repo_id=repo_id,
+                path_prefix=path_prefix,
                 binding_rung=binding_rung,
                 call_sites_limit=_limit_param(request, "call_sites_limit"),
                 call_sites_offset=_offset_param(request, "call_sites_offset"),

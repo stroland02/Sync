@@ -8,6 +8,7 @@ tests assert the fix at the only place that matters: a record a module logger em
 
 from __future__ import annotations
 
+import gc
 import io
 import json
 import logging
@@ -140,3 +141,27 @@ def test_unknown_level_raises_rather_than_silently_falling_back():
 def test_unknown_format_raises_rather_than_silently_falling_back():
     with pytest.raises(ValueError):
         configure(level="INFO", fmt="xml")
+
+
+def test_a_second_configure_does_not_close_the_stream_the_first_borrowed(monkeypatch):
+    """`configure` is documented as idempotent, and it was not: it closed the caller's stream.
+
+    `_rewrapped_at_utf8` wraps `sys.stderr.buffer` in a `TextIOWrapper`, and a `TextIOWrapper`
+    closes the buffer it holds when it is collected. That buffer belongs to `sys.stderr` --
+    borrowed, never opened by this module -- so dropping the first wrapper takes the caller's
+    stream down with it, and every later write anywhere in the process raises
+    `ValueError: I/O operation on closed file` from a line that did nothing wrong.
+
+    Measured under pytest, where each worker's captured stderr is a real file: one extra
+    `configure` in a process failed 1,791 subsequent tests, none of which touch logging.
+    """
+    raw = io.BytesIO()
+    monkeypatch.setattr(sys, "stderr", io.TextIOWrapper(raw, encoding="utf-8", newline=""))
+
+    configure(level="INFO", fmt="text")
+    configure(level="INFO", fmt="text")
+    gc.collect()
+    logging.getLogger("sync.obs.test.reconfigure").info("still writable")
+
+    assert not raw.closed, "the second configure closed the stream the first one borrowed"
+    assert b"still writable" in raw.getvalue()

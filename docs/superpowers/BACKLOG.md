@@ -231,6 +231,93 @@ component to every screen.** `.claude/rules/interface-originality.md` still bind
 ours, and a component earns its place from the graph and the operator, never from a competitor's
 screen or from being available.
 
+#### Slice 1, 2026-08-06 — the two long tables can be narrowed
+
+Both candidate screens now filter, and every filter is a SQL predicate with a denominator that moves
+with it. The vendor findings table takes a severity and a call-site path prefix; the binding surface
+takes a repository and a call-site path prefix. Each filter lives in the URL beside the offset it
+clears, so a narrowed table survives browser Back and can be pasted to somebody else.
+
+**The filters sit inside the repository scope rather than beside it.** B92's scope work landed
+first, on `m4-dashboard`, and this slice was rebased onto it: `repo_id` is what every level below
+Codebase inherits and is not one of the filters an operator sets here, so choosing a severity inside
+a selected repository narrows *that repository* and "clear all filters" deliberately does not touch
+it. All three narrowings reach `open_findings_at_risk` as predicates on one query, and the vendor
+screen's severity facet is scoped by the repository and the vendor together — either alone is the
+same false claim on one axis, and both are the class of defect that scoping exists to remove.
+
+**Every addition is argued from the graph rather than from the catalogue.** Severity and path were
+already parameters of `GraphSurface.whats_at_risk` and reachable from no URL the console builds;
+B92 turned them into real SQL predicates on the way past. `repo_id` was already read by the binding
+surface and settable only by arriving on a link. The only genuinely new predicate is `path_prefix`
+on `call_sites_for_operation`, and it is `starts_with` rather than `LIKE` because `_` is a wildcard
+in a `LIKE` pattern and ordinary in `src/my_module/` — a defect no fixture in this repository would
+have caught. B92's `_open_findings_predicate` reached the same conclusion independently for the
+findings join; `_call_site_predicate` is its sibling over `call_site` alone, and cites rather than
+restates the argument.
+
+**Two facets, both deliberately unnarrowed by the filters they set.** A severity breakdown scoped to
+the repository and the vendor, and the repositories holding a call site on the operation. An option
+list narrowed by its own filter collapses to whatever is already selected and leaves no way back, so
+these count over the whole scope and each says on screen that it does — the numbers on the chips and
+the range under the table answer two different questions.
+
+**Three kinds of nothing per table, where there was one.** Genuinely empty, filtered to empty, and a
+page position past the end of a narrowed set. Each names the repository scope it found nothing in,
+because the scope and the filters are different reasons for an empty table and a reader who cannot
+tell which is which cannot act on either. The second names what the filter excluded against what
+that scope actually holds; the third says the window is empty rather than the table.
+
+**No sorting, and that is the ruling rather than an omission.** A sort control over the rows on
+screen sorts fifty of two and a half thousand and reports a total drawn from all of them — the
+"a reader cannot tell what this view can see" defect this milestone has closed six times, shipped as
+a feature. A correct sort is a server-side `ORDER BY`. Until B92 landed there was nowhere to put
+one, because the vendor route read the frozen `whats_at_risk`; there is now, and **B100** below
+carries what it costs and what it must not claim.
+
+**TanStack Table: declined, with the argument.** `docs/superpowers/references/engineering/dependencies-and-packaging.md`
+governs this and the reason it does not earn its place is the shape of the data, not the size of the
+package. Every long table here is server-paginated over a set that reaches thousands of rows, and
+TanStack's sorting, filtering and faceting are client-side over the rows handed to them — which is
+one page. Wiring it to a server leaves only its column-definition and header-rendering layer, which
+is what `components/ui/table.tsx` already does in 152 lines. The failure mode is worse than the cost:
+a client-side filter over a server page silently produces a wrong answer that looks right, and this
+milestone has spent six defects closing exactly that class. Revisit if a table appears whose whole
+set is genuinely bounded and small.
+
+**No skeleton, no tooltip, no dialog, no icon.** `LoadingState` names what is being waited for in
+words, which is more honest than a shimmer claiming a shape the answer may not have. A tooltip is
+where the surface rule forbids putting a qualification. `--color-graphics` is still unspent, so its
+recorded retiring condition still stands.
+
+**A follow-up this slice filed is already closed, by somebody else, for a different reason.** On
+the pre-rebase base the vendor route answered in about six seconds at this scale, 5,483 ms of which
+was `whats_at_risk` walking every open finding with one `get_call_site` round trip per row. This
+slice filed that rather than smuggling the fix into an interface change; B92 then closed it
+independently by moving the route to `graph_views.vendor_findings`, a real SQL `LIMIT` over a join,
+because the frozen surface's rows carry no `repo_id`. The follow-up entry is deleted rather than
+kept, per this file's own rule that a repaired entry is removed by whoever notices the repair.
+
+**Measured at `--scale 10000`, 1440×900, on the rebased tree.** Binding surface, unfiltered: 650
+DOM nodes, 192 ms first contentful paint, its payload in by 210 ms, 18,307 B. With a path prefix:
+139 nodes and 1,452 B, 12–19 ms at the route. Vendor findings, filtered to one severity: 742 nodes,
+208 ms first contentful paint, both its payloads in by 249 ms, 16,996 B. The route itself answers in
+25–40 ms unfiltered, filtered, or scoped and filtered together — the three are indistinguishable,
+because all three narrowings are predicates on one query.
+
+The paired before figures are against the pre-rebase base and describe this slice's own cost:
+binding surface 634 → 650 nodes, 188 → 192 ms, 18,215 → 18,307 B, which is the filter bar and the
+repository facet. The vendor screen's pair is not reproducible, because B92 replaced the route
+underneath it in the same interval.
+
+**One earlier reading here was wrong and is corrected rather than quietly dropped.** The first
+sample after seeding ten thousand rows showed the filtered vendor route at 6.2 s and the unfiltered
+one at 31 ms, which reads as a filter that costs six seconds. It was not: every read underneath was
+already fast when timed directly, and five repeats of the same request landed at 25–40 ms. The first
+sample after a bulk insert is a measurement of the insert, not of the route. One sample is not a
+measurement, and the rule this file already carries — measure, do not describe — has a second half
+that is easy to skip: measure more than once.
+
 ### B91 — Two screens read one payload and disagree about what they show
 
 `observed-calls-table.tsx` renders `max_resend_count` and not `trace_id`. The embedded observed-calls
@@ -586,6 +673,43 @@ specification.
 **Closes when:** each of the three is either fixed or carries a comment saying why the current
 answer is right, the two remaining reads refuse like their siblings, and the decode gate either
 sees `ValueError`-spelled chains or says in its own text that it cannot.
+
+### B100 — The long tables can be narrowed and still cannot be ordered
+
+B90's first slice ruled sorting out and named what blocked it: a correct sort is a server-side
+`ORDER BY`, and the vendor findings route read the frozen `GraphSurface.whats_at_risk`, which offers
+one ordering and takes no parameter. B92 then moved that route to `graph_views.vendor_findings` over
+`open_findings_at_risk`, a real join with a real `ORDER BY` this repository owns. The block is gone;
+the affordance is still missing, on the two tables a customer repository makes thousands of rows
+long.
+
+**What must not be built.** A sort over the rows already on screen orders fifty of two and a half
+thousand and reports a total drawn from all of them. That is the "a reader cannot tell what this
+view can see" defect this milestone has closed six times, shipped as a feature, and it is the
+failure mode a headless table library invites — B90's TanStack ruling turns on the same point.
+
+Three questions the work has to settle rather than assume, because each has a wrong answer:
+
+- **What an operator actually orders by.** Severity is a closed vocabulary with no natural order
+  stored anywhere — `Severity` is a `Literal`, not a rank — so ordering by it means inventing a
+  ranking and putting it somewhere a reader can see. Newest-first already exists and is the default.
+  A column header that sorts by whatever the column happens to hold is the catalogue talking.
+- **What a stable order costs at scale.** `ORDER BY` over a join with `LIMIT`/`OFFSET` needs an
+  index that matches, or the pagination walks. Time it at `--scale 10000` before and after, the
+  same way the filters were.
+- **What the control claims.** An unsorted table today is in `created_at` order and says so
+  nowhere. Whatever ships has to state the current ordering even when nobody has chosen one,
+  because a table that silently reorders is a table whose page boundaries move under a reader.
+
+**The latency this entry would once have inherited is already gone.** B92's replacement took the
+vendor route from about six seconds at `--scale 10000` to 25–40 ms, and B90's slice-1 note carries
+the re-timed figures. So this is an interface question with a clear budget rather than a
+performance one wearing an interface hat — an `ORDER BY` that costs more than the page it orders
+is the thing to watch for, and there is now a fast baseline to notice it against.
+
+**Evidence that closes this:** an ordering an operator can change on at least the vendor findings
+table, applied in SQL with the page total drawn from the same query, the ordering stated on screen
+whether or not one was chosen, and three numbers at `--scale 10000` before and after.
 
 ## In flight
 

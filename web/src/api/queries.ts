@@ -26,7 +26,7 @@ import type {
   BindingSurfaceParams,
   ObservedTelemetryParams,
   PageParams,
-  ScopeParams,
+  VendorFindingsParams,
 } from "@/api/client"
 import type { RunsPage, WorkflowState } from "@/api/types"
 
@@ -44,16 +44,35 @@ export function useOverview(repoId?: string) {
   })
 }
 
-export function useVendorFindings(
-  vendorId: string,
-  params: PageParams & ScopeParams = {},
-) {
+/**
+ * Open findings for one vendor, in the scope and under the filters the URL asks for.
+ *
+ * All four narrowings are in the query key, so each is a new question rather than a re-render of
+ * the old answer — leaving any of them out would let the cache serve a wider page under a
+ * narrower URL, which is the one failure a scope or a filter must never have.
+ */
+export function useVendorFindings(vendorId: string, params: VendorFindingsParams = {}) {
   const limit = params.limit ?? DEFAULT_LIMIT
   const offset = params.offset ?? 0
+  const severity = params.severity
+  const path = params.path
   return useQuery({
-    queryKey: ["vendors", vendorId, "findings", params.repoId ?? null, limit, offset],
+    queryKey: [
+      "vendors",
+      vendorId,
+      "findings",
+      params.repoId ?? null,
+      limit,
+      offset,
+      severity ?? null,
+      path ?? null,
+    ],
     queryFn: ({ signal }) =>
-      fetchVendorFindings(vendorId, { limit, offset, repoId: params.repoId }, signal),
+      fetchVendorFindings(
+        vendorId,
+        { limit, offset, repoId: params.repoId, severity, path },
+        signal,
+      ),
   })
 }
 
@@ -189,6 +208,7 @@ export function useBindingSurface(
       vendorId,
       operationId,
       params.repoId ?? null,
+      params.pathPrefix ?? null,
       params.callSitesOffset ?? 0,
       params.changesOffset ?? 0,
     ],
