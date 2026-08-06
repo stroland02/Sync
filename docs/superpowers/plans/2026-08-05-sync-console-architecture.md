@@ -2324,3 +2324,780 @@ by spending its restraint on legibility at density rather than on space, which i
 discipline pointed at a different constraint. That is the whole of what three references can tell us,
 and the last unmeasured mile — whether it works at a thousand rows — is ours to find out on our own
 screens.
+
+## 13. Added 2026-08-05 — a published control plane, measured and read
+
+Sections 1 through 12 rest on three landing pages, and section 12 states the limitation plainly:
+none of the three contains a dense surface at all, because the only data-dense artifacts on any of
+them are flat PNGs. Every claim about a thousand rows was inference.
+
+Reference D is a different kind of evidence. It is a **published design system for a developer
+control plane** — Vercel's Geist, at `vercel.com/geist` — which means two things the landing pages
+could not offer. Its surfaces are real DOM at real density rather than screenshots, so they can be
+measured. And its decisions are **documented with their reasoning**, which is the one form of
+material `.claude/rules/interface-originality.md` permits without qualification: a stated argument
+is a concept, and concepts transfer where layouts do not.
+
+That rule binds here exactly as above. Nothing below is a layout, a component composition, a colour
+system or a phrase. Where a Geist rule is quoted it is quoted as evidence of what a control plane
+concluded, and the recommendation that follows is restated from our operator, our graph and our
+product position. Where a finding survives only because Geist does it, that is said out loud and
+the finding is cut.
+
+**Method.** Chrome at 1440x900, `getComputedStyle` across every element in the document, the
+system's own dark theme forced on so the measurement describes the surface we are building. A real
+pointer moved onto controls so `:hover` genuinely matched, verified by reading `matches(':hover')`
+before reading the style. Font metrics taken from canvas at 130px and normalised, so they are ratios
+rather than rounded pixels. Pages measured: `introduction`, `colors`, `typography`, `materials`,
+`table`, `button`, `badge`, `status-dot`, `gauge`, `entity`, `description`, `empty-state`, `note`.
+
+**One thing could not be measured, and it is said rather than worked around.** `vercel.com/dashboard`
+redirects to a login page. The running product is behind authentication, so every number below comes
+from the published system and its live component surfaces, not from the operational dashboard. The
+component surfaces are real DOM and are dense; the dashboard would have been better.
+
+### 13.1 The token layer, read
+
+467 custom properties resolve on `:root`. The structure, not the values, is the finding.
+
+**Colour is indexed by job, and the same index does the same job in every hue.** Nine scales of ten
+steps each — a neutral, its alpha twin, and seven chromatics. The documentation states what each
+index is for, and it is identical across scales: **1 to 3 are component backgrounds (default, hover,
+active); 4 to 6 are borders (default, hover, active); 7 and 8 are high-contrast backgrounds; 9 and
+10 are text and icons.**
+
+Three consequences follow, and all three are measurable in the ramp itself.
+
+- **Only two of ten steps are text.** The "two ink levels" the three landing pages agreed on
+  emergently is here a stated rule with a reason. Counted on a live component page in dark mode:
+  208 text-bearing elements at the secondary ink, 27 at the primary, 4 strays, 2 inverted. **89% of
+  all rendered text is the secondary level.** Primary ink is the exception, not the default.
+- **Three of ten steps are borders.** A line is not an afterthought in a control plane; it gets as
+  much of the ramp as text does. Measured on the table page: 23 elements at one border step and 18
+  at the next.
+- **The ramp is not monotonic, because it is not a ramp.** Lightness by index in dark mode runs 10,
+  12, 16, 18, 27, 53, 56, 49, 63, 93 percent. **Step 8 is darker than steps 6 and 7.** A scale tuned
+  to a job at each index will do that; a scale interpolated between two endpoints cannot. This is the
+  clearest single piece of evidence that the index names a role.
+
+**There are exactly two page backgrounds.** One default, one for the rare case where a subtle
+differentiation is needed, and the documentation says to use the first in most instances. Everything
+that looks like a third or fourth surface is a *component* background at rest, hover or active. So
+the surface inventory of a control plane is **two levels of depth and three levels of state**, not
+five levels of depth.
+
+**One height scale governs controls, form fields, popover rows and menu rows alike:** 32, 36 and 40
+pixels, named small, medium and large, with the form-field and popover-row tokens resolving to the
+same three numbers. A control drops into a dense row without breaking the rhythm because there is
+one rhythm.
+
+**Elevation is a bundled preset whose name is its role.** Eight presets, each fixing radius, fill,
+stroke and shadow together: four that sit on the page and four that float above it. The
+documentation's rule is that you pick the preset from where the element sits in the layered
+hierarchy, never by choosing a shadow; that you never stack two on one element, and a child needing
+more elevation is lifted into its own; and that the choice is aligned with the element's z-index
+band, which is itself tokenised in five named steps. Radius is a function of that role — 6px at the
+resting levels, 12px at the raised and floating ones, 16px at full-screen — and separately a function
+of control size, 6px on the two smaller controls and 8px on the largest.
+
+**Lines are drawn as shadow rings, and it is a token.** The border preset is a 1px spread box-shadow
+rather than a border property. This is the same construction the three landing pages reached (452,
+14 and 576 thin filled divs respectively), arrived at here for a reason a control plane has and a
+marketing page does not: **a ring costs no layout.** A border changes an element's box; in a table
+where a selected row must not shift by a pixel relative to its neighbours, that matters. Our own
+`shadow-flat` ring is the same mechanism, arrived at independently.
+
+**Focus is one hue, and it is the link hue.** The focus ring is a double ring: two pixels of the
+page colour, then two pixels of the accent. That construction exists so the ring reads against any
+surface step underneath it. On a dense surface where focus can land on a row, a cell, a control
+inside a cell, or a header button, a single-ring focus indicator disappears against roughly half of
+them.
+
+**Motion has tokens, and they are named by role rather than by duration:** an overlay duration, a
+popover duration, one shared timing curve with a slight overshoot, and a default transition duration
+of 0.15s. That a control plane tokenises motion at all is the first sign of the disagreement section
+15 develops.
+
+**Space is base 4**, with the scale 4, 8, 12, 16, 24, 32, 36, 40, 64, 96, 128, 192, 256 and named
+aliases at 8, 12, 24, 32 and 40. **The page margin token is 24px.** That number is the whole of
+section 15's spacing argument and it is worth reading twice.
+
+### 13.2 Type, which is a matrix and not a ramp
+
+This is the finding that most changes how we should read our own numbers.
+
+Geist does not publish a type scale. It publishes **four roles, each with its own sizes, leading and
+weight**, and a size may appear in more than one role with different treatment.
+
+| Role | Sizes | Weight | Tracking | Job, as documented |
+|---|---|---|---|---|
+| **Heading** | 72, 64, 56, 48, 40, 32, 24, 20, 16, **14** | 600 | -0.06em at 40 and above, -0.04em at 24-32, -0.02em at 14-20 | introduce a page or a section |
+| **Button** | 16, 14, 12 | 500 | normal | only inside components that render buttons |
+| **Label** | 20, 18, 16, 14, 13, 12, plus mono at 14, 13, 12 | 400 | normal | single lines, ample leading, marries with icons |
+| **Copy** | 24, 20, 18, 16, 14, 13, plus mono at 13 | 400 | normal | multiple lines, higher leading than Label |
+
+Two modifiers, and nothing else: **Strong** raises 400 copy to 500 inside a line, and **Subtle**
+lowers a 600 heading to 500 inside a line. Weight is therefore **not a hierarchy channel at all in
+this system — it is a within-line emphasis modifier plus one constant per role.**
+
+Measured leading, which shows the roles diverging: Heading runs 1.0 at 72, 56 and 64 up to 1.5 at 16;
+Label runs 1.11 to 1.6 and takes 16px of leading at 13px; Copy takes 18px of leading at the same
+13px. **The same size gets different leading depending on whether it is a row or a paragraph.**
+
+The documented usage notes are worth more than the numbers:
+
+- Copy at 24, 20 and 18 is marked **for marketing pages and hero areas**. The application register
+  tops out at 16 for read text.
+- Copy 14 is "the most commonly used text style"; Label 14 is "the most common text style of all".
+- Copy 13 is "for secondary text and views where space is a premium".
+- Label 12 is "for tertiary level text in busy views", and it is the step that carries capitals.
+- Label 13 carries **tabular figures**, "used when conveying numbers for consistent spacing".
+- Mono appears only at 14, 13 and 12, and is documented as pairing with a sans size one step larger.
+
+**Measured on a live component page in dark mode**, the working band is narrow: of 231 text-bearing
+elements, 183 at 14px, 22 at 16, 18 at a mono 13.7, 7 at 24, 4 at 12, 4 at 20, 2 at 13 and 1 at 40.
+The nominal range is 40/12 = **3.33:1**, but **90% of all text sits inside 12-16px, a band of
+1.33:1**. Weights present: 400 on 195, 500 on 34, **600 on 12**.
+
+**Letter-spacing is `normal` on every application-register element measured.** Negative tracking
+appears only on 600-weight headings, graduated in three tiers by size.
+
+### 13.3 The dense surface, measured
+
+Six live tables on one page, and every one of them identical.
+
+| | Measured |
+|---|---|
+| Body row height | **40px**, on all six tables |
+| Header cell height | **36px** |
+| Body cell padding | **10px vertical, 8px horizontal** |
+| Header cell padding | **0 vertical, 8px horizontal** |
+| Rules between body rows | **none** |
+| Rule under the header | **one, 1px, at the documented default-border step** |
+| Body cell ink | secondary, on every cell |
+| Body cell weight | 400, on every cell |
+| Header cell ink | **the same secondary ink as the body** |
+| Header cell weight | **500** |
+| Striped variant | alternate rows take the **deeper** background step, not a lighter one |
+| Row on hover, pointer really on it | background unchanged, `transform: none`, no shadow |
+
+Three things in that table are worth stating as sentences.
+
+**The header separates from the body by one weight step and one rule.** Not by ink, not by a surface
+step, not by capitals. That is the cheapest possible separator and it survives a thousand rows,
+because it costs no contrast budget and no vertical space.
+
+**Nothing in a row carries emphasis.** Every cell is the same size, the same weight and the same ink.
+Emphasis inside a row comes from what you put in the cell — a badge, a mono value, a control — never
+from the row's own typography. A dense surface stays legible by **refusing to rank its own fields**
+and letting the columns do it.
+
+**The row height is the governing number and the padding is derived from it.** A 20px line box plus
+10px above and below is 40px, which is the large step of the one height scale. The 10px is not on the
+base-4 grid; the system breaks its own spacing scale in the table cell in order to hit the row
+height. Pick the row from the control scale first, then solve for padding.
+
+### 13.4 Motion, with a real pointer
+
+Measured on a component page carrying 976 elements.
+
+- **34 named `@keyframes` exist in the document.** Every one sorts into exactly three jobs: an
+  overlay entering or leaving, something loading, or the marketing site's scroll reveal. **None is
+  decorative on an application surface.**
+- **77 elements carry a transition — 7.9% of the document.**
+- **30 animations are running at rest, and every single one is the spinner's opacity keyframe**,
+  belonging to the loading-state demonstrations on that page. Nothing else moves.
+- **The primary control, pointer on it and `:hover` confirmed matching: fill changes from
+  rgb(237,237,237) to rgb(204,204,204). `transform: none`. Opacity unchanged. No shadow. And
+  `transition-duration: 0.15s`, eased on a standard curve.**
+
+Three sizes of that control, at 32, 36 and 40px high, taking 14/500, 14/500 and 16/500 type, 6px,
+6px and 8px radius, and 6px, 10px and 14px of horizontal padding. **Every variant differs from every
+other by fill alone** — identical geometry, identical type. That is the fourth independent
+measurement of the same construction.
+
+### 13.5 Spacing at density, measured rather than tokenised
+
+The rendered distribution inverts the landing pages completely.
+
+| | Landing pages A/B/C | Geist, rendered |
+|---|---|---|
+| Dominant gap | 24px | **8px** (40 declarations), then 10 (20), 4 (12), 24 (6), 12 (6) |
+| Dominant padding | 24px | **2px** (106), **6px** (91), **12px** (87), then 48 (14), 16 (9), 24 (7) |
+| Page frame | 113-173px | **24px**, as a token |
+| Frame : section : component | 4.7 to 7.2 : 2.7 to 3.3 : 1 | approximately **1 : 1 : 0.33** |
+
+A control plane's page frame is the same value as its largest common gap. There is no 6.7:1.
+
+---
+
+## 14. Where Geist agrees with the three landing pages
+
+Section 8 listed fourteen properties on which three designers agreed and called them invariants of
+dense considered interfaces. A fourth measurement, this time of an actual control plane, holds seven
+of them, refines three and breaks four. The agreements first.
+
+| Property | A/B/C | Geist | Standing |
+|---|---|---|---|
+| Working ink levels | two, plus one accent | **two**, and stated as a rule with 89% on the secondary | **Confirmed, and now with a reason** |
+| Ink default | primary is used sparingly | **89% of text is secondary ink** | **Confirmed, and sharper than we assumed** |
+| Leading | loosens as size falls | 1.0 at the display end, 1.5 at 16px, 1.33 at 12px | **Confirmed** |
+| Primary and secondary controls | identical geometry, differ only by fill | identical geometry and type, differ only by fill | **Confirmed four times** |
+| Display tracking | negative, never looser than body | -0.02 to -0.06em, graduated, on headings | **Confirmed** |
+| Nothing decorative runs at rest | 0, 0, and one 40ms scroll bar | 30 running animations, **all of them spinners** | **Confirmed, and this is the strongest form of it** |
+| Geometry never moves on interaction | `transform: none` on all three | `transform: none`, no scale, no shadow | **Confirmed four times** |
+| Lines are drawn without the border property | 452, 14 and 576 thin filled divs | a **tokenised 1px shadow ring**, and a stated reason | **Confirmed, and the reason is now known** |
+| Prose never runs the column width | quarter to half the column | prose held to 862px inside a 1220px column, 71% | **Weakly confirmed; the constraint is looser in an app** |
+
+The two that matter most are the last two and the sixth.
+
+**"Nothing decorative is ever running" is now measured on a system that has every excuse to animate.**
+Thirty animations were running at rest and every one was a loading indicator attached to a component
+that was genuinely waiting. A control plane with 78 components, motion tokens, and a documented
+overlay-animation model still runs nothing that is not reporting a real state. Section 6's conclusion
+that the felt quality does not come from motion now rests on four measurements, one of them of
+exactly our register.
+
+**The ring construction now has an argument rather than a coincidence.** Section 10 concluded that
+the useful rule was "a line where something is separated, a surface step where something is grouped,
+neither applied by default", derived from what three pages did. Geist supplies the mechanism's
+reason: a 1px shadow ring costs no layout, and on a surface where a row must not shift relative to its
+neighbours when it gains a border, that is the whole point. Our `shadow-flat` is already this. The
+defect section 2 found — every surface taking the identical ring, so the ring encodes nothing — is
+unchanged and the fix is unchanged.
+
+---
+
+## 15. Where Geist disagrees, and which I trust for a dense surface
+
+Four of section 8's fourteen invariants do not survive contact with a control plane. In every case
+I trust the control plane, and in every case the reason is the same: the property was a consequence
+of a page that is read once, and our screens are read all day.
+
+### 15.1 Two weights, no 600 — broken, and we were already right
+
+Section 8: "Two weights. No 600, no 700, in any of them." Measured on all three landing pages.
+
+Geist: **600 on every heading at every size, down to and including 14px.** Weight 400 on 195
+elements, 500 on 34, 600 on 12 in a single dark-mode census.
+
+I trust Geist, and our own `DESIGN.md` already agrees — `--text-emphasis`, `--text-section`,
+`--text-page` and `--text-figure` all carry 600 today. Section 5 refused "two font weights" on the
+grounds that our range is 2.67:1 by decision and at that range weight does necessary work that size
+cannot. That refusal was correct and is now confirmed by a system built for our register.
+
+**And it goes further than a refusal.** Geist reaches a 14px heading — 600 weight, negative tracking,
+20px line box, the same line box as a body row. A heading that costs no more vertical space than the
+row beneath it is hierarchy for free, and it is the direct answer to "78% of our type is on two
+steps". The problem was never that 78% of type sits at 12 and 14. The problem is that at 12 and 14 we
+have **one treatment**, so a label, a value, a column header and a heading are indistinguishable.
+Geist has four treatments in that band. We can afford at least three.
+
+### 15.2 "At most one authored transition in an entire page" — broken, and the fourth guard must change
+
+Section 8: "At most one in an entire page", from stylesheet counts of 0, 0 and 1. Section 10
+strengthened the CTA finding to "instant, non-geometric acknowledgement or none at all, and
+`transition-duration: 0s` on all three". Section 11 turned that into a new assertion for Task 16
+banning any `transition-duration` above zero under `features/` and `layouts/`.
+
+Geist: **77 transition-bearing elements out of 976, and the primary control eases its fill over
+0.15s on a standard curve.** The change is still non-geometric — `transform: none`, no scale, no
+opacity, no shadow — but it is not instant.
+
+I trust Geist without hesitation, and the reason is a product difference rather than a taste
+difference. A landing page has one call to action and the visitor clicks it once. **The button on
+that Geist page was one of 47.** When a surface carries dozens of controls and the operator's pointer
+crosses several on the way to the one they want, an instant fill change reads as flicker; a 150ms ease
+reads as the surface tracking the pointer. The feedback is not decoration, it is disambiguation, and
+only a dense surface generates the requirement.
+
+**Section 11's fourth assertion for Task 16 is wrong as written and must not be built as written.**
+Section 18 replaces it with two narrower assertions that all four references support.
+
+### 15.3 The three-level spacing ratio — broken at the outer level, and this is the sharpest disagreement
+
+Section 8: "Three levels, each at least 2x the one below; frame 4.7 to 7.2x the in-component unit."
+Section 11 turned that into Task 14 Step 1's target.
+
+Geist: **the page margin token is 24px, which is also the dominant named gap.** The rendered
+distribution is dominated by 8px gaps and 2, 6 and 12px paddings. Frame-to-section is approximately
+**1:1**, not 2:1 and certainly not 4.7:1.
+
+I trust Geist, and the argument is one this plan already made in a different place. `DESIGN.md` says
+vertical space is the currency and every unit of it is a row that fell off the viewport. Section 5
+and section 12 both refused the landing pages' magnitudes on exactly that ground. What the fourth
+measurement adds is that **the ratio does not survive either, at the outer level.**
+
+The reason is structural rather than aesthetic. On a landing page the frame is the only thing
+separating the content from the browser, so it has to do the work of saying "this is a composition".
+On a console the frame is bounded by a persistent navigation rail and a header, which already say
+that, and every pixel spent on the frame is taken from a nine-column evidence table. **A control
+plane's frame does no hierarchical work, so it is set to the smallest value that keeps content off
+the chrome.**
+
+The step ratio is still real, but it lives one level down. Section 18 revises Task 14 Step 1
+accordingly: hold the step between the three *inner* levels and stop requiring the frame to exceed
+the between-panel gap.
+
+### 15.4 "The smallest step is a different job" — resolved, in our favour, on a third reading
+
+Section 1 measured Reference A's 12px step as uppercase with +0.1em tracking and promoted that to a
+principle. Section 10 demoted it, because B and C have no uppercase anywhere at all, and reduced it to
+our own decision defended on our own grounds.
+
+Geist restores partial support with reasoning rather than habit. Its Label 12 is documented for
+"tertiary level text in busy views" and it is the step that carries capitals. Two of four references
+now use the treatment, and the one that documents it documents it **for the exact condition we have** —
+tertiary text in a busy view. Its Label 13 additionally carries tabular figures for numeric comparison
+across rows.
+
+The status of Task 12 Step 2 is unchanged: build it, as our decision, justified from `site-nav.tsx:65`
+arriving at it independently for graph-level labels. But it is no longer a lone habit, and the brief
+can now say the role it serves is the one a control plane names.
+
+### 15.5 One more disagreement, smaller, and it is about our own table
+
+Section 2 recorded `TableRow`'s `hover:bg-muted/50` as "the one interaction in the console that was
+already right", and Task 13 Step 3 instructs the executing agent to leave it exactly as it is.
+
+**Geist's table row does not respond to hover at all.** Pointer on it, `:hover` matching, background
+unchanged. Its *navigable* rows do respond, by moving to the other background step. The distinction
+is that a row highlights when it is a target and stays quiet when it is data.
+
+I trust Geist here, and the argument is ours: a highlight is an affordance, and an affordance that
+leads nowhere is a lie the surface tells forty times a second as the pointer crosses the table.
+Several of our tables are evidence, not navigation. Section 18 revises Task 13 Step 3 to keep the
+hover where the row is genuinely navigable and remove it where it is not — and to move it off an
+alpha overlay, because an alpha composites differently against each of our four surface steps and
+therefore means four different things.
+
+---
+
+## 16. What transfers, in our own terms and our own tokens
+
+Nine things. Each is stated as a problem we have, and each survives the rule's test: it can be
+justified from the operator, the graph or the product position without pointing at anybody's screen.
+
+**1. Our nine-step neutral ramp should say what each index is for, and the indices should not all be
+about lightness.** The console's ramp is currently a lightness gradient with four steps named for
+surfaces. The problem it fails to solve is ours and specific: a reviewer looking at an evidence table
+cannot tell a panel from a header from a selected row from a hovered row, because all four are drawn
+from the same continuum and none of them is *reserved*. Assigning jobs to indices — which are
+surfaces, which are borders, which are text, which are state — makes the ramp answerable and makes a
+misuse visible. **This is a documentation and allocation change, not a new value.**
+
+**2. The extra surface steps belong to state, not to depth.** This is the single largest correction
+to section 3. That section proposed letting grouping ride the four-step surface ramp so the ring
+could stop being applied to everything. The direction is right and the allocation is wrong: two of
+our four steps should carry depth — the page and a panel — and the remaining head-room should carry
+**rest, hover and selected on a row**. Our own evidence supports this over the landing pages': we
+have exactly one authored interaction in eight feature screens, and the reason is that we have no
+vocabulary for state, so every agent invents an alpha overlay. Two depth levels is also what
+`DESIGN.md` already declares.
+
+**3. A table header separates by weight and one rule, and needs neither ink nor surface.** Task 13
+Step 3 currently spends `surface-subtle` on the header. A weight step plus the rule we are already
+keeping is cheaper, costs no contrast budget, and leaves `surface-subtle` free for point 2. Justified
+from us: our tables run to hundreds of rows and the header is the one element that must survive being
+sticky over any surface underneath it — a background makes that harder, a weight does not.
+
+**4. A row's fields should not be individually ranked, and the row height should be picked before the
+padding.** Our body step is 14px on a 20px line box, which is the same line box a control plane uses;
+with 8px of row padding that is a 36px row, and 36px is a legible medium row. The transferable
+mechanism is the ordering: **choose the row height from the same scale the controls use, then derive
+the cell padding from it**, so a button dropped into a cell does not change the row. We have no
+height scale today, which is why nothing lines up.
+
+**5. Weight and leading, not size, are the affordable hierarchy channels inside the 12-16px band.**
+This is the answer to the 2.0:1 measurement in section 2, and it is a better answer than the one
+section 3 gave. Adding steps costs rows; a heading set at the body size in the heading weight costs
+none. Our system already has the weight; it does not have the rule that says a screen must
+distinguish scanned text from read text from headed text within the band.
+
+**6. A single-line row and a paragraph at the same size should not share a line-height.** Measured:
+a control plane gives its single-line label role 16px of leading at 13px and its multi-line copy role
+18px at the same size. Our six steps carry one leading each, so a table cell and a qualification
+paragraph are set identically. The qualification is the thing that suffers, and the qualifications
+are what this plan protects.
+
+**7. Tabular figures on every numeric column, and mono stays reserved.** The problem is ours and
+concrete: a count of findings, a count of bindings and a row count only support comparison down a
+column if their digits align. A control plane solves it two ways — tabular figures, or monospace —
+and **the second one is closed to us**, because mono in this console means the system recorded this
+value verbatim, and spending it on every number destroys the signal. So: tabular figures on numeric
+columns, mono reserved for verbatim. Section 10 said C's furniture-mono is what breaks our rule;
+this is the same hazard arriving from the numbers side, and the same answer.
+
+**8. Absence needs a mark and a vocabulary, and there is more than one kind of nothing.** A control
+plane renders a typographic mark where a value is unknown or not applicable and forbids substituting
+an empty string, a null or an abbreviation — and separately ships six distinct empty states, for a
+filter that matched nothing, a resource never created, work that has been cleared, a permission
+denial, an informational blank, and a failed load. **Our data distinguishes more kinds of nothing
+than theirs does**, because the provenance rung tells us whether a binding was never observed or
+observed and empty, and that difference is the whole of the false-positive story. So we take the
+discipline — every empty cell carries a mark, never a blank — and we go further than the convention,
+because collapsing "not applicable" into "not observed" would erase a rung.
+
+**9. A qualification is persistent by construction, and stacking three of them is an architecture
+signal.** A control plane's rule for its inline-notice primitive is that it persists until the
+underlying state changes, that it carries no dismiss control because the control competes with the
+message, and that three of them stacked on one card means the page architecture is wrong rather than
+the copy. The first two are Decision 3 restated by somebody else, which is worth recording. **The
+third is uncomfortable and useful**: this plan protects twenty-four sentences, and if a screen ends
+up stacking several of them, that is evidence the screen is answering too many questions, not
+evidence the sentences are too long. Nothing here licenses shortening one.
+
+### 16.1 The component inventory, and what we lack
+
+A control plane ships 78 documented primitives. We have three that this plan counts — button, card,
+table — inside a `components/ui/` directory of eight files. The gap is not 75 components; most of
+that inventory is form controls and overlays we do not need yet. The honest short list is the
+primitives our own data demands and our tree currently fakes:
+
+| Missing | The problem it solves for us, stated without reference to anybody's system |
+|---|---|
+| **A definition list** | Finding detail and node detail are key/value metadata rendered as two-column tables inside cards. `<dl>` is the correct semantics, is denser, and lets a screen reader announce a pair as a pair. |
+| **A qualification notice** | The twenty-four protected sentences are ad-hoc prose in ad-hoc containers. A primitive that is persistent by construction and has no dismiss path enforces the protection instead of leaving it to an audit every task has to repeat. |
+| **An empty state with variants** | We have at least four kinds of nothing and render them identically. |
+| **A verbatim value** | File paths, finding ids and node names are mono text with no copy affordance and no truncation strategy. |
+| **A middle truncation** | A file path truncated at the end loses the filename, which is the part that identifies it. Our columns are fixed and our paths are long. |
+| **A loading state that is not zero** | An indeterminate figure and a zero figure currently render the same, which is precisely the failure the absence channel exists to prevent. |
+
+**Ruling, recorded here rather than acted on: this list does not become tasks in this plan.** Tasks 12
+through 16 are being executed from by another session and the parallel partition depends on their file
+sets. The inventory is a finding, it is written down so it is not rediscovered, and the two with the
+strongest argument — the qualification notice and the verbatim value — should be the first work
+proposed after Task 16 lands.
+
+---
+
+## 17. The font, and what it costs
+
+Geist Sans and Geist Mono are OFL-licensed and installable, which makes this the one item here that
+is a real adoption decision rather than a concept. It was measured rather than assumed, against the
+stack `DESIGN.md` actually specifies today.
+
+### 17.1 What was measured
+
+Metrics taken from canvas at 130px and normalised to the em, so they are ratios.
+
+| | Geist Sans | Geist Mono | Segoe UI (our sans) | Cascadia Code (our mono) | Consolas |
+|---|---|---|---|---|---|
+| x-height / em | **0.5308** | **0.5308** | 0.5000 | 0.5231 | 0.4923 |
+| cap-height / em | 0.7154 | 0.7154 | 0.7000 | 0.7000 | 0.6385 |
+| descender / em | **0.1538** | **0.1538** | 0.2308 | 0.2308 | 0.2000 |
+
+Advance width, measured on `sync.index.dependency_edits` — 27 characters of the kind that actually
+fill our cells:
+
+| | at 13px | at 14px |
+|---|---|---|
+| Geist Sans | 174.10px | 187.49px |
+| Segoe UI | 165.01px | 177.70px |
+| Geist Mono | 210.60px | 226.80px |
+| Cascadia Code | 205.66px | 221.48px |
+| Consolas | 192.98px | 207.83px |
+
+Digits `1234567890` at 13px: Geist Sans 74.67px, Segoe UI 70.08px.
+
+Payload, as served: **Geist Sans variable woff2, full unicode range, 69,740 bytes. Geist Mono latin
+subset, 23,108 bytes**, with five further subsets loaded only when their ranges are used. Roughly
+**91 KB** for the pair with a full weight axis. A latin-only subset of the sans would be materially
+smaller.
+
+### 17.2 The three questions the brief asked, answered
+
+**Does it improve legibility at 12-14px, where 78% of our type sits?** Yes, and the mechanism is
+measurable rather than aesthetic. Geist Sans has a **6.2% larger x-height than Segoe UI** at the same
+nominal size, and apparent size at small sizes is governed by x-height, not by the nominal number.
+
+There is a cost hiding behind that, and it resolves in our favour. Geist Sans is **5.5% wider than
+Segoe UI at the same nominal size**, and its digits are 6.6% wider — which on a nine-column table is
+real column budget. But the comparison at equal *nominal* size is the wrong one. At 13px Geist Sans
+has an x-height of 6.90px; at 14px Segoe UI has 7.00px. **So Geist at 13px is within 1.4% of Segoe's
+apparent size at 14px, and its advance is 174.10px against 177.70px — 2.0% narrower.** Setting our
+body step at 13px in Geist would be no less legible than 14px in Segoe, would be slightly narrower
+per row, and would free a pixel of line box.
+
+The descender is the second, quieter win. Geist's descender is **33% shallower** than Segoe UI's.
+Descender depth is what forces a line box taller than the type needs; a shallower one is why a 20px
+line box can hold 14px type without the risk of clipping that our current pair carries.
+
+**Does a matched pair strengthen or blur the mono rule?** It strengthens it, and the measurement says
+why. Geist Sans and Geist Mono are **metric-matched on the vertical axis to four decimal places** —
+identical x-height, cap-height, ascender and descender. Our current pair is not: Segoe UI and Cascadia
+Code differ by 4.6% in x-height, so a mono span inside a sans row today reads as *a different size*.
+
+That is the blur, and it is in our current stack rather than in the matched pair. Size is the channel
+our type ramp owns; a mono run that also shifts apparent size is competing with the hierarchy. A
+matched pair removes size from the mono signal entirely and leaves it carried by letterform and by
+advance rhythm — Geist Mono is 21% wider than Geist Sans for the same string, so a mono run is
+unmistakable without being a different size. **Mono means the system recorded this verbatim, and it
+should mean only that.**
+
+One hazard, and it is worth writing into `DESIGN.md` if this is adopted: a matched, pleasant mono
+invites exactly the drift section 10 identified in Reference C, where mono becomes a furniture
+typeface for navigation and captions and consequently means nothing. The rule survives adoption only
+if it is written down and guarded.
+
+**What does it cost?** Honestly:
+
+- **~91 KB of woff2** as served, less with a latin subset. Against a console that today ships zero
+  font bytes and makes zero font requests.
+- **A font-loading strategy, or a flash.** A variable font at 68 KB will not be there on first paint.
+  The mitigation Vercel ships is a metric-adjusted local fallback face so the swap causes no reflow;
+  that is a real, hand-written `@font-face` with `size-adjust`, `ascent-override` and
+  `descent-override`, and getting the numbers wrong makes the swap worse than no fallback. It is an
+  afternoon of work and it is not optional, because a reflowing table is worse than a plain one.
+- **`DESIGN.md`'s current position becomes false and must be rewritten.** It states today that a
+  webfont buys a network request, a flash of unstyled text and a licence question, for a console
+  nobody outside the project has opened. Two thirds of that stands. The licence question does not —
+  OFL settles it.
+
+### 17.3 The ruling
+
+**Adopt Geist Mono. Defer Geist Sans.** They are separable and they should be separated, because the
+arguments for them are not equally strong.
+
+The mono case is the strong one and it is nearly free. Our mono is load-bearing — it is a semantic
+claim about provenance, not a style — and it is currently rendered in a face that sits at a different
+optical size from the sans beside it, which weakens the one distinction we most need to read
+correctly. Geist Mono's latin subset is **23 KB**, it is metric-matched to a sans we may or may not
+adopt, its x-height is 7.8% larger than Consolas's, and it is the smaller half of the payload. A
+flash on the mono spans alone is also the cheaper flash: mono is a minority of our text, and those
+spans are values rather than prose, so a swap disturbs less.
+
+The sans case is real but not urgent, and it should wait for a specific reason. The measured gain is
+a body step that can drop from 14px to 13px at equal legibility and slightly narrower — which is
+worth about one extra column of a wide table, or a pixel of line box per row. That is a genuine gain
+and it is not worth 68 KB, a fallback-metrics exercise and a first-paint regression **until we have
+measured a screen at a thousand rows and know whether we need that pixel.** Section 12 named that as
+the last unmeasured mile. Adopt the sans when the mile is measured and it turns out we do.
+
+**And one thing to take from the font work regardless of either decision: tabular figures.** They are
+available in the system stack we already ship, they cost nothing, and transfer item 7 above is the
+argument. Do that first.
+
+---
+
+## 18. What this changes in Tasks 12 through 16
+
+No task is renumbered, reordered or removed, and the parallel partition is unchanged. Each revision
+below names the step it changes and what replaces it.
+
+**Task 12, Step 1 — tracking on `--text-section` and `--text-emphasis`.** Confirmed a fourth time and
+now with target values. A control plane applies negative tracking **only to its heading role**, never
+to a label, a button or body copy at any size, graduated by size: about -0.02em at 14-20px, -0.04em at
+24-32px. Our steps map onto that directly — `--text-emphasis` at 16 and `--text-section` at 18 take
+the shallower value, and `--text-page` at 24 and `--text-figure` at 32 already carry tracking that
+should be checked against the deeper one. **Add the condition to `DESIGN.md`:** tracking travels with
+these steps because they are heading roles; if `--text-emphasis` is ever used for in-row emphasis
+rather than a panel title, that use takes the step without the tracking.
+
+**Task 12, Step 2 — the furniture class.** Unchanged in substance, and the brief's justification gains
+a fourth measurement. Section 11 correctly demoted the uppercase micro-step from a measured principle
+to our own decision. It stays our decision, but the role it serves is now one a control plane names
+explicitly: the smallest step carries **tertiary text in busy views**, which is what a graph-level
+label, a column header and a rung label are. The implementation constraint from section 11 stands
+without change — the class sets `text-transform`, and the capitals never go into the copy.
+
+**Task 12, Step 3 — the surface ramp's grouping contract. This step changes most.** Section 11 already
+struck its false premise. The contract to write is now more specific than "a rule where something is
+separated, a surface step where something is grouped":
+
+- **Two of the four surface steps carry depth** — the page, and a panel on it. That is all the depth
+  a console needs, and it is what `DESIGN.md` already declares by having exactly two elevation levels.
+- **The remaining head-room carries interaction state** — a row at rest, a row under the pointer, a
+  row selected — and not a third and fourth level of nesting. This replaces section 3's proposal that
+  grouping ride the whole ramp. The argument is ours: eight feature screens contain one authored
+  interaction between them, because the system gives an agent no vocabulary for state and every agent
+  invents an alpha overlay instead.
+- **State steps are named surface values, never an alpha overlay.** An alpha composites differently
+  against each depth step underneath it, so one declaration means several different things.
+- **The ring is kept for a surface that must be told apart from a neighbour at the same step**, as
+  already ruled, and it stops being applied by default.
+- Record why the ring is a shadow rather than a border, in one sentence: a ring costs no layout, so a
+  row that gains one does not shift relative to its neighbours.
+
+**Task 12, Step 4 — the spacing ruling.** Unchanged: three tokens, no fourth, page frame unnamed on
+Tailwind's base scale. Add one recorded decision that section 15.3 now supports: **the page frame is
+set to the smallest value that keeps content off the chrome, and it is not required to exceed the
+between-panel gap.** A control plane's frame does no hierarchical work because the nav rail and the
+header already do it.
+
+**Task 12 — one addition, and it is cheap.** Record a **row-height scale** in `DESIGN.md` alongside
+the spacing tokens: three values that govern a control, a form field and a table row alike, so a
+control dropped into a cell does not change the row. Our `--text-body` at 14/20 with `p-row` above and
+below already produces a coherent row; the point is to name the height, derive the padding from it,
+and stop deriving the row from the padding. **No fourth spacing token** — this is a height scale, and
+it belongs with the control sizes rather than with the gaps.
+
+**Task 13, Step 1 — radius.** Unchanged, and now with a fourth data point that does not disturb it. A
+control plane makes radius a function of two things: elevation role (6, 12, 16) and control size (6 on
+the two smaller controls, 8 on the largest). Our two-value rule is a deliberate simplification and it
+stands on `DESIGN.md`'s own argument. Note the alternative in the brief so the next agent does not
+rediscover it as a defect.
+
+**Task 13, Step 3 — `TableHeader`. Revised, and it gets cheaper.** Section 11 already ruled that the
+header rule stays. The measurement now shows the surface step is not needed to do the separating: a
+control plane's table header sits on **no background at all**, uses **the same ink as the body**, and
+separates by **weight 500 against 400 plus one 1px rule**. Make the weight step and the rule the
+mechanism, and treat the surface step as optional. Two reasons, both ours: a sticky header over a
+scrolled body is easier to keep legible without a background than with one, and freeing
+`surface-subtle` is what pays for the state steps in Task 12 Step 3.
+
+**Task 13, Step 3 — the second half, which section 11 did not touch.** The instruction to leave
+`TableRow`'s `hover:bg-muted/50` "exactly as it is" is now revised. **Keep a hover response only where
+the row is genuinely navigable, and remove it where the row is evidence.** A highlight is an
+affordance; on a row that leads nowhere it is a promise the surface cannot keep, made forty times a
+second as the pointer crosses the table. Where it is kept, move it from the alpha overlay to the named
+state surface from Task 12 Step 3, and keep the transition — see Task 16 below, which no longer
+forbids it.
+
+**Task 14, Step 1 — separating the page frame from the between-panel gap. Retargeted.** Section 11 set
+the target as "each spacing level at least 2x the one below", from 2.0, 2.4 and 1.8 measured on three
+landing pages. A control plane measures approximately **1:1** at that level and 24px of frame in
+total. The revised target: **hold the at-least-2x step between the three inner levels — between-panel,
+in-panel, in-row — and drop the requirement that the frame exceed the between-panel gap.** At our
+8px in-row unit that is 16 and 32, which is affordable in rows and is what section 11 already
+computed. The frame is set for chrome clearance and nothing else. Our measured 24 : 24 : 16 : 4 still
+fails, but it now fails at the inner levels, which is where fixing it is free.
+
+**Task 14, Step 3 — the figures take `--text-figure`.** Unchanged, and one companion constraint is
+added. `--text-figure` is for the figures an operator acts on and it is currently used once in the
+whole console; spending it is still the work. But **hierarchy elsewhere on the screen is carried by
+weight at the body size, not by reaching for a larger step**, because a larger step costs rows and a
+weight step costs nothing. A control plane sets headings down to 14px at weight 600 on a 20px line
+box — the same line box as its densest row. That is the mechanism that makes a dense screen legible
+without making it taller.
+
+**Task 14, Step 4 — `ScreenLimitsCard`.** Unchanged and reinforced. The rule a control plane states for
+its persistent-notice primitive is that it survives until the underlying state changes and carries no
+dismiss path. That is Decision 3 arrived at independently, and it is the argument for lifting this
+card rather than quieting it.
+
+**Task 15, Step 1 — four of six type steps per screen. Revised to a role rule.** The step count is the
+wrong target and section 12 already suspected it — a reference reaching 5.82:1 across twelve steps
+reads as considered, so the mechanism is role assignment rather than step count. Replace the target
+with: **every screen distinguishes scanned text from read text from headed text, and may do it with
+weight and leading at one size where a larger step would cost rows.** The companion constraint from
+section 11 — prose is never set to the column's full width — stands unchanged and binds hardest on the
+protected sentences.
+
+**Task 15 — two additions to Step 4, the honesty audit.** Both are things our data supports and our
+rendering currently does not.
+
+- **Every empty cell carries a mark, never a blank, a null or an abbreviation** — and the mark
+  distinguishes *not applicable* from *not observed*, because the provenance rung distinguishes them
+  and collapsing the two erases a rung. This is stricter than the convention a control plane
+  documents, deliberately, and the reason is our own.
+- **Numeric columns take tabular figures.** Available in the stack we already ship, costs nothing, and
+  it is the alternative to spending mono on numbers — which would destroy the verbatim signal.
+
+**Task 16 — the guard. The fourth assertion from section 11 must not be built as written.** It bans
+any `transition-duration` above zero under `features/` and `layouts/`, on the strength of three
+landing-page measurements. A control plane carries 77 transition-bearing elements and eases its primary
+control's fill over 0.15s, and section 15.2 gives the reason. Replace it with two assertions that all
+four references support and that guard the thing actually worth guarding:
+
+- [ ] **Assert no `@keyframes` and no `animation` shorthand anywhere under `web/src/features/` or
+  `web/src/layouts/`, and none in `web/src/index.css` beyond those already present.** Every keyframe
+  in every reference measured is an overlay entering or leaving, or something loading. This is the
+  assertion that stops a liveness pulse, which is the specific regression section 5 names as most
+  likely.
+- [ ] **Assert no transition on `transform`, `translate`, `scale`, `opacity` or `box-shadow` anywhere
+  under `web/src/`.** All four references move nothing on interaction: `transform: none` on every
+  primary control measured. Colour and background-colour transitions are permitted, because a dense
+  surface needs them to say which of forty controls the pointer owns.
+- [ ] **Prove both can fail**, as the other three assertions must, and for the reason expected.
+
+`components/ui/` is no longer excluded from the second assertion — geometry must not move anywhere.
+It remains excluded from nothing else, since the first assertion already permits the spinner keyframe
+that lives there.
+
+**Unchanged and reaffirmed by a fourth measurement:** every item in section 5's rejection list, the
+twenty-four protected sentences, and the standing prohibition on a score, a health figure, a traffic
+light, a green dot or a liveness pulse. Section 19 explains why the fourth reference strengthens that
+prohibition rather than testing it.
+
+---
+
+## 19. What a control plane teaches that a marketing page cannot
+
+This study was commissioned because three landing pages could not answer a question about a thousand
+rows. Six things came back that no marketing page could have supplied, and they are worth separating
+from everything above because they are the return on the exercise.
+
+**1. The prohibition on a score, a dot and a traffic light is not conservatism. It is what a mature
+control plane's own rules require of our data.**
+
+This is the most valuable finding and it was not the expected one. A control plane does ship a status
+dot, a gauge and coloured badges — the very devices this console rejected three times. It also
+documents the preconditions for each, and **our data fails them.**
+
+- Its status dot is scoped to **one lifecycle with a closed enum**, and the documentation forbids
+  repurposing it for any other kind of status. Its dot animates only while the system holds a
+  non-terminal state, and the documentation says explicitly not to flash colour through transitional
+  states on a polling tick — **only when the stored state changes.** `runs-table.tsx:159-168` refuses
+  a liveness dot because nothing in our data distinguishes a run parked on the customer's CI from one
+  that has died. That is precisely the stored-state transition the rule requires and we do not have.
+  **The reference system's own rule forbids the dot for our data.**
+- Its gauge requires **a 0-100 ratio against a fixed maximum where the comparison is the point**, and
+  the documentation forbids inventing gauge-only thresholds — the numeric breakpoints must already
+  exist elsewhere in the product. A composite health figure has no fixed maximum and no pre-existing
+  breakpoints. `ScreenLimitsCard` exists because our denominators are the thing we cannot state.
+  **The rule forbids the figure for our data.**
+- Its badge, which is where colour does carry meaning, is keyed to **a value the system recorded** —
+  a terminal outcome from a closed vocabulary matching the canonical API term — and the documentation
+  requires the text to be readable without the colour, forbids adding a checkmark or an X, and says
+  one badge per row, because two side by side means the row needs a second column.
+
+That last one is the interesting boundary. **Sync already permits exactly what that permits.** Our
+three licensed channels are run outcome, error state and absence, and all three are recorded values
+from closed vocabularies. What we forbid is the *composite* and the *liveness claim*, and those are
+the two the reference system also fences off behind preconditions. **We are not stricter than a mature
+control plane. We have data that fails its tests, and we said so.** A marketing page could never have
+produced that argument, because a marketing page has no state to render.
+
+**2. A dense surface stays legible by refusing to rank its own fields.** Every cell in every measured
+table is the same size, the same weight and the same ink. The temptation on a nine-column evidence
+table is to make the important column louder; the measurement says a control plane does the opposite
+and lets the column position and the cell's contents carry it. A screenful of twenty elements never
+generates that problem, so no landing page can teach it.
+
+**3. Hierarchy at density is bought with weight and leading, not with size.** A heading at 14px in the
+heading weight on the same line box as the row beneath it costs zero rows. This is the direct answer
+to the 2.0:1 experienced range measured in section 2, and it is a better answer than adding steps.
+Landing pages solve hierarchy with a 3x size jump because they have the room; we do not, and neither
+does a control plane.
+
+**4. A control plane's frame does no work, and the spacing ratio the landing pages agreed on inverts.**
+Frame at 24px, dominant gap at 8px, dominant paddings at 2, 6 and 12. Three references agreed on 4.7
+to 7.2 : 1 and all three were measuring a composition that had to hold its own edge. A console's edge
+is held by chrome. This one measurement saves a row on every panel on every screen.
+
+**5. Interaction feedback is a density requirement, not decoration — and it is the only motion finding
+that changed.** The landing pages measured `transition-duration: 0s` on their primary action and this
+plan turned that into a prohibition. The reason it did not survive is countable: **that Geist page
+carried 47 controls.** When the pointer crosses several controls to reach one, an instant fill change
+is flicker and a 150ms ease is tracking. Everything else about the motion finding held — nothing
+moves, nothing scales, nothing decorative runs, and the only thing animating at rest across a
+976-element page was a spinner reporting a genuine wait. **The prohibition on motion was right about
+what it forbade and wrong about the mechanism, and only a page with dozens of controls could show
+that.**
+
+**6. Absence is a first-class design problem with more than one answer, and a marketing page has no
+absences.** Six documented empty states for six different reasons a list is empty; a required
+typographic mark for a value that is unknown or not applicable, with substitutes explicitly banned; a
+rule that an indeterminate figure must be labelled so it does not read as zero. This console has an
+absence channel and an honesty discipline and had never seen another system treat nothing as a design
+surface with its own vocabulary. **Ours has to be richer than theirs, because the provenance rung
+distinguishes kinds of nothing that their model collapses** — and that is a place where the console's
+core idea gives it something a general-purpose control plane does not have.
+
+**And the limit, stated as plainly as section 12 stated its own.** This reference is a published
+system and a set of component surfaces. Its dashboard is behind authentication and was not measured.
+So the numbers above are of a documentation site built by the people who built the control plane,
+using the control plane's own primitives at the control plane's own density — which is much closer to
+our register than three landing pages, and is still not a screen holding a thousand rows. The last
+mile remains ours, and it remains unmeasured until we render one.
