@@ -193,7 +193,7 @@ export function CorpusChart({ data }: { data: CorpusSummary }) {
           ariaLabel={`Attempts by disposition: ${summary}`}
           style={{ height: 160 }}
         />
-        <figcaption className="text-body text-muted-foreground">
+        <figcaption className="max-w-prose text-body text-muted-foreground">
           This table holds nothing for a run abandoned before any attempt (at{" "}
           <code className="font-mono">locate</code> or{" "}
           <code className="font-mono">prepare</code>), for a run where no tier applied, or for

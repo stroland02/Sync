@@ -59,7 +59,7 @@ export function ScreenLimitsCard() {
           {LIMITS.map((limit) => (
             <div key={limit.headline} className="flex flex-col gap-field">
               <dt className="text-emphasis tracking-normal text-foreground">{limit.headline}</dt>
-              <dd className="text-body text-muted-foreground">{limit.detail}</dd>
+              <dd className="max-w-prose text-body text-muted-foreground">{limit.detail}</dd>
             </div>
           ))}
         </dl>
