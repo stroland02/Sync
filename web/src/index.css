@@ -96,7 +96,11 @@
   --color-destructive-foreground: oklch(0.155 0 0);
 
   /* Six steps. 12px is a floor rather than the small end of a range: being on
-     this ramp does not exempt a value from it, and nothing renders below it. */
+     this ramp does not exempt a value from it, and nothing renders below it.
+     Tracking is two-tiered and travels with the heading role, not with size
+     alone: -0.02em at 16-18px, -0.04em at 24-32px, larger heading always more
+     negative. DESIGN.md's Type section carries the condition under which a
+     step keeps it. */
   --text-meta: 0.75rem;
   --text-meta--line-height: 1rem;
   --text-body: 0.875rem;
@@ -104,17 +108,19 @@
   --text-emphasis: 1rem;
   --text-emphasis--line-height: 1.375rem;
   --text-emphasis--font-weight: 600;
+  --text-emphasis--letter-spacing: -0.02em;
   --text-section: 1.125rem;
   --text-section--line-height: 1.5rem;
   --text-section--font-weight: 600;
+  --text-section--letter-spacing: -0.02em;
   --text-page: 1.5rem;
   --text-page--line-height: 1.875rem;
   --text-page--font-weight: 600;
-  --text-page--letter-spacing: -0.01em;
+  --text-page--letter-spacing: -0.04em;
   --text-figure: 2rem;
   --text-figure--line-height: 2.25rem;
   --text-figure--font-weight: 600;
-  --text-figure--letter-spacing: -0.02em;
+  --text-figure--letter-spacing: -0.04em;
 
   --font-sans: system-ui, -apple-system, "Segoe UI", sans-serif;
   --font-mono: ui-monospace, "Cascadia Code", "Segoe UI Mono", Menlo, Consolas,
@@ -133,6 +139,34 @@
      shadow, and only a thing that occludes content may take it. */
   --shadow-flat: 0 0 0 1px var(--color-line);
   --shadow-float: 0 0 0 1px var(--color-line), 0 12px 32px -12px var(--color-shadow);
+}
+
+/* `.furniture` is the uppercase, open-tracked treatment `site-nav.tsx:65` already renders
+   by hand for its graph-level labels -- defined once so nothing else in the tree hand-spells
+   it again. Outside the `text-*` namespace on purpose: `web/src/lib/utils.ts` teaches
+   `tailwind-merge` exactly six font-size names under that prefix, and an unlisted `text-*`
+   class merges as a text-*colour* conflict instead, which is the defect that file's docstring
+   already records once (`text-emphasis` dropped against `text-critical-ink`). Sets the
+   transform here rather than in copy, because a screen reader spells out letters that are
+   already capitalised in the string -- the transform is a rendering choice, not a fact about
+   the data. DESIGN.md's Type section carries which of `--text-meta`'s two jobs this covers. */
+@layer components {
+  .furniture {
+    text-transform: uppercase;
+    letter-spacing: 0.025em;
+  }
+}
+
+/* Every `--text-figure` value is a number an operator compares down a column or across a
+   poll; tabular figures make that comparison exact instead of a guess. Extends the utility
+   Tailwind already generates from the `--text-figure` theme entry above rather than
+   replacing it -- that entry still owns size, line height, weight and tracking. Mono numbers
+   do not also take this: mono already aligns by construction, and DESIGN.md's Type section
+   says why doubling up on them is the wrong fix. */
+@layer utilities {
+  .text-figure {
+    font-variant-numeric: tabular-nums;
+  }
 }
 
 /* `web/src/lib/motion.ts` gates the three framer-motion usages from script; this is the CSS

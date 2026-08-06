@@ -78,10 +78,10 @@ than the plane behind it**, which is why `--color-surface` is lighter than `--co
 
 | # | Token | Job | Value |
 |---|---|---|---|
-| 1 | `--color-surface-sunken` | the page plane, behind everything | `oklch(0.155 0 0)` `#0c0c0c` |
-| 2 | `--color-surface` | a card, a panel, a chart's plotting area | `oklch(0.205 0 0)` `#171717` |
-| 3 | `--color-surface-subtle` | a table header, a `<pre>`, a muted fill | `oklch(0.255 0 0)` `#232323` |
-| 4 | `--color-surface-emphasis` | a hovered or selected row | `oklch(0.305 0 0)` `#2f2f2f` |
+| 1 | `--color-surface-sunken` | depth: the page plane, behind everything | `oklch(0.155 0 0)` `#0c0c0c` |
+| 2 | `--color-surface` | depth: a card, a panel, a chart's plotting area | `oklch(0.205 0 0)` `#171717` |
+| 3 | `--color-surface-subtle` | state: a row under the pointer; also a `<pre>` and a muted fill in the shadcn catalog — see *Surface ramp: depth and state* | `oklch(0.255 0 0)` `#232323` |
+| 4 | `--color-surface-emphasis` | state: a row that is selected — see *Surface ramp: depth and state* | `oklch(0.305 0 0)` `#2f2f2f` |
 | 5 | `--color-line` | the hairline: dividers, card rings, table rules | `oklch(0.345 0 0)` `#393939` |
 | 6 | `--color-line-strong` | the boundary of a control, which must clear 3:1 | `oklch(0.578 0 0)` `#7a7a7a` |
 | 7 | `--color-ink-muted` | metadata, `<dt>` labels, timestamps, the absence marker | `oklch(0.715 0 0)` `#a3a3a3` |
@@ -94,6 +94,38 @@ surface and the contrast arithmetic stops holding; the values above are the ones
 to hold, not a mirror of the retired light-mode values.
 
 `ABSENT` — the console's one absence marker — wears `--color-ink-muted`. One glyph, one appearance.
+
+### Surface ramp: depth and state
+
+The four surface steps carry two different jobs, and no step does both.
+
+**Two steps carry depth, and a console needs no more than two.** `surface-sunken` is the page
+plane; `surface` is a panel resting on it. Elevation above that is a separate mechanism — see
+*Elevation* below — and it stops at two levels for the same reason.
+
+**Two steps carry interaction state, not a third and fourth level of nesting.** `surface-subtle`
+is a row under the pointer; `surface-emphasis` is a row that is selected. A row *at rest* takes its
+panel's own depth step — there is no separate token for rest, because state should only spend
+contrast when the pointer or a selection asks for it. State is always a named step, never an alpha
+overlay: an alpha composites differently against whichever depth step sits underneath it, so one
+declaration (`bg-foreground/10`) would mean several different colours depending on where it landed.
+Eight feature screens hold exactly one authored row interaction between them today — the ramp gave
+an agent no state step to reach for, so every agent reached for an alpha wash instead.
+
+**A panel header takes the panel's own depth step, not a background of its own.** It separates from
+the body by weight and the hairline rule (`--color-line`) already kept for table rules — cheaper
+than a background, and a sticky header stays legible over a scrolled body at any depth without one.
+This is also what frees `surface-subtle` for state above.
+
+**The ring stops being the default.** `--shadow-flat` is kept for a surface that must be told apart
+from a neighbour drawn at the *same* depth step and nothing else separates them; it no longer
+decorates every surface that sits on the page. A step already tells a panel from the page and a row
+from its neighbours — see *Contrast, computed* below, none of these pairings are new.
+
+**The ring is a shadow, not a border, for one reason: it costs no layout.** A `border` changes an
+element's box, so a row that gains one shifts by a pixel relative to its neighbours above and
+below. A 1px inset box-shadow occupies no space, so a row can move between rest, hover and selected
+without ever nudging the rows around it.
 
 ### The brand hue
 
@@ -235,18 +267,50 @@ makes focus visible and makes the `link` button variant a link.
 Six steps. The console previously lived at 12 / 12.8 / 14 / 16 / 18px, a measured range ratio of
 1.5:1 against a 2.0 threshold; the `page` step alone takes it to 2.0.
 
-| Token | Size | Line height | Weight | Job |
-|---|---|---|---|---|
-| `--text-meta` | 12px | 16px | inherit | labels, timestamps, furniture. **The floor.** |
-| `--text-body` | 14px | 20px | inherit | prose and table cells. 14 rather than 16 because rows per screen is the currency. |
-| `--text-emphasis` | 16px | 22px | 600 | card titles, panel headlines |
-| `--text-section` | 18px | 24px | 600 | a section heading inside a view |
-| `--text-page` | 24px | 30px | 600 | the `h1` on every view |
-| `--text-figure` | 32px | 36px | 600 | stat-tile values only |
+| Token | Size | Line height | Weight | Tracking | Job |
+|---|---|---|---|---|---|
+| `--text-meta` | 12px | 16px | inherit | normal | labels, timestamps, furniture. **The floor.** |
+| `--text-body` | 14px | 20px | inherit | normal | prose and table cells. 14 rather than 16 because rows per screen is the currency. |
+| `--text-emphasis` | 16px | 22px | 600 | −0.02em | card titles, panel headlines |
+| `--text-section` | 18px | 24px | 600 | −0.02em | a section heading inside a view |
+| `--text-page` | 24px | 30px | 600 | −0.04em | the `h1` on every view |
+| `--text-figure` | 32px | 36px | 600 | −0.04em | stat-tile values only; carries `tabular-nums` — see below |
 
 Utilities: `text-meta`, `text-body`, `text-emphasis`, `text-section`, `text-page`, `text-figure`.
 Weight, line height and tracking travel with the step, so `text-page` is the whole decision rather
 than three of them. Override with `font-normal` or `leading-*` where a specific case needs it.
+
+**Tracking is two-tiered, and it belongs to the heading role, not to size alone.**
+`--text-emphasis` and `--text-section` take −0.02em; `--text-page` and `--text-figure` take
+−0.04em, deepened from the −0.01em/−0.02em this console shipped with, to keep the direction
+consistent — larger heading, more negative tracking — across all four steps that carry it. **The
+condition:** tracking travels with these four steps because each names a heading role — a panel
+title, a section heading, a page title, a stat-tile figure. If `--text-emphasis` is ever reached
+for as in-row emphasis rather than a panel title, that use takes `tracking-normal` alongside it;
+the tracking belongs to the heading, not to the size.
+
+**The furniture class.** `.furniture` (`web/src/index.css`, `@layer components`) is the uppercase,
+open-tracked treatment `site-nav.tsx:65` already renders by hand for its graph-level labels,
+defined once so nothing else in the tree hand-spells it again. It is a class, not a token — this
+document's own test says so: two agents rendering a graph-level label would both reach for
+uppercase and open tracking, so there is nothing for them to choose differently. It covers **one of
+`--text-meta`'s two jobs**: a scanned label — a graph-level name, a column header, a rung label —
+takes it; a read value — a timestamp, a count — does not. It sets `text-transform: uppercase` in
+CSS rather than in copy, because a screen reader spells out letters that are already capitalised in
+a string, and the transform is a rendering choice, not a fact about the data. It is deliberately
+outside the `text-*` namespace: `web/src/lib/utils.ts` teaches `tailwind-merge` exactly six
+font-size names under that prefix, and an unlisted `text-*` class merges as a text-*colour*
+conflict instead — the defect that file's docstring already records once, for `text-emphasis`
+against `text-critical-ink`.
+
+**Tabular figures.** `--text-figure` carries `font-variant-numeric: tabular-nums`, because every
+value on that step is a number an operator compares down a column or across a poll, and
+proportional digits make that comparison a guess. Mono numbers do not also take it: mono already
+aligns by construction — see *Mono means the system recorded this verbatim* above — and
+`tabular-nums` on a mono run would be decoration on a mechanism that already works. A sans numeric
+value outside `--text-figure` — a count rendered in prose rather than a stat tile — takes the same
+Tailwind utility directly; it costs nothing in the stack already shipped and does not touch the
+mono rule.
 
 Tailwind's stock steps (`text-xs`, `text-sm`, `text-lg`) still resolve — they are not removed,
 because removing them would break every component mid-migration. They are not the scale. New code
@@ -276,6 +340,53 @@ is written `gap-6` or `space-y-6` on Tailwind's base 4px scale. It stays unnamed
 page-layout value used once per view, not a component value; a component reaching for it is
 misusing it. A genuinely new spacing value is a decision recorded here, not a token added quietly.
 
+**Recorded decision: these three tokens are the only spacing spellings permitted inside
+`features/`.** A raw Tailwind spacing utility in a feature screen (`gap-4`, `p-2`, …) duplicates
+one of these three numbers under a different name — measured on this tree at 19 token spellings
+against 128 raw ones, two of them landing on the same pixel value under a different name (`gap-1`
+and `gap-field` both 4px; `p-4` and `p-section` both 16px). A raw value stays legitimate only for a
+page-layout number used once per view, on the grounds already argued above for the 24px section
+gap — never inside a component.
+
+**Recorded decision: each spacing level is at least twice the one below it, and the requirement
+binds the three *inner* levels, not the page frame.** `--spacing-section` (16px) is already 2× of
+`--spacing-row` (8px), which is already 2× of `--spacing-field` (4px) — the token ramp holds this
+without a change. The level above them — the gap between panels on a page — does not: it is
+`gap-6` (24px) today, the same value as the page frame, which is the sharpest defect this slice
+measured: the page had one spacing level where it needed three. The between-panel gap moves to
+**32px** (`gap-8`, unnamed on the same grounds as the frame) so that `32 : 16 : 8 : 4` holds the 2×
+floor at every inner step.
+
+**Recorded decision, and it reverses earlier reasoning: the page frame is not required to exceed
+the between-panel gap.** A console's edge is held by the navigation rail and the header, not by the
+frame — the frame does no hierarchical work here the way it does on a page with no chrome around
+it. The frame stays at **24px** (`px-6`, unnamed), set to the smallest value that keeps content off
+the chrome, not to a multiple of anything below it. **The frame-to-section ratio this console
+adopts is 24 : 32, or 0.75 : 1** — the frame is smaller than the gap it sits outside of, and that
+only holds because the nav rail and header are already saying "this is a composition," so the frame
+does not have to.
+
+---
+
+## Row height
+
+Three named steps, not a fourth spacing token — a row height and a spacing gap answer different
+questions. The row height is chosen first, from the same scale a control already renders at; the
+cell padding is *derived* from it, not the other way round.
+
+| Step | Value | Already rendered at | Governs |
+|---|---|---|---|
+| `row-sm` | 32px (`h-8`) | `Button`'s default size | a compact row — a dense table, a toolbar |
+| `row-md` | 36px (`h-9`) | `Button`'s `lg` size, and `--text-body` (14/20) plus `--spacing-row` (8px) top and bottom | the default table row |
+| `row-lg` | 40px (`h-10`) | `TableHead` today | a header row, or a form field needing a larger target |
+
+None of these is a new value: each is a Tailwind stock height Sync's own components already
+render, named here so a future row is chosen from the scale rather than invented. `row-md` is the
+existing arithmetic made explicit — `TableCell` already renders a 36px row from `text-body` and
+`p-row`; it was simply never named. A control dropped into a `row-md` cell (a default 32px button)
+clears the row by 2px on each side without changing the row's height — that is the property the
+scale exists to protect.
+
 ---
 
 ## Radius
@@ -295,11 +406,11 @@ through `var(--radius-md)` in an arbitrary value.
 ## Elevation
 
 Two levels, and the mechanism at both is a ring. A console with no depth to communicate should not
-paint depth.
+paint depth, and a surface with no neighbour to be told apart from should not draw a ring either.
 
 | Token | Is | Use for |
 |---|---|---|
-| `--shadow-flat` | a hairline ring in `--color-line` | cards, tables, panels — anything that sits *on* the page |
+| `--shadow-flat` | a hairline ring in `--color-line` | a surface that must be told apart from a neighbour at the same depth step — not applied by default; see *Surface ramp: depth and state* above |
 | `--shadow-float` | the same ring, plus a soft drop shadow | only something that occludes content |
 
 There is no third level. Cards do not float above tables. Today exactly one thing in this console
@@ -490,6 +601,11 @@ answers, and only the gamma one matches what the screen shows.
 Every rendered composition found still clears the 5.05 floor, and the lowest of them (5.44) sits
 above the declared-token worst case below — so "worst pairing anywhere" stays true once "anywhere"
 is checked against what actually renders, not assumed from it.
+
+**The `surface-subtle/50` row above is the alpha overlay *Surface ramp: depth and state* retires,**
+kept here as the measurement of what the tree renders today rather than deleted for describing a
+pattern that is going away. `TableRow` still composes it; the contract's named-step replacement is
+`--color-surface-subtle` at full strength, applied where Task 13 lands it, not this alpha wash.
 
 **Two of these rows document a fix, not a finding that stood.** `button.tsx`'s `default` variant
 hover was `hover:bg-primary/80` — a wash toward whatever sits behind the button — which measured
