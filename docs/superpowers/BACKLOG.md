@@ -197,6 +197,15 @@ Measured on 2026-08-05 across `web/src`: **21 `<Card>`, 17 `<Table>`, 1 chart, 5
 whole frontend contains 7 `onChange`, 3 `<Button>`, 2 `onClick` and 1 `<input>`. Three shadcn
 primitives exist — `button`, `card`, `table`.
 
+**Two of those counts were wrong when written, and the correction matters more than the numbers.**
+`web/src/components/ui/` held eight primitives that day, not three — `command`, `dialog`, `input`,
+`input-group` and `textarea` alongside the three named — and `layouts/command-palette.tsx` existed,
+having landed in `0455810` the day before this entry was filed. So "no command palette anywhere"
+was false at the moment it was measured. The thesis survives the correction: what those primitives
+were doing was sitting vendored and unused, which is the entry's actual argument. But an entry that
+counts wrong teaches the next reader to re-measure rather than to trust it, and this one had three
+plans quoting it.
+
 So the console is a read-only table renderer. That was the right first version, and it produced
 eight screens, provenance rendered at two levels, and six false-claim defects found and closed.
 **What is missing is not structure, it is interface.** There is no filtering, sorting, search,
@@ -318,126 +327,25 @@ sample after a bulk insert is a measurement of the insert, not of the route. One
 measurement, and the rule this file already carries — measure, do not describe — has a second half
 that is easy to skip: measure more than once.
 
-### B91 — Two screens read one payload and disagree about what they show
-
-`observed-calls-table.tsx` renders `max_resend_count` and not `trace_id`. The embedded observed-calls
-card in `repository-coverage-page.tsx` renders `trace_id` and not `max_resend_count`, `http_method`
-or `first_seen`. Both read `GET /api/repositories/{repo}/observed`. **Neither says it is partial.**
-
-Not a payload mismatch — the same *a reader cannot tell what this view can see* class the milestone
-has closed six times, duplicated across two implementations of one dataset. Also sent and rendered
-nowhere: `server_address` and `url_template` on observed calls, and `args_keys`,
-`response_fields_read` and `loop_depth` on binding call sites.
-
-**Evidence that closes this:** one component reads that payload, or each view states which subset it
-shows and why. A field the transport sends and no screen renders is either a screen gap or a payload
-that should stop sending it; decide which per field and record the ruling.
-
-### B92 — The repository level was never built, and two routes exist to work around its absence
-
-The design document's information architecture starts at `Codebase (the selected repository)` and
-says why: *"A user starts from a repository, not from a vendor list, because the question they
-actually have is 'what is wrong with my code'"*
-(`specs/2026-07-25-sync-self-maintaining-apis-design.md:397, :407`). **Nothing in the console selects
-a repository.**
-
-The screen exists — `/bindings/repositories/:repoId` takes exactly that parameter and reports what
-the index sees in one repository — but it is labelled *Repository coverage*, addressed as a child of
-`/bindings`, and reachable only from a lookup form. So two routes exist purely to reach it:
-`/bindings` is three text fields that navigate to a URL, and `/observed-telemetry` is a repository
-picker for one panel. Both are repository selectors that do not know they are one.
-
-The consequence is not cosmetic. Repository scope is what every level below Codebase inherits, so
-without it `/api/overview`, `/api/detectors` and `/api/corpus` are fleet-wide and take no `repo_id`,
-and `/codebase` is a vendor roll-up across every repository wearing the repository level's name. An
-unscoped answer rendered under a selected repository is a false claim about that repository — the
-same class this milestone has closed six times.
-
-**Evidence that closes this:** `/repositories/:repoId` is the Codebase level, reachable from the
-fleet index by clicking a repository row; `/bindings` and `/observed-telemetry` are gone from
-`routes.ts`; and picking a different repository changes every figure on every screen below it.
-`2026-08-05-sync-console-architecture.md` Task 9 carries it.
-
-**Closed 2026-08-06.** All three. The level and the two deletions landed with Task 9's steps 1-4;
-the scope landed with steps 5 and 7. Measured against `scripts/seed_console.py`'s two repositories:
-`seed-console-repo-a` reports 3 open findings across 1 vendor (1 breaking, 2 warning),
-`seed-console-repo-b` reports 2 across 2 vendors (1 deprecation, 1 warning), and the same vendor
-screen reports 3 findings under the first repository, 1 under the second and 4 unscoped. Detector
-attribution moves the same way: 2 findings across 2 detectors for one repository against 10,007
-across 4 for the fleet.
-
-Two figures are deliberately not scoped and say so on screen rather than moving: what a vendor
-published is a fact about the vendor, and the repair record stores no `repo_id` at all by the
-schema decision that makes it safe to aggregate across customers. Task 9's landed note carries the
-ruling per figure.
-
-### B93 — Observed telemetry is declared at Errors & Incidents; the specification puts it under Signals
-
-`routes.ts:124-139` declares both observed-telemetry routes at level `Errors & Incidents`. Observed
-calls, shapes and error windows are stored tables, so the screen passes the design document's test —
-*every level is an entity the system already stores* — and its placement still fails. The document
-has a home for it: *Signals — one panel per attached integration, grouped by role: vendor, signal
-source, human surface* (`:399-400`), with the three roles defined at `:419-423`. Observed telemetry
-is what a signal source produced.
-
-Declaring a signal at the findings level puts a reading where a claim belongs. That distinction is
-what the rung discipline exists to protect, and this is the interface undoing it.
-
-**Evidence that closes this:** the route is declared at `Signals`, sits under API Services, and is
-scoped by repository. The level's header names which of the three roles has a panel and which two do
-not, because one panel of one role must not imply three integrations exist.
-
-### B94 — Signals was specified and never built
+### B94 — Signals is built; one of its three roles has nothing to attach
 
 *One panel per attached integration, grouped by role: vendor, signal source, human surface*
-(`:399-400`). The console has no such level. B93 reparents observed telemetry into it, which builds
-one panel of one role and does not build the level.
+(`:399-400`).
 
-This is genuinely blocked rather than merely undone: the vendor role has the registry behind it, the
-signal-source role has B71's Sentry ingest, and the human-surface role has nothing in the tree at
-all. Filing it so the gap is a queued item rather than a level that quietly stopped existing.
+**Built 2026-08-06** (M4-W127, `3855fd4`/`b39dcde`/`87f0d7f`, merged `e4284ae`). The level renders
+all three roles from a roster taken verbatim from the specification's M5 table, held by five Python
+tests that read the TypeScript, and its header states which roles have an integration attached and
+which do not. `not-attached-state.tsx` draws the distinction the level turns on: *attached and
+quiet* is a fact about traffic, *nothing is attached* is a fact about configuration.
 
-**Evidence that closes this:** a Signals level that lists every attached integration by role, states
-which roles have no integration attached, and does not imply completeness it does not have. Realistic
-after M5's correlation join, not before.
+**What remains is genuinely blocked rather than undone.** The vendor role has the registry behind
+it and the signal-source role has B71's Sentry ingest; the human-surface role has nothing in the
+tree at all — no adapter, no configuration table, no row naming a delivery destination. Rendering
+that blockage is finished work, not a placeholder, and a panel invented so the grid looks even
+would be a false claim.
 
-### B95 — Pull Request is a level in the specification and a link in an evidence panel in the console
-
-The specification's hierarchy ends `Solution Workflow → Pull Request — with its evidence bundle`
-(`:403-404`). The console renders `pr_url` as one row of the workflow's evidence table
-(`features/workflows/evidence.tsx:131`). The bundle — the push, the `tsc` verdict, the CI run that
-was watched — is spread across the workflow screen and has no address of its own.
-
-That matters because of what the product claims. *"Showing the state machine and its evidence is
-what earns the merge"* (`:411`), and deep links are the point (`App.tsx:4-6`). Today a reviewer
-cannot send a colleague the evidence that earned a particular pull request; they can send the
-workflow and describe where to look.
-
-**Evidence that closes this:** a route under the workflow that renders the pull request and its
-bundle, deep-linkable, with every qualification already on the workflow screen carried onto it
-verbatim.
-
-### B96 — Nothing checks the route registry against the specification that defines its levels
-
-Three plans built the console's hierarchy — `2026-07-30-sync-m4-dashboard.md`,
-`2026-08-04-sync-m4-slice-2.md`, `2026-08-05-sync-console-architecture.md` — and none opened
-`specs/2026-07-25-sync-self-maintaining-apis-design.md:392-411`. Each argued its placements against
-the other routes, carefully and in writing. The drift was invisible because the console's own
-`GRAPH_LEVELS` array became the authority every later decision was checked against, and a hierarchy
-compared with itself always agrees.
-
-`.claude/rules/console-hierarchy.md` is written and is the cheap half: it fires when
-`web/src/lib/routes.ts`, the shell, or any plan is edited, and it requires every level to cite the
-specification line that defines it. The other half has to be able to fail a build, because a rule
-alone already failed here — slice 2's fleet exception was recorded honestly and read by nobody for
-the day it took three more levels to appear beside it.
-
-**Evidence that closes this:** `tests/test_console_hierarchy.py` parses the fenced hierarchy block
-under *Information architecture* and `GRAPH_LEVELS`, asserts they name the same levels in the same
-order, and has been **proven able to fail twice** — once by adding a level the specification does
-not have, once by removing a level from the specification's block. It must not assert which route
-sits at which level; that is a judgement with a wrong answer and it belongs to a reviewer.
-`2026-08-05-sync-console-architecture.md` Task 10 carries it.
+**Evidence that closes this:** a human-surface integration exists and its panel reads from it.
+Realistic after M5's correlation join, not before.
 
 ### B7 — The M0 acceptance run has not executed since the pipeline changed underneath it
 
@@ -531,7 +439,7 @@ to be made again.
 proving it passes a real vendor entry, or this entry is closed as declined with the sample of
 recorded attempts that justified declining.
 
-### B99 — Two typechecks on one host race on a shared npx cache, and the loser looks like a bad patch
+### B101 — Two typechecks on one host race on a shared npx cache, and the loser looks like a bad patch
 
 `run_tsc` (`src/sync/index/tsc.py:141-152`) falls back to `npx --yes --package=typescript@latest`
 whenever a clone has no TypeScript installed. That resolver writes into `~/.npm/_npx/<hash>`, which
@@ -755,6 +663,35 @@ Entries stay under **Ready** above with their full reasoning until they land, be
 is what a reviewer needs and duplicating it here would let the two copies drift.
 
 ## Done
+
+- **B96** — the route registry is checked against the specification that defines its levels.
+`tests/test_console_hierarchy.py` parses the authoritative fenced block and `GRAPH_LEVELS` and
+asserts they name the same levels in the same order. Block selection fails loudly rather than
+guessing: the section carries two fenced hierarchies on purpose, and pointing the parser at the
+superseded one is how the guard was proven able to fail. Landed `07b498b` (M4-W126's sibling, Task
+10 of the architecture plan).
+
+- **B95** — the Pull Request level has its own address. `/findings/:findingId/workflow/pull-request`
+renders the bundle in the remediation graph's own causal order, and the Solution Workflow links to
+it. Landed `c808854`, `d0e316f` (M4-W126). What the review then found on that screen — a `current`
+node rendered as "Running now." — is M4-W136, not a reason to keep this open.
+
+- **B93** — observed telemetry sits under Signals, scoped by repository, and the level's header
+names which roles have an integration attached. Landed `3855fd4`, `b39dcde`, `87f0d7f`, merged
+`e4284ae` (M4-W127). The re-export shim that let the route move separately is deleted rather than
+left behind.
+
+- **B92** — the repository level is the Codebase level, reachable by clicking a repository row, and
+`/bindings` and `/observed-telemetry` are gone. Its third clause is what took the work: picking a
+different repository changes every figure below it, so `/api/overview`, `/api/detectors` and
+`/api/vendors/{id}` gained an optional `repo_id`, and the vendor page moved onto
+`graph_views.vendor_findings` rather than changing a signature `sync.mcp.tools` pins. Two figures
+stay fleet-wide and say so on screen — vendor changes are a fact about the vendor, and
+`migration_outcome` stores no `repo_id` at all. Landed `a628e77`, merged `e79fb5b` (M4-W130).
+
+- **B91** — one component reads the observed payload, and the binding call-site table renders
+`args_keys`, `response_fields_read` and `loop_depth` with a per-field ruling in its docstring.
+Landed `e5235b2`, `da078bb`.
 
 - **B99** — what the patch agent reads for itself is framed. `sync.remediate.tool_output` is a
 `PostToolUse` hook applying the same three elements `untrusted.py` puts around the prompt to what

@@ -96,7 +96,7 @@ jobs:
       # gate rather than in the machine running it. Run the resolver once, serially, so every
       # worker afterwards finds an installed and unwritten cache entry.
       #
-      # This warms a shared cache; it does not make the fallback concurrency-safe. B99 carries
+      # This warms a shared cache; it does not make the fallback concurrency-safe. B101 carries
       # that, because two Sync remediations on one host hit the same race with no CI step in
       # front of them.
       - name: Warm the TypeScript npx cache
