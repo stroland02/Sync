@@ -220,3 +220,52 @@ What *is* transferable from that panel is subtler: **the screen gives its most s
 region rather than a row in a table.** For us the equivalent is the binding surface — call sites
 joined to operations — and the question that reopens Task 11 is whether the table is measured
 failing at scale, not whether a competitor drew a picture.
+
+---
+
+## 4. Supabase — the same overview, populated, with a world map (2026-08-06)
+
+The same screen as entry 3 with data in it and the sidebar collapsed to icons. Three things the
+empty state did not show:
+
+- **The sidebar collapses to a 40px icon rail** and the page reflows into the space. The navigation
+  is not a fixed cost.
+- **The spatial panel is a world map**, dimmed almost to the background, with one bright dot for the
+  active region and faint dots for the others. It is a *locator*, not a chart: it answers "where is
+  this" at a glance and carries no axis, legend or number.
+- **Sparklines are dense and small** — a week of bars in a 300px card, green for success and red for
+  errors, with only the window's start and end labelled. No axis, no gridline, no tooltip visible.
+
+The map is the clearest example so far of a property this console has none of: **a region whose job
+is orientation rather than measurement.** What ours would hold there is a question the plan has to
+answer, not a picture to copy — and Task 11's ruling against a bipartite diagram still stands, so
+the honest candidates are the ones that locate rather than diagram.
+
+---
+
+## Measurement: the console at 1890px, taken 2026-08-06 against the running tree
+
+The owner asked why the console does not use the screen. Measured in Chrome at a 1890px viewport on
+`/` rather than reasoned about:
+
+| | |
+|---|---|
+| Viewport | 1890 |
+| `documentElement.scrollWidth` / `clientWidth` | 1875 / 1875 — **no horizontal overflow** |
+| `body`, `#root`, `main` | 1875 each — **no width cap anywhere** |
+| Content region inside the 24px gutter | 1827 |
+| Cards | 1827 — full width |
+| Tables | 1795 — full width |
+| **Paragraphs** | **491** |
+
+**So the app does fill the window, and the screen still looks empty.** Both are true, and the second
+is the real finding: `max-w-prose` caps every paragraph at 491px and leaves roughly **1330px of
+nothing to its right**, while the table beneath it spends a **1290px column on a vendor name**.
+
+The layout is one column, stacked vertically, at every width. There is no composition — no rail, no
+regions, nothing placed beside anything else. A single column that is technically full-width reads
+as emptier than a narrower page that is arranged, which is exactly what the three reference examples
+demonstrate: Superlog puts a 360px fact rail beside its content, Supabase puts a spatial panel
+beside its tiles.
+
+That is the defect. Not a cap — an absence of arrangement.
