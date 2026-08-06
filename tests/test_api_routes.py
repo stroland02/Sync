@@ -10,6 +10,7 @@ tested by behaviour rather than by grepping the source for the shape a mutation 
 
 from __future__ import annotations
 
+import os
 import re
 from datetime import datetime, timezone
 from pathlib import Path
@@ -25,6 +26,7 @@ from sync.api.__main__ import DEFAULT_PORT, _reload_enabled, app_factory
 from sync.api.app import _MAX_LIMIT, _SCAN_LIMIT, create_app
 from sync.core import CallSite, Finding, VendorChange
 from sync.dashboard.queries import _FINISHED
+from sync.graph.store import GraphStore
 from sync.mcp.tools import DEFAULT_LIMIT, GraphSurface
 
 INDEXED = datetime(2026, 7, 28, 6, 0, tzinfo=timezone.utc)
@@ -156,7 +158,9 @@ def _fake_detector_reader(*, repo_id=None) -> dict[str, Any]:
     return {"repo_id": repo_id, "detectors": [], "total_open_findings": 0}
 
 
-def _fake_severity_reader(*, repo_id=None) -> dict[str, Any]:
+def _fake_severity_reader(
+    *, repo_id: str | None = None, vendor_id: str | None = None
+) -> dict[str, Any]:
     return {"by_severity": {}, "total": 0}
 
 
@@ -1146,9 +1150,9 @@ def _recording_client(**graph_kw) -> _RecordingClient:
         detector_reads.append(repo_id)
         return _fake_detector_reader(repo_id=repo_id)
 
-    def severity_reader(*, repo_id=None):
-        severity_reads.append(repo_id)
-        return _fake_severity_reader(repo_id=repo_id)
+    def severity_reader(*, repo_id=None, vendor_id=None):
+        severity_reads.append((repo_id, vendor_id))
+        return _fake_severity_reader(repo_id=repo_id, vendor_id=vendor_id)
 
     def overview_reader(*, repo_id=None):
         overview_reads.append(repo_id)
@@ -1218,7 +1222,15 @@ def test_no_route_reaches_past_the_read_surface():
     assert len(coverage_reads) == 1, "the coverage route must reach its own reader exactly once"
     assert len(observed_reads) == 1, "the observed route must reach its own reader exactly once"
     assert len(detector_reads) == 1, "the detectors route must reach its own reader exactly once"
-    assert len(severity_reads) == 1, "the overview route must reach the severity reader exactly once"
+    # Two routes read the severity roll-up, once each and at two different scopes: the fleet
+    # screen by repository alone, a vendor screen by that repository *and* the vendor in its own
+    # URL. Asserting the scopes rather than the count is what keeps a vendor screen from quietly
+    # being served the fleet's breakdown -- a count alone passes either way. Both entries carry
+    # `None` for the repository here because these requests name none.
+    assert severity_reads == [(None, None), (None, "stripe")], (
+        "the overview route reads the severity roll-up without a vendor and the vendor route "
+        "reads it scoped to its own vendor, each exactly once"
+    )
     assert len(overview_reads) == 1, "the overview route must reach the overview reader exactly once"
     assert len(vendor_findings_reads) == 1, "the vendor route must reach its own reader exactly once"
 
@@ -1619,3 +1631,156 @@ def test_reload_unrecognised_value_raises_rather_than_silently_enabling(monkeypa
 
     with pytest.raises(ValueError):
         _reload_enabled()
+
+
+# -- narrowing a long table -----------------------------------------------------
+#
+# The console's two longest tables gain a filter each, and both filters are server-side for
+# one reason: a filter applied to whichever page arrived reports a total drawn from a set it
+# never filtered. That is the "a reader cannot tell what this view can see" defect the
+# milestone has closed six times, and a client-side filter is how it comes back.
+#
+# The transport's half is the usual one -- a query parameter parsed and passed through, and
+# absent means unfiltered rather than a default the route invented.
+
+
+def test_binding_route_passes_the_path_prefix_and_defaults_it_to_none():
+    calls: list[str | None] = []
+
+    def reader(vendor_id: str, operation_id: str, *, path_prefix=None, **_):
+        calls.append(path_prefix)
+        return _fake_binding_reader(vendor_id, operation_id)
+
+    app = _build_app(surface=GraphSurface(FakeGraph(), feed_fetched_at=FETCHED), binding_reader=reader)
+    client = TestClient(app)
+
+    client.get("/api/vendors/stripe/operations/PostCharges/bindings?path_prefix=src/billing/")
+    client.get("/api/vendors/stripe/operations/PostCharges/bindings")
+
+    assert calls == ["src/billing/", None]
+
+
+def test_binding_route_forwards_the_repositories_facet_unaltered():
+    payload = {
+        "vendor_id": "stripe", "operation_id": "PostCharges", "repo_id": None,
+        "path_prefix": None, "call_sites": dict(_EMPTY_PAGE), "changes": dict(_EMPTY_PAGE),
+        "repositories": [{"repo_id": "r1", "call_site_count": 2}],
+    }
+    app = _build_app(
+        surface=GraphSurface(FakeGraph(), feed_fetched_at=FETCHED),
+        binding_reader=lambda *a, **k: payload,
+    )
+    client = TestClient(app)
+
+    body = client.get("/api/vendors/stripe/operations/PostCharges/bindings").json()
+
+    assert body["repositories"] == [{"repo_id": "r1", "call_site_count": 2}]
+
+
+# `test_vendor_route_passes_the_vendor_and_its_filters_to_the_reader` already holds the
+# severity and path passthrough, against the reader the route actually calls. An earlier version
+# of this file held a second copy of that assertion driven through `GraphSurface.whats_at_risk`,
+# which this route no longer reads at all; it is deleted rather than left describing a path that
+# is gone.
+
+
+def test_vendor_route_carries_the_severity_breakdown_for_its_scope():
+    """The option list a severity filter is built from, beside the page it filters. Scoped, so
+    the screen never offers a severity this vendor has no finding at in this repository -- a
+    filter whose only possible answer is an empty page is a choice the graph does not hold.
+    """
+    def severity_reader(*, repo_id=None, vendor_id=None):
+        return {"by_severity": {"breaking": 2}, "total": 2}
+
+    app = _build_app(
+        surface=GraphSurface(FakeGraph(), feed_fetched_at=FETCHED), severity_reader=severity_reader
+    )
+    client = TestClient(app)
+
+    body = client.get("/api/vendors/stripe").json()
+
+    assert body["severity_counts"] == {"breaking": 2}
+    assert body["severity_total"] == 2
+
+
+def test_vendor_route_composes_the_repository_scope_with_the_vendor_for_its_breakdown():
+    """Both scopes reach the reader together. Dropping the repository puts a fleet-wide
+    breakdown under a repository's heading; dropping the vendor puts every vendor's severities
+    beside one vendor's findings. Both are the same false claim, one axis at a time.
+    """
+    calls: list[tuple[str | None, str | None]] = []
+
+    def severity_reader(*, repo_id=None, vendor_id=None):
+        calls.append((repo_id, vendor_id))
+        return _fake_severity_reader()
+
+    app = _build_app(
+        surface=GraphSurface(FakeGraph(), feed_fetched_at=FETCHED), severity_reader=severity_reader
+    )
+    client = TestClient(app)
+
+    client.get("/api/vendors/stripe?repo_id=r1")
+    client.get("/api/vendors/stripe")
+
+    assert calls == [("r1", "stripe"), (None, "stripe")]
+
+
+def test_vendor_route_severity_breakdown_ignores_the_filters_it_is_the_options_for():
+    """Narrowed by the severity or the path currently selected, the breakdown collapses to
+    whatever is already chosen and there is no way back to the rest. The repository is not one
+    of those filters -- it is the scope the level above selected, so it does reach the reader.
+    """
+    calls: list[tuple[str | None, str | None]] = []
+
+    def severity_reader(*, repo_id=None, vendor_id=None):
+        calls.append((repo_id, vendor_id))
+        return {"by_severity": {"breaking": 2, "warning": 1}, "total": 3}
+
+    app = _build_app(
+        surface=GraphSurface(FakeGraph(), feed_fetched_at=FETCHED), severity_reader=severity_reader
+    )
+    client = TestClient(app)
+
+    body = client.get("/api/vendors/stripe?repo_id=r1&severity=breaking&path=src/billing").json()
+
+    assert calls == [("r1", "stripe")]
+    assert body["severity_counts"] == {"breaking": 2, "warning": 1}
+
+
+def test_app_factory_readers_accept_what_their_routes_actually_pass(monkeypatch):
+    """Every graph-backed route, driven through the readers `app_factory` really wires.
+
+    The tests above drive each route against a fake reader written beside the test, which
+    proves the transport's half and nothing about the wiring. A reader that gained a parameter
+    in the route and not in `app_factory` passes every one of them and 500s on the first real
+    request — measured, twice in one change: the severity roll-up gained a vendor scope and the
+    binding reader gained a path prefix, and both raised `TypeError` against a running API
+    while the whole suite was green.
+
+    Scoped to the routes whose readers read `GraphStore`. `/api/runs` and `/api/workflows` read
+    the LangGraph checkpointer, which this module does not stand up; a reader drift there needs
+    the same treatment and a checkpointer fixture to hang it on.
+    """
+    dsn = os.environ.get("SYNC_DSN", "postgresql://sync:sync@localhost:5433/sync")
+    GraphStore(dsn).apply_schema()
+    monkeypatch.setenv("SYNC_GRAPH_DSN", dsn)
+    monkeypatch.delenv("SYNC_CHECKPOINTER_DSN", raising=False)
+    monkeypatch.delenv("SYNC_API_RELOAD", raising=False)
+    client = TestClient(app_factory())
+
+    for path in (
+        "/api/overview",
+        "/api/overview?repo_id=r1",
+        "/api/vendors/stripe",
+        "/api/vendors/stripe?repo_id=r1&severity=breaking&path=src/",
+        "/api/vendors/stripe/changes",
+        "/api/vendors/stripe/operations/PostCharges/bindings",
+        "/api/vendors/stripe/operations/PostCharges/bindings?repo_id=r1&path_prefix=src/&binding_rung=static",
+        "/api/repositories",
+        "/api/repositories/r1/coverage",
+        "/api/repositories/r1/observed",
+        "/api/detectors",
+        "/api/detectors?repo_id=r1",
+        "/api/corpus",
+    ):
+        assert client.get(path).status_code == 200, path

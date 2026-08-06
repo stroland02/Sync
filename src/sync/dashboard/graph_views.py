@@ -98,6 +98,7 @@ def binding_surface(
     operation_id: str,
     *,
     repo_id: str | None = None,
+    path_prefix: str | None = None,
     binding_rung: str | None = None,
     call_sites_limit: int = DEFAULT_LIMIT,
     call_sites_offset: int = 0,
@@ -116,6 +117,18 @@ def binding_surface(
     `repo_id` is optional and its absence means every repository, matching
     `call_sites_for_operation`'s own contract: an aggregate across customers is a real question
     and a detector is not what is asking it here.
+
+    `path_prefix` narrows the call sites to a directory, and narrows their total with them. It
+    does not touch the changes: a vendor change has no position in the customer's codebase --
+    `path_ptr` points into the vendor's own specification -- so filtering it by a source path
+    would answer a question nobody asked with rows that happened to share a prefix.
+
+    `repositories` is which repositories hold a live call site on this operation and how many
+    each holds, **computed with neither `repo_id` nor `path_prefix` applied**. It is the option
+    list those filters are set from, and an option list narrowed by the filter it sets collapses
+    to whatever is already selected with no way back to the rest. Its counts are therefore counts
+    over the whole operation rather than over the page beside it; a caller renders which of the
+    two it is showing rather than leaving a reader to assume they agree.
 
     **Every call site row reports `binding_rung: "static"`, unconditionally.** A call site is
     what the static index found; nothing about the row rests on a resolution step or on watched
@@ -147,10 +160,12 @@ def binding_surface(
         call_sites_page = dict(_EMPTY_PAGE)
     else:
         sites = store.call_sites_for_operation(
-            vendor_id, operation_id, repo_id=repo_id,
+            vendor_id, operation_id, repo_id=repo_id, path_prefix=path_prefix,
             limit=call_sites_limit, offset=call_sites_offset,
         )
-        sites_total = store.call_sites_for_operation_count(vendor_id, operation_id, repo_id=repo_id)
+        sites_total = store.call_sites_for_operation_count(
+            vendor_id, operation_id, repo_id=repo_id, path_prefix=path_prefix
+        )
         call_sites_page = _page([_call_site_row(s) for s in sites], sites_total, call_sites_offset)
 
     changes = store.vendor_changes_for_operation(
@@ -159,12 +174,18 @@ def binding_surface(
     changes_total = store.vendor_changes_for_operation_count(vendor_id, operation_id)
     changes_page = _page([_change_row(c) for c in changes], changes_total, changes_offset)
 
+    repositories = store.call_site_repositories_for_operation(vendor_id, operation_id)
+
     return {
         "vendor_id": vendor_id,
         "operation_id": operation_id,
         "repo_id": repo_id,
+        "path_prefix": path_prefix,
         "call_sites": call_sites_page,
         "changes": changes_page,
+        "repositories": [
+            {"repo_id": repo, "call_site_count": count} for repo, count in repositories.items()
+        ],
     }
 
 
@@ -416,7 +437,9 @@ def vendor_findings(
     }
 
 
-def severity_rollup(store: GraphStore, *, repo_id: str | None = None) -> dict:
+def severity_rollup(
+    store: GraphStore, *, repo_id: str | None = None, vendor_id: str | None = None
+) -> dict:
     """Every open finding's severity, tallied once: a count per severity and the total.
 
     `by_severity` is `open_findings_severity_counts`, a real SQL `GROUP BY` -- not a `Counter`
@@ -429,13 +452,23 @@ def severity_rollup(store: GraphStore, *, repo_id: str | None = None) -> dict:
     the recurring defect this milestone keeps closing (`overview_summary` carries the same
     independence for the vendor breakdown beside it).
 
-    `repo_id` narrows both aggregates together. Narrowing one and not the other would report a
-    breakdown of one repository against a fleet-wide denominator, which is the same class of
-    false claim with the arithmetic done for the reader.
+    `repo_id` and `vendor_id` narrow both aggregates together. Narrowing one and not the other
+    would report a breakdown of one scope against a denominator drawn from a wider one, which is
+    the same class of false claim with the arithmetic done for the reader.
+
+    **The two scopes compose rather than replace each other.** A vendor screen opened inside a
+    selected repository asks for that vendor *in* that repository -- passing only the vendor
+    would put a fleet-wide breakdown under a repository heading, and passing only the repository
+    would put every vendor's severities beside one vendor's findings. Both are the same defect
+    one axis at a time.
+
+    **A scope with nothing open is `{}` and zero, never the wider answer.** A filter that
+    silently serves the unscoped result when it matches nothing is the worst shape a filter can
+    take: it reports numbers that are true of something, so nothing on screen looks broken.
     """
     return {
-        "by_severity": store.open_findings_severity_counts(repo_id=repo_id),
-        "total": store.open_findings_count(repo_id=repo_id),
+        "by_severity": store.open_findings_severity_counts(repo_id=repo_id, vendor_id=vendor_id),
+        "total": store.open_findings_count(repo_id=repo_id, vendor_id=vendor_id),
     }
 
 

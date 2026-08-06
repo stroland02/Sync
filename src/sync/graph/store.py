@@ -79,6 +79,40 @@ def _open_findings_predicate(
     return " AND ".join(clauses), parameters
 
 
+def _call_site_predicate(
+    vendor_id: str,
+    operation_id: str,
+    *,
+    repo_id: str | None = None,
+    path_prefix: str | None = None,
+) -> tuple[str, list[object]]:
+    """The `WHERE` every live-call-site read on one operation shares, and its parameters.
+
+    A sibling of `_open_findings_predicate` rather than the same builder, because the two answer
+    over different relations: that one always joins `finding` and always asks for open status,
+    and this one reads `call_site` alone, where a call site exists whether or not any detector
+    has raised anything against it. Sharing a builder would mean either an open-findings join a
+    binding surface does not want or a status clause that quietly drops every unflagged site.
+
+    What they do share is the reason for `starts_with` over `LIKE`, and that argument is written
+    once, above, rather than restated here: a path holding `_` or `%` is a wildcard under `LIKE`
+    and a literal under this.
+
+    One builder for the page, its denominator and the repository facet, for the reason
+    `_open_findings_predicate` gives for its own seven readers: a filter added to two of three
+    and forgotten in the third is a page and a total that disagree about which rows exist.
+    """
+    clauses = ["vendor_id = %s", "operation_id = %s", "retracted_at IS NULL"]
+    parameters: list[object] = [vendor_id, operation_id]
+    if repo_id is not None:
+        clauses.append("repo_id = %s")
+        parameters.append(repo_id)
+    if path_prefix is not None:
+        clauses.append("starts_with(path, %s)")
+        parameters.append(path_prefix)
+    return " AND ".join(clauses), parameters
+
+
 def _table_name(create: str) -> str:
     return create[: create.index("(")].split()[-1]
 
@@ -438,6 +472,7 @@ class GraphStore:
         operation_id: str,
         *,
         repo_id: str | None = None,
+        path_prefix: str | None = None,
         limit: int | None = None,
         offset: int = 0,
     ) -> list[CallSite]:
@@ -465,39 +500,77 @@ class GraphStore:
         (three detectors, `binding_surface`) needs: each of them ranks or counts over the whole
         set, and a page of it would rank the wrong thing. `call_sites_for_operation_count` is the
         matching denominator, read without fetching a single row's columns.
+
+        `path_prefix` narrows to a directory or a file prefix and is a real SQL predicate, for
+        the same reason `limit` is: a prefix applied after the fetch reads every row off the
+        wire before discarding most of them, which is the whole cost the filter exists to avoid
+        against a customer repository holding thousands of sites.
         """
-        clause = "" if repo_id is None else " AND repo_id = %s"
-        parameters: list[object] = [vendor_id, operation_id]
-        if repo_id is not None:
-            parameters.append(repo_id)
+        clause, parameters = _call_site_predicate(
+            vendor_id, operation_id, repo_id=repo_id, path_prefix=path_prefix
+        )
         limit_clause = ""
         if limit is not None:
             limit_clause = " LIMIT %s OFFSET %s"
             parameters += [limit, offset]
         rows = self._connect().execute(
-            f"SELECT * FROM call_site "
-            f"WHERE vendor_id = %s AND operation_id = %s AND retracted_at IS NULL{clause} "
-            f"ORDER BY path, line{limit_clause}",
+            f"SELECT * FROM call_site WHERE {clause} ORDER BY path, line{limit_clause}",
             parameters,
         ).fetchall()
         return [CallSite(**row) for row in rows]
 
     def call_sites_for_operation_count(
-        self, vendor_id: str, operation_id: str, *, repo_id: str | None = None
+        self,
+        vendor_id: str,
+        operation_id: str,
+        *,
+        repo_id: str | None = None,
+        path_prefix: str | None = None,
     ) -> int:
         """How many rows `call_sites_for_operation` would return unbounded -- the denominator a
         page of it is drawn from, read without a single column of any row.
+
+        Every narrowing parameter the page takes is taken here too. A denominator drawn from a
+        wider set than the page it sits beside tells a reader the page is a window on something
+        it is not, which is the failure the console keeps having to close by hand.
         """
-        clause = "" if repo_id is None else " AND repo_id = %s"
-        parameters: list[object] = [vendor_id, operation_id]
-        if repo_id is not None:
-            parameters.append(repo_id)
+        clause, parameters = _call_site_predicate(
+            vendor_id, operation_id, repo_id=repo_id, path_prefix=path_prefix
+        )
         row = self._connect().execute(
-            f"SELECT count(*) AS n FROM call_site "
-            f"WHERE vendor_id = %s AND operation_id = %s AND retracted_at IS NULL{clause}",
-            parameters,
+            f"SELECT count(*) AS n FROM call_site WHERE {clause}", parameters
         ).fetchone()
         return row["n"]
+
+    def call_site_repositories_for_operation(
+        self, vendor_id: str, operation_id: str
+    ) -> dict[str, int]:
+        """Which repositories hold a live call site on one vendor operation, and how many each
+        holds -- one `GROUP BY`, never a query per repository.
+
+        Deliberately unscoped by `repo_id` and by `path_prefix`: this is the option list a
+        repository filter is built from, and an option list narrowed by the filter it sets
+        collapses to whatever is already selected, leaving no way back. The counts it carries
+        are therefore counts over the whole operation, which is a different number from the
+        page beside it whenever a path filter is active -- the caller renders which one it is
+        showing rather than letting a reader assume.
+
+        **A repository whose call sites have all been retracted is absent, not present with a
+        zero**, matching `call_sites_for_operation`'s own exclusion. Offering a repository that
+        can only ever answer with an empty page would invent a choice the graph does not hold.
+        """
+        clause, parameters = _call_site_predicate(vendor_id, operation_id)
+        rows = self._connect().execute(
+            f"""
+            SELECT repo_id, count(*) AS n
+              FROM call_site
+             WHERE {clause}
+             GROUP BY repo_id
+             ORDER BY repo_id
+            """,
+            parameters,
+        ).fetchall()
+        return {row["repo_id"]: row["n"] for row in rows}
 
     def call_site_counts(self, repo_id: str) -> dict[str, int]:
         """How many indexed call sites reach each vendor, for one repository.
@@ -688,11 +761,18 @@ class GraphStore:
         ).fetchall()
         return [Finding(**row) for row in rows]
 
-    def open_findings_count(self, *, repo_id: str | None = None) -> int:
+    def open_findings_count(
+        self, *, repo_id: str | None = None, vendor_id: str | None = None
+    ) -> int:
         """How many rows `open_findings`/`open_findings_page` return unbounded, through the same
         join -- a retracted call site's finding is invisible to both or neither.
+
+        `vendor_id` sits beside `repo_id` so `severity_rollup` can compute its total under the
+        same scope as its breakdown, through a second real aggregate rather than by summing the
+        first. Two numbers that cannot contradict each other are two numbers that can never
+        reveal one of them is wrong.
         """
-        predicate, parameters = _open_findings_predicate(repo_id=repo_id)
+        predicate, parameters = _open_findings_predicate(repo_id=repo_id, vendor_id=vendor_id)
         row = self._connect().execute(
             f"""
             SELECT count(*) AS n FROM finding
@@ -764,10 +844,18 @@ class GraphStore:
         ).fetchall()
         return {row["vendor_id"]: row["n"] for row in rows}
 
-    def open_findings_severity_counts(self, *, repo_id: str | None = None) -> dict[str, int]:
+    def open_findings_severity_counts(
+        self, *, repo_id: str | None = None, vendor_id: str | None = None
+    ) -> dict[str, int]:
         """Every open finding, tallied by severity -- the same reasoning
         `open_findings_vendor_counts` carries, over `finding.severity` instead of
         `call_site.vendor_id`.
+
+        `repo_id` and `vendor_id` narrow together or separately, through the same shared
+        predicate every other open-findings read uses. A vendor screen's severity filter is built
+        from both at once: the breakdown beside one vendor's findings inside a selected repository
+        has to be that vendor in that repository, or it is the same false claim one axis at a
+        time.
 
         A distribution derived from a bounded page understates whichever severities the ordering
         happened not to reach before the bound -- exactly the failure `open_findings_count_bounded`
@@ -777,7 +865,7 @@ class GraphStore:
         every row's severity, aggregated in SQL, rather than counting a `Counter` in Python over
         a full fetch of every `Finding`.
         """
-        predicate, parameters = _open_findings_predicate(repo_id=repo_id)
+        predicate, parameters = _open_findings_predicate(repo_id=repo_id, vendor_id=vendor_id)
         rows = self._connect().execute(
             f"""
             SELECT finding.severity AS severity, count(*) AS n

@@ -1182,3 +1182,153 @@ def test_a_removal_reports_how_many_rows_it_took_out(store):
     )
 
     assert removed == 2
+
+
+# -- filtering and faceting a long table ----------------------------------------
+#
+# A console table over a real customer repository holds thousands of call sites, and the
+# affordance that makes it usable -- narrow to a directory, or to one repository -- has to be
+# a real SQL predicate rather than a filter applied to whichever page arrived. A filter over
+# one page reports a total drawn from the whole set, which is the "a reader cannot tell what
+# this view can see" defect this milestone has closed six times, wearing a new hat.
+
+
+def test_call_sites_for_operation_narrows_to_a_path_prefix(store):
+    store.upsert_call_site(_site(path="src/billing/charge.ts", content_hash="hash-a"))
+    store.upsert_call_site(_site(path="src/reporting/export.ts", content_hash="hash-b"))
+
+    sites = store.call_sites_for_operation("stripe", "PostCharges", path_prefix="src/billing/")
+
+    assert [s.path for s in sites] == ["src/billing/charge.ts"]
+
+
+def test_call_sites_for_operation_path_prefix_is_sql_not_a_python_filter(store, fetch_counts):
+    """A prefix applied after the fetch reads every row off the wire and then throws most of
+    them away, which is exactly the cost the filter exists to avoid at ten thousand call sites.
+    """
+    for i in range(5):
+        store.upsert_call_site(_site(path=f"src/keep/{i}.ts", line=i, content_hash=f"keep-{i}"))
+    for i in range(5):
+        store.upsert_call_site(_site(path=f"src/drop/{i}.ts", line=i, content_hash=f"drop-{i}"))
+
+    sites = store.call_sites_for_operation("stripe", "PostCharges", path_prefix="src/keep/")
+
+    assert len(sites) == 5, "rows returned"
+    assert fetch_counts[-1] == 5, "rows read off the wire"
+
+
+def test_call_sites_for_operation_path_prefix_treats_underscore_as_a_literal(store):
+    """`_` is a single-character wildcard in SQL `LIKE` and is ordinary in a source path --
+    `src/my_module/` is the normal spelling of a Python or TypeScript directory. A prefix
+    built as a `LIKE` pattern without escaping matches `src/myXmodule/` too, silently, and no
+    fixture in this repository would have caught it.
+    """
+    store.upsert_call_site(_site(path="src/my_module/charge.ts", content_hash="hash-a"))
+    store.upsert_call_site(_site(path="src/myXmodule/charge.ts", content_hash="hash-b"))
+
+    sites = store.call_sites_for_operation("stripe", "PostCharges", path_prefix="src/my_module/")
+
+    assert [s.path for s in sites] == ["src/my_module/charge.ts"]
+
+
+def test_call_sites_for_operation_path_prefix_treats_percent_as_a_literal(store):
+    store.upsert_call_site(_site(path="src/100%/charge.ts", content_hash="hash-a"))
+    store.upsert_call_site(_site(path="src/other/charge.ts", content_hash="hash-b"))
+
+    sites = store.call_sites_for_operation("stripe", "PostCharges", path_prefix="src/100%/")
+
+    assert [s.path for s in sites] == ["src/100%/charge.ts"]
+
+
+def test_call_sites_for_operation_count_honours_the_path_prefix(store):
+    """The denominator has to move with the filter. A total drawn from the unfiltered set
+    beside a filtered page tells a reader the page is a window on something it is not.
+    """
+    for i in range(3):
+        store.upsert_call_site(_site(path=f"src/keep/{i}.ts", line=i, content_hash=f"keep-{i}"))
+    store.upsert_call_site(_site(path="src/drop/0.ts", content_hash="drop-0"))
+
+    assert store.call_sites_for_operation_count("stripe", "PostCharges") == 4
+    assert (
+        store.call_sites_for_operation_count(
+            "stripe", "PostCharges", path_prefix="src/keep/"
+        )
+        == 3
+    )
+
+
+def test_call_sites_for_operation_combines_the_path_prefix_with_repo_id(store):
+    store.upsert_call_site(_site(repo_id="r1", path="src/keep/a.ts", content_hash="hash-a"))
+    store.upsert_call_site(_site(repo_id="r2", path="src/keep/b.ts", content_hash="hash-b"))
+    store.upsert_call_site(_site(repo_id="r1", path="src/drop/c.ts", content_hash="hash-c"))
+
+    sites = store.call_sites_for_operation(
+        "stripe", "PostCharges", repo_id="r1", path_prefix="src/keep/"
+    )
+
+    assert [s.path for s in sites] == ["src/keep/a.ts"]
+
+
+def test_call_site_repositories_for_operation_counts_sites_per_repository(store):
+    store.upsert_call_site(_site(repo_id="r1", path="src/a.ts", content_hash="hash-a"))
+    store.upsert_call_site(_site(repo_id="r1", path="src/b.ts", content_hash="hash-b"))
+    store.upsert_call_site(_site(repo_id="r2", path="src/c.ts", content_hash="hash-c"))
+
+    assert store.call_site_repositories_for_operation("stripe", "PostCharges") == {
+        "r1": 2,
+        "r2": 1,
+    }
+
+
+def test_call_site_repositories_for_operation_is_one_query_not_one_per_repository(
+    store, monkeypatch
+):
+    for i in range(5):
+        store.upsert_call_site(_site(repo_id=f"r{i}", path=f"src/{i}.ts", content_hash=f"h-{i}"))
+    queries = _execute_count(monkeypatch)
+
+    store.call_site_repositories_for_operation("stripe", "PostCharges")
+
+    assert len(queries) == 1
+
+
+def test_call_site_repositories_for_operation_excludes_retracted_sites(store):
+    """A repository whose every call site has been retracted is absent, not present with a
+    zero. The facet is the option list for a filter, and offering a repository that can only
+    ever return an empty page invents a choice the graph does not hold.
+    """
+    site_id = store.upsert_call_site(_site(repo_id="r2", path="src/c.ts", content_hash="hash-c"))
+    store.upsert_call_site(_site(repo_id="r1", path="src/a.ts", content_hash="hash-a"))
+    store.replace_call_sites("r2", [])
+
+    assert store.call_site_repositories_for_operation("stripe", "PostCharges") == {"r1": 1}
+    assert store.get_call_site(site_id).retracted_at is not None
+
+
+def test_call_site_repositories_for_operation_is_scoped_to_the_operation(store):
+    store.upsert_call_site(_site(repo_id="r1", operation_id="PostCharges", content_hash="hash-a"))
+    store.upsert_call_site(
+        _site(repo_id="r2", operation_id="GetCharges", path="src/b.ts", content_hash="hash-b")
+    )
+
+    assert store.call_site_repositories_for_operation("stripe", "PostCharges") == {"r1": 1}
+
+
+def test_open_findings_severity_counts_narrows_to_one_vendor(store):
+    """The fleet screen asks this across every vendor; a vendor screen asks it for one. The
+    same aggregate answers both -- a second method would be a second place for the join to
+    disagree about which findings are open.
+    """
+    stripe_site = store.upsert_call_site(_site(vendor_id="stripe", content_hash="hash-a"))
+    twilio_site = store.upsert_call_site(
+        _site(vendor_id="twilio", path="src/sms.ts", content_hash="hash-b")
+    )
+    store.insert_finding(_finding_for_open(stripe_site, severity="breaking"))
+    store.insert_finding(_finding_for_open(twilio_site, severity="warning", claim="other"))
+
+    assert store.open_findings_severity_counts() == {"breaking": 1, "warning": 1}
+    assert store.open_findings_severity_counts(vendor_id="stripe") == {"breaking": 1}
+
+
+def test_open_findings_severity_counts_for_a_vendor_with_nothing_open_is_empty(store):
+    assert store.open_findings_severity_counts(vendor_id="stripe") == {}

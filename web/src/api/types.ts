@@ -136,7 +136,8 @@ export interface RiskRow {
 }
 
 /**
- * `GET /api/vendors/{vendor_id}`: the API Services level's page of open findings.
+ * `GET /api/vendors/{vendor_id}`: the API Services level's page of open findings, the scope it
+ * was computed in, and the severities that scope holds.
  *
  * A `Page<RiskRow>` that also names the scope it was computed in. `repo_id` is `null` when the
  * page spans every repository the index has seen, and the repository's own id when the caller
@@ -146,9 +147,23 @@ export interface RiskRow {
  * `GET /api/vendors/{vendor_id}/changes` deliberately has no counterpart field: what a vendor
  * published is a fact about the vendor, true whether or not any repository calls it, so there
  * is no repository scope for it to be in.
+ *
+ * `severity_counts` is the option list the severity filter is built from. It is scoped to that
+ * same repository and to the vendor, and to nothing else: `sync.api.app.vendor_detail` reads it
+ * without the severity or path currently selected, because an option list narrowed by the
+ * filter it sets collapses to that one value and leaves no way back to the others. So it does
+ * not agree with `total` above whenever a filter is on, and it is not supposed to — `total` is
+ * the filtered page's denominator and this is the unfiltered breakdown of the same scope. A
+ * screen rendering both says which is which.
+ *
+ * `severity_total` is that scope's own count, read as a second SQL aggregate rather than summed
+ * from `severity_counts`: two numbers that cannot contradict each other are two numbers that can
+ * never reveal one of them is wrong.
  */
 export interface VendorFindingsPage extends Page<RiskRow> {
   repo_id: string | null
+  severity_counts: Tally
+  severity_total: number
 }
 
 /** One item of `GET /api/vendors/{vendor_id}/changes`: something the vendor changed. */
@@ -421,15 +436,28 @@ export interface BindingChange {
  * Not a `Provenance`: this route reads `sync.dashboard.graph_views`, never `GraphSurface`, and
  * carries no feed-fetch timestamp and no context-savings figure — inheriting the envelope would
  * invent two fields the transport never sends, the reasoning that already keeps `WorkflowState`
- * and `RunsPage` off it. `repo_id` here is the filter the request was made with, not a fact
- * about the answer: null when the caller asked for every repository.
+ * and `RunsPage` off it. `repo_id` and `path_prefix` here are the filters the request was made
+ * with, not facts about the answer: null when the caller asked for everything.
+ *
+ * `repositories` is the option list those filters are set from, and `binding_surface` computes
+ * it with neither of them applied — an option list narrowed by the filter it sets collapses to
+ * whatever is already selected. Its `call_site_count` is therefore a count over the whole
+ * operation and not over `call_sites.total` beside it, which is why a screen showing both has
+ * to say which is which.
  */
+export interface BindingRepository {
+  repo_id: string
+  call_site_count: number
+}
+
 export interface BindingSurfaceResponse {
   vendor_id: string
   operation_id: string
   repo_id: string | null
+  path_prefix: string | null
   call_sites: ItemPage<BindingCallSite>
   changes: ItemPage<BindingChange>
+  repositories: BindingRepository[]
 }
 
 /**
