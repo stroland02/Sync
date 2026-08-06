@@ -87,6 +87,21 @@ jobs:
       - name: Test skip discipline
         run: uv run python scripts/lint_test_skips.py tests
 
+      # `sync.index.tsc.run_tsc` falls back to `npx --yes --package=typescript@latest` whenever a
+      # clone has no TypeScript of its own, which is every fixture in this suite. `addopts` runs
+      # pytest under `-n auto`, so several workers reach that fallback at once against a cold
+      # `~/.npm/_npx` cache -- one worker is still writing the package while another execs
+      # `node .../typescript/lib/tsc.js`, and Linux answers `ETXTBSY`. It surfaces as a patch that
+      # abandoned with "could not establish a typecheck baseline", which reads as a defect in the
+      # gate rather than in the machine running it. Run the resolver once, serially, so every
+      # worker afterwards finds an installed and unwritten cache entry.
+      #
+      # This warms a shared cache; it does not make the fallback concurrency-safe. B99 carries
+      # that, because two Sync remediations on one host hit the same race with no CI step in
+      # front of them.
+      - name: Warm the TypeScript npx cache
+        run: npx --yes --silent --package=typescript@latest tsc --version
+
       - name: Tests
         run: uv run pytest
 

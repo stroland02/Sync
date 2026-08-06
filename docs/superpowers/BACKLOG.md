@@ -408,6 +408,33 @@ to be made again.
 proving it passes a real vendor entry, or this entry is closed as declined with the sample of
 recorded attempts that justified declining.
 
+### B99 — Two typechecks on one host race on a shared npx cache, and the loser looks like a bad patch
+
+`run_tsc` (`src/sync/index/tsc.py:141-152`) falls back to `npx --yes --package=typescript@latest`
+whenever a clone has no TypeScript installed. That resolver writes into `~/.npm/_npx/<hash>`, which
+is shared by every process on the host. Two callers reaching it at once against a cold cache means
+one is still writing the package while the other execs `node .../typescript/lib/tsc.js`, and Linux
+answers `ETXTBSY`.
+
+Observed in CI on 2026-08-06 (run `31099640833`): `pytest -n auto` put several xdist workers into
+the fallback simultaneously and
+`test_a_finding_reaches_a_verified_patch_through_the_real_graph` failed with
+`abandon_reason='RuntimeError: could not establish a typecheck baseline ... process.execve failed
+with error code ETXTBSY'`. **The failure mode is the expensive part.** It does not read as a
+machine problem; it reads as a patch that could not be verified, which is exactly the verdict the
+gate exists to produce honestly. A reviewer meeting it on a real finding would look at the patch.
+
+The CI step *Warm the TypeScript npx cache* resolves the package once, serially, before the suite,
+so no worker meets a cold cache. That is a fix for this repository's test run and nothing else —
+two Sync remediations running on one host hit the same race with no step in front of them, and the
+`--cache` npx flag is per-invocation rather than per-host so it does not help either.
+
+**Closes when:** the fallback resolves TypeScript through a path that is safe to enter concurrently
+— a lock around the resolve, a pre-resolved install directory the run owns, or an install into the
+clone before the compile — with a test that starts two typechecks against a cold cache at once and
+watches the current form fail before the fix lands. A test that merely runs two sequentially proves
+nothing.
+
 ## In flight
 
 
