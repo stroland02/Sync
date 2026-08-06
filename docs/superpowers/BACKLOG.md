@@ -648,6 +648,21 @@ why it ships with it.
 
 ### B105 — Four statements in `DESIGN.md`'s rendered-pixel section are contradicted by the rendered pixels
 
+**Closed 2026-08-06 (M4-W149).** The ring renders at full strength — `focus-visible:ring-ring` on
+`button`, `input`, `textarea` and `input-group` — so the published figure is now the token's own,
+re-measured at **8.70** against the card and **9.50** against the page plane. 3.08 with no second
+channel was judged unacceptable rather than documented: it cleared the non-text floor by 0.08, and
+on the `outline` variant it is the only channel there is. The two outline-button rows now name their
+backdrop, which is what was actually missing — 10.76/8.03 over the card, 12.08/8.68 over the page
+plane. The `TableRow` row is rewritten as history. `test_no_focus_ring_is_washed_by_an_alpha_modifier`
+holds the ring.
+
+Two corrections to the finding below, from re-measuring at `f725efb`: **12.09 is reproducible** —
+over `--color-surface-sunken` the resting pairing is 12.08, and the "11.6" recorded here was an
+arithmetic slip rather than a property of the ramp. And `TableRow`'s hover fill is not simply gone:
+it is now the named step `bg-surface-subtle` at full strength, gated behind `data-interactive="true"`,
+which no caller passes — so no row hovers, and one that did would measure 13.79 rather than 14.80.
+
 Same measurement as B104. This is the one section of the contract whose whole purpose is to be
 checkable against a screen, and four of its claims do not survive being checked.
 
@@ -680,6 +695,14 @@ them, and the retired `TableRow` row is rewritten as history rather than as curr
 chosen, the four numbers are re-read off a running instance, not recomputed from tokens.
 
 ### B106 — Every route's heading list opens with the title of a dialog that is not open
+
+**Closed 2026-08-06 (M4-W149).** `DialogHeader` moved inside `DialogContent` in `command.tsx`, so
+Radix unmounts it with the rest of the closed dialog. Walked on the running console: the first
+heading is the page's own `h1` and the 1px description paragraph is gone. The accessible name was
+verified rather than assumed — with the palette open, `aria-labelledby` resolves to "Jump to a
+destination" and the node it names is inside the content, which is the association Radix wants and
+which the hoisted header did not have. `test_no_dialog_heading_sits_outside_its_dialog_content`
+holds the structural cause; nothing here can walk a rendered document.
 
 Same measurement. No route skips a heading level. But on all nine, the first heading in the document
 is `h2 "Jump to a destination"` — the command palette's title — ahead of the page's own `h1`.
@@ -718,6 +741,28 @@ reader cannot tell recessive prose from a deliberate second voice.
 two plus an accent, and the choice is recorded — if `ink-secondary` is the right step for
 abandoned-run prose, `DESIGN.md` gains the third text level as an argued decision rather than as a
 class that arrived without one.
+
+### B108 — The validation ring is washed the way the focus ring was, and it is spelled against a token that does not exist
+
+Found while closing B105 (M4-W149), and left rather than swept into it because it is a different
+question wearing the same shape.
+
+`button.tsx`, `input.tsx`, `textarea.tsx` and `input-group.tsx` each carry
+`aria-invalid:ring-destructive/20` and `dark:aria-invalid:ring-destructive/40`. Two problems, and the
+second is the bigger one. The alpha is the same defect the focus ring had: a contrast figure nobody
+computed, unreadable off the class name, and `test_no_focus_ring_is_washed_by_an_alpha_modifier` is
+deliberately scoped to focus rings so it does not force this to be answered in the same commit.
+`--color-destructive` is also not a token `DESIGN.md` declares — the contract's vocabulary is
+`critical-ink` / `critical-surface` — so these classes are shadcn defaults referring to a colour this
+project never argued for.
+
+Nothing sets `aria-invalid` in the console today, so this renders nowhere and is not urgent. It is
+also not free to leave: the first form that validates inherits an unmeasured ring in an undeclared
+colour.
+
+**Closes when:** the invalid state is expressed in declared tokens at a strength measured against the
+3:1 non-text floor, `destructive` is either declared in `DESIGN.md` or gone from `web/src`, and the
+ring guard's scope widens from focus rings to every `ring-*/n` with the narrowing comment deleted.
 
 ## In flight
 

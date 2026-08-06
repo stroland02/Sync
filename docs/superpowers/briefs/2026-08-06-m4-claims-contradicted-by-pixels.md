@@ -27,8 +27,16 @@ which measures 3.08 against the card and 3.12 against the page plane. It clears 
 0.08, and it is the **only** channel: `outline-style` is `none` and the border does not change under
 focus. So 3.08 is the entire visual signal a keyboard user gets.
 
-The outline button's two figures are wrong the same way, and one of them (12.09) is reproducible
-against no backdrop in the ramp at all.
+The outline button's two figures are wrong the same way.
+
+**Corrected on re-measure at `f725efb`, which is what this brief's own opening asks for.** 12.09 *is*
+reproducible: over `--color-surface-sunken`, the page plane, the resting pairing measures 12.08 and
+the hover pairing 8.68. The published figures were the page-plane ones; over the card, which is where
+every outline button in this console actually sits, they are 10.76 and 8.03. So the defect in those
+two rows is a missing backdrop, not an unreproducible number — the conformance report's "11.6" was an
+arithmetic slip. The third statement is also narrower than recorded: `TableRow`'s hover fill is not
+gone, it is now the named step `bg-surface-subtle` at full strength gated behind
+`data-interactive="true"`, which no caller passes.
 
 **The correction has two halves and both are required.** Fix the numbers so the document states what
 renders — and decide whether 3.08 with no second channel is acceptable for the only focus signal in

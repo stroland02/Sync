@@ -655,3 +655,148 @@ def test_the_weight_guard_permits_the_three_weights_the_console_spends(tmp_path:
     violations = _heavy_weight_violations(tmp_path, 600)
 
     assert not violations
+
+
+# -- assertion 8: the focus ring ships at full strength ------------------------------------------
+#
+# The focus ring is the only signal a keyboard user gets on a control whose variant sets its own
+# border colour, and an alpha modifier on it is invisible in the source and decisive on screen:
+# `ring-ring/50` composites the brand hue to `rgb(84, 101, 139)` over the card, which measures
+# 3.08:1 against 3:1 -- a floor cleared by 0.08 while `DESIGN.md` published 8.69. A ring colour is
+# a token, not a wash: it is declared once, argued in that file, and rendered at the strength it
+# was argued at.
+#
+# Scoped to the focus ring rather than to every `ring-*/n`: the `aria-invalid:` rings on the same
+# elements are washed the same way and are the same class of defect, but they are also spelled
+# against `destructive`, which is not a token `DESIGN.md` declares at all. That is a bigger
+# question than this guard, and B108 carries it.
+
+# `\]?` catches the `has-[…:focus-visible]:ring-…` form `input-group.tsx` uses, where the ring
+# is applied to a wrapper by a descendant's focus rather than by the element's own.
+_RING_WITH_ALPHA = re.compile(r"(?<![\w-])focus(?:-visible)?\]?:ring-([a-z-]+)/(\d{1,3})(?![\w-])")
+
+
+def _ring_alpha_violations(root: Path) -> list[str]:
+    violations = []
+    for path in _iter_source_files(root):
+        text = _read_stripped(path)
+        for match in _RING_WITH_ALPHA.finditer(text):
+            violations.append(
+                f"{path}:{_line_at(text, match.start())} renders the focus ring as "
+                f"`{match.group(0)}`; {match.group(2)}% of a colour is not the colour "
+                "DESIGN.md's contrast figure was computed for"
+            )
+    return violations
+
+
+def test_no_focus_ring_is_washed_by_an_alpha_modifier():
+    _require_web_src()
+    _require_examined(_iter_source_files(_WEB_SRC), _WEB_SRC)
+    violations = _ring_alpha_violations(_WEB_SRC)
+    assert not violations, (
+        "a focus ring at partial strength is a contrast figure nobody computed and nobody can "
+        "read off the class name -- render the token, and argue the token in DESIGN.md:\n"
+        + "\n".join(violations)
+    )
+
+
+def test_the_ring_guard_rejects_a_half_strength_ring(tmp_path: Path) -> None:
+    (tmp_path / "button.tsx").write_text(
+        '<button className="focus-visible:ring-3 focus-visible:ring-ring/50" />\n',
+        encoding="utf-8",
+    )
+
+    violations = _ring_alpha_violations(tmp_path)
+
+    assert violations and "ring-ring/50" in violations[0]
+
+
+def test_the_ring_guard_permits_a_full_strength_ring_and_a_ring_width(tmp_path: Path) -> None:
+    # `ring-3` is a width, not a colour, and `ring-0` removes the ring entirely -- neither is a
+    # colour washed by an alpha modifier, and a guard that swept them up would be deleted.
+    (tmp_path / "input.tsx").write_text(
+        '<input className="focus-visible:ring-3 focus-visible:ring-ring" />\n'
+        '<span className="focus-visible:ring-0" />\n',
+        encoding="utf-8",
+    )
+
+    violations = _ring_alpha_violations(tmp_path)
+
+    assert not violations
+
+
+# -- assertion 9: a dialog's heading lives inside the dialog -------------------------------------
+#
+# Radix unmounts `DialogContent` while the dialog is closed. A `DialogTitle` outside it is not
+# unmounted, so it sits in the document permanently -- and on every route of this console the
+# first heading in the document was `h2 "Jump to a destination"`, the command palette's title,
+# ahead of the page's own `h1`. The heading tree is the only machine-readable assertion of which
+# level of the dependency graph a reader is on, and it was asserting a closed overlay.
+#
+# This is a text guard over the JSX, not a walk of the rendered document: nothing in this
+# repository can run React. It holds the structural cause rather than the rendered symptom, which
+# is the part a future edit can reintroduce.
+
+_DIALOG_CONTENT_OPEN = re.compile(r"<DialogContent\b")
+_DIALOG_HEADING = re.compile(r"<(DialogHeader|DialogTitle|DialogDescription)\b")
+
+
+def _dialog_heading_violations(root: Path) -> list[str]:
+    violations = []
+    for path in _iter_source_files(root):
+        text = _read_stripped(path)
+        opens = [m.start() for m in _DIALOG_CONTENT_OPEN.finditer(text)]
+        if not opens:
+            continue
+        first_content = min(opens)
+        for match in _DIALOG_HEADING.finditer(text):
+            if match.start() < first_content:
+                violations.append(
+                    f"{path}:{_line_at(text, match.start())} renders <{match.group(1)}> before "
+                    "<DialogContent>; Radix unmounts the content and leaves this in the document"
+                )
+    return violations
+
+
+def test_no_dialog_heading_sits_outside_its_dialog_content():
+    _require_web_src()
+    _require_examined(_iter_source_files(_WEB_SRC), _WEB_SRC)
+    violations = _dialog_heading_violations(_WEB_SRC)
+    assert not violations, (
+        "a heading that outlives its closed dialog is the first heading on every route, ahead "
+        "of the page's own h1:\n" + "\n".join(violations)
+    )
+
+
+def test_the_dialog_heading_guard_rejects_a_header_hoisted_above_the_content(tmp_path: Path) -> None:
+    (tmp_path / "command.tsx").write_text(
+        "<Dialog>\n"
+        '  <DialogHeader className="sr-only">\n'
+        "    <DialogTitle>{title}</DialogTitle>\n"
+        "  </DialogHeader>\n"
+        "  <DialogContent>{children}</DialogContent>\n"
+        "</Dialog>\n",
+        encoding="utf-8",
+    )
+
+    violations = _dialog_heading_violations(tmp_path)
+
+    assert violations and "DialogHeader" in violations[0]
+
+
+def test_the_dialog_heading_guard_permits_a_header_inside_the_content(tmp_path: Path) -> None:
+    (tmp_path / "command.tsx").write_text(
+        "<Dialog>\n"
+        "  <DialogContent>\n"
+        '    <DialogHeader className="sr-only">\n'
+        "      <DialogTitle>{title}</DialogTitle>\n"
+        "    </DialogHeader>\n"
+        "    {children}\n"
+        "  </DialogContent>\n"
+        "</Dialog>\n",
+        encoding="utf-8",
+    )
+
+    violations = _dialog_heading_violations(tmp_path)
+
+    assert not violations

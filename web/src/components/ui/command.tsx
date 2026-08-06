@@ -44,12 +44,15 @@ function CommandDialog({
   className?: string
   showCloseButton?: boolean
 }) {
+  // The header belongs inside the content, and this is not a preference. Radix unmounts
+  // `DialogContent` while the dialog is closed; a header outside it is never unmounted, so the
+  // title and its description sat in the document permanently. On all nine routes the first
+  // heading was this dialog's `h2` rather than the page's own `h1` — and the heading tree is the
+  // only machine-readable assertion of which level of the dependency graph a reader is on.
+  // Radix also wants the title associated with the content, which is where the dialog's
+  // accessible name comes from; outside it, `aria-labelledby` pointed at a node in another tree.
   return (
     <Dialog {...props}>
-      <DialogHeader className="sr-only">
-        <DialogTitle>{title}</DialogTitle>
-        <DialogDescription>{description}</DialogDescription>
-      </DialogHeader>
       <DialogContent
         className={cn(
           "top-1/3 translate-y-0 overflow-hidden rounded-surface! p-0",
@@ -57,6 +60,10 @@ function CommandDialog({
         )}
         showCloseButton={showCloseButton}
       >
+        <DialogHeader className="sr-only">
+          <DialogTitle>{title}</DialogTitle>
+          <DialogDescription>{description}</DialogDescription>
+        </DialogHeader>
         {children}
       </DialogContent>
     </Dialog>

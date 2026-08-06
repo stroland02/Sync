@@ -231,10 +231,17 @@ border stays `--color-input` under focus, so that 3.08 is the whole of what a ke
 rendered* lists `foreground` on `input/30` at 12.09 and on `input/50` at 8.70. Measured over
 `--color-surface`, both are lower. The arithmetic, in the gamma-encoded sRGB Chrome actually
 composites in: `oklab(0.578 0 0)` resolves to `#7a7a7a`, so `0.3 × 122 + 0.7 × 23 = 53`, and
-`#f0f0f0` on `rgb(53,53,53)` is **10.76**; at `/50`, `0.5 × 122 + 0.5 × 23 = 72` gives **8.03**. No
-backdrop in the ramp reproduces 12.09 — over `--color-surface-sunken` the resting fill is 45 and the
-pairing is 11.6. Both still clear the 5.05 floor comfortably, so this is a wrong number rather than
-an unsafe colour.
+`#f0f0f0` on `rgb(53,53,53)` is **10.76**; at `/50`, `0.5 × 122 + 0.5 × 23 = 72` gives **8.03**.
+Both still clear the 5.05 floor comfortably, so this is a wrong number rather than an unsafe colour.
+
+**Corrected 2026-08-06 while closing B105 (M4-W149).** The sentence that stood here — "No backdrop
+in the ramp reproduces 12.09 — over `--color-surface-sunken` the resting fill is 45 and the pairing
+is 11.6" — was wrong, and wrong in the direction that makes a real finding look larger than it is.
+`#f0f0f0` on `rgb(45,45,45)` is **12.08**, not 11.6, and 12.08 at `/50` becomes `rgb(67,67,67)` at
+**8.68**. So the published pair *is* the page-plane pair, read to two decimals; what the rows were
+missing was the backdrop they were composed over, which is now a column in `DESIGN.md`. The figure
+that matters for this console is the card one, because every outline button here sits inside a
+`<Card>`.
 
 **The row height: 36px declared, 40px minimum and 80px rendered.** *Row height* says `row-md` is
 "the existing arithmetic made explicit — `TableCell` already renders a 36px row from `text-body` and
