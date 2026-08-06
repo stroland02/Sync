@@ -1211,15 +1211,72 @@ def test_a_zero_limit_is_floored_so_the_cursor_terminates():
 #
 # Sentry's `MissingPaginationError` (`src/sentry/api/base.py:487-494`) raises when a `GET`
 # returns a bare list with no pagination. `app.py` has no such gate, so the same guard is built
-# here as a test: a route declares itself a collection by the shape of what it actually returns
-# rather than by a name on a hand-written list, because a list restating the routes passes even
-# on a build that serves none of them -- the exact failure mode this class of test exists to
-# catch. `_PAGE_ENVELOPE_KEYS` is the one page shape every paginated answer in this file already
-# uses (`_EMPTY_PAGE` above, and `GraphSurface._page` in production): `items`, `total` and
-# `next_offset` together. A response carrying that trio -- whatever else it also carries, as
-# `vendor_detail` and `vendor_changes` do with `indexed_at` and `binding_source` beside them --
-# is a collection; every other route answers one resource or a fixed-size aggregate and has
-# nothing to page through.
+# here as a test.
+#
+# This guard's first form defined "collection" as "a route whose *current* answer already
+# carries a page envelope" -- which can only ever confirm a route that already paginates, and
+# is blind to the one thing it exists to catch: a route that forgot to paginate never grows the
+# envelope, so the old code skipped it in silence rather than flagging it. Collection-ness has
+# to be a decision about what each route *is*, recorded once, not inferred from a body that
+# might not implement it yet.
+#
+# The three sets below classify every GET route `app.routes` carries. A route absent from all
+# three is a route nobody has decided about, and `_pagination_violations` fails on it by name --
+# it does not fall through to a silent skip the way the old guard did, so a route `create_app`
+# adds later cannot slip through unclassified.
+#
+# Collections checked here, against a single `limit`/`offset` cursor:
+_LIMIT_OFFSET_COLLECTIONS = {
+    # Findings at risk for one vendor (`GraphSurface.whats_at_risk`) and every change recorded
+    # for one vendor (`whats_changed`) -- both already page-shaped, and both grow with the
+    # graph's own data rather than with anything fixed in code or configuration.
+    "/api/vendors/{vendor_id}",
+    "/api/vendors/{vendor_id}/changes",
+    # Every remediation run across the fleet -- grows with usage, unboundedly.
+    "/api/runs",
+}
+
+# Two routes carry more than one paginated list on the same screen, and `_limit_param`'s own
+# docstring in `app.py` says why each needs its own cursor name rather than sharing `limit`:
+# `binding` pages `call_sites` and `changes` independently (`call_sites_limit`/`_offset`,
+# `changes_limit`/`_offset`, proven by `test_binding_route_call_sites_and_changes_paginate_
+# independently` and `test_binding_route_pagination_defaults_and_clamps_match_the_other_routes`
+# above); `repository_observed` pages `calls`, `shapes` and `error_windows` independently
+# (proven by `test_observed_route_paginates_calls_shapes_and_error_windows_independently` and
+# `test_observed_route_pagination_defaults_when_absent` above). Both are genuine collections --
+# exempted from *this* guard because it checks exactly one cursor name per route, not because
+# either is unaccounted for.
+_MULTI_CURSOR_COLLECTIONS = {
+    "/api/vendors/{vendor_id}/operations/{operation_id}/bindings",
+    "/api/repositories/{repo_id}/observed",
+}
+
+# Routes that answer with a list but are not a page of it, each for a reason evidenced in the
+# console that reads it rather than asserted here:
+#
+# - `/api/overview`'s `vendors`, `/api/repositories`'s `repo_ids` and `/api/detectors`'s
+#   `detectors` are each fetched whole by the card that renders them
+#   (`web/src/features/fleet/vendor-distribution.tsx`, `repositories-table.tsx`,
+#   `detectors-summary.tsx`) and truncated for *display* client-side via `sliceForDisplay`,
+#   because `CardinalityStatement` states the true total ("N repositories indexed") -- a
+#   server-paginated page could not answer that without a second, unpaginated count call, which
+#   is the same list this route already sends. `vendor-distribution.tsx`'s own comment records
+#   that `/api/overview` was made unpaginated deliberately on 2026-08-05.
+# - `/api/findings/{finding_id}` and `/api/workflows/{finding_id}` each answer one resource. A
+#   finding's list-valued fields (`args_keys`, `response_fields_read`, `known_changes`) describe
+#   that one finding, not a page of findings.
+# - `/api/corpus` and `/api/repositories/{repo_id}/coverage` are aggregate counts grouped into
+#   dicts (`by_terminal_status`, `by_vendor`, ...), not lists of records -- there is nothing to
+#   page through.
+_NOT_COLLECTIONS = {
+    "/api/overview",
+    "/api/findings/{finding_id}",
+    "/api/workflows/{finding_id}",
+    "/api/corpus",
+    "/api/repositories",
+    "/api/repositories/{repo_id}/coverage",
+    "/api/detectors",
+}
 
 _PAGE_ENVELOPE_KEYS = {"items", "total", "next_offset"}
 
@@ -1232,26 +1289,45 @@ def _dummy_path(path: str) -> str:
     return re.sub(r"\{[^}]*\}", "x", path)
 
 
-def _pagination_violations(app: Starlette) -> list[str]:
-    """Every GET route on `app` whose answer is page-shaped, checked for whether `limit` and
-    `offset` actually change what it returns -- not merely whether the route names them.
-
-    Built from `app.routes` rather than a path list this file restates, so a route `create_app`
-    renames or adds is covered without anyone remembering a second place to update it.
-    """
-    client = TestClient(app)
-    violations = []
+def _get_get_routes(app: Starlette) -> list[str]:
+    paths = []
     for route in app.routes:
         methods = getattr(route, "methods", None)
         path = getattr(route, "path", None)
-        if not methods or "GET" not in methods or path is None:
+        if methods and "GET" in methods and path is not None:
+            paths.append(path)
+    return paths
+
+
+def _pagination_violations(app: Starlette) -> list[str]:
+    """Every GET route `app.routes` carries, checked against the collection decision recorded
+    above -- never against what the route happens to answer today.
+
+    Built from `app.routes` rather than a path list this file restates, so a route `create_app`
+    renames or adds is covered without anyone remembering a second place to update it: it either
+    lands in one of the three sets above, or this function reports it unclassified by name.
+    """
+    client = TestClient(app)
+    violations = []
+    for path in _get_get_routes(app):
+        if path in _NOT_COLLECTIONS or path in _MULTI_CURSOR_COLLECTIONS:
+            continue
+        if path not in _LIMIT_OFFSET_COLLECTIONS:
+            violations.append(
+                f"{path}: not classified as a collection or an exemption in "
+                "test_api_routes.py -- decide which before this guard can trust a GET here"
+            )
             continue
         url = _dummy_path(path)
         baseline = client.get(url)
         if baseline.status_code != 200:
+            violations.append(
+                f"{path}: classified as a collection but returned {baseline.status_code}"
+            )
             continue
         body = baseline.json()
         if not _page_shaped(body):
+            violations.append(f"{path}: classified as a collection but its answer has no page envelope")
             continue
         if len(body["items"]) <= 1:
             violations.append(f"{path}: fixture offers <=1 item, `limit` cannot be proven here")
@@ -1264,6 +1340,21 @@ def _pagination_violations(app: Starlette) -> list[str]:
         if not _page_shaped(offset_page) or offset_page["items"] == limited["items"]:
             violations.append(f"{path} does not honour `offset`")
     return violations
+
+
+def test_the_pagination_guard_rejects_an_unclassified_route():
+    # Proves the guard can fail on the exact defect it replaced: the old definition treated "not
+    # yet page-shaped" as "not a collection, skip it," so a route that forgot to paginate was
+    # invisible to it. A path absent from every set above is unclassified, and unclassified is a
+    # violation now, not a silent skip.
+    app = Starlette(
+        routes=[Route("/api/__unclassified", lambda r: JSONResponse({"ok": True}), methods=["GET"])]
+    )
+
+    violations = _pagination_violations(app)
+
+    assert violations and "/api/__unclassified" in violations[0]
+    assert "not classified" in violations[0]
 
 
 def test_every_collection_route_accepts_limit_and_offset():
@@ -1297,11 +1388,17 @@ def test_every_collection_route_accepts_limit_and_offset():
     assert not violations, "\n".join(violations)
 
 
-def test_the_pagination_guard_rejects_a_route_that_ignores_its_query_string():
+def test_the_pagination_guard_rejects_a_classified_collection_that_ignores_its_query_string():
+    # `/api/runs` is in `_LIMIT_OFFSET_COLLECTIONS`, so the guard commits to checking it; this
+    # handler returns a page envelope but never actually slices by `limit`. The old guard's
+    # entire definition of "collection" was "the answer already carries this envelope," so it
+    # could stumble onto a case like this one by accident -- but it had no way to reach a route
+    # that answers with a bare, unenveloped list instead, which is what
+    # `test_the_pagination_guard_rejects_an_unclassified_route` above proves separately.
     async def broken_collection(request):
         return JSONResponse({"items": [1, 2, 3], "total": 3, "next_offset": None})
 
-    app = Starlette(routes=[Route("/api/broken", broken_collection, methods=["GET"])])
+    app = Starlette(routes=[Route("/api/runs", broken_collection, methods=["GET"])])
 
     violations = _pagination_violations(app)
 

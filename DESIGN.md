@@ -268,11 +268,49 @@ series or facet. Do not change the palette.
 |---|---|---|
 | `--color-chart-grid` | gridlines, recessive | `oklch(0.29 0 0)` `#2b2b2b` |
 | `--color-chart-axis` | the baseline and axis rule | `oklch(0.42 0 0)` `#4d4d4d` |
+| `--color-chart-label-on-light` | the in-segment label ink `corpus-chart.tsx`'s `labelInkFor` picks per fill | `#000000` |
 
-The chart's plotting surface is `--color-surface`. Text on a chart — values, labels, legend entries
-— wears the ink tokens, never the series colour; a coloured mark beside the text carries identity.
-One axis, never two. A legend whenever there are two or more series; direct labels at four or
-fewer.
+The chart's plotting surface is `--color-surface`. Axis labels, legend entries and tooltip text wear
+the ink tokens, never the series colour; a coloured mark beside the text carries identity. One axis,
+never two. A legend whenever there are two or more series; direct labels at four or fewer.
+
+**One exception to "text wears the ink tokens": a value label set *inside* a stacked segment**
+(`corpus-chart.tsx`) reads against that segment's own fill, not against `--color-surface`, so it
+needs a colour chosen for that fill rather than for the neutral ramp — the ink tokens solve a
+different problem, and the series palette was never built to carry text.
+
+`--color-chart-label-on-light` is black, not white, and the arithmetic is why. Black's relative
+luminance is exactly 0 — an achromatic colour's relative luminance is `L³`, and black is `L = 0` —
+so contrast against a fill of sRGB relative luminance `Lf` is `(Lf + 0.05) / 0.05`. White's is
+`(1 + 0.05) / (Lf + 0.05)`. `Lf` below is the full sRGB relative-luminance computation on each
+series hex, not the OKLCH shortcut, because these eight are chromatic:
+
+| Series slot | Hue | Value | `Lf` | vs. black | vs. white |
+|---|---|---|---|---|---|
+| 1 | aqua | `#199e70` | 0.2583 | 6.17 | 3.41 |
+| 2 | orange | `#d95926` | 0.2204 | 5.41 | 3.88 |
+| 3 | blue | `#3987e5` | 0.2385 | 5.77 | 3.64 |
+| 4 | green | `#008300` | 0.1623 | 4.25 | 4.95 |
+| 5 | magenta | `#d55181` | 0.2162 | 5.32 | 3.94 |
+| 6 | yellow | `#c98500` | 0.2919 | 6.84 | 3.07 |
+| 7 | violet | `#9085e9` | 0.2859 | 6.72 | 3.13 |
+| 8 | red | `#e66767` | 0.2750 | 6.50 | 3.23 |
+
+Black clears the 5.05 floor against seven of the eight slots. White — this token's value before this
+slice — clears none of them; its worst case (slot 6, 3.07:1) was not a near miss. That is the whole
+argument for the literal above: not "black looks fine here" but "white fails everywhere and black
+mostly doesn't."
+
+**Named exception: slot 4 (`--color-series-4`, `#008300`) cannot clear 5.05:1 against any ink,
+light or dark, and no different literal fixes it.** Its `Lf` (0.1623) sits inside the band
+`(0.158, 0.202)`: below 0.158, white clears 5.05; above 0.202, black does; a fill inside the band
+clears it with neither, because that is what solving both inequalities for the same floor produces,
+not a property of any one colour choice. The best available for this fill is white, at 4.95 — nearer
+the floor than black's 4.25, but still short. The consequence is bounded rather than silent:
+`corpus-chart.tsx`'s `INLINE_LABEL_SHARE_FLOOR` already withholds an inline label from a segment too
+thin to hold one, the legend beneath the chart restates every value, and the tooltip gives the exact
+count on hover — a reader who cannot resolve a label inside a thin slot-4 segment has two other
+routes to the same number on the same screen.
 
 ### The names the shadcn catalog consumes
 

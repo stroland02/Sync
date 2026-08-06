@@ -41,7 +41,11 @@ def _line_at(text: str, index: int) -> int:
 
 
 _BLOCK_COMMENT = re.compile(r"/\*.*?\*/", re.DOTALL)
-_LINE_COMMENT = re.compile(r"//[^\n]*")
+# `(?<!:)` excludes a `//` immediately after `:` -- a URL scheme (`"https://..."`,
+# `"http://..."`) -- from starting a comment. Without it, a real violation sitting later on the
+# same line as a URL string is blanked along with the "comment" this regex wrongly opens there:
+# `test_the_stripper_does_not_swallow_code_after_a_url_style_double_slash` below proves it.
+_LINE_COMMENT = re.compile(r"(?<!:)//[^\n]*")
 
 
 def _read_stripped(path: Path) -> str:
@@ -53,10 +57,25 @@ def _read_stripped(path: Path) -> str:
     code. Scanning raw text flags the sentence along with the violation; blanking comments first
     keeps line numbers intact (a block comment is replaced by an equal count of newlines) while
     removing the one source of false positives every assertion here would otherwise share.
+
+    This is a regex over text, not a parser, so it does not know a string literal from a real
+    comment -- `_LINE_COMMENT`'s `(?<!:)` closes the one such gap this file has needed in
+    practice (a URL's `//` swallowing the rest of its line as a false comment); it is not a
+    guarantee against every string that happens to contain `/*` or `//`.
     """
     text = path.read_text(encoding="utf-8")
     text = _BLOCK_COMMENT.sub(lambda m: "\n" * m.group(0).count("\n"), text)
     return _LINE_COMMENT.sub("", text)
+
+
+def _require_examined(files: list[Path], where: Path) -> None:
+    """A guard that iterates zero files cannot tell "clean" from "looked in the wrong place" --
+    `_iter_source_files` returns `[]` just as readily for a directory that no longer exists under
+    this name as for one that genuinely holds no source file, and `assert not violations` cannot
+    tell the two apart on its own. Call this before that assertion so a renamed or deleted
+    directory fails here, by name, instead of reporting the guard it starved as clean.
+    """
+    assert files, f"examined 0 files under {where} -- does this directory still exist under this name?"
 
 
 # -- reading the token contract out of DESIGN.md, rather than hardcoding its numbers here ------
@@ -118,7 +137,9 @@ def _spacing_violations(root: Path, banned: dict[int, str]) -> list[str]:
 
 def test_no_raw_spacing_value_duplicates_a_design_token_inside_features():
     _require_web_src()
-    violations = _spacing_violations(_WEB_SRC / "features", _banned_spacing_pixel_values())
+    root = _WEB_SRC / "features"
+    _require_examined(_iter_source_files(root), root)
+    violations = _spacing_violations(root, _banned_spacing_pixel_values())
     assert not violations, "\n".join(violations)
 
 
@@ -128,6 +149,31 @@ def test_the_spacing_guard_rejects_a_raw_duplicate_of_a_named_token(tmp_path: Pa
     violations = _spacing_violations(tmp_path, {8: "row"})
 
     assert violations and "gap-2" in violations[0]
+
+
+def test_the_stripper_does_not_swallow_code_after_a_url_style_double_slash(tmp_path: Path) -> None:
+    # `_LINE_COMMENT`'s naive `//[^\n]*`, before `(?<!:)` was added, treated the `//` inside
+    # `"https://..."` as a comment start and blanked everything after it on the same line --
+    # including `gap-2`, a real violation, sitting later on that exact line. That is a violation
+    # escaping because the stripper mistook code for a comment, not because it read a real one.
+    (tmp_path / "link.tsx").write_text(
+        'const href = "https://example.com"; const bad = <div className="gap-2 flex" />\n',
+        encoding="utf-8",
+    )
+
+    violations = _spacing_violations(tmp_path, {8: "row"})
+
+    assert violations and "gap-2" in violations[0]
+
+
+def test_require_examined_fails_loudly_on_a_directory_that_is_not_there(tmp_path: Path) -> None:
+    # The other half of the same defect: a renamed or deleted directory makes `_iter_source_files`
+    # return `[]`, which every guard above would otherwise read as "nothing to complain about"
+    # rather than "never looked". `_require_examined` is what turns that silence into a failure.
+    missing = tmp_path / "features"
+
+    with pytest.raises(AssertionError, match="examined 0 files"):
+        _require_examined(_iter_source_files(missing), missing)
 
 
 def test_the_spacing_guard_permits_the_two_sanctioned_exceptions(tmp_path: Path) -> None:
@@ -156,9 +202,14 @@ def _keyframe_violations(root: Path) -> list[str]:
 
 def test_no_keyframes_or_animation_shorthand_under_features_or_layouts():
     _require_web_src()
-    violations = _keyframe_violations(_WEB_SRC / "features") + _keyframe_violations(
-        _WEB_SRC / "layouts"
-    )
+    features_root = _WEB_SRC / "features"
+    layouts_root = _WEB_SRC / "layouts"
+    # Checked separately, not on the combined file count: one renamed directory must not hide
+    # behind the other still having files, or this guard is starved over exactly the half nobody
+    # noticed moved.
+    _require_examined(_iter_source_files(features_root), features_root)
+    _require_examined(_iter_source_files(layouts_root), layouts_root)
+    violations = _keyframe_violations(features_root) + _keyframe_violations(layouts_root)
     assert not violations, (
         "every keyframe measured across four references is an overlay entering or leaving, or "
         "something loading -- a loading indicator belongs in components/ui/, never in a feature "
@@ -206,6 +257,7 @@ def _geometry_transition_violations(root: Path) -> list[str]:
 
 def test_nothing_transitions_geometry_anywhere():
     _require_web_src()
+    _require_examined(_iter_source_files(_WEB_SRC), _WEB_SRC)
     violations = _geometry_transition_violations(_WEB_SRC)
     assert not violations, (
         "a sanctioned fade is not a geometry change, so opacity is not banned here -- transform, "
@@ -266,6 +318,7 @@ def _row_deemphasis_violations(root: Path) -> list[str]:
 
 def test_no_row_level_de_emphasis():
     _require_web_src()
+    _require_examined(_iter_source_files(_WEB_SRC), _WEB_SRC)
     violations = _row_deemphasis_violations(_WEB_SRC)
     assert not violations, (
         "a whole row, cell or card rendered at reduced opacity is a verdict with no text beside "
@@ -321,6 +374,7 @@ def _colour_literal_violations(root: Path) -> list[str]:
 
 def test_no_colour_literal_outside_index_css():
     _require_web_src()
+    _require_examined(_iter_source_files(_WEB_SRC, suffixes=(".ts", ".tsx", ".css")), _WEB_SRC)
     violations = _colour_literal_violations(_WEB_SRC)
     assert not violations, (
         "every colour DESIGN.md governs lives in index.css as a named token; a literal anywhere "
