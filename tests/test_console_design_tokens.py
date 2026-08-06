@@ -351,7 +351,66 @@ def test_the_row_deemphasis_guard_permits_a_disabled_controls_opacity(tmp_path: 
     assert not violations
 
 
-# -- assertion 5: no colour literal outside index.css --------------------------------------------
+# -- assertion 5: the absence glyph is rendered in one place ------------------------------------
+#
+# `lib/format.ts` returns `string | null` and `<Formatted>` in `components/status.tsx` is the one
+# place a null becomes ink, so absence is `--color-ink-muted` everywhere. A call site that reaches
+# for the `ABSENT` constant itself paints the same glyph at whatever colour surrounds it -- which
+# is what `binding-surface-page.tsx`'s own `joinOrAbsent` did, in full `--color-ink`, months after
+# that module's docstring recorded the regression as closed. A docstring did not hold it; this does.
+
+_ABSENT_CONSTANT = re.compile(r"(?<![\w-])ABSENT(?![\w-])")
+# The two files that are allowed to name it: the one that declares it, and the one that renders it.
+_ABSENT_OWNERS = ("format.ts", "status.tsx")
+
+
+def _absence_glyph_violations(root: Path) -> list[str]:
+    violations = []
+    for path in _iter_source_files(root):
+        if path.name in _ABSENT_OWNERS:
+            continue
+        text = _read_stripped(path)
+        for match in _ABSENT_CONSTANT.finditer(text):
+            violations.append(f"{path}:{_line_at(text, match.start())}")
+    return violations
+
+
+def test_only_the_formatter_and_its_renderer_name_the_absence_glyph():
+    _require_web_src()
+    _require_examined(_iter_source_files(_WEB_SRC), _WEB_SRC)
+    violations = _absence_glyph_violations(_WEB_SRC)
+    assert not violations, (
+        "DESIGN.md: one glyph, one appearance. Return `string | null` from the formatter and "
+        "render it through `<Formatted>`, which is the only thing that knows what colour an "
+        "absence is:\n" + "\n".join(violations)
+    )
+
+
+def test_the_absence_guard_rejects_a_helper_returning_the_glyph_as_a_string(tmp_path: Path) -> None:
+    (tmp_path / "surface-page.tsx").write_text(
+        "function joinOrAbsent(values: string[]): string {\n"
+        "  return values.length === 0 ? ABSENT : values.join(', ')\n"
+        "}\n",
+        encoding="utf-8",
+    )
+
+    violations = _absence_glyph_violations(tmp_path)
+
+    assert violations
+
+
+def test_the_absence_guard_permits_the_two_files_that_own_the_glyph(tmp_path: Path) -> None:
+    (tmp_path / "format.ts").write_text('export const ABSENT = "—"\n', encoding="utf-8")
+    (tmp_path / "status.tsx").write_text(
+        'import { ABSENT } from "@/lib/format"\n', encoding="utf-8"
+    )
+
+    violations = _absence_glyph_violations(tmp_path)
+
+    assert not violations
+
+
+# -- assertion 6: no colour literal outside index.css --------------------------------------------
 
 _HEX_LITERAL = re.compile(
     r"(?<![&\w])#[0-9a-fA-F]{8}\b|(?<![&\w])#[0-9a-fA-F]{6}\b|(?<![&\w])#[0-9a-fA-F]{3,4}\b"

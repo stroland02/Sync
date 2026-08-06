@@ -30,7 +30,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
-import { ABSENT, formatTimestamp, orAbsent } from "@/lib/format"
+import { formatTimestamp, orAbsent } from "@/lib/format"
 import { useOffsetParam } from "@/lib/use-offset-param"
 
 function bindingSurfaceHref(vendorId: string, operation: string, repoId: string | null): string {
@@ -78,7 +78,7 @@ export function VendorChangesTable({
             <TableBody>
               {page.items.map((change, index) => (
                 <TableRow
-                  key={`${change.published_at}-${change.operation ?? ABSENT}-${change.change_kind}-${index}`}
+                  key={`${change.published_at}-${change.operation ?? ""}-${change.change_kind}-${index}`}
                 >
                   <TableCell className="text-meta">
                     <time dateTime={change.published_at}>

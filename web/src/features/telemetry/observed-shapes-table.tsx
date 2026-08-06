@@ -9,7 +9,7 @@
  */
 
 import type { ObservedShapeRow } from "@/api/types"
-import { Formatted } from "@/components/status"
+import { Absent, Formatted } from "@/components/status"
 import {
   Table,
   TableBody,
@@ -18,7 +18,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
-import { ABSENT, formatTimestamp, orAbsent } from "@/lib/format"
+import { formatTimestamp, orAbsent } from "@/lib/format"
 
 export function ObservedShapesTable({ shapes }: { shapes: ObservedShapeRow[] }) {
   return (
@@ -46,7 +46,7 @@ export function ObservedShapesTable({ shapes }: { shapes: ObservedShapeRow[] }) 
             <TableCell>{shape.nullable_seen ? "yes" : "no"}</TableCell>
             <TableCell className="font-mono">
               {shape.spec_enum_values.length === 0 ? (
-                <span className="text-ink-muted">{ABSENT}</span>
+                <Absent />
               ) : (
                 shape.spec_enum_values.join(", ")
               )}
