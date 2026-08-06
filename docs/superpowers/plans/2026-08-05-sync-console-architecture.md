@@ -3112,3 +3112,752 @@ So the numbers above are of a documentation site built by the people who built t
 using the control plane's own primitives at the control plane's own density — which is much closer to
 our register than three landing pages, and is still not a screen holding a thousand rows. The last
 mile remains ours, and it remains unmeasured until we render one.
+
+---
+
+## 20. Added 2026-08-06 — two dense applications, read as source
+
+Sections 1 through 19 rest on four measured surfaces: three landing pages, whose only data-dense
+artifacts were flat PNGs, and one published design system whose running dashboard is behind
+authentication. Both limitations were stated plainly at the time. Section 12 said every claim about
+a thousand rows was inference from marketing layout; section 19 said its numbers came from a
+documentation site rather than an operational screen.
+
+This study closes both gaps by a different method. Nothing here was measured in a browser. Two
+open-source dense applications were **cloned and read as source**, which answers two questions no
+rendered page can: how a dense surface is *built*, and what a mature team wrote down about *why*.
+
+`.claude/rules/interface-originality.md` binds here as it binds above, and it is worth restating
+what that rule permits, because reading source sits closer to its edge than measuring a page did.
+Nothing below is a layout, a component composition, a colour system or a phrase. What is taken is
+mechanism and stated reasoning — how a count is bounded, where pagination state lives, what
+precondition a component's own documentation attaches to it. Every recommendation is restated as a
+problem from our operator, our graph or our product position, and the two places where a finding
+survived only because somebody else does it are named and demoted.
+
+### 20.1 What was read, and how deeply
+
+| | `getsentry/sentry` | `grafana/grafana` |
+|---|---|---|
+| Why it was chosen | the closest analog that exists — findings, triage, evidence, "why do we think this" | dense operational surfaces, and a table with a published rationale |
+| Read | its issue stream end to end, its `components/core` design system, its written principles, and the server-side pagination it rests on | its table package end to end — the data grid, the hooks, the cells, the constants — plus its empty-state component and documentation |
+| Depth | source, not skim: the stream's state machine, the paginator's SQL, four component primitives, three principle documents | source, not skim: the filter/sort/paginate hook pipeline, row-height derivation, three cell renderers |
+
+`supabase/supabase`, `PostHog/posthog` and `tremorlabs/tremor` were not read. The brief said two read
+properly beat five skimmed, and after Sentry's paginator turned up the answer to the performance
+question in section 24, spending the remaining budget on breadth would have bought less than
+reading that mechanism to the bottom. That is a choice and it is recorded as one.
+
+Citations below are into the cloned trees. Sentry paths are relative to its repository root;
+Grafana paths likewise.
+
+---
+
+## 21. The questions, answered
+
+### 21.1 The table at ten thousand rows: virtualised or paginated
+
+**Both applications do both, and the variable that decides is not the row count.** It is whether
+the data is already in the client and whether the result set is bounded.
+
+**Sentry paginates and does not virtualise its issue stream.** `static/app/views/issueList/overview.tsx:78`
+sets `const MAX_ITEMS = 25;`, and that is the page. The list is rendered as plain rows —
+`static/app/views/issueList/groupListBody.tsx:128-140` maps the ids straight into components with no
+windowing anywhere in the path. Twenty-five DOM rows need no virtualiser.
+
+**It virtualises exactly where the result set is unbounded.** `static/app/components/infiniteTable/infiniteTable.tsx:89-94`
+uses `useVirtualizer` with `overscan: 5`, and the type of the thing it is windowing is the tell:
+its `Body` takes a `UseInfiniteQueryResult` (`:84`). Virtualisation is coupled to infinite scroll,
+not to size. Where the page is bounded, the bound is the answer; where the stream has no bound,
+the window is.
+
+**Grafana virtualises because its data is already client-side.** Its table renders through
+`@grafana/react-data-grid` (`packages/grafana-ui/src/components/Table/TableNG/TableDataGrid.tsx:6`),
+which windows rows and columns. A Grafana panel has already received its whole data frame from a
+query; there is no server page to ask for. So it windows, and it *additionally* offers pagination
+as a display option over the same in-memory rows.
+
+**The rule this yields, stated for us.** The console's transport already returns pages —
+`whats_at_risk` takes `limit` and `offset` and the graph surface has "paginate every list" as a
+frozen rule. That puts every screen we have in Sentry's first case: bounded page, no virtualiser
+needed. **Do not build a virtualiser.** It is the answer to a problem we have deliberately arranged
+not to have, and it costs a measurement layer, a scroll-restoration bug class and a printing
+regression. The one screen that could earn one is a future streaming log view, and there is none.
+
+### 21.2 How sorting, filtering and a server-paginated fetch stay consistent
+
+This was named as the thing we have not built and are about to. Both applications solve it, and
+they solve it differently, for a reason that is visible in the code.
+
+**Sentry: every state change except a page change discards the cursor.** The mechanism is one
+expression. `static/app/views/issueList/overview.tsx:679-696` defines `transitionTo`, and its first
+line is:
+
+```
+...omit(location.query, ['page', 'cursor']),
+```
+
+Every caller that changes a filter, a search, a sort or a stats period goes through it —
+`onSearch` (`:699-706`), `onSortChange` (`:708-724`), `onSelectStatsPeriod` (`:740-748`) — and every
+one of them therefore drops the cursor on the floor. The single caller that *keeps* it is
+`onCursorChange` (`:723-739`), which passes the new cursor back in explicitly, and which additionally
+resets to no cursor at all when the page index falls to zero or below (`:732-736`).
+
+The invariant that expression encodes is worth naming, because it is the whole answer: **a cursor
+is only meaningful relative to a fixed sort and a fixed filter.** A cursor is a position in an
+ordering. Change the ordering or the population and the position denotes nothing, so it is not
+carried forward — it is dropped, and the reader lands on page one of the new question.
+
+**Grafana: an ordered pure pipeline, and the page is clamped rather than dropped.** Its hooks
+compose in one direction — `useFilteredRows` (`packages/grafana-ui/src/components/Table/TableNG/hooks.ts:59`),
+then `useSortedRows` (`:98`), then `usePaginatedRows` (`:163`) — each taking the previous stage's rows
+as input. Consistency is structural: sorting cannot disagree with filtering because it can only see
+what filtering returned. The page index is separate state, and when a filter shrinks the population
+the page can point past the end, so there is an explicit guard at `:250-253` that resets to the last
+valid page rather than to the first.
+
+**Which we take, and why.** Sentry's, with Grafana's ordering as the internal discipline. Our
+pagination offset is in the URL by deliberate decision, so a browser Back does not lose the
+reader's place — that decision is confirmed by the more mature of the two systems and should not be
+revisited. What it needs beside it is the discard rule, which we do not have written down anywhere:
+**changing a filter, a severity, a path or a sort clears the offset; only a page control preserves
+it.** Grafana's clamp is the right shape for a client-side table over a fixed frame and the wrong
+shape for us, because our filter change is a new server query whose total we do not know until it
+returns — clamping would require a round trip to learn what to clamp to.
+
+### 21.3 Where filter, sort and pagination state lives
+
+**Sentry puts all of it in the URL, and nothing else.** There is no store. `overview.tsx:144`
+reads `useLocation()`, `:146` takes `useNavigate()`, and every state transition is a navigation
+(`:693-696`). The cursor is read out of `location.query.cursor` at request-assembly time
+(`:287-290`); the sort and the search live in the same object. `queryCount` is `useState`
+(`:159`) — but it is *derived from the response*, not user intent, which is the line the codebase
+draws: **intent goes in the URL, response metadata goes in component state.**
+
+**Grafana puts none of it in the URL.** `useSortedRows` holds `sortColumns` in `useState`
+(`hooks.ts:120`); `useFilteredRows` holds `filter` the same way (`:60`). That is correct for its
+context and not for ours — a Grafana table is one panel among many on a dashboard whose own state
+is the saved dashboard JSON, and a URL cannot hold twelve panels' sort orders without becoming
+unreadable.
+
+**How far a mature app takes it, which was the question asked.** Further than we do, and the
+extra distance is the interesting part. Sentry's URL carries the *search query itself* — a full
+structured query string — not merely a filter selection. And two details show the discipline is
+deliberate rather than incidental: `getEndpointParams` omits `sort` from the URL when it equals the
+default (`overview.tsx:267-269`), and `transitionTo` deletes a sort that is not valid for the
+current query (`:685-690`). So the URL holds the *difference from default*, not the whole state.
+That keeps a shared link short and, more usefully, means a default view has one canonical URL
+rather than several that render identically.
+
+### 21.4 Density mechanics
+
+Read from Sentry's table primitive, `static/app/components/tables/simpleTable/index.tsx`.
+
+| | Sentry, in source | Geist, measured (section 13.3) | Ours today |
+|---|---|---|---|
+| Header row height | `min-height: 40px` (`:109`) | 36px | 40px |
+| Header ink | `content.secondary` (`:153`) — **the same as the body** | secondary, same as body | `text-foreground` |
+| Header weight | `sans.medium` (`:151`) | 500 | `font-medium` |
+| Header capitals | `text-transform: none`, set explicitly (`:111`) | none | none |
+| Rule under header | `1px solid border.primary` (`:104`) | one, 1px | present |
+| Rules between body rows | **`1px solid border.secondary` on all but the last** (`:126-129`) | **none** | none |
+| Row emphasis | none — no cell is ranked | none | none |
+| Cell padding | `lg xl` on every cell, header and body alike (`:89`) | 10/8 body, 0/8 header | 8px inline, 10px block, identical on both |
+
+Four sentences are worth pulling out of that table.
+
+**Both systems separate the header by weight and a rule, and neither spends ink on it.** Section 18
+already revised Task 13 on exactly this and Task 13 landed it. It is now confirmed by a second
+independent implementation, and the confirmation is stronger than the measurement was, because here
+the ink token is *named* in source: the header cell explicitly selects `content.secondary`, the same
+token the body uses. That is a choice, not a coincidence of rendering.
+
+**Sentry rules between body rows and Geist does not.** This is a real disagreement between two
+mature control planes and section 22.3 rules on it.
+
+**The sorted column's header changes ink, and this is the best single idea in the file.**
+`simpleTable/index.tsx:169-171`:
+
+```
+&[aria-sort] {
+  color: ${p => p.theme.tokens.content.primary};
+}
+```
+
+The one place primary ink is spent in the entire table is the column the table is currently ordered
+by. Ink is not carrying importance, which would be a judgement; it is carrying **a fact the system
+recorded about its own current state** — which ordering produced these rows in this sequence. That
+passes our own test cleanly and section 23 adopts it.
+
+**Column alignment is `subgrid`, not a `<table>` and not measurement.** The panel is one grid
+(`:96`), and the header and every row declare `grid-template-columns: subgrid; grid-column: 1 / -1`
+(`:112-114`, `:120-122`). Columns line up because they are the same grid tracks. This matters
+beyond tidiness: it is what lets a row be an arbitrary component rather than a `<tr>`, which is the
+precondition for ever windowing a list without the columns drifting.
+
+### 21.5 Empty, loading and error, per surface
+
+**Our console distinguishes four kinds of nothing and treats that as load-bearing. Sentry
+distinguishes six, and pays a network round trip to tell two of them apart.**
+
+The dispatcher is `static/app/views/issueList/noGroupsHandler/index.tsx`. Its branches:
+
+- `:117-119` — still deciding which kind of empty this is: a loading indicator.
+- `:121-123` — the decision itself failed: fall through to the generic empty rather than assert.
+- `:125-133` — the project has never sent an event: an onboarding surface.
+- `:166-173` — the default query returned nothing: nothing is wrong, everything is resolved.
+- `:175-184` — the review queue is empty: a third message again.
+- `:194` — a filtered query matched nothing.
+
+The load-bearing detail is `:90-100`. To distinguish "never configured" from "configured and
+currently clear", the component **issues a second HTTP request** to `/sent-first-event/`. It cannot
+tell those two apart from the list response, and rather than guess it asks. That is the same
+discipline our absence channel encodes, arrived at independently and paid for in latency.
+
+**And it is where our core idea gives us something they do not have.** The provenance rung tells us
+from the row itself whether a binding was never observed or observed and empty. Sentry needs a round
+trip for the equivalent distinction because its data does not carry it. **We get for free what a
+mature control plane pays for**, and that is worth writing down as a strength rather than treated as
+mere compliance.
+
+**Grafana types the same problem into the component signature.** Its `EmptyState` takes
+`variant: 'call-to-action' | 'not-found' | 'completed'` as a **required** prop
+(`packages/grafana-ui/src/components/EmptyState/EmptyState.tsx:34,46-54`), and its documentation
+assigns each a cause: never created, filter matched nothing, all work cleared
+(`EmptyState.mdx`, "When to use"). A required discriminated variant is the mechanism, and it is
+better than a convention because an agent cannot render a generic empty by omission.
+
+**The loading state is sized to the loaded state.** `groupListBody.tsx:63-83` renders exactly
+`pageSize` skeleton rows. The page does not reflow when data arrives. Grafana does the analogous
+thing for its scroll geometry by estimating an average row height over the first hundred rows
+(`hooks.ts:188-199`).
+
+**Error is a distinct branch with a retry, never an empty.** `groupListBody.tsx:113-115` returns
+`<LoadingError onRetry={refetchGroups} />`. A failed read is never rendered as "nothing here" — with
+the one honest exception at `noGroupsHandler/index.tsx:121-123`, where the request that failed was
+the *disambiguating* one, and falling back to the less specific empty is the conservative answer.
+
+### 21.6 The component inventory a control plane actually needs
+
+Section 16.1 listed six primitives we lack, derived from Geist's 78. Reading two more inventories
+changes that list in three places and confirms the rest.
+
+**Confirmed and unchanged:** the empty state with variants (both systems ship one, Grafana with a
+required variant prop), the qualification notice, the definition list, the verbatim value.
+
+**Added, and it is cheap.** A **sortable header cell** that owns `aria-sort` — Sentry has
+`static/app/components/tables/sortableHeaderCell.tsx` as a primitive rather than a per-table
+concern, which is what makes the sorted-column ink rule enforceable in one place instead of eleven.
+A **column-resize hook** is deliberately *not* added: `static/app/components/tables/useColumnResize.tsx`
+exists there and we have no argument for it from our operator.
+
+**Demoted: the middle truncation.** Section 16.1 argued for it because a file path truncated at the
+end loses the filename. Neither application ships one. Sentry's cell instead sets
+`overflow: hidden` and lets the cell clip (`simpleTable/index.tsx:89`); our own `TableCell` already
+chose better, wrapping on `break-words` so nothing is lost at all. A truncation primitive solves a
+problem we have already solved differently, and it should come off the list rather than sit on it
+as a permanent unbuilt obligation.
+
+**One primitive neither list had, and it is the one we most need.** Sentry's
+`InteractionStateLayer` (`static/app/components/core/interactionStateLayer/interactionStateLayer.tsx`)
+is a single absolutely-positioned overlay that owns **every** interaction state of whatever it sits
+inside: rest at `opacity: 0` (`:62`), hover at 0.06 (`:68`), pressed at 0.09 (`:82`), and
+`aria-selected`/`aria-expanded` at the same 0.09 (`:92-93`). It inherits `border-radius` and
+`border` from its parent (`:52-53`) and its fill is `currentcolor` (`:58`). Section 22.2 takes this
+up, because it contradicts a ruling we have already landed.
+
+---
+
+## 22. Where source contradicts the earlier studies, and which I trust
+
+Six contradictions. In four cases source wins, in one our landed decision wins, and one is a genuine
+standoff that we should decide on our own grounds.
+
+### 22.1 Motion: the rule is a frequency test, not a duration
+
+**Section 8 measured `transition-duration: 0s` on three landing pages and section 11 turned it into
+a prohibition. Section 15.2 then reversed that on Geist's 0.15s ease and called the reason "a dense
+surface has 47 controls". Both were reaching for a rule and neither found it.**
+
+Sentry has it written down. `static/app/components/core/principles/motion/motion.mdx:39`:
+
+> **Frequent interactions**, such as keyboard interactions and repetitive daily workflows, should
+> avoid animation all together. Likewise, when the **speed** of an interaction is critical, motion
+> should be applied carefully to maintain the perceived performance.
+
+And the codebase obeys it where it matters most: `InteractionStateLayer` — the primitive that
+handles hover on every row, every button and every menu item in the product — **declares no
+transition at all.** The opacity step from 0 to 0.06 is instant. Meanwhile the same system publishes
+a full motion token set with named durations of 120ms, 160ms and 240ms (`motion.mdx:100-102`) and
+spends them on overlays, modals and toasts.
+
+**I trust this over both earlier rulings, and it is strictly better than either.** The variable is
+not the page's control count and not a magic duration. It is **how often the operator crosses this
+thing**. A row hover on a nine-column evidence table is the most frequent interaction in the console
+and takes no transition; a dialog opening is rare and may take one. That rule is decidable by
+whoever is writing the component, which "0s everywhere" and "150ms because dense" both were not.
+
+It also resolves the disagreement between Geist and Sentry rather than picking a side. Geist eases
+the *fill of a button*; Sentry refuses to ease the *hover of a row*. Under the frequency test both
+are right, and section 15.2's conclusion survives with a better reason than the one it was given.
+
+### 22.2 The alpha overlay for interaction state: our ruling is too broad
+
+**Section 18 and `DESIGN.md`'s *Surface ramp: depth and state* rule that state steps are named
+surface values and never an alpha overlay, because an alpha composites differently against each
+depth step and therefore means several things.**
+
+Sentry does the opposite, deliberately, and its reason is not one we considered: the overlay's fill
+is `currentcolor` (`interactionStateLayer.tsx:58`). It is not an alpha of a fixed grey. It is an
+alpha of *whatever ink the element already carries*, so it is always a step toward the foreground,
+on any surface, in any theme, at any nesting depth — one declaration, one meaning, no token per
+combination. It inherits radius and border from its parent, so it fits a pill, a card corner and a
+square cell without knowing which it is in.
+
+**I trust our landed ruling for our tree, and the reason is that our defect was never the alpha.**
+Section 2 found `hover:bg-muted/50` spelled inline in a primitive, and the surrounding problem was
+that eight feature screens contained one authored interaction between them because nobody had a
+state vocabulary to reach for. A named surface step fixes that with two enumerable values, because
+after Task 12's reallocation we have exactly two depth steps for state to sit on — the composition
+ambiguity that motivated the ban barely exists at two.
+
+**But the ruling as written forbids more than it should, and should be narrowed rather than kept.**
+What must stay banned is an *ad-hoc* alpha spelled at a call site. A single primitive owning all
+four states, with a `currentcolor` fill, is a legitimate construction with a real advantage, and a
+future agent reading `DESIGN.md` will find it forbidden with a reason that does not apply to what
+they are doing. Section 26 revises the wording. This is the one place in this study where a landed
+decision needs a correction rather than a confirmation.
+
+### 22.3 Rules between body rows: a standoff, and we keep ours
+
+Geist, measured: no rules between body rows (section 13.3). Sentry, in source: a rule between every
+body row, at `border.secondary` — a **weaker token than the header's `border.primary`**
+(`simpleTable/index.tsx:104` against `:126-129`).
+
+Neither is a mistake. Sentry's rows carry a graph sparkline, an assignee avatar and a multi-line
+title, so rows are tall and visually busy and a rule keeps them from bleeding into each other.
+Geist's are single-line values at 40px.
+
+**I trust neither for us and we should keep what we have**, which is Geist's shape — a header rule
+and nothing between rows. The deciding fact is ours: our rows are single-line values at 36px, which
+is Geist's case and not Sentry's. What transfers is the *graded* idea rather than the presence of
+the rule: **when a rule is drawn between rows it must be weaker than the rule under the header**, so
+the header still reads as the strongest horizontal division. If any of our tables ever grows a
+multi-line row, that is the rule to apply, and it is now written down rather than rediscovered.
+
+### 22.4 Row height derived from type, or type fitted into a row height
+
+**Section 18 asked for a row-height scale on the argument that a control dropped into a cell must
+not change the row, and Task 12 landed one — `DESIGN.md`'s *Row height*, three steps at 32/36/40,
+with the row chosen first and the padding derived from it.**
+
+Grafana does the opposite. `packages/grafana-ui/src/components/Table/TableNG/utils.ts:168` computes
+the default row height as `CELL_PADDING * 2 + theme.typography.fontSize * theme.typography.body.lineHeight`
+— padding plus type, exactly the derivation `web/src/components/ui/table.tsx:68-72` describes and
+`DESIGN.md` replaced.
+
+**But Grafana also publishes named steps beside that formula**, and they are the interesting part:
+`utils.ts:159-167` returns **36 for small, 42 for medium, 48 for large**. So the derived value is the
+fallback, and the named steps are what a user actually selects.
+
+**I trust our landed decision, and a third independent 36 is why.** Geist's dense row is 40 with 36
+as its middle control step; Grafana's small row is 36; our `row-md` is 36. Three systems, three
+derivations, one number for a dense single-line row. That is about as much corroboration as this
+kind of question admits. Grafana additionally supplies the failure mode our ordering avoids: because
+its height is derived from content, it needs `MAX_CELL_HEIGHT: 48` (`TableNG/constants.ts:13`) and a
+clamping apparatus inside the cell renderers to stop contents stretching with the row —
+`Cells/BarGaugeCell.tsx:49-50` is one, with the comment "clamp the height of the gauge so it isn't
+stretched for large rows". Deriving the row from the content means every cell renderer must then
+defend itself against the row.
+
+### 22.5 The "two ink levels" invariant needs a third category, and it is not text
+
+Sections 8 and 14 concluded: two working ink levels plus one accent, never three. Sentry's token
+documentation splits the same job three ways
+(`static/app/components/core/principles/tokens/tokens.mdx`, "Categories"): `content` paints "text
+and icons which need to stand out the most", and **`graphics` paints "icons and other graphical
+elements which don't need to stand out as much as `content` tokens"**, with `border` a third
+category again.
+
+**I trust this as a refinement rather than a contradiction, and it is one we should adopt because we
+have the bug it prevents.** The invariant holds for *text*: two levels, and one of them is the
+default. What it got wrong is treating an icon as text. An icon at the secondary text ink is
+optically louder than the text beside it, because it is a solid shape rather than a stroke pattern.
+Naming a separate graphics level is how a system stops an agent reaching for the text token for a
+chevron. This costs no new value in our ramp — it is an allocation and a sentence, which is exactly
+what transfer item 1 in section 16 asked for and was not specific about.
+
+### 22.6 What the landing pages could not have shown, and got backwards
+
+Section 8 called "at most one authored transition in an entire page" an invariant of dense
+considered interfaces, from stylesheet counts of 0, 0 and 1. Section 15.2 already broke it on
+Geist's 77. Sentry publishes five easing curves and three durations as tokens and spends them
+throughout.
+
+The correction is complete and it is section 22.1's: the count was never the variable. Three landing
+pages had near-zero transitions because a landing page has near-zero repeated interactions, which is
+the *same rule* producing the opposite number. The invariant and its refutation are one principle
+read at two densities — and this is precisely the class of error section 12 warned about when it
+said every claim about a thousand rows was inference from marketing layout.
+
+---
+
+## 23. What transfers, in our own terms
+
+Five things. Each is stated as a problem we have and each survives the rule's test — it can be
+justified from the operator, the graph or the product position without pointing at anybody's screen.
+
+**1. Bound every count in SQL, and let the bound reach the screen.** This is section 24 and it is
+the largest item in this study.
+
+**2. Changing what is asked clears where you are.** Our pagination offset is in the URL by
+deliberate decision and that decision is confirmed. What is missing beside it is the discard rule:
+an offset is a position in an ordering, so a change of filter, severity, path or sort must clear it.
+Justified from the operator without reference to anyone: a reviewer who narrows to one vendor and
+lands on page four of a three-page result has been handed an empty screen by the console's own
+bookkeeping, and will read it as "no findings" — which is a **false absence**, on a console whose
+entire position is that it distinguishes kinds of absence correctly. This is not a polish item; it
+is an honesty defect waiting for its first filter.
+
+**3. Ink marks which column produced this ordering.** Our tables sort, and a reader arriving at a
+screenful of rows cannot see from the rows which column put them in that sequence. That is a fact
+the system holds and does not render, which is the same defect class as an unattributed rung. One
+step of ink on one header cell states it, spends no vertical space, and asserts nothing — the
+ordering is recorded, not judged. This is the single cheapest thing in this study.
+
+**4. A separate ink level for graphics, so an icon stops borrowing the text token.** Two text levels
+stand. An icon is not text, and rendering it at the text ink makes it louder than the text it
+accompanies. This is an allocation inside the nine-step ramp and a rule in `DESIGN.md`, not a value.
+
+**5. Motion is decided by frequency.** The console's rule becomes: **a surface the operator crosses
+repeatedly takes no transition; a surface they meet occasionally may take one.** This replaces both
+"never" and "150ms because dense" with a test whoever writes the component can apply. It also
+explains our own tree back to us — `TableRow`'s transition on navigable rows is the frequent case
+and should go, while the theme control's press feedback is the rare case and stays.
+
+---
+
+## 24. The number that was the prize
+
+Our fleet screen and vendor findings table measured **9–19s and 4.6s** at ten thousand call sites,
+because `/api/overview` and `whats_at_risk` read every open finding. The binding surface, which got
+real SQL bounds, measured **28ms**. The brief said that if source showed how a mature application
+makes the first two behave like the third, that would be the most valuable thing to bring back.
+
+It does, the mechanism is four files deep, and it fits this console better than it fits the
+application it came from.
+
+### 24.1 The mechanism
+
+**The count is a `COUNT(*)` over a bounded subquery, never over the table.**
+`src/sentry/api/paginator.py:30-48`:
+
+```python
+def count_hits(queryset: Any, max_hits: int) -> int:
+    if not max_hits:
+        return 0
+    hits_query = queryset.values()[:max_hits].query
+    hits_query.clear_select_clause()
+    hits_query.add_fields(["id"])
+    hits_query.clear_ordering(force=True, clear_default=True)
+    ...
+    count_sql = "SELECT COUNT(*) FROM (" + h_sql + ") as t"
+```
+
+Four separate economies in nine lines, and each is independently worth having. The result set is
+**truncated with a LIMIT before it is counted**, so the database stops at `max_hits` however many
+rows match. The select list is **stripped to the primary key**, so no column is materialised and no
+`select_related` join runs. The **ordering is cleared**, which removes a sort the count does not
+need. And it runs against a **read replica** (`:43`).
+
+**The bound has a default and it is small.** `paginator.py:26`: `MAX_HITS_LIMIT = 1000`. Ten
+thousand matching rows cost the same as one thousand.
+
+**The bound travels to the client alongside the count.** `src/sentry/api/base.py:502-505` emits both
+as response headers:
+
+```python
+if cursor_result.hits is not None:
+    response["X-Hits"] = cursor_result.hits
+if cursor_result.max_hits is not None:
+    response["X-Max-Hits"] = cursor_result.max_hits
+```
+
+**And the interface renders the bound honestly rather than hiding it.**
+`static/app/components/queryCount.tsx:18`:
+
+```tsx
+const countOrMax = defined(count) && defined(max) && count >= max ? `${max}+` : count;
+```
+
+The issue stream reads both headers (`overview.tsx:478-480`), stores them (`:159-160`), and passes
+the bound down to that component (`:1016`).
+
+**One more piece, and it is a guard rather than an optimisation.** `base.py:487-494` inspects every
+`GET` response: if the body is a list, and the endpoint is not on an explicit allowlist, and the
+response carries no pagination, it **raises**. The exception's own message (`paginator.py:56-58`)
+says a list response must be paginated "as lack of pagination can break the product in the future
+due to eventual growth". An unpaginated list endpoint is a bug that fails loudly rather than a
+latency regression that shows up in a screenshot six months later.
+
+### 24.2 What it means for `/api/overview`
+
+`src/sync/api/app.py:150-156` is the defect in five lines. It probes for the total, then asks for
+that many rows, then counts them by vendor **in a Python loop over materialised rows**:
+
+```python
+probe = surface.whats_at_risk(limit=1, offset=0)
+page = surface.whats_at_risk(limit=max(probe["total"], 1), offset=0)
+vendor_counts: dict[str, int] = {}
+for row in page["items"]:
+    vendor = row["vendor"]
+    vendor_counts[vendor] = vendor_counts.get(vendor, 0) + 1
+```
+
+The comment above it is careful and correct about the thing it was written to solve — it bounds the
+*call count* at two rather than looping `next_offset`. It is bounding the wrong axis. Two calls that
+each materialise ten thousand rows is the 9–19 seconds.
+
+Three changes follow, and they are the same three the binding surface already made to reach 28ms.
+
+- **The vendor distribution is a `GROUP BY`.** "How many open findings per vendor" is one aggregate
+  query returning one row per vendor. It is never a loop over findings, because the number of
+  vendors does not grow with the number of findings and the number of findings does.
+- **`total` is bounded and says so.** A count computed by materialising every row is precise and
+  slow; a count that stops at a stated ceiling is a fact about where the system stopped looking.
+  **The second is the more honest of the two on this console**, which is worth making explicit
+  rather than treating the bound as a regrettable compromise. "10,000" rendered after nineteen
+  seconds of scanning implies a completeness the operator has no way to check. "1,000+" states a
+  limit the system actually enforced. That is the same register as every other sentence this plan
+  protects, and it is why this mechanism fits here better than it fits Sentry.
+- **The ceiling and the marker are one decision.** If the transport bounds a count it must return
+  the bound, and if the interface receives a bound it must render the difference between "1,000" and
+  "at least 1,000". A bounded count rendered as a bare number is a falsehood the transport
+  introduced and the interface completed.
+
+**Where the honesty discipline bites harder than Sentry's.** `severity_counts` on the same payload
+is a distribution, and a distribution truncated at a global ceiling is **not** the distribution of
+the population — it is the distribution of whichever thousand rows the ordering happened to reach. A
+bounded total is honest; a bounded breakdown presented as a breakdown is not. So the roll-up is
+computed as its own `GROUP BY` over the whole table, which is cheap for the same reason the vendor
+distribution is, or it is not shown. It is never derived from a bounded page. `app.py:161-164`
+already keeps these two as independently-computed reads for a related reason, and that decision
+should be pointed at this one.
+
+**The `_SCAN_LIMIT = 10_000` at `app.py:66` is this idea already present in our tree**, applied to
+the wrong route. `finding_detail` fans through a page to find one finding by id and stops. The place
+that needs a ceiling is the aggregate, not the lookup.
+
+### 24.3 The ruling
+
+**This is not a console task and it must not become one.** It is a change to `/api/overview`,
+`whats_at_risk` and the severity roll-up — Python, SQL and the graph surface — and it is the
+highest-value work this plan has identified since the amendment began. It is recorded here because
+this is where the measurement was made and where the mechanism was found; **it should be proposed as
+its own task after Task 16 lands**, ahead of the two primitives section 16.1 nominated.
+
+The one piece of it that belongs to the console is the marker: whatever the transport decides, the
+interface must render "at least N" distinctly from "N". That is an absence-channel question, it is
+small, and section 26 puts it where it belongs.
+
+---
+
+## 25. What they do that we must not, with the precondition found in their source
+
+Section 19 established that a mature control plane ships a status dot, a gauge and coloured badges
+behind documented preconditions our data fails, and that we are therefore not stricter than the
+field — we have data that fails its published tests and we said so. Reading two more implementations
+strengthens that finding in a way measuring could not, because **source shows what happens to a
+precondition when it meets a default.**
+
+**The status dot's default is a repeating pulse.**
+`static/app/components/core/statusIndicator/statusIndicator.mdx:18`: "By default, each dot renders
+with a subtle muted background pulse behind it", and `:58`: "The background pulse repeats
+continuously by default." The static form is opt-in, and the documentation states the condition for
+it at `:79`:
+
+> Reach for this when the indicator reflects a **known, persistent value** — such as a fixed `level`
+> or `severity` from query parameters — rather than a change worth drawing attention to.
+
+**Read as a precondition we fail, exactly as Geist's was, and it fails one step earlier.** A
+continuously repeating pulse is a liveness claim — the strongest one an interface can make without
+text. `runs-table.tsx:159-168` refuses a liveness dot because nothing in our data distinguishes a
+run parked on the customer's CI from one that has died. Under this system's own framing, every
+status we hold is a "known, persistent value" and therefore qualifies only for the static variant —
+which is a dot carrying colour and nothing else, and our badge already carries the same recorded
+value *as text*, legibly, without colour. So the precondition does not merely forbid the animated
+dot: satisfying it strips the dot of everything the badge does not already do better.
+
+**The gauge ships an invented threshold as its default.** Geist's documentation forbids inventing
+gauge-only breakpoints — the numbers must already exist elsewhere in the product (section 19).
+Grafana's table gauge cell, `packages/grafana-ui/src/components/Table/TableNG/Cells/BarGaugeCell.tsx:10-22`:
+
+```ts
+const defaultScale: ThresholdsConfig = {
+  mode: ThresholdsMode.Absolute,
+  steps: [
+    { color: 'blue',  value: -Infinity },
+    { color: 'green', value: 20 },
+  ],
+};
+```
+
+Blue below twenty, green at twenty and above, applied to **any** numeric column that has no
+thresholds configured, with no argument anywhere for what twenty means. `:29-35` installs it
+silently whenever the field lacks its own.
+
+**This is the finding worth the most, because it refutes the standing counter-argument to our own
+refusal, in someone else's source.** The objection to the prohibition on scores and traffic lights
+is that it is over-cautious — that a responsible team would simply configure the thresholds
+properly. Here is a responsible team, on a mature product, and the moment the device existed as a
+cell type it acquired a default, and the default is a number with no meaning rendering as a colour
+with two values. **The pattern does not degrade because someone was careless. It degrades because a
+threshold-driven visual must render before anyone has supplied a threshold, and the only way to
+render is to invent one.** Our data has no fixed maximum and no pre-existing breakpoints, so we
+would be *starting* where Grafana's default ends.
+
+**The coloured pill's colour is a hash of the string.**
+`packages/grafana-ui/src/components/Table/TableNG/Cells/PillCell.tsx:87`:
+
+```ts
+return getColorByStringHash(colors, String(value));
+```
+
+Absent an explicit value mapping or a fixed colour, the pill's colour is a hash of the cell's text.
+It carries **distinctness and nothing else** — two rows sharing a colour share a value, and that is
+the whole of the information. It is not severity, not health, not outcome.
+
+Two things follow. As a **concept it is defensible and we should say so**: a colour that means
+"these are the same value" is a legitimate device, and it is not what our licensed channels do. As a
+**pattern it is refused**, and the reason is that the reader cannot tell which kind of colour they
+are looking at. On a console that already spends colour on run outcome, error state and absence,
+adding a colour that means "distinct value" makes all four ambiguous — the reader would have to know
+the column to know the encoding. `DESIGN.md` reserves the brand hue for links, focus and the current
+node for the same reason, and this is that argument arriving from a different direction.
+
+**The sparkline verdict was looked for and the finding is negative.** Grafana has
+`TableNG/Cells/SparklineCell.tsx`, and it renders a series the panel's query returned — a real time
+series with a real axis, drawn small. It is not a verdict. There is no cell in either codebase that
+compresses a history into a direction or a judgement. The pattern the brief asked about does not
+appear in either mature application, which is the strongest form of a negative finding: it is not
+that we refuse something the field does; the field does not do it either.
+
+**One thing to refuse that came from Sentry, and it is subtler than any of the above.**
+`simpleTable/index.tsx:130-136` gives its row a `variant="faded"` that sets `opacity: 0.8` on every
+cell. A whole row rendered quieter than its neighbours is a claim about that row — it says *this one
+matters less* — carried by a channel with no text beside it and no way for the reader to learn what
+produced it. That is precisely what the honesty discipline forbids, and it is far easier to add by
+accident than a dot, because it looks like styling rather than like a verdict. **No row-level
+de-emphasis.** If a row is less important, the column that makes it so is on screen and can say so
+in words.
+
+---
+
+## 26. What this changes in Tasks 12 through 16
+
+No task is renumbered, reordered or removed. Tasks 12 through 15 have landed (`b7ec856`, `2404850`,
+`d516439`, `f1300d6`), so for those this section states **what should change next** rather than
+rewriting a completed brief. Task 16 has not landed —
+`tests/test_console_design_tokens.py` does not exist in the tree — so its brief is revised in place.
+
+### After Task 12 — one correction and two additions to `DESIGN.md`
+
+All three are documentation against an already-shipped token layer. None adds a value.
+
+- **Correction.** *Surface ramp: depth and state* bans the alpha overlay outright. Narrow it to what
+  the evidence supports: **an ad-hoc alpha spelled at a call site is banned; a single primitive
+  owning all interaction states with a `currentcolor` fill is a legitimate alternative
+  construction.** Record why we chose named steps anyway — two enumerable depth steps make the
+  composition ambiguity the ban was written against nearly absent, and named values are greppable
+  where an overlay is not. Section 22.2 carries the argument. Leave the shipped behaviour alone;
+  this is a wording change so the next agent finds a reason that applies to what they are doing.
+- **Addition — a graphics ink level.** Allocate an index of the existing nine-step ramp to icons and
+  graphical elements, below the secondary text ink, and state the rule: an icon does not take a text
+  token. No new value; an allocation and two sentences. Section 22.5.
+- **Addition — the motion rule, as a frequency test.** `DESIGN.md` records: **a surface the operator
+  crosses repeatedly takes no transition; a surface they meet occasionally may take one.** This
+  replaces the standing "no new motion" framing with something decidable, and it is what Task 16's
+  motion assertions should be read against. Section 22.1.
+
+### After Task 13 — two changes to the table primitives, both small
+
+- **The sorted column's header takes primary ink.** One selector on `TableHead`, keyed to
+  `aria-sort`. It renders a recorded fact — which ordering produced this sequence — and asserts
+  nothing. It also requires that `aria-sort` actually be set, which is the argument for lifting sort
+  into a header-cell primitive rather than leaving it per table. Section 21.4.
+- **Remove the transition from the navigable-row hover.** `web/src/components/ui/table.tsx:60`
+  carries `data-[interactive=true]:transition-colors`. Under the frequency test a row hover is the
+  most frequent interaction in the console and takes no transition. The hover itself stays where the
+  row is navigable — that ruling is unchanged and was right.
+
+### After Tasks 14 and 15 — one addition to the honesty audit, and one recorded rejection
+
+**The addition is a new kind of nothing.** Section 24 will produce bounded counts. **The console
+must render "at least N" distinctly from "N".** This is the absence channel gaining a fifth member:
+not-applicable, not-observed, observed-and-empty, never-measured, and now **counted-to-a-limit**. It
+is not a styling question — a bounded count rendered as a bare number is a false precision, which is
+the exact failure the absence channel exists to prevent. Add it to the per-screen audit when the
+transport change lands, not before.
+
+**The rejection, recorded so it is not rediscovered.** Sentry rules between body rows and we should
+not adopt it — our rows are single-line at 36px, which is the case where a header rule alone
+suffices. What is worth writing into `DESIGN.md` is the conditional: **if a row ever becomes
+multi-line, the rule between rows is weaker than the rule under the header.** Section 22.3.
+
+**And one thing Tasks 14 and 15 should be re-audited for, because it is new.** Section 25's last
+finding — no row-level de-emphasis. Neither task's audit looked for a whole row rendered at reduced
+opacity, because nobody had seen one done deliberately before. Check the seven screens once.
+
+### Task 16: the guard — revised in place
+
+The brief stands as section 18 left it, with three changes to its assertion list and one addition.
+Every assertion still has to be proved able to fail, as Step 4 requires.
+
+- [ ] **Steps 1 through 3 — unchanged.** Spacing tokens, radius and type steps, nothing below
+  `--text-meta`.
+- [ ] **The first motion assertion — unchanged.** No `@keyframes` and no `animation` shorthand under
+  `web/src/features/` or `web/src/layouts/`, and none in `web/src/index.css` beyond those already
+  present. Four references and now two source trees agree that every keyframe in a control plane is
+  an overlay entering or leaving, or something loading. Section 25 has strengthened its
+  justification considerably: the reference system's status dot **pulses by default**, so the
+  regression this guards against is not hypothetical — it is what happens when nobody rules it out.
+- [ ] **The second motion assertion — narrowed.** Section 18 wrote it as "no transition on
+  `transform`, `translate`, `scale`, `opacity` or `box-shadow` anywhere under `web/src/`". Keep the
+  geometry half — nothing moves, confirmed on every reference measured and in both source trees.
+  **Drop `opacity`**: the first assertion already covers the case that matters, and a legitimate
+  loading state needs it. The frequency test from section 22.1 is the companion the guard cannot
+  check and a reviewer must apply: a transition on a table row or a table cell is a defect
+  regardless of which property it animates.
+- [ ] **New assertion — no row-level de-emphasis.** Assert that no file under `web/src/` applies an
+  opacity utility below 1 to a table row or its cells. Section 25's last finding is a claim about a
+  row carried by a channel with no text beside it; it is trivially easy to add while believing it is
+  styling; and it is the one honesty regression in this study that no existing guard would catch.
+  Prove it fails.
+- [ ] **Companion, and it is Python where it belongs.** Sentry's `MissingPaginationError`
+  (`src/sentry/api/base.py:487-494`) raises when a `GET` returns a bare list with no pagination. We
+  have "paginate every list" as a frozen rule of the graph surface and nothing that enforces it. A
+  test over `src/sync/api/app.py`'s route table, asserting that every route returning a collection
+  accepts `limit` and `offset`, is the same guard. It costs about an hour and belongs with the other
+  Python assertions rather than in the frontend — which has no test runner by deliberate
+  architectural decision, and this is a classification with a wrong answer.
+
+### Unchanged and reaffirmed by two source trees
+
+Every item in section 5's rejection list. The twenty-four protected sentences. The console stays
+dark-only. And the standing prohibition on a score, a health figure, a traffic light, a green dot or
+a liveness pulse — which section 25 has now supported from a second and a third independent
+codebase, in a sharper form than section 19 could reach: **these devices do not fail only when the
+data is unsuitable. They fail when a default has to exist**, and Grafana's blue-below-twenty is what
+that failure looks like in production source.
+
+### The limit of this study, stated as plainly as sections 12 and 19 stated theirs
+
+Nothing here was rendered. These are two codebases read, not two products measured, and reading
+tells you what a team decided rather than what the result feels like at nine columns and a thousand
+rows. Two numbers in section 21.4 are declarations in source and were not confirmed against a
+running page — Sentry's 40px header, and its cell padding, which is spelled as named tokens
+(`padding="lg xl"`) whose resolved pixel values were not looked up, and which therefore should not
+be compared against our 8/10 as though both were measurements. The last mile is still the last mile:
+neither application was run, and this console has still never rendered a thousand rows. Section 24
+is the one finding here that does not depend on that mile, because it is arithmetic about a query
+plan rather than a judgement about a surface.
