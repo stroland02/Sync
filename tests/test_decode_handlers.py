@@ -953,6 +953,10 @@ _DECODES_NOTHING = (
     "sync/cli.py::_window_bound::ValueError",
     "sync/mcp/tools.py::GraphSurface._change_for::KeyError+LookupError+ValueError",
     "sync/mcp/tools.py::GraphSurface._site_for::KeyError+LookupError+ValueError",
+    # `shlex` raising on an unbalanced quote in a command string the hook already holds in
+    # memory. Nothing is read and nothing is decoded here -- the bytes became a string before
+    # the gate ever saw them.
+    "sync/remediate/tool_gate.py::_bash_refusal::ValueError",
     "sync/signals/datadog/shapes.py::DatadogShapeReader._seen_at::ValueError",
     "sync/signals/deprecations/catalogue.py::_parse_date::ValueError",
     "sync/signals/feed/consumer.py::parse_feed::TypeError+ValueError",

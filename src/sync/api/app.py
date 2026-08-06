@@ -85,12 +85,6 @@ VendorFindingsReader = Callable[..., dict[str, Any]]
 OverviewReader = Callable[[], dict[str, Any]]
 
 
-# Upper bound on a single scan of `whats_at_risk` when the transport needs to look up a
-# finding by id. The surface does not offer a by-id read; `finding_detail` fans through one
-# page and stops when it has what it needs. Chosen as an operator ceiling rather than a
-# truth about the graph: past this, the console pages instead.
-_SCAN_LIMIT = 10_000
-
 # Ceiling on a page a caller may ask for. "Paginate every list" is a frozen rule of the graph
 # surface, and a query string is the one place a caller can ask for an unbounded page: the
 # surface honours whatever limit it is handed.
@@ -198,13 +192,13 @@ def create_app(
 
     async def finding_detail(request: Request) -> JSONResponse:
         finding_id = request.path_params["finding_id"]
-        # `whats_at_risk` is the surface's window on open findings; scanning it is the only
-        # by-id lookup the read surface offers, and the surface's own reasoning says a
-        # closed finding is `None` rather than an error. `_SCAN_LIMIT` bounds the scan; a
-        # deployment past that limit adds a by-id read to the surface rather than raising
-        # it here.
-        page = surface.whats_at_risk(limit=_SCAN_LIMIT, offset=0)
-        row = next((r for r in page["items"] if r.get("finding_id") == finding_id), None)
+        # `finding_by_id` is the surface's own by-id read, and it returns exactly what a
+        # `whats_at_risk` row returns -- the two share `_risk_row` so they cannot drift. This
+        # route used to page through the answer looking for one row, because the by-id read did
+        # not exist when it was written; that reason expired and the comment saying otherwise
+        # outlived it. `None` is a finding that is not open, or one whose call site has gone,
+        # and both are honestly "not found" here.
+        row = surface.finding_by_id(finding_id)
         if row is None:
             return _not_found("finding", finding_id)
         payload = surface.explain_call_site(row["file"], row["line"])

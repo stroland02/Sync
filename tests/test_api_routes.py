@@ -22,7 +22,7 @@ from starlette.routing import Route
 from starlette.testclient import TestClient
 
 from sync.api.__main__ import DEFAULT_PORT, _reload_enabled, app_factory
-from sync.api.app import _MAX_LIMIT, _SCAN_LIMIT, create_app
+from sync.api.app import _MAX_LIMIT, create_app
 from sync.core import CallSite, Finding, VendorChange
 from sync.dashboard.queries import _FINISHED
 from sync.mcp.tools import DEFAULT_LIMIT, GraphSurface
@@ -1045,7 +1045,13 @@ def test_detectors_route_passes_repo_id_to_its_reader():
 # The three surface methods a read-only console is allowed to reach. `propose_patch` is
 # absent deliberately: it clones the customer's repository, installs its dependencies and
 # runs `tsc`, all of which the plan forbids a console route from doing.
-_READ_ONLY_METHODS = frozenset({"whats_at_risk", "explain_call_site", "whats_changed"})
+# `finding_by_id` joined this set when the finding route stopped paging through `whats_at_risk`
+# to find one row. It is a read like the other three and it is deliberately not a published tool
+# -- `sync.mcp.registry` declares that set as data, so the console's by-id question did not turn
+# the frozen four into five.
+_READ_ONLY_METHODS = frozenset(
+    {"whats_at_risk", "explain_call_site", "whats_changed", "finding_by_id"}
+)
 
 
 class RecordingSurface:

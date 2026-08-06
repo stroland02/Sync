@@ -53,7 +53,6 @@ src/sync/obs/log.py:_SafeStreamHandler.emit
 # the console to `GraphSurface` and not to `sync.dashboard`, so this function is dead in
 # `src/` for a reason the surface makes structural. It leaves when Task 3 or a followup either
 # wires it or removes it.
-src/sync/dashboard/queries.py:repository_overview
 
 # A correction to the decision above rather than a new acceptance. The header says adding a line
 # is a decision and not a formality; re-adding one is a decision about a decision, so it is worth
@@ -69,8 +68,6 @@ src/sync/dashboard/queries.py:repository_overview
 # `GraphSurface`, so a view model that takes a `GraphStore` has no caller on that path. Whether
 # the console ever binds to `sync.dashboard` is an open M4 question, and these lines leave when it
 # is answered either way.
-src/sync/dashboard/queries.py:vendor_detail
-src/sync/dashboard/queries.py:finding_detail
 
 # `observed_error_windows` is a deferral like the entry above, but a weaker one, and the
 # difference is worth stating rather than borrowing the stronger framing. `repository_overview`
@@ -87,4 +84,3 @@ src/sync/dashboard/queries.py:finding_detail
 #
 # What retires this line is the first M5 detector querying these counts. Until then the entry is
 # the honest record: the write path is wired and the read path is not.
-src/sync/graph/store.py:GraphStore.observed_error_windows
