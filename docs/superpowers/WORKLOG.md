@@ -42,6 +42,7 @@ M4 continues the sequence at 126. Everything before that is in `git log`.
 | M4-W149 | Two documents that assert what the page does not do — B105, B106 | landed | `cb6b3d6`; B108 filed for the aria-invalid rings |
 | M4-W150 | Briefs for the four defects the measurement found | landed | this file |
 | M4-W151 | The dev proxy takes a port instead of being edited to reach one | landed | `web/vite.config.ts` |
+| M4-W152 | The affordance brief, moved ahead of the architecture plan's remaining tasks | landed | `briefs/2026-08-06-m45-affordance-layer.md` |
 
 ## M4.5 — the console is worth looking at
 
@@ -57,7 +58,7 @@ published.
 
 | Item | Task | State |
 |---|---|---|
-| M4.5-W141 | The affordance layer — the table layer and progressive disclosure, closing on an operator question answered in one interaction at `--scale 10000` | reserved |
+| M4.5-W141 | The affordance layer — the table layer and progressive disclosure, closing on an operator question answered in one interaction at `--scale 10000` | dispatched |
 | M4.5-W142 | Type, ink and space measured against rendered pixels — B104 and B107 closed, B108 filed | pushed, `m4-tokens`, not merged |
 | M4.5-W143 | Motion, and the discipline of not having any — at most one keyframe, nothing decorative running at rest, no transition on a primary action | reserved |
 | M4.5-W144 | Density that is legible — the 11px floor held, the provenance column on screen at 1280px, prose wrapping at 1920px | reserved |
