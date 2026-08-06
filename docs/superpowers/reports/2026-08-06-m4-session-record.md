@@ -106,3 +106,29 @@ levels of the console did not exist.
 **One measurement caution.** The local pytest gate is unreliable while several agents run suites
 against the one Postgres on 5433 — a run that fails with 583 errors and passes serially is
 contention, not a defect. CI on the pull request is the authoritative gate.
+
+## Added later the same day: `dispatched` does not mean started
+
+Two of the five workspaces — `m4-conformance` and `m4-review-wave` — did no work for roughly two
+hours while every signal said they were fine. `worker-start` had returned `state: ready` with
+`dispatch_input: accepted`, `orca orchestration task-list` read `dispatched`, and the terminals were
+`status: running`. What had actually happened is that the injected preamble and TASK block were
+sitting **unsubmitted on the agent's `❯` input line**. Nobody had pressed Enter.
+
+Reading the terminal is what found it: a TASK block still on the input line means the agent never
+started. The fix is one keystroke, `orca terminal send --terminal <handle> --text "" --enter`, and
+both were building within twenty seconds of it.
+
+**The cheaper check is the artifact rather than the board.** A dispatched worker that has pushed no
+branch after twenty minutes has not started, whatever the orchestration state claims — and unlike
+reading a terminal, that check is one command and works for every worker at once:
+
+```bash
+git branch -r | grep <workspace-name>
+```
+
+This is a second shape of a failure this project has already recorded once, where dispatch reported
+success and nothing ran. The first shape left a task sitting for sixty-nine hours. The lesson that
+generalises: **every layer here reports its own success, and none of them reports the next layer's.**
+A dispatch that was accepted, a terminal that is running, and an agent that is working are three
+different facts, and only the third one produces a commit.

@@ -37,6 +37,7 @@ M4 continues the sequence at 126. Everything before that is in `git log`.
 | M4-W139 | The backlog stops describing a console that no longer exists | landed | five entries closed, B90 and B94 corrected, B99 collision resolved |
 | M4-W140 | The decode census accounts for the borrowed wrapper's teardown | landed | `tests/test_decode_handlers.py` |
 | M4-W146 | The quality milestone's items numbered and reserved | landed | this file |
+| M4-W147 | A dispatched worker may never have started — the check that catches it | landed | `reports/2026-08-06-m4-session-record.md` |
 
 ## M4.5 — the console is worth looking at
 
