@@ -277,6 +277,99 @@ def test_workflow_state_of_a_live_run_reports_no_outcome(checkpointer_tables):
     assert status["open_pr"] == "pending"
 
 
+def test_a_ci_failure_is_not_attributed_to_the_compiler(checkpointer_tables):
+    # `diagnostics` is one flat channel that six nodes write. `await_ci` writes
+    # "CI failed: {url}" into it, and the console renders `static_verify`'s evidence under
+    # "What the compiler said" -- so a run that typechecked, pushed and then failed CI showed
+    # a CI URL as compiler output. Attribution belongs to whoever knows which node wrote last,
+    # and only `verify_ok` says that for this key.
+    _insert_checkpoint(
+        f"{FINDING_ID}:abc123def456:0",
+        "1f069000-0000-6000-8000-00000000000e",
+        channel_values={
+            "outcome": "running",
+            "verify_ok": True,
+            "branch": "sync/fix-charges",
+            "ci_url": "https://github.com/x/y/actions/runs/9",
+            "ci_attempts": 1,
+            "attempt_ci_result": "failed",
+            "diagnostics": "CI failed: https://github.com/x/y/actions/runs/9",
+        },
+        channel_versions={"branch:to:patch": _version(9)},
+        versions_seen={
+            "__input__": {},
+            "locate": {"branch:to:locate": _version(1)},
+            "prepare": {"branch:to:prepare": _version(2)},
+            "patch": {"branch:to:patch": _version(3)},
+            "static_verify": {"branch:to:static_verify": _version(4)},
+            "replay": {"branch:to:replay": _version(5)},
+            "push_branch": {"branch:to:push_branch": _version(6)},
+            "await_ci": {"branch:to:await_ci": _version(7)},
+        },
+        step=9,
+    )
+
+    evidence = {n["name"]: n["evidence"] for n in workflow_state(DSN, FINDING_ID)["nodes"]}
+
+    assert evidence["static_verify"] == {"verify_ok": True}
+    # The failure is not lost -- `await_ci` carries its own attributed verdict.
+    assert evidence["await_ci"]["attempt_ci_result"] == "failed"
+
+
+def test_a_typecheck_failure_still_reaches_the_compiler_panel(checkpointer_tables):
+    _insert_checkpoint(
+        f"{FINDING_ID}:abc123def456:0",
+        "1f069000-0000-6000-8000-00000000000f",
+        channel_values={
+            "outcome": "running",
+            "verify_ok": False,
+            "diagnostics": "src/billing.ts(42,8): error TS2345",
+        },
+        channel_versions={"branch:to:patch": _version(6)},
+        versions_seen={
+            "__input__": {},
+            "locate": {"branch:to:locate": _version(1)},
+            "prepare": {"branch:to:prepare": _version(2)},
+            "patch": {"branch:to:patch": _version(3)},
+            "static_verify": {"branch:to:static_verify": _version(4)},
+        },
+        step=6,
+    )
+
+    evidence = {n["name"]: n["evidence"] for n in workflow_state(DSN, FINDING_ID)["nodes"]}
+
+    assert evidence["static_verify"]["diagnostics"] == "src/billing.ts(42,8): error TS2345"
+
+
+def test_a_run_that_never_typechecked_reports_no_compiler_output(checkpointer_tables):
+    # `prepare` writes `diagnostics` on its own failure path, before `static_verify` has run
+    # at all. Without `verify_ok` there is nothing saying the compiler produced this, so the
+    # compiler panel says nothing rather than borrowing another node's text.
+    _insert_checkpoint(
+        f"{FINDING_ID}:abc123def456:0",
+        "1f069000-0000-6000-8000-000000000010",
+        channel_values={
+            "outcome": "abandoned",
+            "abandon_reason": "the lockfile names a package manager that is not on PATH",
+            "prepare_ok": False,
+            "diagnostics": "RuntimeError: yarn is not on PATH",
+        },
+        channel_versions={"branch:to:abandon": _version(4)},
+        versions_seen={
+            "__input__": {},
+            "locate": {"branch:to:locate": _version(1)},
+            "prepare": {"branch:to:prepare": _version(2)},
+            "abandon": {"branch:to:abandon": _version(3)},
+        },
+        step=4,
+    )
+
+    evidence = {n["name"]: n["evidence"] for n in workflow_state(DSN, FINDING_ID)["nodes"]}
+
+    assert "diagnostics" not in evidence["static_verify"]
+    assert evidence["prepare"]["prepare_ok"] is False
+
+
 def test_workflow_state_of_an_abandoned_run_carries_the_reason(checkpointer_tables):
     _insert_checkpoint(
         f"{FINDING_ID}:abc123def456:0",
