@@ -23,9 +23,10 @@ by content, because items were never tagged with a milestone as they landed.
 | **M1** | Runtime signals, efficiency detector | **~85%** | Built; the dollar estimate is deliberately unbuilt |
 | **M2** | Production error detector | **~85%** | Built; never exercised against real telemetry |
 | **M3** | Multi-vendor, MCP, plugin SDK | **~95%** | Packaging closed 2026-07-30; nothing structural left |
-| **M4** | Hosted control plane (**the front end**) | **~45%** | Eight screens and the honesty discipline are built; nothing is hosted and the interface is one idiom |
+| **M4** | Hosted control plane (**the front end**) | **~50%** | Nine levels and the honesty discipline are built and scoped; nothing is hosted, and three of the milestone's four deliverables have no code |
+| **M4.5** | The console is worth looking at | **0%** | Split out 2026-08-06 so M4 can close; starts when M4's console half does |
 | **M5** | Integration layer | **~25%** | Feed and registry exist; nothing correlates anything |
-| **M6** | Show it, rather than describe it | **0%** | Needs a UI to film |
+| **M6** | Show it, rather than describe it | **0%** | Needs a UI to film, so it sits behind M4.5 rather than M4 |
 
 ### M0 — Walking skeleton, one real pull request · ~90%
 
@@ -132,6 +133,25 @@ That is closed: `scripts/seed_console.py` populates every screen with call sites
 three rungs, vendor changes, observed calls, shapes, error windows, migration attempts and multi-
 generation runs, idempotently, with an exact `--remove`. `B7` is still worth running, but it is no
 longer what stands between M4 and progress.
+
+### M4.5 — The console is worth looking at · 0%
+
+**Split out of M4 on 2026-08-06, deliberately.** The plan is
+`docs/superpowers/plans/2026-08-06-m45-console-quality.md` and carries the argument; the short version
+is three reasons. M4 is four deliverables of which three have no code, so an open-ended quality bar
+inside it produces a milestone with no end. Its acceptance test is a different kind — an M4 task is
+done when a screen exists and a test holds it, a quality task when a measurement clears a bar. And
+this has already gone wrong once in this exact direction: nine consecutive ticks went to design-system
+findings while two specified levels of the console did not exist.
+
+A separate milestone with a written start condition is what makes "not yet" a fact about sequence
+rather than a judgement somebody re-makes every tick. The condition is: the architecture plan's Tasks
+4 through 7 landed, the 2026-08-06 review wave closed, and the conformance report published.
+
+Six tasks, each closing on a measurement rather than an opinion — the baseline report, the affordance
+layer, type and ink and space against rendered pixels, motion (one keyframe, nothing running at rest),
+density with its 11px floor, and the one visual that earns itself. M6 sits behind this rather than
+behind M4, because what gets photographed is this milestone's output.
 
 ### M5 — The integration layer · ~35%
 
