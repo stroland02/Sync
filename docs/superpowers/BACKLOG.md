@@ -640,33 +640,37 @@ specification.
 answer is right, the two remaining reads refuse like their siblings, and the decode gate either
 sees `ValueError`-spelled chains or says in its own text that it cannot.
 
-### B110 — The binding surface has the same tall rows and nothing opaque to reclaim
+### B115 — Four columns on the binding surface each miss a single line by a handful of pixels
 
-Measured 2026-08-06 at 1440x900 with `--scale 10000`, while closing B109 on the vendor findings
-table next door.
+Measured 2026-08-06 at 1440x900 with `--scale 10000`, after M4.5-W144 factored the shared directory
+out of the path column.
 
-A body row on the binding surface's call-site table measures **76px** and **eleven** fit above the
-fold — the same numbers the vendor table had before M4.5-W141, and for the same reason: the call-site
-path needs about 837px to sit on one line and gets **572px**, because eight other columns are ahead
-of it.
+The whole table now wants **1,154px** of content width and is granted **1,345px**, so every column
+could sit on one line — and the row is still two, because auto table layout balances columns rather
+than minimising height. Each of the four wrapping columns misses by a little, comparing content box
+(granted minus 16px of padding) against what the value needs:
 
-**The fix that worked next door does not exist here, and that is why this is an entry rather than a
-commit.** The vendor table gave up 164px by deleting a column that carried an opaque 32-character
-hash — something a reader clicks rather than reads. Every one of these nine columns is a distinct
-fact the graph stores about the call site: repository, path, symbol, SDK version, argument keys,
-response fields read, loop depth, rung, indexed-at. Taking 164px here means removing information,
-which is a different decision from removing an artifact and belongs to whoever can say which of the
-nine an operator does not need.
+| column | content box | needs | short by |
+|---|---|---|---|
+| Call site | 291 | 296 | 5 |
+| Repository | 135 | 148 | 13 |
+| Indexed at | 135 | 148 | 13 |
+| Argument keys | 192 | 214 | 22 |
 
-`break-words` must survive whatever closes this. It is what keeps the rung column on screen at
-1280px on a nine-column table: a customer's 200-character path grows a row taller instead of pushing
-provenance out of the viewport.
+**Closing this would take the row from 57px to about 37px** — `row-md` plus nothing — which is another
+seven rows per viewport height on top of the four M4.5-W144 bought.
 
-**Closes when:** a body row there measures at or under `row-md` plus one wrapped line at
-`--scale 10000`, with the before-and-after heights and the rows-above-the-fold count — by narrowing
-what a column holds, by virtualising, or by an argued case that one of the nine columns is not
-carrying its width. **Not** by removing `break-words`, and not by truncating a path without leaving
-the whole of it reachable.
+Why it is an entry rather than that commit: the only lever left is explicit column widths, and a
+fixed width is a bet about customer data. `seed-console-scale` is 18 characters; a repository named
+`acme-payments-platform-integration` is 34 and would wrap under any width chosen against this
+fixture, while a `table-fixed` layout would clip rather than wrap and take `break-words` out of the
+picture — which B109 established must not happen, because it is what keeps the rung column on screen
+at 1280px.
+
+**Closes when:** the row measures at or under `row-md` at `--scale 10000` **and** at a second fixture
+whose repository ids and argument-key lists are visibly longer than this one's, with the heights at
+both. A width that only holds for one seed is not a fix, it is a coincidence that will be read as
+one.
 
 ### B105 — Four statements in `DESIGN.md`'s rendered-pixel section are contradicted by the rendered pixels
 
@@ -862,6 +866,38 @@ Entries stay under **Ready** above with their full reasoning until they land, be
 is what a reviewer needs and duplicating it here would let the two copies drift.
 
 ## Done
+
+- **B110** — the binding surface's rows are 57px, and no column stopped being a fact. Measured at
+`--scale 10000`, before and after: row height **76.5px -> 56.5px** at both 1440x900 and 1280x800,
+rows per viewport height **11 -> 15** at 900px and **10 -> 14** at 800px, and the table's total
+content demand **1,712px -> 1,154px**. Landed on `m45-density` under M4.5-W144.
+
+  **The entry was right that there is nothing opaque here and wrong about where the width goes.**
+  All nine columns are distinct facts, and none was deleted. But the path column wanted 854px of the
+  1,345px available and **65% of what it held was a directory identical on every one of the 2,500
+  rows** — a fact about the *set*, being re-rendered once per row. So the fact moved to where it is
+  true: `call_sites_common_directory` is computed in SQL over the filtered set, stated once in a
+  sentence above the table, and each cell carries what follows it. `create-charges-handler-000000.ts:1:1`
+  instead of a 104-character path, which is the filename and line a reader matches against their
+  editor. Nothing is truncated and nothing is hidden: the whole path is the sentence plus the cell,
+  both on screen, and `break-words` is untouched.
+
+  Computed over the **set** and not the page, deliberately. A prefix folded client-side over fifty
+  rows would make the same call site render differently on page one and page two — a column whose
+  meaning depends on where the reader is standing. `min(path)`/`max(path)` under the page's own
+  predicate is the whole scan, because the longest common prefix of a set is the longest common
+  prefix of its lexicographic extremes, and it costs nothing measurable: 24-26ms at `--scale 10000`.
+  Truncated at the last `/`, which is the correctness condition rather than a nicety — `create-a.ts`
+  and `create-b.ts` share the characters `create-`, and stopping there names a directory that does
+  not exist and leaves a remainder nobody can rejoin.
+
+  **The honest half: on the first screenful this is a wash.** The sentence costs about 96px above the
+  table, which is roughly what the first five rows save, so rows fully visible from the page top are
+  **5 before and 5 after** at 1440x900 and **3 before and 3 after** at 1280x800. The win is in
+  scrolling a long table — every screenful after the first holds four more rows, and the prefix is
+  paid once against 2,500 rows — not in what an operator sees before they touch the wheel. B115
+  carries the four columns that each miss a single line by between 5 and 22 pixels, which is what
+  would take the row to 37px.
 
 - **B100** — the long tables can be ordered, and every page says how it is ordered. A named
 ordering reaches SQL as an `ORDER BY` ahead of the page's own `LIMIT`, so the page is the first page

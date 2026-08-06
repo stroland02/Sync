@@ -11,7 +11,7 @@
 
 import { afterEach, describe, expect, it, vi } from "vitest"
 
-import { describeRung, formatElapsed } from "@/lib/format"
+import { describeRung, formatElapsed, pathAfter } from "@/lib/format"
 import type { BindingSource } from "@/api/types"
 
 const NOW = new Date("2026-08-06T12:00:00.000Z")
@@ -99,5 +99,36 @@ describe("formatElapsed", () => {
     expect(formatElapsed(ago(60_000))).toBe("1m ago")
     expect(formatElapsed(ago(3_600_000))).toBe("1h ago")
     expect(formatElapsed(ago(24 * 3_600_000))).toBe("1d ago")
+  })
+})
+
+describe("pathAfter", () => {
+  it("returns what follows a shared directory, so the row carries what distinguishes it", () => {
+    expect(pathAfter("packages/billing/charges/", "packages/billing/charges/create.ts")).toBe(
+      "create.ts"
+    )
+  })
+
+  it("returns the whole path when there is no shared directory to factor out", () => {
+    expect(pathAfter("", "packages/billing/charges/create.ts")).toBe(
+      "packages/billing/charges/create.ts"
+    )
+  })
+
+  it("returns the whole path when the path does not start with the prefix", () => {
+    // The payload computes the prefix over the same set it drew the rows from, so this cannot
+    // happen from the API. It is here because the failure mode if it ever did is a mangled path
+    // that reads as a real one — a reader would take `ing/charges/create.ts` for a file. Falling
+    // back to the whole path is wrong-but-legible instead of wrong-and-plausible.
+    expect(pathAfter("services/orders/", "packages/billing/charges/create.ts")).toBe(
+      "packages/billing/charges/create.ts"
+    )
+  })
+
+  it("keeps a path that is exactly the prefix legible rather than returning nothing", () => {
+    // A directory cannot itself be a call site, so this is unreachable through the payload too.
+    // An empty cell would be a row that names no file at all, which is worse than a repeated
+    // prefix.
+    expect(pathAfter("packages/billing/", "packages/billing/")).toBe("packages/billing/")
   })
 })

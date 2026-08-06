@@ -644,6 +644,100 @@ def test_call_sites_for_operation_count_matches_the_filter_not_the_page(store):
     assert len(store.call_sites_for_operation("stripe", "PostCharges", limit=2)) == 2
 
 
+def _sites_at(store, paths: list[str]) -> None:
+    for i, path in enumerate(paths):
+        store.upsert_call_site(_site(path=path, line=i + 1, content_hash=f"hash-{i}"))
+
+
+def test_the_common_directory_is_the_deepest_one_every_call_site_shares(store):
+    """The prefix the binding surface factors out of its path column.
+
+    It is a property of the filtered set rather than of a page, computed in SQL, because a prefix
+    computed over fifty rows would make the same call site render differently on page one and page
+    two -- the column's meaning would depend on the window, which is the class of claim this console
+    exists to remove.
+    """
+    _sites_at(store, [
+        "packages/billing/src/adapters/stripe/charges/create.ts",
+        "packages/billing/src/adapters/stripe/charges/refund.ts",
+    ])
+
+    assert store.call_sites_common_directory("stripe", "PostCharges") == (
+        "packages/billing/src/adapters/stripe/charges/"
+    )
+
+
+def test_the_common_directory_never_cuts_a_path_segment_in_half(store):
+    """`create-a.ts` and `create-b.ts` share the characters `create-`, and a prefix that stopped
+    there would name a directory that does not exist and leave a remainder no reader could rejoin.
+    The answer is the last `/`, not the last matching character.
+    """
+    _sites_at(store, [
+        "packages/billing/charges/create-a.ts",
+        "packages/billing/charges/create-b.ts",
+    ])
+
+    assert store.call_sites_common_directory("stripe", "PostCharges") == (
+        "packages/billing/charges/"
+    )
+
+
+def test_the_common_directory_is_empty_when_two_call_sites_share_no_directory(store):
+    """A customer calling one operation from two trees has no shared prefix, and the honest answer
+    is nothing to factor out -- not the first directory of whichever row sorted first.
+    """
+    _sites_at(store, ["packages/billing/charge.ts", "services/orders/send.ts"])
+
+    assert store.call_sites_common_directory("stripe", "PostCharges") == ""
+
+
+def test_a_single_call_site_reports_its_own_directory(store):
+    """One row shares its whole directory with itself. Reporting the filename too would factor out
+    the only part of the path that distinguishes anything, which is the failure the segment rule
+    above prevents in general.
+    """
+    _sites_at(store, ["packages/billing/src/charge.ts"])
+
+    assert store.call_sites_common_directory("stripe", "PostCharges") == "packages/billing/src/"
+
+
+def test_the_common_directory_is_empty_when_there_are_no_call_sites(store):
+    assert store.call_sites_common_directory("stripe", "PostCharges") == ""
+
+
+def test_the_common_directory_moves_with_the_path_filter(store):
+    """It narrows with the same predicate the page does. A prefix drawn from the unfiltered set
+    would be shorter than the one the visible rows actually share, so the column would keep
+    repeating characters the filter had already established.
+    """
+    _sites_at(store, [
+        "packages/billing/charges/create.ts",
+        "packages/billing/refunds/create.ts",
+    ])
+
+    assert store.call_sites_common_directory("stripe", "PostCharges") == "packages/billing/"
+    assert store.call_sites_common_directory(
+        "stripe", "PostCharges", path_prefix="packages/billing/charges"
+    ) == "packages/billing/charges/"
+
+
+def test_the_common_directory_ignores_a_retracted_call_site(store):
+    """The same exclusion every other read of this relation makes. A retracted row shortening the
+    prefix would make the visible rows repeat a directory none of them needed to.
+    """
+    keeper = _site(path="packages/billing/charges/create.ts", line=1, content_hash="hash-keep")
+    store.upsert_call_site(keeper)
+    store.upsert_call_site(_site(path="services/orders/send.ts", line=9, content_hash="hash-gone"))
+    # `replace_call_sites` stamps `retracted_at` on every current row it is not handed, which is
+    # how a pass that no longer finds a call site records the loss. Both rows are live before this
+    # and share no directory at all, so a prefix that counted the retracted one would be empty.
+    store.replace_call_sites("r1", [keeper])
+
+    assert store.call_sites_common_directory("stripe", "PostCharges") == (
+        "packages/billing/charges/"
+    )
+
+
 def test_vendor_changes_for_operation_limit_is_sql_not_a_python_slice(store, fetch_counts):
     for i in range(4):
         store.upsert_vendor_change(_change(operation_id="PostCharges", raw={"text": f"t{i}"}))

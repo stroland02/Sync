@@ -159,6 +159,10 @@ def binding_surface(
 
     if binding_rung is not None and binding_rung != _CALL_SITE_RUNG:
         call_sites_page = dict(_EMPTY_PAGE)
+        # Empties with the page it describes. A directory named above a table with no rows in it is
+        # a claim about rows the reader cannot see, which is the shape of false claim this whole
+        # view is careful about elsewhere.
+        common_directory = ""
     else:
         sites = store.call_sites_for_operation(
             vendor_id, operation_id, repo_id=repo_id, path_prefix=path_prefix,
@@ -168,6 +172,9 @@ def binding_surface(
             vendor_id, operation_id, repo_id=repo_id, path_prefix=path_prefix
         )
         call_sites_page = _page([_call_site_row(s) for s in sites], sites_total, call_sites_offset)
+        common_directory = store.call_sites_common_directory(
+            vendor_id, operation_id, repo_id=repo_id, path_prefix=path_prefix
+        )
 
     changes = store.vendor_changes_for_operation(
         vendor_id, operation_id, limit=changes_limit, offset=changes_offset
@@ -183,6 +190,12 @@ def binding_surface(
         "repo_id": repo_id,
         "path_prefix": path_prefix,
         "call_sites": call_sites_page,
+        # The deepest directory every call site in the *filtered set* shares, or `""`. The screen
+        # states it once above the path column and gives each row the part that distinguishes it --
+        # on a real repository most of that column's width is a prefix identical on every row.
+        # Computed under the page's own predicate rather than over its fifty rows, so the same call
+        # site does not render differently on page one and page two.
+        "call_sites_common_directory": common_directory,
         "changes": changes_page,
         "repositories": [
             {"repo_id": repo, "call_site_count": count} for repo, count in repositories.items()
