@@ -109,6 +109,14 @@ and closed, several by removing a field or a column rather than adding one.
   control plane" is the milestone's name and that half is at zero.
 - **No write path.** Every route is read-only by design and by test. An operator cannot start a run,
   retry one, or close a finding from the console.
+- **The navigation hierarchy is not the one the design document specifies**, established
+  2026-08-05 by reconciling all eleven routes against
+  `specs/2026-07-25-sync-self-maintaining-apis-design.md:392-411`. Three match. Four levels are
+  invented, two are reparented, and three specified levels — the repository entry point, Signals,
+  and Pull Request — were never built. The index route is a level the design document does not
+  contain. B92 through B96, and Tasks 9 and 10 of `2026-08-05-sync-console-architecture.md`. The
+  design document was amended the same day for the three levels where it, rather than the console,
+  was what had gone stale.
 - **The interface is one idiom, eight times.** Measured: 21 `<Card>`, 17 `<Table>`, 1 chart across
   5,781 lines. Three shadcn primitives exist — button, card, table. The whole frontend contains 7
   `onChange`, 3 `<Button>`, 2 `onClick` and 1 `<input>`. There is no filtering, sorting, search,
@@ -166,12 +174,19 @@ Measured on 2026-08-05 across `web/src`: **21 `<Card>`, 17 `<Table>`, 1 chart, 5
 whole frontend contains 7 `onChange`, 3 `<Button>`, 2 `onClick` and 1 `<input>`. Three shadcn
 primitives exist — `button`, `card`, `table`.
 
-So the console is a read-only table renderer. That was the right first version, and the *information
-architecture* it produced is genuinely good: eight screens that map the graph, provenance rendered at
-two levels, and six false-claim defects found and closed. **What is missing is not structure, it is
-interface.** There is no filtering, sorting, search, drill-down, tab, dialog, skeleton, tooltip or
-command palette anywhere — on a console whose tables will hold thousands of call sites from a real
-customer repository, where the fixture holds five.
+So the console is a read-only table renderer. That was the right first version, and it produced
+eight screens, provenance rendered at two levels, and six false-claim defects found and closed.
+**What is missing is not structure, it is interface.** There is no filtering, sorting, search,
+drill-down, tab, dialog, skeleton, tooltip or command palette anywhere — on a console whose tables
+will hold thousands of call sites from a real customer repository, where the fixture holds five.
+
+**Correction, 2026-08-05.** This entry previously said the information architecture those eight
+screens produced was "genuinely good", and `2026-08-05-sync-console-architecture.md` cited that
+sentence back as established fact. It was not established; it was never checked. Reconciled against
+`specs/2026-07-25-sync-self-maintaining-apis-design.md:392-411`, three of eleven routes match the
+specified hierarchy, four levels are invented, two are reparented, and three specified levels were
+never built. B92 through B96 carry the corrective work. Everything else measured in this entry
+stands.
 
 **The leverage here is that almost nothing needs installing.** `shadcn` is already in
 `devDependencies` and `radix-ui` is already a dependency, and shadcn vendors component source into
@@ -207,6 +222,99 @@ nowhere: `server_address` and `url_template` on observed calls, and `args_keys`,
 **Evidence that closes this:** one component reads that payload, or each view states which subset it
 shows and why. A field the transport sends and no screen renders is either a screen gap or a payload
 that should stop sending it; decide which per field and record the ruling.
+
+### B92 — The repository level was never built, and two routes exist to work around its absence
+
+The design document's information architecture starts at `Codebase (the selected repository)` and
+says why: *"A user starts from a repository, not from a vendor list, because the question they
+actually have is 'what is wrong with my code'"*
+(`specs/2026-07-25-sync-self-maintaining-apis-design.md:397, :407`). **Nothing in the console selects
+a repository.**
+
+The screen exists — `/bindings/repositories/:repoId` takes exactly that parameter and reports what
+the index sees in one repository — but it is labelled *Repository coverage*, addressed as a child of
+`/bindings`, and reachable only from a lookup form. So two routes exist purely to reach it:
+`/bindings` is three text fields that navigate to a URL, and `/observed-telemetry` is a repository
+picker for one panel. Both are repository selectors that do not know they are one.
+
+The consequence is not cosmetic. Repository scope is what every level below Codebase inherits, so
+without it `/api/overview`, `/api/detectors` and `/api/corpus` are fleet-wide and take no `repo_id`,
+and `/codebase` is a vendor roll-up across every repository wearing the repository level's name. An
+unscoped answer rendered under a selected repository is a false claim about that repository — the
+same class this milestone has closed six times.
+
+**Evidence that closes this:** `/repositories/:repoId` is the Codebase level, reachable from the
+fleet index by clicking a repository row; `/bindings` and `/observed-telemetry` are gone from
+`routes.ts`; and picking a different repository changes every figure on every screen below it.
+`2026-08-05-sync-console-architecture.md` Task 9 carries it.
+
+### B93 — Observed telemetry is declared at Errors & Incidents; the specification puts it under Signals
+
+`routes.ts:124-139` declares both observed-telemetry routes at level `Errors & Incidents`. Observed
+calls, shapes and error windows are stored tables, so the screen passes the design document's test —
+*every level is an entity the system already stores* — and its placement still fails. The document
+has a home for it: *Signals — one panel per attached integration, grouped by role: vendor, signal
+source, human surface* (`:399-400`), with the three roles defined at `:419-423`. Observed telemetry
+is what a signal source produced.
+
+Declaring a signal at the findings level puts a reading where a claim belongs. That distinction is
+what the rung discipline exists to protect, and this is the interface undoing it.
+
+**Evidence that closes this:** the route is declared at `Signals`, sits under API Services, and is
+scoped by repository. The level's header names which of the three roles has a panel and which two do
+not, because one panel of one role must not imply three integrations exist.
+
+### B94 — Signals was specified and never built
+
+*One panel per attached integration, grouped by role: vendor, signal source, human surface*
+(`:399-400`). The console has no such level. B93 reparents observed telemetry into it, which builds
+one panel of one role and does not build the level.
+
+This is genuinely blocked rather than merely undone: the vendor role has the registry behind it, the
+signal-source role has B71's Sentry ingest, and the human-surface role has nothing in the tree at
+all. Filing it so the gap is a queued item rather than a level that quietly stopped existing.
+
+**Evidence that closes this:** a Signals level that lists every attached integration by role, states
+which roles have no integration attached, and does not imply completeness it does not have. Realistic
+after M5's correlation join, not before.
+
+### B95 — Pull Request is a level in the specification and a link in an evidence panel in the console
+
+The specification's hierarchy ends `Solution Workflow → Pull Request — with its evidence bundle`
+(`:403-404`). The console renders `pr_url` as one row of the workflow's evidence table
+(`features/workflows/evidence.tsx:131`). The bundle — the push, the `tsc` verdict, the CI run that
+was watched — is spread across the workflow screen and has no address of its own.
+
+That matters because of what the product claims. *"Showing the state machine and its evidence is
+what earns the merge"* (`:411`), and deep links are the point (`App.tsx:4-6`). Today a reviewer
+cannot send a colleague the evidence that earned a particular pull request; they can send the
+workflow and describe where to look.
+
+**Evidence that closes this:** a route under the workflow that renders the pull request and its
+bundle, deep-linkable, with every qualification already on the workflow screen carried onto it
+verbatim.
+
+### B96 — Nothing checks the route registry against the specification that defines its levels
+
+Three plans built the console's hierarchy — `2026-07-30-sync-m4-dashboard.md`,
+`2026-08-04-sync-m4-slice-2.md`, `2026-08-05-sync-console-architecture.md` — and none opened
+`specs/2026-07-25-sync-self-maintaining-apis-design.md:392-411`. Each argued its placements against
+the other routes, carefully and in writing. The drift was invisible because the console's own
+`GRAPH_LEVELS` array became the authority every later decision was checked against, and a hierarchy
+compared with itself always agrees.
+
+`.claude/rules/console-hierarchy.md` is written and is the cheap half: it fires when
+`web/src/lib/routes.ts`, the shell, or any plan is edited, and it requires every level to cite the
+specification line that defines it. The other half has to be able to fail a build, because a rule
+alone already failed here — slice 2's fleet exception was recorded honestly and read by nobody for
+the day it took three more levels to appear beside it.
+
+**Evidence that closes this:** `tests/test_console_hierarchy.py` parses the fenced hierarchy block
+under *Information architecture* and `GRAPH_LEVELS`, asserts they name the same levels in the same
+order, and has been **proven able to fail twice** — once by adding a level the specification does
+not have, once by removing a level from the specification's block. It must not assert which route
+sits at which level; that is a judgement with a wrong answer and it belongs to a reviewer.
+`2026-08-05-sync-console-architecture.md` Task 10 carries it.
 
 ### B7 — The M0 acceptance run has not executed since the pipeline changed underneath it
 

@@ -410,6 +410,42 @@ A user starts from a repository, not from a vendor list, because the question th
 
 This is a deliberate product position rather than a debugging convenience. Comparable tools present a black box and a result, which asks a reviewer to trust the output on faith. Showing the state machine and its evidence is what earns the merge — the reviewer can see that the patch passed a real typecheck and a real CI run before it was ever offered to them.
 
+#### Amendment, 2026-08-05 — three levels the graph gained after this section was written
+
+The hierarchy above is unchanged and the two rules under it still bind. What follows is added because the console was reconciled against this section on 2026-08-05 and three of its screens turned out to rest on entities this document did not yet know about. Each is stored, so each passes this section's own test; the omission was here rather than in the console.
+
+**A level above the repository, because M4 is multi-tenant.** This milestone's first sentence promises a multi-tenant runtime and organization onboarding, and the diagram then starts at a single selected repository. Those two cannot both be complete. A control plane holding many repositories needs a surface above them — every repository the index has seen, and what the machine has been doing across all of them — and there is no node in the graph whose grain is "every run", which is why it took a screen to notice.
+
+That surface is legitimate, and it does not overturn the sentence about starting from a repository. That sentence rules out a *vendor* list as the entry point, and its reason says so: the question a user has is "what is wrong with my code", never "what is Stripe doing". A fleet surface asks the first question across every codebase rather than the second. What the sentence does still require, and what a fleet surface must not be allowed to replace, is **selection**: the repository level is the scope every level beneath it inherits, and a console with no way to select a repository has no scope to inherit. A fleet surface is therefore an *index into* the repository level, never a substitute for it.
+
+**Binding surface, under API Services.** Which call sites bind to one vendor operation, and which of them a particular change touches, with the rung each binding came from. The hierarchy above reaches a vendor's consequences only through Errors & Incidents, which presumes every consequence of a vendor change is a finding. It is not: a change that no detector has claimed still has a binding surface, and an operator asking "Stripe shipped this — what does it hit?" needs the answer before a detector fires rather than after.
+
+**Detector attribution, over Errors & Incidents.** The level above names the detector as an attribute of a finding — "findings for this vendor, from any detector" — and gives a reader no way to ask the inverse. `finding.detector` is a `NOT NULL` column and the table's grain is one row per claim, per detector, per call site, precisely so a false positive can be attributed. An interface that stores the attribution and never renders the aggregate is holding the evidence for the feedback loop and not showing it. This is an aggregate over the Errors & Incidents level rather than a new level beneath it, in the same way the vendor roll-up is an aggregate over API Services.
+
+**And one thing the amendment does not license.** Observed telemetry is stored, and it is *not* one of these. It already has a home in the hierarchy above — Signals, the signal-source role — and a screen that renders it beside findings is placing a signal where a claim belongs. The rung discipline exists to keep those apart.
+
+**The hierarchy with the three additions folded in. This block is the authoritative one**; the block at the top of this section is kept unamended so the original argument stays readable beside what changed.
+
+```
+Fleet                               every repository the index has seen, and what the machine has
+   │                                been doing across all of them; an index into the level below,
+   │                                never a substitute for it
+   └── Codebase (the selected repository)
+         └── API Services           vendors the indexer found in this repository
+               ├── Signals          one panel per attached integration, grouped by role:
+               │                    vendor, signal source, human surface
+               ├── Binding surface  the call sites one vendor operation binds, and the rung
+               │                    each binding came from
+               └── Errors & Incidents  findings for this vendor, from any detector
+                     └── Finding
+                           └── Solution Workflow      the remediation run
+                                 └── Pull Request     with its evidence bundle
+```
+
+Every node in that block is a level. Detector attribution is deliberately not in it: it is an aggregate *over* Errors & Incidents, in the same relation the vendor roll-up has to API Services, and a screen that aggregates a level is not a rung on the ladder. Signals holds one panel per attached integration and those panels are not levels either.
+
+The interface's declared levels are checked against this block mechanically rather than by memory, because they drifted once without anyone noticing: `.claude/rules/console-hierarchy.md` carries the rule and `tests/test_console_hierarchy.py` carries the assertion.
+
 ### M5 — The integration layer
 
 The product's name is its thesis: synchronize signal across the tools a team already uses, so that remediation has complete context rather than one channel's worth.

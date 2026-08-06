@@ -87,6 +87,15 @@ index screen that leads with the machine's activity rather than with the operato
 An information architecture is a set of paths a person can walk. A route table is a set of
 addresses. This is the second one.
 
+> **Correction, 2026-08-05, after Task 1 shipped.** The paragraph above is wrong in its most
+> confident sentence. The conceptual architecture is *not* good, and neither this plan nor the two
+> before it ever opened the document that defines it. The hierarchy every one of them treats as
+> settled — `Fleet → Codebase → API Services → Errors & Incidents → Finding → Solution Workflow` —
+> matches the design document's information architecture at three of its six levels. Establish 5
+> below carries the reconciliation, route by route, and Task 9 carries the work. Nothing else in
+> this plan is retracted: the reachability finding was real, and the navigation Task 1 built is the
+> right mechanism pointed at a hierarchy nobody had checked.
+
 The corollary decides the ranking: **adding filtering and sorting to a screen nobody can reach
 improves nothing.** Navigation comes first.
 
@@ -315,6 +324,175 @@ and because two of them look like ordinary features:
   lexical string comparison against an ISO timestamp (`tools.py:212`), not a parsed date.
 - **A fleet-wide route narrowed to one repository.** `/api/overview`, `/api/detectors`,
   `/api/corpus` and `/api/runs` are fleet-wide and take no `repo_id`.
+
+### 5. Added 2026-08-05 — the hierarchy, reconciled against the document that defines it
+
+Everything above was established by reading the console. This was established by reading the
+console *against the specification*, which is the pass that was never made — not by this plan, not
+by `2026-08-04-sync-m4-slice-2.md`, and not by `2026-07-30-sync-m4-dashboard.md`. Between them
+those three plans built a route registry, a persistent navigation and a command palette on a
+hierarchy none of them checked, and the sixth level of that hierarchy is a word the design document
+does not contain.
+
+The authority is
+`docs/superpowers/specs/2026-07-25-sync-self-maintaining-apis-design.md:392-411`, section *M4 —
+Hosted control plane / Information architecture*. It states two rules and they are the test applied
+throughout this section:
+
+> Every level of the interface is an entity the system already stores, which means the interface
+> cannot drift from the domain — there are no invented screens and no dead ends. (`:394`)
+
+> A user starts from a repository, not from a vendor list, because the question they actually have
+> is "what is wrong with my code" rather than "what is Stripe doing". (`:407`)
+
+#### The reconciliation, route by route
+
+All eleven routes in `web/src/lib/routes.ts`, against the seven levels the specification's
+hierarchy declares at `:396-405`.
+
+| Route (`routes.ts`) | Console label and declared level | Specification | Verdict |
+|---|---|---|---|
+| `/` (`:68-74`) | **Fleet**, level `Fleet` | no such level; the word appears **zero times** in the specification | **invented**, and it is the index route |
+| `/codebase` (`:76-82`) | **Codebase**, level `Codebase` | `Codebase (the selected repository)` (`:397`) | **reparented** — the name survives, the grain does not. `/api/overview` groups open findings by vendor across every repository and takes no `repo_id` (`app.py:130-131`), so this is a fleet-wide vendor roll-up wearing the repository level's name |
+| `/bindings/repositories/:repoId` (`:84-90`) | **Repository coverage**, level `Codebase` | `Codebase (the selected repository)` (`:397`) | **renamed** — this *is* the specified root. It takes exactly the parameter that level needs, and it is addressed as a child of `/bindings` |
+| `/bindings` (`:92-98`) | **Bindings**, level `API Services` | no such level | **invented**. Its own child is the repository screen, and its content is a three-field lookup form (`binding-lookup-form.tsx:43`) — a repository selector that does not know it is one |
+| `/vendors/:vendorId` (`:100-106`) | **Vendor**, level `API Services` | `API Services — vendors the indexer found in this repository` (`:398`) | **matches spec**, except that "in this repository" has no repository to be in |
+| `/bindings/vendors/:vendorId/operations/:operationId` (`:108-114`) | **Binding surface**, level `API Services` | no such level | **invented**, and judged correct — see below |
+| `/detectors` (`:116-122`) | **Detectors**, level `Errors & Incidents` | no such level; `detector` is named as an attribute at `:401` | **invented**, and judged correct as an aggregate rather than a level — see below |
+| `/observed-telemetry` (`:124-130`) | **Observed telemetry**, level `Errors & Incidents` | no such level | **invented**. It is a repository picker, which exists only because the repository level does not |
+| `/repositories/:repoId/observed` (`:132-139`) | **Observed telemetry**, level `Errors & Incidents` | `Signals … grouped by role: vendor, signal source, human surface` (`:399-400`) | **reparented** — a signal source's output, rendered where findings belong |
+| `/findings/:findingId` (`:141-147`) | **Finding**, level `Finding` | `Finding` (`:402`) | **matches spec** |
+| `/findings/:findingId/workflow` (`:149-155`) | **Solution workflow**, level `Solution Workflow` | `Solution Workflow — the remediation run` (`:403`) | **matches spec** |
+
+And the three levels the specification declares that no route implements:
+
+| Specification | Console | Verdict |
+|---|---|---|
+| `Codebase (the selected repository)` as the entry point (`:397`, `:407`) | nothing selects a repository anywhere | **missing** |
+| `Signals — one panel per attached integration, grouped by role` (`:399-400`) | nothing | **missing** |
+| `Pull Request — with its evidence bundle` (`:404`) | `pr_url`, one row in the workflow's evidence panel (`features/workflows/evidence.tsx:131`) | **missing as a level** — present as a link, absent as a destination with an address |
+
+Three of eleven routes match. Two are the specification's own levels renamed or regrained. Four
+are invented. Two are reparented. Three specified levels were never built.
+
+#### The judgement on each invented level
+
+The specification's test is literal — *is this level an entity the system already stores* — so it
+is applied literally, and it does not return the same answer four times.
+
+**`Fleet` is a legitimate surface that must not be the root.** Slice 2's decision 2 already
+conceded the first half of the case against it: *"a fleet view is not a graph entity. There is no
+node in the API Dependency Graph whose grain is 'every run'"*
+(`2026-08-04-sync-m4-slice-2.md:48-50`). It then granted itself an exception for a directory and
+the exception was spent on the index route. That is the drift.
+
+But the question the screen answers — *what is this system doing right now, across everything* — is
+real, an operator has it, and it is unanswerable from any single repository. The specification's own
+M4 opens by promising a "multi-tenant runtime, dashboard, organization onboarding" (`:390`) and then
+draws a hierarchy that starts inside one repository. Those two sentences cannot both be complete, so
+here the document is what is stale, and it has been amended.
+
+**That leaves the load-bearing sentence, and it must be answered directly rather than around.** *"A
+user starts from a repository, not from a vendor list."* Read narrowly it forbids a vendor list at
+the entry, and gives its own reason — the user's question is "what is wrong with my code", never
+"what is Stripe doing". A fleet surface asks the first question across every codebase rather than
+the second, so it does not violate the sentence's reason. Read broadly it names the first screen,
+and Fleet violates it.
+
+The narrow reading is the right one, **and it does not acquit the console**, because the sentence
+protects something neither reading is about: the repository level is the *scope* every level
+beneath it inherits. Take it out and nothing below has a scope. That is exactly what happened —
+`/codebase`, `/detectors` and the corpus roll-up are all fleet-wide because there is no repository
+to narrow them to, and the plan above records that gap as a data limitation
+(*"a fleet-wide route narrowed to one repository"*) without noticing it is a hierarchy defect.
+
+**Ruling: `Fleet` survives, at `/`, as an index into repositories — not as a replacement for one.**
+The corrective work is to build the Codebase level, not to delete the fleet screen. Recorded under
+`.claude/rules/autonomous-development.md` as a decision the owner can reverse; reversing it means
+demoting `/` to `/fleet` and making the repository list the index, which is one entry in one array.
+
+**`Binding surface` is legitimate and the specification is stale.** Every element it renders is
+stored: `vendor_change`, `call_site`, and the `binding_rung` on each binding. It passes the test
+outright. What the specification lacks is a path to it — its hierarchy reaches a vendor's
+consequences only through Errors & Incidents, which presumes every consequence of a vendor change
+is a finding. It is not. A change no detector has claimed still has a binding surface, and *"Stripe
+shipped a breaking change — what does it hit?"* is this plan's operator question 4 and the single
+most product-defining question the console answers. Amended into the specification as a level under
+API Services.
+
+**`Detectors` is legitimate, and it is an aggregate rather than a level.** A detector is not a
+table. But `finding.detector` is `NOT NULL` and the table's grain is *one row per claim, per
+detector, per call site* (`src/sync/graph/schema.sql:122-137`) — attribution is stored, deliberately,
+for the same reason the rung is: *"a false positive that cannot be attributed to a rung cannot be
+fixed"* (`CLAUDE.md`). Storing the attribution and never rendering the aggregate is holding the
+evidence for the feedback loop and not showing it. `routes.ts:17-20` argues its placement at Errors
+& Incidents by analogy with `/codebase` over API Services, and that reasoning is right — it is an
+aggregate over the level, in the same relation `/codebase` has to `/vendors/:id`. Amended into the
+specification on those terms. Its defect is scope, not existence: it is fleet-wide.
+
+**`Observed telemetry` is a stored entity in the wrong place, and this one is drift.**
+`observed_call`, `observed_shape` and `observed_error_window` are tables, so it passes the stored
+test — and the specification already has a home for it that nobody looked up. *Signals — one panel
+per attached integration, grouped by role: vendor, signal source, human surface* (`:399-400`), with
+the three roles defined in the M5 table at `:419-423`. Observed telemetry is what a signal source
+produced. Declaring it at `Errors & Incidents` puts a signal where a claim belongs, and the rung
+discipline exists to keep those apart. **Reparent it under Signals, scoped by repository.** Note
+what this does not close: Signals as specified is one panel *per attached integration*, and observed
+telemetry is one panel of one role. Building it does not build the level.
+
+**`Bindings` is not a level at all.** A binding is stored; `/bindings` does not render one. It
+renders three text fields that navigate to a URL, and its child is the repository screen. It is the
+repository selector, built sideways because the level that should have held it was missing. It
+disappears into the Codebase level, and the lookup form goes with it.
+
+#### The corrected hierarchy
+
+Written as the specification writes it, with every surviving screen placed. Levels the
+specification already had are unmarked; the three added by the 2026-08-05 amendment are marked
+`[amended]`; what is not yet built is marked `[missing]`. Two nodes below are shown in place and are
+**not levels** — observed telemetry is a panel of the Signals level, and detector attribution is an
+aggregate over Errors & Incidents. Neither belongs in `GRAPH_LEVELS`, and the specification's own
+authoritative block omits both for that reason.
+
+```
+Fleet  [amended]                    every repository the index has seen, and what the machine
+   │                                has been doing across all of them; an index into the level
+   │                                below, never a substitute for it
+   └── Codebase (the selected repository)      what the index sees here, and what it does not
+         └── API Services           vendors the indexer found in this repository
+               ├── Signals  [missing]          one panel per attached integration, grouped by
+               │     └── Observed telemetry    role: vendor, signal source, human surface
+               ├── Binding surface  [amended]  the call sites one vendor operation binds, and
+               │                               the rung each binding came from
+               └── Errors & Incidents          findings for this vendor, from any detector
+                     ├── Detector attribution  [amended]   which detector raised what, and on
+                     │                                     what evidence — an aggregate over
+                     │                                     this level, not a level beneath it
+                     └── Finding
+                           └── Solution Workflow     the remediation run
+                                 └── Pull Request  [missing]   with its evidence bundle
+```
+
+Where each of the eleven lands:
+
+| Today | Becomes |
+|---|---|
+| `/` Fleet | **Fleet.** Keeps `/`. Gains a repository list that links into the level below, which is the whole of what makes it an index rather than a replacement |
+| `/bindings/repositories/:repoId` Repository coverage | **Codebase.** Promoted and re-addressed to `/repositories/:repoId`. This screen already exists and already takes the right parameter |
+| `/codebase` | folds into Codebase, scoped by repository. Its fleet-wide vendor roll-up is what Fleet should carry |
+| `/bindings` | **removed.** The lookup form moves onto Codebase |
+| `/vendors/:vendorId` | **API Services**, scoped by repository |
+| `/bindings/vendors/:v/operations/:op` | **Binding surface**, under API Services. Address unchanged |
+| `/observed-telemetry` | **removed.** It is the repository selector under another name |
+| `/repositories/:repoId/observed` | **Signals**, under API Services. The first of the three roles to have a panel |
+| `/detectors` | **Errors & Incidents**, as an aggregate, scoped by repository |
+| `/findings/:findingId` | **Finding.** Unchanged |
+| `/findings/:findingId/workflow` | **Solution Workflow.** Unchanged |
+| — | **Pull Request**, new: a destination with an address, carrying the evidence bundle that today is one `pr_url` row |
+
+**What this costs, honestly.** Every fleet-wide route takes no `repo_id` (`app.py`), so scoping the
+levels below Codebase is a transport change and not a routing change. That is why Task 9 is a day
+rather than an afternoon, and why it is sequenced where it is.
 
 ---
 
@@ -1057,6 +1235,99 @@ that each states which subset it shows and why.
 
 ---
 
+## Task 9: The hierarchy the specification defines, built
+
+**Added 2026-08-05, after Establish 5.** **Files:** Modify `web/src/lib/routes.ts`,
+`web/src/App.tsx`, `web/src/layouts/site-nav.tsx`, `web/src/features/bindings/**`,
+`web/src/features/telemetry/**`, `web/src/features/repositories/**`,
+`web/src/features/fleet/**`. Modify `src/sync/dashboard/graph_views.py`,
+`src/sync/dashboard/fleet.py`, `src/sync/api/app.py` for the repository scope. **~1 day.**
+
+**Not exclusive, and it cannot run in parallel with Task 4, 6 or 7** — it moves screens those tasks
+edit. It ranks ahead of all three, because a column model, a transport split and a disclosure pass
+applied to a screen that is about to be reparented is that work done twice.
+
+- [ ] **Step 1:** `GRAPH_LEVELS` becomes the specification's levels and nothing else, in the
+  specification's order, each with the document line that defines it in a comment beside it. A level
+  with no such line does not go in the array — it goes in the specification first, as a dated
+  amendment with its argument, and only then here. That ordering is the rule, not a preference.
+- [ ] **Step 2:** Promote the Codebase level. `/bindings/repositories/:repoId` becomes
+  `/repositories/:repoId` and is labelled `Codebase`; the binding lookup form moves onto it;
+  `/bindings` and `/observed-telemetry` are deleted from the registry. **Two routes disappearing is
+  the deliverable, not a side effect** — both existed to work around the missing level.
+- [ ] **Step 3:** Fleet becomes an index. Its repositories table links each row into
+  `/repositories/:repoId`, which Task 2 step 5 already half-built. Fleet keeps `/` and keeps every
+  protected sentence on it.
+- [ ] **Step 4:** Reparent observed telemetry to `Signals` under API Services. **Do not build the
+  rest of Signals** — one panel of one role is what the data supports, and the level's own header
+  says which of the three roles has a panel and which two do not. A level that implies three
+  integrations exist when one does is the same false-completeness defect in a new place.
+- [ ] **Step 5:** Scope the levels below Codebase by repository. `/api/overview`, `/api/detectors`
+  and `/api/corpus` take no `repo_id` (`app.py`), so this is a transport change: each gains an
+  optional `repo_id`, and the screen states which scope it is in. **An unscoped answer rendered
+  under a selected repository is a false claim about that repository**, which is this milestone's
+  recurring defect wearing a new hat.
+- [ ] **Step 6:** The Pull Request level. `pr_url` is one row in the workflow's evidence panel
+  (`evidence.tsx:131`); the specification says a level with its evidence bundle (`:404`). Give it an
+  address under the workflow and move the push, the `tsc` verdict and the CI run onto it as the
+  bundle. Deep links are the point (`App.tsx:4-6`), and today a reviewer cannot send a colleague the
+  pull request's evidence.
+- [ ] **Step 7:** The honesty audit. Every level now asserts that it is scoped to the repository
+  above it. Confirm each one is, and that any panel still reading a fleet-wide route says so beside
+  its figure rather than inheriting a scope it does not have.
+- [ ] **Step 8:** `npm run build` clean, `npm run lint` no new error-level violations, `npm test`
+  green. Commit.
+
+**Verification a reviewer can run:** open `/`, pick a repository, and confirm every figure on every
+screen below it changes when you pick a different one. Then read `GRAPH_LEVELS` beside
+`specs/2026-07-25-sync-self-maintaining-apis-design.md:392-411` and confirm they name the same
+levels in the same order. Then delete a level from the specification's block and watch the guard in
+Task 10 go red.
+
+---
+
+## Task 10: The guard that would have caught this
+
+**Added 2026-08-05.** **Files:** Create `tests/test_console_hierarchy.py`. **~2 hours. Follows
+Task 9.**
+
+Establish 5 exists because three plans built an interface hierarchy and none of them opened the
+document that defines one. `.claude/rules/console-hierarchy.md` is written and is the cheap half of
+the fix; this is the half that fails a build.
+
+**Python, not Vitest** — deliberately, and against Task 5's precedent. This assertion is over two
+files' text, needs no DOM and no runner, and belongs in the suite CI already runs on every commit.
+It is the same shape as the constant-mirror tests at `tests/test_api_routes.py:440-460`, and open
+question 3 already sanctions the Python form.
+
+What it asserts, exactly:
+
+- [ ] **Step 1:** Parse the authoritative fenced hierarchy block in
+  `docs/superpowers/specs/2026-07-25-sync-self-maintaining-apis-design.md` — the one under
+  *Amendment, 2026-08-05*, which the section marks as authoritative — into an ordered list of level
+  names, reading indentation for depth. **The section holds two blocks on purpose**, the original
+  kept unamended beside what changed, so the test selects by the amendment heading and fails loudly
+  if it finds neither block or both unmarked. `encoding="utf-8"`, and the block contains `└──`, so
+  this is a file where the encoding rule bites.
+- [ ] **Step 2:** Parse `GRAPH_LEVELS` out of `web/src/lib/routes.ts`.
+- [ ] **Step 3:** Assert the two sets are equal, and that the shared ordering matches. **The failure
+  message names the offending level and both files**, and states the fix: either the route changes,
+  or the specification gains a dated amendment — never the test.
+- [ ] **Step 4:** Assert every `level:` value in `ROUTES` is a member of `GRAPH_LEVELS`. TypeScript
+  already enforces this; the assertion is here so that the *set* is checked against the
+  specification rather than against itself, which is precisely the check that was missing.
+- [ ] **Step 5:** **Prove it can fail, twice** — once by adding a level to `GRAPH_LEVELS` that the
+  specification does not have, once by removing a level from the specification's block. Watch both
+  go red for the reason expected, restore. A guard that has never rejected anything has not been
+  shown to guard, and the naive version of this test — comparing `routes.ts` to `routes.ts` — passes
+  against today's drift and shows nothing.
+
+**What it deliberately does not assert:** which route sits at which level. That is a judgement with
+a wrong answer and it belongs in a plan and a review, not in a parser. The test holds the level
+*vocabulary*, which is the thing that drifted silently.
+
+---
+
 ## Ranking, and what loses
 
 Value over cost, for a solo and self-funded project.
@@ -1072,11 +1343,14 @@ Value over cost, for a solo and self-funded project.
 | 6 | The transport split | ~½ day | Pure future value: a ninth screen goes from five shared files to one. Mechanical, and it cannot run in parallel with anything touching a feature. |
 | 7 | Progressive disclosure | ~1 day | Real, and the riskiest task in the plan — it is the one that can lose a qualification by accident. Ranked below the structural work because disclosure over an unreachable screen is nothing. |
 | 8 | B91 | hours | A known defect with a known fix. Cheap, and it is the sixth instance of a class this milestone keeps closing. |
-| 9 | The layered bipartite diagram | ~1.5 days | **Loses.** See below. |
+| 9 | The hierarchy the specification defines | ~1 day | **Added 2026-08-05, and it ranks ahead of 4, 6 and 7 despite its number.** Four of eleven routes are invented, three specified levels were never built, and nothing below Codebase carries a repository scope. A column model, a transport split and a disclosure pass applied to a screen about to be reparented is that work done twice. |
+| 10 | The guard that would have caught this | ~2 hours | Added 2026-08-05. Follows Task 9. Holds the fix rather than making it, which is where Task 5 ranks for the same reason. |
+| 11 | The layered bipartite diagram | ~1.5 days | **Loses.** See below. *(Renumbered from 9 on 2026-08-05.)* |
 
 **What loses, explicitly:**
 
-- **The layered bipartite SVG diagram (Task 9), even though its deferral condition is met.**
+- **The layered bipartite SVG diagram (rank 11; it was rank 9 before Task 9 and Task 10 were added
+  on 2026-08-05), even though its deferral condition is met.**
   `binding-surface-page.tsx` already answers "which call sites does this vendor change touch", as a
   table, with the rung on every row. The `dataviz` skill's own rule sends more than about seven
   meaningful classes back to a table (`choosing-a-form.md:14`), and a customer repository's binding
