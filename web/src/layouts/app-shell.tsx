@@ -20,8 +20,14 @@ export function AppShell() {
     <div className="min-h-screen bg-background text-foreground">
       <ErrorSurface />
       <CommandPalette />
+      {/* Full width, no cap: this shell hosts dense tables that want every pixel of the
+          viewport and short prose that wants a readable measure — those are opposite needs,
+          so the choice is made per surface rather than once here. A table-bearing page takes
+          the width this shell gives it; a prose panel constrains itself with `max-w-prose`
+          at the component level (see `run-outcome.tsx`, `states.tsx`). The shell's job is only
+          the gutter. */}
       <header className="border-b border-border">
-        <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-2 px-4 py-3">
+        <div className="flex flex-wrap items-center justify-between gap-2 px-6 py-3">
           <Link to="/" className="text-emphasis">
             Sync — operator console
           </Link>
@@ -37,7 +43,7 @@ export function AppShell() {
         </div>
       </header>
       <SiteNav />
-      <main className="mx-auto max-w-7xl px-4 py-6">
+      <main className="px-6 py-6">
         <ErrorBoundary>
           <Outlet />
         </ErrorBoundary>

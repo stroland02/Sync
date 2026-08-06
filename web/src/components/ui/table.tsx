@@ -68,7 +68,7 @@ function TableHead({ className, ...props }: React.ComponentProps<"th">) {
     <th
       data-slot="table-head"
       className={cn(
-        "h-10 px-row text-left align-middle text-meta font-medium whitespace-nowrap text-foreground [&:has([role=checkbox])]:pr-0",
+        "h-10 px-row text-left align-middle text-meta font-medium break-words text-foreground [&:has([role=checkbox])]:pr-0",
         className
       )}
       {...props}
@@ -76,12 +76,18 @@ function TableHead({ className, ...props }: React.ComponentProps<"th">) {
   )
 }
 
+// Cells wrap by default rather than force the table wider than its container: a row that
+// grows taller costs less than a table the viewport has to scroll to read. `break-words`
+// (not `break-all`) only splits a token — an id, a hash — when it would not otherwise fit,
+// so short mono content still reads as one unbroken run. `Table`'s `overflow-x-auto` wrapper
+// stays as a fallback for a column a caller deliberately keeps unbreakable with its own
+// `whitespace-nowrap`, not as the table's normal-case behaviour.
 function TableCell({ className, ...props }: React.ComponentProps<"td">) {
   return (
     <td
       data-slot="table-cell"
       className={cn(
-        "p-row text-body align-middle whitespace-nowrap [&:has([role=checkbox])]:pr-0",
+        "p-row text-body align-middle break-words [&:has([role=checkbox])]:pr-0",
         className
       )}
       {...props}

@@ -11,10 +11,11 @@
  * up with seven of eleven routes unreachable in the first place, one shortcut at a time.
  *
  * A route whose `params` is non-empty needs a subject this registry does not hold — a vendor
- * id, a repository id, a finding id — so it renders here as a description of a destination
- * rather than as a link with nothing to point at. It is still reachable, from the row that
- * names its subject on another screen; the two exceptions, `/findings/:findingId` and
- * `/vendors/:vendorId`, are already linked from the fleet and the codebase screens today.
+ * id, a repository id, a finding id. A destination you can only reach by way of a subject is
+ * not a nav destination, it is where you arrive after picking one on another screen, so it is
+ * left out of this bar entirely rather than listed as a description of somewhere it cannot
+ * link. The graph-level grouping stays even though a level can lose every route this way —
+ * `GRAPH_LEVELS.map` below already drops a group with nothing left to show it.
  */
 
 import { Link, matchPath, useLocation } from "react-router"
@@ -27,36 +28,17 @@ function isCurrent(route: RouteEntry, pathname: string): boolean {
 }
 
 function NavDestination({ route, current }: { route: RouteEntry; current: boolean }) {
-  if (route.params.length === 0) {
-    return (
-      <Link
-        to={route.path}
-        aria-current={current ? "page" : undefined}
-        className={cn(
-          "text-body underline-offset-2 hover:underline",
-          current ? "font-medium text-brand" : "text-foreground"
-        )}
-      >
-        {route.label}
-      </Link>
-    )
-  }
-
-  // Needs a subject: rendered as text, not a link, so nothing here is a dead href. Still
-  // marked current when its pattern matches, so an operator on a parameterised screen can
-  // see where in the graph they landed.
   return (
-    <span
+    <Link
+      to={route.path}
       aria-current={current ? "page" : undefined}
-      title={route.question}
       className={cn(
-        "text-body",
-        current ? "font-medium text-brand" : "text-muted-foreground"
+        "text-body underline-offset-2 hover:underline",
+        current ? "font-medium text-brand" : "text-foreground"
       )}
     >
       {route.label}
-      <span className="text-meta text-muted-foreground"> (needs a subject)</span>
-    </span>
+    </Link>
   )
 }
 
@@ -65,23 +47,25 @@ export function SiteNav() {
 
   return (
     <nav aria-label="Console navigation" className="border-b border-border bg-surface">
-      <div className="mx-auto flex max-w-7xl flex-wrap items-start gap-x-6 gap-y-3 px-4 py-3">
+      <div className="flex flex-wrap items-center gap-x-5 gap-y-2 px-6 py-2">
         {GRAPH_LEVELS.map((level, index) => {
-          const routesAtLevel = ROUTES.filter((route) => route.level === level)
+          const routesAtLevel = ROUTES.filter(
+            (route) => route.level === level && route.params.length === 0
+          )
           if (routesAtLevel.length === 0) return null
 
           return (
-            <div key={level} className="flex items-start gap-x-6">
+            <div key={level} className="flex items-center gap-x-5">
               {index > 0 && (
-                <span aria-hidden="true" className="pt-5 text-meta text-muted-foreground">
+                <span aria-hidden="true" className="text-meta text-muted-foreground">
                   →
                 </span>
               )}
-              <div className="flex flex-col gap-1">
+              <div className="flex items-center gap-x-2">
                 <span className="text-meta tracking-wide text-muted-foreground uppercase">
                   {level}
                 </span>
-                <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                <div className="flex flex-wrap items-center gap-x-3">
                   {routesAtLevel.map((route) => (
                     <NavDestination
                       key={route.path}

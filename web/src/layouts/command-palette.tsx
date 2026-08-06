@@ -8,6 +8,12 @@
  *
  * Reads `ROUTES` — the same array the router and `SiteNav` read — so a route removed from the
  * registry disappears from here in the same edit, not as a follow-up.
+ *
+ * A route whose `params` is non-empty needs a subject this palette cannot supply — a vendor
+ * id, a repository id, a finding id — so it is left out rather than listed disabled. Wiring
+ * the palette to accept a subject and jump straight to, say, a named vendor is a real feature
+ * and a later slice; a disabled row that never becomes enabled is not a placeholder for it,
+ * it is dead weight in the list. `SiteNav` makes the same call for the same reason.
  */
 
 import { useEffect, useState } from "react"
@@ -21,7 +27,6 @@ import {
   CommandInput,
   CommandItem,
   CommandList,
-  CommandShortcut,
 } from "@/components/ui/command"
 import { GRAPH_LEVELS, ROUTES } from "@/lib/routes"
 
@@ -40,8 +45,7 @@ export function CommandPalette() {
     return () => document.removeEventListener("keydown", onKeyDown)
   }, [])
 
-  function select(path: string, hasSubject: boolean) {
-    if (hasSubject) return
+  function select(path: string) {
     setOpen(false)
     navigate(path)
   }
@@ -58,25 +62,22 @@ export function CommandPalette() {
         <CommandList>
           <CommandEmpty>No declared route matches.</CommandEmpty>
           {GRAPH_LEVELS.map((level) => {
-            const routesAtLevel = ROUTES.filter((route) => route.level === level)
+            const routesAtLevel = ROUTES.filter(
+              (route) => route.level === level && route.params.length === 0
+            )
             if (routesAtLevel.length === 0) return null
 
             return (
               <CommandGroup key={level} heading={level}>
-                {routesAtLevel.map((route) => {
-                  const hasSubject = route.params.length > 0
-                  return (
-                    <CommandItem
-                      key={route.path}
-                      value={`${route.label} ${route.question}`}
-                      disabled={hasSubject}
-                      onSelect={() => select(route.path, hasSubject)}
-                    >
-                      <span>{route.label}</span>
-                      {hasSubject && <CommandShortcut>needs a subject</CommandShortcut>}
-                    </CommandItem>
-                  )
-                })}
+                {routesAtLevel.map((route) => (
+                  <CommandItem
+                    key={route.path}
+                    value={`${route.label} ${route.question}`}
+                    onSelect={() => select(route.path)}
+                  >
+                    <span>{route.label}</span>
+                  </CommandItem>
+                ))}
               </CommandGroup>
             )
           })}
