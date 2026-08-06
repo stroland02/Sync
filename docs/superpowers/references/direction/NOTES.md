@@ -146,3 +146,77 @@ The workflow screen renders the node sequence as a list of nodes. Theirs renders
 happened, then what the agent concluded, then the structured artifact it produced, then the
 resolution with per-item evidence. Same data, different reading order — and the reading order is
 what makes one feel like an investigation and the other like a status table.
+
+---
+
+## 3. Supabase — project overview (2026-08-06)
+
+The owner's third example. Where Superlog showed a **detail**, this shows an **index**: the screen
+you land on, whose job is to say what this thing is and what state it is in.
+
+### What the screen is made of
+
+1. **Entity switchers in the top bar, as the breadcrumb.** Organization (`stroland02's Org`, with a
+   `FREE` plan chip) / project / branch (`main`, with a `PRODUCTION` chip), each carrying its own
+   up-down switcher control. The trail is not a set of links to click back through — **each level is
+   a control that changes scope in place.**
+2. **A left sidebar** of about 180px, every item icon-plus-label, grouped by blank space rather than
+   by headings: build tools, then stores, then observe, then settings pinned last. The active item
+   is a filled surface with white text.
+3. **A keyboard-shortcut strip** directly under the nav: *"Go to Project Overview  `G` then `H`"*.
+   The shortcut is discoverable on the screen it applies to rather than hidden in a palette.
+4. **A display-size page title** — the only text at that size — then the project's URL beside a
+   split Copy control.
+5. **A grid of six fact tiles.** Each is a bordered, rounded icon square about 56px, then a
+   **small-caps letterspaced label** (`STATUS`, `COMPUTE`, `GITHUB`, `RECENT BRANCH`,
+   `LAST MIGRATION`, `LAST BACKUP`), then the value at body size. Two of them carry a chip instead
+   of text (`NANO`).
+6. **A spatial panel** on the right: a dotted-grid canvas holding one infrastructure card — Primary
+   Database, region with flag, instance class, and a metric row underneath (`CPU 0%` · `Disk 0%` ·
+   `RAM 0%` · `0/60 conns`). Two small controls sit at its top-right corner.
+7. **A metrics strip** across the bottom: a headline stat pair (`13 Total Requests`, `53.8% Success
+   Rate`) with a **time-range selector** (`Last 60 minutes`) at the right, then a horizontally
+   scrolling rail of service cards — each with a count, a `WARNINGS` / `ERRORS` legend with coloured
+   dots, a sparkline of bars, and the window's start and end timestamps. A pager arrow overlays the
+   rail's right edge.
+
+### The properties worth taking
+
+- **Absence is written out.** *"No branches"*, *"No backups"*, *"Waiting for project…"* — never a
+  dash, never an empty tile. This is the discipline this console already holds, arriving from a
+  reference rather than from our own rules, which is the strongest form of confirmation available.
+- **A skeleton, not a spinner.** `LAST MIGRATION` renders a grey bar the width its value will be.
+  The console has no skeleton anywhere; every pending state is a sentence.
+- **The label register is separate from the value register.** Small caps, letterspaced, muted, at
+  the smallest step — so a label never competes with what it labels. Our `text-meta` exists but is
+  not used as a distinct register this way.
+- **A fact is a tile, not a row.** Icon, label, value, in a grid. We render the same facts as table
+  rows and prose paragraphs.
+- **Status colour ships with a word.** The legend reads `● WARNINGS  ● ERRORS`; the dot never
+  travels alone. That is our rule, independently arrived at.
+- **A time range is a control.** Every count on the strip is scoped by it, and it says which window
+  it is in. Nothing in our console is time-scoped or says what window it covers.
+
+### What we would put in each slot
+
+| Their slot | Ours |
+|---|---|
+| Org / project / branch switchers | fleet / repository / vendor — the levels the specification already defines |
+| The six fact tiles | last indexed, index coverage, open findings, watched vendors, last run, corpus attempts |
+| `LAST MIGRATION` skeleton | any figure still being fetched |
+| The infrastructure card with live metrics | **nothing yet** — see below |
+| Service cards with sparklines | per-detector or per-vendor finding counts over a window |
+| `Last 60 minutes` | a window over `observed_error_window`, which is stored per window already |
+
+### The one that does not transfer, and why it is worth saying
+
+The dotted canvas with a database node is a **topology** view: one entity, its location, its live
+resource use. We have no live resource metrics and no infrastructure to draw — and
+`2026-08-05-sync-console-architecture.md` Task 11 already ruled against a layered bipartite diagram
+of call sites against operations, with the argument at `:1364-1372`. That ruling stands; a canvas
+with one card on it is not the counter-example that reopens it.
+
+What *is* transferable from that panel is subtler: **the screen gives its most spatial fact its own
+region rather than a row in a table.** For us the equivalent is the binding surface — call sites
+joined to operations — and the question that reopens Task 11 is whether the table is measured
+failing at scale, not whether a competitor drew a picture.
