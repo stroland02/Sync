@@ -11,6 +11,13 @@
  * not send, which is exactly what keeps `WorkflowState` and `RunsPage` off it elsewhere in
  * this console; the honest page-level rung sentence below is written in prose instead, the
  * fourth such sentence beside the three `ProvenanceStrip` already carries.
+ *
+ * B91 ruling: `BindingCallSite.args_keys`, `.response_fields_read` and `.loop_depth` are
+ * screen gaps, not payload to retire — `parameter_deprecation`, `vendor_change` and
+ * `observed_drift` all query the first two, and `loop_depth` is the static evidence a
+ * repeated-call finding rests on (`sync.signals.reachability`). All three are now columns
+ * below. `ObservedCallRow.server_address` and `.url_template` are the same class of gap one
+ * level over, in `features/telemetry`, which this feature does not own.
  */
 
 import { useParams, useSearchParams } from "react-router"
@@ -31,10 +38,15 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
-import { formatTimestamp, orAbsent } from "@/lib/format"
+import { ABSENT, formatTimestamp, orAbsent } from "@/lib/format"
 import { Breadcrumbs } from "@/layouts/breadcrumbs"
 import { UnknownRoute } from "@/layouts/unknown-route"
 import { useOffsetParam } from "@/lib/use-offset-param"
+
+/** A string list joined for a table cell, or the absence glyph when the site recorded none. */
+function joinOrAbsent(values: string[]): string {
+  return values.length === 0 ? ABSENT : values.join(", ")
+}
 
 function describeScope(vendorId: string, operationId: string, repoId: string | null): string {
   return repoId === null
@@ -137,6 +149,9 @@ function BindingSurfaceDetail({
                         <TableHead>Call site</TableHead>
                         <TableHead>Symbol</TableHead>
                         <TableHead>SDK version</TableHead>
+                        <TableHead>Argument keys</TableHead>
+                        <TableHead>Response fields read</TableHead>
+                        <TableHead>Loop depth</TableHead>
                         <TableHead>Rung</TableHead>
                         <TableHead>Indexed at</TableHead>
                       </TableRow>
@@ -154,6 +169,13 @@ function BindingSurfaceDetail({
                           <TableCell className="font-mono">
                             <Formatted value={orAbsent(site.sdk_version)} />
                           </TableCell>
+                          <TableCell className="font-mono">
+                            {joinOrAbsent(site.args_keys)}
+                          </TableCell>
+                          <TableCell className="font-mono">
+                            {joinOrAbsent(site.response_fields_read)}
+                          </TableCell>
+                          <TableCell className="font-mono">{site.loop_depth}</TableCell>
                           <TableCell>
                             <RungBadge rung={site.binding_rung} />
                           </TableCell>
