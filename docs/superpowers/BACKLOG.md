@@ -345,6 +345,66 @@ would be a false claim.
 **Evidence that closes this:** a human-surface integration exists and its panel reads from it.
 Realistic after M5's correlation join, not before.
 
+### B111 — The test suite runs three times on every pull request
+
+Measured 2026-08-06 over 25 runs by `scripts/profile_ci.py`
+(`reports/ci-profile-2026-08-06.md`). Jobs run concurrently, so the critical path is the `test` job
+at a median of **200s**, and inside it:
+
+| Median | Job | Step |
+|---:|---|---|
+| 137s | `serial` | Tests, serial scheduler (`-n0`) |
+| 80s | `test` | Coverage (recorded, not gated) |
+| 60s | `test` | Tests (`-n auto`) |
+
+**Roughly 280s of compute and 140s of the 200s critical path is the same suite, three times.**
+
+Each run has a real reason and none of them is wrong. The gate is the gate. Coverage is a separate
+invocation because a dotted `--cov` legitimately changes behaviour here
+(`specs/2026-07-29-psycopg-error-identity.md`) and is ungated because
+`specs/2026-07-27-sync-benchmark-gates.md` forbids inventing a threshold. The serial job exists
+because `addopts` runs `-n auto` everywhere else and 186 errors appear only under `-n0`
+(`reports/2026-07-30-n0-is-broken.md`).
+
+**What none of those reasons requires is that all three run on every pull request.** Coverage is
+recorded rather than gated, so a nightly schedule loses nothing a reviewer waits for; the serial
+scheduler catches a class of defect that arrives with a conftest or fixture change rather than with
+a screen, so it could be conditioned or scheduled. Both are decisions with a real risk attached —
+a defect found nightly is found later — and that risk is the thing to argue, not to assume away.
+
+**Closes when:** the critical path falls with the before-and-after medians from two profiles beside
+it, and every check that stopped running per-pull-request is named along with where it runs instead.
+A gate deleted rather than moved does not close this.
+
+### B112 — Hosted runners stopped acquiring this repository's jobs, so CI's verdict means nothing
+
+Observed 2026-08-06. Run `31124124263` on `81d6c96`: all three jobs recorded a start and an end
+fifteen minutes apart, ran **zero steps**, and were cancelled. The annotation is
+*"The job was not acquired by Runner of type hosted even after multiple attempts."* It began as one
+job an hour earlier and became all three.
+
+`gh run list` reports those runs as `failure`, which is the dangerous part: a coordinator reading
+the conclusion sees a red build on its own branch and starts looking for a defect that does not
+exist. The distinguishing check is cheap and is now in the tick —
+
+```sh
+gh api repos/stroland02/Sync/actions/runs/<id>/jobs --jq '.jobs[] | "\(.name) \(.conclusion) steps=\(.steps|length)"'
+```
+
+— zero steps means the job never started.
+
+The cause is not visible from here. Exhausted Actions minutes on a personal account produces exactly
+this signature; so does a service incident. `gh api users/<login>/settings/billing/actions` answers
+it and needs the `user` scope, which this checkout's `gh` does not hold
+(`gh auth refresh -h github.com -s user`).
+
+**While this holds, the local gate is the authority** — `uv run pytest tests/ -q -n0`, plus
+`npm run build`, `npm run lint` and `npm test` from `web/`. Say so rather than implying CI covered
+something it never ran.
+
+**Closes when:** a run completes with steps again, and the cause is recorded — because "it started
+working" without a cause is a thing that will happen again with nobody knowing why it stopped.
+
 ### B7 — The M0 acceptance run has not executed since the pipeline changed underneath it
 
 `tests/test_e2e_stripe.py::test_one_command_produces_one_green_pull_request` is the
