@@ -16,6 +16,7 @@
 import { useState, type FormEvent, type ReactNode } from "react"
 
 import { Button } from "@/components/ui/button"
+import { chipSurface } from "@/lib/selectable-surface"
 import {
   InputGroup,
   InputGroupAddon,
@@ -28,27 +29,6 @@ export interface FacetOption {
   value: string
   /** How many rows carry this value, counted over the facet's own scope — never the page. */
   count: number
-}
-
-/**
- * Selected and unselected, as named surface steps.
- *
- * The catalog's own `outline`/`secondary` pairing renders this backwards here: `outline` fills
- * with `input/30`, a translucent light wash, while `secondary` is `0.255` — flat and *darker*
- * than the wash. Measured on the running screen, the unselected chips came back brighter than
- * the selected one, which is the state distinction inverted rather than merely subtle.
- *
- * So the steps are named instead, which is what `DESIGN.md`'s surface ramp reserves them for: a
- * control at rest takes its panel's own depth step, `surface-emphasis` is a selection, and
- * `surface-subtle` is the pointer. Rest, hover and selected then climb the ramp in that order.
- * The `dark:` spellings are the ones that land — the console is dark-only and the class is
- * permanent — but both are written so the override does not depend on which variant the
- * catalog happens to use for a background.
- */
-function chipSurface(selected: boolean): string {
-  return selected
-    ? "border-line-strong bg-surface-emphasis hover:bg-surface-emphasis dark:border-line-strong dark:bg-surface-emphasis dark:hover:bg-surface-emphasis"
-    : "border-line bg-surface hover:bg-surface-subtle dark:border-line dark:bg-surface dark:hover:bg-surface-subtle"
 }
 
 /**
@@ -217,14 +197,19 @@ function PrefixFilterForm({
  * narrow, which is the whole precondition for reading its emptiness correctly.
  */
 /**
- * The controls that narrow one table, laid out together above it.
+ * The controls that govern one table, laid out together above it.
  *
- * A row rather than a stack because the table is what the screen is for: two stacked controls
- * with an explanatory sentence each cost a quarter of the viewport before the first row of
- * data. It wraps rather than shrinking, so a narrow window gets the stack back instead of two
- * controls too small to use.
+ * A row rather than a stack because the table is what the screen is for: stacked controls with an
+ * explanatory sentence each cost a quarter of the viewport before the first row of data. It wraps
+ * rather than shrinking, so a narrow window gets the stack back instead of controls too small to
+ * use.
+ *
+ * Named for controls rather than filters because an ordering goes in it too, and an ordering is not
+ * a filter — it narrows nothing and the total under the table is the same number either way. The
+ * bar is a layout, and the one thing it must not do is imply that everything inside it does the
+ * same job.
  */
-export function FilterBar({ children }: { children: ReactNode }) {
+export function ControlBar({ children }: { children: ReactNode }) {
   return <div className="flex flex-wrap items-start gap-section">{children}</div>
 }
 

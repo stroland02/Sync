@@ -8,6 +8,17 @@
  * The operation column links into the Binding surface level. `repoId`, when the caller has
  * one, rides along so the surface that opens is scoped to it.
  *
+ * **The call site is the way into the finding, and there is no finding-id column.** Measured at
+ * `--scale 10000`: a 32-character id in a 164px column wrapped to three lines, and the call-site
+ * path beside it wrapped to four, which is what put a body row at 76px and eleven rows above the
+ * fold on a two-and-a-half-thousand-row table. An opaque hash is not something a reader reads —
+ * it is something they click — so the click moved to the cell that names the row in the operator's
+ * own terms, and the column it used to occupy went to the path. `break-words` stays on that path:
+ * it is what keeps the rung column on screen at 1280px, because a customer's 200-character path
+ * grows a row taller instead of pushing provenance out of the viewport. The id itself is not lost;
+ * it is the heading of the page the link opens, and it rides the link's accessible name so a
+ * screen reader announces which finding a path leads to.
+ *
  * `repoId` also narrows the query itself. It is not a hint the table decorates a link with: a
  * page fetched for the fleet and rendered under a repository's name is a false claim about that
  * repository, so the same value reaches `GET /api/vendors/{vendor_id}` as `repo_id` and the
@@ -32,14 +43,15 @@ import { Link } from "react-router"
 
 import { DEFAULT_LIMIT } from "@/api/client"
 import { useVendorFindings } from "@/api/queries"
-import type { VendorFindingsPage } from "@/api/types"
+import type { FindingOrder, VendorFindingsPage } from "@/api/types"
 import {
   ActiveFilters,
   FacetChips,
-  FilterBar,
+  ControlBar,
   PrefixFilter,
   type FacetOption,
 } from "@/components/filters"
+import { OrderChoice } from "@/components/ordering"
 import { PageControls } from "@/components/page-controls"
 import { ProvenanceStrip, RungBadge } from "@/components/provenance"
 import { EmptyState, ErrorState, LoadingState } from "@/components/states"
@@ -59,10 +71,16 @@ import { useOffsetParam } from "@/lib/use-offset-param"
 const OFFSET_KEY = "findings_offset"
 const SEVERITY_KEY = "severity"
 const PATH_KEY = "path"
+const ORDER_KEY = "order"
 
 /** Both filters clear the page position: an offset measured against the old set means nothing
  * against the new one, and a page past the end of a narrowed set is an empty table that reads
- * as "nothing matches". */
+ * as "nothing matches".
+ *
+ * The ordering clears it too, for a related reason that is not the same one. A filter changes
+ * which rows exist; an ordering changes which rows a given offset names. Offset 250 in one
+ * ordering is fifty different findings in the other, so holding the position across a re-order
+ * would move the window under the reader while the count under it stayed still. */
 const RESETS = [OFFSET_KEY]
 
 function bindingSurfaceHref(vendorId: string, operation: string, repoId: string | null): string {
@@ -148,12 +166,17 @@ export function VendorFindingsTable({
   const [offset, setOffset] = useOffsetParam(OFFSET_KEY)
   const [severity, setSeverity] = useFilterParam(SEVERITY_KEY, RESETS)
   const [pathPrefix, setPathPrefix] = useFilterParam(PATH_KEY, RESETS)
+  // Sent as whatever the URL holds, including a value the API does not have. The API resolves it
+  // and echoes the ordering it applied, and the control renders *that* — so a hand-edited URL
+  // cannot leave the screen naming an arrangement the rows are not in.
+  const [order, setOrder] = useFilterParam(ORDER_KEY, RESETS)
   const query = useVendorFindings(vendorId, {
     limit: DEFAULT_LIMIT,
     offset,
     repoId: repoId ?? undefined,
     severity: severity ?? undefined,
     path: pathPrefix ?? undefined,
+    order: (order ?? undefined) as FindingOrder | undefined,
   })
 
   // `repo_id` is deliberately not among the keys this clears. It is the scope the level above
@@ -176,7 +199,7 @@ export function VendorFindingsTable({
   return (
     <div className="flex flex-col gap-section">
       <div className="flex flex-col gap-section">
-        <FilterBar>
+        <ControlBar>
           <FacetChips
             legend="Severity"
             options={severityOptions(page)}
@@ -192,7 +215,13 @@ export function VendorFindingsTable({
             placeholder="src/billing/"
             note="Matched as a prefix of the call site's path, never as a substring: src/billing reaches src/billing/charge.ts and not lib/src/billing.ts."
           />
-        </FilterBar>
+          <OrderChoice
+            legend="Order"
+            applied={page.order}
+            severityOrder={page.severity_order}
+            onSelect={setOrder}
+          />
+        </ControlBar>
         <ActiveFilters filters={activeFilters} onClear={clearAll} />
       </div>
 
@@ -219,7 +248,6 @@ export function VendorFindingsTable({
                 <TableHead>Symbol</TableHead>
                 <TableHead>Operation</TableHead>
                 <TableHead>Change kind</TableHead>
-                <TableHead>Finding</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -230,7 +258,13 @@ export function VendorFindingsTable({
                     <RungBadge rung={row.binding_source} />
                   </TableCell>
                   <TableCell className="font-mono">
-                    {row.file}:{row.line}
+                    <Link
+                      to={`/findings/${encodeURIComponent(row.finding_id)}`}
+                      className="underline underline-offset-2"
+                      aria-label={`Finding ${row.finding_id} at ${row.file} line ${row.line}`}
+                    >
+                      {row.file}:{row.line}
+                    </Link>
                   </TableCell>
                   <TableCell className="font-mono">
                     <Formatted value={orAbsent(row.symbol)} />
@@ -250,18 +284,15 @@ export function VendorFindingsTable({
                   <TableCell>
                     <Formatted value={orAbsent(row.change_kind)} />
                   </TableCell>
-                  <TableCell>
-                    <Link
-                      to={`/findings/${encodeURIComponent(row.finding_id)}`}
-                      className="font-mono underline underline-offset-2"
-                    >
-                      {row.finding_id}
-                    </Link>
-                  </TableCell>
                 </TableRow>
               ))}
             </TableBody>
           </Table>
+          <p className="max-w-prose text-meta text-muted-foreground">
+            Each call site opens its finding. The finding's full id is the heading of that page —
+            this table shows the path instead, because an opaque 32-character hash cost three
+            wrapped lines in every row and told a reader nothing they could read.
+          </p>
           <PageControls
             offset={offset}
             limit={DEFAULT_LIMIT}

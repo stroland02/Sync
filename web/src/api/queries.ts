@@ -56,6 +56,10 @@ export function useVendorFindings(vendorId: string, params: VendorFindingsParams
   const offset = params.offset ?? 0
   const severity = params.severity
   const path = params.path
+  // The ordering is part of the key for the same reason `repoId` is: two orderings of one set are
+  // two different pages, and a shared key would serve the severity-ordered page's rows under the
+  // default ordering's name straight out of the cache.
+  const order = params.order
   return useQuery({
     queryKey: [
       "vendors",
@@ -66,11 +70,12 @@ export function useVendorFindings(vendorId: string, params: VendorFindingsParams
       offset,
       severity ?? null,
       path ?? null,
+      order ?? null,
     ],
     queryFn: ({ signal }) =>
       fetchVendorFindings(
         vendorId,
-        { limit, offset, repoId: params.repoId, severity, path },
+        { limit, offset, repoId: params.repoId, severity, path, order },
         signal,
       ),
   })

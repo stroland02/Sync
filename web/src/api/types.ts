@@ -160,10 +160,35 @@ export interface RiskRow {
  * from `severity_counts`: two numbers that cannot contradict each other are two numbers that can
  * never reveal one of them is wrong.
  */
+/**
+ * How a page of findings is ordered. Named orderings rather than column names, because a control
+ * that sorts by whatever a header holds would offer to rank the provenance rung — an evidence
+ * class with no good end — and to sort a codebase alphabetically and call it a priority.
+ *
+ * `sync.graph.store.FINDING_ORDERS` is the authority and
+ * `test_the_consoles_finding_order_matches_the_orderings_the_store_offers` holds this list to it,
+ * the same way `RunDisposition` is held to `_FINISHED`: the console cannot import Python, so a
+ * value added on one side and forgotten here would reach the console as a string the compiler
+ * never checked.
+ */
+export type FindingOrder = "first-seen" | "severity"
+
 export interface VendorFindingsPage extends Page<RiskRow> {
   repo_id: string | null
   severity_counts: Tally
   severity_total: number
+  /**
+   * The ordering the query actually applied — not the one the URL asked for. An unrecognised
+   * `order` resolves server-side and comes back as what was used, so the screen can never name an
+   * ordering the rows are not in.
+   */
+  order: FindingOrder
+  /**
+   * The severity rank the `severity` ordering uses, most severe first, sent rather than restated
+   * here. It is a declared judgement rather than something the graph stores, so the screen states
+   * it — and stating a copy would eventually state the wrong one.
+   */
+  severity_order: string[]
 }
 
 /** One item of `GET /api/vendors/{vendor_id}/changes`: something the vendor changed. */
