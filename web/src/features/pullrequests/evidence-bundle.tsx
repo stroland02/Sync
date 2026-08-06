@@ -10,7 +10,7 @@
  * Workflow page already shows all eight, node by node.
  */
 
-import type { WorkflowNode, WorkflowNodeName } from "@/api/types"
+import type { WorkflowNode, WorkflowNodeName, WorkflowOutcome } from "@/api/types"
 import { NodeEvidence } from "@/features/workflows/evidence"
 import { STANDING_SENTENCE } from "@/features/workflows/node-standing"
 
@@ -52,7 +52,7 @@ const BUNDLE_STAGES: BundleStage[] = [
     name: "open_pr",
     title: "The pull request",
     blurb:
-      "What Sync actually opened. The bundle it assembles for a reviewer — the spec diff, the changelog entry, and the call sites it touched — is not exposed by this transport beyond the two fields below: sync.dashboard.queries reads only pr_url and pr_number out of the checkpoint, so that is all this page can show.",
+      "What Sync opened, on a run that reached this node. The bundle it assembles for a reviewer — the spec diff, the changelog entry, and the call sites it touched — is not exposed by this transport beyond the two fields below: sync.dashboard.queries reads only pr_url and pr_number out of the checkpoint, so that is all this page can show.",
   },
 ]
 
@@ -97,11 +97,85 @@ function EmptyStage({ node }: { node: WorkflowNode | undefined }) {
   return <p className="text-body text-muted-foreground">{STANDING_SENTENCE[node.standing]}</p>
 }
 
-export function EvidenceBundle({ nodes }: { nodes: WorkflowNode[] }) {
+/**
+ * What this bundle is, on a run that did not open a pull request.
+ *
+ * The stage blurbs below are written for a run that reached them, and rendering them
+ * unconditionally headed a `reported` run's page with "What Sync actually opened." and five
+ * "Never reached" rows — a page asserting a pull request that routing had decided against.
+ * The outcome is on the payload, so the framing follows it rather than presupposing the happy
+ * path. `opened` gets none of this: the panel above it already says the run opened one, and a
+ * second sentence saying so is a fact written twice.
+ */
+function Framing({ outcome }: { outcome: WorkflowOutcome | null }) {
+  if (outcome === "opened") return null
+
+  const sentence =
+    outcome === "reported"
+      ? "No pull request exists for this run. Routing decided no patch was warranted, so nothing below was attempted — the reason it decided that is in the panel above."
+      : outcome === "abandoned"
+        ? "No pull request exists for this run: Sync abandoned it before one was opened."
+        : outcome === null || outcome === "running"
+          ? "Whether this run reaches a pull request is not yet decided. The five nodes below are the evidence it has produced so far, and a node the graph still owes a visit says so."
+          : "The console does not recognise this run's outcome, so it cannot say whether a pull request exists for it. The five nodes below are still what the run produced."
+
+  return <p className="max-w-prose text-body text-muted-foreground">{sentence}</p>
+}
+
+/**
+ * A `reported` run reached none of the five, so there are no five rows to draw.
+ *
+ * The nodes are named here rather than rendered as five identical "Never reached" panels: the
+ * fact is one fact, and five copies of it read as a run that got partway. Naming them keeps
+ * what this bundle would have shown visible, which is the part that must not be lost.
+ */
+function NothingAttempted() {
+  return (
+    <p className="max-w-prose text-body text-muted-foreground">
+      None of the five nodes this bundle names — <code className="font-mono">static_verify</code>,{" "}
+      <code className="font-mono">replay</code>, <code className="font-mono">push_branch</code>,{" "}
+      <code className="font-mono">await_ci</code> and <code className="font-mono">open_pr</code> —
+      was ever reached, and none produced anything. That is not a gap in this view: a run that
+      reports rather than patches ends before any of them runs.
+    </p>
+  )
+}
+
+export function EvidenceBundle({
+  nodes,
+  outcome,
+}: {
+  nodes: WorkflowNode[]
+  outcome: WorkflowOutcome | null
+}) {
+  const staged = BUNDLE_STAGES.map((stage) => ({
+    stage,
+    node: findNode(nodes, stage.name),
+  }))
+  const anyEvidence = staged.some(
+    ({ node }) => node !== undefined && Object.keys(node.evidence).length > 0
+  )
+
+  return (
+    <div className="flex flex-col gap-section">
+      <Framing outcome={outcome} />
+      {outcome === "reported" && !anyEvidence ? (
+        <NothingAttempted />
+      ) : (
+        <BundleStages staged={staged} />
+      )}
+    </div>
+  )
+}
+
+function BundleStages({
+  staged,
+}: {
+  staged: { stage: BundleStage; node: WorkflowNode | undefined }[]
+}) {
   return (
     <ol className="flex flex-col gap-section">
-      {BUNDLE_STAGES.map((stage) => {
-        const node = findNode(nodes, stage.name)
+      {staged.map(({ stage, node }) => {
         const hasEvidence = node !== undefined && Object.keys(node.evidence).length > 0
 
         return (

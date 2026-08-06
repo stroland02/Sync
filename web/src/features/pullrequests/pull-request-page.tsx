@@ -17,11 +17,11 @@
 import { Link, useParams } from "react-router"
 
 import { NotFoundError } from "@/api/errors"
-import { useWorkflow } from "@/api/queries"
+import { WORKFLOW_POLL_MS, useWorkflow } from "@/api/queries"
 import { ErrorState, LoadingState, NotFoundState } from "@/components/states"
 import { Button } from "@/components/ui/button"
 import { EvidenceBundle } from "@/features/pullrequests/evidence-bundle"
-import { RunOutcome } from "@/features/workflows/run-outcome"
+import { RunOutcome, type BelowThisPanel } from "@/features/workflows/run-outcome"
 import { Breadcrumbs } from "@/layouts/breadcrumbs"
 import { UnknownRoute } from "@/layouts/unknown-route"
 
@@ -30,6 +30,22 @@ export function PullRequestPage() {
   const { findingId } = useParams<{ findingId: string }>()
   if (findingId === undefined) return <UnknownRoute />
   return <PullRequest findingId={findingId} />
+}
+
+/**
+ * What `RunOutcome` may say about this screen, which renders five of the run's eight nodes.
+ *
+ * `locate`, `prepare` and `patch` are deliberately not here, so nothing below this panel may
+ * be described as the attempt in full — and the node the workflow screen calls `open_pr` is
+ * labelled "The pull request" here, so naming the channel would send a reader looking for a
+ * heading that is not on this page.
+ */
+const BELOW: BelowThisPanel = {
+  inFlight: `The five nodes below are the last state the checkpointer recorded for them, re-read every ${WORKFLOW_POLL_MS / 1000} seconds until the run finishes.`,
+  abandoned:
+    "The five nodes below carry however far the evidence got; locate, prepare and patch are not among them, and the solution workflow shows all eight.",
+  opened: "The pull request itself is the last of the five panels below.",
+  unrecognised: "The five nodes below are still what the run produced.",
 }
 
 function PullRequest({ findingId }: { findingId: string }) {
@@ -94,9 +110,10 @@ function PullRequest({ findingId }: { findingId: string }) {
             outcome={data.outcome}
             abandonReason={data.abandon_reason}
             reportReason={data.report_reason}
+            below={BELOW}
           />
 
-          <EvidenceBundle nodes={data.nodes} />
+          <EvidenceBundle nodes={data.nodes} outcome={data.outcome} />
 
           <p className="max-w-prose text-body text-muted-foreground">
             Read from the checkpointer, the same source as{" "}
