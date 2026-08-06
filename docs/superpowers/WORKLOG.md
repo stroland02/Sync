@@ -43,7 +43,7 @@ M4 continues the sequence at 126. Everything before that is in `git log`.
 | M4-W150 | Briefs for the four defects the measurement found | landed | this file |
 | M4-W151 | The dev proxy takes a port instead of being edited to reach one | landed | `web/vite.config.ts` |
 | M4-W152 | The affordance brief, moved ahead of the architecture plan's remaining tasks | landed | `briefs/2026-08-06-m45-affordance-layer.md` |
-| M4-W153 | The frontend test runner and the reachability guard — architecture Task 5 | dispatched | `briefs/2026-08-06-m4-frontend-test-runner.md` |
+| M4-W153 | The frontend test runner and the reachability guard — architecture Task 5 | landed | `briefs/2026-08-06-m4-frontend-test-runner.md` |
 
 ## M4.5 — the console is worth looking at
 

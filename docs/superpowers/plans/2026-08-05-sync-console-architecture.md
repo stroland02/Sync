@@ -1137,8 +1137,8 @@ confirm you cannot. Then set a filter and confirm the table says how many rows i
 **Files:** Create `web/vitest.config.ts` and the test files. Modify `web/package.json`,
 `.github/workflows/ci.yml`. **~half a day plus a standing cost.**
 
-- [ ] **Step 1:** `npm i -D vitest @testing-library/react jsdom`. Add `"test": "vitest run"`.
-- [ ] **Step 2:** Write the tests **failing first**, against the behaviour that already exists, and
+- [x] **Step 1:** `npm i -D vitest @testing-library/react jsdom`. Add `"test": "vitest run"`.
+- [x] **Step 2:** Write the tests **failing first**, against the behaviour that already exists, and
   watch each one fail for the reason expected. `CLAUDE.md`'s rule now applies here: a test that has
   never failed has never been shown to test anything.
   - `isRunTerminal` over each outcome value including `running` and `null`.
@@ -1151,12 +1151,25 @@ confirm you cannot. Then set a filter and confirm the table says how many rows i
   - `formatElapsed` over null, zero, and a value spanning units.
   - **Every route in `lib/routes.ts` is reachable from the shell**, and every route `App.tsx`
     declares is in the registry.
-- [ ] **Step 3:** Prove the reachability test can fail: remove one entry from the registry's
+- [x] **Step 3:** Prove the reachability test can fail: remove one entry from the registry's
   navigation grouping and watch it go red. Restore it.
-- [ ] **Step 4:** Wire `npm test` into the existing `web` job in `.github/workflows/ci.yml`.
-- [ ] **Step 5:** Record in `CLAUDE.md`'s test-discipline rule that TypeScript is now test-first
+- [x] **Step 4:** Wire `npm test` into the existing `web` job in `.github/workflows/ci.yml`.
+- [x] **Step 5:** Record in `CLAUDE.md`'s test-discipline rule that TypeScript is now test-first
   too, with the scope from Decision 6 — classification and structural invariants, never class
   names, never snapshots.
+
+**Landed 2026-08-06 (M4-W153).** `vitest`, `@testing-library/react` and `jsdom` as devDependencies,
+`web/vitest.config.ts`, `"test": "vitest run"`, and `npm test` in CI's `web` job. Fifty-one tests
+across five files. Every one was shown red against a deliberately broken subject before it was
+trusted, nine mutations in all — the reachability guard failed with
+`expected [ '/detectors' ] to deeply equal []` when one entry was dropped from the navigation's
+grouping, and with `expected <h1> to be null` when the router was given one route fewer than the
+registry declares.
+
+One item of the specified set had no subject in the tree: the plan's disclosure header was never
+built, so the invariant it carried — a section labelled "(0)" is a fact and must render rather than
+be suppressed — is held where it actually lives today, on `FacetChips`, which renders an option
+counted at zero rather than dropping it.
 
 **Verification a reviewer can run:** `npm test` green. Then delete a route from the navigation
 grouping and watch the reachability test go red; restore it. A guard that has never rejected

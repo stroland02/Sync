@@ -305,3 +305,13 @@ jobs:
       # WorkflowOutcome union needed and never had.
       - name: Build
         run: npm run build
+
+      # Vitest over jsdom. Scope is classification, derivation and structural invariants --
+      # `isRunTerminal`, `hasLiveRun`, the cardinality threshold, an option counted at zero,
+      # `describeRung`'s exhaustiveness, `formatElapsed`, and every declared route being
+      # reachable from the shell. Never class names, never snapshots: a snapshot in a console
+      # being actively restyled fails on every correct change and gets deleted by whoever it
+      # blocks. Needs no database and no Python, which is why it belongs in this job and not
+      # in `test`.
+      - name: Test
+        run: npm test
