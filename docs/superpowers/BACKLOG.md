@@ -408,27 +408,6 @@ to be made again.
 proving it passes a real vendor entry, or this entry is closed as declined with the sample of
 recorded attempts that justified declining.
 
-### B99 — The agent's own tool reads are unfenced, and that is the larger channel
-
-The prompt is one of two ways untrusted bytes reach the patch agent, and it is the smaller one.
-After the prompt, the agent `Read`s, `Grep`s and `Bash`es its way around a repository whose files
-can hold anything, and a comment in the very file it was sent to edit arrives with no frame around
-it whatsoever.
-
-Fencing that at the prompt layer is impossible by construction — the bytes never pass through
-`build_patch_prompt`. What is available is narrower and worth scoping honestly: a per-attempt
-budget so a wandering agent is bounded, and the sandbox from B97 so what it reads cannot leave.
-There is no clean equivalent of the fence here, and an entry that pretends otherwise would be
-worse than one that says so.
-
-One third of the channel narrowed on 2026-08-06: the `Bash` half of "`Read`s, `Grep`s and
-`Bash`es" is now three commands rather than a shell (B97). `Read` and `Grep` are untouched and
-still unfenced — what changed is that `tool_gate` records them, so the reading is at least
-legible to an operator. Legible is not bounded, and this entry does not move.
-
-**Closes when:** the exposure is either bounded by B97 plus a budget, or a mechanism is designed
-that frames tool results, with an argument for why it is not merely theatre.
-
 ## In flight
 
 
@@ -451,6 +430,27 @@ Entries stay under **Ready** above with their full reasoning until they land, be
 is what a reviewer needs and duplicating it here would let the two copies drift.
 
 ## Done
+
+- **B99** — what the patch agent reads for itself is framed. `sync.remediate.tool_output` is a
+`PostToolUse` hook applying the same three elements `untrusted.py` puts around the prompt to what
+`Read`, `Grep`, `Glob` and the shell hand back, with the same refusal-on-marker discipline.
+
+**This entry said no clean equivalent of the fence was available here, and that was wrong.** It
+reasoned from the prompt layer: the bytes never pass through `build_patch_prompt`, therefore they
+cannot be fenced, therefore only a sandbox and a budget are left. The premise holds and the
+conclusion does not. `PostToolUseHookSpecificOutput.updatedToolOutput` is declared in the installed
+SDK as "Replaces the tool output before it is sent to the model", the bundled CLI applies it before
+the tool's own result mapper runs, and the hook is handed the very object it replaces. The fence
+moved one layer out rather than being unavailable. The lesson worth keeping is that the entry
+described a limit of the place it had been looking rather than a limit of the system, and said so
+with enough confidence that nobody checked for eight days.
+
+Three things it does not do, each in the threat model beside the rest: it does not make the agent
+obey the frame, it has not been observed enforcing, and it changes what the model sees rather than
+what the process did. One control was found and rejected rather than built — confining reads to
+paths inside the clone, rejected because `pnpm`'s symlinked `node_modules` makes the strong form
+unusable and the lexical form is walked past by a symlink committed into the repository, which is
+the attacker in scope.
 
 - **B71** — Sentry now answers a question other than what a response body looked like. An ingest
 folds an issues export into per-operation, per-window failure counts on `observed_error_window`,

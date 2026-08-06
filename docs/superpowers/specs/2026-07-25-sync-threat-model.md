@@ -3,7 +3,8 @@
 **Date:** 2026-07-25, extended 2026-08-06
 **Status:** Specified. Contains one finding against code already on the M0 branch. The prompt-injection
 section was rewritten on 2026-08-06 from a traced inventory of the inputs rather than from a category,
-and the first layer of defence it argues for is built.
+and three layers of defence are built: the prompt boundary, a predicate on the run, and a fence on what
+the agent reads for itself. The sandbox that would contain any of them is not.
 **Scope:** What Sync holds, what it must never hold, the blast radius when it is compromised, and the gap
 between the architecture the design document claims and the code as written.
 
@@ -191,7 +192,7 @@ Ranked by how easily an attacker reaches the byte, not by where it sits in the p
 | `signals/feed/consumer.py:79` | Every field of `VendorChange`, unvalidated | Whoever holds the feed signing key | Yes, all of it |
 | `index/typescript.py:594-618`, `index/python_lang.py:768-783`, `index/literals.py:140` | `CallSite.path`, `.symbol`, `.args_keys`, `.response_fields_read`, `.operation_id` | Anyone who can merge — or in most workflows merely open — a pull request against the customer's own repository | Yes, four prompt lines |
 | `remediate/nodes.py:295, 439, 522` | `diagnostics` | `tsc` output over customer source and the vendor's shipped `.d.ts`; a CI verdict; the rejected diff | Yes, the retry section |
-| The clone itself | Nothing — read by the agent's own `Read`, `Grep` and `Bash` calls | Anyone who can write a file in the repository | **Not through the prompt at all.** See "what the first layer does not cover" |
+| The clone itself | Nothing — read by the agent's own `Read`, `Grep` and `Bash` calls | Anyone who can write a file in the repository | **Not through the prompt at all**, and the larger channel by volume. Framed at the tool layer instead — see "The second channel" below |
 
 `VendorChange`'s string fields are bare `str` with no validator, no length bound and no charset constraint
 (`src/sync/core/models.py:97-110`). The three accidental filters that exist — `_looks_like_a_model_id`,
@@ -319,7 +320,9 @@ attach to, so it is first whatever else is built.
 - **It does not touch what the agent reads with its own tools.** The prompt is one of two channels and it
   is the smaller one. The agent then `Read`s and `Grep`s a repository whose files can hold anything, and a
   comment in the file it was sent to edit arrives with no fence around it at all. That channel cannot be
-  fenced at the prompt layer by construction; it is a sandbox and egress problem, which is mitigation 1.
+  fenced at the prompt layer by construction. *Amended 2026-08-06: it can be fenced one layer out, at the
+  tool layer, and now is — see "The second channel" below. The sentence above was right that
+  `build_patch_prompt` cannot reach those bytes and wrong to conclude that only a sandbox could.*
 - **It does nothing about exfiltration**, the top-ranked item above. `Bash` in a clone holding the
   customer's `.env` is unaffected by how the prompt is punctuated.
 - **It is not a defence against a compromised feed key.** A feed that can construct a whole `VendorChange`
@@ -396,13 +399,111 @@ that sees every call, so choosing reduction does not cost the detection it was c
   such.
 - **It does nothing about what the agent reads.** `Read` and `Grep` over the clone stay permitted
   and unfenced, which is B99 and is the larger channel. The gate now records those calls, so the
-  exposure is at least legible; it is not reduced.
+  exposure is at least legible; it is not reduced. *Amended 2026-08-06: those results are now
+  framed by `sync.remediate.tool_output`. The gate still does not narrow which paths are readable,
+  and the reasoning for not adding that is in the next section.*
 - **A permitted command can still be wrong.** `git add` on a path the patch does not need is
   permitted, and the gate deliberately does not arbitrate that — `sync.index.shipped_tree` and the
   unstaged-additions check own it, and mixing a patch-quality rule into a security refusal would
   make both harder to reason about.
 - **It is per call, so it cannot see a sequence.** Three permitted commands that together do
   something a single refused one would have done are three permitted commands.
+
+### The second channel: what the agent fetches for itself, framed 2026-08-06
+
+`src/sync/remediate/tool_output.py`, a `PostToolUse` hook registered beside the `PreToolUse` gate on
+every `ClaudeAgentOptions` the patch node builds. It closes B99.
+
+Everything above defends the bytes Sync *chose* to include. The agent then goes and reads the
+repository itself, and until this shipped, what came back from `Read` and `Grep` arrived in the same
+register as Sync's own instructions. **Measured on this tree's own committed fixtures: the whole patch
+prompt is 4,037 bytes; the median TypeScript fixture is 637 bytes and the largest is 106,429.** One
+read of one file can be twenty-six times the entire prompt, and a run makes many. The first layer
+fenced the smaller half.
+
+**The mechanism, established against the installed package rather than assumed.** This is the
+question the design turned on, and the answer is not the obvious one:
+
+- `HookEvent` in `claude_agent_sdk.types` (0.2.128) includes `PostToolUse`, and
+  `PostToolUseHookInput` carries `tool_response`.
+- `PostToolUseHookSpecificOutput.updatedToolOutput` is documented in the SDK's own source as
+  **"Replaces the tool output before it is sent to the model."** So the event modifies rather than
+  merely observes. The alternative, `additionalContext`, only appends a note beside output that
+  still arrives unframed, and it is what a `PostToolUseFailure` or a `Stop` hook is limited to.
+- The bundled CLI implements it: `if(p.updatedToolOutput!==void 0)yield{updatedToolOutput:...}`,
+  and downstream `Oe=gt.updatedToolOutput`, where `Oe` is the value the tool's own
+  `mapToolResultToToolResultBlockParam` renders into the `tool_result` block the model receives.
+- `tool_response` handed to the hook is that same object, so a shape-preserving edit of it is safe
+  by construction.
+
+**The trap, which decides how the module is written.** The CLI validates a replacement against the
+tool's zod `outputSchema` and, on a mismatch, logs an error and **uses the original output** —
+`"PostToolUse hook returned updatedToolOutput that does not match "+name+"'s output shape; using
+original output."` A control that built its replacement from scratch would therefore not fail
+loudly on a schema change; it would fail *open*, onto exactly the unfenced bytes it exists to frame.
+So every replacement here is the response object the hook was handed with individual string fields
+rewritten, and where the fields it knows are absent it **refuses rather than finding nothing to
+frame**. That is the difference between this and a check that cannot fail, and this repository has
+shipped that defect twice.
+
+The framing itself is `sync.remediate.untrusted`'s, unchanged — the same three elements, the same
+refusal-on-marker discipline, so a reader of one understands the other. `Read` content and `Grep`
+matches are `untrusted-repository-text`; `Bash` output is `untrusted-tool-output`, which is what
+`build_patch_prompt` already calls the same `tsc` bytes when they come back as `diagnostics`. The
+preamble was extended to say the elements appear in tool results too; framing output with a marker
+whose meaning the preamble scoped to the prompt is half a control.
+
+Three outcomes, and the module has no fourth:
+
+- **Framed.** Wrapped and passed on. The markers sit *inline* on `Read` content rather than on lines
+  of their own, because the CLI numbers those lines from `startLine` and the prompt tells the agent
+  the call site is at `path:line` — a marker on its own line would shift every line after it and
+  send the agent to the wrong one. Path lists are the opposite case and get the markers as entries
+  of their own, because wrapping the first and last path in place would corrupt two real paths.
+- **Withheld.** A `Read` of an image, a notebook, a PDF: bytes that cannot be framed at all. The
+  agent gets a sentence instead and the run continues. Nothing a patch needs is in them, `tool_gate`
+  already refuses `NotebookEdit`, and abandoning a finding over an idle read costs more than it buys.
+- **Refused.** A marker in the content, or a shape the module cannot account for. The bytes are
+  replaced, the run is stopped with `continue: false`, and the reason reaches `abandon_reason`
+  through `agent_patch`. Both, rather than either: a hook cannot raise into `propose`, so the
+  refusal is recorded for the caller and raised after the query ends.
+
+**The cost is fixed rather than proportional.** Fifty-five bytes per tool result — two markers —
+whatever the file's size. Against a 4,037-byte prompt that is a rounding error, and it does not grow
+with the thing it frames.
+
+**What was rejected, and why.** Confining `Read`, `Grep` and `Glob` to paths inside the clone. It is
+the obvious companion control and it is currently absent: the patch agent may read any path the
+process can. It was rejected because the only form available here is a lexical one. `os.path.realpath`
+would be the strong form and cannot be used — this project installs with `pnpm`, whose `node_modules`
+is a symlink farm, and resolving links would push legitimate dependency reads outside the clone and
+break the typecheck path. A lexical check is walked past by a symlink committed into the repository,
+which is precisely the attacker in scope. A boundary the intended adversary steps over, presented as
+a boundary, is worse than none — and the read still has to reach a diff to matter, which
+`shipped_tree` and `dependency_edits` already weigh. It stays open and named rather than half-closed.
+
+**What this does not cover, stated plainly.**
+
+- **It does not make the agent obey the frame, and that limit has not moved.** Framing is persuasion.
+  It now covers both channels rather than one; it is still not containment, and proving a model
+  respects it needs a model API call the test discipline here forbids.
+- **It has not been observed enforcing.** The same weakest-claim as the tool gate, and for the same
+  reason. That `updatedToolOutput` reaches the model is taken from the SDK's declared contract and
+  from the bundled binary's own code, read at `claude.exe` offsets 247,469,449 and 247,470,034 — not
+  from a run. Nor has `continue: false` been observed stopping one; the binary maps it to
+  `preventContinuation`, which is why the bytes are *also* replaced on a refusal rather than the stop
+  being relied on alone.
+- **It changes what the model sees, never what the process did.** The file was read off the disk
+  before the hook ran. Nothing here is an operating-system boundary, and mitigation 1 is still the
+  containment and still unbuilt.
+- **`Edit` and `Write` results are not framed**, deliberately: they report on what the agent itself
+  wrote. But `Edit` echoes surrounding lines of the file back, so a small amount of repository text
+  reaches the model unframed by that route. It is bounded by the edit's own context window and was
+  judged not worth teaching the agent that the elements appear on Sync's side of the conversation too.
+- **It is per result, so it cannot see a sequence.** Framing is applied to each result independently.
+  Instructions split across three files are three framed results.
+- **A framed instruction is still an instruction the agent read.** The frame says whose bytes these
+  are. It does not, and cannot, make a persuasive sentence unpersuasive.
 
 ### Sequencing, revised
 
@@ -416,6 +517,13 @@ The tool gate does not displace that. It is the cheap part of the same job done 
 it was worth building first only because it took a day rather than a milestone. Read the two
 together: the gate decides what the agent may ask for, the sandbox decides what the process can do
 regardless of what it asks. A gate with no sandbox under it is one bug away from nothing.
+
+Neither does the tool-output fence, and the paragraph above needs one correction rather than a
+revision. It said both remaining prompt layers defend the smaller channel. That was true of the two
+this page still declines to build, and it was the wrong reason to have left the second channel alone:
+the fence turned out to cost a day, and it defends the *larger* one. What it does not do is touch
+the top-ranked attack, which remains exfiltration during the run, and mitigation 1 remains the only
+item on this page that does.
 
 ## What a security reviewer will ask, and the answer
 

@@ -55,7 +55,7 @@ from pathlib import Path
 from claude_agent_sdk import ClaudeAgentOptions, ResultMessage, query
 
 from sync.core import CallSite, Finding, Patch, RepoRef, VendorChange
-from sync.remediate import tool_gate
+from sync.remediate import tool_gate, tool_output
 from sync.remediate.untrusted import (
     HARDENING,
     REPOSITORY,
@@ -350,6 +350,9 @@ class AgentRemediator:
         asyncio.run(self._drive_agent(prompt, repo_path, identity))
 
     async def _drive_agent(self, prompt: str, repo_path: Path, identity: str) -> None:
+        # A hook cannot abandon a run -- an exception raised inside one is answered to the
+        # CLI, not to this frame -- so `tool_output` records its refusals here instead.
+        refusals: list[str] = []
         options = ClaudeAgentOptions(
             cwd=repo_path,
             model=MODEL,
@@ -357,12 +360,18 @@ class AgentRemediator:
             effort="xhigh",
             allowed_tools=ALLOWED_TOOLS,
             disallowed_tools=DISALLOWED_TOOLS,
-            hooks=tool_gate.hooks(identity),
+            hooks={**tool_gate.hooks(identity), **tool_output.hooks(identity, refusals)},
         )
         result: ResultMessage | None = None
         async for message in query(prompt=prompt, options=options):
             if isinstance(message, ResultMessage):
                 result = message
+
+        # Ahead of the two checks below, which describe how the run ended rather than why it
+        # was stopped. A refusal reports as an ordinary completion with an empty diff, and
+        # `route_after_patch` reads that as a remediator that found nothing to change.
+        if refusals:
+            raise RuntimeError(refusals[0])
 
         # A run that failed or never reported must not be mistaken for one that
         # completed and correctly found nothing to change: both would otherwise
