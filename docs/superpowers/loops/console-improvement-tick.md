@@ -16,6 +16,17 @@ human's.
 
 - `docs/superpowers/plans/2026-07-30-sync-m4-dashboard.md` — the console's plan, its architectural
   spine, and its **Deferred, deliberately** table. That table is the feature backlog for this loop.
+- `docs/superpowers/plans/2026-08-06-sync-console-expansion.md` — the slice in execution as of
+  2026-08-06, and the one that names which four workstreams are live. **Read it before taking an
+  item**, because four agents are working in their own Orca workspaces
+  (`orca/workspaces/Sync/m4-repository`, `m4-idiom`, `m4-signals`, `m4-conformance`), each on a
+  branch based on `m4-dashboard`, and the item you were about to take may be someone's brief.
+  `orca orchestration task-list --brief --json` says which are still dispatched.
+- The authority above every plan is
+  `docs/superpowers/specs/2026-07-25-sync-self-maintaining-apis-design.md`, section *M4 — Hosted
+  control plane / Information architecture*, **second fenced block**. A plan is a plan; the
+  specification is what a screen is checked against, and three plans built a hierarchy without
+  opening it.
 - `CLAUDE.md` and `.claude/rules/` — binding on everything.
 - `git log --oneline -15` on `main`. Several sessions push here. Something you are about to build
   may already exist.
@@ -113,7 +124,16 @@ scan silently did nothing. Never record a clean result without the first line pa
    exact failure shipping once already, waved through because the size was on the design ramp.
    **Being on `DESIGN.md`'s ramp does not exempt a value from this floor.**
 
-**Where each item stands, checked against the tree at `72450ae` (2026-08-05), after Task 1 of
+**This standings list is stale and is being replaced by a measurement.** The workstream at
+`docs/superpowers/briefs/2026-08-06-m4-conformance-measurement.md` re-measures all seven items, plus
+the fourteen invariants three reference surfaces agreed on, against the running console with the
+commit SHA recorded on every table. When
+`docs/superpowers/reports/2026-08-06-console-conformance.md` exists, read that instead of what
+follows and delete this paragraph along with the list under it. Until then the list below is the
+best record there is, and several design-system tasks have landed since it was written — **re-check
+an item against the running tree before acting on it.**
+
+**Where each item stood, checked against the tree at `72450ae` (2026-08-05), after Task 1 of
 `docs/superpowers/plans/2026-08-05-sync-console-design-system.md` landed and before Tasks 2-7:**
 
 - **Item 7 is already closed**, and stays closed rather than being newly fixed: the console's floor
