@@ -151,6 +151,17 @@ function Workflow({ findingId }: { findingId: string }) {
             reportReason={data.report_reason}
           />
 
+          <p className="max-w-prose text-body text-muted-foreground">
+            <Link
+              to={`/findings/${encodeURIComponent(findingId)}/workflow/pull-request`}
+              className="underline underline-offset-2"
+            >
+              See the pull request's evidence bundle
+            </Link>{" "}
+            — the five nodes below that answer whether this run earned a merge, at their own
+            address a reviewer can send on.
+          </p>
+
           <Card>
             <CardHeader>
               <CardTitle>The run, node by node</CardTitle>
