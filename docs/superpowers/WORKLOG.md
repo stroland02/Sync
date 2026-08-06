@@ -57,7 +57,7 @@ published.
 | Item | Task | State |
 |---|---|---|
 | M4.5-W141 | The affordance layer — the table layer and progressive disclosure, closing on an operator question answered in one interaction at `--scale 10000` | reserved |
-| M4.5-W142 | Type, ink and space measured against rendered pixels — begun as B104 and B107, the token contract not rendering what it declares | dispatched |
+| M4.5-W142 | Type, ink and space measured against rendered pixels — B104 and B107 closed, B108 filed | pushed, `m4-tokens`, not merged |
 | M4.5-W143 | Motion, and the discipline of not having any — at most one keyframe, nothing decorative running at rest, no transition on a primary action | reserved |
 | M4.5-W144 | Density that is legible — the 11px floor held, the provenance column on screen at 1280px, prose wrapping at 1920px | reserved |
 | M4.5-W145 | The one visual that earns itself — a question the table beside it cannot answer, surviving `--scale 10000` | reserved |

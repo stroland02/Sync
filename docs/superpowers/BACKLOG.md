@@ -616,35 +616,34 @@ is the thing to watch for, and there is now a fast baseline to notice it against
 **Evidence that closes this:** an ordering an operator can change on at least the vendor findings
 table, applied in SQL with the page total drawn from the same query, the ordering stated on screen
 whether or not one was chosen, and three numbers at `--scale 10000` before and after.
-### B104 — The table primitive spends 10px on padding the contract never named, and a row costs twice what it declares
 
-Measured 2026-08-06 at `7d8e798`, Chrome 1440×900, `getComputedStyle` over every visible element on
-all nine routes (`reports/2026-08-06-console-conformance.md`).
+### B108 — A finding id wraps to three lines and that, not padding, is what a long table costs
 
-`table.tsx:103` and `:122` spell `px-row py-2.5`. **`py-2.5` is 10px**, so every `th` and `td`
-renders 10px of vertical padding — off the 4px base the design system is built on, and on the
-table-bearing routes it is the *second most frequent padding value in the document*: **918
-occurrences against 926 of 8px** on the binding surface, **714 against 722** on the vendor page.
-Nine distinct spacing values render where `DESIGN.md` names three tokens and two exceptions.
+Measured 2026-08-06 at 1440x900 with `--scale 10000`, while closing B104
+(`reports/2026-08-06-console-conformance.md` carries the method).
 
-That is the small half. The large half is what it costs a reader. `DESIGN.md`'s *Row height* section
-says `row-md` is "the existing arithmetic made explicit — `TableCell` already renders a 36px row from
-`text-body` and `p-row`; it was simply never named." **It never rendered 36px.** With 10px padding a
-single-line row is **40px**, and on the vendor findings table, where `break-words` wraps a call-site
-path to two lines, the measured row is **80px** and the header row **52.5px**. At 80px a 900px
-viewport holds about ten rows of the ten-thousand-row table the `--scale 10000` fixture produces —
-roughly a third of the viewport spent on padding nobody chose.
+On the vendor findings table a body row measures **76px** and only **16px** of that is padding. The
+tallest thing in the row is the Finding cell: a 32-character id in a **164px** column, wrapping to
+three lines at **56px**. Eleven rows fit above the fold, and they fit whether the cell pads at 8px
+or 10px — 900/76 and 900/80 both floor to 11. **The row height is set by one column's width, not by
+the spacing ramp**, and B104 was closed on the contract's argument rather than on the density one
+for exactly this reason.
 
-The wrapping is not the defect and must not be removed to fix this: `break-words` is what keeps the
-`Rung` column on screen at 1280px on a nine-column table, structurally rather than by fixture luck,
-because a customer's 200-character path makes a row taller instead of pushing provenance out of the
-viewport. **The row gets shorter by spending 8px instead of 10, not by letting the table overflow.**
+`break-words` is why it wraps rather than overflows, and that is deliberate and must stay: it is
+what keeps the `Rung` column on screen at 1280px on a nine-column table, structurally rather than
+by fixture luck, because a customer's 200-character path grows a row instead of pushing provenance
+out of the viewport.
 
-**Closes when:** both cells take `py-row`, the rendered single-line row measures 36px, and a Python
-guard bans fractional Tailwind spacing utilities (`p-2.5`, `py-0.5`, `px-1.5`) under
-`components/ui/` and `features/` — proven red by reintroducing `py-2.5` and watching it name the
-file and line. The guard cannot land before the fix, because it fails on the current tree; that is
-why it ships with it.
+So the lever is what that column is asked to hold. A finding id is an opaque 32-character hash that
+a reader does not read — they click it. Three candidates, in the order they cost least: render a
+leading fragment with the full id in the accessible name; give the column a `whitespace-nowrap` and
+let the table's own `overflow-x-auto` wrapper hold it, which trades a row of height for a horizontal
+scroll on one column; or stop rendering the id as a column at all and make the row itself the link,
+which `TableRow`'s `interactive` prop already supports.
+
+**Closes when:** a body row on that table at `--scale 10000` measures at or under `row-md` plus one
+wrapped line, with the before-and-after heights and the rows-above-the-fold count, and the id stays
+reachable in full for a reader who needs to copy it. **Not** by removing `break-words`.
 
 ### B105 — Four statements in `DESIGN.md`'s rendered-pixel section are contradicted by the rendered pixels
 
@@ -698,27 +697,6 @@ that assertion starting with something that is not a level.
 **Closes when:** the palette's accessible name comes from inside `DialogContent`, or from an
 `aria-label` rather than a heading, and a walk of every route finds `h1` first.
 
-### B107 — A third neutral ink renders on the two screens carrying the densest evidence
-
-Same measurement. Section 8's invariant is two ink levels plus one accent, never three, and the
-console holds it on seven of nine routes: `--color-ink` and `--color-ink-muted`, plus the brand hue
-on exactly one element where a link exists.
-
-On the solution workflow and pull request screens a third appears — **`oklch(0.83 0 0)`,
-`--color-ink-secondary`, on 3 elements each** — from the wrapper at `run-outcome.tsx:28`, which sets
-`text-body text-ink-secondary` on a container the abandoned-run prose inherits from. `DESIGN.md`
-says two ink levels hold for text and names a `graphics` allocation rather than a third text step,
-so this is the one place the ramp's own promise does not render.
-
-It is worth a line rather than a shrug because of *where* it lands: these are the two screens whose
-argument is that a reviewer can see what the system did and why, and a third grey there means a
-reader cannot tell recessive prose from a deliberate second voice.
-
-**Closes when:** the wrapper takes `text-ink-muted` or nothing, the ink census on both routes reads
-two plus an accent, and the choice is recorded — if `ink-secondary` is the right step for
-abandoned-run prose, `DESIGN.md` gains the third text level as an argued decision rather than as a
-class that arrived without one.
-
 ## In flight
 
 - **B77** — branch `b77-keep-the-red`, worktree `m1-forge`. Its session died mid-task: the branch
@@ -763,6 +741,40 @@ Entries stay under **Ready** above with their full reasoning until they land, be
 is what a reviewer needs and duplicating it here would let the two copies drift.
 
 ## Done
+
+- **B104** — the table's rows measure what the contract says they measure. `table.tsx` took
+`py-row` on both cells and `h-10` on the header, so the padding is derived from a height chosen
+from the scale rather than the other way round. Measured in Chrome at 1440x900 across seven tables
+on the Fleet screen, before and after: a single-line body row **40.5px -> 36.0px** (`row-md`) and a
+header row **36.5px -> 40.0px** (`row-lg`) — the two declared heights were in each other's slots,
+which is worse than merely off and is why the guard is arithmetic rather than a string match.
+`--scale 10000`, vendor findings table: header **52.5 -> 48.5px**, body rows **80 -> 76px**. 10px
+left the rendered spacing census on every route that has a table. Landed on `m4-tokens` under
+M4.5-W142 with `DESIGN.md`'s *Row height* correction and
+`test_a_body_row_measures_the_row_height_design_md_derives_for_it`.
+
+  **Two claims in this entry were wrong and the correction matters more than the fix.** It said
+  "roughly a third of the viewport spent on padding nobody chose". Padding was 20px of an 80px row;
+  the row is dominated by the Finding cell, whose 32-character id wraps to three lines at 56px in a
+  164px column. And the 4px saving buys **no extra rows**: 900/80 and 900/76 both floor to 11 rows
+  above the fold. The fix is right for the reason the contract gives — a declared number that does
+  not render is a number the next reader trusts and should not — not for the density it was sold on.
+  B108 carries where the rows actually go.
+
+- **B107** — the third neutral ink is gone from DOM text. `run-outcome.tsx`'s panel body takes
+`text-ink-muted` and `filters.tsx`'s active-filter value takes `text-ink`; the ink census on the
+solution workflow and pull request screens went from **three neutral levels to two** (`ink` and
+`ink-muted`, plus the brand accent where a link exists), measured at 1440x900. The floor was never
+in tension: the panel prose measures **7.75:1** at `ink-muted` on `surface-sunken` against a 5.05
+floor, up from `ink-secondary`'s 11.57 and still far above it. `--color-ink-secondary` keeps its one
+real consumer — `corpus-chart.tsx`'s legend `textStyle`, painted inside a canvas — and `DESIGN.md`
+now says that is its job rather than "prose that is not the headline value", which is the sentence
+that invited two components to spend it on DOM text. The guard bans the class, not the token.
+Landed on `m4-tokens` under M4.5-W142.
+
+  One census artifact worth knowing before the next reading: the workflow screen also paints one
+  element at `oklch(0.155 0 0)`, which is `surface-sunken` used as ink on an `ink`-filled node
+  marker. That is the inverse of the same pair, not a third level.
 
 - **B96** — the route registry is checked against the specification that defines its levels.
 `tests/test_console_hierarchy.py` parses the authoritative fenced block and `GRAPH_LEVELS` and
