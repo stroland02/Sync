@@ -1,47 +1,74 @@
 # The Sync operator console
 
-A read-only React front end over Sync's API Dependency Graph. It answers four questions, one
-screen each: which vendors this codebase depends on, what is at risk for one of them, what one
-finding binds to, and — the screen the rest exists to reach — what Sync actually did about a
-finding, node by node, with the evidence each node of the remediation graph produced.
+A read-only React front end over Sync's API Dependency Graph. Every screen is one level of the
+graph's hierarchy; the hierarchy itself is not this file's to state, because it already has an
+authority — see *The hierarchy* below.
 
 Nothing here writes. Every screen is a GET, and no route in the transport behind it mutates the
-graph, starts a remediation run, or touches a customer repository.
+graph, starts a remediation run, or touches a customer repository
+(`.claude/rules/console-dev-loop.md`, *The API stays read-only*).
 
 ## Running it
 
-The console needs the Python API. Start that first, from the repository root:
+Two processes and a fixture, from the repository root — the full loop, including the environment
+variables that name the graph and the checkpointer, and the trap around a stale reloaded process,
+is `.claude/rules/console-dev-loop.md`:
 
 ```sh
-uv run python -m sync.api
+SYNC_API_RELOAD=true uv run python -m sync.api   # 8787 — vite.config.ts proxies /api here
+uv run python scripts/seed_console.py            # fixture data
 ```
-
-It reads `SYNC_GRAPH_DSN` for the graph and `SYNC_CHECKPOINTER_DSN` for the LangGraph
-checkpointer, falling back to the graph DSN when the second is unset. It listens on **port
-8787**, which is the port `vite.config.ts` proxies `/api` to; `SYNC_API_PORT` overrides it, and
-changing one without the other turns every request into a proxy error.
 
 Then, from this directory:
 
 ```sh
 npm install
-npm run dev
+npm run dev                                       # 5173
 ```
 
-`npm run build` typechecks with `tsc -b` and then builds. It is expected to be silent — a
-warning here is a defect, because `web/` has no CI gate of its own.
+`npm run build` runs `tsc -b` then Vite's build; `npm run lint` runs `oxlint`. Both are expected
+to be silent — `web/` has no CI gate of its own, and a warning here is a defect. **There is no
+`npm test`.** That is deliberate, not unfinished: `.claude/rules/console-dev-loop.md` says which
+logic belongs in Python instead, and why.
+
+## The hierarchy
+
+Every destination the console declares — the router, the persistent navigation, and the
+Cmd/Ctrl-K command palette — reads one array: `GRAPH_LEVELS` and `ROUTES` in
+`web/src/lib/routes.ts`. That file is not where the hierarchy comes from; it is where the
+hierarchy is checked. The source is
+`docs/superpowers/specs/2026-07-25-sync-self-maintaining-apis-design.md`, *M4 — Hosted control
+plane / Information architecture*, and `.claude/rules/console-hierarchy.md` states which of that
+section's two fenced blocks is the authoritative one and why a level with no line there does not
+belong in `GRAPH_LEVELS`. `tests/test_console_hierarchy.py` parses both sides and fails the build
+if they disagree.
+
+Read `routes.ts`'s own docstring for the current levels, the current routes, and the two
+placement decisions that are not obvious from a route's own file. Do not expect this README to
+repeat them — a route list here is a second copy for the two to disagree about, and the reconciled
+hierarchy is exactly what drifted silently once already
+(`.claude/rules/console-hierarchy.md`, *The failure this exists to prevent*).
+
+## Design
+
+Dark-only. `DESIGN.md` at the repository root is the token contract — every colour, size, space
+and elevation value, with the arithmetic that proves each pairing clears the contrast floor.
+`.claude/rules/console-surface.md` carries what binds while a screen is open, including the
+sentences a screen may not delete, shorten, or hide behind a disclosure.
 
 ## Where things are
 
 | | |
 |---|---|
-| The five routes and their payloads | `src/sync/api/app.py` |
-| The workflow view's data | `src/sync/dashboard/queries.py` |
-| Response types, mirroring both | `src/api/types.ts` |
-| Fetching and errors | `src/api/client.ts`, `src/api/errors.ts` |
+| Route registry, the hierarchy checked against the graph levels | `src/lib/routes.ts` |
+| Router, built from the registry | `src/App.tsx` |
+| Shell, persistent navigation, command palette | `src/layouts/` |
 | One directory per screen | `src/features/` |
+| Response types, fetching, errors | `src/api/` |
+| Route handlers and payloads | `src/sync/api/app.py` |
+| The workflow view's data | `src/sync/dashboard/` |
 
-Three constants are restated here from Python because TypeScript cannot import it: the default
-page size, the remediation graph's node order, and the evidence keys each node produces. Python
-tests read these files and fail when the two sides drift — `tests/test_api_routes.py` and
-`tests/test_dashboard_queries.py` hold them.
+Constants that exist in both languages — the default page size, the remediation graph's node
+order, the evidence keys each node produces — are restated in TypeScript because it cannot import
+Python, and Python tests (`tests/test_api_routes.py`, `tests/test_dashboard_queries.py`) fail the
+two sides apart when they drift.

@@ -434,7 +434,7 @@ specification on those terms. Its defect is scope, not existence: it is fleet-wi
 `observed_call`, `observed_shape` and `observed_error_window` are tables, so it passes the stored
 test — and the specification already has a home for it that nobody looked up. *Signals — one panel
 per attached integration, grouped by role: vendor, signal source, human surface* (`:399-400`), with
-the three roles defined in the M5 table at `:419-423`. Observed telemetry is what a signal source
+the three roles defined in the M5 table at `:455-459`. Observed telemetry is what a signal source
 produced. Declaring it at `Errors & Incidents` puts a signal where a claim belongs, and the rung
 discipline exists to keep those apart. **Reparent it under Signals, scoped by repository.** Note
 what this does not close: Signals as specified is one panel *per attached integration*, and observed
@@ -1280,9 +1280,10 @@ applied to a screen that is about to be reparented is that work done twice.
 
 **Verification a reviewer can run:** open `/`, pick a repository, and confirm every figure on every
 screen below it changes when you pick a different one. Then read `GRAPH_LEVELS` beside
-`specs/2026-07-25-sync-self-maintaining-apis-design.md:392-411` and confirm they name the same
-levels in the same order. Then delete a level from the specification's block and watch the guard in
-Task 10 go red.
+`specs/2026-07-25-sync-self-maintaining-apis-design.md:429-443` and confirm they name the same
+levels in the same order — `:392-411` is the section's original, unamended block and does not hold
+`Fleet` or `Binding surface`, so a `GRAPH_LEVELS` compared against it would pass while missing both.
+Then delete a level from the specification's block and watch the guard in Task 10 go red.
 
 ---
 
