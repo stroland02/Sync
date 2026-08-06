@@ -32,7 +32,28 @@ M4 continues the sequence at 126. Everything before that is in `git log`.
 | M4-W134 | Reconcile the branch with `main`, and take the by-id read | landed | `99f542b`, `3962fcc` |
 | M4-W135 | Filters that compose with repository scope — B90 slice 1 | landed | `f84e334` |
 | M4-W136 | The review wave: one Critical, five Important, and an error surface | in flight | `briefs/2026-08-06-m4-review-wave.md` |
-| M4-W137 | The conformance measurement against the fourteen invariants | in flight | `briefs/2026-08-06-m4-conformance-measurement.md` |
+| M4.5-W137 | The conformance measurement against the fourteen invariants | in flight | `briefs/2026-08-06-m4-conformance-measurement.md` |
 | M4-W138 | The work-item register back in the tree | landed | this file |
-| M4-W140 | The decode census accounts for the borrowed wrapper's teardown | landed | `tests/test_decode_handlers.py` |
 | M4-W139 | The backlog stops describing a console that no longer exists | landed | five entries closed, B90 and B94 corrected, B99 collision resolved |
+| M4-W140 | The decode census accounts for the borrowed wrapper's teardown | landed | `tests/test_decode_handlers.py` |
+| M4-W146 | The quality milestone's items numbered and reserved | landed | this file |
+
+## M4.5 — the console is worth looking at
+
+`docs/superpowers/plans/2026-08-06-m45-console-quality.md` carries the argument and the start
+condition. **The milestone's first item is already running as M4.5-W137 above**, and it is
+deliberately first: it is the measurement every task below closes against, so without it each of
+them is an opinion.
+
+The five numbers below are reserved rather than started. A reserved row is a claim about what the
+work is, not about when it happens — the start condition is what decides that, and it is checkable:
+Tasks 4 through 7 of the architecture plan landed, the review wave closed, the conformance report
+published.
+
+| Item | Task | State |
+|---|---|---|
+| M4.5-W141 | The affordance layer — the table layer and progressive disclosure, closing on an operator question answered in one interaction at `--scale 10000` | reserved |
+| M4.5-W142 | Type, ink and space measured against rendered pixels — two weights, two ink levels plus one accent, a type range of at least 3.4:1 | reserved |
+| M4.5-W143 | Motion, and the discipline of not having any — at most one keyframe, nothing decorative running at rest, no transition on a primary action | reserved |
+| M4.5-W144 | Density that is legible — the 11px floor held, the provenance column on screen at 1280px, prose wrapping at 1920px | reserved |
+| M4.5-W145 | The one visual that earns itself — a question the table beside it cannot answer, surviving `--scale 10000` | reserved |
