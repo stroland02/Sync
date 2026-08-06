@@ -148,6 +148,46 @@ def test_binding_surface_every_call_site_row_reports_the_static_rung(store):
     assert all(row["binding_rung"] == "static" for row in result["call_sites"]["items"])
 
 
+def test_binding_surface_reports_the_directory_its_call_sites_share(store):
+    """The prefix the screen factors out of the path column, echoed like every other fact about the
+    scope a page was computed in. Under the same predicate as the rows, so a filtered page's prefix
+    is the one its visible rows actually share.
+    """
+    for i, path in enumerate([
+        "packages/billing/src/adapters/stripe/charges/create.ts",
+        "packages/billing/src/adapters/stripe/charges/refund.ts",
+    ]):
+        store.upsert_call_site(_site(path=path, line=i + 1, content_hash=f"h{i}"))
+
+    page = binding_surface(store, "stripe", "PostCharges")
+
+    assert page["call_sites_common_directory"] == "packages/billing/src/adapters/stripe/charges/"
+
+
+def test_binding_surface_reports_no_common_directory_when_there_is_none(store):
+    """Two trees calling one operation share nothing, and the payload says so with an empty string
+    rather than with the first directory of whichever row sorted first. The screen renders the whole
+    path when this is empty, which is the only correct fallback.
+    """
+    for i, path in enumerate(["packages/billing/charge.ts", "services/orders/send.ts"]):
+        store.upsert_call_site(_site(path=path, line=i + 1, content_hash=f"h{i}"))
+
+    assert binding_surface(store, "stripe", "PostCharges")["call_sites_common_directory"] == ""
+
+
+def test_binding_surface_reports_no_common_directory_for_a_rung_that_holds_no_rows(store):
+    """`binding_rung` other than `static` empties the call-site page by design. The prefix has to
+    empty with it: a directory named above a table with no rows in it is a claim about rows the
+    reader cannot see.
+    """
+    store.upsert_call_site(_site(path="packages/billing/charges/create.ts"))
+
+    page = binding_surface(store, "stripe", "PostCharges", binding_rung="observed")
+
+    assert page["call_sites"]["items"] == []
+    assert page["call_sites_common_directory"] == ""
+
+
 def test_binding_surface_filters_call_sites_by_repo_id_when_asked(store):
     store.upsert_call_site(_site(repo_id="r1", path="src/a.ts", line=1))
     store.upsert_call_site(_site(repo_id="r2", path="src/b.ts", line=2))

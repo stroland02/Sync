@@ -84,6 +84,27 @@ def _finding_order_clause(order: str) -> tuple[str, list[object]]:
     return clause, list(parameters)
 
 
+def _common_directory(lo: str | None, hi: str | None) -> str:
+    """The deepest directory two paths share, ending in `/`, or `""`.
+
+    `lo` and `hi` are the lexicographic extremes of a set, which is enough to characterise the whole
+    set's common prefix -- see `call_sites_common_directory` for why. `None` means the set was empty.
+
+    The truncation is the load-bearing part. A common *character* prefix can stop in the middle of a
+    filename, and a prefix that does is not a directory: it names nothing on disk and the remainder
+    it leaves behind cannot be rejoined by a reader who wants to open the file.
+    """
+    if lo is None or hi is None:
+        return ""
+    shared = 0
+    for a, b in zip(lo, hi):
+        if a != b:
+            break
+        shared += 1
+    cut = lo.rfind("/", 0, shared)
+    return lo[: cut + 1] if cut >= 0 else ""
+
+
 def _open_findings_predicate(
     *,
     repo_id: str | None = None,
@@ -584,6 +605,45 @@ class GraphStore:
             f"SELECT count(*) AS n FROM call_site WHERE {clause}", parameters
         ).fetchone()
         return row["n"]
+
+    def call_sites_common_directory(
+        self,
+        vendor_id: str,
+        operation_id: str,
+        *,
+        repo_id: str | None = None,
+        path_prefix: str | None = None,
+    ) -> str:
+        """The deepest directory every live call site on this operation shares, or `""`.
+
+        The binding surface's path column is the widest thing on that screen, and on a real
+        repository most of its width is a prefix that is identical on every row. This is that
+        prefix, so the screen can state it once and give each row the part that distinguishes it.
+        Nothing is hidden by that: the prefix is on screen in words, above the column it came out of.
+
+        **A property of the filtered set, not of a page.** Computed under the same predicate the
+        page is drawn from, so it narrows when the filter does. Computing it over the fifty rows in
+        one window would make the same call site render differently on page one and page two, which
+        is a column whose meaning depends on where you are standing.
+
+        `min` and `max` are the whole scan, and that is not a trick worth hiding: for any set of
+        strings the longest common prefix of the set is the longest common prefix of its
+        lexicographic extremes, because a character position where the extremes agree is one where
+        everything between them agrees too. Two aggregates over an indexed column rather than
+        reading every path off the wire to fold in Python.
+
+        **Truncated at the last `/`, and that is the correctness condition rather than a nicety.**
+        `create-a.ts` and `create-b.ts` share the characters `create-`; stopping there would name a
+        directory that does not exist and leave each row holding a remainder no reader could rejoin
+        to anything. A shared prefix is only sayable at a segment boundary.
+        """
+        clause, parameters = _call_site_predicate(
+            vendor_id, operation_id, repo_id=repo_id, path_prefix=path_prefix
+        )
+        row = self._connect().execute(
+            f"SELECT min(path) AS lo, max(path) AS hi FROM call_site WHERE {clause}", parameters
+        ).fetchone()
+        return _common_directory(row["lo"], row["hi"])
 
     def call_site_repositories_for_operation(
         self, vendor_id: str, operation_id: str

@@ -1616,6 +1616,46 @@ def test_the_consoles_finding_order_matches_the_orderings_the_store_offers():
     assert members == set(FINDING_ORDERS)
 
 
+def test_the_consoles_binding_surface_type_declares_every_key_the_view_returns():
+    """`web/src/api/types.ts` restates the binding surface payload and the compiler cannot check it.
+
+    This is the `a6ee379` failure mode `.claude/rules/console-dev-loop.md` names: a field removed
+    from a payload while `types.ts` still declares it leaves the build green and a column rendering
+    the absence marker on every row forever, which reads as "none" when the truth is "this view
+    cannot see them". The two sides are held together by Python reading the TypeScript, not by
+    `tsc`.
+
+    Read out of both sources as text, needing no database, matching every other guard in this file.
+
+    Asserted one way only -- every key the view returns is declared. A field declared here and never
+    sent shows up as a column that renders nothing, which somebody notices; a field sent and not
+    declared is the silent half, and it is the one that cost this milestone a Critical.
+    """
+    view = (
+        Path(__file__).resolve().parent.parent / "src" / "sync" / "dashboard" / "graph_views.py"
+    ).read_text(encoding="utf-8")
+    body = re.search(r"def binding_surface\(.*?\n    return \{(.*?)\n    \}", view, re.DOTALL)
+    assert body is not None, "graph_views.binding_surface no longer ends in a `return {...}` literal"
+    # Anchored to the literal's own indentation. Matching every quoted key anywhere in the block
+    # also collects the nested `{"repo_id": ..., "call_site_count": ...}` a comprehension builds
+    # inside it, and those belong to `BindingRepository` rather than to this response -- so an
+    # unanchored version of this guard fails against a correct tree, which is how it was caught.
+    returned = set(re.findall(r'^        "(\w+)":', body.group(1), re.M))
+    assert returned, "no keys parsed out of binding_surface's return -- this guard would pass blind"
+
+    source = _web_source("src/api/types.ts")
+    declared_block = re.search(
+        r"export interface BindingSurfaceResponse \{(.*?)\n\}", source, re.DOTALL
+    )
+    assert declared_block is not None, "types.ts no longer declares BindingSurfaceResponse"
+    declared = set(re.findall(r"^  (\w+)\??:", declared_block.group(1), re.M))
+
+    assert returned <= declared, (
+        "the binding surface view returns keys `types.ts` does not declare: "
+        + ", ".join(sorted(returned - declared))
+    )
+
+
 def test_the_consoles_theme_block_declares_static_so_every_token_reaches_the_build():
     # `web/src/index.css` declares tokens such as `--color-series-*` and `--color-brand`
     # that are read only dynamically -- through `getComputedStyle` in `echart.tsx`, or not
