@@ -39,6 +39,8 @@ M4 continues the sequence at 126. Everything before that is in `git log`.
 | M4-W146 | The quality milestone's items numbered and reserved | landed | this file |
 | M4-W147 | A dispatched worker may never have started — the check that catches it | landed | `reports/2026-08-06-m4-session-record.md` |
 | M4-W148 | One milestone table, and M4 says what is now true | landed | `BACKLOG.md` |
+| M4-W149 | Two documents that assert what the page does not do — B105, B106 | dispatched | `briefs/2026-08-06-m4-claims-contradicted-by-pixels.md` |
+| M4-W150 | Briefs for the four defects the measurement found | landed | this file |
 
 ## M4.5 — the console is worth looking at
 
@@ -55,7 +57,7 @@ published.
 | Item | Task | State |
 |---|---|---|
 | M4.5-W141 | The affordance layer — the table layer and progressive disclosure, closing on an operator question answered in one interaction at `--scale 10000` | reserved |
-| M4.5-W142 | Type, ink and space measured against rendered pixels — two weights, two ink levels plus one accent, a type range of at least 3.4:1 | reserved |
+| M4.5-W142 | Type, ink and space measured against rendered pixels — begun as B104 and B107, the token contract not rendering what it declares | dispatched |
 | M4.5-W143 | Motion, and the discipline of not having any — at most one keyframe, nothing decorative running at rest, no transition on a primary action | reserved |
 | M4.5-W144 | Density that is legible — the 11px floor held, the provenance column on screen at 1280px, prose wrapping at 1920px | reserved |
 | M4.5-W145 | The one visual that earns itself — a question the table beside it cannot answer, surviving `--scale 10000` | reserved |
