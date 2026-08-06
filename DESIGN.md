@@ -565,12 +565,33 @@ move over every table, all day. `ErrorSurface` arriving is the opposite case —
 transition earns its place. **When adding a transition, ask how often the operator crosses this
 surface, not how large the page is or how long feels right.**
 
-`web/src/lib/motion.ts` owns the three deliberate, framer-motion-driven usages: `ErrorSurface`
-arriving and leaving, the changed-under-poll wash, and the paged table container settling into
-its new height. Each reads `useReducedMotion()` from that file and, under reduced motion,
-substitutes a duration of `0` for its animated prop set rather than shortening it — a fade or a
-colour wash that merely sped up would still be motion. This is code, not a token, because the
-branch is the token: there is no CSS value that expresses "skip this prop entirely."
+`web/src/lib/motion.ts` owns the framer-motion-driven usages, and **it is a registry rather than a
+list in prose**: `MOTION_USAGES` names every module permitted to import framer-motion, and
+`tests/test_console_design_tokens.py` asserts that array and the tree name the same modules in both
+directions. An unlisted importer fails; so does an entry that no longer imports anything, so a
+deletion cannot leave a permission behind. This paragraph said the same thing before M4.5-W143 and
+could not stop a fourth call site landing, which is why the sentence is now a test.
+
+Each usage reads `useReducedMotion()` from that file and, under reduced motion, substitutes a
+duration of `0` for its animated prop set rather than shortening it — a fade or a colour wash that
+merely sped up would still be motion. This is code, not a token, because the branch is the token:
+there is no CSS value that expresses "skip this prop entirely."
+
+**Two usages, and the third was deleted on evidence rather than on taste.** `ErrorSurface` arriving
+and leaving is the occasional, occluding surface this section already licensed. The changed-under-poll
+wash tracks a checkpoint the checkpointer wrote at a moment, which is a time the graph holds, and
+`node-sequence.test.tsx` holds that it fires on a real status transition and on nothing else.
+
+The third was "the paged table container settling into its new height", a `layout` prop on
+`PageControls`. Measured on 2026-08-06 at 1440×900 against `--scale 10000`: **it had never once
+run.** Every screen that paginates returns a loading state while `query.isPending`, and a page change
+is a new query key with no cached data, so the subtree unmounts and a fresh one mounts — a layout
+animation needs a node that persists across a layout change, and this node does not. Sampled every
+40ms across a swap that took the row count from 50 to 34: zero transforms, zero entries in
+`document.getAnimations()`, and the node captured before the click reported `isConnected: false`
+afterwards with a different element in its place. It would not have earned itself even had it worked,
+because an offset changing holds no time and paging is one of the most frequent interactions on a
+long table — the case this section's own frequency gate names.
 
 Everything else — every Tailwind `transition-*` and `animate-*` utility the shadcn catalog and
 the console's own components use — is gated by a `@media (prefers-reduced-motion: reduce)` block

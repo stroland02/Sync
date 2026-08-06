@@ -765,6 +765,59 @@ colour.
 3:1 non-text floor, `destructive` is either declared in `DESIGN.md` or gone from `web/src`, and the
 ring guard's scope widens from focus rings to every `ring-*/n` with the narrowing comment deleted.
 
+### B113 — Two guards in the node-status wash are unreachable, and the audit could not safely delete them
+
+Measured 2026-08-06 while auditing motion for M4.5-W143. `ChangeWash`
+(`features/workflows/node-sequence.tsx`) carries two defensive guards and **neither can fire**:
+
+- `mounted.current` short-circuits the first effect run. Removing it changes nothing, because
+  `previous` is seeded with `useRef(status)`, so the comparison below it is already equal on the
+  first run.
+- `previous.current !== status` guards against an unchanged refetch. Removing it changes nothing
+  either, because the effect's dependency array is `[status]` — it does not run at all unless the
+  status changed.
+
+Both breaks were applied to the real component and **all four tests in `node-sequence.test.tsx`
+still passed**, which is how they were found. `CLAUDE.md` forbids handling conditions that cannot
+occur, so this is debt by that rule's own terms.
+
+**Why M4.5-W143 did not delete them.** The trigger is a live poll observing a status transition, and
+that session could seed no live run against the graph to exercise it end to end. Simplifying the one
+animation the console has left, on reasoning about React's effect and ref semantics rather than on a
+run, is a worse trade than a redundancy that is written down — so the finding went into the test's
+docstring, where the next reader meets it beside the code.
+
+**Closes when:** either both guards are gone with a run that shows a real status transition still
+washing exactly once and a mount still washing nothing, or a comment in `ChangeWash` names the
+condition each one actually catches. What must not happen is the guards staying with no explanation,
+because that is a comment claiming somebody argued for them.
+
+### B114 — The one hover transition left is on the frequency gate's wrong side, and nobody has measured whether it matters
+
+Measured 2026-08-06 at 1440×900 with a real pointer and `:hover` matching. Every interactive control
+in the console carries `transition-colors` from `button.tsx`'s base class, rendering
+**`transition-duration: 0.15s`** on 11 elements on the vendor findings screen, 7 on the binding
+surface and 6 on Signals. The shape is right and is not in question — `transform: none`,
+`scale: none`, `box-shadow: none`, `opacity` unchanged, only the fill alpha stepping `input/30` to
+`input/50`.
+
+Section 15.2 of `2026-08-05-sync-console-architecture.md` overturned the references' literal
+`transition-duration: 0s` for a dense surface, and `DESIGN.md` replaced it with a frequency gate:
+*a surface the operator crosses repeatedly takes no transition at all*. **The gate and the
+implementation now disagree in one place.** `TableRow`'s hover was correctly given none because a row
+is crossed on every pointer move. A paginator's Previous and Next are the most frequently *clicked*
+controls on a long table, and they take 0.15s because they are the same `Button` as a dialog's
+confirm.
+
+This is one entry rather than a change because the fix is a design-system decision with a real trade:
+either `Button` gains a variant whose transition is zero and the frequent call sites take it, or the
+gate is refined to say that frequency is about crossing rather than clicking and the 0.15s is correct
+everywhere. Both are arguable and neither is measured.
+
+**Closes when:** the disagreement is resolved in `DESIGN.md`'s Motion section — with the rendered
+`transition-duration` on a paginator and on a dialog control measured either side of whatever
+changes, or with an argued statement that one value is right for both.
+
 ## In flight
 
 - **B77** — branch `b77-keep-the-red`, worktree `m1-forge`. Its session died mid-task: the branch

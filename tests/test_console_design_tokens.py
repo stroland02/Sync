@@ -200,20 +200,34 @@ def _keyframe_violations(root: Path) -> list[str]:
     return violations
 
 
-def test_no_keyframes_or_animation_shorthand_under_features_or_layouts():
+# `components/ui/` is where a sanctioned spinner would live -- it is the shadcn catalog, and the
+# references' one permitted keyframe is a loading indicator. Everything above it is ours.
+_ANIMATION_FREE_ROOTS = ("features", "layouts", "components", "api", "lib")
+
+
+def test_no_keyframes_or_animation_shorthand_outside_the_component_catalog():
     _require_web_src()
-    features_root = _WEB_SRC / "features"
-    layouts_root = _WEB_SRC / "layouts"
-    # Checked separately, not on the combined file count: one renamed directory must not hide
-    # behind the other still having files, or this guard is starved over exactly the half nobody
+    # Checked per directory, not on a combined file count: one renamed directory must not hide
+    # behind another still having files, or this guard is starved over exactly the half nobody
     # noticed moved.
-    _require_examined(_iter_source_files(features_root), features_root)
-    _require_examined(_iter_source_files(layouts_root), layouts_root)
-    violations = _keyframe_violations(features_root) + _keyframe_violations(layouts_root)
+    violations = []
+    for name in _ANIMATION_FREE_ROOTS:
+        root = _WEB_SRC / name
+        _require_examined(_iter_source_files(root), root)
+        for path in _iter_source_files(root):
+            # `components/ui/` is the catalog and is vendored; it is excluded by path rather than
+            # by leaving `components/` unscanned, which is what let `components/` go unchecked
+            # until M4.5-W143 -- the two framer-motion call sites the motion audit ruled on both
+            # live there, one directory above the exclusion.
+            if path.relative_to(_WEB_SRC).as_posix().startswith("components/ui/"):
+                continue
+            text = _read_stripped(path)
+            for match in _KEYFRAME_OR_ANIMATION.finditer(text):
+                violations.append(f"{path}:{_line_at(text, match.start())}: {match.group(0)!r}")
     assert not violations, (
         "every keyframe measured across four references is an overlay entering or leaving, or "
         "something loading -- a loading indicator belongs in components/ui/, never in a feature "
-        "screen or a layout:\n" + "\n".join(violations)
+        "screen, a layout, or a component this project wrote:\n" + "\n".join(violations)
     )
 
 
@@ -989,3 +1003,98 @@ def test_the_third_ink_guard_permits_the_chart_resolving_the_token(tmp_path: Pat
     violations = _third_ink_violations(tmp_path)
 
     assert not violations
+
+
+# -- assertion 10: framer-motion has a registry, and the registry and the tree agree -------------
+#
+# `DESIGN.md`'s Motion section and `lib/motion.ts`'s own docstring both already said that motion
+# outside the declared usages is forbidden. Neither could stop a fourth `import { motion } from
+# "framer-motion"` arriving, because prose does not fail a build. M4.5-W143 turned the list into an
+# array in `lib/motion.ts` and this reads it, so the fact has one copy and a violation has a line
+# number.
+#
+# **Both directions matter.** An unlisted importer is the obvious failure. A stale entry is the one
+# that bites later: M4.5-W143 deleted the paginator's `layout` animation after measuring that it had
+# never once run, and an entry left behind would have been a standing permission for the next person
+# to animate a paginator, with a comment claiming somebody had thought about it.
+
+_FRAMER_IMPORT = re.compile(r"""from\s+["']framer-motion["']""")
+
+
+def _motion_registry() -> list[str]:
+    """The module paths `web/src/lib/motion.ts` declares as permitted framer-motion importers."""
+    path = _WEB_SRC / "lib" / "motion.ts"
+    assert path.is_file(), f"{path} is gone -- the console's motion registry moved and this is blind"
+    text = _read_stripped(path)
+    match = re.search(r"export const MOTION_USAGES = \[(.*?)\] as const", text, re.DOTALL)
+    assert match, "lib/motion.ts no longer declares `MOTION_USAGES` as an array literal"
+    entries = re.findall(r'"([^"]+)"', match.group(1))
+    assert entries, "MOTION_USAGES is empty; a registry with nothing in it cannot be checked"
+    return entries
+
+
+def _framer_importers() -> list[str]:
+    """Every module under `web/src` that imports framer-motion, as a `web/src`-relative path.
+
+    `lib/motion.ts` is excluded rather than listed: it is the registry, and a registry naming
+    itself is a rule that permits its own existence and says nothing.
+    """
+    importers = []
+    for path in _iter_source_files(_WEB_SRC):
+        if path.name.endswith(".test.ts") or path.name.endswith(".test.tsx"):
+            continue
+        relative = path.relative_to(_WEB_SRC).as_posix()
+        if relative == "lib/motion.ts":
+            continue
+        if _FRAMER_IMPORT.search(_read_stripped(path)):
+            importers.append(relative)
+    return sorted(importers)
+
+
+def test_every_framer_motion_importer_is_a_declared_motion_usage():
+    _require_web_src()
+    _require_examined(_iter_source_files(_WEB_SRC), _WEB_SRC)
+    undeclared = sorted(set(_framer_importers()) - set(_motion_registry()))
+    assert not undeclared, (
+        "these modules import framer-motion and `lib/motion.ts` does not declare them. Motion "
+        "claims a time, so it is permitted where the data holds one and the operator meets the "
+        "surface occasionally rather than on every pointer move -- add the state change to "
+        "MOTION_USAGES in those terms, or take the animation out:\n" + "\n".join(undeclared)
+    )
+
+
+def test_every_declared_motion_usage_still_animates_something():
+    _require_web_src()
+    importers = set(_framer_importers())
+    stale = [entry for entry in _motion_registry() if entry not in importers]
+    assert not stale, (
+        "`lib/motion.ts` declares these usages and none of them imports framer-motion any more. A "
+        "stale entry is a standing permission to animate, carrying a comment that claims somebody "
+        "argued for it -- delete the entry with the animation:\n" + "\n".join(stale)
+    )
+
+
+def test_every_declared_motion_usage_names_a_file_that_exists():
+    _require_web_src()
+    missing = [entry for entry in _motion_registry() if not (_WEB_SRC / entry).is_file()]
+    assert not missing, (
+        "MOTION_USAGES names files that are not there; a renamed module leaves a permission "
+        "pointing at nothing:\n" + "\n".join(missing)
+    )
+
+
+def test_the_registry_guard_rejects_an_undeclared_importer(tmp_path: Path) -> None:
+    # The scanning functions read the real tree by design -- they are guards over one known
+    # registry, not a reusable scan -- so this exercises the set arithmetic they end in, which is
+    # where an undeclared importer is actually caught.
+    registry = {"components/error-surface.tsx"}
+    importers = {"components/error-surface.tsx", "features/fleet/corpus-chart.tsx"}
+
+    assert sorted(importers - registry) == ["features/fleet/corpus-chart.tsx"]
+
+
+def test_the_registry_guard_rejects_a_stale_entry() -> None:
+    registry = ["components/error-surface.tsx", "components/page-controls.tsx"]
+    importers = {"components/error-surface.tsx"}
+
+    assert [e for e in registry if e not in importers] == ["components/page-controls.tsx"]
