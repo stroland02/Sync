@@ -8,12 +8,22 @@
  * was answering fleet-wide for exactly that reason. This is the fix: pick a repository here,
  * and drill down from it into the vendor rows below.
  *
- * Two view models, two questions. `index_coverage` answers "how much of this codebase has
- * Sync read" from `call_site` alone. `observed_telemetry` answers "what traffic did Sync see"
- * from three tables that carry no bearing on what the static index found — a call site can
- * exist with no traffic observed, and traffic can arrive that correlates to no known call
- * site. Rendering them as two cards rather than one keeps that boundary visible instead of
- * implying either one confirms the other.
+ * Three view models, three questions, and none of them confirms another.
+ *
+ * `overview_summary` scoped to this repository answers "what is currently wrong here" — the
+ * question the design document says a user actually arrives with. `index_coverage` answers
+ * "how much of this codebase has Sync read" from `call_site` alone. `observed_telemetry`
+ * answers "what traffic did Sync see" from three tables that carry no bearing on what the
+ * static index found — a call site can exist with no traffic observed, and traffic can arrive
+ * that correlates to no known call site. Three cards rather than one keeps those boundaries
+ * visible instead of implying any of them confirms the others, and there is deliberately no
+ * figure combining them: a scalar over "what is broken", "what we read" and "what we watched"
+ * would collapse three different kinds of not-knowing onto one axis.
+ *
+ * Every figure on this screen and on every screen below it is scoped to `repoId`. The three
+ * routes it reads take the repository — `/api/overview`, `/api/repositories/{repo}/coverage`
+ * and `/api/repositories/{repo}/observed` — and each answer names the scope it was computed
+ * in, so picking a different repository changes every number here rather than some of them.
  */
 
 import { Link, useParams } from "react-router"
@@ -36,6 +46,7 @@ import {
 } from "@/components/ui/table"
 import { formatTimestamp, orAbsent } from "@/lib/format"
 import { IndexCoverageCard } from "@/features/repositories/index-coverage-card"
+import { OpenFindingsCard } from "@/features/repositories/open-findings-card"
 import { Breadcrumbs } from "@/layouts/breadcrumbs"
 import { UnknownRoute } from "@/layouts/unknown-route"
 import { useOffsetParam } from "@/lib/use-offset-param"
@@ -299,6 +310,7 @@ export function CodebasePage() {
     <section className="flex flex-col gap-8">
       <Breadcrumbs trail={[{ label: "Fleet", to: "/" }, { label: repoId }]} />
       <h1 className="font-mono text-page">{repoId}</h1>
+      <OpenFindingsCard repoId={repoId} />
       <IndexCoverageCard repoId={repoId} />
       <ObservedTelemetryCard repoId={repoId} />
     </section>

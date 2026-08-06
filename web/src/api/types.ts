@@ -103,6 +103,13 @@ export interface VendorSummary {
  * one field over.
  */
 export interface OverviewResponse extends Provenance {
+  /**
+   * The repository this answer was computed for, or `null` for the whole fleet. The transport
+   * echoes the scope back rather than leaving a screen to remember which one it asked for: a
+   * fleet-wide figure rendered under a repository's name is a false claim about that
+   * repository, and a payload that names its own scope cannot make it silently.
+   */
+  repo_id: string | null
   vendors: VendorSummary[]
   total_findings: number
   total_findings_bound: number
@@ -126,6 +133,22 @@ export interface RiskRow {
   severity: string
   finding_id: string
   binding_source: BindingSource
+}
+
+/**
+ * `GET /api/vendors/{vendor_id}`: the API Services level's page of open findings.
+ *
+ * A `Page<RiskRow>` that also names the scope it was computed in. `repo_id` is `null` when the
+ * page spans every repository the index has seen, and the repository's own id when the caller
+ * narrowed it — `sync.dashboard.graph_views.vendor_findings` carries why the transport echoes
+ * it back rather than trusting a screen to remember what it asked for.
+ *
+ * `GET /api/vendors/{vendor_id}/changes` deliberately has no counterpart field: what a vendor
+ * published is a fact about the vendor, true whether or not any repository calls it, so there
+ * is no repository scope for it to be in.
+ */
+export interface VendorFindingsPage extends Page<RiskRow> {
+  repo_id: string | null
 }
 
 /** One item of `GET /api/vendors/{vendor_id}/changes`: something the vendor changed. */
@@ -518,6 +541,8 @@ export interface DetectorRow {
  * for the same reason as the other two graph views above.
  */
 export interface DetectorAccountabilityResponse {
+  /** The repository this roll-up covers, or `null` for the fleet. See `OverviewResponse`. */
+  repo_id: string | null
   detectors: DetectorRow[]
   total_open_findings: number
 }

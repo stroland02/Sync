@@ -37,8 +37,21 @@ import {
   sliceForDisplay,
 } from "@/features/fleet/cardinality"
 
-/** The vendor rows, unpaginated. */
-export function VendorFindingsTable({ vendors }: { vendors: readonly VendorSummary[] }) {
+/**
+ * The vendor rows, unpaginated.
+ *
+ * `repoId` is the scope the rows were counted in, and it travels into each link rather than
+ * being dropped at the boundary: a vendor opened from a repository's own screen must land on
+ * that repository's findings, not on the fleet's. Null is the fleet, which is what the lead
+ * screen passes.
+ */
+export function VendorFindingsTable({
+  vendors,
+  repoId = null,
+}: {
+  vendors: readonly VendorSummary[]
+  repoId?: string | null
+}) {
   return (
     <Table>
       <TableHeader>
@@ -52,7 +65,7 @@ export function VendorFindingsTable({ vendors }: { vendors: readonly VendorSumma
           <TableRow key={vendor.vendor_id}>
             <TableCell>
               <Link
-                to={`/vendors/${encodeURIComponent(vendor.vendor_id)}`}
+                to={vendorHref(vendor.vendor_id, repoId)}
                 className="font-mono underline underline-offset-2"
               >
                 {vendor.vendor_id}
@@ -64,6 +77,11 @@ export function VendorFindingsTable({ vendors }: { vendors: readonly VendorSumma
       </TableBody>
     </Table>
   )
+}
+
+function vendorHref(vendorId: string, repoId: string | null): string {
+  const path = `/vendors/${encodeURIComponent(vendorId)}`
+  return repoId === null ? path : `${path}?repo_id=${encodeURIComponent(repoId)}`
 }
 
 function byOpenFindingCountDescending(a: VendorSummary, b: VendorSummary): number {
@@ -96,11 +114,11 @@ export function VendorDistributionCard() {
             </CardTitle>
             <CardDescription className="max-w-prose text-body">
               Every open finding the graph holds, grouped by the vendor whose API the call
-              site binds to, ordered by which vendor has the most open findings. This is a
-              fleet-wide roll-up — <code className="font-mono">GET /api/overview</code> takes
-              no <code className="font-mono">repo_id</code> — so it is the closest this
-              console gets to "every vendor at risk" until a repository's own Codebase screen
-              can narrow it.
+              site binds to, ordered by which vendor has the most open findings. This is the
+              fleet's roll-up across every repository the index has seen, which is the
+              question this level asks; the same figures for one codebase are on that
+              repository's own Codebase screen, and the two are different numbers rather than
+              different renderings of one.
             </CardDescription>
             {query.data.total_findings_bound_reached && (
               <p className="max-w-prose text-body text-muted-foreground">

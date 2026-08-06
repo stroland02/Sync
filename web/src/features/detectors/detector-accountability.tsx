@@ -85,7 +85,7 @@ function TallyTable({
   )
 }
 
-function DetectorCard({ row }: { row: DetectorRow }) {
+function DetectorCard({ row, repoId }: { row: DetectorRow; repoId: string | null }) {
   return (
     <Card>
       <CardHeader>
@@ -109,9 +109,18 @@ function DetectorCard({ row }: { row: DetectorRow }) {
             and the sentence says so rather than letting the link imply otherwise. */}
         <p className="max-w-prose text-meta text-muted-foreground">
           No route filters findings by detector yet. Every open finding, by vendor, is on{" "}
-          <Link to="/" className="underline underline-offset-2">
-            the fleet screen
-          </Link>{" "}
+          {repoId === null ? (
+            <Link to="/" className="underline underline-offset-2">
+              the fleet screen
+            </Link>
+          ) : (
+            <Link
+              to={`/repositories/${encodeURIComponent(repoId)}`}
+              className="underline underline-offset-2"
+            >
+              this repository's own screen
+            </Link>
+          )}{" "}
           instead.
         </p>
       </CardContent>
@@ -119,8 +128,8 @@ function DetectorCard({ row }: { row: DetectorRow }) {
   )
 }
 
-export function DetectorAccountability() {
-  const query = useDetectors()
+export function DetectorAccountability({ repoId = null }: { repoId?: string | null }) {
+  const query = useDetectors(repoId ?? undefined)
 
   if (query.isPending) return <LoadingState what="detector accountability" />
   if (query.isError) return <ErrorState error={query.error} what="detector accountability" />
@@ -131,8 +140,12 @@ export function DetectorAccountability() {
     <div className="flex flex-col gap-8">
       {detectors.length === 0 ? (
         <EmptyState
-          headline="No open finding is attributed to any detector."
-          detail="The API answered, and the graph holds no open findings right now. That is an answer, not a failure -- nothing indexed is currently flagged by any detector."
+          headline={
+            repoId === null
+              ? "No open finding is attributed to any detector."
+              : `No open finding in ${repoId} is attributed to any detector.`
+          }
+          detail="The API answered, and the graph holds no open findings in this scope right now. That is an answer, not a failure -- nothing indexed here is currently flagged by any detector."
         />
       ) : (
         <>
@@ -145,7 +158,7 @@ export function DetectorAccountability() {
           </p>
           <div className="flex flex-col gap-section">
             {detectors.map((row) => (
-              <DetectorCard key={row.detector} row={row} />
+              <DetectorCard key={row.detector} row={row} repoId={repoId} />
             ))}
           </div>
         </>

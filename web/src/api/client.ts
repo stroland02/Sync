@@ -23,9 +23,9 @@ import type {
   OverviewResponse,
   Page,
   RepositoriesResponse,
-  RiskRow,
   RunsPage,
   VendorChangeRow,
+  VendorFindingsPage,
   WorkflowState,
 } from "@/api/types"
 
@@ -35,6 +35,18 @@ export const DEFAULT_LIMIT = 50
 export interface PageParams {
   limit?: number
   offset?: number
+}
+
+/**
+ * The repository a question is asked about.
+ *
+ * Repository scope is what every level below Codebase inherits, so the routes those levels read
+ * take it as a query parameter. Omitting it is the fleet — a real question, and the one the
+ * Fleet screen asks — never a default standing in for "whichever repository the reader had in
+ * mind".
+ */
+export interface ScopeParams {
+  repoId?: string
 }
 
 async function getJson<T>(path: string, signal?: AbortSignal): Promise<T> {
@@ -80,17 +92,32 @@ function withPageParams(path: string, params: PageParams): string {
   return rendered ? `${path}?${rendered}` : path
 }
 
-export function fetchOverview(signal?: AbortSignal): Promise<OverviewResponse> {
-  return getJson<OverviewResponse>("/api/overview", signal)
+/**
+ * Open findings by vendor and by severity.
+ *
+ * `repoId` narrows every figure in the answer to one repository; omitted, the answer spans the
+ * fleet and the payload's own `repo_id` comes back null. The two are different questions and
+ * the transport answers whichever it was asked — a screen below the Codebase level that fetches
+ * this without a repository is claiming the fleet's numbers describe one codebase.
+ */
+export function fetchOverview(
+  params: ScopeParams = {},
+  signal?: AbortSignal,
+): Promise<OverviewResponse> {
+  return getJson<OverviewResponse>(withQueryParams("/api/overview", { repo_id: params.repoId }), signal)
 }
 
 export function fetchVendorFindings(
   vendorId: string,
-  params: PageParams,
+  params: PageParams & ScopeParams,
   signal?: AbortSignal,
-): Promise<Page<RiskRow>> {
-  const path = withPageParams(`/api/vendors/${encodeURIComponent(vendorId)}`, params)
-  return getJson<Page<RiskRow>>(path, signal)
+): Promise<VendorFindingsPage> {
+  const path = withQueryParams(`/api/vendors/${encodeURIComponent(vendorId)}`, {
+    limit: params.limit,
+    offset: params.offset,
+    repo_id: params.repoId,
+  })
+  return getJson<VendorFindingsPage>(path, signal)
 }
 
 export function fetchVendorChanges(
@@ -229,7 +256,18 @@ export function fetchRepositoryObserved(
   return getJson<ObservedTelemetryResponse>(path, signal)
 }
 
-/** Every open finding, aggregated by the detector that raised it. */
-export function fetchDetectors(signal?: AbortSignal): Promise<DetectorAccountabilityResponse> {
-  return getJson<DetectorAccountabilityResponse>("/api/detectors", signal)
+/**
+ * Every open finding, aggregated by the detector that raised it.
+ *
+ * `repoId` narrows the roll-up to one repository — "which detector is producing *my* false
+ * positives" rather than the fleet's. The answer echoes the scope back in `repo_id`.
+ */
+export function fetchDetectors(
+  params: ScopeParams = {},
+  signal?: AbortSignal,
+): Promise<DetectorAccountabilityResponse> {
+  return getJson<DetectorAccountabilityResponse>(
+    withQueryParams("/api/detectors", { repo_id: params.repoId }),
+    signal,
+  )
 }

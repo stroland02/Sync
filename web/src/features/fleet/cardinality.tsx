@@ -3,8 +3,12 @@
  * holds and says so; at or above it, a panel states the count, the ordering it applied, and
  * the size of the slice it renders instead of the whole set. A panel that switches between
  * the two without saying which one it is in is the defect class this milestone has closed
- * six times, so every panel on this screen that can grow past a handful of rows speaks
- * through this module rather than composing its own sentence.
+ * six times, so every panel that can grow past a handful of rows speaks through this module
+ * rather than composing its own sentence.
+ *
+ * It lives under `features/fleet/` because the lead screen is where the rule was first needed,
+ * and it is read from the Codebase level too: the same panel asked about one repository has
+ * the same way of going wrong.
  */
 
 /**

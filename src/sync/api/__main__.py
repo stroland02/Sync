@@ -128,14 +128,28 @@ def app_factory() -> Starlette:
             error_windows_limit=error_windows_limit, error_windows_offset=error_windows_offset,
         )
 
-    def detector_reader():
-        return graph_views.detector_accountability(store)
+    def detector_reader(*, repo_id: str | None = None):
+        return graph_views.detector_accountability(store, repo_id=repo_id)
 
-    def severity_reader():
-        return graph_views.severity_rollup(store)
+    def severity_reader(*, repo_id: str | None = None):
+        return graph_views.severity_rollup(store, repo_id=repo_id)
 
-    def overview_reader():
-        return graph_views.overview_summary(store)
+    def overview_reader(*, repo_id: str | None = None):
+        return graph_views.overview_summary(store, repo_id=repo_id)
+
+    def vendor_findings_reader(
+        vendor_id: str,
+        *,
+        repo_id: str | None = None,
+        severity: str | None = None,
+        path: str | None = None,
+        limit: int,
+        offset: int,
+    ):
+        return graph_views.vendor_findings(
+            store, vendor_id,
+            repo_id=repo_id, severity=severity, path=path, limit=limit, offset=offset,
+        )
 
     return create_app(
         surface=surface,
@@ -149,6 +163,7 @@ def app_factory() -> Starlette:
         detector_reader=detector_reader,
         severity_reader=severity_reader,
         overview_reader=overview_reader,
+        vendor_findings_reader=vendor_findings_reader,
     )
 
 

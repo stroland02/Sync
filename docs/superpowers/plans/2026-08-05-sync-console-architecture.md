@@ -1262,7 +1262,7 @@ applied to a screen that is about to be reparented is that work done twice.
   rest of Signals** — one panel of one role is what the data supports, and the level's own header
   says which of the three roles has a panel and which two do not. A level that implies three
   integrations exist when one does is the same false-completeness defect in a new place.
-- [ ] **Step 5:** Scope the levels below Codebase by repository. `/api/overview`, `/api/detectors`
+- [x] **Step 5:** Scope the levels below Codebase by repository. `/api/overview`, `/api/detectors`
   and `/api/corpus` take no `repo_id` (`app.py`), so this is a transport change: each gains an
   optional `repo_id`, and the screen states which scope it is in. **An unscoped answer rendered
   under a selected repository is a false claim about that repository**, which is this milestone's
@@ -1272,11 +1272,31 @@ applied to a screen that is about to be reparented is that work done twice.
   address under the workflow and move the push, the `tsc` verdict and the CI run onto it as the
   bundle. Deep links are the point (`App.tsx:4-6`), and today a reviewer cannot send a colleague the
   pull request's evidence.
-- [ ] **Step 7:** The honesty audit. Every level now asserts that it is scoped to the repository
+- [x] **Step 7:** The honesty audit. Every level now asserts that it is scoped to the repository
   above it. Confirm each one is, and that any panel still reading a fleet-wide route says so beside
   its figure rather than inheriting a scope it does not have.
-- [ ] **Step 8:** `npm run build` clean, `npm run lint` no new error-level violations, `npm test`
+- [x] **Step 8:** `npm run build` clean, `npm run lint` no new error-level violations, `npm test`
   green. Commit.
+
+**Landed 2026-08-06.** Steps 1 through 4 and 6 landed earlier the same day. Steps 5 and 7 landed
+last, and each figure below Codebase was resolved one of the two honest ways the brief allows —
+scope the query, or say on screen that it is not scoped. Which was chosen, and why:
+
+| Figure | Ruling | Why |
+|---|---|---|
+| `/api/overview` (vendor and severity breakdowns, totals) | **Scoped.** Optional `repo_id`, echoed back in the payload. | Every read behind it already joins `call_site`, which is where `repo_id` lives, so the filter is a predicate on a join the query already makes. Rendered scoped on the new Codebase card, unscoped on Fleet. |
+| `/api/detectors` (detector attribution) | **Scoped.** Optional `repo_id`, echoed back. | Same join. "Which detector is producing my false positives" is a question about one codebase at least as often as about the fleet, and the screen now says which it answered. |
+| `/api/vendors/{id}` (open findings for one vendor) | **Scoped**, and moved off the frozen surface onto `graph_views.vendor_findings`. | API Services is the first level under Codebase, so an unscoped page here was the defect in its most visible place. `GraphSurface.whats_at_risk` cannot be narrowed — `sync/mcp/tools.py` is frozen and its rows carry no `repo_id` — so this is the same replacement `overview_summary` already made for `/api/overview`, and it inherits the same second benefit: a real SQL `LIMIT` over a join instead of a full walk with one `get_call_site` round trip per row. |
+| `/api/vendors/{id}/changes` (what the vendor published) | **Said on screen.** No `repo_id`, and the card states it. | A vendor publishes a change once, to everyone. There is no repository scope for it to be in, and inventing one ("changes touching this repository") would be a different question wearing this one's name. What it hits here is the Binding surface level, which is linked from the row. |
+| `/api/corpus` (the repair record) | **Said on screen.** No `repo_id`, and it is not rendered under a repository at all. | `migration_outcome` stores no `repo_id` by a deliberate schema decision — `schema.sql`'s own grain note says nothing there identifies a customer, and that is what makes the table safe to aggregate across them. A join through `finding` would reach only attempts whose finding row still exists, so a per-repository attempt count would silently omit attempts. It stays on Fleet, which is the level where a fleet-wide answer is the answer. |
+
+Two consequences worth recording because they are not in the checklist above. The Codebase screen
+gained a third card — open findings in this repository, by vendor and by severity — because the
+level had no answer to the question the design document says a user arrives with, and because
+scoping `/api/overview` with nothing rendering the scoped answer would have been a transport change
+with no screen behind it. And `GraphStore` gained one shared predicate builder rather than seven
+copies of the same `WHERE` clause: a filter added to six reads and forgotten in the seventh is a
+fleet-wide figure under a repository heading, which is the exact failure the scoping removes.
 
 **Verification a reviewer can run:** open `/`, pick a repository, and confirm every figure on every
 screen below it changes when you pick a different one. Then read `GRAPH_LEVELS` beside

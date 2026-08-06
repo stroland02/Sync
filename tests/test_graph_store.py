@@ -903,6 +903,194 @@ def test_open_findings_summary_of_an_empty_graph_is_all_none(store):
     assert store.open_findings_summary() == {"indexed_at": None, "binding_rung": None}
 
 
+# -- the same reads, narrowed to one repository ------------------------------------------------
+#
+# Repository scope is what every console level below Codebase inherits (B92). Each read below
+# already joins `call_site`, which is where `repo_id` lives, so the filter is a predicate on a
+# join these queries already make rather than a second query or a Python pass over the result.
+
+
+def _two_repositories(store) -> None:
+    """One open finding in `r1` and one in `r2`, differing only by repository."""
+    mine = store.upsert_call_site(_site(repo_id="r1", path="src/a.ts", line=1))
+    theirs = store.upsert_call_site(_site(repo_id="r2", path="src/b.ts", line=2))
+    store.insert_finding(_finding_for_open(mine, claim="c1"))
+    store.insert_finding(_finding_for_open(theirs, claim="c2"))
+
+
+def test_open_findings_page_scoped_to_a_repository_omits_another_repositorys_finding(store):
+    _two_repositories(store)
+
+    findings = store.open_findings_page(repo_id="r1")
+
+    assert len(findings) == 1
+    assert len(store.open_findings_page()) == 2, "unscoped still answers for the fleet"
+
+
+def test_open_findings_count_scoped_to_a_repository(store):
+    _two_repositories(store)
+
+    assert store.open_findings_count(repo_id="r1") == 1
+    assert store.open_findings_count() == 2
+
+
+def test_open_findings_count_bounded_scoped_to_a_repository(store):
+    _two_repositories(store)
+
+    assert store.open_findings_count_bounded(10, repo_id="r1") == (1, False)
+    assert store.open_findings_count_bounded(10) == (2, False)
+
+
+def test_open_findings_vendor_counts_scoped_to_a_repository(store):
+    mine = store.upsert_call_site(_site(repo_id="r1", path="src/a.ts", line=1))
+    theirs = store.upsert_call_site(
+        _site(repo_id="r2", path="src/b.ts", line=2, vendor_id="shopify", operation_id="GetOrders")
+    )
+    store.insert_finding(_finding_for_open(mine, claim="c1"))
+    store.insert_finding(_finding_for_open(theirs, claim="c2"))
+
+    assert store.open_findings_vendor_counts(repo_id="r1") == {"stripe": 1}
+    assert store.open_findings_vendor_counts() == {"shopify": 1, "stripe": 1}
+
+
+def test_open_findings_vendor_counts_scoped_to_a_repository_is_still_one_query(store, monkeypatch):
+    _two_repositories(store)
+
+    calls = _execute_count(monkeypatch)
+    store.open_findings_vendor_counts(repo_id="r1")
+
+    assert len(calls) == 1, f"expected one query, made {len(calls)}"
+
+
+def test_open_findings_severity_counts_scoped_to_a_repository(store):
+    mine = store.upsert_call_site(_site(repo_id="r1", path="src/a.ts", line=1))
+    theirs = store.upsert_call_site(_site(repo_id="r2", path="src/b.ts", line=2))
+    store.insert_finding(_finding_for_open(mine, claim="c1", severity="breaking"))
+    store.insert_finding(_finding_for_open(theirs, claim="c2", severity="warning"))
+
+    assert store.open_findings_severity_counts(repo_id="r1") == {"breaking": 1}
+    assert store.open_findings_severity_counts() == {"breaking": 1, "warning": 1}
+
+
+def test_open_findings_summary_scoped_to_a_repository_reads_only_that_repositorys_rungs(store):
+    mine = store.upsert_call_site(_site(repo_id="r1", path="src/a.ts", line=1))
+    theirs = store.upsert_call_site(_site(repo_id="r2", path="src/b.ts", line=2))
+    store.insert_finding(_finding_for_open(mine, claim="c1", binding_rung="static"))
+    store.insert_finding(_finding_for_open(theirs, claim="c2", binding_rung="observed"))
+
+    assert store.open_findings_summary(repo_id="r1")["binding_rung"] == "static"
+    assert store.open_findings_summary()["binding_rung"] is None, "the fleet mixes two rungs"
+
+
+# -- the at-risk page: what the vendor screen renders, filtered in SQL --------------------------
+#
+# `GraphSurface.whats_at_risk` answers the same question and cannot be narrowed to a repository:
+# `sync/mcp/tools.py` is frozen, its rows carry no `repo_id`, and it walks every open finding
+# doing one `get_call_site` round trip per row. This is the same replacement `overview_summary`
+# already made for `/api/overview`.
+
+
+def test_open_findings_at_risk_returns_one_row_per_open_finding(store):
+    change_id = store.upsert_vendor_change(_change(operation_id="PostCharges"))
+    site_id = store.upsert_call_site(_site())
+    store.insert_finding(_finding_for_open(site_id, vendor_change_id=change_id))
+
+    rows = store.open_findings_at_risk()
+
+    assert len(rows) == 1
+    row = rows[0]
+    assert row["path"] == "src/billing.ts"
+    assert row["line"] == 42
+    assert row["symbol"] == "stripe.charges.create"
+    assert row["operation_id"] == "PostCharges"
+    assert row["vendor_id"] == "stripe"
+    assert row["change_kind"] == "response-property-removed"
+    assert row["severity"] == "breaking"
+    assert row["binding_rung"] == "static"
+
+
+def test_open_findings_at_risk_change_kind_is_null_when_the_finding_names_no_change(store):
+    """A finding raised by a detector that read traffic rather than a changelog names no
+    `vendor_change`, and the row must say so rather than dropping out of the page entirely --
+    which is what an inner join would have done.
+    """
+    site_id = store.upsert_call_site(_site())
+    store.insert_finding(_finding_for_open(site_id, detector="status-rate", binding_rung="observed"))
+
+    rows = store.open_findings_at_risk()
+
+    assert len(rows) == 1
+    assert rows[0]["change_kind"] is None
+
+
+def test_open_findings_at_risk_scoped_to_a_repository(store):
+    _two_repositories(store)
+
+    assert len(store.open_findings_at_risk(repo_id="r1")) == 1
+    assert len(store.open_findings_at_risk()) == 2
+
+
+def test_open_findings_at_risk_scoped_to_a_vendor(store):
+    stripe = store.upsert_call_site(_site(path="src/a.ts", line=1))
+    shopify = store.upsert_call_site(
+        _site(path="src/b.ts", line=2, vendor_id="shopify", operation_id="GetOrders")
+    )
+    store.insert_finding(_finding_for_open(stripe, claim="c1"))
+    store.insert_finding(_finding_for_open(shopify, claim="c2"))
+
+    rows = store.open_findings_at_risk(vendor_id="stripe")
+
+    assert [row["vendor_id"] for row in rows] == ["stripe"]
+
+
+def test_open_findings_at_risk_scoped_to_a_severity(store):
+    site_a = store.upsert_call_site(_site(path="src/a.ts", line=1))
+    site_b = store.upsert_call_site(_site(path="src/b.ts", line=2))
+    store.insert_finding(_finding_for_open(site_a, claim="c1", severity="breaking"))
+    store.insert_finding(_finding_for_open(site_b, claim="c2", severity="warning"))
+
+    rows = store.open_findings_at_risk(severity="warning")
+
+    assert [row["severity"] for row in rows] == ["warning"]
+
+
+def test_open_findings_at_risk_limit_is_sql_not_a_python_slice(store, fetch_counts):
+    for i in range(5):
+        site_id = store.upsert_call_site(_site(path=f"src/{i}.ts", line=i, content_hash=f"hash-{i}"))
+        store.insert_finding(_finding_for_open(site_id, claim=f"claim-{i}"))
+
+    rows = store.open_findings_at_risk(limit=2, offset=0)
+
+    assert len(rows) == 2, "rows returned"
+    assert fetch_counts[-1] == 2, "rows read off the wire"
+
+
+def test_open_findings_at_risk_count_matches_the_filter_not_the_page(store):
+    for i in range(5):
+        site_id = store.upsert_call_site(_site(path=f"src/{i}.ts", line=i, content_hash=f"hash-{i}"))
+        store.insert_finding(_finding_for_open(site_id, claim=f"claim-{i}"))
+
+    assert store.open_findings_at_risk_count() == 5
+    assert len(store.open_findings_at_risk(limit=2)) == 2
+
+
+def test_open_findings_at_risk_count_honours_the_same_filters_as_the_page(store):
+    _two_repositories(store)
+
+    assert store.open_findings_at_risk_count(repo_id="r1") == 1
+    assert store.open_findings_at_risk_count() == 2
+
+
+def test_open_findings_at_risk_excludes_a_retracted_call_sites_finding(store):
+    site_id = store.upsert_call_site(_site())
+    store.insert_finding(_finding_for_open(site_id))
+    with store._connect().cursor() as cur:
+        cur.execute("UPDATE call_site SET retracted_at = now() WHERE id = %s", (site_id,))
+
+    assert store.open_findings_at_risk() == []
+    assert store.open_findings_at_risk_count() == 0
+
+
 # -- the observed-shape join collapses from N+1 to one query -----------------------------------
 
 

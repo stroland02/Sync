@@ -22,22 +22,38 @@ import {
   fetchVendorFindings,
   fetchWorkflow,
 } from "@/api/client"
-import type { BindingSurfaceParams, ObservedTelemetryParams, PageParams } from "@/api/client"
+import type {
+  BindingSurfaceParams,
+  ObservedTelemetryParams,
+  PageParams,
+  ScopeParams,
+} from "@/api/client"
 import type { RunsPage, WorkflowState } from "@/api/types"
 
-export function useOverview() {
+/**
+ * Open findings by vendor and by severity, for one repository or for the fleet.
+ *
+ * `repoId` is part of the query key rather than only of the request. Two scopes are two
+ * answers, and a shared key would serve one repository's figures from the other's cache — the
+ * false claim this scoping exists to remove, arriving through the cache instead of the wire.
+ */
+export function useOverview(repoId?: string) {
   return useQuery({
-    queryKey: ["overview"],
-    queryFn: ({ signal }) => fetchOverview(signal),
+    queryKey: ["overview", repoId ?? null],
+    queryFn: ({ signal }) => fetchOverview({ repoId }, signal),
   })
 }
 
-export function useVendorFindings(vendorId: string, params: PageParams = {}) {
+export function useVendorFindings(
+  vendorId: string,
+  params: PageParams & ScopeParams = {},
+) {
   const limit = params.limit ?? DEFAULT_LIMIT
   const offset = params.offset ?? 0
   return useQuery({
-    queryKey: ["vendors", vendorId, "findings", limit, offset],
-    queryFn: ({ signal }) => fetchVendorFindings(vendorId, { limit, offset }, signal),
+    queryKey: ["vendors", vendorId, "findings", params.repoId ?? null, limit, offset],
+    queryFn: ({ signal }) =>
+      fetchVendorFindings(vendorId, { limit, offset, repoId: params.repoId }, signal),
   })
 }
 
@@ -206,10 +222,13 @@ export function useRepositoryObserved(repoId: string, params: ObservedTelemetryP
   })
 }
 
-/** Every open finding, aggregated by the detector that raised it. */
-export function useDetectors() {
+/**
+ * Every open finding, aggregated by the detector that raised it — for one repository, or for
+ * the fleet when `repoId` is absent. Keyed by scope for the reason `useOverview` is.
+ */
+export function useDetectors(repoId?: string) {
   return useQuery({
-    queryKey: ["detectors"],
-    queryFn: ({ signal }) => fetchDetectors(signal),
+    queryKey: ["detectors", repoId ?? null],
+    queryFn: ({ signal }) => fetchDetectors({ repoId }, signal),
   })
 }

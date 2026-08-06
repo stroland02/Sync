@@ -152,16 +152,36 @@ def _fake_observed_reader(
     }
 
 
-def _fake_detector_reader() -> dict[str, Any]:
-    return {"detectors": [], "total_open_findings": 0}
+def _fake_detector_reader(*, repo_id=None) -> dict[str, Any]:
+    return {"repo_id": repo_id, "detectors": [], "total_open_findings": 0}
 
 
-def _fake_severity_reader() -> dict[str, Any]:
+def _fake_severity_reader(*, repo_id=None) -> dict[str, Any]:
     return {"by_severity": {}, "total": 0}
 
 
-def _fake_overview_reader() -> dict[str, Any]:
+def _fake_vendor_findings_reader(
+    vendor_id: str,
+    *,
+    repo_id=None,
+    severity=None,
+    path=None,
+    limit=DEFAULT_LIMIT,
+    offset=0,
+) -> dict[str, Any]:
     return {
+        **_EMPTY_PAGE,
+        "repo_id": repo_id,
+        "indexed_at": None,
+        "feed_fetched_at": None,
+        "binding_source": None,
+        "context_savings": 0,
+    }
+
+
+def _fake_overview_reader(*, repo_id=None) -> dict[str, Any]:
+    return {
+        "repo_id": repo_id,
         "vendors": [],
         "total_findings": 0,
         "total_findings_bound": 1000,
@@ -186,9 +206,10 @@ def _build_app(
     detector_reader=_fake_detector_reader,
     severity_reader=_fake_severity_reader,
     overview_reader=_fake_overview_reader,
+    vendor_findings_reader=_fake_vendor_findings_reader,
 ) -> Starlette:
     """`create_app` with every reader defaulted to a fake, so a test naming one override is
-    not forced to restate the other nine.
+    not forced to restate the other ten.
 
     `create_app` keeps every reader required -- a deployment that forgets one should fail
     at start-up rather than serve a route that breaks on first use. That signature stays as
@@ -207,6 +228,7 @@ def _build_app(
         detector_reader=detector_reader,
         severity_reader=severity_reader,
         overview_reader=overview_reader,
+        vendor_findings_reader=vendor_findings_reader,
     )
 
 
@@ -240,7 +262,7 @@ def test_overview_returns_the_overview_readers_payload():
         "context_savings": 800,
     }
     app = _build_app(
-        surface=GraphSurface(FakeGraph(), feed_fetched_at=FETCHED), overview_reader=lambda: payload
+        surface=GraphSurface(FakeGraph(), feed_fetched_at=FETCHED), overview_reader=lambda *, repo_id=None: payload
     )
     client = TestClient(app)
 
@@ -260,7 +282,7 @@ def test_overview_reports_the_bound_and_whether_it_was_reached():
         "total_findings_bound_reached": True,
     }
     app = _build_app(
-        surface=GraphSurface(FakeGraph(), feed_fetched_at=FETCHED), overview_reader=lambda: payload
+        surface=GraphSurface(FakeGraph(), feed_fetched_at=FETCHED), overview_reader=lambda *, repo_id=None: payload
     )
     client = TestClient(app)
 
@@ -274,7 +296,8 @@ def test_overview_reports_the_bound_and_whether_it_was_reached():
 def test_overview_includes_the_severity_counts_from_its_own_reader():
     payload = {"by_severity": {"breaking": 3, "warning": 1}, "total": 4}
     app = _build_app(
-        surface=GraphSurface(FakeGraph(), feed_fetched_at=FETCHED), severity_reader=lambda: payload
+        surface=GraphSurface(FakeGraph(), feed_fetched_at=FETCHED),
+        severity_reader=lambda *, repo_id=None: payload,
     )
     client = TestClient(app)
 
@@ -283,38 +306,51 @@ def test_overview_includes_the_severity_counts_from_its_own_reader():
     assert body["severity_counts"] == {"breaking": 3, "warning": 1}
 
 
-def test_overview_reaches_its_severity_reader_exactly_once_with_no_arguments():
-    calls: list[None] = []
+def _recording_overview_readers() -> tuple[Any, list[str | None], Any, list[str | None]]:
+    severity_calls: list[str | None] = []
+    overview_calls: list[str | None] = []
 
-    def severity_reader():
-        calls.append(None)
-        return _fake_severity_reader()
+    def severity_reader(*, repo_id=None):
+        severity_calls.append(repo_id)
+        return _fake_severity_reader(repo_id=repo_id)
 
+    def overview_reader(*, repo_id=None):
+        overview_calls.append(repo_id)
+        return _fake_overview_reader(repo_id=repo_id)
+
+    return severity_reader, severity_calls, overview_reader, overview_calls
+
+
+def test_overview_reaches_each_reader_exactly_once_and_unscoped_by_default():
+    severity_reader, severity_calls, overview_reader, overview_calls = _recording_overview_readers()
     app = _build_app(
-        surface=GraphSurface(FakeGraph(), feed_fetched_at=FETCHED), severity_reader=severity_reader
+        surface=GraphSurface(FakeGraph(), feed_fetched_at=FETCHED),
+        severity_reader=severity_reader,
+        overview_reader=overview_reader,
     )
     client = TestClient(app)
 
     client.get("/api/overview")
 
-    assert calls == [None]
+    assert severity_calls == [None]
+    assert overview_calls == [None]
 
 
-def test_overview_reaches_its_overview_reader_exactly_once_with_no_arguments():
-    calls: list[None] = []
-
-    def overview_reader():
-        calls.append(None)
-        return _fake_overview_reader()
-
+def test_overview_passes_repo_id_to_both_of_its_readers():
+    # Both, together. Narrowing the vendor breakdown and leaving the severity breakdown
+    # fleet-wide would put two scopes on one screen with nothing saying which is which.
+    severity_reader, severity_calls, overview_reader, overview_calls = _recording_overview_readers()
     app = _build_app(
-        surface=GraphSurface(FakeGraph(), feed_fetched_at=FETCHED), overview_reader=overview_reader
+        surface=GraphSurface(FakeGraph(), feed_fetched_at=FETCHED),
+        severity_reader=severity_reader,
+        overview_reader=overview_reader,
     )
     client = TestClient(app)
 
-    client.get("/api/overview")
+    client.get("/api/overview?repo_id=acme%2Fbilling")
 
-    assert calls == [None]
+    assert severity_calls == ["acme/billing"]
+    assert overview_calls == ["acme/billing"]
 
 
 def test_overview_never_reaches_the_frozen_surface():
@@ -331,105 +367,107 @@ def test_overview_never_reaches_the_frozen_surface():
 
 
 # -- vendor detail --------------------------------------------------------------
+#
+# `/api/vendors/{vendor_id}` no longer reaches `GraphSurface.whats_at_risk` either, and for the
+# reason `/api/overview` stopped: `sync.mcp.tools` is frozen, and that method cannot narrow its
+# answer to one repository because its rows carry no `repo_id`. Repository scope is what every
+# console level below Codebase inherits (B92), and API Services is the first level under it, so
+# an unscoped page here is a fleet-wide answer rendered under a repository's name.
+# `sync.dashboard.graph_views.vendor_findings` answers the same question against `GraphStore`
+# (`tests/test_graph_views.py` carries the filtering, the paging and the envelope's rung); these
+# tests hold the route's half -- it forwards the reader's payload verbatim, and every query
+# parameter reaches the reader bounded.
 
 
-def test_vendor_route_calls_whats_at_risk_filtered_by_vendor():
-    stripe_site = _site("s1", vendor="stripe")
-    shopify_site = _site("s2", vendor="shopify", op="GetOrders")
-    change_stripe = _change("c1", vendor="stripe")
-    change_shopify = _change("c2", vendor="shopify", op="GetOrders")
-    client = _client(
-        findings=[_finding("f1", "s1", "c1"), _finding("f2", "s2", "c2")],
-        sites=[stripe_site, shopify_site],
-        changes=[change_stripe, change_shopify],
+def _recording_vendor_findings_reader() -> tuple[Any, list[dict[str, Any]]]:
+    calls: list[dict[str, Any]] = []
+
+    def reader(vendor_id: str, **kwargs):
+        calls.append({"vendor_id": vendor_id, **kwargs})
+        return _fake_vendor_findings_reader(vendor_id, **kwargs)
+
+    return reader, calls
+
+
+def test_vendor_route_returns_the_vendor_findings_readers_payload():
+    payload = {
+        "items": [{"finding_id": "f1", "vendor": "stripe"}],
+        "total": 1,
+        "next_offset": None,
+        "repo_id": "r1",
+        "indexed_at": "2026-07-28T06:00:00+00:00",
+        "feed_fetched_at": None,
+        "binding_source": "static",
+        "context_savings": 400,
+    }
+    app = _build_app(
+        surface=GraphSurface(FakeGraph(), feed_fetched_at=FETCHED),
+        vendor_findings_reader=lambda vendor_id, **_: payload,
     )
+    client = TestClient(app)
 
     body = client.get("/api/vendors/stripe").json()
 
-    assert body["total"] == 1
-    assert body["items"][0]["vendor"] == "stripe"
-    assert body["items"][0]["finding_id"] == "f1"
+    for key, value in payload.items():
+        assert body[key] == value, key
 
 
-def test_vendor_route_passes_pagination_through():
-    findings, sites, changes = [], [], []
-    change = _change("c1", vendor="stripe")
-    changes.append(change)
-    for i in range(5):
-        site = _site(f"s{i}", vendor="stripe", path=f"src/a{i}.ts", line=i + 1)
-        sites.append(site)
-        findings.append(_finding(f"f{i}", f"s{i}", "c1"))
-    client = _client(findings=findings, sites=sites, changes=changes)
-
-    body = client.get("/api/vendors/stripe?limit=2&offset=1").json()
-
-    assert body["total"] == 5
-    assert len(body["items"]) == 2
-    assert body["next_offset"] == 3
-
-
-def test_vendor_route_passes_the_severity_filter_through_to_the_frozen_surface():
-    # `whats_at_risk` has accepted `severity` since it was written (`tools.py:89-95`); no route
-    # ever passed it. This is what exposes it -- one query parameter, no change to `tools.py`.
-    breaking_site = _site("s1", vendor="stripe")
-    warning_site = _site("s2", vendor="stripe", path="src/other.ts", line=44)
-    change = _change("c1", vendor="stripe")
-    client = _client(
-        findings=[
-            _finding("f1", "s1", "c1", severity="breaking"),
-            _finding("f2", "s2", "c1", severity="warning"),
-        ],
-        sites=[breaking_site, warning_site],
-        changes=[change],
+def test_vendor_route_passes_the_vendor_and_its_filters_to_the_reader():
+    reader, calls = _recording_vendor_findings_reader()
+    client = TestClient(
+        _build_app(
+            surface=GraphSurface(FakeGraph(), feed_fetched_at=FETCHED),
+            vendor_findings_reader=reader,
+        )
     )
 
-    body = client.get("/api/vendors/stripe?severity=breaking").json()
+    client.get("/api/vendors/stripe?repo_id=r1&severity=breaking&path=src/billing&limit=2&offset=1")
 
-    assert body["total"] == 1
-    assert body["items"][0]["finding_id"] == "f1"
+    assert calls == [
+        {
+            "vendor_id": "stripe",
+            "repo_id": "r1",
+            "severity": "breaking",
+            "path": "src/billing",
+            "limit": 2,
+            "offset": 1,
+        }
+    ]
 
 
-def test_vendor_route_passes_the_path_filter_through_to_the_frozen_surface():
-    billing_site = _site("s1", vendor="stripe", path="src/billing/pay.ts")
-    other_site = _site("s2", vendor="stripe", path="src/other/pay.ts")
-    change = _change("c1", vendor="stripe")
-    client = _client(
-        findings=[_finding("f1", "s1", "c1"), _finding("f2", "s2", "c1")],
-        sites=[billing_site, other_site],
-        changes=[change],
+def test_vendor_route_filters_default_to_none_when_absent():
+    reader, calls = _recording_vendor_findings_reader()
+    client = TestClient(
+        _build_app(
+            surface=GraphSurface(FakeGraph(), feed_fetched_at=FETCHED),
+            vendor_findings_reader=reader,
+        )
     )
 
-    body = client.get("/api/vendors/stripe?path=src/billing").json()
+    client.get("/api/vendors/stripe")
 
-    assert body["total"] == 1
-    assert body["items"][0]["finding_id"] == "f1"
-
-
-def test_vendor_route_severity_and_path_default_to_no_filter_when_absent():
-    site_a = _site("s1", vendor="stripe")
-    site_b = _site("s2", vendor="stripe", path="src/other.ts", line=44)
-    change = _change("c1", vendor="stripe")
-    client = _client(
-        findings=[_finding("f1", "s1", "c1"), _finding("f2", "s2", "c1")],
-        sites=[site_a, site_b],
-        changes=[change],
-    )
-
-    body = client.get("/api/vendors/stripe").json()
-
-    assert body["total"] == 2
+    assert calls[0]["repo_id"] is None
+    assert calls[0]["severity"] is None
+    assert calls[0]["path"] is None
+    assert calls[0]["limit"] == DEFAULT_LIMIT
+    assert calls[0]["offset"] == 0
 
 
 def test_vendor_route_a_negative_offset_is_floored_not_turned_into_a_negative_slice():
     # `_int_param` returns whatever an out-of-range value parses to, and `offset` was never
-    # clamped the way `limit` is (`app.py:88` clamps limit; offset went straight to the surface).
-    # A negative offset is a slice bound in the surface's own Python-side pagination, not a page.
-    client, surface, *_ = _recording_client()
+    # clamped the way `limit` is. A negative offset reaching the reader is a slice bound rather
+    # than a page position, whichever side of the transport the paging happens on.
+    reader, calls = _recording_vendor_findings_reader()
+    client = TestClient(
+        _build_app(
+            surface=GraphSurface(FakeGraph(), feed_fetched_at=FETCHED),
+            vendor_findings_reader=reader,
+        )
+    )
 
     client.get("/api/vendors/stripe?offset=-5")
 
-    offsets = [kwargs["offset"] for _, kwargs in surface.calls if "offset" in kwargs]
-    assert offsets == [0]
+    assert calls[0]["offset"] == 0
 
 
 def test_vendor_changes_route_a_negative_offset_is_floored():
@@ -452,9 +490,9 @@ def test_runs_route_a_negative_offset_is_floored():
 
 
 def test_vendor_route_returns_empty_page_for_unknown_vendor():
-    # `whats_at_risk` returns an empty page for a vendor with no findings; the route
-    # matches that shape rather than 404, because the surface itself says that "nothing
-    # matches" is an answer, not a failure.
+    # `vendor_findings` returns an empty page for a vendor with no findings; the route
+    # matches that shape rather than 404, because "nothing matches" is an answer, not a
+    # failure -- the same ruling the frozen surface made for the same question.
     client = _client()
 
     response = client.get("/api/vendors/nobody")
@@ -949,12 +987,13 @@ def test_observed_route_pagination_defaults_when_absent():
 
 def test_detectors_route_returns_the_readers_payload_unaltered():
     payload = {
+        "repo_id": None,
         "detectors": [{"detector": "vendor-change", "total": 2, "by_rung": {"static": 2}}],
         "total_open_findings": 2,
     }
     app = _build_app(
         surface=GraphSurface(FakeGraph(), feed_fetched_at=FETCHED),
-        detector_reader=lambda: payload,
+        detector_reader=lambda *, repo_id=None: payload,
     )
     client = TestClient(app)
 
@@ -964,13 +1003,18 @@ def test_detectors_route_returns_the_readers_payload_unaltered():
     assert response.json() == payload
 
 
-def test_detectors_route_reaches_its_reader_exactly_once_with_no_arguments():
-    calls: list[None] = []
+def _recording_detector_reader() -> tuple[Any, list[str | None]]:
+    calls: list[str | None] = []
 
-    def detector_reader():
-        calls.append(None)
-        return _fake_detector_reader()
+    def detector_reader(*, repo_id=None):
+        calls.append(repo_id)
+        return _fake_detector_reader(repo_id=repo_id)
 
+    return detector_reader, calls
+
+
+def test_detectors_route_reaches_its_reader_exactly_once_and_unscoped_by_default():
+    detector_reader, calls = _recording_detector_reader()
     app = _build_app(
         surface=GraphSurface(FakeGraph(), feed_fetched_at=FETCHED), detector_reader=detector_reader
     )
@@ -978,7 +1022,22 @@ def test_detectors_route_reaches_its_reader_exactly_once_with_no_arguments():
 
     client.get("/api/detectors")
 
-    assert calls == [None]
+    assert calls == [None], "no repo_id in the query string is the fleet, and it says so"
+
+
+def test_detectors_route_passes_repo_id_to_its_reader():
+    # Detector attribution under the Codebase level answers "which detector is producing *my*
+    # false positives". Rendering the fleet's answer there would be a false claim about this
+    # repository -- the class B92 closes.
+    detector_reader, calls = _recording_detector_reader()
+    app = _build_app(
+        surface=GraphSurface(FakeGraph(), feed_fetched_at=FETCHED), detector_reader=detector_reader
+    )
+    client = TestClient(app)
+
+    client.get("/api/detectors?repo_id=acme%2Fbilling")
+
+    assert calls == ["acme/billing"]
 
 
 # -- the read-only constraint, as a test rather than a promise ------------------
@@ -1035,9 +1094,10 @@ class _RecordingClient(NamedTuple):
     binding_reads: list[tuple[str, str, str | None]]
     coverage_reads: list[str]
     observed_reads: list[str]
-    detector_reads: list[None]
-    severity_reads: list[None]
-    overview_reads: list[None]
+    detector_reads: list[str | None]
+    severity_reads: list[str | None]
+    overview_reads: list[str | None]
+    vendor_findings_reads: list[dict[str, Any]]
 
 
 def _recording_client(**graph_kw) -> _RecordingClient:
@@ -1049,9 +1109,10 @@ def _recording_client(**graph_kw) -> _RecordingClient:
     binding_reads: list[tuple[str, str, str | None]] = []
     coverage_reads: list[str] = []
     observed_reads: list[str] = []
-    detector_reads: list[None] = []
-    severity_reads: list[None] = []
-    overview_reads: list[None] = []
+    detector_reads: list[str | None] = []
+    severity_reads: list[str | None] = []
+    overview_reads: list[str | None] = []
+    vendor_findings_reads: list[dict[str, Any]] = []
 
     def workflow_reader(finding_id: str):
         workflow_reads.append(finding_id)
@@ -1081,17 +1142,21 @@ def _recording_client(**graph_kw) -> _RecordingClient:
         observed_reads.append(repo_id)
         return _fake_observed_reader(repo_id)
 
-    def detector_reader():
-        detector_reads.append(None)
-        return _fake_detector_reader()
+    def detector_reader(*, repo_id=None):
+        detector_reads.append(repo_id)
+        return _fake_detector_reader(repo_id=repo_id)
 
-    def severity_reader():
-        severity_reads.append(None)
-        return _fake_severity_reader()
+    def severity_reader(*, repo_id=None):
+        severity_reads.append(repo_id)
+        return _fake_severity_reader(repo_id=repo_id)
 
-    def overview_reader():
-        overview_reads.append(None)
-        return _fake_overview_reader()
+    def overview_reader(*, repo_id=None):
+        overview_reads.append(repo_id)
+        return _fake_overview_reader(repo_id=repo_id)
+
+    def vendor_findings_reader(vendor_id: str, **kwargs):
+        vendor_findings_reads.append({"vendor_id": vendor_id, **kwargs})
+        return _fake_vendor_findings_reader(vendor_id, **kwargs)
 
     app = create_app(
         surface=surface,
@@ -1105,10 +1170,12 @@ def _recording_client(**graph_kw) -> _RecordingClient:
         detector_reader=detector_reader,
         severity_reader=severity_reader,
         overview_reader=overview_reader,
+        vendor_findings_reader=vendor_findings_reader,
     )
     return _RecordingClient(
         TestClient(app), surface, workflow_reads, runs_reads, corpus_reads, repositories_reads,
         binding_reads, coverage_reads, observed_reads, detector_reads, severity_reads, overview_reads,
+        vendor_findings_reads,
     )
 
 
@@ -1122,6 +1189,7 @@ def test_no_route_reaches_past_the_read_surface():
     (
         client, surface, workflow_reads, runs_reads, corpus_reads, repositories_reads,
         binding_reads, coverage_reads, observed_reads, detector_reads, severity_reads, overview_reads,
+        vendor_findings_reads,
     ) = _recording_client(findings=[_finding("f1", "s1", "c1")], sites=[site], changes=[change])
 
     assert client.get("/api/overview").status_code == 200
@@ -1152,6 +1220,7 @@ def test_no_route_reaches_past_the_read_surface():
     assert len(detector_reads) == 1, "the detectors route must reach its own reader exactly once"
     assert len(severity_reads) == 1, "the overview route must reach the severity reader exactly once"
     assert len(overview_reads) == 1, "the overview route must reach the overview reader exactly once"
+    assert len(vendor_findings_reads) == 1, "the vendor route must reach its own reader exactly once"
 
 
 def test_a_404_route_reaches_past_nothing_either():
@@ -1169,42 +1238,45 @@ def test_a_404_route_reaches_past_nothing_either():
 
 
 def test_limit_above_the_ceiling_is_clamped():
-    client, surface, *_ = _recording_client()
+    # Both sides of the transport: the vendor route pages through its own reader now, the
+    # changes route still pages through the frozen surface, and `_limit_param` bounds each.
+    recorded = _recording_client()
 
-    client.get(f"/api/vendors/stripe?limit={_MAX_LIMIT * 1000}")
-    client.get(f"/api/vendors/stripe/changes?limit={_MAX_LIMIT * 1000}")
+    recorded.client.get(f"/api/vendors/stripe?limit={_MAX_LIMIT * 1000}")
+    recorded.client.get(f"/api/vendors/stripe/changes?limit={_MAX_LIMIT * 1000}")
 
-    limits = [kwargs["limit"] for _, kwargs in surface.calls if "limit" in kwargs]
-    assert limits == [_MAX_LIMIT, _MAX_LIMIT]
+    assert [call["limit"] for call in recorded.vendor_findings_reads] == [_MAX_LIMIT]
+    surface_limits = [kwargs["limit"] for _, kwargs in recorded.surface.calls if "limit" in kwargs]
+    assert surface_limits == [_MAX_LIMIT]
 
 
 def test_a_limit_under_the_ceiling_passes_through_untouched():
-    client, surface, *_ = _recording_client()
+    recorded = _recording_client()
 
-    client.get("/api/vendors/stripe?limit=7")
+    recorded.client.get("/api/vendors/stripe?limit=7")
 
-    assert [kwargs["limit"] for _, kwargs in surface.calls if "limit" in kwargs] == [7]
+    assert [call["limit"] for call in recorded.vendor_findings_reads] == [7]
 
 
 def test_a_negative_limit_is_floored_not_turned_into_a_negative_slice():
-    # `rows[offset : offset + limit]` in the surface turns a negative limit into a negative
-    # slice stop, which trims from the end instead of returning nothing. The ceiling alone
-    # does not stop this -- a floor does.
-    client, surface, *_ = _recording_client()
+    # A negative limit is a negative slice stop wherever the paging happens -- in the surface's
+    # own `rows[offset : offset + limit]`, or in a SQL `LIMIT` that rejects it outright. The
+    # ceiling alone does not stop this; a floor does.
+    recorded = _recording_client()
 
-    client.get("/api/vendors/stripe?limit=-1")
+    recorded.client.get("/api/vendors/stripe?limit=-1")
 
-    assert [kwargs["limit"] for _, kwargs in surface.calls if "limit" in kwargs] == [1]
+    assert [call["limit"] for call in recorded.vendor_findings_reads] == [1]
 
 
 def test_a_zero_limit_is_floored_so_the_cursor_terminates():
     # `next_offset` only reaches `None` once a window is non-empty; a limit of zero never
     # consumes a row, so the cursor the console would page with never advances.
-    client, surface, *_ = _recording_client()
+    recorded = _recording_client()
 
-    client.get("/api/vendors/stripe?limit=0")
+    recorded.client.get("/api/vendors/stripe?limit=0")
 
-    assert [kwargs["limit"] for _, kwargs in surface.calls if "limit" in kwargs] == [1]
+    assert [call["limit"] for call in recorded.vendor_findings_reads] == [1]
 
 
 # -- every collection route paginates --------------------------------------------
@@ -1370,18 +1442,27 @@ def test_every_collection_route_accepts_limit_and_offset():
         sites.append(site)
         findings.append(_finding(f"f{i}", f"s{i}", "c1"))
     run_items = [{"thread_id": f"f{i}:0", "finding_id": f"f{i}", "outcome": "opened"} for i in range(5)]
+    finding_items = [{"finding_id": f"f{i}", "vendor": "x", "line": i} for i in range(5)]
 
-    def runs_reader(*, limit: int, offset: int) -> dict[str, Any]:
-        window = run_items[offset : offset + limit]
+    def _paged(items: list, limit: int, offset: int) -> dict[str, Any]:
+        window = items[offset : offset + limit]
         consumed = offset + len(window)
         return {
             "items": window,
-            "total": len(run_items),
-            "next_offset": consumed if consumed < len(run_items) else None,
+            "total": len(items),
+            "next_offset": consumed if consumed < len(items) else None,
         }
 
+    def runs_reader(*, limit: int, offset: int) -> dict[str, Any]:
+        return _paged(run_items, limit, offset)
+
+    def vendor_findings_reader(vendor_id: str, *, limit: int, offset: int, **_) -> dict[str, Any]:
+        return _paged(finding_items, limit, offset)
+
     surface = GraphSurface(FakeGraph(findings=findings, sites=sites, changes=changes), feed_fetched_at=FETCHED)
-    app = _build_app(surface=surface, runs_reader=runs_reader)
+    app = _build_app(
+        surface=surface, runs_reader=runs_reader, vendor_findings_reader=vendor_findings_reader
+    )
 
     violations = _pagination_violations(app)
 

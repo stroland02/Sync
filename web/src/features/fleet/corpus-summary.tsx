@@ -73,6 +73,12 @@ export function CorpusSummaryCard() {
               retried three times writes three attempts here and counts once toward
               findings.
             </CardDescription>
+            <p className="max-w-prose text-body text-muted-foreground">
+              This one cannot be narrowed to a repository, and no screen below this level
+              renders it: <code className="font-mono">migration_outcome</code> stores no
+              repository at all — nothing in it identifies a customer, which is the decision
+              that makes it safe to aggregate across them.
+            </p>
           </CardHeader>
           <CardContent className="flex flex-col gap-section">
             {query.data.attempts === 0 ? (

@@ -36,10 +36,9 @@ export function IndexCoverageCard({ repoId }: { repoId: string }) {
           Call sites the index holds for this repository, per vendor. A vendor absent from the
           table is not zero — it is a question this view cannot answer: whether the indexer
           looked and found nothing, or nothing declares which package to look for. A vendor
-          name below opens that vendor's own page, which reads across every repository the
-          index has seen rather than staying scoped to this one —{" "}
-          <code className="font-mono">GET /api/vendors/&#123;vendor_id&#125;</code> takes no{" "}
-          <code className="font-mono">repo_id</code> yet.
+          name below opens that vendor's own page with this repository's scope carried into
+          it, so the findings there are this codebase's; what the vendor published is not
+          scoped, and that page says which of its two halves is which.
         </CardDescription>
       </CardHeader>
       <CardContent>

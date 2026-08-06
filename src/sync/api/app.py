@@ -1,7 +1,7 @@
 """Starlette app: the transport for the operator console, over two answer sources.
 
-The transport holds no logic. Per-finding and per-vendor routes are a thin call into
-`GraphSurface`, which answers questions about one repository an agent is already pointed
+The transport holds no logic. Per-finding routes are a thin call into `GraphSurface`, which
+answers questions about one repository an agent is already pointed
 at. Fleet-wide routes -- `/api/runs`, `/api/corpus`, `/api/repositories` -- answer a
 different grain, every run or every attempt across repositories, which the frozen surface
 answers no question about; those go through reader callables backed by `sync.dashboard`
@@ -11,6 +11,14 @@ telemetry, detector accountability -- are the same amendment applied a second ti
 constructs neither the surface nor a dashboard view model -- all of it is built by the caller
 and handed in. Errors that a reader expresses as `None` become 404 with a JSON body -- HTML
 would confuse a JSON client into treating a missing finding as a broken deployment.
+
+Four routes take an optional `repo_id` and pass it straight through: `/api/overview`,
+`/api/detectors`, `/api/vendors/{vendor_id}` and the bindings route. Repository scope is what
+every console level below Codebase inherits, and a fleet-wide answer rendered under a
+repository's name is a false claim about that repository. The corpus is deliberately not among
+them -- `migration_outcome` stores no `repo_id` at all, by a schema decision that is what makes
+the table safe to aggregate across customers, so that figure states its fleet scope on screen
+instead.
 
 Every reader is a callable rather than a class for the same reason `workflow_reader` is: the
 checkpointer, the corpus, the repository roll-up and the graph views each live outside
@@ -57,6 +65,15 @@ DetectorReader = Callable[[], dict[str, Any]]
 # rather than derived from `whats_at_risk`'s own page so the two stay two questions rather than
 # one route quietly answering both from data shaped for the first.
 SeverityReader = Callable[[], dict[str, Any]]
+
+# The vendor-findings reader backs `sync.dashboard.graph_views.vendor_findings`, and it is here
+# for the reason `overview_reader` is: `sync.mcp.tools` is frozen, and `whats_at_risk` cannot
+# narrow its answer to one repository because its rows carry no `repo_id`. Repository scope is
+# what every console level below Codebase inherits, and API Services is the first level under
+# it, so a fleet-wide page rendered under a repository's name is a false claim about that
+# repository. The reader also fixes the same scan `overview_reader` did: `whats_at_risk` walks
+# every open finding doing one `get_call_site` round trip per row before slicing in Python.
+VendorFindingsReader = Callable[..., dict[str, Any]]
 
 # The overview reader backs `sync.dashboard.graph_views.overview_summary`: the fleet screen's
 # vendor distribution and its bounded total, read straight from `GraphStore` in real SQL rather
@@ -134,6 +151,7 @@ def create_app(
     detector_reader: DetectorReader,
     severity_reader: SeverityReader,
     overview_reader: OverviewReader,
+    vendor_findings_reader: VendorFindingsReader,
 ) -> Starlette:
     """Build the Starlette app bound to a particular surface and readers.
 
@@ -158,20 +176,25 @@ def create_app(
         # from `page["items"]`: the vendor distribution and the severity distribution are two
         # independently-computed questions, and merging them into one reader's return value
         # would let one route quietly answer both from data shaped for the first.
-        payload = overview_reader()
-        severity = severity_reader()
+        #
+        # `repo_id` narrows both readers together or neither. Narrowing one would put two
+        # scopes on one screen with nothing on it saying which figure is in which.
+        repo_id = request.query_params.get("repo_id")
+        payload = overview_reader(repo_id=repo_id)
+        severity = severity_reader(repo_id=repo_id)
         return JSONResponse({**payload, "severity_counts": severity["by_severity"]})
 
     async def vendor_detail(request: Request) -> JSONResponse:
-        vendor_id = request.path_params["vendor_id"]
-        limit = _limit_param(request)
-        offset = _offset_param(request)
-        severity = request.query_params.get("severity")
-        path = request.query_params.get("path")
-        page = surface.whats_at_risk(
-            vendor=vendor_id, severity=severity, path=path, limit=limit, offset=offset
+        return JSONResponse(
+            vendor_findings_reader(
+                request.path_params["vendor_id"],
+                repo_id=request.query_params.get("repo_id"),
+                severity=request.query_params.get("severity"),
+                path=request.query_params.get("path"),
+                limit=_limit_param(request),
+                offset=_offset_param(request),
+            )
         )
-        return JSONResponse(page)
 
     async def finding_detail(request: Request) -> JSONResponse:
         finding_id = request.path_params["finding_id"]
@@ -264,7 +287,7 @@ def create_app(
         )
 
     async def detectors(request: Request) -> JSONResponse:
-        return JSONResponse(detector_reader())
+        return JSONResponse(detector_reader(repo_id=request.query_params.get("repo_id")))
 
     routes = [
         Route("/api/overview", overview, methods=["GET"]),
