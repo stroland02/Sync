@@ -44,7 +44,7 @@ function Panel({ headline, children }: { headline: string; children: ReactNode }
   return (
     <div className="max-w-prose rounded border border-border p-section">
       <h2 className="text-emphasis">{headline}</h2>
-      <div className="mt-row flex flex-col gap-row text-body text-ink-secondary">{children}</div>
+      <div className="mt-row flex flex-col gap-row text-body text-ink-muted">{children}</div>
     </div>
   )
 }

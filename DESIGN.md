@@ -85,7 +85,7 @@ than the plane behind it**, which is why `--color-surface` is lighter than `--co
 | 5 | `--color-line` | the hairline: dividers, card rings, table rules | `oklch(0.345 0 0)` `#393939` |
 | 6 | `--color-line-strong` | the boundary of a control, which must clear 3:1 | `oklch(0.578 0 0)` `#7a7a7a` |
 | 7 | `--color-ink-muted` | metadata, `<dt>` labels, timestamps, the absence marker | `oklch(0.715 0 0)` `#a3a3a3` |
-| 8 | `--color-ink-secondary` | prose that is not the headline value | `oklch(0.83 0 0)` `#c7c7c7` |
+| 8 | `--color-ink-secondary` | a chart's legend and axis text, inside a canvas — **not a DOM text step**; see below | `oklch(0.83 0 0)` `#c7c7c7` |
 | 9 | `--color-ink` | the primary ink | `oklch(0.955 0 0)` `#f0f0f0` |
 
 This ramp was **re-stepped against the dark surface**, not produced by inverting the light ramp the
@@ -95,8 +95,29 @@ to hold, not a mirror of the retired light-mode values.
 
 `ABSENT` — the console's one absence marker — wears `--color-ink-muted`. One glyph, one appearance.
 
+**The two working text levels are `ink` and `ink-muted`, and step 8 is not a third one.** A headline
+value takes `ink`; everything recessive beside it — a `<dt>` label, a timestamp, a panel's
+explanatory prose, an absence marker — takes `ink-muted`. That is the pair the console actually
+renders, measured across all nine routes, and it is what makes "two ink levels plus one accent"
+true rather than aspirational.
+
+`--color-ink-secondary` sits between them and has exactly one consumer: `corpus-chart.tsx` spends
+it on a chart legend's `textStyle`, resolved through `getComputedStyle` in `echart.tsx`. That text
+is painted inside a canvas, so it is never a DOM ink level and never composes against DOM text on
+the same surface. **Reaching for it as a `text-` class is what a third grey looks like when it
+arrives**, and it arrived twice: `run-outcome.tsx` put it on the panel body of the two screens
+carrying the densest evidence, and `filters.tsx` put it on the active-filter *value* — where, at
+`oklch(0.83)` against an `ink-muted` label at `0.715`, it also made the value only slightly
+brighter than the word naming it. Both were corrected on 2026-08-06 (`M4.5-W142`), to `ink-muted`
+and `ink` respectively, and the ink census on those routes went from three neutral levels to two.
+The floor was never in tension: the panel prose measures **7.75:1** at `ink-muted` on
+`surface-sunken`, against a 5.05 floor.
+
+`tests/test_console_design_tokens.py` holds the class ban rather than the token, so a chart
+resolving step 8 keeps working and a component cannot spend it on DOM text.
+
 **Graphics is an allocation, not a tenth step.** Two ink levels hold for text — `ink` and
-`ink-secondary` — but an icon rendered at either is optically louder than the prose it sits beside,
+`ink-muted` — but an icon rendered at either is optically louder than the prose it sits beside,
 because a filled glyph carries more area than a stroke pattern at the same lightness. `getsentry/sentry`
 keeps a separate `graphics` category for exactly this (`components/core/principles/tokens/tokens.mdx`,
 "Categories": `content` is "text and icons which need to stand out the most", `graphics` is "icons and
@@ -461,11 +482,28 @@ cell padding is *derived* from it, not the other way round.
 | `row-lg` | 40px (`h-10`) | `TableHead` today | a header row, or a form field needing a larger target |
 
 None of these is a new value: each is a Tailwind stock height Sync's own components already
-render, named here so a future row is chosen from the scale rather than invented. `row-md` is the
-existing arithmetic made explicit — `TableCell` already renders a 36px row from `text-body` and
-`p-row`; it was simply never named. A control dropped into a `row-md` cell (a default 32px button)
-clears the row by 2px on each side without changing the row's height — that is the property the
-scale exists to protect.
+render, named here so a future row is chosen from the scale rather than invented. A control
+dropped into a `row-md` cell (a default 32px button) clears the row by 2px on each side without
+changing the row's height — that is the property the scale exists to protect.
+
+**Corrected 2026-08-06, and the correction is the useful part.** This section used to say `row-md`
+was "the existing arithmetic made explicit — `TableCell` already renders a 36px row from
+`text-body` and `p-row`; it was simply never named." It never rendered 36px. `table.tsx` spelled
+`py-2.5` — 10px, off the 4px base — and a comment in that file stated the opposite rule to this
+one: that the row height is a consequence of the padding rather than chosen before it. Measured in
+Chrome at 1440×900 across seven tables on the Fleet screen: a single-line body row was **40.5px**
+and a header row **36.5px** — the two heights this table assigns, in each other's slots. The
+classes now derive from the numbers above (`h-10 px-row py-row` on the header, `px-row py-row` on
+the cell) and measure **40.0px** and **36.0px**.
+
+Two things follow, and both are the point of writing this down rather than quietly editing the
+sentence. **A header cannot reach `row-lg` through padding**: 12px of `--text-meta` on a 16px line
+box plus `--spacing-row` twice is 32px, and the value that would make it 40 is a 12px padding this
+document deliberately does not name — which is why the header declares `h-10` and pads inside it,
+in the order this section already prescribed. And **the sentence was checkable the whole time**:
+`tests/test_console_design_tokens.py` now multiplies the classes `table.tsx` sets against the Type,
+Space and Row height tables here and asserts they equal these numbers, so this table and that file
+cannot disagree again without a test naming which one moved.
 
 ---
 

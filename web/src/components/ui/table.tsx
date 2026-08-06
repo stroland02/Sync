@@ -72,11 +72,17 @@ function TableRow({
   )
 }
 
-// Padding is the same on every cell, header or body: 8px inline from the shared `--spacing-row`
-// token, 10px block. The row height is a consequence of that padding plus each cell's own type
-// step, not a separately chosen number -- a header row (`--text-meta`, 16px line height) lands
-// at 36px and a body row (`--text-body`, 20px line height) lands at 40px from the identical
-// padding declaration.
+// Padding is `--spacing-row` on both axes of both cells. The row height is *not* a consequence
+// of it: DESIGN.md's Row height section chooses the height from the scale first and derives the
+// padding from it, so a body row lands at `row-md` (36px: `--text-body`'s 20px line box plus 8px
+// top and bottom) and a header declares `row-lg` outright.
+//
+// This comment and DESIGN.md used to say opposite things, and the code followed this one. It read
+// "10px block... the row height is a consequence of that padding, not a separately chosen
+// number", which produced a 36px header and a 40px body row -- the two heights the contract
+// assigns, in each other's slots. Both sentences are now the same rule, and
+// `tests/test_console_design_tokens.py` multiplies these classes out against DESIGN.md's tables
+// so the two cannot drift apart again silently.
 //
 // Declared and unconsumed today, on purpose, not by oversight: `aria-[sort]:text-foreground`
 // renders a column at primary ink whenever it carries an `aria-sort` attribute -- a recorded
@@ -95,12 +101,17 @@ function TableRow({
 // `aria-sort="ascending" | "descending" | "none"` through it -- not before, and deleting the
 // selector now would be removing a rule Task 13 already argued for and priced, only to have the
 // header-cell task re-add the identical line.
+//
+// `h-10` is `row-lg`, and padding alone could not reach it: 12px of `--text-meta` on a 16px line
+// box plus the 8px row token is 32px, and the only value that would make it 40 is a 12px vertical
+// padding the contract does not name. In table layout a declared height is a minimum, so a header
+// label that wraps still grows past it.
 function TableHead({ className, ...props }: React.ComponentProps<"th">) {
   return (
     <th
       data-slot="table-head"
       className={cn(
-        "px-row py-2.5 text-left align-middle text-meta font-medium break-words text-foreground aria-[sort]:text-foreground [&:has([role=checkbox])]:pr-0",
+        "h-10 px-row py-row text-left align-middle text-meta font-medium break-words text-foreground aria-[sort]:text-foreground [&:has([role=checkbox])]:pr-0",
         className
       )}
       {...props}
@@ -119,7 +130,7 @@ function TableCell({ className, ...props }: React.ComponentProps<"td">) {
     <td
       data-slot="table-cell"
       className={cn(
-        "px-row py-2.5 text-body align-middle break-words [&:has([role=checkbox])]:pr-0",
+        "px-row py-row text-body align-middle break-words [&:has([role=checkbox])]:pr-0",
         className
       )}
       {...props}

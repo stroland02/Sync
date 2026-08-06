@@ -241,7 +241,7 @@ export function ActiveFilters({
     <div className="flex flex-wrap items-center gap-row text-body">
       <span className="text-ink-muted">Narrowed by</span>
       {filters.map((filter) => (
-        <span key={filter.label} className="text-ink-secondary">
+        <span key={filter.label} className="text-ink">
           {filter.label} <span className="font-mono">{filter.value}</span>
         </span>
       ))}

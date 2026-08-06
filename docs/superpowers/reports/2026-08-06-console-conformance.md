@@ -268,10 +268,16 @@ distinction that section already draws, and it is right.
 
 Four, and they share a property: each one either costs an operator rows on a dense screen or puts a
 number in the contract that the screen contradicts, which is the failure a measured contract exists
-to prevent. **B104** is the only one that costs rows — 10px of cell padding turns a declared 36px
-row into a rendered 80px one, so a ten-thousand-row table gives up roughly a third of its viewport
-to padding nobody chose, and the same two lines are what make nine spacing values render where the
-contract names three. **B105** is three stale numbers and one stale sentence in the one section of
+to prevent. **B104** is the one where the contract's own arithmetic does not render — 10px of cell
+padding puts a declared 36px row and a declared 40px header in each other's slots, and the same two
+lines are what make nine spacing values render where the contract names three. (**Corrected
+2026-08-06 by `M4.5-W142`, which closed it.** This paragraph first said B104 "is the only one that
+costs rows" and that a ten-thousand-row table "gives up roughly a third of its viewport to padding
+nobody chose". Both were wrong. Padding was 20px of an 80px row; the row is set by the Finding
+cell, whose 32-character id wraps to three lines at 56px in a 164px column. Fixing the padding
+moved a row from 80px to 76px and bought **no extra rows** — 900/80 and 900/76 both floor to 11
+above the fold. B104 was right to close on the contract, not on the density; B109 carries where the
+rows actually go.) **B105** is three stale numbers and one stale sentence in the one section of
 `DESIGN.md` whose entire purpose is to be checkable against pixels; a focus ring published at 8.69
 and rendering at 3.08 is exactly the divergence that section warns about, and leaving it makes the
 next reader trust the wrong figure. **B106** and **B107** are one line each and both are honesty
@@ -317,8 +323,17 @@ were legitimate — a `dd` holding a short mono value, a `p` inside a wrapper th
 whether it does is a question about rendered layout. A guard written anyway would either fail on
 correct code or be relaxed until it caught nothing.
 
-The row height cannot, until B104 lands: a guard banning fractional spacing utilities would be the
-right shape and it fails on the current tree, so it ships with the fix and not before.
+The row height can, and `M4.5-W142` landed the guard with the fix. **This section first said it
+could not** — that "a guard banning fractional spacing utilities would be the right shape and it
+fails on the current tree". The shape was wrong, which is why it looked unholdable. A fractional-
+spacing ban still fails on the current tree, because `input.tsx`, `input-group.tsx`, `textarea.tsx`
+and three badge call sites spell `px-2.5`, `py-1.5` and `py-0.5`, and sweeping the shadcn form
+catalog was nobody's task. What the defect needed was not a spelling ban but **the arithmetic
+itself**: resolve the classes `table.tsx` sets against `DESIGN.md`'s Type, Space and Row height
+tables, and assert they multiply out to the declared height.
+`test_a_body_row_measures_the_row_height_design_md_derives_for_it` does that, reddens if either side
+moves alone, and was proven red against the real tree at `py-2.5` before it was trusted. **A rule
+that resists a string match is often still a rule about a number.**
 
 The rendered-contrast numbers cannot. Compositing an alpha over a surface needs a browser, and
 `CLAUDE.md`'s rule that logic with a wrong answer lives in Python does not help here, because the

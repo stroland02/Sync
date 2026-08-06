@@ -798,5 +798,194 @@ def test_the_dialog_heading_guard_permits_a_header_inside_the_content(tmp_path: 
     )
 
     violations = _dialog_heading_violations(tmp_path)
+# -- assertion 8: the table's rows measure what DESIGN.md says they measure ----------------------
+#
+# `DESIGN.md`'s Row height section states two heights as arithmetic over values it declares
+# elsewhere in the same file -- a header at `row-lg`, a body row at `row-md` derived from
+# `--text-body`'s line box plus `--spacing-row` top and bottom. Both sentences were false for as
+# long as they existed: `table.tsx` spelled `py-2.5`, so a header measured 36px against a declared
+# 40 and a single-line body row measured 40px against a declared 36 -- inverted, not merely off.
+# Measured in Chrome at 1440x900 across seven tables on the Fleet screen before and after
+# M4.5-W142: header 36.5 -> 40.0, single-line body row 40.5 -> 36.0.
+#
+# This guard is the arithmetic itself rather than a string match, because a string match would
+# pass on any spelling somebody liked. It resolves the classes `table.tsx` actually sets against
+# the type, spacing and row-height tables in `DESIGN.md` and asserts they multiply out to the
+# declared height, so it reddens if either side moves alone.
+
+
+def _type_line_heights() -> dict[str, int]:
+    """`--text-*` step -> line-height px, from DESIGN.md's Type table."""
+    steps = {
+        name: int(lh)
+        for name, lh in re.findall(r"\| `--text-(\w+)` \| \d+px \| (\d+)px \|", _design_md_text())
+    }
+    assert steps, "DESIGN.md's Type table no longer matches this regex -- update it here too"
+    return steps
+
+
+def _row_heights() -> dict[str, int]:
+    """`row-*` step -> px, from DESIGN.md's Row height table."""
+    steps = {
+        name: int(px)
+        for name, px in re.findall(r"\| `row-(\w+)` \| (\d+)px \(`h-\d+`\) \|", _design_md_text())
+    }
+    assert steps, "DESIGN.md's Row height table no longer matches this regex -- update it here too"
+    return steps
+
+
+def _table_primitive_text() -> str:
+    path = _WEB_SRC / "components" / "ui" / "table.tsx"
+    assert path.is_file(), f"{path} is gone -- the table primitive moved and this guard is blind"
+    return _read_stripped(path)
+
+
+def _cell_classes(slot: str, text: str | None = None) -> str:
+    """The Tailwind class string `table.tsx` sets on one `data-slot`.
+
+    Anchored on the slot rather than on the function name so a rename of `TableHead` does not
+    silently starve this guard: the slot is what the rest of the tree selects on. `text` is the
+    source to read, defaulting to the real primitive -- the tests below pass the class string
+    that was there before this change so the arithmetic is proven to reject it.
+    """
+    if text is None:
+        text = _table_primitive_text()
+    match = re.search(
+        r'data-slot="' + re.escape(slot) + r'"\s*\n\s*className=\{cn\(\s*\n?\s*"([^"]+)"',
+        text,
+    )
+    assert match, f'table.tsx no longer sets a cn("...") class string on data-slot="{slot}"'
+    return match.group(1)
+
+
+def _vertical_padding_px(classes: str, spacing: dict[str, int]) -> int:
+    """The rendered `py-*` in px, whether it is spelled as a token or as a raw Tailwind step."""
+    match = re.search(r"(?<![\w-])py-([\w.]+)(?![\w-])", classes)
+    assert match, f"no `py-*` in {classes[:60]!r} -- the padding moved and this guard is blind"
+    value = match.group(1)
+    if value in spacing:
+        return spacing[value]
+    return int(float(value) * 4)
+
+
+def _declared_height_px(classes: str) -> int | None:
+    match = re.search(r"(?<![\w-])h-(\d+)(?![\w.-])", classes)
+    return int(match.group(1)) * 4 if match else None
+
+
+def _text_step(classes: str, steps: dict[str, int]) -> str:
+    found = [name for name in steps if re.search(r"(?<![\w-])text-" + name + r"(?![\w-])", classes)]
+    assert len(found) == 1, f"expected exactly one `--text-*` step in {classes[:60]!r}, got {found}"
+    return found[0]
+
+
+def _body_row_height_px(classes: str) -> int:
+    spacing, steps = _spacing_tokens(), _type_line_heights()
+    return steps[_text_step(classes, steps)] + 2 * _vertical_padding_px(classes, spacing)
+
+
+def test_a_body_row_measures_the_row_height_design_md_derives_for_it():
+    _require_web_src()
+    classes = _cell_classes("table-cell")
+    rendered = _body_row_height_px(classes)
+    declared = _row_heights()["md"]
+
+    assert rendered == declared, (
+        f"a single-line table cell renders {rendered}px against the {declared}px DESIGN.md "
+        f"declares for `row-md`. Either the cell's padding or that table is wrong, and the "
+        f"contract says the height is chosen first and the padding derived from it"
+    )
+
+
+def test_a_header_row_declares_the_row_height_design_md_assigns_it():
+    _require_web_src()
+    declared_by_class = _declared_height_px(_cell_classes("table-head"))
+    declared_by_contract = _row_heights()["lg"]
+
+    assert declared_by_class == declared_by_contract, (
+        f"the header cell declares {declared_by_class}px against the {declared_by_contract}px "
+        f"DESIGN.md assigns `row-lg`, whose own row names `TableHead` as where it is already "
+        f"rendered. Padding alone cannot reach it -- 12px of `--text-meta` on a 16px line box "
+        f"plus the 8px row token is 32px -- so the height is set and the padding derived"
+    )
+
+
+# The two class strings below are verbatim what `table.tsx` carried before M4.5-W142, so these are
+# the guards refusing the real defect rather than a fixture invented to be refusable.
+_OLD_CELL = 'data-slot="table-cell"\n      className={cn(\n        "px-row py-2.5 text-body align-middle",\n'
+_OLD_HEAD = 'data-slot="table-head"\n      className={cn(\n        "px-row py-2.5 text-meta font-medium",\n'
+
+
+def test_the_row_height_arithmetic_rejects_the_fractional_padding_that_was_there() -> None:
+    # 10px of padding on `--text-body`'s 20px line box is 40 -- `row-lg`'s number, in `row-md`'s
+    # slot, which is the inversion the measurement found.
+    assert _body_row_height_px(_cell_classes("table-cell", _OLD_CELL)) == 40
+    assert _row_heights()["md"] == 36
+
+
+def test_the_header_guard_rejects_a_header_that_sets_no_height() -> None:
+    # Without `h-10` the header's height is whatever its padding happens to make it, which is how
+    # it came to render 36px while the contract assigned it 40.
+    assert _declared_height_px(_cell_classes("table-head", _OLD_HEAD)) is None
+    assert _row_heights()["lg"] == 40
+
+
+# -- assertion 9: two working ink levels for text, and the third is not a text class ------------
+#
+# Section 8 of `2026-08-05-sync-console-architecture.md` measures two ink levels plus one accent
+# and never three. The console holds it with `--color-ink` and `--color-ink-muted`;
+# `--color-ink-secondary` has exactly one consumer, `corpus-chart.tsx`'s legend `textStyle`, which
+# renders into a canvas and is not a DOM ink level at all. Two call sites reached for it as a
+# class and made a third -- `run-outcome.tsx` on the two screens carrying the densest evidence,
+# and `filters.tsx` on the active-filter strip, where it also made the value *dimmer* than the
+# ink-muted label naming it. Both measured 3 levels before M4.5-W142 and 2 after.
+#
+# The ban is on the class, not on the token: a chart resolving `--color-ink-secondary` through
+# `getComputedStyle` is the sanctioned consumer and must keep working.
+
+_INK_SECONDARY_CLASS = re.compile(r"(?<![\w-])(?:text|decoration|placeholder|caret)-ink-secondary(?![\w-])")
+
+
+def _third_ink_violations(root: Path) -> list[str]:
+    violations = []
+    for path in _iter_source_files(root, suffixes=(".ts", ".tsx")):
+        text = _read_stripped(path)
+        for match in _INK_SECONDARY_CLASS.finditer(text):
+            violations.append(f"{path}:{_line_at(text, match.start())}: {match.group(0)!r}")
+    return violations
+
+
+def test_no_component_paints_dom_text_with_the_third_ink_level():
+    _require_web_src()
+    _require_examined(_iter_source_files(_WEB_SRC), _WEB_SRC)
+    violations = _third_ink_violations(_WEB_SRC)
+    assert not violations, (
+        "the console's two working ink levels are `ink` and `ink-muted`; `ink-secondary` is the "
+        "chart legend's step and reaching for it as a text class puts a third grey on screen "
+        "where a reader cannot tell recessive prose from a deliberate second voice. Recessive "
+        "prose takes `text-ink-muted`, a value takes `text-ink`:\n" + "\n".join(violations)
+    )
+
+
+def test_the_third_ink_guard_rejects_a_text_class(tmp_path: Path) -> None:
+    (tmp_path / "run-outcome.tsx").write_text(
+        '<div className="text-body text-ink-secondary">{children}</div>\n', encoding="utf-8"
+    )
+
+    violations = _third_ink_violations(tmp_path)
+
+    assert violations and "text-ink-secondary" in violations[0]
+
+
+def test_the_third_ink_guard_permits_the_chart_resolving_the_token(tmp_path: Path) -> None:
+    # `echart.tsx` maps a token name to a chart option and `corpus-chart.tsx` spends it on legend
+    # text inside a canvas. Neither is a DOM ink level and neither may be swept up here.
+    (tmp_path / "echart.tsx").write_text(
+        'const TOKEN_PROPERTIES = { inkSecondary: "--color-ink-secondary" }\n'
+        "const legend = { textStyle: { color: tokens.inkSecondary } }\n",
+        encoding="utf-8",
+    )
+
+    violations = _third_ink_violations(tmp_path)
 
     assert not violations
