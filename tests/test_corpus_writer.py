@@ -10,9 +10,11 @@ reads, and every axis keeps reporting null with a sample size of zero. Null-beca
 and null-because-the-writer-vanished are then indistinguishable, and the measurement that tests
 the product claim goes quiet without anything going red.
 
-And the positive class is unreachable without a push: only `open_pr` records a success, and it
-takes a forge. The tests at the end of this file document that rather than fix it -- the wiring
-belongs to another task -- and they are written to fail when it closes.
+And the positive class used to be unreachable without a push: only `open_pr` recorded a
+success, and it takes a forge. `report` now records `halted` for a patch that verified inside
+an assembly with no forge, so the axes computed over verification see those runs. A pull
+request is still the only thing that writes a `pr_number`, which is what keeps merge rate
+honest.
 """
 
 from __future__ import annotations
@@ -149,17 +151,18 @@ def test_the_grain_is_one_row_per_attempt():
 
 # --- part two: what recording a success actually requires -------------------------
 #
-# These document today's behaviour. **Each is written to fail when the gap closes, and that
-# failing is the point** -- delete or invert the one that fires, do not adjust it back to
-# green.
+# The gap these once documented has closed: `report` now records `halted` for a verified
+# patch with no forge. These pin the corpus's terminal vocabulary and the call sites the AST
+# scan holds it against -- a test here that fires on a new status is a vocabulary that grew,
+# so update it, do not delete or invert it.
 
 
 def _terminal_statuses_recorded_by(path: Path) -> set[str]:
     """Every literal a `record(...)` call in `path` passes as `terminal_status`.
 
-    Read from the syntax rather than by running the graph, because the fact being asserted is
-    exactly the one no run can reach: a success needs a forge, so a test that could observe it
-    behaviourally would be a test that pushes.
+    Read from the syntax rather than by running the graph, because `opened` is still the one
+    status no run can reach behaviourally: it needs a forge, so a test that could observe it
+    would be a test that pushes.
     """
     tree = ast.parse(path.read_text(encoding="utf-8"))
     found: set[str] = set()
@@ -172,23 +175,27 @@ def _terminal_statuses_recorded_by(path: Path) -> set[str]:
     return found
 
 
-def test_open_pr_is_the_only_node_that_records_a_success():
-    """Three call sites and one of them is terminal-and-successful. `retried` closes an attempt
-    that another is about to supersede, `abandoned` is the negative class, and `opened` is
-    written after `forge.open_pull_request` returns a URL -- so the whole positive class of the
-    corpus sits behind a push.
+def test_the_verification_boundary_records_without_a_push():
+    """Four call sites, and the positive class no longer sits entirely behind a push.
 
-    Fails when a fourth status appears, which is what closing this gap looks like.
+    `retried` closes an attempt another is about to supersede and `abandoned` is the negative
+    class. `opened` is still written only after `forge.open_pull_request` returns a URL, and is
+    still the only status carrying a `pr_number`. `halted` is the fourth: a patch that verified
+    inside an assembly with no forge, which is an attempt that ran and so owes a row.
+
+    Fails when a fifth status appears.
     """
-    assert _terminal_statuses_recorded_by(NODES) == {"retried", "opened", "abandoned"}
+    assert _terminal_statuses_recorded_by(NODES) == {
+        "retried", "opened", "abandoned", "halted",
+    }
 
 
-def test_the_status_scan_would_notice_a_fourth_call_site(tmp_path):
+def test_the_status_scan_would_notice_a_fifth_call_site(tmp_path):
     """The gap test above is only worth having if it can fail. Proven against a synthetic
-    module rather than by editing `nodes.py`, which another task owns -- a mutation there
-    would be a collision, and the property under test belongs to the scan either way.
+    module rather than by editing `nodes.py`, since the property under test belongs to the
+    scan either way.
     """
-    module = tmp_path / "nodes_with_a_fourth.py"
+    module = tmp_path / "nodes_with_a_fifth.py"
     module.write_text(
         "def open_pr(state):\n"
         "    record(state, terminal_status='opened')\n"
@@ -218,10 +225,10 @@ def test_a_verified_row_would_unblock_routing_accuracy_and_not_merge_rate():
     """Which of the five axes a verification-boundary row buys, computed rather than argued.
 
     Routing accuracy divides by findings routed to tier 0 and reads `static_verify_passed`, so
-    a verified tier-0 attempt is exactly its numerator -- and today that attempt writes no row
-    at all unless it pushes, which is why the axis can only ever see the failures. Merge rate
-    and cost per merged patch divide by pull requests and stay null until a real webhook
-    populates `pr_merged`; no amount of verification data reaches them.
+    a verified tier-0 attempt is exactly its numerator, and a row written at that boundary is
+    what the axis needs. Merge rate and cost per merged patch divide by pull requests and stay
+    null until a real webhook populates `pr_merged`; no amount of verification data reaches
+    them.
     """
     verified = MigrationOutcome.from_attempt(
         finding_id="f-1", attempt_index=1, site=SITE, change=CHANGE,

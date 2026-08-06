@@ -27,6 +27,9 @@ by content, because items were never tagged with a milestone as they landed.
 | **M4.5** | The console is worth looking at | **0%** | Split out 2026-08-06 so M4 can close; starts when M4's console half does |
 | **M5** | Integration layer | **~25%** | Feed and registry exist; nothing correlates anything |
 | **M6** | Show it, rather than describe it | **0%** | Needs a UI to film, so it sits behind M4.5 rather than M4 |
+| **M4** | Hosted control plane (**the front end**) | **0%** | Not started, and has no plan file yet |
+| **M5** | Integration layer | **~35%** | Sentry feeds counts in now; still nothing correlates anything |
+| **M6** | Show it, rather than describe it | **0%** | Needs a UI to film |
 
 ### M0 — Walking skeleton, one real pull request · ~90%
 
@@ -467,13 +470,151 @@ two Sync remediations running on one host hit the same race with no step in fron
 clone before the compile — with a test that starts two typechecks against a cold cache at once and
 watches the current form fail before the fix lands. A test that merely runs two sequentially proves
 nothing.
+### B77 — one unexplained red in a database-backed suite, and no capture of it
+
+`tests/test_status_rate_detector.py` ended a full run `1 failed, 2897 passed, 4 skipped, 6 errors`,
+every failure and error in that one file, during B74. The immediate rerun was clean and the file
+alone then passed three times, `27 passed` each. Nothing on that branch touches `sync.detect`.
+
+**The obvious explanation was checked and does not hold.** The hypothesis was a concurrent
+`truncate_all()` across the several worktrees live against the shared Postgres on 5433. But
+`tests/conftest.py` gives every run its own database, named from its pid and its xdist worker id, so
+two suites in two worktrees do not share one. The cross-run drop that *could* produce this shape --
+a sweep removing a database out from under a live worker -- is the defect
+`leaked_database_names` was written to close, and its docstring names the exact symptom it produced,
+`database "sync_test_28096_gw2" does not exist`. That path is guarded and pinned by a test.
+
+So the cause is unknown, and the honest record is that: one red, four subsequent greens, and the
+leading theory eliminated rather than confirmed.
+
+**The part that is actionable is the process failure, not the flake.** The failure text was gone
+before anyone read it, because the rerun overwrote it. A one-off red that nobody captured cannot be
+diagnosed later and cannot be told apart from a real defect that happens to be intermittent, which
+is the same reason this repository does not accept a green it did not watch.
+
+**Closes when:** either the failure is reproduced and explained, or a harness change makes a red
+run's output survive the next run — and the second is worth doing whether or not the first ever
+happens.
+
+### B78 — no way to run the pipeline end to end without opening a real pull request
+
+The console has no live data. `migration_outcome` holds three rows and none carries a `pr_number`,
+the checkpoint tables are empty, and every UI verification so far has been done by hand-inserting
+checkpoint rows — which tests the renderer against rows a human invented rather than against rows
+the graph wrote.
+
+**Most of this already exists and is not reachable.** `tests/test_cli.py:693` defines
+`_LocalForge(GitHubForge)`, which keeps the real `push_branch` so a real branch lands in a real
+origin and replaces only the two steps needing GitHub: `await_ci` answers green and
+`open_pull_request` fabricates a `PullRequest`. `tests/test_cli.py:456` builds the fixture origin.
+And `build_graph` already takes both the store and the checkpointer as parameters, so pointing them
+at Postgres on 5433 needs no monkeypatching at all.
+
+What is missing is the entry point. That test reaches the shape through `monkeypatch` with
+`GraphStore` stubbed and `PostgresSaver` swapped for an in-memory checkpointer, so the run is real
+and the rows go nowhere. There is no `--fixture` or `--dry-run` on `cli.run` — no spelling of one
+exists.
+
+This is not B7. B7 is the acceptance run against a real repository, it opens a real pull request,
+and it stays gated on the user. This is the opposite: everything except the two steps that talk to
+GitHub, against a fixture repo, writing real rows.
+
+**Closes when:** one command drives `locate` through `open_pr` against a fixture repository, writes
+real checkpoint and `migration_outcome` rows to the configured database, opens nothing, and is
+covered by a test that watches the rows arrive. Whether the fabricated pull-request number counts
+up across runs is a question for whoever consumes it.
+
+**Task 2 of the dogfooding plan has landed** — the merge above `cc35120`. `build_graph` now accepts
+`forge=None` and omits `push_branch`, `await_ci` and `open_pr` from the compiled graph rather than
+guarding them at runtime, and a verified patch with nowhere to push routes `replay → report` and
+records `terminal_status="halted"`. Two facts that came out of it and are worth carrying:
+
+- **Before it, `forge=None` did not crash — it abandoned.** `None.push_branch(...)` raised inside
+  the node's own handler, which set `fatal` and routed to `abandon`. So anyone who ran forge-less
+  got a plausible-looking `abandoned` run with a Python traceback fragment in `abandon_reason`.
+- **`"halted"` is a fourth `terminal_status`**, alongside `retried`, `opened` and `abandoned`. The
+  column is plain `TEXT` with no `CHECK`, and `benchmark.axes` branches on `"abandoned"` alone, so a
+  halted row lands in `counts.attempts` and in `routing_accuracy` and is excluded from every merge
+  rate. Additive, no migration. It touches the run-state vocabulary spec, which the console session
+  owns.
+
+What remains for B78 is the entry point itself — Task 3 and the tasks below it.
+
+### B79 — a rehearsal row and a production row collide on the corpus natural key
+
+`migration_outcome` is upserted on `(finding_id, attempt_index)` with `ON CONFLICT DO NOTHING`
+(`store.py:546`). That clause is the idempotence guarantee the pipeline discipline requires and is
+not the defect.
+
+The defect is that a run has no identity in that key. A forge-less rehearsal writes
+`(f, 1, halted, pr_number=NULL)`; if the same finding at the same attempt index is later run with a
+forge against the same database, `open_pr`'s `(f, 1, opened, pr_number=1)` is dropped silently and
+that pull request never enters `merge_rate` or `counts.pull_requests_opened`.
+
+Pre-existing rather than introduced — before the Task 2 merge the same path wrote
+`(f, 1, abandoned)` — but B78's whole point is to make rehearsal runs routine, which turns a
+theoretical collision into an expected one. It bites only when a rehearsal and a production run
+share a database and a finding id.
+
+**Closes when:** either a rehearsal's rows are distinguishable from a production run's at the grain
+the corpus declares, or `schema.sql` states as a comment why sharing a database between the two is
+not supported and something refuses it. Deciding which is the work; do not change the conflict
+clause.
+
+### B76 — three small truths about how this CLI reads files, left over from B73
+
+Recorded rather than folded into B73, because each is a decision and none is a typo.
+
+- **A whitespace-only `--secret-file` still answers the both-sources message.** An operator who
+  passed `--secret-file` is told to set the environment variable or pass `--secret-file`, which is
+  advice they have already taken. Fails closed, so this is confusion rather than a security defect.
+  It is the same confusion B73's third ground names, on the one case that commit did not reach.
+- **`_signing_key`'s docstring says "a key that is present and unreadable answers `None` like an
+  absent one".** It does not: the read sits outside the `try`, and only unparseable material answers
+  `None`. This sentence is what B73's brief was built on and what the implementer had to correct, so
+  it has already cost one round of work. Its own read is unguarded too, and an unreadable key file
+  tracebacks out of `publish-feed` and `feed-public-key`.
+- **`benchmark` catches `ValueError`, which subsumes `UnicodeDecodeError`.**
+  `tests/test_decode_handlers.py` inventories handlers by the exception *names* a chain lists, so
+  that one is invisible to the gate — neither counted nor required to have a driver. A handler
+  spelled `ValueError` is a hole in that gate's coverage by construction, and the gate cannot see
+  its own blind spot.
+
+Two more reads still have no handler at all: `intake --registry-directory` and the `--score-pair`
+specification.
+
+**Closes when:** each of the three is either fixed or carries a comment saying why the current
+answer is right, the two remaining reads refuse like their siblings, and the decode gate either
+sees `ValueError`-spelled chains or says in its own text that it cannot.
 
 ## In flight
 
+- **B77** — branch `b77-keep-the-red`, worktree `m1-forge`. Its session died mid-task: the branch
+  carries one commit, an uncommitted `tests/test_red_run_capture.py`, and an untracked `red-runs/`
+  at the worktree root — which is the exact failure mode its own brief said not to introduce. Needs
+  finishing or reverting; do not dispatch a second worker at it without reading that tree first.
 
-- **B61** — `task_12ccee12fd98`, worktree `sync-solo-b`.
-- **B55** — re-dispatched as `task_3746257e4c0a` into `sync-solo-b`. The first attempt
-  (`task_e03a2a5bb93f`) produced nothing in 94 minutes and was stood down.
+Both dispatched through the Agent tool with the brief written to a file in the worktree's `.claude/`
+and the path handed over. Orca dispatch is still not delivering — see HANDOFF.md — and every agent
+that has done real work in the last two days went this way instead.
+
+An entry here that outlives its work makes this section read as capacity in use when there is none,
+which is the opposite of what a tick needs from it. **B61 and B55 sat here for days after landing**
+— `89ac057` and `c32f99e` record them, and B55 has a report at
+`reports/2026-07-29-adapter-selection-explains-its-refusal.md`. So: whoever lands an item clears its
+line in the landing commit, and whoever dispatches one adds it in the same breath as the dispatch.
+
+**38 local failures that are not a regression.** `sync.signals.oasdiff._binary()` resolves
+`tools/oasdiff.exe` relative to `Path(__file__).resolve().parents[3]` — the **worktree root**, not the
+repository. `tools/` is gitignored, so a worktree where `scripts/bootstrap_tools.sh` has never run
+raises `FileNotFoundError` out of every test that reaches oasdiff. CI installs the pinned version
+from `.oasdiff-version` and is green, so this is local only, and it looks exactly like a regression
+to anyone baselining a suite in a fresh tree.
+
+Measured on 2026-08-04 across all eleven worktrees: **only `sync-m4-dashboard` is missing it.**
+Everything else is bootstrapped, which is why the same suite reads `2902 passed` in one tree and 38
+red in another. Run `scripts/bootstrap_tools.sh` in the tree, once, and it goes away. Reported by
+the chat that hit it, after ruling out yarn — the other thing `tools/` holds.
 
 **Workers keep landing in the wrong worktree.** Three times today a worker has written into a tree
 its brief did not name, twice into one another worker already held. The brief names the path and
@@ -511,6 +652,66 @@ what the process did. One control was found and rejected rather than built — c
 paths inside the clone, rejected because `pnpm`'s symlinked `node_modules` makes the strong form
 unusable and the lexical form is walked past by a symlink committed into the repository, which is
 the attacker in scope.
+- **B74** — `/api/overview` counts once and carries the same envelope as every other route, at
+`cdb9040`. Two defects reported from two directions: the console chat found the missing
+`context_savings` by consuming the API against a live server, and the windowing contradiction turned
+up while narrowing a comment during M4-P1. **The measurement that decided the design**: the window
+never bounded any work. `whats_at_risk` builds a row for every open finding and only then slices, so
+the ceiling bounded serialisation, which the overview discarded — counted over two thousand findings,
+the old path made two thousand call-site reads and two thousand vendor-change reads, the aggregate
+makes two thousand and none. Removing the window halved the reads. `context_savings` is 0 as a
+measurement rather than a placeholder, because the constant is a file read avoided per binding
+returned and an overview returns no binding; `binding_source` follows `whats_at_risk` over the same
+loop iteration the counts come from. The console contract is additive — one new key, no rename, every
+existing value identical below the old ceiling.
+
+- **M4-P1** — the operator console's transport reads one finding by asking for it, at `e7a481c`.
+It had been scanning as many as ten thousand rows out of `whats_at_risk` and walking the list in
+Python, and past that ceiling it answered 404 for a finding that exists. `GraphSurface.finding_by_id`
+returns the row the page carries for that finding and `None` in exactly the cases the page would not
+list it; the row literal is now shared so the two cannot drift, and the reviewer established the
+predicate cannot drift either. **The four published MCP tools are still four** — a surface method
+becomes a tool only when somebody writes a `ToolSpec`, the golden schema blob is byte-identical, and
+`dispatch` answers "unknown tool" for the new name. The proving test shrinks the ceiling rather than
+building ten thousand rows, because what breaks the scan is a finding's position past the window and
+not the size of the graph. **B75 closed with it** — see below.
+
+- **B75** — the dead-links gate covers its two symbols again, at `e7a481c`. Both entries are back in
+the baseline with a reason that states the correction rather than repeating the framing that was
+wrong, all five transport handlers took a `_` prefix rather than only the two that collide today,
+and `lint_dead_links.py`'s known-limits section carries the instance and the lesson: when a baseline
+entry disappears, confirm the caller with an import rather than with a name. **What is still open is
+not this** — whether those two dead functions should exist at all turns on whether the console binds
+to `sync.dashboard`, which belongs to whoever owns the console. One fact for that decision is in
+`.claude/COORDINATION.md`: `repository_overview` returns a per-vendor `call_site_count` the surface
+route cannot produce, so a vendor with indexed call sites and no open findings is absent from
+`/api/overview` entirely.
+
+- **B73** — the last three operator-named file reads refuse rather than traceback, at `4ef5cce`. Two
+took the established handler. The third, the webhook secret, deliberately did not: the question was
+what the caller does with `None`, because if `None` had meant verification is skipped then swallowing
+a read failure would have downgraded authentication over a file permission. It fails closed instead —
+but the behaviour being replaced was not silence either. The unguarded read raised out of `main()` as
+exit 1, and exit 1 in that command is the code reserved for a verdict about a delivery, so an
+unreadable secret file was reporting as a forged one. **The reviewer confirmed what the silent
+alternative would have cost**: with the read swallowed inside `_webhook_secret`, control falls
+through to the environment variable and a delivery signed with the environment's secret verifies and
+exits 0 against a credential the operator did not name. The test pins exactly that. One premise of
+the brief was false and the implementer said so rather than building on it — the neighbouring
+signing-key loader does not answer `None` for a key file it cannot read, only for an unparseable PEM,
+and its docstring says otherwise. That docstring is part of B76.
+
+- **B72** — `sync ingest` refuses an unreadable payload rather than tracebacking, at `eb33cd6`.
+Three commands read an operator-named payload through one helper and only two of them said what
+had gone wrong; the third raised, so a mistyped path or a capture truncated mid-write produced a
+stack trace and no statement about whether anything had reached the graph. The handler is
+duplicated across the three rather than shared, deliberately: each command's comment states what a
+wrong reading would mean for that command's own numbers, and one shared message keeps the
+behaviour while losing three reasons. Four tests, each watched failing first with the exact
+exception it now prevents, across the file route and the piped one; one asserts no fragment of the
+payload reaches stderr, because a captured OTLP export carries customer request data. **What
+closing it turned up is B73**: three more unguarded reads, one of which is a secret file and needs
+its own answer rather than the same handler.
 
 - **B71** — Sentry now answers a question other than what a response body looked like. An ingest
 folds an issues export into per-operation, per-window failure counts on `observed_error_window`,

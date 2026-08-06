@@ -116,28 +116,87 @@ class GraphSurface:
             if severity is not None and finding.severity != severity:
                 continue
 
-            change = self._change_for(finding)
             newest_index = _later(newest_index, site.indexed_at)
             matched.append(finding)
-            rows.append(
-                {
-                    "file": site.path,
-                    "line": site.line,
-                    "symbol": site.symbol,
-                    "operation": site.operation_id,
-                    "vendor": site.vendor_id,
-                    "change_kind": change.kind if change else None,
-                    "severity": finding.severity,
-                    "finding_id": finding.id,
-                    # Per row, because this is the only level at which it can be right: a page
-                    # built from a vendor-change finding and a status-rate finding rests on two
-                    # binders, and an agent weighs each row against the binding under it.
-                    "binding_source": finding.binding_rung,
-                }
-            )
+            rows.append(self._risk_row(finding, site))
 
         return self._page(
             rows, limit, offset, indexed_at=newest_index, binding_source=_shared_rung(matched)
+        )
+
+    def finding_by_id(self, finding_id: str) -> dict[str, Any] | None:
+        """The `whats_at_risk` row for one finding, without paging to reach it.
+
+        Not a tool. `sync.mcp.registry` declares the published set as data, so this answers the
+        console's by-id question without the frozen four becoming five.
+
+        `None` for a finding that is not open, matching `explain_call_site` and
+        `propose_patch`: a finding that closed is a question with an answer, and the answer is
+        "nothing here". A finding whose call site has gone is also `None`, because
+        `whats_at_risk` drops that row -- a lookup that answered where the page does not would
+        let the two disagree about what is open.
+        """
+        finding = next((f for f in self._graph.open_findings() if f.id == finding_id), None)
+        if finding is None:
+            return None
+        site = self._site_for(finding)
+        if site is None:
+            return None
+
+        return self._envelope(
+            self._risk_row(finding, site),
+            indexed_at=site.indexed_at,
+            savings=_TOKENS_PER_AVOIDED_READ,
+            # One finding, so the envelope rests on exactly the binding under it, and the row's
+            # own `binding_source` carries the same value rather than a second claim.
+            binding_source=finding.binding_rung,
+        )
+
+    def overview(self) -> dict[str, Any]:
+        """Open findings per vendor, counted over every one of them.
+
+        Not a tool, for `finding_by_id`'s reason: `sync.mcp.registry` declares the published set
+        as data, so the console's aggregate question is answered without the frozen four becoming
+        five.
+
+        Deliberately unpaginated, which is the one place this surface departs from "paginate
+        every list": the payload is bounded by the number of vendors rather than by the number of
+        findings, so it cannot grow with the graph. That bounds the response and not the cost --
+        the read behind it is one call per open finding, unbounded, on a route a console polls. A
+        window here would put the counts and the total on different sets, and the two would
+        disagree past it with nothing saying so.
+
+        Counted over the same findings `whats_at_risk` builds rows from -- a finding whose call
+        site has gone is dropped by both -- or a total and a page over the same graph would
+        report different numbers.
+
+        `context_savings` is zero and that is the measurement rather than a placeholder:
+        `_TOKENS_PER_AVOIDED_READ` is an estimate per binding returned, and this answer returns
+        counts and no binding.
+        """
+        vendor_counts: dict[str, int] = {}
+        matched: list[Finding] = []
+        newest_index: datetime | None = None
+
+        for finding in self._graph.open_findings():
+            site = self._site_for(finding)
+            if site is None:
+                continue
+            newest_index = _later(newest_index, site.indexed_at)
+            matched.append(finding)
+            vendor_counts[site.vendor_id] = vendor_counts.get(site.vendor_id, 0) + 1
+
+        return self._envelope(
+            {
+                "vendors": [
+                    {"vendor_id": vendor_id, "open_finding_count": count}
+                    for vendor_id, count in sorted(vendor_counts.items())
+                ],
+                "total_findings": len(matched),
+            },
+            indexed_at=newest_index,
+            savings=0,
+            binding_source=_shared_rung(matched),
         )
 
     def explain_call_site(self, file: str, line: int) -> dict[str, Any] | None:
@@ -284,6 +343,28 @@ class GraphSurface:
         )
 
     # -- internals -----------------------------------------------------------------
+
+    def _risk_row(self, finding: Finding, site: CallSite) -> dict[str, Any]:
+        """One row of the at-risk answer, shared by the page and the by-id read.
+
+        Shared rather than duplicated because the by-id read's whole contract is that it
+        returns what the page returns; two literals would let that drift silently.
+        """
+        change = self._change_for(finding)
+        return {
+            "file": site.path,
+            "line": site.line,
+            "symbol": site.symbol,
+            "operation": site.operation_id,
+            "vendor": site.vendor_id,
+            "change_kind": change.kind if change else None,
+            "severity": finding.severity,
+            "finding_id": finding.id,
+            # Per row, because this is the only level at which it can be right: a page built
+            # from a vendor-change finding and a status-rate finding rests on two binders, and
+            # an agent weighs each row against the binding under it.
+            "binding_source": finding.binding_rung,
+        }
 
     def _evidence_for(
         self, finding: Finding, change: VendorChange | None = None
