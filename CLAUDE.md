@@ -150,9 +150,27 @@ ClaudeAgentOptions(
 )
 ```
 
-Verified against the installed package: `ClaudeAgentOptions` exposes `cwd`, `model`, `thinking`, `effort`, `allowed_tools`, `disallowed_tools`, and `permission_mode`. Passing the Messages-API shape to it does not work, and this document previously said otherwise.
+Passing the Messages-API shape to `ClaudeAgentOptions` does not work, and this document previously said otherwise.
 
-Restricting a tool means listing it in `disallowed_tools`. Merely leaving it out of `allowed_tools` is not a block — with no `can_use_tool` callback registered, an out-of-list call has no resolution path in headless mode, which inside an unattended pipeline is a hang rather than a refusal.
+**It said something else wrong, and the correction matters because it is load-bearing for the patch agent's containment.** It listed seven fields as the verified surface. The installed package (`0.2.128`) declares **45**, and the ones this project cares about were all missing from that list: `hooks`, `can_use_tool`, `tools`, `sandbox`, `env`, `max_budget_usd`.
+
+Three facts about restricting what the agent may do, all checked against the installed package rather than inferred:
+
+- **Listing a tool in `disallowed_tools` is a real block. Omitting it from `allowed_tools` is not.** That much was right.
+- **A `can_use_tool` callback is shadowed by a whole-tool `allowed_tools` entry.** The SDK's own
+  `types._get_can_use_tool_shadowed_warning` says a whole-tool allow auto-approves *before* the
+  callback is consulted, and directs you to a `PreToolUse` hook to gate every call. Every entry in
+  the patch agent's allow-list is a whole-tool entry, so a `can_use_tool` gate there would have been
+  consulted for nothing and looked like it was working. `hooks` also works with a one-shot string
+  prompt; `can_use_tool` requires streaming mode and raises without it.
+- **The hang is a property of the default permission mode, not of headless mode.** `PermissionMode`
+  includes `dontAsk` — deny anything not pre-approved — alongside `default`, `acceptEdits`, `plan`,
+  `bypassPermissions` and `auto`.
+
+`sandbox` accepts network `deniedDomains` and is **macOS and Linux only**, so it is not available on
+this machine. That is the mechanism B97 needs to actually close, and knowing it is unavailable here
+is why the gate that shipped is a `PreToolUse` hook instead
+(`docs/superpowers/specs/2026-07-25-sync-threat-model.md`).
 
 `temperature`, `top_p`, and `budget_tokens` return HTTP 400 on this model on either surface. Steer with prompting instead. Thinking is on by default, and on the Messages API `max_tokens` caps thinking plus output together, which is why that ceiling is generous.
 
