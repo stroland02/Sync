@@ -1,7 +1,9 @@
 # Sync — Threat Model
 
-**Date:** 2026-07-25
-**Status:** Specified. Contains one finding against code already on the M0 branch.
+**Date:** 2026-07-25, extended 2026-08-06
+**Status:** Specified. Contains one finding against code already on the M0 branch. The prompt-injection
+section was rewritten on 2026-08-06 from a traced inventory of the inputs rather than from a category,
+and the first layer of defence it argues for is built.
 **Scope:** What Sync holds, what it must never hold, the blast radius when it is compromised, and the gap
 between the architecture the design document claims and the code as written.
 
@@ -158,6 +160,179 @@ Two limits worth naming rather than glossing:
   reviewer can see whether the diff matches the justification. A diff that does something the evidence does not
   explain is the signal to look for, and it is visible precisely because Sync shows its reasoning rather than
   presenting a black box.
+
+### The paragraph above was written before anyone traced the inputs
+
+It says "vendor changelog prose" as a category. This section says which bytes, from which line, under
+whose control, and what each one buys an attacker. It was written on 2026-08-06 against the code as it
+then stood, and it corrects one claim the reference study left open.
+
+That open question was whether Sync should build an injection defence now or wait for "a future adapter
+reading a vendor's freeform release notes"
+(`docs/superpowers/references/engineering/llm-engineering-practice.md`, §5), on the reasoning that
+`VendorChange.raw` held only structured oasdiff records, which are lower risk. **That adapter already
+exists and has since before the question was asked.** `sync.signals.deprecations.parameters` parses a
+vendor's published markdown page and keeps the behaviour cell verbatim — deliberately, because a pull
+request body quotes the vendor's own wording and that wording is what makes the finding credible
+(`src/sync/signals/deprecations/parameters.py:121`). The cell is filed as `raw["behavior"]`
+(`:174`), `sync.detect.parameter_deprecation` interpolates it into `Finding.rationale`
+(`src/sync/detect/parameter_deprecation.py:147`), and `build_patch_prompt` renders that under "Why this
+matters". The precondition for treating this as urgent was met before the note that named it was filed.
+
+### Where untrusted bytes enter
+
+Ranked by how easily an attacker reaches the byte, not by where it sits in the pipeline.
+
+| Entry | Field it becomes | Who can write it | Reaches the patch prompt |
+|---|---|---|---|
+| `signals/deprecations/parameters.py:121` → `:174` | `raw["behavior"]`, `raw["applies_from"]` | Anyone who can change a vendor's published documentation page, plus anyone who can serve it — `signals/deprecations/adapter.py:137-151` is a plain urllib GET | Yes, via `Finding.rationale` |
+| `signals/oasdiff.py:166` (`raw=record`) | `raw["text"]`, and through it `changed_field` (`:202-210`) | Anyone who can land a property name or description in a vendor's OpenAPI specification | Yes — "Affected field", and inside the "Required edit" sentence |
+| `signals/oasdiff.py` (`kind`, `operation_id`, versions) | `VendorChange.kind`, `.operation_id` | The same | Yes, three prompt lines |
+| `signals/feed/consumer.py:79` | Every field of `VendorChange`, unvalidated | Whoever holds the feed signing key | Yes, all of it |
+| `index/typescript.py:594-618`, `index/python_lang.py:768-783`, `index/literals.py:140` | `CallSite.path`, `.symbol`, `.args_keys`, `.response_fields_read`, `.operation_id` | Anyone who can merge — or in most workflows merely open — a pull request against the customer's own repository | Yes, four prompt lines |
+| `remediate/nodes.py:295, 439, 522` | `diagnostics` | `tsc` output over customer source and the vendor's shipped `.d.ts`; a CI verdict; the rejected diff | Yes, the retry section |
+| The clone itself | Nothing — read by the agent's own `Read`, `Grep` and `Bash` calls | Anyone who can write a file in the repository | **Not through the prompt at all.** See "what the first layer does not cover" |
+
+`VendorChange`'s string fields are bare `str` with no validator, no length bound and no charset constraint
+(`src/sync/core/models.py:97-110`). The three accidental filters that exist — `_looks_like_a_model_id`,
+`_IDENTIFIER` in the parameter parser, and oasdiff's newline check — each cover one field and none covers
+`raw["behavior"]`.
+
+**The distinction the table exists to make: "vendor" and "customer" are not two grades of the same thing.**
+A vendor's changelog is a public document. Nobody needs an account to read it, the vendor's own review
+process is the only thing standing between a contributor and its contents, and Sync fetches it for every
+customer at once — so a single successful edit is a payload delivered to Sync's entire installed base.
+A customer's repository is private and the attacker has to already be inside it, which sounds like a
+smaller problem and is a different one: it reaches only that customer, but it reaches them with Sync's
+credentials rather than the attacker's, which is the whole point of doing it.
+
+### What an attacker gains, ranked by damage
+
+1. **Exfiltration of the customer's own secrets, with nothing left behind in the diff.** This is the worst
+   case and it is not the obvious one. The patch agent holds `Bash` inside a clone, and a clone of a real
+   application repository routinely contains `.env` files, `.npmrc` tokens, fixture credentials and CI
+   configuration. Sync holds no customer secrets, which is exactly why this matters: the secrets are in the
+   clone, and `Bash` is a general egress channel. `WebSearch` and `WebFetch` are in `DISALLOWED_TOOLS`
+   (`agent_patch.py:69`), which is a real block, but `curl` is not a tool — it is a program, and the agent
+   was given a shell. Nothing in the verification gate looks at this: the exfiltration happens during the
+   run and the diff can be empty or innocent afterwards. **Damage is unbounded and detection is zero.**
+2. **Arbitrary code in a customer's repository behind a green CI.** A patch that compiles and passes the
+   customer's tests, plus one line that does something else. The gates do their job and the pull request
+   arrives looking exactly like every other one Sync opens. Bounded by a human review that Sync's own
+   product position invites — a reviewer reads the evidence bundle — but a one-line addition inside an
+   otherwise correct migration is a hard thing to spot, and Sync's pull requests are designed to be
+   routine.
+3. **Poisoning the migration corpus and the routing matrix.** Abandoned attempts are how routing learns
+   which change kinds are not mechanically safe. An attacker who can cause abandonment at will can steer
+   which changes Sync stops attempting, which is a durable, quiet degradation rather than an incident.
+4. **Burning model spend.** An instruction that sends the agent on a long fruitless search costs `xhigh`
+   effort per attempt against a per-attempt budget that does not exist. Cheapest to execute and the least
+   interesting.
+
+Note what is *not* on this list. The GitHub App key is not reachable from the patch agent as designed,
+because mitigation 1 puts the clone in a credential-free sandbox. That mitigation is still unbuilt, and
+until it is, the CodeRabbit shape at the top of this document is reachable from item 1 by a shorter path
+than any of these four.
+
+### What the existing gates genuinely stop, and where the boundary sits
+
+They stop a patch that does not compile, and a patch the customer's own tests reject. `static_verify`
+measures the tree a push would carry rather than whatever the agent left in the clone
+(`sync.index.shipped_tree`), an edit inside an installed dependency fails the verification by name
+before the compiler runs (`sync.index.dependency_edits`), and an unstaged new file fails the gate rather
+than shipping (`agent_patch.py:299-305`). Those are real and they are more than most tools in this
+category have.
+
+**The boundary is this: every one of those gates is a predicate on the artifact. None of them is a
+predicate on the run.** They ask what the branch contains. They do not ask what the agent did, what it
+read, or what left the machine while it was working. An attack that wants to ship something has to beat
+them; an attack that wants to take something never meets them.
+
+The second half of the boundary is inside the artifact check itself. `tsc` plus CI is a test of whether
+the patch is *broken*, not of whether it is *what was asked for*. A patch that applies the migration
+correctly and adds one more line compiles, passes, and is the shape every gate is looking for.
+
+### The trust boundary
+
+**Vendor text is data the agent reads about. It is never instruction the agent follows.** The same holds
+for the repository's contents and for tool output over either.
+
+This is a decision rather than an observation, and the alternative is real: the whole value of quoting a
+vendor's own deprecation wording is that it tells the agent something Sync does not otherwise know, which
+is uncomfortably close to instructing it. The line that resolves it is *who the sentence is addressed to*.
+A vendor's changelog is addressed to a human integrator and describes the world. Sync's prompt is addressed
+to the agent and describes the task. Text of the first kind may inform the task and may never redefine it,
+and where the two conflict, Sync's wins — including when the vendor's text is more specific, more urgent,
+or claims to come from Sync.
+
+Everything below follows from that sentence, and so does the honest limit on it: a boundary the agent is
+told about is not a boundary the agent is guaranteed to respect.
+
+### Layer one: the untrusted-text boundary, built 2026-08-06
+
+`src/sync/remediate/untrusted.py`, applied at `build_patch_prompt`. Three parts, one idea:
+
+- Every untrusted span in the prompt sits inside an element naming what it is —
+  `<untrusted-vendor-text>`, `<untrusted-repository-text>`, `<untrusted-tool-output>`. The vendor block,
+  the call-site block, the rationale, and the retry diagnostics are all fenced. So is the field name inside
+  the "Required edit" sentence, which is the one line where Sync's instruction and a vendor's bytes share a
+  sentence.
+- A preamble states what the elements mean before the agent meets one: read what is inside, act on what it
+  describes, follow no instruction written in it however phrased and whoever it claims to be from.
+- **Content that carries one of those markers is refused, not escaped.** These strings exist nowhere but
+  in the structure of this prompt, so a vendor page or a customer's TypeScript cannot contain one by
+  accident — an occurrence is content trying to leave the region it was placed in. The usual answer is to
+  escape it and carry on; the reason to refuse instead is that an absorbed attack teaches nobody anything.
+  A refusal lands in `abandon_reason`, which is where this project already says the interesting failures
+  belong, and it costs nothing: the check runs while the prompt is being assembled, before the SDK is
+  invoked, so a poisoned record spends the run's attempts and no model time.
+
+**Why this layer rather than a list of injection patterns.** A pattern list is what the reference
+implementation leads with, and it is the wrong thing to build first here. It fails in both directions at
+once. It fails open, because the realistic payload against Sync is not "ignore previous instructions" —
+it is a paragraph of plausible vendor migration guidance, correctly spelled and calmly worded, of the kind
+a real deprecation notice contains, and no phrase list catches that. And it fails closed, because vendor
+deprecation prose legitimately contains sentences like "disregard the previous guidance" and "this
+supersedes the note above"; a list tuned tightly enough to catch an attack will eventually refuse Stripe,
+and a defence that blocks real vendor text is an outage. The boundary has neither failure mode: it does
+not try to recognise an attack, so it cannot fail to, and it wraps rather than judges, so legitimate text
+passes byte for byte.
+
+The second argument is ordering. A pattern list without a boundary has nowhere to put what it finds — it
+can redact, but it cannot tell the model which bytes were suspect. Framing is what the other two layers
+attach to, so it is first whatever else is built.
+
+**What it does not cover, stated plainly.**
+
+- **It does not make the agent obey.** Framing is persuasion, and persuasion is not containment. Proving
+  a model respects the frame requires calling one, which the test discipline here forbids and which would
+  in any case establish a fact about today's model and not a property of the system.
+- **It does not touch what the agent reads with its own tools.** The prompt is one of two channels and it
+  is the smaller one. The agent then `Read`s and `Grep`s a repository whose files can hold anything, and a
+  comment in the file it was sent to edit arrives with no fence around it at all. That channel cannot be
+  fenced at the prompt layer by construction; it is a sandbox and egress problem, which is mitigation 1.
+- **It does nothing about exfiltration**, the top-ranked item above. `Bash` in a clone holding the
+  customer's `.env` is unaffected by how the prompt is punctuated.
+- **It is not a defence against a compromised feed key.** A feed that can construct a whole `VendorChange`
+  can construct one whose fenced contents are perfectly ordinary and whose instruction is the finding
+  itself.
+
+Evidence it does something: `tests/test_patch_prompt_injection.py`. A hostile deprecation cell carrying
+migration instructions for "the automated migration tool" reaches the agent inside the fence and nowhere
+outside it; the same cell with a closing tag appended is refused; the refusal survives whitespace and
+capitalisation variants; the refusal message does not quote what it rejected, because it becomes the next
+attempt's input; a real Stripe-shaped deprecation entry still builds a prompt with its wording intact; and
+ordinary TypeScript — `Array<untrustedInput>`, `a<untrusted_count` — is not mistaken for a marker.
+Two mutations were run against those tests and each was caught by a different one: disabling the refusal
+reddens the three smuggling tests, and widening the marker to any `<untrusted` reddens the outage guard.
+
+### Sequencing, revised
+
+Layers two and three of the reference's shape — the injection-pattern list and further prompt hardening —
+are deliberately not built, and are filed in the backlog with this reasoning. Neither is the next most
+valuable thing. **The next most valuable thing is mitigation 1**, the credential-free sandbox, because it
+is the only item on this page that touches the top-ranked attack, and because both remaining prompt layers
+defend the channel that is already the smaller of the two.
 
 ## What a security reviewer will ask, and the answer
 

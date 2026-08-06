@@ -55,6 +55,14 @@ from pathlib import Path
 from claude_agent_sdk import ClaudeAgentOptions, ResultMessage, query
 
 from sync.core import CallSite, Finding, Patch, RepoRef, VendorChange
+from sync.remediate.untrusted import (
+    HARDENING,
+    REPOSITORY,
+    TOOL_OUTPUT,
+    VENDOR,
+    fence,
+    fenced_block,
+)
 from sync.signals.oasdiff import changed_field
 
 MODEL = "claude-opus-5"
@@ -98,24 +106,30 @@ def _required_edit(field: str | None, site: CallSite) -> str:
 
     Positional, not directional. What happened to the field is already stated two lines
     above as the oasdiff rule id; what the agent lacks is which expression to change.
+
+    This is the one line where Sync's instruction and a vendor's bytes share a sentence, so
+    the field is fenced where it sits rather than relying on the block above. `changed_field`
+    returns whatever the vendor backticked first, subject only to it holding no newline, so
+    the value cannot be assumed to be an identifier or to be short.
     """
     if field is None:
         return (
             "the vendor change does not name a field, so read the call site and the change"
             " above and determine the affected expression yourself"
         )
+    quoted = fence(VENDOR, field)
     if field in site.args_keys:
         return (
-            f"`{field}` is passed as an argument at this call site, so that argument is what"
+            f"{quoted} is passed as an argument at this call site, so that argument is what"
             f" your edit must change to agree with the change above"
         )
     if field in site.response_fields_read:
         return (
-            f"`{field}` is read from this call's response at this call site, so that read is"
+            f"{quoted} is read from this call's response at this call site, so that read is"
             f" what your edit must change to agree with the change above"
         )
     return (
-        f"the change affects `{field}`, which the index did not record among this call site's"
+        f"the change affects {quoted}, which the index did not record among this call site's"
         f" arguments or the response fields it reads -- locate it in the surrounding code"
         f" rather than assuming either position"
     )
@@ -134,20 +148,31 @@ def build_patch_prompt(
     sections = [
         "A third-party API changed and this repository's code no longer matches it.",
         "",
-        f"Vendor: {change.vendor_id}",
-        f"Change: {change.kind}",
-        f"Operation: {change.operation_id}  ({change.from_version} -> {change.to_version})",
-        f"Affected field: {field_line}",
+        HARDENING,
         "",
-        f"Call site: {site.path}, line {site.line}",
-        f"SDK call: {site.symbol}",
-        f"Arguments passed: {', '.join(site.args_keys) or 'none'}",
-        f"Response fields read: {', '.join(site.response_fields_read) or 'none'}",
+        *fenced_block(VENDOR, [
+            f"Vendor: {change.vendor_id}",
+            f"Change: {change.kind}",
+            f"Operation: {change.operation_id}  ({change.from_version} -> {change.to_version})",
+            f"Affected field: {field_line}",
+        ]),
+        "",
+        *fenced_block(REPOSITORY, [
+            f"Call site: {site.path}, line {site.line}",
+            f"SDK call: {site.symbol}",
+            f"Arguments passed: {', '.join(site.args_keys) or 'none'}",
+            f"Response fields read: {', '.join(site.response_fields_read) or 'none'}",
+        ]),
         "",
         f"Required edit: {_required_edit(field, site)}.",
         "Done when: that edit is made and the call site agrees with the change above.",
         "",
-        f"Why this matters: {finding.rationale}",
+        # Fenced whole rather than in part, and as vendor text although a detector composed
+        # the sentence around it. A rationale is Sync's template with the vendor's own prose
+        # inside it -- `sync.detect.parameter_deprecation` quotes a deprecation table's
+        # behaviour cell verbatim -- and nothing downstream can say where the seam is.
+        "Why this matters:",
+        *fenced_block(VENDOR, [finding.rationale]),
         "",
         _SCOPE_RULES,
     ]
@@ -160,7 +185,7 @@ def build_patch_prompt(
             "",
             "A previous attempt failed. What went wrong:",
             "",
-            diagnostics,
+            *fenced_block(TOOL_OUTPUT, [diagnostics]),
             "",
             "Fix the cause rather than suppressing the error.",
         ]

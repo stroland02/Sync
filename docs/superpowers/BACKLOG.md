@@ -346,6 +346,70 @@ when, which is why it is recorded here rather than dispatched.
 **Closes when:** one `sync run` produces a CI-green pull request again, or the failure is
 recorded with which change broke it.
 
+### B97 — The patch agent can exfiltrate a customer's secrets and no gate looks
+
+Ranked first in the threat model's injection section
+(`specs/2026-07-25-sync-threat-model.md`) and it is the only item there that the layer built on
+2026-08-06 does not touch at all.
+
+The patch agent holds `Bash` inside a clone of a customer's application repository. Such a clone
+routinely holds `.env`, `.npmrc`, fixture credentials and CI configuration. `WebSearch` and
+`WebFetch` are in `DISALLOWED_TOOLS` and that is a real block, but `curl` is a program rather than
+a tool and the agent was given a shell. Every gate Sync has — `tsc`, `shipped_tree`,
+`dependency_edits`, the customer's own CI — is a predicate on the *artifact*. None is a predicate
+on the *run*. An attack that wants to ship something has to beat them; an attack that wants to
+take something never meets them.
+
+This is mitigation 1 of that document, restated with the attack that motivates it: the clone,
+the install, the patch and the typecheck run in an ephemeral container with no credential in its
+environment or on its filesystem, and no network egress after dependencies are installed. It has
+been specified since 2026-07-25 and is what stands between Sync and the CodeRabbit shape.
+
+**Closes when:** a patch run cannot open a socket to a host Sync did not name, proven by a test
+that watches the attempt fail rather than by a configuration file asserting it.
+
+### B98 — Injection-pattern matching and further prompt hardening, deliberately deferred
+
+Layers two and three of the reference implementation's shape
+(`references/engineering/llm-engineering-practice.md`, §2.6). Layer one — the untrusted-text
+boundary — shipped on 2026-08-06. These two did not, and the reasoning belongs here rather than
+being rediscovered.
+
+**The pattern list fails in both directions at once.** It fails open, because the realistic
+payload against Sync is not "ignore previous instructions" but a calm, correctly spelled paragraph
+of plausible migration guidance, which is what a real deprecation notice looks like. It fails
+closed, because vendor deprecation prose legitimately says "disregard the previous guidance" and
+"this supersedes the note above" — and a defence that refuses Stripe is an outage. It is not
+worthless, but it is worth less than the two items around it, and it must never be built in a form
+that can refuse a legitimate entry silently.
+
+Further hardening is cheaper and also lower value: the preamble already states the boundary once,
+and a second sentence saying it again is not a second layer.
+
+**What would change this ranking:** the first observed injection attempt. The refusal path built
+on 2026-08-06 records one in `abandon_reason`, so the evidence will exist before the decision has
+to be made again.
+
+**Closes when:** either is built with a test proving it refuses a constructed payload *and* a test
+proving it passes a real vendor entry, or this entry is closed as declined with the sample of
+recorded attempts that justified declining.
+
+### B99 — The agent's own tool reads are unfenced, and that is the larger channel
+
+The prompt is one of two ways untrusted bytes reach the patch agent, and it is the smaller one.
+After the prompt, the agent `Read`s, `Grep`s and `Bash`es its way around a repository whose files
+can hold anything, and a comment in the very file it was sent to edit arrives with no frame around
+it whatsoever.
+
+Fencing that at the prompt layer is impossible by construction — the bytes never pass through
+`build_patch_prompt`. What is available is narrower and worth scoping honestly: a per-attempt
+budget so a wandering agent is bounded, and the sandbox from B97 so what it reads cannot leave.
+There is no clean equivalent of the fence here, and an entry that pretends otherwise would be
+worse than one that says so.
+
+**Closes when:** the exposure is either bounded by B97 plus a budget, or a mechanism is designed
+that frames tool results, with an argument for why it is not merely theatre.
+
 ## In flight
 
 
