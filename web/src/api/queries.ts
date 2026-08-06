@@ -22,7 +22,7 @@ import {
   fetchVendorFindings,
   fetchWorkflow,
 } from "@/api/client"
-import type { PageParams } from "@/api/client"
+import type { BindingSurfaceParams, ObservedTelemetryParams, PageParams } from "@/api/client"
 import type { RunsPage, WorkflowState } from "@/api/types"
 
 export function useOverview() {
@@ -165,10 +165,17 @@ export function useRepositories() {
 export function useBindingSurface(
   vendorId: string,
   operationId: string,
-  params: { repoId?: string } = {},
+  params: BindingSurfaceParams = {},
 ) {
   return useQuery({
-    queryKey: ["bindings", vendorId, operationId, params.repoId ?? null],
+    queryKey: [
+      "bindings",
+      vendorId,
+      operationId,
+      params.repoId ?? null,
+      params.callSitesOffset ?? 0,
+      params.changesOffset ?? 0,
+    ],
     queryFn: ({ signal }) => fetchBindingSurface(vendorId, operationId, params, signal),
   })
 }
@@ -185,10 +192,17 @@ export function useRepositoryCoverage(repoId: string) {
 }
 
 /** What traffic this repository has shown, what shape it had, and how often it failed. */
-export function useRepositoryObserved(repoId: string) {
+export function useRepositoryObserved(repoId: string, params: ObservedTelemetryParams = {}) {
   return useQuery({
-    queryKey: ["repositories", repoId, "observed"],
-    queryFn: ({ signal }) => fetchRepositoryObserved(repoId, signal),
+    queryKey: [
+      "repositories",
+      repoId,
+      "observed",
+      params.callsOffset ?? 0,
+      params.shapesOffset ?? 0,
+      params.errorWindowsOffset ?? 0,
+    ],
+    queryFn: ({ signal }) => fetchRepositoryObserved(repoId, params, signal),
   })
 }
 

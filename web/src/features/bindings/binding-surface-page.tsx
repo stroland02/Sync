@@ -15,8 +15,10 @@
 
 import { useParams, useSearchParams } from "react-router"
 
+import { DEFAULT_LIMIT } from "@/api/client"
 import { useBindingSurface } from "@/api/queries"
 import type { BindingSurfaceResponse } from "@/api/types"
+import { PageControls } from "@/components/page-controls"
 import { RungBadge } from "@/components/provenance"
 import { EmptyState, ErrorState, LoadingState } from "@/components/states"
 import { Formatted } from "@/components/status"
@@ -32,6 +34,7 @@ import {
 import { formatTimestamp, orAbsent } from "@/lib/format"
 import { Breadcrumbs } from "@/layouts/breadcrumbs"
 import { UnknownRoute } from "@/layouts/unknown-route"
+import { useOffsetParam } from "@/lib/use-offset-param"
 
 function describeScope(vendorId: string, operationId: string, repoId: string | null): string {
   return repoId === null
@@ -48,7 +51,7 @@ function describeScope(vendorId: string, operationId: string, repoId: string | n
  * the rungs to mix over, unlike a page assembled from more than one detector's findings.
  */
 function RungNote({ data }: { data: BindingSurfaceResponse }) {
-  if (data.call_sites.length === 0) {
+  if (data.call_sites.total === 0) {
     return (
       <p className="text-body text-muted-foreground">
         No call site carries a rung here, because none is bound to this operation — see below
@@ -75,7 +78,15 @@ function BindingSurfaceDetail({
   operationId: string
   repoId: string | null
 }) {
-  const query = useBindingSurface(vendorId, operationId, { repoId: repoId ?? undefined })
+  const [callSitesOffset, setCallSitesOffset] = useOffsetParam("call_sites_offset")
+  const [changesOffset, setChangesOffset] = useOffsetParam("changes_offset")
+  const query = useBindingSurface(vendorId, operationId, {
+    repoId: repoId ?? undefined,
+    callSitesLimit: DEFAULT_LIMIT,
+    callSitesOffset,
+    changesLimit: DEFAULT_LIMIT,
+    changesOffset,
+  })
 
   return (
     <section className="flex flex-col gap-4">
@@ -108,7 +119,7 @@ function BindingSurfaceDetail({
               </CardDescription>
             </CardHeader>
             <CardContent className="flex flex-col gap-4">
-              {query.data.call_sites.length === 0 ? (
+              {query.data.call_sites.total === 0 ? (
                 <EmptyState
                   headline="No call site in the index is bound to this operation."
                   detail={
@@ -118,40 +129,51 @@ function BindingSurfaceDetail({
                   }
                 />
               ) : (
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Repository</TableHead>
-                      <TableHead>Call site</TableHead>
-                      <TableHead>Symbol</TableHead>
-                      <TableHead>SDK version</TableHead>
-                      <TableHead>Rung</TableHead>
-                      <TableHead>Indexed at</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {query.data.call_sites.map((site) => (
-                      <TableRow key={`${site.repo_id}-${site.path}-${site.line}-${site.col}`}>
-                        <TableCell className="font-mono">{site.repo_id}</TableCell>
-                        <TableCell className="font-mono">
-                          {site.path}:{site.line}:{site.col}
-                        </TableCell>
-                        <TableCell className="font-mono">
-                          <Formatted value={orAbsent(site.symbol)} />
-                        </TableCell>
-                        <TableCell className="font-mono">
-                          <Formatted value={orAbsent(site.sdk_version)} />
-                        </TableCell>
-                        <TableCell>
-                          <RungBadge rung={site.binding_rung} />
-                        </TableCell>
-                        <TableCell className="font-mono text-meta">
-                          <Formatted value={formatTimestamp(site.indexed_at)} />
-                        </TableCell>
+                <>
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Repository</TableHead>
+                        <TableHead>Call site</TableHead>
+                        <TableHead>Symbol</TableHead>
+                        <TableHead>SDK version</TableHead>
+                        <TableHead>Rung</TableHead>
+                        <TableHead>Indexed at</TableHead>
                       </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
+                    </TableHeader>
+                    <TableBody>
+                      {query.data.call_sites.items.map((site) => (
+                        <TableRow key={`${site.repo_id}-${site.path}-${site.line}-${site.col}`}>
+                          <TableCell className="font-mono">{site.repo_id}</TableCell>
+                          <TableCell className="font-mono">
+                            {site.path}:{site.line}:{site.col}
+                          </TableCell>
+                          <TableCell className="font-mono">
+                            <Formatted value={orAbsent(site.symbol)} />
+                          </TableCell>
+                          <TableCell className="font-mono">
+                            <Formatted value={orAbsent(site.sdk_version)} />
+                          </TableCell>
+                          <TableCell>
+                            <RungBadge rung={site.binding_rung} />
+                          </TableCell>
+                          <TableCell className="font-mono text-meta">
+                            <Formatted value={formatTimestamp(site.indexed_at)} />
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                  <PageControls
+                    offset={callSitesOffset}
+                    limit={DEFAULT_LIMIT}
+                    shown={query.data.call_sites.items.length}
+                    total={query.data.call_sites.total}
+                    nextOffset={query.data.call_sites.next_offset}
+                    busy={query.isFetching}
+                    onOffsetChange={setCallSitesOffset}
+                  />
+                </>
               )}
               <RungNote data={query.data} />
               <p className="text-body text-muted-foreground">
@@ -171,41 +193,52 @@ function BindingSurfaceDetail({
               </CardDescription>
             </CardHeader>
             <CardContent>
-              {query.data.changes.length === 0 ? (
+              {query.data.changes.total === 0 ? (
                 <EmptyState
                   headline="The vendor has never changed this operation."
                   detail="The API answered with an empty list. No ingested feed names a change against this operation — that is an answer, not a failure."
                 />
               ) : (
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Detected</TableHead>
-                      <TableHead>Kind</TableHead>
-                      <TableHead>Severity</TableHead>
-                      <TableHead>Path</TableHead>
-                      <TableHead>Versions</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {query.data.changes.map((change) => (
-                      <TableRow key={change.change_id}>
-                        <TableCell className="font-mono text-meta">
-                          <Formatted value={formatTimestamp(change.detected_at)} />
-                        </TableCell>
-                        <TableCell>{change.kind}</TableCell>
-                        <TableCell>{change.severity}</TableCell>
-                        <TableCell className="font-mono">
-                          <Formatted value={orAbsent(change.path_ptr)} />
-                        </TableCell>
-                        <TableCell className="font-mono">
-                          <Formatted value={orAbsent(change.from_version)} /> →{" "}
-                          <Formatted value={orAbsent(change.to_version)} />
-                        </TableCell>
+                <>
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Detected</TableHead>
+                        <TableHead>Kind</TableHead>
+                        <TableHead>Severity</TableHead>
+                        <TableHead>Path</TableHead>
+                        <TableHead>Versions</TableHead>
                       </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
+                    </TableHeader>
+                    <TableBody>
+                      {query.data.changes.items.map((change) => (
+                        <TableRow key={change.change_id}>
+                          <TableCell className="font-mono text-meta">
+                            <Formatted value={formatTimestamp(change.detected_at)} />
+                          </TableCell>
+                          <TableCell>{change.kind}</TableCell>
+                          <TableCell>{change.severity}</TableCell>
+                          <TableCell className="font-mono">
+                            <Formatted value={orAbsent(change.path_ptr)} />
+                          </TableCell>
+                          <TableCell className="font-mono">
+                            <Formatted value={orAbsent(change.from_version)} /> →{" "}
+                            <Formatted value={orAbsent(change.to_version)} />
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                  <PageControls
+                    offset={changesOffset}
+                    limit={DEFAULT_LIMIT}
+                    shown={query.data.changes.items.length}
+                    total={query.data.changes.total}
+                    nextOffset={query.data.changes.next_offset}
+                    busy={query.isFetching}
+                    onOffsetChange={setChangesOffset}
+                  />
+                </>
               )}
             </CardContent>
           </Card>

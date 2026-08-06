@@ -45,6 +45,22 @@ export interface Page<T> extends Provenance {
   next_offset: number | null
 }
 
+/**
+ * A paginated set with no page-level provenance of its own.
+ *
+ * `sync.dashboard.graph_views._page` builds this shape for every set `binding_surface` and
+ * `observed_telemetry` page: `{items, total, next_offset}`, nothing else. Those two routes
+ * carry no feed-fetch timestamp or context-savings figure to fill `Page<T>`'s `Provenance`
+ * half with — `BindingSurfaceResponse` and `ObservedTelemetryResponse` say why in their own
+ * docstrings — so this is the bare envelope rather than `Page<T>` with fields invented to
+ * satisfy the type.
+ */
+export interface ItemPage<T> {
+  items: T[]
+  total: number
+  next_offset: number | null
+}
+
 /** `GET /api/overview` — one entry per vendor the open findings name. */
 export interface VendorSummary {
   vendor_id: string
@@ -357,8 +373,8 @@ export interface BindingSurfaceResponse {
   vendor_id: string
   operation_id: string
   repo_id: string | null
-  call_sites: BindingCallSite[]
-  changes: BindingChange[]
+  call_sites: ItemPage<BindingCallSite>
+  changes: ItemPage<BindingChange>
 }
 
 /**
@@ -445,9 +461,9 @@ export interface ObservedErrorWindowRow {
  */
 export interface ObservedTelemetryResponse {
   repo_id: string
-  calls: ObservedCallRow[]
-  shapes: ObservedShapeRow[]
-  error_windows: ObservedErrorWindowRow[]
+  calls: ItemPage<ObservedCallRow>
+  shapes: ItemPage<ObservedShapeRow>
+  error_windows: ItemPage<ObservedErrorWindowRow>
 }
 
 /**

@@ -12,8 +12,10 @@
 
 import { useParams } from "react-router"
 
+import { DEFAULT_LIMIT } from "@/api/client"
 import { useRepositoryCoverage, useRepositoryObserved } from "@/api/queries"
 import type { ObservedTelemetryResponse } from "@/api/types"
+import { PageControls } from "@/components/page-controls"
 import { RungBadge } from "@/components/provenance"
 import { EmptyState, ErrorState, LoadingState } from "@/components/states"
 import { Absent, Formatted } from "@/components/status"
@@ -29,6 +31,7 @@ import {
 import { formatTimestamp, orAbsent } from "@/lib/format"
 import { Breadcrumbs } from "@/layouts/breadcrumbs"
 import { UnknownRoute } from "@/layouts/unknown-route"
+import { useOffsetParam } from "@/lib/use-offset-param"
 
 function IndexCoverageCard({ repoId }: { repoId: string }) {
   const query = useRepositoryCoverage(repoId)
@@ -108,7 +111,7 @@ function IndexCoverageCard({ repoId }: { repoId: string }) {
  * component's envelope with, the same reasoning `binding-surface-page.tsx` documents.
  */
 function TelemetryRungNote({ data }: { data: ObservedTelemetryResponse }) {
-  if (data.calls.length === 0) {
+  if (data.calls.total === 0) {
     return (
       <p className="text-body text-muted-foreground">
         No call has ever been observed for this repository — silence, not a measured zero:
@@ -116,7 +119,7 @@ function TelemetryRungNote({ data }: { data: ObservedTelemetryResponse }) {
       </p>
     )
   }
-  const rungs = new Set(data.calls.map((call) => call.binding_rung))
+  const rungs = new Set(data.calls.items.map((call) => call.binding_rung))
   if (rungs.size === 1) {
     const [only] = rungs
     return (
@@ -134,7 +137,17 @@ function TelemetryRungNote({ data }: { data: ObservedTelemetryResponse }) {
 }
 
 function ObservedTelemetryCard({ repoId }: { repoId: string }) {
-  const query = useRepositoryObserved(repoId)
+  const [callsOffset, setCallsOffset] = useOffsetParam("calls_offset")
+  const [shapesOffset, setShapesOffset] = useOffsetParam("shapes_offset")
+  const [errorWindowsOffset, setErrorWindowsOffset] = useOffsetParam("error_windows_offset")
+  const query = useRepositoryObserved(repoId, {
+    callsLimit: DEFAULT_LIMIT,
+    callsOffset,
+    shapesLimit: DEFAULT_LIMIT,
+    shapesOffset,
+    errorWindowsLimit: DEFAULT_LIMIT,
+    errorWindowsOffset,
+  })
 
   return (
     <Card>
@@ -156,47 +169,58 @@ function ObservedTelemetryCard({ repoId }: { repoId: string }) {
           <>
             <div className="flex flex-col gap-3">
               <h3 className="text-section">Calls</h3>
-              {query.data.calls.length === 0 ? (
+              {query.data.calls.total === 0 ? (
                 <EmptyState
                   headline="No call has been observed for this repository."
                   detail="The API answered with an empty list. Either nothing has watched this repository's traffic, or nothing arrived while it was watching — this view cannot tell the two apart."
                 />
               ) : (
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Rung</TableHead>
-                      <TableHead>Vendor / operation</TableHead>
-                      <TableHead>Trace</TableHead>
-                      <TableHead>Calls</TableHead>
-                      <TableHead>Distinct targets</TableHead>
-                      <TableHead>Repeated</TableHead>
-                      <TableHead>Errors</TableHead>
-                      <TableHead>Last seen</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {query.data.calls.map((call) => (
-                      <TableRow key={call.trace_id}>
-                        <TableCell>
-                          <RungBadge rung={call.binding_rung} />
-                        </TableCell>
-                        <TableCell className="font-mono">
-                          {call.vendor_id} /{" "}
-                          {call.operation_id === "" ? <Absent>uncorrelated</Absent> : call.operation_id}
-                        </TableCell>
-                        <TableCell className="font-mono text-meta">{call.trace_id}</TableCell>
-                        <TableCell className="font-mono">{call.call_count}</TableCell>
-                        <TableCell className="font-mono">{call.distinct_targets}</TableCell>
-                        <TableCell className="font-mono">{call.repeated_calls}</TableCell>
-                        <TableCell className="font-mono">{call.error_count}</TableCell>
-                        <TableCell className="font-mono text-meta">
-                          <Formatted value={formatTimestamp(call.last_seen)} />
-                        </TableCell>
+                <>
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Rung</TableHead>
+                        <TableHead>Vendor / operation</TableHead>
+                        <TableHead>Trace</TableHead>
+                        <TableHead>Calls</TableHead>
+                        <TableHead>Distinct targets</TableHead>
+                        <TableHead>Repeated</TableHead>
+                        <TableHead>Errors</TableHead>
+                        <TableHead>Last seen</TableHead>
                       </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
+                    </TableHeader>
+                    <TableBody>
+                      {query.data.calls.items.map((call) => (
+                        <TableRow key={call.trace_id}>
+                          <TableCell>
+                            <RungBadge rung={call.binding_rung} />
+                          </TableCell>
+                          <TableCell className="font-mono">
+                            {call.vendor_id} /{" "}
+                            {call.operation_id === "" ? <Absent>uncorrelated</Absent> : call.operation_id}
+                          </TableCell>
+                          <TableCell className="font-mono text-meta">{call.trace_id}</TableCell>
+                          <TableCell className="font-mono">{call.call_count}</TableCell>
+                          <TableCell className="font-mono">{call.distinct_targets}</TableCell>
+                          <TableCell className="font-mono">{call.repeated_calls}</TableCell>
+                          <TableCell className="font-mono">{call.error_count}</TableCell>
+                          <TableCell className="font-mono text-meta">
+                            <Formatted value={formatTimestamp(call.last_seen)} />
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                  <PageControls
+                    offset={callsOffset}
+                    limit={DEFAULT_LIMIT}
+                    shown={query.data.calls.items.length}
+                    total={query.data.calls.total}
+                    nextOffset={query.data.calls.next_offset}
+                    busy={query.isFetching}
+                    onOffsetChange={setCallsOffset}
+                  />
+                </>
               )}
               <TelemetryRungNote data={query.data} />
             </div>
@@ -209,40 +233,51 @@ function ObservedTelemetryCard({ repoId }: { repoId: string }) {
                 is a vendor-wide fact, not a per-repository one, so nothing here belongs to this
                 repository alone.
               </p>
-              {query.data.shapes.length === 0 ? (
+              {query.data.shapes.total === 0 ? (
                 <EmptyState
                   headline="No shape recorded for this repository's operations."
                   detail="Either no traffic for these operations has been shaped yet, or this repository's calls did not correlate to any operation."
                 />
               ) : (
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Vendor / operation</TableHead>
-                      <TableHead>Field</TableHead>
-                      <TableHead>Type</TableHead>
-                      <TableHead>Nullable seen</TableHead>
-                      <TableHead>Source</TableHead>
-                      <TableHead>Samples</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {query.data.shapes.map((shape) => (
-                      <TableRow
-                        key={`${shape.vendor_id}-${shape.operation_id}-${shape.field_path}`}
-                      >
-                        <TableCell className="font-mono">
-                          {shape.vendor_id} / {shape.operation_id}
-                        </TableCell>
-                        <TableCell className="font-mono">{shape.field_path}</TableCell>
-                        <TableCell className="font-mono">{shape.json_type}</TableCell>
-                        <TableCell>{shape.nullable_seen ? "yes" : "no"}</TableCell>
-                        <TableCell className="font-mono">{shape.source}</TableCell>
-                        <TableCell className="font-mono">{shape.sample_count}</TableCell>
+                <>
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Vendor / operation</TableHead>
+                        <TableHead>Field</TableHead>
+                        <TableHead>Type</TableHead>
+                        <TableHead>Nullable seen</TableHead>
+                        <TableHead>Source</TableHead>
+                        <TableHead>Samples</TableHead>
                       </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
+                    </TableHeader>
+                    <TableBody>
+                      {query.data.shapes.items.map((shape) => (
+                        <TableRow
+                          key={`${shape.vendor_id}-${shape.operation_id}-${shape.field_path}`}
+                        >
+                          <TableCell className="font-mono">
+                            {shape.vendor_id} / {shape.operation_id}
+                          </TableCell>
+                          <TableCell className="font-mono">{shape.field_path}</TableCell>
+                          <TableCell className="font-mono">{shape.json_type}</TableCell>
+                          <TableCell>{shape.nullable_seen ? "yes" : "no"}</TableCell>
+                          <TableCell className="font-mono">{shape.source}</TableCell>
+                          <TableCell className="font-mono">{shape.sample_count}</TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                  <PageControls
+                    offset={shapesOffset}
+                    limit={DEFAULT_LIMIT}
+                    shown={query.data.shapes.items.length}
+                    total={query.data.shapes.total}
+                    nextOffset={query.data.shapes.next_offset}
+                    busy={query.isFetching}
+                    onOffsetChange={setShapesOffset}
+                  />
+                </>
               )}
             </div>
 
@@ -252,46 +287,57 @@ function ObservedTelemetryCard({ repoId }: { repoId: string }) {
                 Failure counts have no denominator in this table — a count is not a rate, and
                 this view does not compute one.
               </p>
-              {query.data.error_windows.length === 0 ? (
+              {query.data.error_windows.total === 0 ? (
                 <EmptyState
                   headline="No error window recorded for this repository."
                   detail="Either nothing has tracked errors for this repository, or nothing tracked ever recorded a window — this view cannot tell the two apart."
                 />
               ) : (
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Rung</TableHead>
-                      <TableHead>Vendor / operation</TableHead>
-                      <TableHead>Status class</TableHead>
-                      <TableHead>Window</TableHead>
-                      <TableHead>Errors</TableHead>
-                      <TableHead>Issues</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {query.data.error_windows.map((window, index) => (
-                      <TableRow
-                        key={`${window.vendor_id}-${window.operation_id}-${window.window_start}-${index}`}
-                      >
-                        <TableCell>
-                          <RungBadge rung={window.binding_rung} />
-                        </TableCell>
-                        <TableCell className="font-mono">
-                          {window.vendor_id} /{" "}
-                          <Formatted value={orAbsent(window.operation_id)} />
-                        </TableCell>
-                        <TableCell className="font-mono">{window.status_class}</TableCell>
-                        <TableCell className="font-mono text-meta">
-                          <Formatted value={formatTimestamp(window.window_start)} /> →{" "}
-                          <Formatted value={formatTimestamp(window.window_end)} />
-                        </TableCell>
-                        <TableCell className="font-mono">{window.error_count}</TableCell>
-                        <TableCell className="font-mono">{window.issue_count}</TableCell>
+                <>
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Rung</TableHead>
+                        <TableHead>Vendor / operation</TableHead>
+                        <TableHead>Status class</TableHead>
+                        <TableHead>Window</TableHead>
+                        <TableHead>Errors</TableHead>
+                        <TableHead>Issues</TableHead>
                       </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
+                    </TableHeader>
+                    <TableBody>
+                      {query.data.error_windows.items.map((window, index) => (
+                        <TableRow
+                          key={`${window.vendor_id}-${window.operation_id}-${window.window_start}-${index}`}
+                        >
+                          <TableCell>
+                            <RungBadge rung={window.binding_rung} />
+                          </TableCell>
+                          <TableCell className="font-mono">
+                            {window.vendor_id} /{" "}
+                            <Formatted value={orAbsent(window.operation_id)} />
+                          </TableCell>
+                          <TableCell className="font-mono">{window.status_class}</TableCell>
+                          <TableCell className="font-mono text-meta">
+                            <Formatted value={formatTimestamp(window.window_start)} /> →{" "}
+                            <Formatted value={formatTimestamp(window.window_end)} />
+                          </TableCell>
+                          <TableCell className="font-mono">{window.error_count}</TableCell>
+                          <TableCell className="font-mono">{window.issue_count}</TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                  <PageControls
+                    offset={errorWindowsOffset}
+                    limit={DEFAULT_LIMIT}
+                    shown={query.data.error_windows.items.length}
+                    total={query.data.error_windows.total}
+                    nextOffset={query.data.error_windows.next_offset}
+                    busy={query.isFetching}
+                    onOffsetChange={setErrorWindowsOffset}
+                  />
+                </>
               )}
             </div>
           </>

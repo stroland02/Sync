@@ -142,24 +142,47 @@ export function fetchRepositories(signal?: AbortSignal): Promise<RepositoriesRes
   return getJson<RepositoriesResponse>("/api/repositories", signal)
 }
 
-function withRepoIdParam(path: string, repoId: string | undefined): string {
-  return repoId === undefined ? path : `${path}?repo_id=${encodeURIComponent(repoId)}`
+function withQueryParams(path: string, params: Record<string, string | number | undefined>): string {
+  const query = new URLSearchParams()
+  for (const [key, value] of Object.entries(params)) {
+    if (value !== undefined) query.set(key, String(value))
+  }
+  const rendered = query.toString()
+  return rendered ? `${path}?${rendered}` : path
+}
+
+export interface BindingSurfaceParams {
+  repoId?: string
+  callSitesLimit?: number
+  callSitesOffset?: number
+  changesLimit?: number
+  changesOffset?: number
 }
 
 /**
  * Every call site the index holds against one vendor operation, and what the vendor has
  * changed about it. `repoId` narrows to one repository; omitted, the answer spans every
  * repository the index has seen calling this operation.
+ *
+ * Call sites and changes page independently, matching `binding_surface`'s own contract: a
+ * customer with a long feed history but few call sites (or the reverse) can page one set
+ * without the other's size leaking in.
  */
 export function fetchBindingSurface(
   vendorId: string,
   operationId: string,
-  params: { repoId?: string } = {},
+  params: BindingSurfaceParams = {},
   signal?: AbortSignal,
 ): Promise<BindingSurfaceResponse> {
-  const path = withRepoIdParam(
+  const path = withQueryParams(
     `/api/vendors/${encodeURIComponent(vendorId)}/operations/${encodeURIComponent(operationId)}/bindings`,
-    params.repoId,
+    {
+      repo_id: params.repoId,
+      call_sites_limit: params.callSitesLimit,
+      call_sites_offset: params.callSitesOffset,
+      changes_limit: params.changesLimit,
+      changes_offset: params.changesOffset,
+    },
   )
   return getJson<BindingSurfaceResponse>(path, signal)
 }
@@ -175,15 +198,35 @@ export function fetchRepositoryCoverage(
   )
 }
 
-/** What traffic showed up for one repository, what shape it had, and how often it failed. */
+export interface ObservedTelemetryParams {
+  callsLimit?: number
+  callsOffset?: number
+  shapesLimit?: number
+  shapesOffset?: number
+  errorWindowsLimit?: number
+  errorWindowsOffset?: number
+}
+
+/**
+ * What traffic showed up for one repository, what shape it had, and how often it failed.
+ *
+ * The three sets page independently, matching `observed_telemetry`'s own contract: they are
+ * three questions of different cardinality stacked on one screen.
+ */
 export function fetchRepositoryObserved(
   repoId: string,
+  params: ObservedTelemetryParams = {},
   signal?: AbortSignal,
 ): Promise<ObservedTelemetryResponse> {
-  return getJson<ObservedTelemetryResponse>(
-    `/api/repositories/${encodeURIComponent(repoId)}/observed`,
-    signal,
-  )
+  const path = withQueryParams(`/api/repositories/${encodeURIComponent(repoId)}/observed`, {
+    calls_limit: params.callsLimit,
+    calls_offset: params.callsOffset,
+    shapes_limit: params.shapesLimit,
+    shapes_offset: params.shapesOffset,
+    error_windows_limit: params.errorWindowsLimit,
+    error_windows_offset: params.errorWindowsOffset,
+  })
+  return getJson<ObservedTelemetryResponse>(path, signal)
 }
 
 /** Every open finding, aggregated by the detector that raised it. */

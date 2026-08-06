@@ -22,7 +22,9 @@
 
 import { useParams } from "react-router"
 
+import { DEFAULT_LIMIT } from "@/api/client"
 import { useRepositoryObserved } from "@/api/queries"
+import { PageControls } from "@/components/page-controls"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { ErrorState, LoadingState } from "@/components/states"
 import { ErrorWindowsTable } from "@/features/telemetry/error-windows-table"
@@ -30,6 +32,7 @@ import { ObservedCallsTable } from "@/features/telemetry/observed-calls-table"
 import { ObservedShapesTable } from "@/features/telemetry/observed-shapes-table"
 import { Breadcrumbs } from "@/layouts/breadcrumbs"
 import { UnknownRoute } from "@/layouts/unknown-route"
+import { useOffsetParam } from "@/lib/use-offset-param"
 
 function NothingRecorded({ what, repoId }: { what: string; repoId: string }) {
   return (
@@ -50,7 +53,17 @@ export function ObservedTelemetryPage() {
 }
 
 function ObservedTelemetryDetail({ repoId }: { repoId: string }) {
-  const query = useRepositoryObserved(repoId)
+  const [callsOffset, setCallsOffset] = useOffsetParam("calls_offset")
+  const [shapesOffset, setShapesOffset] = useOffsetParam("shapes_offset")
+  const [errorWindowsOffset, setErrorWindowsOffset] = useOffsetParam("error_windows_offset")
+  const query = useRepositoryObserved(repoId, {
+    callsLimit: DEFAULT_LIMIT,
+    callsOffset,
+    shapesLimit: DEFAULT_LIMIT,
+    shapesOffset,
+    errorWindowsLimit: DEFAULT_LIMIT,
+    errorWindowsOffset,
+  })
 
   return (
     <section className="flex flex-col gap-4">
@@ -84,10 +97,21 @@ function ObservedTelemetryDetail({ repoId }: { repoId: string }) {
               </CardDescription>
             </CardHeader>
             <CardContent>
-              {query.data.calls.length === 0 ? (
+              {query.data.calls.total === 0 ? (
                 <NothingRecorded what="observed calls" repoId={repoId} />
               ) : (
-                <ObservedCallsTable calls={query.data.calls} />
+                <div className="flex flex-col gap-4">
+                  <ObservedCallsTable calls={query.data.calls.items} />
+                  <PageControls
+                    offset={callsOffset}
+                    limit={DEFAULT_LIMIT}
+                    shown={query.data.calls.items.length}
+                    total={query.data.calls.total}
+                    nextOffset={query.data.calls.next_offset}
+                    busy={query.isFetching}
+                    onOffsetChange={setCallsOffset}
+                  />
+                </div>
               )}
             </CardContent>
           </Card>
@@ -102,10 +126,21 @@ function ObservedTelemetryDetail({ repoId }: { repoId: string }) {
               </CardDescription>
             </CardHeader>
             <CardContent>
-              {query.data.shapes.length === 0 ? (
+              {query.data.shapes.total === 0 ? (
                 <NothingRecorded what="response shapes" repoId={repoId} />
               ) : (
-                <ObservedShapesTable shapes={query.data.shapes} />
+                <div className="flex flex-col gap-4">
+                  <ObservedShapesTable shapes={query.data.shapes.items} />
+                  <PageControls
+                    offset={shapesOffset}
+                    limit={DEFAULT_LIMIT}
+                    shown={query.data.shapes.items.length}
+                    total={query.data.shapes.total}
+                    nextOffset={query.data.shapes.next_offset}
+                    busy={query.isFetching}
+                    onOffsetChange={setShapesOffset}
+                  />
+                </div>
               )}
             </CardContent>
           </Card>
@@ -120,10 +155,21 @@ function ObservedTelemetryDetail({ repoId }: { repoId: string }) {
               </CardDescription>
             </CardHeader>
             <CardContent>
-              {query.data.error_windows.length === 0 ? (
+              {query.data.error_windows.total === 0 ? (
                 <NothingRecorded what="error windows" repoId={repoId} />
               ) : (
-                <ErrorWindowsTable windows={query.data.error_windows} />
+                <div className="flex flex-col gap-4">
+                  <ErrorWindowsTable windows={query.data.error_windows.items} />
+                  <PageControls
+                    offset={errorWindowsOffset}
+                    limit={DEFAULT_LIMIT}
+                    shown={query.data.error_windows.items.length}
+                    total={query.data.error_windows.total}
+                    nextOffset={query.data.error_windows.next_offset}
+                    busy={query.isFetching}
+                    onOffsetChange={setErrorWindowsOffset}
+                  />
+                </div>
               )}
             </CardContent>
           </Card>
