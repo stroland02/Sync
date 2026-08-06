@@ -53,14 +53,14 @@ function describeScope(vendorId: string, operationId: string, repoId: string | n
 function RungNote({ data }: { data: BindingSurfaceResponse }) {
   if (data.call_sites.total === 0) {
     return (
-      <p className="text-body text-muted-foreground">
+      <p className="max-w-prose text-body text-muted-foreground">
         No call site carries a rung here, because none is bound to this operation — see below
         for what that absence does and does not mean.
       </p>
     )
   }
   return (
-    <p className="text-body text-muted-foreground">
+    <p className="max-w-prose text-body text-muted-foreground">
       Every call site below rests on the <RungBadge rung="static" /> rung: what the index found
       by reading the source, never a resolution or a correlation step. A stronger rung for this
       same operation — traffic Sync has actually observed calling it — is a separate kind of
@@ -89,7 +89,7 @@ function BindingSurfaceDetail({
   })
 
   return (
-    <section className="flex flex-col gap-4">
+    <section className="flex flex-col gap-8">
       <Breadcrumbs
         trail={[
           { label: "Fleet", to: "/" },
@@ -100,7 +100,7 @@ function BindingSurfaceDetail({
       <h1 className="font-mono text-page">
         {vendorId} / {operationId}
       </h1>
-      <p className="text-body text-muted-foreground">
+      <p className="max-w-prose text-body text-muted-foreground">
         {describeScope(vendorId, operationId, repoId)}.
       </p>
 
@@ -118,7 +118,7 @@ function BindingSurfaceDetail({
                 What in the codebase calls this operation, and how the system knows it does.
               </CardDescription>
             </CardHeader>
-            <CardContent className="flex flex-col gap-4">
+            <CardContent className="flex flex-col gap-section">
               {query.data.call_sites.total === 0 ? (
                 <EmptyState
                   headline="No call site in the index is bound to this operation."
@@ -176,7 +176,7 @@ function BindingSurfaceDetail({
                 </>
               )}
               <RungNote data={query.data} />
-              <p className="text-body text-muted-foreground">
+              <p className="max-w-prose text-body text-muted-foreground">
                 Either this operation has never had a call site here, or it had one that was
                 later retracted — this table cannot tell the two apart.
               </p>
@@ -186,7 +186,7 @@ function BindingSurfaceDetail({
           <Card>
             <CardHeader>
               <CardTitle>Vendor changes</CardTitle>
-              <CardDescription>
+              <CardDescription className="max-w-prose">
                 What the vendor changed about this operation, whether or not a call site above
                 is affected. A vendor change is not a binding and carries no rung — it is
                 evidence about the vendor, not about the codebase.

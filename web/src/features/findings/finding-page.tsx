@@ -30,14 +30,14 @@ import { UnknownRoute } from "@/layouts/unknown-route"
 
 function FieldList({ label, values }: { label: string; values: string[] }) {
   return (
-    <div className="flex flex-col gap-1">
-      <h3 className="text-meta tracking-wide text-muted-foreground uppercase">{label}</h3>
+    <div className="flex flex-col gap-field">
+      <h3 className="furniture text-meta text-muted-foreground">{label}</h3>
       {values.length === 0 ? (
         <p className="text-body text-muted-foreground">{ABSENT} none recorded</p>
       ) : (
-        <ul className="flex flex-wrap gap-2">
+        <ul className="flex flex-wrap gap-row">
           {values.map((value) => (
-            <li key={value} className="rounded border border-border px-1.5 py-0.5 font-mono text-meta">
+            <li key={value} className="rounded border border-border px-field py-0.5 font-mono text-meta">
               {value}
             </li>
           ))}
@@ -72,7 +72,7 @@ function FindingDetail({ findingId }: { findingId: string }) {
   ]
 
   return (
-    <section className="flex flex-col gap-4">
+    <section className="flex flex-col gap-8">
       <Breadcrumbs trail={trail} />
       <h1 className="font-mono text-page">{findingId}</h1>
 
@@ -80,7 +80,7 @@ function FindingDetail({ findingId }: { findingId: string }) {
           abandoned is no longer open, so this page 404s for it — and that is exactly the
           finding whose run is most worth reading. The workflow lives in the checkpointer,
           which does not care whether the graph still holds the finding. */}
-      <p className="text-body">
+      <p className="max-w-prose text-body">
         <Link
           to={`/findings/${encodeURIComponent(findingId)}/workflow`}
           className="underline underline-offset-2"
@@ -114,12 +114,10 @@ function FindingDetail({ findingId }: { findingId: string }) {
                 What this call site calls, and how the system knows it does.
               </CardDescription>
             </CardHeader>
-            <CardContent className="flex flex-col gap-4">
-              <dl className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            <CardContent className="flex flex-col gap-section">
+              <dl className="grid gap-section sm:grid-cols-2 lg:grid-cols-4">
                 <div>
-                  <dt className="text-meta tracking-wide text-muted-foreground uppercase">
-                    Vendor
-                  </dt>
+                  <dt className="furniture text-meta text-muted-foreground">Vendor</dt>
                   <dd className="font-mono text-body">
                     <Link
                       to={`/vendors/${encodeURIComponent(query.data.vendor)}`}
@@ -130,31 +128,25 @@ function FindingDetail({ findingId }: { findingId: string }) {
                   </dd>
                 </div>
                 <div>
-                  <dt className="text-meta tracking-wide text-muted-foreground uppercase">
-                    Operation
-                  </dt>
+                  <dt className="furniture text-meta text-muted-foreground">Operation</dt>
                   <dd className="font-mono text-body">
                     <Formatted value={orAbsent(query.data.operation)} />
                   </dd>
                 </div>
                 <div>
-                  <dt className="text-meta tracking-wide text-muted-foreground uppercase">
-                    Symbol
-                  </dt>
+                  <dt className="furniture text-meta text-muted-foreground">Symbol</dt>
                   <dd className="font-mono text-body">
                     <Formatted value={orAbsent(query.data.symbol)} />
                   </dd>
                 </div>
                 <div>
-                  <dt className="text-meta tracking-wide text-muted-foreground uppercase">
-                    SDK version
-                  </dt>
+                  <dt className="furniture text-meta text-muted-foreground">SDK version</dt>
                   <dd className="font-mono text-body">
                     <Formatted value={orAbsent(query.data.sdk_version)} />
                   </dd>
                 </div>
                 <div>
-                  <dt className="text-meta tracking-wide text-muted-foreground uppercase">
+                  <dt className="furniture text-meta text-muted-foreground">
                     This finding's rung
                   </dt>
                   <dd className="text-body">
@@ -177,7 +169,7 @@ function FindingDetail({ findingId }: { findingId: string }) {
                 has to break for this finding to matter.
               </CardDescription>
             </CardHeader>
-            <CardContent className="flex flex-col gap-4">
+            <CardContent className="flex flex-col gap-section">
               <FieldList label="Argument keys" values={query.data.args_keys} />
               <FieldList
                 label="Response fields read"
@@ -196,7 +188,7 @@ function FindingDetail({ findingId }: { findingId: string }) {
             </CardHeader>
             <CardContent>
               {query.data.known_changes.length === 0 ? (
-                <p className="text-body text-muted-foreground">
+                <p className="max-w-prose text-body text-muted-foreground">
                   {ABSENT} No vendor change names this call site. The finding was raised by
                   something other than a spec diff.
                 </p>

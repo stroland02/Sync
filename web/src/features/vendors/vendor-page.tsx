@@ -27,29 +27,32 @@ export function VendorPage() {
   const repoId = searchParams.get("repo_id")
 
   return (
-    <section className="flex flex-col gap-4">
-      <Breadcrumbs
-        trail={
-          repoId === null
-            ? [{ label: "Fleet", to: "/" }, { label: vendorId }]
-            : [
-                { label: "Fleet", to: "/" },
-                { label: repoId, to: `/repositories/${encodeURIComponent(repoId)}` },
-                { label: vendorId },
-              ]
-        }
-      />
-      <h1 className="font-mono text-page">{vendorId}</h1>
-      <p className="text-body text-muted-foreground">
-        Every open finding and every published change for {vendorId}, across every repository
-        the index has seen — <code className="font-mono">GET /api/vendors/{vendorId}</code>{" "}
-        takes no repository id, so nothing below can be narrowed to one codebase yet.
-      </p>
+    <section className="flex flex-col gap-8">
+      <div className="flex flex-col gap-section">
+        <Breadcrumbs
+          trail={
+            repoId === null
+              ? [{ label: "Fleet", to: "/" }, { label: vendorId }]
+              : [
+                  { label: "Fleet", to: "/" },
+                  { label: repoId, to: `/repositories/${encodeURIComponent(repoId)}` },
+                  { label: vendorId },
+                ]
+          }
+        />
+        <h1 className="font-mono text-page">{vendorId}</h1>
+        <p className="max-w-prose text-body text-muted-foreground">
+          Every open finding and every published change for {vendorId}, across every
+          repository the index has seen —{" "}
+          <code className="font-mono">GET /api/vendors/{vendorId}</code> takes no repository
+          id, so nothing below can be narrowed to one codebase yet.
+        </p>
+      </div>
 
       <Card>
         <CardHeader>
           <CardTitle>Errors and incidents</CardTitle>
-          <CardDescription>
+          <CardDescription className="max-w-prose">
             Call sites in this codebase that an open finding touches. The rung on each row
             says how the system knows the site is bound to the operation.
           </CardDescription>

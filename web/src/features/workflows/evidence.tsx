@@ -176,11 +176,13 @@ function Row({
   children: ReactNode
 }) {
   return (
-    <div className={cn("flex flex-col gap-1", className)}>
-      <dt className="text-meta tracking-wide text-muted-foreground uppercase">{label}</dt>
-      <dd className="flex flex-col gap-1 text-body">
+    <div className={cn("flex flex-col gap-field", className)}>
+      <dt className="furniture text-meta text-muted-foreground">{label}</dt>
+      <dd className="flex flex-col gap-field text-body">
         {children}
-        {help !== undefined && <p className="text-meta text-muted-foreground">{help}</p>}
+        {help !== undefined && (
+          <p className="max-w-prose text-meta text-muted-foreground">{help}</p>
+        )}
       </dd>
     </div>
   )
@@ -203,7 +205,7 @@ function Flag({ field, value }: { field: Field; value: unknown }) {
     ? (field.trueLabel ?? "yes")
     : (field.falseLabel ?? "no")
   return (
-    <span className="rounded border border-border px-1.5 py-0.5 text-meta">
+    <span className="rounded border border-border px-field py-0.5 text-meta">
       {value ? "PASS" : "FAIL"} — {wording}
     </span>
   )
@@ -228,7 +230,7 @@ function Block({ value }: { value: unknown }) {
     return <Absent />
   }
   return (
-    <pre className="max-h-72 overflow-auto rounded border border-border bg-muted p-2 font-mono text-meta whitespace-pre-wrap">
+    <pre className="max-h-72 overflow-auto rounded border border-border bg-muted p-row font-mono text-meta whitespace-pre-wrap">
       {rendered}
     </pre>
   )
@@ -296,7 +298,7 @@ export function NodeEvidence({
   if (named.length === 0 && unnamed.length === 0) return null
 
   return (
-    <dl className="mt-3 grid gap-3 sm:grid-cols-2">
+    <dl className="mt-section grid gap-section sm:grid-cols-2">
       {named.map((field) => (
         <Row
           key={field.key}

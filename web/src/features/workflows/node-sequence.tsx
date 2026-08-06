@@ -133,11 +133,11 @@ function Step({
   const revisited = node.status === "current" && Object.keys(node.evidence).length > 0
 
   return (
-    <li className="grid grid-cols-[auto_1fr] gap-4">
+    <li className="grid grid-cols-[auto_1fr] gap-section">
       <div className="flex flex-col items-center">
         <span
           aria-hidden="true"
-          className={`relative flex size-7 shrink-0 items-center justify-center rounded-full border text-xs ${look.markerClass}`}
+          className={`relative flex size-7 shrink-0 items-center justify-center rounded-full border text-meta ${look.markerClass}`}
         >
           <ChangeWash status={node.status} />
           {look.glyph}
@@ -145,16 +145,16 @@ function Step({
         {!isLast && <span aria-hidden="true" className="w-px flex-1 bg-border" />}
       </div>
 
-      <div className={isLast ? "" : "pb-6"}>
-        <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-          <h3 className={`font-mono text-sm ${look.nameClass}`}>{node.name}</h3>
-          <p className="text-xs text-muted-foreground">{look.label}</p>
+      <div className={isLast ? "" : "pb-section"}>
+        <div className="flex flex-wrap items-baseline gap-x-row gap-y-field">
+          <h3 className={`font-mono text-body ${look.nameClass}`}>{node.name}</h3>
+          <p className="text-meta text-muted-foreground">{look.label}</p>
         </div>
-        <p className="mt-1 text-sm text-muted-foreground">
+        <p className="mt-field max-w-prose text-body text-muted-foreground">
           {purposeFor(node.name)}
         </p>
         {revisited && (
-          <p className="mt-1 text-sm">
+          <p className="mt-field max-w-prose text-body">
             This node has already produced evidence and the graph owes it another visit — it
             is a retry, not a finished step.
           </p>

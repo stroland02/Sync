@@ -36,7 +36,7 @@ import { useOffsetParam } from "@/lib/use-offset-param"
 
 function NothingRecorded({ what, repoId }: { what: string; repoId: string }) {
   return (
-    <p className="text-body text-muted-foreground">
+    <p className="max-w-prose text-body text-muted-foreground">
       No {what} recorded for <span className="font-mono">{repoId}</span>. That could mean the
       relevant code path has never run since telemetry started, that telemetry was never wired
       up for this repository, or that this identifier does not name a repository the index has
@@ -66,7 +66,7 @@ function ObservedTelemetryDetail({ repoId }: { repoId: string }) {
   })
 
   return (
-    <section className="flex flex-col gap-4">
+    <section className="flex flex-col gap-8">
       <Breadcrumbs
         trail={[
           { label: "Fleet", to: "/" },
@@ -75,7 +75,7 @@ function ObservedTelemetryDetail({ repoId }: { repoId: string }) {
         ]}
       />
       <h1 className="font-mono text-page">{repoId}</h1>
-      <p className="text-body text-muted-foreground">
+      <p className="max-w-prose text-body text-muted-foreground">
         Traffic Sync's telemetry has recorded for this repository, the response shapes that
         traffic has shown, and the failure counts an error tracker has recorded against it.
       </p>
@@ -90,7 +90,7 @@ function ObservedTelemetryDetail({ repoId }: { repoId: string }) {
           <Card>
             <CardHeader>
               <CardTitle>Observed calls</CardTitle>
-              <CardDescription>
+              <CardDescription className="max-w-prose">
                 One row per unit of work's use of one vendor operation. A row proves the call
                 ran at least once; it does not prove the operation it names is the operation
                 that was actually called — that is what the rung says.
@@ -100,7 +100,7 @@ function ObservedTelemetryDetail({ repoId }: { repoId: string }) {
               {query.data.calls.total === 0 ? (
                 <NothingRecorded what="observed calls" repoId={repoId} />
               ) : (
-                <div className="flex flex-col gap-4">
+                <div className="flex flex-col gap-section">
                   <ObservedCallsTable calls={query.data.calls.items} />
                   <PageControls
                     offset={callsOffset}
@@ -119,7 +119,7 @@ function ObservedTelemetryDetail({ repoId }: { repoId: string }) {
           <Card>
             <CardHeader>
               <CardTitle>Response shapes</CardTitle>
-              <CardDescription>
+              <CardDescription className="max-w-prose">
                 What the operations this repository's own traffic names have actually been
                 seen to return, joined in through those operations rather than stored per
                 repository — a shape is a fact about the vendor, not about who calls it.
@@ -129,7 +129,7 @@ function ObservedTelemetryDetail({ repoId }: { repoId: string }) {
               {query.data.shapes.total === 0 ? (
                 <NothingRecorded what="response shapes" repoId={repoId} />
               ) : (
-                <div className="flex flex-col gap-4">
+                <div className="flex flex-col gap-section">
                   <ObservedShapesTable shapes={query.data.shapes.items} />
                   <PageControls
                     offset={shapesOffset}
@@ -148,7 +148,7 @@ function ObservedTelemetryDetail({ repoId }: { repoId: string }) {
           <Card>
             <CardHeader>
               <CardTitle>Error windows</CardTitle>
-              <CardDescription>
+              <CardDescription className="max-w-prose">
                 How many times one operation failed, over a window an error tracker recorded.
                 A count here has no denominator and is not a rate — it says nothing on its own
                 about whether traffic is getting worse, only how many failures one window held.
@@ -158,7 +158,7 @@ function ObservedTelemetryDetail({ repoId }: { repoId: string }) {
               {query.data.error_windows.total === 0 ? (
                 <NothingRecorded what="error windows" repoId={repoId} />
               ) : (
-                <div className="flex flex-col gap-4">
+                <div className="flex flex-col gap-section">
                   <ErrorWindowsTable windows={query.data.error_windows.items} />
                   <PageControls
                     offset={errorWindowsOffset}

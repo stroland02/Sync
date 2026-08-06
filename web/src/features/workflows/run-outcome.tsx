@@ -23,9 +23,9 @@ import { Absent } from "@/components/status"
 // reaches for the reserved status colour; every outcome gets the same neutral treatment.
 function Panel({ headline, children }: { headline: string; children: ReactNode }) {
   return (
-    <div className="max-w-prose rounded border border-border p-4">
+    <div className="max-w-prose rounded border border-border p-section">
       <h2 className="text-emphasis">{headline}</h2>
-      <div className="mt-2 flex flex-col gap-2 text-body text-ink-secondary">{children}</div>
+      <div className="mt-row flex flex-col gap-row text-body text-ink-secondary">{children}</div>
     </div>
   )
 }
@@ -60,8 +60,8 @@ export function RunOutcome({
           change kinds are not mechanically safe.
         </p>
         <div>
-          <p className="text-meta tracking-wide text-ink-muted uppercase">Reason it was abandoned</p>
-          <p className="mt-1 font-mono text-body whitespace-pre-wrap text-foreground">
+          <p className="furniture text-meta text-ink-muted">Reason it was abandoned</p>
+          <p className="mt-field font-mono text-body whitespace-pre-wrap text-foreground">
             {abandonReason === null || abandonReason === "" ? (
               <Absent>the run recorded no reason, which is itself a gap worth chasing</Absent>
             ) : (
@@ -92,8 +92,8 @@ export function RunOutcome({
           abandonment: the finding stays open and unremediated, which is the honest state.
         </p>
         <div>
-          <p className="text-meta tracking-wide text-ink-muted uppercase">Reason it reported</p>
-          <p className="mt-1 font-mono text-body whitespace-pre-wrap text-foreground">
+          <p className="furniture text-meta text-ink-muted">Reason it reported</p>
+          <p className="mt-field font-mono text-body whitespace-pre-wrap text-foreground">
             {reportReason === null || reportReason === "" ? (
               <Absent>the run reported without recording why</Absent>
             ) : (

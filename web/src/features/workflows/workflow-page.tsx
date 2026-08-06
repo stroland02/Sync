@@ -55,9 +55,9 @@ function StaleBanner({
   return (
     <div
       role="status"
-      className="rounded border border-border bg-muted p-3 text-body text-muted-foreground"
+      className="rounded border border-border bg-muted p-section text-body text-muted-foreground"
     >
-      <p>
+      <p className="max-w-prose">
         Could not refresh. Showing the run as of{" "}
         <Formatted value={formatTimestamp(new Date(fetchedAt).toISOString())} /> —{" "}
         {live
@@ -68,7 +68,7 @@ function StaleBanner({
         <Button
           variant="outline"
           size="sm"
-          className="mt-2"
+          className="mt-row"
           disabled={isFetching}
           onClick={onRetry}
         >
@@ -85,7 +85,7 @@ function Workflow({ findingId }: { findingId: string }) {
   const terminal = isRunTerminal(data)
 
   return (
-    <section className="flex flex-col gap-4">
+    <section className="flex flex-col gap-8">
       <Breadcrumbs
         trail={[
           { label: "Fleet", to: "/" },
@@ -100,7 +100,7 @@ function Workflow({ findingId }: { findingId: string }) {
       {data === undefined &&
         query.isError &&
         (query.error instanceof NotFoundError ? (
-          <div className="flex flex-col items-start gap-3">
+          <div className="flex flex-col items-start gap-section">
             <NotFoundState
               headline="No remediation run for this finding."
               detail="The API answered, and the checkpointer holds no run under this identifier. Either remediation has not been started for this finding, or it has never been started for any finding on this database. This is an answer about the run, not a failure of the console — a finding can be perfectly real and have no attempt against it yet."
@@ -130,7 +130,7 @@ function Workflow({ findingId }: { findingId: string }) {
             />
           )}
 
-          <p className="text-meta text-ink-muted">
+          <p className="max-w-prose text-meta text-ink-muted">
             Run <span className="font-mono">{data.thread_id}</span>
             {data.generation_count > 1 && (
               <>
@@ -166,7 +166,7 @@ function Workflow({ findingId }: { findingId: string }) {
             </CardContent>
           </Card>
 
-          <p className="text-body text-muted-foreground">
+          <p className="max-w-prose text-body text-muted-foreground">
             Read from the checkpointer, which is a different database from the API
             Dependency Graph — this screen carries no indexing timestamp and no binding rung
             for that reason.{" "}

@@ -51,7 +51,7 @@ export function VendorFindingsTable({
   const page = query.data
 
   return (
-    <div className="flex flex-col gap-4">
+    <div className="flex flex-col gap-section">
       {page.items.length === 0 ? (
         <EmptyState
           headline={`No open findings for ${vendorId}.`}

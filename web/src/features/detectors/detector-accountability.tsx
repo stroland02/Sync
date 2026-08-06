@@ -19,6 +19,7 @@ import { Link } from "react-router"
 import { useDetectors } from "@/api/queries"
 import type { BindingSource, DetectorRow, Tally } from "@/api/types"
 import { EmptyState, ErrorState, LoadingState } from "@/components/states"
+import { Formatted } from "@/components/status"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import {
   Table,
@@ -28,7 +29,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
-import { describeRung } from "@/lib/format"
+import { describeRung, orAbsent } from "@/lib/format"
 
 function isBindingSource(value: string): value is BindingSource {
   return (
@@ -56,8 +57,8 @@ function TallyTable({
 }) {
   const entries = Object.entries(tally).sort(([a], [b]) => a.localeCompare(b))
   return (
-    <div className="flex flex-col gap-2">
-      <h3 className="text-meta uppercase tracking-wide text-muted-foreground">{heading}</h3>
+    <div className="flex flex-col gap-row">
+      <h3 className="furniture text-meta text-muted-foreground">{heading}</h3>
       <Table>
         <TableHeader>
           <TableRow>
@@ -68,8 +69,12 @@ function TallyTable({
         <TableBody>
           {entries.map(([value, count]) => (
             <TableRow key={value}>
+              {/* `value` is a tally key straight from the payload -- an empty string is a
+                  real, distinct key (a claim or a severity nothing named), not a missing
+                  cell, so it takes the same absence mark as every other unnamed value
+                  rather than rendering as blank space with no mark at all. */}
               <TableCell className="font-mono text-body" title={tooltipFor?.(value)}>
-                {value}
+                <Formatted value={orAbsent(value)} />
               </TableCell>
               <TableCell className="font-mono text-body">{count}</TableCell>
             </TableRow>
@@ -86,12 +91,14 @@ function DetectorCard({ row }: { row: DetectorRow }) {
       <CardHeader>
         <CardTitle className="font-mono text-emphasis">{row.detector}</CardTitle>
         <CardDescription className="text-body">
-          {row.total} open {row.total === 1 ? "finding" : "findings"} currently attributed
-          to this detector.
+          {/* Weight carries the count, not a size step: this card repeats once per
+              detector, so a stat-tile figure here would cost a row on every one of them. */}
+          <span className="font-semibold text-foreground tabular-nums">{row.total}</span> open{" "}
+          {row.total === 1 ? "finding" : "findings"} currently attributed to this detector.
         </CardDescription>
       </CardHeader>
-      <CardContent className="flex flex-col gap-4">
-        <div className="grid gap-4 sm:grid-cols-3">
+      <CardContent className="flex flex-col gap-section">
+        <div className="grid gap-section sm:grid-cols-3">
           <TallyTable heading="By rung" tally={row.by_rung} tooltipFor={rungTooltip} />
           <TallyTable heading="By claim" tally={row.by_claim} />
           <TallyTable heading="By severity" tally={row.by_severity} />
@@ -100,7 +107,7 @@ function DetectorCard({ row }: { row: DetectorRow }) {
             attribution exists nowhere else in the console before this screen. The link
             below is real and goes to real findings; it is just not scoped to this row,
             and the sentence says so rather than letting the link imply otherwise. */}
-        <p className="text-meta text-muted-foreground">
+        <p className="max-w-prose text-meta text-muted-foreground">
           No route filters findings by detector yet. Every open finding, by vendor, is on{" "}
           <Link to="/" className="underline underline-offset-2">
             the fleet screen
@@ -121,7 +128,7 @@ export function DetectorAccountability() {
   const { detectors, total_open_findings } = query.data
 
   return (
-    <div className="flex flex-col gap-4">
+    <div className="flex flex-col gap-8">
       {detectors.length === 0 ? (
         <EmptyState
           headline="No open finding is attributed to any detector."
@@ -129,13 +136,18 @@ export function DetectorAccountability() {
         />
       ) : (
         <>
-          <p className="text-body text-muted-foreground">
-            {total_open_findings} open {total_open_findings === 1 ? "finding" : "findings"}{" "}
-            across {detectors.length} {detectors.length === 1 ? "detector" : "detectors"}.
+          <p className="flex flex-wrap items-baseline gap-field text-body text-muted-foreground">
+            <span className="text-figure text-foreground">{total_open_findings}</span>
+            <span>
+              open {total_open_findings === 1 ? "finding" : "findings"} across{" "}
+              {detectors.length} {detectors.length === 1 ? "detector" : "detectors"}.
+            </span>
           </p>
-          {detectors.map((row) => (
-            <DetectorCard key={row.detector} row={row} />
-          ))}
+          <div className="flex flex-col gap-section">
+            {detectors.map((row) => (
+              <DetectorCard key={row.detector} row={row} />
+            ))}
+          </div>
         </>
       )}
     </div>

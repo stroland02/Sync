@@ -46,7 +46,7 @@ function IndexCoverageCard({ repoId }: { repoId: string }) {
     <Card>
       <CardHeader>
         <CardTitle>Index coverage</CardTitle>
-        <CardDescription>
+        <CardDescription className="max-w-prose">
           Call sites the index holds for this repository, per vendor. A vendor absent from the
           table is not zero — it is a question this view cannot answer: whether the indexer
           looked and found nothing, or nothing declares which package to look for. A vendor
@@ -68,10 +68,10 @@ function IndexCoverageCard({ repoId }: { repoId: string }) {
               detail="This repository was never indexed, or it was indexed and nothing bound to a vendor was found. Those are the same answer here: the index has no configuration table, so a repository it has never seen a call site from is indistinguishable from one nobody ever configured."
             />
           ) : (
-            <div className="flex flex-col gap-4">
-              <p className="text-body">
-                <span className="font-mono text-emphasis">{query.data.total_call_sites}</span>{" "}
-                call site{query.data.total_call_sites === 1 ? "" : "s"} indexed.
+            <div className="flex flex-col gap-section">
+              <p className="flex flex-wrap items-baseline gap-field text-body">
+                <span className="text-figure">{query.data.total_call_sites}</span>
+                <span>call site{query.data.total_call_sites === 1 ? "" : "s"} indexed.</span>
               </p>
               <Table>
                 <TableHeader>
@@ -110,7 +110,7 @@ function IndexCoverageCard({ repoId }: { repoId: string }) {
                     ))}
                 </TableBody>
               </Table>
-              <p className="text-body text-muted-foreground">
+              <p className="max-w-prose text-body text-muted-foreground">
                 "Last indexed" is the newest indexing timestamp among that vendor's call sites —
                 staleness, not a promise the index is current. A repository re-scanned weeks ago
                 reports the same value every day after, until another re-index moves it.
@@ -130,7 +130,7 @@ function IndexCoverageCard({ repoId }: { repoId: string }) {
 function TelemetryRungNote({ data }: { data: ObservedTelemetryResponse }) {
   if (data.calls.total === 0) {
     return (
-      <p className="text-body text-muted-foreground">
+      <p className="max-w-prose text-body text-muted-foreground">
         No call has ever been observed for this repository — silence, not a measured zero:
         nothing here says whether a traffic source was ever watching.
       </p>
@@ -140,13 +140,13 @@ function TelemetryRungNote({ data }: { data: ObservedTelemetryResponse }) {
   if (rungs.size === 1) {
     const [only] = rungs
     return (
-      <p className="text-body text-muted-foreground">
+      <p className="max-w-prose text-body text-muted-foreground">
         Every observed call below rests on the <RungBadge rung={only} /> rung.
       </p>
     )
   }
   return (
-    <p className="text-body text-muted-foreground">
+    <p className="max-w-prose text-body text-muted-foreground">
       Mixed: the observed calls below carry more than one rung — some correlate to a known
       operation and some do not. The rung column on each row says which is which.
     </p>
@@ -170,7 +170,7 @@ function ObservedTelemetryCard({ repoId }: { repoId: string }) {
     <Card>
       <CardHeader>
         <CardTitle>Observed telemetry</CardTitle>
-        <CardDescription>
+        <CardDescription className="max-w-prose">
           What traffic showed up for this repository, what shape it had, and how often it
           failed. A row here is evidence a call site was exercised — it is not proof the
           binding correlating it to an operation is correct. The specification's own Signals
@@ -185,7 +185,7 @@ function ObservedTelemetryCard({ repoId }: { repoId: string }) {
           — rather than being folded silently into this card alone.
         </CardDescription>
       </CardHeader>
-      <CardContent className="flex flex-col gap-6">
+      <CardContent className="flex flex-col gap-section">
         {query.isPending && <LoadingState what={`observed telemetry for ${repoId}`} />}
         {query.isError && (
           <ErrorState error={query.error} what={`observed telemetry for ${repoId}`} />
@@ -193,7 +193,7 @@ function ObservedTelemetryCard({ repoId }: { repoId: string }) {
 
         {query.isSuccess && (
           <>
-            <div className="flex flex-col gap-3">
+            <div className="flex flex-col gap-section">
               <h3 className="text-section">Calls</h3>
               {query.data.calls.total === 0 ? (
                 <EmptyState
@@ -251,9 +251,9 @@ function ObservedTelemetryCard({ repoId }: { repoId: string }) {
               <TelemetryRungNote data={query.data} />
             </div>
 
-            <div className="flex flex-col gap-3">
+            <div className="flex flex-col gap-section">
               <h3 className="text-section">Shapes</h3>
-              <p className="text-body text-muted-foreground">
+              <p className="max-w-prose text-body text-muted-foreground">
                 What the operations this repository calls have looked like on the wire, scoped
                 to the vendor/operation pairs this repository's own calls above name — a shape
                 is a vendor-wide fact, not a per-repository one, so nothing here belongs to this
@@ -307,9 +307,9 @@ function ObservedTelemetryCard({ repoId }: { repoId: string }) {
               )}
             </div>
 
-            <div className="flex flex-col gap-3">
+            <div className="flex flex-col gap-section">
               <h3 className="text-section">Error windows</h3>
-              <p className="text-body text-muted-foreground">
+              <p className="max-w-prose text-body text-muted-foreground">
                 Failure counts have no denominator in this table — a count is not a rate, and
                 this view does not compute one.
               </p>
@@ -378,7 +378,7 @@ export function CodebasePage() {
   if (repoId === undefined) return <UnknownRoute />
 
   return (
-    <section className="flex flex-col gap-4">
+    <section className="flex flex-col gap-8">
       <Breadcrumbs trail={[{ label: "Fleet", to: "/" }, { label: repoId }]} />
       <h1 className="font-mono text-page">{repoId}</h1>
       <IndexCoverageCard repoId={repoId} />
