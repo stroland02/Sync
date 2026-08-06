@@ -42,6 +42,45 @@ We never hold customer secrets. That one is unqualified.
 
 **Vendor-specific knowledge lives in adapters, never in core.** Stripe's URL conventions, its `operationId` scheme, its SDK naming — all of it belongs to `sync.signals.stripe`. The moment core knows a vendor's name, the plugin story is dead.
 
+## The console renders the product position, so its interface rules are not taste
+
+Sync's argument is that competing tools present a black box and a result and ask a reviewer to
+trust it. The operator console exists to show the system's reasoning instead. Three authorities
+bind it and none of them is this document:
+
+- **The hierarchy comes from the specification**, never from a plan.
+  `docs/superpowers/specs/2026-07-25-sync-self-maintaining-apis-design.md:427-445` is the
+  authoritative block. Three plans built a different one and nobody noticed until a reconciliation
+  on 2026-08-05 found three of eleven routes matched, four levels invented and two reparented.
+  `.claude/rules/console-hierarchy.md` holds it.
+- **`DESIGN.md` is the token contract** — every colour, size, space and elevation, with the
+  arithmetic that proves each contrast, against a 5.05:1 floor. Dark-only as of 2026-08-05.
+  `.claude/rules/console-surface.md` carries what binds while a screen is open.
+- **The interface is ours.** `.claude/rules/interface-originality.md`.
+
+**One rule sits here rather than in a path rule, because it binds a Python view model exactly as
+much as a React component: no composite score, no health figure, no traffic light, no green dot,
+no liveness pulse.** Rejected on the record three times. A scalar that averaged three gates would
+collapse "we could not check" onto the same axis as "we checked and it passed", which is the
+failure this console exists to replace.
+
+That refusal is not conservatism, and the strongest form of the argument is worth carrying because
+it is the form that survives a sceptic. A mature control plane ships all three patterns — a status
+dot, a gauge, a coloured badge — and documents a precondition for each. Its dot requires a stored
+state transition inside one closed lifecycle; nothing in our data tells a run parked on the
+customer's CI from one that has died. Its gauge requires a 0–100 ratio against a fixed maximum,
+with breakpoints that already exist elsewhere in the product; a composite health figure has
+neither. Its badge — a recorded value from a closed vocabulary, legible without its colour — is
+permitted, and **Sync already permits exactly that**: run outcome, error state, absence. **We are
+not stricter than a mature control plane. We have data that fails its own published tests, and we
+said so.** (`docs/superpowers/plans/2026-08-05-sync-console-architecture.md`, section 19.)
+
+Four distinctions follow from the same position, and each is rendered rather than assumed:
+provenance at two levels, absence apart from zero, staleness apart from liveness, and
+never-measured apart from nothing-here. Twenty-four sentences on screen carry them, reproduced with
+file and line in that plan's *Establish 2* (`:102-207`). **Restyling one is allowed. Deleting one,
+shortening one, collapsing one behind a disclosure, or moving one into a tooltip is not.**
+
 ## Toolchain
 
 | | |
@@ -124,6 +163,32 @@ Comment to state a constraint the code cannot show — never to narrate what the
 Prefer small, focused modules over large ones. A file that has grown past one clear responsibility is a signal, not a style preference.
 
 Do not add error handling, fallbacks, or validation for conditions that cannot occur. Validate at system boundaries — user input, vendor responses, subprocess output — and trust internal code.
+
+## Where a convention goes
+
+Three tiers, and they cost very different amounts. Put a convention in the narrowest tier that
+still catches its failure.
+
+**Every turn, for every agent:** this file, and any file in `.claude/rules/` with no `paths:`
+frontmatter. Two rules load that way today and both are deliberate — `autonomous-development.md`,
+because plan execution is not predicted by any path, and `interface-originality.md`, because the
+directory of competitor screenshots it fences off can be opened from anywhere. **Adding a rule file
+without `paths:` promotes it to the most expensive tier in the repository.** Do that on purpose or
+not at all.
+
+**Only while a matching file is in play:** a rule with `paths:` frontmatter. That is where a
+convention scoped to a directory belongs, and where most of them are — `graph-grain.md`,
+`signal-stage.md`, `remediate-stage.md`, `test-discipline.md`, `console-hierarchy.md`,
+`console-surface.md`, `console-dev-loop.md`. A frontend convention loaded while somebody edits a
+Python detector is pure cost.
+
+**Only when something asks for it:** a skill, or a document under `docs/`. Specs and plans live
+here. They are the authorities; the tiers above cite them.
+
+Prefer a pointer to a copy. A fact written down twice is a fact that will disagree with itself, and
+this repository has spent a week fixing exactly that. What earns a full restatement in the two
+expensive tiers is what an agent must not be able to miss regardless of what it happens to be
+editing — nothing else.
 
 ## Commits
 
