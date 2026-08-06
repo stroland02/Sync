@@ -1518,12 +1518,20 @@ def test_the_consoles_default_page_size_matches_the_surfaces():
 
 
 def test_the_consoles_proxy_target_matches_the_apis_default_port():
-    # `web/vite.config.ts` proxies `/api` to a hardcoded host:port because the dev server
-    # cannot import Python. Nothing else holds the two together: a port changed on one side
-    # and not the other turns every console request into a proxy error, silently.
+    # `web/vite.config.ts` proxies `/api` to a host:port it writes out itself, because the dev
+    # server cannot import Python. Nothing else holds the two together: a port changed on one
+    # side and not the other turns every console request into a proxy error, silently.
+    #
+    # M4-W151 made that target `process.env.SYNC_API_ORIGIN ?? "http://127.0.0.1:8787"` so a
+    # session on a machine where 8787 is held stops editing a tracked file to get around it.
+    # This guard reads the fallback, which is the value that has to agree with `DEFAULT_PORT`;
+    # the override is a local condition and has nothing to agree with. It was left matching the
+    # old hardcoded spelling and had been red on `m4-dashboard` since that commit.
     source = _web_source("vite.config.ts")
-    match = re.search(r'target:\s*"http://127\.0\.0\.1:(\d+)"', source)
-    assert match is not None, "web/vite.config.ts no longer proxies /api to a fixed port"
+    match = re.search(r'\?\?\s*"http://127\.0\.0\.1:(\d+)"', source)
+    assert match is not None, (
+        "web/vite.config.ts no longer falls back to a fixed port for the /api proxy"
+    )
     assert int(match.group(1)) == DEFAULT_PORT
 
 

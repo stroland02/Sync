@@ -103,7 +103,9 @@ Git warns `LF will be replaced by CRLF` on every commit. That is expected. Do no
 
 ## How we work
 
-**Test first, always.** Write the failing test, run it, watch it fail for the reason you expect, then implement. A test that has never failed has never been shown to test anything.
+**Test first, always, in both languages.** Write the failing test, run it, watch it fail for the reason you expect, then implement. A test that has never failed has never been shown to test anything.
+
+**TypeScript is test-first too, as of 2026-08-06.** The console has a runner: `cd web && npm test` is `vitest run` over jsdom, wired into CI's `web` job beside `lint` and `build`. Its scope is Decision 6's and it is deliberately narrow — **classification, derivation and structural invariants; never class names, never snapshots.** A snapshot test in a console being actively restyled fails on every correct change and gets deleted within a week by whoever it blocks. Anything about rendered pixels is measured in Chrome and written into `DESIGN.md` instead, which is a different discipline with a different gate. Where a rule *belongs* is a separate question from where it is tested, and `.claude/rules/console-dev-loop.md` carries it: a rule the payload can answer still belongs in the payload, so two screens cannot disagree about one fact.
 
 **Executing a plan, decide rather than ask.** `.claude/rules/autonomous-development.md` carries the rule and the three exceptions that are still the human's. It exists because one blocking question idled a milestone for three hours; a ruling recorded in the plan's ledger costs a fix round to reverse, and waiting costs the afternoon.
 

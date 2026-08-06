@@ -148,7 +148,7 @@ export function useWorkflow(findingId: string) {
  * `reported` — the same test `isRunTerminal` runs against one workflow, applied across a
  * page of them so the fleet stops polling only once every row it can see is done.
  */
-function hasLiveRun(page: RunsPage | undefined): boolean {
+export function hasLiveRun(page: RunsPage | undefined): boolean {
   return page !== undefined && page.items.some((run) => run.outcome === null)
 }
 

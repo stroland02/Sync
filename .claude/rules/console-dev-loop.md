@@ -50,29 +50,42 @@ green while a column rendered the absence marker on every row forever — which 
 retracted" when the truth is "this view cannot see them". The two sides are held together by Python
 tests that read the TypeScript, not by the compiler.
 
-## Logic with a wrong answer lives in Python
+## Logic with a wrong answer is tested, and where it lives is now a judgement
 
-**The console has no test runner.** `web/package.json` declares `dev`, `build`, `lint` and
-`preview`, and no `test`. So any rule with a wrong answer — which node is current, which run is
-terminal, how a run is grouped — belongs in Python, where `uv run pytest` can hold it and
-`CLAUDE.md`'s test-first rule applies. The console formats and renders.
+**The console has a test runner as of 2026-08-06 (M4-W153).** `npm test` is `vitest run` over
+jsdom, and Task 5 of `docs/superpowers/plans/2026-08-05-sync-console-architecture.md` retired the
+deferral its own Decision 6 had already ruled retired. `isRunTerminal` and `hasLiveRun`, the two
+classifiers this file named as the standing violation, are tested; so are the cardinality
+threshold, `describeRung`'s exhaustiveness, `formatElapsed`, an option counted at zero, and every
+declared route being reachable from the shell.
 
-**That has been violated once, and the violation is still in the tree.** `isRunTerminal`
-(`web/src/api/queries.ts:82`) and `hasLiveRun` (`:116`) are classification. Their own docstrings
-state what a wrong answer costs — reading a live run as terminal "stops the poll on a live run,
-which freezes the screen on a stale answer" — and nothing tests either of them.
+So the rule is no longer "TypeScript cannot hold a rule with a wrong answer". It is this:
 
-Decision 6 of `docs/superpowers/plans/2026-08-05-sync-console-architecture.md` rules that the
-deferral retires and Task 5 adds Vitest, `@testing-library/react` and `jsdom`. **Task 5 has not
-landed**, so the rule above still binds. When it does, the scope is classification and structural
-invariants — never class names, never snapshots — and the repository gains a second test discipline
-with the same proven-RED requirement.
+- **A rule the payload can answer belongs in the payload.** Which node the graph owes a visit, how
+  a run is grouped, which run is terminal *as a fact about the run* — Python computes it, one
+  answer reaches every screen, and two components cannot disagree about it. That is not a statement
+  about where the tests are; it is the reason the Critical of 2026-08-06 was a Critical, and
+  `sync.dashboard.queries`'s `standing` field is where it was fixed. **Do not port that back.**
+- **A rule about the rendered view stays here, and is tested here.** Whether a set is small enough
+  to list, what a disclosure header counts, whether a poll should keep asking — a viewport is not
+  in the payload, and the frozen surface serves an agent that has none.
+
+**Scope, so the runner does not become a snapshot habit.** Classification, derivation and
+structural invariants. Never class names. Never snapshots — a snapshot in a console being actively
+restyled fails on every correct change, and it will be deleted within a week by whoever it blocks.
+Anything about rendered pixels is measured in Chrome and written into `DESIGN.md`, which is a
+different discipline with a different gate.
+
+**The proven-RED requirement applies here exactly as it does in `tests/`.** Every guard in
+`web/src/**/*.test.*` was shown red against a deliberately broken subject before it was trusted.
+`CLAUDE.md`'s *Test first, always* is now a TypeScript rule too, and that is a permanent increase
+in per-task cost that Decision 6 states rather than hides.
 
 ## So verification is, today
 
-`npm run build` clean, `npm run lint` with no new error-level violations, and a stated human
-observation of the running screen. A scale claim ships with three numbers at `--scale 10000`: time
-to first paint, DOM node count, payload size — before and after.
+`npm run build` clean, `npm run lint` with no new error-level violations, `npm test` green, and a
+stated human observation of the running screen. A scale claim ships with three numbers at
+`--scale 10000`: time to first paint, DOM node count, payload size — before and after.
 
 ## The API stays read-only
 
