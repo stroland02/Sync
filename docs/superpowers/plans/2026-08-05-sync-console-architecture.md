@@ -1715,6 +1715,9 @@ Ranked. Rank 11 stays the layered bipartite diagram, which still loses, so these
 
 ### Task 12: The system layer — the type range, tracking, and the surface ramp's grouping job
 
+> **Steps 1, 2 and 3 are revised by section 11.** Step 3's stated premise is false; read section 11
+> before writing anything into `DESIGN.md`.
+
 **Files:** `DESIGN.md`, `web/src/index.css`. **~half a day.**
 
 **Not parallel.** Both files are held by the session removing the light column for dark-mode-only.
@@ -1747,6 +1750,8 @@ a token nothing reads is a token that is not wired.
 
 ### Task 13: The primitives carry the grouping, and the radius token becomes true
 
+> **Steps 1 and 3 are revised by section 11.** Step 3 in particular: the table keeps its header rule.
+
 **Files:** `web/src/components/ui/card.tsx`, `web/src/components/ui/table.tsx`,
 `web/src/components/provenance.tsx`. **~half a day. Follows Task 12.**
 
@@ -1775,6 +1780,8 @@ illegible as *grouping* while remaining legible as *text* — which proves the g
 surface and not by the ring that is still there.
 
 ### Task 14: The lead screen uses its width and ranks its panels
+
+> **Step 1 is revised by section 11**, which replaces "one step" with a measured target.
 
 **Files:** `web/src/features/fleet/**`, `web/src/layouts/app-shell.tsx`. **~1 day. Follows Task 13.
 Parallel with Task 15.**
@@ -1805,6 +1812,9 @@ the previous commit; the set of qualifications must be identical or larger.
 
 ### Task 15: The remaining screens adopt the ranked hierarchy
 
+> **Step 1 gains a companion constraint from section 11:** prose is never set to the column's full
+> width, and that binds hardest on the protected sentences.
+
 **Files:** `web/src/features/{bindings,telemetry,vendors,repositories,detectors,findings,workflows}/**`.
 **~1 day. Follows Task 13. Parallel with Task 14.**
 
@@ -1824,6 +1834,9 @@ question is answered above the fold with no horizontal scroll — Decision 8's c
 screen. Then grep the diff for a removed sentence.
 
 ### Task 16: The guard that holds the token layer
+
+> **Section 11 adds a fourth assertion**, guarding the motion finding. It is proved to fail like the
+> other three.
 
 **Files:** `tests/test_console_design_tokens.py`. **~2 hours. Follows Task 15.**
 
@@ -1935,3 +1948,379 @@ What the owner should know is the limit: this will make the console feel conside
 fast to read. It will not make it feel *alive*, because being alive is a claim, and this product's
 entire position is that it does not make claims it cannot support. That is the trade, it was decided
 before this amendment, and it is the right one.
+
+## 7. Added 2026-08-05 — two more references, and what three of them agree about
+
+Sections 1 through 6 rest on one interface. One designer's page cannot tell you which of its
+properties are principles and which are habits, so two more were measured by the same method and the
+first was re-measured to check its own numbers. What follows names the three, reports both new
+measurement sets, and then separates what all three do from what only one does.
+
+`.claude/rules/interface-originality.md` binds here exactly as it binds above. Nothing below is a
+layout, a component, a colour system or a phrase. Every recommendation is restated as a problem
+from the operator, the graph or the product position, and where a finding survived only because a
+reference did it, that is said out loud and the finding is demoted.
+
+**The three, and how each was read.** Chrome at 1440×900, `getComputedStyle` across every element in
+the document, plus a real pointer moved onto the primary call to action so `:hover` genuinely
+matched. No markup was fetched or read for design content.
+
+| | Reference A | Reference B | Reference C |
+|---|---|---|---|
+| Host | `early-list-690354.framer.app` | `newcomer-community-603717.framer.app` | `likely-discipline-565331.framer.app` |
+| Elements | 2,708 | 1,311 | 2,103 |
+| Text-bearing elements | 235 | 217 | 249 |
+| Page surface | dark | dark | **light** |
+| Studied in | section 1 | this section | this section |
+
+Reference C is a light page. The owner has asked for dark mode only, so its colour values are not
+transferable and are not proposed; its *structure* — how many ink levels, how they are separated, how
+grouping is carried — is, and that is all that is taken from it.
+
+### Reference B, measured
+
+**Type.** Eight sizes present, seven doing real work: 14px (85 elements), 16 (82), 12 (11), 38 (10),
+18 (9), 32 (9), 48 (8), 24 (3). Nine of the eleven 12px elements are browser defaults rather than
+authored type — black ink, normal tracking, normal leading, one of them the default link blue — so
+the authored ramp runs 14 to 48, a range of **3.43:1**. Counting the 12px step as present gives
+4.0:1. Two-thirds of all rendered type sits on 14 and 16.
+
+**Weight.** 400 on 164 elements, 500 on 52, and a single stray 700. **No 600 anywhere.**
+
+**Tracking is two-tier, and the tier is chosen by role rather than by size.** Body copy takes
+−0.02em: 14px at −0.28px, 16px at −0.32px. Everything acting as a heading takes **−0.04em**,
+including 16px when it is a heading — 26 elements sit at 16px/500/−0.04em while 48 elements sit at
+16px/400/−0.02em. Above that the −0.04em is uniform: 18 at −0.72px, 24 at −0.96, 32 at −1.28, 38 at
+−1.52, 48 at −1.92. So the same size carries different tracking depending on the job it is doing.
+
+**There is no uppercase anywhere in the document.** `text-transform` is `none` on all 217
+text-bearing elements, and the smallest authored step carries negative tracking like every other.
+
+**Leading is two-tier to match.** 1.5 on body (21px at 14, 24px at 16), 1.1 on everything heading and
+above (19.8 at 18, 26.4 at 24, 35.2 at 32, 41.8 at 38, 52.8 at 48).
+
+**Ink.** White at 0.8 alpha on 118 elements, solid white on 65, white at 0.7 on 5. On the inverted
+panels, near-black on light. **Two working ink levels.** Backgrounds are opaque steps rather than
+alpha layers: rgb(19,21,23) on 74 elements, rgb(35,35,38) on 22, over a page of rgb(8,10,9). Nine
+further chromatic fills exist, each used once to four times — small chips, not a second channel.
+
+**Lines.** **Zero elements declare a border.** But fourteen elements are 1–2px filled divs doing a
+line's job: nine horizontal rules at 285×1 and 301×1 in rgb(35,35,38), and five 2×16 vertical
+markers, one of them in an accent hue. The page is not ruleless. It draws rules without the `border`
+property.
+
+**Space.** Base 4. In-component padding: 20 (41 declarations), 32 (38), 24 (28), 8 (24), 12 (22), 16
+(16), 18 (16), 4 (10). Gaps: 8 (90), 12 (72), 16 (58), 24 (44), 32 (24), 64 (22). Section vertical
+padding is **72px, top and bottom, on seventeen sections**. The content column is 1080 inside a 1425
+viewport, so the page frame is **173px** a side. The three levels stand at **173 : 72 : 24**, a ratio
+of **7.2 : 3.0 : 1**. Prose is held to 285–480px while the column is 1080.
+
+**Controls.** 124 × 33 with `8px 12px` padding and **radius 8**. Label 14px/500/−0.02em. Primary is a
+white fill, secondary is rgb(35,35,38); **geometry, padding and type are identical and only the fill
+differs**.
+
+**Motion.** Two elements in the document carry a transition — `transform 0.1s` and
+`opacity 0.4s ease-out`. The stylesheet declares two transition rules and both are the editor
+framework's own furniture. **One keyframe exists, a loading spinner.** The document holds exactly one
+Web Animation and it is paused at rest. Scroll reveal is 63 elements held at inline `opacity: 0` and
+resolved by that single 400ms fade; 61 carry inline transforms and 88 declare `will-change`. A
+smooth-scroll library is loaded.
+
+**The primary action on hover, with the pointer really on it and `:hover` confirmed matching:**
+background unchanged, `transform: none`, opacity unchanged, `transition-duration: 0s`. One thing does
+change — a `0 0 0 2px` ring at white 0.5 appears, and it is genuinely a hover affordance rather than
+a focus ring, because moving the pointer away returns it to zero alpha and zero spread. It arrives
+instantly. **Nothing moves, scales or fades.**
+
+**Hierarchy in the first screenful**, by y-position: navigation at 23 (14/400/white 0.8); eyebrow at
+161 (14/400/white 0.8); headline at 206 (48/400/−0.04em/solid white); supporting sentence at 331
+(16/400/−0.02em/white 0.8); actions at 427 (14/500, dark ink on a white fill). A **3.0× step** from
+headline to supporting text, and the thing you are meant to click is again the smallest text in the
+composition, winning on fill.
+
+**Typeface.** One family across 200 of 217 text-bearing elements. No monospace anywhere.
+
+### Reference C, measured
+
+**Type, and this is where C is least disciplined.** Fourteen sizes present, twelve carrying five or
+more elements: 15px (52), 12 (46), 14 (37), 16 (35), 13 (19), 20 (13), 32 (10), 54 (8), 11 (6), 26
+(6), 44 (6), 18 (6), 48 (3), 64 (2). Range **64/11 = 5.82:1** — the widest of the three, reached with
+twice as many steps as A. Ten of the 12px elements are browser defaults, as in B.
+
+**Weight.** 400 on 232 elements, 500 on 17. **Two weights, and the second one is nearly unused.**
+
+**Tracking is graduated by size, and tightens as size grows.** 15px body carries **none at all**
+(`normal`). 11, 12, 13 and 14 carry −0.04em. 16 and 18 carry −0.02em. 20, 26 and 32 carry −0.03em.
+44 carries −0.04em. 48, 54 and 64 carry **−0.05em**.
+
+**There is no uppercase anywhere in this document either.** `text-transform` is `none` on all 249
+text-bearing elements. Its eyebrow *reads* as capitals because the capitals are typed into the copy,
+which is a worse way to get there — a screen reader spells out a word set that way, and a
+`text-transform` does not.
+
+**Leading.** 1.5 at 15px body, 1.4 at 12/13/16/18/20, 1.2 at 14/26/32, 1.09 at 44/48/54, 1.0 at 64.
+
+**Ink.** rgb(82,82,82) on 121 elements, rgb(10,10,10) on 96, inverted rgb(250,250,250) on 8 and white
+on 3. **Two working ink levels**, same as the other two, inverted for a light page.
+
+**Lines.** Six elements declare a border, all of them `1px` on the top and left or top, bottom and
+left of a 199×82 cell — a 3×2 grid, which is to say **the only borders on the page are on the one
+thing that is a grid.** Separately, 576 elements are 1×4, 4×1, 1×8 or 8×1 filled divs at
+rgba(10,10,10,0.2), a drawn tick lattice. Same construction as B and A: lines exist, drawn as fills.
+
+**Space.** In-component padding: 24 (298 declarations — dominant by a wide margin), 4 (134), 12 (73),
+16 (71), 32 (49), 8 (35). Gaps: 24 (172), 10 (144), 12 (108), 6 (88), 32 (64). Section vertical
+padding is **64px** with a further 32px inside the column. The content column is 1200 inside 1425, so
+the frame is **113px** a side. Three levels at **113 : 64 : 24**, a ratio of **4.7 : 2.7 : 1**. Prose
+is held to a mode of 323px and a maximum of 588px inside a 1200px column.
+
+**Controls.** 144 × 39 with `11px 16px` padding and **radius 0**. Label 14px/500/−0.029em. Primary is
+a near-black fill, secondary a near-white one; **identical geometry and type, differing only by
+fill** — the same construction as A and B, at a different radius.
+
+**Motion.** Four elements carry a transition. The stylesheet declares three transition rules, of
+which two are framework furniture and **one is authored: `color 0.3s` on a link preset**. One
+keyframe exists, a loading spinner. Exactly one Web Animation runs at any moment: a 40ms width tween
+on a 4px-tall div, which is a scroll-progress bar reading scroll position. Scroll reveal is 34
+elements at inline `opacity: 0`. A smooth-scroll library is loaded.
+
+**The primary action on hover, pointer really on it:** the fill goes from `rgb(10,10,10)` to
+`rgba(10,10,10,0.7)`. `transform: none`, opacity unchanged, no shadow, **`transition-duration: 0s`**.
+Re-read 500ms later, unchanged — the change is instant, not eased. **Nothing moves or scales.**
+
+**Hierarchy in the first screenful**: navigation at 38 (14/400/−0.04em/secondary ink); eyebrow at 200
+(11/400/−0.04em); headline at 233 (**64/400/−0.05em**/primary ink); supporting sentence at 373
+(16/400/no tracking/secondary ink); actions at 454 (14/500 on fills). A **4.0× step** from headline
+to supporting text.
+
+**Typeface, and this is the finding section 1 could not have had.** Two families in near balance:
+a sans on 123 text-bearing elements and a **monospace on 105**. The split is by role — monospace
+carries navigation labels, button labels, eyebrows, section labels and small captions; the sans
+carries body prose and the 64px headline. Monospace is used here as *furniture*, marking the scanned
+register rather than the read one.
+
+## 8. Where all three agree
+
+Each row below was measured independently on three pages by three designers. That is the bar for
+calling something a property of dense considered interfaces rather than one person's taste, and only
+these rows clear it.
+
+| Property | A | B | C | The invariant |
+|---|---|---|---|---|
+| Font weights | 400, 500 | 400, 500 | 400, 500 | **Two weights. No 600, no 700, in any of them.** |
+| Working ink levels | white + white 0.7 | white + white 0.8 | 10,10,10 + 82,82,82 | **Two, plus one accent. Never three.** |
+| Type range | 4.67:1 | 3.43:1 | 5.82:1 | **At least 3.4:1, display step at least 3× body.** |
+| Display tracking | −0.02em | −0.04em | −0.05em | **Negative, and never looser than body.** |
+| Leading | 1.2 display → 1.6 small | 1.1 → 1.5 | 1.0 → 1.5 | **Loosens as size falls. Display at or below 1.2.** |
+| Spacing levels | 160 : 80 : 24 | 173 : 72 : 24 | 113 : 64 : 24 | **Three levels, each ≥2× the one below; frame 4.7–7.2× the in-component unit.** |
+| In-component base | 4, dominant 24 | 4, dominant 20/24 | 4, dominant 24 | **Base 4, one dominant value.** |
+| Prose measure | 460–553 in 1105 | 285–480 in 1080 | 267–588 in 1200 | **Prose never runs the column's width.** |
+| Button pairs | identical, differ by fill | identical, differ by fill | identical, differ by fill | **Primary and secondary differ only in fill.** |
+| Authored stylesheet transitions | 0 | 0 | 1 | **At most one in an entire page.** |
+| `@keyframes` | 1 (spinner) | 1 (spinner) | 1 (spinner) | **One, and it is a spinner.** |
+| Animations running at rest | 0 of 0 | 0 of 1 | 1 of 1, a 40ms scroll bar | **Nothing decorative is ever running.** |
+| Primary action on hover | nothing changes | ring appears | fill alpha changes | **`transition-duration: 0s`, `transform: none`, no scale, no fade — in all three.** |
+| Scroll reveal | inline `opacity: 0` + 0.4s | same, 63 elements | same, 34 elements | **One 400ms one-shot fade, and nothing else.** |
+| Lines | 11 borders, 452 filled divs | 0 borders, 14 filled divs | 6 borders, 576 filled divs | **Rules exist and are drawn; the `border` property is not spent on containers.** |
+
+Every one of those fourteen is available to this console at no cost to its honesty discipline, and
+none of them requires a competitor's screen to justify: two ink levels because a table with three
+is unreadable; two weights because weight is a channel we need for density; a display step because
+the graph is six levels deep and depth has to be visible; three spacing levels because a page frame
+that equals a panel gap tells the eye nothing; no motion because there is nothing in the data that
+moves.
+
+## 9. Where they diverge, which makes it taste
+
+These are the properties on which the three references contradict each other. A property that three
+careful designers resolve three different ways is not a principle, and we should decide it on our own
+grounds or leave it alone.
+
+- **Control radius.** 0 (A), 8 (B), 0 (C). Two of three at zero, and B is not the worse page for it.
+  Ours stays `--radius-control`, decided by us, unchanged by this.
+- **Whether the smallest step is uppercase.** A: 39 elements at 12px/+0.1em/uppercase. B and C:
+  **zero uppercase elements in the entire document**, and both take negative tracking at their
+  smallest step. This is the single largest divergence found and section 10 deals with it.
+- **How tracking is assigned.** Uniform for all sizes (A), two-tier by role (B), graduated by size
+  (C). All three tighten at the display end; nothing else about the model is shared.
+- **How many type steps.** Six (A), seven (B), twelve (C). C is the least disciplined ramp and the
+  widest range, and reads as considered anyway. **So the mechanism is range and consistent role
+  assignment, not step count** — which matters, because our six steps are not the problem.
+- **Monospace.** Absent in A and B; 46% of text in C, used as furniture. Ours is semantic. Different
+  job, and section 10 says why we keep ours rather than drifting toward C's.
+- **Section padding magnitude.** 80 / 72 / 64. Even among landing pages this is not a constant.
+- **Whether a smooth-scroll library is loaded.** Not in A; in both B and C.
+- **What the primary action does on hover.** Nothing (A), a ring (B), a fill alpha step (C). The
+  *shape* of the answer is shared — instant, non-geometric — but the answer is not.
+
+## 10. Where this contradicts section 1, and which measurement I trust
+
+Four of section 1's findings needed revising. Three are refinements and one is wrong.
+
+**Wrong: "Zero elements in the document declare a border."** Reference A was re-measured for this
+amendment specifically because the claim was categorical, and it does not hold: **eleven elements
+declare a border**, and **452 elements are 1–2px filled divs acting as lines** — 240 at 12×1 and 200
+at 1×12 forming a tick lattice, six horizontal rules at 328×1, and six 2×72 vertical markers, three
+of them in the accent hue. B has zero borders and fourteen line divs; C has six borders and 576 line
+divs.
+
+I trust the new measurement, and not because it is newer. It counts the same property the original
+counted *and* the thing the original did not think to look for, so it can only add. The original
+number was not miscounted; it was the wrong question, because a page that draws its rules as filled
+divs answers "how many borders" with zero while being covered in lines.
+
+This matters because a recommendation rests on it. Section 3 argued that the ring should stop being
+applied to every surface, and cited "2,700 elements organised with zero borders" as the prompt for
+checking whether ours do work. The prompt was false. **The recommendation survives on its own
+evidence and needs restating on it**: our own measurement is that every surface takes the identical
+hairline ring, which means the ring encodes nothing, and that is the argument. What the three
+references actually demonstrate is narrower and more useful than "no borders" — **a line where
+something is separated, a surface step where something is grouped, and neither applied by default.**
+That rule survives translation to a table, where "no lines at all" would not.
+
+**Refined: "Tracking flips to +0.1em and uppercase at 12px. The smallest step is a different job."**
+Confirmed exactly on A — 39 elements at 12px, +0.100em, uppercase. Contradicted as a general
+principle by both new references, which have **no uppercase at all** and take negative tracking on
+their smallest steps.
+
+I trust all three measurements; they are each internally consistent and there is nothing to
+reconcile. The conclusion is that the uppercase micro-step is **one designer's habit**, and section 1
+promoted it to a measured principle it is not. It should still be built, because there is a
+Sync-side argument for it that does not point at anybody's screen — `site-nav.tsx:65` reached it
+independently for graph-level labels, which are scanned rather than read, and open tracking on short
+capitalised runs is legibility at speed. But it is now **our choice defended on our grounds**, not a
+finding, and Task 12's brief has to say so. One thing C teaches here in the negative: it gets its
+capitals by typing them into the copy, which a screen reader spells out letter by letter. If we do
+this, it is `text-transform`, never the content.
+
+**Refined: "Two CSS transitions in the entire stylesheet, and the primary CTA measured dead on
+hover."** The stylesheet count holds for A and B, where every transition rule is framework furniture;
+C has three, one of them authored. The CTA finding is exactly right for A and I reproduced it —
+pointer on the element, `:hover` matching, background, transform, opacity and shadow all unchanged
+and `transition-duration: 0s`. B and C both *do* change something on hover. Neither moves.
+
+So the sentence "the primary action does nothing at all on hover" is true of one page, not of dense
+interfaces. The correct statement is stronger and more useful: **all three give the primary action an
+instant, non-geometric acknowledgement or none at all. None of the three moves, scales, or eases
+anything.** `transition-duration` is `0s` on the primary action of all three pages.
+
+**And the load-bearing conclusion is not weakened by this — it is confirmed three times.** Section 6
+argued the felt quality does not come from motion. Three independent designers, three pages that read
+as engineered, one spinner keyframe each, at most one authored transition in a whole stylesheet,
+nothing decorative running at rest on any of them. If animation were where the quality came from, one
+of the three would have used some. The standing prohibition on new motion still costs this console
+nothing, and that now rests on three measurements rather than one.
+
+**Refined: "our 112 `font-mono` declarations carry a distinction the reference has no equivalent
+of."** True of A and B, both of which have no monospace at all. C is 46% monospace — but it uses it
+as a *typeface for furniture*: navigation, buttons, eyebrows, captions. Ours means the system
+recorded this verbatim. Both uses are legitimate and they are incompatible: adopt C's and our
+semantic signal is destroyed, because mono would then be everywhere and mean nothing. **Keep ours,
+and treat C as the demonstration of what breaks it.**
+
+## 11. What this changes in Tasks 12 through 16
+
+No task is renumbered, reordered, or removed. Each revision below is a change to a step's
+justification or a step's target, and each names the step it changes.
+
+**Task 12, Step 2 — the furniture class.** Build it, but not for the reason written. The reason
+written cites a treatment two of three references do not use at all. Replace the justification with
+the Sync-side one: `site-nav.tsx:65` arrived at uppercase and open tracking independently for
+graph-level labels, the smallest step carries what is scanned rather than read, and legibility at
+speed on short capitalised runs is the whole of what the F1 framing actually asks for. Add one
+implementation constraint that C supplies in the negative: the class sets `text-transform:
+uppercase`; **the capitals never go into the copy**, because a screen reader spells those out.
+`DESIGN.md` records this as our decision, not as a measured convention.
+
+**Task 12, Step 3 — the surface ramp's grouping contract.** The premise "a 2,700-element page is
+organised with zero borders" is false and must not be written into `DESIGN.md`. The contract to state
+is the one all three references actually follow: **a rule where something is separated, a surface step
+where something is grouped, and neither applied by default.** The change to our tree is unchanged —
+the ring stops being applied to every surface — but the reason is our own measurement that an
+identical ring on every surface encodes nothing.
+
+**Task 12, Step 1 — tracking on `--text-section` and `--text-emphasis`.** Unchanged in substance, with
+the direction now confirmed three ways: tracking is negative at the display end in all three
+references and never looser than body. Adding it to the two mid steps is consistent with that.
+
+**Task 13, Step 1 — radius.** Unchanged. Note for whoever executes it that the references disagree
+(0, 8, 0), so this is our call and `--radius-surface` at 10px stands on `DESIGN.md`'s argument alone.
+
+**Task 13, Step 3 — `TableHeader` on `surface-subtle`.** Keep the surface step, and **keep the header
+rule as well.** Section 3's aside that "a table needs a header rule" is now supported rather than
+assumed: C's only six border declarations in 2,103 elements are on the one element that is a grid.
+The step should not be read as licence to remove the rule in favour of the surface step; it is both,
+and the rule is the thing that survives a dense table.
+
+**Task 14, Step 1 — separating the page frame from the between-panel gap.** The target is now a
+number rather than "one step". The triangulated invariant is **each spacing level at least 2× the one
+below**, measured at 2.0 (A), 2.4 (B) and 1.8 (C) between frame and section, and 3.3, 3.0 and 2.7
+between section and component. Our measured 24 : 24 : 16 fails the first at 1.0. Aim for the ratio at
+our magnitudes, not theirs — at a 8px in-component unit in a table, 2× and 2× again is 16 and 32, and
+that is affordable in rows. **The reference magnitudes are still refused, now on three measurements
+instead of one.**
+
+**Task 15, Step 1 — four of six type steps per screen.** Add a companion constraint the three
+references agree on and our console has no rule for: **prose is never set to the column's full
+width.** All three hold prose to between a quarter and a half of the content column. This binds
+hardest on exactly the sentences this plan protects — the honesty qualifications are prose sitting
+beside tables, and a qualification set 1,392px wide at 12px is a qualification nobody finishes
+reading. Restyling for measure is explicitly permitted by the protection; shortening is not.
+
+**Task 16 — the guard.** Add a fourth assertion, because the motion finding is now confirmed on three
+independent pages and is the cheapest thing in this plan to regress. Assert that no file under
+`web/src/features/` or `web/src/layouts/` declares a `transition-duration` above zero or an
+`animation` shorthand, and that `web/src/index.css` declares no `@keyframes` beyond those already
+present. The interaction the console has stays where it already is and was already right — inside
+`components/ui/`, which the assertion excludes. Prove this one can fail like the other three.
+
+**Unchanged and reaffirmed:** every item in section 5's rejection list, the twenty-four protected
+sentences, and the standing prohibition on a score, a health figure, a traffic light, a green dot or
+a liveness pulse. Reference C's own mock panel renders exactly the pattern we have rejected three
+times — coloured status pills reading as completed, running and failed — which is a good illustration
+of how naturally it appears when nobody has ruled it out, and changes nothing here.
+
+## 12. The limit, and how much of this actually survives to a thousand rows
+
+All three references are landing pages. Two dozen elements a screenful, one column, marketing copy,
+no data. There is a sharper version of that limitation worth stating, because it was discovered while
+measuring rather than assumed: **the only data-dense artifacts on any of the three pages are flat
+PNGs.** B's workflow panel and C's table of runs are images. Neither is DOM and neither can be
+measured. So none of these three pages contains a real dense surface at all, and every claim below
+about what happens at a thousand rows is inference from marketing layout, not measurement of a
+control surface.
+
+With that said plainly, here is the honest split.
+
+**Survives translation intact.** The weight discipline; two ink levels and one accent; negative
+tracking at the display end; leading that loosens as size falls; primary and secondary controls
+differing only by fill; prose capped well below the column width; and the whole motion finding. Every
+one of these gets *easier* as density rises, not harder — a table of a thousand rows needs fewer ink
+levels than a marketing page, not more, and it needs less motion, not more.
+
+**Survives as a ratio, never as a magnitude.** The three spacing levels. Section padding of 64–80px
+and a page frame of 113–173px would cost rows on every screen, and `DESIGN.md` is explicit that
+whitespace is the currency being spent. Section 5 refused those magnitudes on one measurement; three
+measurements refuse them the same way and additionally show the ratio itself is not a constant, which
+means what transfers is only "each level distinguishably larger than the one below", and our own
+floor decides how much larger.
+
+**Survives as a role assignment, not as a scale.** The type range. A 56px or 64px display step is a
+row and a half of table gone every time it appears. Our declared 2.67:1 is not the defect; section 2
+measured the defect precisely — 78% of type on the two smallest steps and the figure step used once
+in the whole console. Spending six declared steps at our magnitudes is the work. Reference C reaching
+5.82:1 across twelve steps is a reminder that step count is not the mechanism.
+
+**Does not survive.** The single-plane ruleless surface, which was never real in any of the three.
+The uppercase micro-step as a measured principle, though it survives as our own decision. Monospace
+as a furniture typeface. And the twelve-step ramp.
+
+**What this means for the owner's question.** The parts of a premium landing page that come from
+typographic range, tracking, spacing ratio, ink restraint and the refusal to animate transfer almost
+completely, and they are the parts section 1 identified. The parts that come from air — 173px
+margins, 900px hero sections, a 64px headline — do not transfer at all, and they are also the parts a
+person most easily mistakes for the source of the quality. A control surface earns the same feeling
+by spending its restraint on legibility at density rather than on space, which is the same
+discipline pointed at a different constraint. That is the whole of what three references can tell us,
+and the last unmeasured mile — whether it works at a thousand rows — is ours to find out on our own
+screens.
