@@ -515,6 +515,17 @@ export interface BindingSurfaceResponse {
   repo_id: string | null
   path_prefix: string | null
   call_sites: ItemPage<BindingCallSite>
+  /**
+   * The deepest directory every call site in the filtered set shares, ending in `/`, or `""` when
+   * they share none.
+   *
+   * A property of the set the page was drawn from rather than of the fifty rows in the window —
+   * computing it client-side over one page would make the same call site render differently on page
+   * one and page two. The screen states it once above the table and renders each row's remaining
+   * path, so nothing is hidden: the full path is the prefix plus the remainder, both on screen.
+   * `""` means render the whole path and say nothing.
+   */
+  call_sites_common_directory: string
   changes: ItemPage<BindingChange>
   repositories: BindingRepository[]
 }

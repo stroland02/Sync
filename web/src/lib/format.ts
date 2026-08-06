@@ -68,3 +68,24 @@ export function describeRange(offset: number, shown: number, total: number): str
   if (total === 0) return "none"
   return `${offset + 1}–${offset + shown} of ${total}`
 }
+
+/**
+ * The part of a call site's path that is not the directory every row on the screen shares.
+ *
+ * On a real repository most of a path column's width is a prefix identical on every row, and the
+ * binding surface's path column is the widest thing on that page. The payload reports the shared
+ * directory (`call_sites_common_directory`, computed in SQL over the filtered set), the screen
+ * states it once, and each row renders what follows it — so nothing is hidden and no fact leaves the
+ * page: the whole path is the prefix plus this.
+ *
+ * Two fallbacks, both returning the whole path, and neither is reachable through the payload — the
+ * prefix is computed from the same set the rows came from. They are here because of what the
+ * alternative looks like when wrong: slicing blind would render `ing/charges/create.ts`, which a
+ * reader takes for a real file, and a path equal to its prefix would render an empty cell that names
+ * no file at all. Wrong-but-legible beats wrong-and-plausible.
+ */
+export function pathAfter(commonDirectory: string, path: string): string {
+  if (commonDirectory === "" || !path.startsWith(commonDirectory)) return path
+  const rest = path.slice(commonDirectory.length)
+  return rest === "" ? path : rest
+}

@@ -39,7 +39,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
-import { formatTimestamp, orAbsent } from "@/lib/format"
+import { formatTimestamp, orAbsent, pathAfter } from "@/lib/format"
 import { Breadcrumbs } from "@/layouts/breadcrumbs"
 import { UnknownRoute } from "@/layouts/unknown-route"
 import { useClearFilters, useFilterParam } from "@/lib/use-filter-param"
@@ -71,6 +71,41 @@ function describeScope(vendorId: string, operationId: string, repoId: string | n
   return repoId === null
     ? `${vendorId}/${operationId}, every repository the index has seen`
     : `${vendorId}/${operationId}, scoped to ${repoId}`
+}
+
+/**
+ * The directory every call site on this page shares, stated once so the column does not repeat it.
+ *
+ * Measured on 2026-08-06 at 1440x900 against `--scale 10000`: the path column wanted 854px on one
+ * line and was granted 572px, because eight other columns are ahead of it — and **65% of what it
+ * held was a prefix identical on all 2,500 rows**. Four columns were wrapping to three lines at
+ * once, so the row stood at 76px and eleven fit above the fold.
+ *
+ * This is not a truncation and nothing is hidden. The whole path is the sentence below plus the
+ * cell beside it, and both are on screen; a reader matching a row to their editor needs the
+ * filename and line, which is exactly what the cell keeps. `break-words` stays on that cell, so a
+ * customer-supplied path with no break opportunity still grows the row instead of overflowing the
+ * column and pushing the rung out of the viewport.
+ *
+ * Empty means the rows share no directory — two trees calling one operation — and then the column
+ * carries the whole path and this says nothing. `pathAfter` is what makes that fallback one branch
+ * rather than a slice that would render `ing/charges/create.ts` and read like a real file.
+ */
+function SharedDirectoryNote({ directory }: { directory: string }) {
+  // Truthiness rather than `=== ""`, and it earned that during this item's own measurement: a dev
+  // API still serving the Python from before the field existed sent no key at all, and the strict
+  // comparison let `undefined` through to render "Every call site below is under , so...". The
+  // payload always carries a string, so this is not a condition the API can produce — it is a
+  // sentence that must not be able to render half-formed, which is a different bar.
+  if (!directory) return null
+
+  return (
+    <p className="max-w-prose text-body text-muted-foreground">
+      Every call site below is under <code className="font-mono">{directory}</code>, so the call-site
+      column carries what follows it. The whole path is that prefix and the cell together — nothing
+      here is shortened away.
+    </p>
+  )
 }
 
 /**
@@ -246,6 +281,7 @@ function BindingSurfaceDetail({
                 />
               </ControlBar>
               <ActiveFilters filters={activeFilters} onClear={clearCallSiteFilters} />
+              <SharedDirectoryNote directory={query.data.call_sites_common_directory} />
               {query.data.call_sites.items.length === 0 ? (
                 <CallSitesEmptyState
                   data={query.data}
@@ -274,7 +310,8 @@ function BindingSurfaceDetail({
                         <TableRow key={`${site.repo_id}-${site.path}-${site.line}-${site.col}`}>
                           <TableCell className="font-mono">{site.repo_id}</TableCell>
                           <TableCell className="font-mono">
-                            {site.path}:{site.line}:{site.col}
+                            {pathAfter(query.data.call_sites_common_directory, site.path)}:
+                            {site.line}:{site.col}
                           </TableCell>
                           <TableCell className="font-mono">
                             <Formatted value={orAbsent(site.symbol)} />
