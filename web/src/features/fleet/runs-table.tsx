@@ -67,7 +67,7 @@ export function RunsCard() {
               <span className="text-figure">{query.data.total.toLocaleString()}</span>
               <span>{query.data.total === 1 ? "run" : "runs"}</span>
             </CardTitle>
-            <CardDescription className="text-body">
+            <CardDescription className="max-w-prose text-body">
               One row per checkpoint thread, not one per finding — a finding retried across
               generations writes a new thread each generation, and each generation is its
               own row here.
@@ -91,7 +91,7 @@ export function RunsCard() {
                       .map(([outcome, count]) => `${outcome}: ${count}`)
                       .join(", ")}
                   </p>
-                  <p className="text-meta text-muted-foreground">
+                  <p className="max-w-prose text-meta text-muted-foreground">
                     Counted across the {query.data.items.length} runs shown below, not the
                     fleet — the fleet's true disposition mix is not in this payload.
                   </p>
@@ -157,7 +157,7 @@ export function RunsCard() {
               </>
             )}
 
-            <p className="border-t border-border pt-section text-body text-muted-foreground">
+            <p className="max-w-prose border-t border-border pt-section text-body text-muted-foreground">
               There is no heartbeat and no process registry — the only evidence a run exists
               is a checkpoint row, and "last checkpoint" is staleness, not liveness. A run
               parked at <code className="font-mono">await_ci</code> blocks inside that node

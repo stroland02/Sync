@@ -29,7 +29,13 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
-import { CardinalityStatement, describeCardinality, sliceForDisplay } from "@/features/fleet/cardinality"
+import {
+  boundedTotalCaveat,
+  CardinalityStatement,
+  describeBoundedTotal,
+  describeCardinality,
+  sliceForDisplay,
+} from "@/features/fleet/cardinality"
 
 /** The vendor rows, unpaginated. */
 export function VendorFindingsTable({ vendors }: { vendors: readonly VendorSummary[] }) {
@@ -76,14 +82,19 @@ export function VendorDistributionCard() {
         <Card>
           <CardHeader>
             <CardTitle className="flex flex-wrap items-baseline gap-field">
-              <span className="text-figure">{query.data.total_findings.toLocaleString()}</span>
+              <span className="text-figure">
+                {describeBoundedTotal(
+                  query.data.total_findings,
+                  query.data.total_findings_bound_reached,
+                )}
+              </span>
               <span>
                 open {query.data.total_findings === 1 ? "finding" : "findings"} across{" "}
                 {query.data.vendors.length}{" "}
                 {query.data.vendors.length === 1 ? "vendor" : "vendors"}
               </span>
             </CardTitle>
-            <CardDescription className="text-body">
+            <CardDescription className="max-w-prose text-body">
               Every open finding the graph holds, grouped by the vendor whose API the call
               site binds to, ordered by which vendor has the most open findings. This is a
               fleet-wide roll-up — <code className="font-mono">GET /api/overview</code> takes
@@ -91,6 +102,11 @@ export function VendorDistributionCard() {
               console gets to "every vendor at risk" until a repository's own Codebase screen
               can narrow it.
             </CardDescription>
+            {query.data.total_findings_bound_reached && (
+              <p className="max-w-prose text-body text-muted-foreground">
+                {boundedTotalCaveat(query.data.total_findings_bound)}
+              </p>
+            )}
           </CardHeader>
           <CardContent className="flex flex-col gap-section">
             {query.data.vendors.length === 0 ? (

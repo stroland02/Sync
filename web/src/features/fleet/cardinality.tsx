@@ -52,5 +52,35 @@ export function sliceForDisplay<T>(rows: readonly T[]): T[] {
 
 /** The cardinality sentence, rendered at the same weight as the panel's other prose. */
 export function CardinalityStatement({ text }: { text: string }) {
-  return <p className="text-body text-muted-foreground">{text}</p>
+  return <p className="max-w-prose text-body text-muted-foreground">{text}</p>
+}
+
+/**
+ * The figure a stat tile renders for a count that may have stopped early: "1,000+" once the
+ * transport's own bound was reached, the plain number otherwise. A fifth member of the
+ * console's absence vocabulary — "at least N" is not "N", and rendering the bare total once
+ * the system stopped counting would imply a completeness `total` does not have. Mirrors
+ * `queryCount.tsx`'s `${max}+` convention (section 24 of the console architecture plan), but
+ * this glyph is never the only channel: `boundedTotalCaveat` below states in words what it
+ * means, the same way a status colour never ships without an icon and a word.
+ */
+export function describeBoundedTotal(total: number, boundReached: boolean): string {
+  return boundReached ? `${total.toLocaleString()}+` : total.toLocaleString()
+}
+
+/**
+ * The sentence that says what the bound figure means: the system stopped counting at a stated
+ * ceiling, so the number is a floor on the true population, not the population itself. Also
+ * names the consequence for any unbounded breakdown shown alongside it — the vendor and
+ * severity distributions are each their own `GROUP BY` over every open finding, so past the
+ * bound their sum legitimately exceeds this total, and a reader seeing that without this
+ * sentence would read it as a bug rather than as two honestly different questions.
+ */
+export function boundedTotalCaveat(bound: number): string {
+  return (
+    `This total stopped counting at ${bound.toLocaleString()}: the graph holds at least that ` +
+    "many open findings, and this figure does not say how many more. The breakdowns below are " +
+    "each their own count across every open finding, not a slice of this total, so they can " +
+    "sum to more than the number shown above."
+  )
 }

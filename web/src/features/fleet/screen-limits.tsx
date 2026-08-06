@@ -44,7 +44,7 @@ export function ScreenLimitsCard() {
     <Card>
       <CardHeader>
         <CardTitle className="text-emphasis">What this screen cannot tell you</CardTitle>
-        <CardDescription className="text-body">
+        <CardDescription className="max-w-prose text-body">
           Four standing limits of the data behind this page, not gaps in how it is drawn.
         </CardDescription>
       </CardHeader>

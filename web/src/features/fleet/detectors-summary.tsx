@@ -51,7 +51,7 @@ export function DetectorsSummaryCard() {
               {query.data.detectors.length}{" "}
               {query.data.detectors.length === 1 ? "detector" : "detectors"} with open findings
             </CardTitle>
-            <CardDescription className="text-body">
+            <CardDescription className="max-w-prose text-body">
               Every open finding, aggregated by the detector that raised it — scoped to open
               findings, the only findings read the graph offers today. A closed finding is
               invisible here exactly as it is invisible everywhere else in the console.{" "}

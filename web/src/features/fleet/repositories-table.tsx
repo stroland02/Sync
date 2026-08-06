@@ -38,7 +38,7 @@ export function RepositoriesCard() {
               {query.data.repo_ids.length}{" "}
               {query.data.repo_ids.length === 1 ? "repository" : "repositories"} indexed
             </CardTitle>
-            <CardDescription className="text-body">
+            <CardDescription className="max-w-prose text-body">
               Every repository the API Dependency Graph holds at least one call site from.
               A repository that was configured but never indexed has no row here — the same
               absence as one that was never configured at all, because the index cannot

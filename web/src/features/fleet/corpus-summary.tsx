@@ -67,7 +67,7 @@ export function CorpusSummaryCard() {
         <Card>
           <CardHeader>
             <CardTitle className="text-emphasis">Repair record</CardTitle>
-            <CardDescription className="text-body">
+            <CardDescription className="max-w-prose text-body">
               Every repair attempt the graph has recorded, one row of{" "}
               <code className="font-mono">migration_outcome</code> per attempt. A finding
               retried three times writes three attempts here and counts once toward

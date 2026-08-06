@@ -72,10 +72,26 @@ export interface VendorSummary {
  *
  * Not a `Page`: the route reports its own `total_findings` and carries no `items`,
  * `total` or `next_offset`.
+ *
+ * `total_findings` is a `count(*)` over a subquery Postgres stops scanning at
+ * `total_findings_bound` (`sync.dashboard.graph_views.overview_summary`, mirroring Sentry's
+ * `count_hits`/`MAX_HITS_LIMIT`) — past the bound it is a floor, not the population, and
+ * `total_findings_bound_reached` is the fact that says so. A render site that shows
+ * `total_findings` without checking `total_findings_bound_reached` is claiming an exact count
+ * the transport did not produce.
+ *
+ * `vendors` and `severity_counts` are each their own unbounded `GROUP BY` over every open
+ * finding — never derived from the bounded total above, and never truncated at
+ * `total_findings_bound`. That is deliberate: a distribution truncated at the same ceiling as
+ * the count would be the distribution of whichever rows the ordering reached, not of the
+ * population, so past the bound their sum legitimately exceeds `total_findings`.
  */
 export interface OverviewResponse extends Provenance {
   vendors: VendorSummary[]
   total_findings: number
+  total_findings_bound: number
+  total_findings_bound_reached: boolean
+  severity_counts: Tally
 }
 
 /**

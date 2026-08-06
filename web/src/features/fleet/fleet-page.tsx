@@ -40,7 +40,7 @@ export function FleetPage() {
       <Breadcrumbs trail={[{ label: "Fleet" }]} />
       <div className="flex flex-col gap-section">
         <h1 className="text-page">Fleet</h1>
-        <p className="text-body text-muted-foreground">
+        <p className="max-w-prose text-body text-muted-foreground">
           There is no composite health figure here on purpose. A scalar that averaged three
           gates would collapse "we could not check" onto the same axis as "we checked and it
           passed", which is the failure this console exists to replace. Every figure below
