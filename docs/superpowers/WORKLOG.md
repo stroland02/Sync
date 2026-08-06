@@ -31,7 +31,7 @@ M4 continues the sequence at 126. Everything before that is in `git log`.
 | M4-W133 | The session record a worker can actually open | landed | `0c6eb94` |
 | M4-W134 | Reconcile the branch with `main`, and take the by-id read | landed | `99f542b`, `3962fcc` |
 | M4-W135 | Filters that compose with repository scope — B90 slice 1 | landed | `f84e334` |
-| M4-W136 | The review wave: one Critical, five Important, and an error surface | in flight | `briefs/2026-08-06-m4-review-wave.md` |
+| M4-W136 | The review wave: one Critical, five Important, and an error surface | landed | five commits, merged; `node-standing.ts` and its Python source of truth |
 | M4.5-W137 | The conformance measurement against the fourteen invariants | landed | `reports/2026-08-06-console-conformance.md`; gaps filed as B104-B107 |
 | M4-W138 | The work-item register back in the tree | landed | this file |
 | M4-W139 | The backlog stops describing a console that no longer exists | landed | five entries closed, B90 and B94 corrected, B99 collision resolved |

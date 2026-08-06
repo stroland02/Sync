@@ -226,6 +226,29 @@ export interface NotFoundBody {
 export type WorkflowNodeStatus = "done" | "current" | "pending"
 
 /**
+ * Where a node stands, mirroring `NODE_STANDINGS` in `sync.dashboard.queries`.
+ *
+ * `status` alone means different things depending on two facts outside the node: a `current`
+ * node that has already produced evidence is a retry rather than a first visit, and a
+ * `pending` node on a finished run will never be reached rather than not yet. Both joins used
+ * to be made in the console, separately, by two components that then disagreed about the same
+ * payload. The transport makes them once — `tests/test_dashboard_queries.py` holds the answer,
+ * which nothing in `web/` can — and this console renders one label per value.
+ *
+ * Nothing here is a liveness claim. `due` says the graph owes the node a visit; a run parked
+ * on the customer's CI and a run that has died write the same nothing into a checkpoint.
+ */
+export const NODE_STANDINGS = [
+  "ran",
+  "due",
+  "due_again",
+  "not_reached_yet",
+  "never_reached",
+] as const
+
+export type NodeStanding = (typeof NODE_STANDINGS)[number]
+
+/**
  * How a run ended, or `running` while it has not.
  *
  * The transport reports null for a run in flight, and null is the signal to poll. `running`
@@ -249,6 +272,7 @@ export type WorkflowOutcome = "opened" | "abandoned" | "reported" | "running"
 export interface WorkflowNode {
   name: string
   status: WorkflowNodeStatus
+  standing: NodeStanding
   evidence: Record<string, unknown>
 }
 

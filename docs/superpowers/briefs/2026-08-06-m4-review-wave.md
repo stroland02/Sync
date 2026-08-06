@@ -113,10 +113,23 @@ interface-quality checklist's first item exists for this and names the two place
 lands first — `run-outcome.tsx`'s branch for an outcome the console has never heard of, and
 `evidence.tsx`'s `JSON.stringify` of unnamed evidence keys. Both are reached by data, not by clicking.
 
-Add an error boundary that **renders the error** — the message, the component that threw, and a way to
-copy it — around each routed screen, so a thrown exception becomes a visible, reportable state instead
-of a hole. It is a state panel like the four in `web/src/components/states.tsx` and it belongs beside
-them; a fifth sentence in a family that already distinguishes four kinds of nothing.
+**Corrected against the tree on 2026-08-06, which is what this brief's own opening asks for.** A
+boundary already exists: `web/src/components/error-boundary.tsx`, wrapping the `Outlet` in
+`layouts/app-shell.tsx`. So this is not new work, and writing it as new work would have produced a
+second boundary beside the first. What that boundary actually did wrong is four things, and each is
+still worth fixing:
+
+- **It swallowed the throw.** `componentDidCatch` filed the error on the central surface and told
+  nobody else, so neither the browser console nor Vite's overlay ever saw it.
+- **It named nothing.** The panel rendered `error.message` alone; the component stack went to the
+  error surface and nowhere a reader could act on it.
+- **There was no way to copy it.**
+- **It never reset.** One boundary outside the `Outlet` survives every navigation, so a single crash
+  left the crash panel standing over every screen after it until a reload.
+
+Fix those, so a thrown exception becomes a visible, reportable state instead of a hole. The panel is a
+state panel like the four in `web/src/components/states.tsx` and it belongs beside them; a fifth
+sentence in a family that already distinguishes four kinds of nothing.
 
 Two constraints:
 

@@ -14,13 +14,13 @@
 import { Link, useParams } from "react-router"
 
 import { NotFoundError } from "@/api/errors"
-import { isRunTerminal, useWorkflow } from "@/api/queries"
+import { WORKFLOW_POLL_MS, isRunTerminal, useWorkflow } from "@/api/queries"
 import { ErrorState, LoadingState, NotFoundState } from "@/components/states"
 import { Formatted } from "@/components/status"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { NodeSequence } from "@/features/workflows/node-sequence"
-import { RunOutcome } from "@/features/workflows/run-outcome"
+import { RunOutcome, type BelowThisPanel } from "@/features/workflows/run-outcome"
 import { Breadcrumbs } from "@/layouts/breadcrumbs"
 import { UnknownRoute } from "@/layouts/unknown-route"
 import { formatTimestamp } from "@/lib/format"
@@ -77,6 +77,21 @@ function StaleBanner({
       )}
     </div>
   )
+}
+
+/**
+ * What `RunOutcome` may say about this screen, which renders all eight nodes as a sequence.
+ * The panel does not know that; this page does.
+ */
+const BELOW: BelowThisPanel = {
+  inFlight: `The sequence below is the last state the checkpointer recorded, re-read every ${WORKFLOW_POLL_MS / 1000} seconds until the run finishes.`,
+  abandoned: "The attempt is still below in full, with everything each node produced.",
+  opened: (
+    <>
+      The pull request is under <code>open_pr</code>.
+    </>
+  ),
+  unrecognised: "The sequence below is still what the run produced.",
 }
 
 function Workflow({ findingId }: { findingId: string }) {
@@ -149,6 +164,7 @@ function Workflow({ findingId }: { findingId: string }) {
             outcome={data.outcome}
             abandonReason={data.abandon_reason}
             reportReason={data.report_reason}
+            below={BELOW}
           />
 
           <p className="max-w-prose text-body text-muted-foreground">
@@ -156,7 +172,12 @@ function Workflow({ findingId }: { findingId: string }) {
               to={`/findings/${encodeURIComponent(findingId)}/workflow/pull-request`}
               className="underline underline-offset-2"
             >
-              See the pull request's evidence bundle
+              {/* The possessive asserted a pull request on every run, including the ones that
+                  never opened one. The link goes to the same place either way; what it says
+                  follows the outcome the payload already carries. */}
+              {data.outcome === "opened"
+                ? "See the pull request's evidence bundle"
+                : "See the evidence bundle for this run"}
             </Link>{" "}
             — the five nodes below that answer whether this run earned a merge, at their own
             address a reviewer can send on.
@@ -173,7 +194,7 @@ function Workflow({ findingId }: { findingId: string }) {
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <NodeSequence nodes={data.nodes} terminal={terminal} />
+              <NodeSequence nodes={data.nodes} />
             </CardContent>
           </Card>
 

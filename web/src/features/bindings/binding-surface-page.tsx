@@ -39,7 +39,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
-import { ABSENT, formatTimestamp, orAbsent } from "@/lib/format"
+import { formatTimestamp, orAbsent } from "@/lib/format"
 import { Breadcrumbs } from "@/layouts/breadcrumbs"
 import { UnknownRoute } from "@/layouts/unknown-route"
 import { useClearFilters, useFilterParam } from "@/lib/use-filter-param"
@@ -62,9 +62,9 @@ const REPO_KEY = "repo_id"
  * the two sets page independently, and narrowing one says nothing about where the other is. */
 const CALL_SITE_RESETS = [CALL_SITES_OFFSET_KEY]
 
-/** A string list joined for a table cell, or the absence glyph when the site recorded none. */
-function joinOrAbsent(values: string[]): string {
-  return values.length === 0 ? ABSENT : values.join(", ")
+/** A string list joined for a table cell, or null when the site recorded none. */
+function joinOrAbsent(values: string[]): string | null {
+  return values.length === 0 ? null : values.join(", ")
 }
 
 function describeScope(vendorId: string, operationId: string, repoId: string | null): string {
@@ -283,10 +283,10 @@ function BindingSurfaceDetail({
                             <Formatted value={orAbsent(site.sdk_version)} />
                           </TableCell>
                           <TableCell className="font-mono">
-                            {joinOrAbsent(site.args_keys)}
+                            <Formatted value={joinOrAbsent(site.args_keys)} />
                           </TableCell>
                           <TableCell className="font-mono">
-                            {joinOrAbsent(site.response_fields_read)}
+                            <Formatted value={joinOrAbsent(site.response_fields_read)} />
                           </TableCell>
                           <TableCell className="font-mono">{site.loop_depth}</TableCell>
                           <TableCell>

@@ -14,7 +14,7 @@ import { NotFoundError } from "@/api/errors"
 import { useFinding } from "@/api/queries"
 import { ProvenanceStrip, RungBadge } from "@/components/provenance"
 import { ErrorState, LoadingState, NotFoundState } from "@/components/states"
-import { Formatted } from "@/components/status"
+import { Absent, Formatted } from "@/components/status"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import {
   Table,
@@ -24,7 +24,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
-import { ABSENT, orAbsent } from "@/lib/format"
+import { orAbsent } from "@/lib/format"
 import { Breadcrumbs } from "@/layouts/breadcrumbs"
 import { UnknownRoute } from "@/layouts/unknown-route"
 
@@ -33,7 +33,9 @@ function FieldList({ label, values }: { label: string; values: string[] }) {
     <div className="flex flex-col gap-field">
       <h3 className="furniture text-meta text-muted-foreground">{label}</h3>
       {values.length === 0 ? (
-        <p className="text-body text-muted-foreground">{ABSENT} none recorded</p>
+        <p className="text-body">
+          <Absent>none recorded</Absent>
+        </p>
       ) : (
         <ul className="flex flex-wrap gap-row">
           {values.map((value) => (
@@ -188,9 +190,11 @@ function FindingDetail({ findingId }: { findingId: string }) {
             </CardHeader>
             <CardContent>
               {query.data.known_changes.length === 0 ? (
-                <p className="max-w-prose text-body text-muted-foreground">
-                  {ABSENT} No vendor change names this call site. The finding was raised by
-                  something other than a spec diff.
+                <p className="max-w-prose text-body">
+                  <Absent>
+                    No vendor change names this call site. The finding was raised by something
+                    other than a spec diff.
+                  </Absent>
                 </p>
               ) : (
                 <Table>
