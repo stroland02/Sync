@@ -1,0 +1,148 @@
+# Direction notes
+
+One entry per example the owner supplies. Each records **what is structurally right about it** and
+**what we already store that would go in that slot** — because a layout copied without that mapping
+is a layout we cannot fill.
+
+---
+
+## 1. Superlog — incident detail (2026-08-06)
+
+The owner's words: *"this is exactly the type of professionalism I was looking for in terms of the
+structure of the user interface, and we don't have anything close to this."*
+
+### What the screen is made of
+
+1. **A persistent left sidebar**, roughly 210px, grouped with small caps labels — `Workspace`
+   (Overview, Incidents, Errors, Alerts) and `Observe` (Explore, Dashboards) — the active item
+   carrying a filled surface, a collapse control at the top beside the wordmark, and `Settings`
+   pinned at the bottom edge.
+2. **A top bar** carrying a breadcrumb (`Workspace / Incidents`) on the left and account furniture
+   on the right — theme toggle, organization switcher, avatar.
+3. **A second trail row** below it: `Incidents › <the incident's title>` with a close control at the
+   far right. The detail is an addressable destination that remembers where it was opened from.
+4. **A two-column detail.** A fixed left rail about 360px wide: a short id (`#honey-jackal`), the
+   title at display size with tight leading, a paragraph of summary prose, then a **definition list
+   of nine facts** — Priority, Status, Service, Environment, First detection, Last detection,
+   Duration, Linked errors, Investigation — then three actions stacked at the bottom.
+5. **Tabs in the content column** (`Activity` / `Findings`).
+6. **Labelled content rows** — a narrow label column (`Proposed title`, `Root cause`) against a wide
+   body that mixes prose, inline code chips and full code blocks. Each code block carries a
+   **language label in its own header strip** (`TEXT`, `PYTHON`) and is syntax-highlighted.
+7. **A composer pinned at the bottom** of the content column: *"Reply to the investigation — request
+   PR changes, explain the issue, add context…"*, with a Send button and a `Shift Enter` hint.
+
+### Why it reads as professional, stated as properties rather than as praise
+
+- **The eye has one place to land.** The title is the only display-sized text on screen; everything
+  else is body or smaller. Our console's type range is 2.0–2.67:1 and nothing dominates.
+- **Facts are a list, not a paragraph.** Nine of them, label left, value right, one line each,
+  scannable without reading. We render most of these as prose or as table columns.
+- **The frame is doing work.** The sidebar holds the left edge, the content column is inset from it,
+  and the rail and body are separated by a real gutter rather than a border.
+- **Depth is used once.** Code blocks sit on a raised surface with their own label strip; nothing
+  else on the screen is raised.
+- **The trail is visible.** Two levels of breadcrumb mean you always know which entity you are
+  inside and what contains it.
+
+### What we already store that goes in each slot
+
+This is the part that matters, and it is favourable: **we hold more than they render.**
+
+| Their slot | Our data |
+|---|---|
+| Incident | `Finding` — with a rung, which their incident has no equivalent of |
+| Priority / Status | `severity`, run outcome from the checkpointer |
+| Service / Environment | vendor, operation, repository |
+| First / Last detection | `indexed_at`, `first_seen` on observed calls |
+| Linked errors | observed error windows, call sites, binding surface |
+| Root cause + code | the vendor change, the call site, the patch diff, the `tsc` verdict |
+| **Activity trail** | the remediation graph's checkpointed node sequence — `locate → patch → static verify → push → await CI → open PR`, **including the attempts that were abandoned and why** |
+| Findings tab | the detectors that fired and the rung each rested on |
+
+Their activity log is the closest thing on screen to what this product is *for*, and ours is
+strictly richer: theirs shows what an agent did, ours shows what it did, what it could not verify,
+and what it gave up on with a reason. We render it as a plain vertical list.
+
+### The one thing that is not just presentation
+
+**The composer implies a write path.** Every route we serve is a GET, held by a behavioural test, and
+an operator cannot start a run, retry one, or reply to anything. That is a product decision with an
+authorization story attached, not a component. It belongs in the plan as its own item and must not
+be smuggled in as a text box.
+
+### A premise this screenshot falsifies
+
+`DESIGN.md`'s Space section refuses a wider frame ratio because *"the nav rail and header already
+hold the composition's edge."* **There is no rail.** `layouts/site-nav.tsx` renders a horizontal
+strip with `border-b`, and `app-shell.tsx` puts the whole page in a 24px gutter under it. The
+argument that kept our frame at 3.0 against a 4.7–7.2 bar rests on a component that does not exist.
+
+---
+
+## 2. Superlog — the activity trail's content model (2026-08-06)
+
+The owner supplied the feed's full text alongside the screenshot. This is the more valuable half:
+the first example showed the *frame*, this shows **what goes in it**.
+
+### The entry types, in the order they interleave
+
+1. **Signal entries.** A kind chip (`trace` or `log`), the exception class or level, an event count
+   (`8 events`), the message, and a relative time. Repeated for each distinct signal.
+2. **An occurrence histogram** — *"Occurrences · last 14 days"*, one row per day with a count,
+   showing zero every day here. **Zero is rendered, not suppressed**, which is the same discipline
+   this console already holds and is worth noting as agreement rather than as something to adopt.
+3. **State transitions**, as their own entries: *Investigation queued* · *Investigation started
+   across 1 candidate repos* · *New issue joined the incident* · *Incident resolved by the
+   investigating agent*.
+4. **A collapsed agent run**: *"Started investigation — Show investigation · 8 steps"*. The steps
+   exist, are counted, and are behind a disclosure.
+5. **The agent's own narration**, labelled `Investigation agent`, in the first person, with numbered
+   observations.
+6. **A tool call rendered as a titled, structured block** — `report_findings` — with named fields:
+   Summary, Proposed title, Root cause (prose, inline code, and two syntax-highlighted blocks with
+   file and line references), Estimated impact, Severity.
+7. **A second tool call** — `resolve_incident` — with Reasoning, Evidence, and a per-issue outcome
+   array: `reason`, `status`, `issueId`, `evidence`, one object per issue closed.
+
+### What we already hold for each
+
+| Theirs | Ours |
+|---|---|
+| `trace` / `log` signal entries | observed calls, observed shapes, error windows — with `binding_rung` on each |
+| Occurrence histogram | `observed_error_window` counts over time |
+| *New issue joined the incident* | findings grouping under one `vendor_change` |
+| *Investigation started across 1 candidate repos* | the run's repository scope |
+| The 8 collapsed steps | **the checkpointed remediation graph** — `locate → prepare → patch → static verify → replay → push → await CI → open PR` |
+| Agent narration | the patch agent's own recorded reasoning |
+| `report_findings` block | the `Finding`, its vendor change, its call site, its rung |
+| Root cause with file:line and code | the call site, the diff, the `tsc` verdict |
+| `resolve_incident` per-issue outcomes | `migration_outcome` rows — disposition, `abandon_reason`, `terminal_status`, the routing row |
+
+**We hold every slot, and two they do not have**: the provenance rung on each signal, and the
+attempts that were abandoned with the reason they were abandoned. We render this as a plain vertical
+list.
+
+### The one thing to refuse, and it is prominent
+
+Their block carries **`Root cause confidence: 9`** and **`Impact confidence: 9`**. That is the
+composite score this project has refused four times, and the refusal does not move because a
+reference we admire does it. A 9 has no referent: it does not say what was checked, what could not
+be, or which of those two produced the number — and `CLAUDE.md`'s argument is precisely that a
+scalar collapses *we could not check* onto the same axis as *we checked and it passed*.
+
+**The honest version of that field is the one we already have.** The rung says which class of
+evidence a claim rests on — `static`, `resolved`, `observed` — and it is attributable, so a false
+positive can be traced to the binder that produced it. Where their screen puts a number, ours puts
+the rung and the evidence behind it.
+
+So: take the **structure** — a named, structured findings block with its evidence beside it, a
+resolution block with a per-item outcome and reason, a collapsed step count that expands. Refuse the
+**scalar**. That is the whole of what "concepts, not appearance" means here.
+
+### What this makes obvious about our own screens
+
+The workflow screen renders the node sequence as a list of nodes. Theirs renders a *narrative*: what
+happened, then what the agent concluded, then the structured artifact it produced, then the
+resolution with per-item evidence. Same data, different reading order — and the reading order is
+what makes one feel like an investigation and the other like a status table.
