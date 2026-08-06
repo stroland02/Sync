@@ -27,7 +27,7 @@ import { describeRung, formatTimestamp } from "@/lib/format"
 export function RungBadge({ rung }: { rung: BindingSource }) {
   return (
     <span
-      className="rounded-control border border-line px-field py-0.5 font-mono text-meta"
+      className="furniture rounded-control border border-line px-field py-0.5 font-mono text-meta"
       title={describeRung(rung)}
     >
       {rung}
@@ -38,7 +38,7 @@ export function RungBadge({ rung }: { rung: BindingSource }) {
 function Field({ label, children }: { label: string; children: ReactNode }) {
   return (
     <div className="flex flex-col gap-0.5">
-      <dt className="text-meta tracking-wide text-ink-muted uppercase">{label}</dt>
+      <dt className="furniture text-meta text-ink-muted">{label}</dt>
       <dd className="font-mono text-meta">{children}</dd>
     </div>
   )
