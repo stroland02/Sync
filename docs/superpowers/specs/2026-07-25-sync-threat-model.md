@@ -216,6 +216,10 @@ credentials rather than the attacker's, which is the whole point of doing it.
    (`agent_patch.py:69`), which is a real block, but `curl` is not a tool — it is a program, and the agent
    was given a shell. Nothing in the verification gate looks at this: the exfiltration happens during the
    run and the diff can be empty or innocent afterwards. **Damage is unbounded and detection is zero.**
+   *Amended 2026-08-06: a tool gate now refuses any shell command outside a fixed list of three and
+   records every call. `curl` no longer runs and the attempt is in the log. The clone is still
+   credential-bearing and the process still has a network stack, so this reads "the agent may not ask
+   for egress", not "egress is impossible" — see "The first predicate on the run" below.*
 2. **Arbitrary code in a customer's repository behind a green CI.** A patch that compiles and passes the
    customer's tests, plus one line that does something else. The gates do their job and the pull request
    arrives looking exactly like every other one Sync opens. Bounded by a human review that Sync's own
@@ -247,6 +251,11 @@ category have.
 predicate on the run.** They ask what the branch contains. They do not ask what the agent did, what it
 read, or what left the machine while it was working. An attack that wants to ship something has to beat
 them; an attack that wants to take something never meets them.
+
+That sentence was true of every gate Sync had until 2026-08-06. `sync.remediate.tool_gate` is the
+first predicate on the run, and the section below is careful about how much of the boundary it
+moves: a call the agent makes is now weighed, but what the agent reads is still unweighed, and
+nothing here is an operating-system boundary.
 
 The second half of the boundary is inside the artifact check itself. `tsc` plus CI is a test of whether
 the patch is *broken*, not of whether it is *what was asked for*. A patch that applies the migration
@@ -326,6 +335,75 @@ ordinary TypeScript — `Array<untrustedInput>`, `a<untrusted_count` — is not 
 Two mutations were run against those tests and each was caught by a different one: disabling the refusal
 reddens the three smuggling tests, and widening the marker to any `<untrusted` reddens the outage guard.
 
+### The first predicate on the run, built 2026-08-06
+
+`src/sync/remediate/tool_gate.py`, registered as a `PreToolUse` hook on every `ClaudeAgentOptions`
+the patch node builds. Three refusals and one record:
+
+- **A tool outside the set a patch needs is refused.** `Read`, `Grep`, `Glob`, `Edit`, `Write`,
+  `Bash` are what making a patch takes. Everything else is denied, including tools that do not
+  exist yet, because the set is stated as what is permitted rather than as a list of what is not.
+- **A shell command outside a fixed list of three is refused.** `git add`, `git status`, `npx tsc`
+  — the first and third are what the patch prompt asks for by name, the second is how an agent
+  confirms the staging that prompt makes load-bearing. The command must be one simple command:
+  a second command, a pipe, a redirection, a substitution or a line break refuses the call before
+  the first word is read. The match is on the first two tokens rather than on a prefix, because
+  `git -c core.pager=… add` is not `git add` — several git configuration keys name a program git
+  then executes.
+- **A write under `.git/` is refused.** This one is not about the patch, and it is the thing this
+  work found that was not on anybody's list. `push_branch` runs `git` in this clone *after* the
+  agent has finished, so a file left in `.git/hooks/` runs under Sync, and `.git/config` is the
+  same shape by a different route — `core.fsmonitor` and its neighbours name a program the next
+  git command executes. Neither is visible to `tsc`, to `shipped_tree`, to `dependency_edits` or
+  to the customer's CI, and none of them ships in the diff.
+- **Every call is recorded**, permitted ones at debug and refused ones at warning, tagged with the
+  finding and repository so a line joins back to a run. The refusal handed to the agent names the
+  rule and quotes nothing, on `sync.remediate.untrusted`'s reasoning: the agent composed that
+  command, possibly out of text a vendor page put in front of it, and echoing it is a second
+  delivery. The log is operator-facing, so it carries the command in full. That asymmetry is the
+  whole of the detection half — before this, an exfiltration left nothing anywhere.
+
+**Why a `PreToolUse` hook and not `can_use_tool`.** The installed SDK settles it rather than the
+documentation: `claude_agent_sdk.types._get_can_use_tool_shadowed_warning` says that an
+`allowed_tools` entry allowing a whole tool auto-approves it *before* the permission callback is
+consulted, and that "to gate every tool call, use a PreToolUse hook". Every entry in
+`ALLOWED_TOOLS` is a whole-tool entry, so a `can_use_tool` callback would have been consulted for
+nothing the agent actually calls. It would also have required restructuring the prompt into
+streaming mode, which the same package raises on.
+
+**Why this step and not the other one on the table.** The alternative was to record what the agent
+ran and change nothing about what it may run — cheaper, and it answers the "detection is zero"
+half. It loses on what is at stake. The asset here is a customer's production credentials, and a
+recorded exfiltration is still an exfiltration: you learn which secrets to rotate, which is worth
+something, and you learn it after they are gone. Reduction had been treated as the harder half
+because `git add` and `npx tsc` are load-bearing and removing `Bash` breaks the patch — but the
+gate is per invocation rather than per tool, so the two commands the pipeline depends on stay and
+everything else goes. And the record comes with it: the same hook that decides is the only place
+that sees every call, so choosing reduction does not cost the detection it was competing with.
+
+**What it does not cover, stated plainly.**
+
+- **It is not containment, and not an operating-system boundary.** It constrains what the agent may
+  *ask for*. The process still has a network stack, a filesystem and a credential-adjacent clone;
+  anything that gets past the tool layer is unaffected by it. Mitigation 1 remains the containment
+  and remains unbuilt.
+- **`npx tsc` still runs the customer's own compiler**, resolved through their `.npmrc`, exactly as
+  `CLAUDE.md`'s qualification says. A permitted command is not a safe one; it is a needed one.
+- **It has not been observed enforcing.** The decision function and the wiring are tested; that the
+  CLI honours a returned `permissionDecision: "deny"` is taken from the SDK's own contract and from
+  the bundled binary carrying the field, not from a run. Observing it needs a model API call, which
+  the test discipline here forbids. This is the weakest claim on the page and it should be read as
+  such.
+- **It does nothing about what the agent reads.** `Read` and `Grep` over the clone stay permitted
+  and unfenced, which is B99 and is the larger channel. The gate now records those calls, so the
+  exposure is at least legible; it is not reduced.
+- **A permitted command can still be wrong.** `git add` on a path the patch does not need is
+  permitted, and the gate deliberately does not arbitrate that — `sync.index.shipped_tree` and the
+  unstaged-additions check own it, and mixing a patch-quality rule into a security refusal would
+  make both harder to reason about.
+- **It is per call, so it cannot see a sequence.** Three permitted commands that together do
+  something a single refused one would have done are three permitted commands.
+
 ### Sequencing, revised
 
 Layers two and three of the reference's shape — the injection-pattern list and further prompt hardening —
@@ -333,6 +411,11 @@ are deliberately not built, and are filed in the backlog with this reasoning. Ne
 valuable thing. **The next most valuable thing is mitigation 1**, the credential-free sandbox, because it
 is the only item on this page that touches the top-ranked attack, and because both remaining prompt layers
 defend the channel that is already the smaller of the two.
+
+The tool gate does not displace that. It is the cheap part of the same job done a layer higher, and
+it was worth building first only because it took a day rather than a milestone. Read the two
+together: the gate decides what the agent may ask for, the sandbox decides what the process can do
+regardless of what it asks. A gate with no sandbox under it is one bug away from nothing.
 
 ## What a security reviewer will ask, and the answer
 

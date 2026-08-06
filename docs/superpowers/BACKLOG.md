@@ -365,6 +365,20 @@ the install, the patch and the typecheck run in an ephemeral container with no c
 environment or on its filesystem, and no network egress after dependencies are installed. It has
 been specified since 2026-07-25 and is what stands between Sync and the CodeRabbit shape.
 
+**One bounded step landed on 2026-08-06 and the rest of this entry stands.**
+`src/sync/remediate/tool_gate.py` is a `PreToolUse` hook on the patch run: a tool outside the six a
+patch needs is refused, a shell command outside `git add`, `git status` and `npx tsc` is refused,
+a compound or substituted command is refused before its first word is read, a write under `.git/`
+is refused, and every call is recorded against the finding it belongs to. `curl` no longer runs and
+the attempt is no longer invisible.
+
+That is a predicate on what the agent may *ask for*. It is not an operating-system boundary, it has
+not been observed enforcing — the CLI's honouring of a `deny` decision is taken from the SDK's own
+contract, since watching it needs a model call the test discipline forbids — and the clone still
+holds the secrets while the process still has a network stack. The close condition below is
+unchanged, and the gate should be read as the cheap layer above the sandbox rather than as a
+substitute for it.
+
 **Closes when:** a patch run cannot open a socket to a host Sync did not name, proven by a test
 that watches the attempt fail rather than by a configuration file asserting it.
 
@@ -406,6 +420,11 @@ Fencing that at the prompt layer is impossible by construction — the bytes nev
 budget so a wandering agent is bounded, and the sandbox from B97 so what it reads cannot leave.
 There is no clean equivalent of the fence here, and an entry that pretends otherwise would be
 worse than one that says so.
+
+One third of the channel narrowed on 2026-08-06: the `Bash` half of "`Read`s, `Grep`s and
+`Bash`es" is now three commands rather than a shell (B97). `Read` and `Grep` are untouched and
+still unfenced — what changed is that `tool_gate` records them, so the reading is at least
+legible to an operator. Legible is not bounded, and this entry does not move.
 
 **Closes when:** the exposure is either bounded by B97 plus a budget, or a mechanism is designed
 that frames tool results, with an argument for why it is not merely theatre.

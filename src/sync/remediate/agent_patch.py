@@ -55,6 +55,7 @@ from pathlib import Path
 from claude_agent_sdk import ClaudeAgentOptions, ResultMessage, query
 
 from sync.core import CallSite, Finding, Patch, RepoRef, VendorChange
+from sync.remediate import tool_gate
 from sync.remediate.untrusted import (
     HARDENING,
     REPOSITORY,
@@ -75,6 +76,9 @@ ALLOWED_TOOLS = ["Read", "Write", "Edit", "Bash", "Glob", "Grep"]
 # to the permission mode instead of being blocked, so network tools have to be
 # denied explicitly to guarantee none run.
 DISALLOWED_TOOLS = ["WebSearch", "WebFetch"]
+# Every entry above allows a whole tool, which auto-approves it before any permission callback
+# is consulted -- so what the agent may do inside those tools is decided in `sync.remediate
+# .tool_gate`, which the SDK reaches through a PreToolUse hook that nothing shadows.
 
 _SCOPE_RULES = """
 Rules:
@@ -91,6 +95,10 @@ Rules:
   whatever your commands happened to leave in this clone. Staging a file is you asserting
   the patch needs it, and it is the only thing that distinguishes a file the fix requires
   from a build artifact or a log.
+- The shell in this clone runs three commands and nothing else: `git add`, `git status`, and the
+  typechecker named below. Anything else is refused before it runs, one command at a time, so a
+  pipe, a redirection, a substitution or a second command on the same line is refused as well.
+  Read, Grep and Glob are how you inspect this repository.
 - Run `npx tsc --noEmit` once you have made the edit -- after staging anything you added,
   so that it measures the same tree the branch will carry -- and confirm you introduced no
   new errors. That is the whole of what it establishes. It cannot tell you whether the edit
@@ -349,6 +357,7 @@ class AgentRemediator:
             effort="xhigh",
             allowed_tools=ALLOWED_TOOLS,
             disallowed_tools=DISALLOWED_TOOLS,
+            hooks=tool_gate.hooks(identity),
         )
         result: ResultMessage | None = None
         async for message in query(prompt=prompt, options=options):
