@@ -39,7 +39,7 @@ M4 continues the sequence at 126. Everything before that is in `git log`.
 | M4-W146 | The quality milestone's items numbered and reserved | landed | this file |
 | M4-W147 | A dispatched worker may never have started — the check that catches it | landed | `reports/2026-08-06-m4-session-record.md` |
 | M4-W148 | One milestone table, and M4 says what is now true | landed | `BACKLOG.md` |
-| M4-W149 | Two documents that assert what the page does not do — B105, B106 | dispatched | `briefs/2026-08-06-m4-claims-contradicted-by-pixels.md` |
+| M4-W149 | Two documents that assert what the page does not do — B105, B106 | landed | `cb6b3d6`; B108 filed for the aria-invalid rings |
 | M4-W150 | Briefs for the four defects the measurement found | landed | this file |
 
 ## M4.5 — the console is worth looking at

@@ -683,26 +683,48 @@ pixels, because Chrome composites `background-color` alpha in gamma-encoded sRGB
 light; blending the same two colours in linear light and gamma space gives visibly different
 answers, and only the gamma one matches what the screen shows.
 
+**How the 2026-08-06 figures below were obtained, because a figure whose method is unstated is the
+defect this section keeps having.** Chrome at 1440×900 on a seeded instance. Every element's own
+values came from `getComputedStyle` on that element, under a real `Tab` keypress for anything
+measured under `:focus-visible` and a real pointer move for anything measured under `:hover` —
+`.focus()` does not match `:focus-visible`, so a programmatic focus measures the resting state and
+reports it as the focused one. Every composite was then blended in a `<canvas>` in that same page:
+each token painted as an opaque fill, the alpha colour painted over it with `color-mix(in srgb, …)`,
+and the result read back with `getImageData`, which is Chrome's own gamma-encoded sRGB compositor
+rather than arithmetic repeating whatever assumption produced the wrong numbers. Contrast is WCAG
+2.x relative luminance over those bytes. Screenshot sampling was attempted first and abandoned: the
+captures this harness produced were uniformly `rgb(12, 12, 12)`, so they measured nothing.
+
 ### Composed pairings, rendered
 
-| Composition | Value |
-|---|---|
-| `ink` on `surface-subtle/50` over the card (a hovered/selected table row) | 14.80 |
-| `foreground` on `input/30` (outline button, resting) | 12.09 |
-| `foreground` on `input/50` (outline button, hover) | 8.70 |
-| `primary-foreground` on `bg-primary` mixed 15% toward `foreground` (default button, hover) | 10.37 |
-| `secondary-foreground` on `bg-secondary` mixed 5% toward `foreground` (secondary button, hover) | 12.38 |
-| `critical-ink` on `bg-critical-surface` (destructive button, resting) | 5.44 |
-| `critical-ink` on `bg-critical-surface` mixed 25% toward the surface extreme (destructive button, hover) | 6.02 |
+**A composed figure is meaningless without the backdrop it was composed over, so every row names
+one.** Two rows here used to omit it, and both were then read as card figures when they were plane
+figures — the correction below is the whole of B105's second and third findings.
+
+| Composition | Backdrop | Value |
+|---|---|---|
+| `foreground` on `input/30` (outline button, resting) | `card` — where every outline button in this console sits | 10.76 |
+| `foreground` on `input/30` (outline button, resting) | `background`/`surface-sunken` — the page plane | 12.08 |
+| `foreground` on `input/50` (outline button, hover) | `card` | 8.03 |
+| `foreground` on `input/50` (outline button, hover) | `background`/`surface-sunken` | 8.68 |
+| `primary-foreground` on `bg-primary` mixed 15% toward `foreground` (default button, hover) | opaque, no backdrop | 10.37 |
+| `secondary-foreground` on `bg-secondary` mixed 5% toward `foreground` (secondary button, hover) | opaque, no backdrop | 12.38 |
+| `critical-ink` on `bg-critical-surface` (destructive button, resting) | opaque, no backdrop | 5.44 |
+| `critical-ink` on `bg-critical-surface` mixed 25% toward the surface extreme (destructive button, hover) | opaque, no backdrop | 6.02 |
 
 Every rendered composition found still clears the 5.05 floor, and the lowest of them (5.44) sits
 above the declared-token worst case below — so "worst pairing anywhere" stays true once "anywhere"
 is checked against what actually renders, not assumed from it.
 
-**The `surface-subtle/50` row above is the alpha overlay *Surface ramp: depth and state* retires,**
-kept here as the measurement of what the tree renders today rather than deleted for describing a
-pattern that is going away. `TableRow` still composes it; the contract's named-step replacement is
-`--color-surface-subtle` at full strength, applied where Task 13 lands it, not this alpha wash.
+**The row that used to sit at the top of this table described a hover fill nothing renders.** It
+read `ink` on `surface-subtle/50` over the card at 14.80, in the present tense, as "the measurement
+of what the tree renders today". That has not been true since `TableRow` was rebuilt: it now names
+`--color-surface-subtle` at full strength — the named step *Surface ramp: depth and state* asks for,
+not an alpha wash — and gates it behind `data-interactive="true"`, which no caller passes today. A
+real pointer held on a row leaves `background-color` at `rgba(0, 0, 0, 0)` with the row's own
+`transition-duration` at 0s. The figure is kept here as history and as the number a caller would
+inherit: `ink` on the full-strength step measures **13.79**, and the retired `/50` wash measured
+14.79 over the card.
 
 **Two of these rows document a fix, not a finding that stood.** `button.tsx`'s `default` variant
 hover was `hover:bg-primary/80` — a wash toward whatever sits behind the button — which measured
@@ -722,8 +744,44 @@ the number this floor is checked against.)
 
 ### Non-text, against the 3:1 floor
 
-`--color-line-strong` clears 3:1 against every surface a control sits on: 3.12–4.56. The focus ring
-(`--color-ring`, the brand hue) clears it comfortably: 8.69, against `--color-surface`.
+`--color-line-strong` clears 3:1 against every surface a control sits on: 3.12–4.56 (4.18 against
+the card, 4.56 against the page plane).
+
+**The focus ring is `--color-ring` at full strength, and that is a decision this section had to
+make rather than restate.** It measures **8.70** against the card and **9.50** against the page
+plane. Until 2026-08-06 this line published 8.69 and the console rendered `ring-ring/50` — the same
+hue at half alpha, compositing to `rgb(84, 101, 139)` and measuring **3.08** against the card and
+3.12 against the plane. That cleared the 3:1 non-text floor by 0.08.
+
+0.08 is not a margin to ship a focus ring on, and the ring is frequently the *only* channel:
+`outline-style` is `none` on every control, and the border does not always change. So the alpha was
+removed rather than the figure rewritten — `focus-visible:ring-ring` on `button`, `input`,
+`textarea` and `input-group`. `tests/test_console_design_tokens.py` now fails on any focus ring
+carrying an alpha modifier, because that is a contrast figure nobody computed and nobody can read
+off a class name.
+
+Three facts about the second channel, all measured rather than inferred, because "the border also
+changes" is the argument that would otherwise excuse a weak ring:
+
+- **On an input, an input group, and every button variant that does not set its own border colour,
+  the border does turn `--color-ring` under `:focus-visible`** — measured `oklch(0.775 0.113 265)`,
+  **8.70** against the card. Two channels there.
+- **On the `outline` button variant it does not.** `focus-visible:border-ring` and
+  `dark:border-input` both resolve to specificity (0,2,0) — this project's dark variant is
+  `&:is(.dark *)`, and `:is()` carries its argument's specificity — so the tie is broken by source
+  order, and Tailwind emits `dark:` after `focus-visible:`. The border stays `--color-input`. That
+  variant is the one used for pagination and filters, so its focus signal is the ring alone, which
+  is why the ring alone has to be strong.
+- **A link takes the user agent's ring, not this one.** No console rule styles `a:focus-visible`;
+  Chrome renders `outline-style: auto`, its own two-tone ring, which is contrast-safe by
+  construction on either plane. Deliberately left alone — a ring the browser adapts is better than
+  one this contract would have to re-measure per surface.
+
+The `destructive` button variant used to override both channels — `ring-critical-ink/20` and
+`border-critical-ink/40`, which composite to **1.40** and **2.03** against that button's own
+surface, under the 3:1 floor. Both overrides are deleted rather than re-tinted: a focus ring is an
+affordance, not a judgement, and *Colour claims a judgement* argues against giving it a per-variant
+hue at all.
 
 The status **marks** against the card: good 5.34, warning 9.77, serious 6.80, critical 3.73 — all
 four clear 3:1 in the surviving palette. (The retired light column had warning at 1.83 and serious
