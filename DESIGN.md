@@ -95,6 +95,21 @@ to hold, not a mirror of the retired light-mode values.
 
 `ABSENT` — the console's one absence marker — wears `--color-ink-muted`. One glyph, one appearance.
 
+**Graphics is an allocation, not a tenth step.** Two ink levels hold for text — `ink` and
+`ink-secondary` — but an icon rendered at either is optically louder than the prose it sits beside,
+because a filled glyph carries more area than a stroke pattern at the same lightness. `getsentry/sentry`
+keeps a separate `graphics` category for exactly this (`components/core/principles/tokens/tokens.mdx`,
+"Categories": `content` is "text and icons which need to stand out the most", `graphics` is "icons and
+other graphical elements which don't need to stand out as much"). `--color-graphics` names step 7 of
+the ramp above — the same value as `--color-ink-muted`, `oklch(0.715 0 0)` — under its own job so an
+icon reaches for it rather than for a text token. No new lightness, and the contrast already published
+for `ink-muted` in *Contrast, computed* below applies unchanged: for an achromatic OKLCH colour,
+relative luminance is exactly `L^3`, so contrast against a surface of lightness `L_surface` is
+`(0.715³ + 0.05) / (L_surface³ + 0.05)`. Worst case is `--color-surface-emphasis` (`L` 0.305): `(0.3655
++ 0.05) / (0.02837 + 0.05) = 5.30`, above the 5.05 floor with room, and every step behind it in depth
+scores higher still (surface-subtle 6.24, surface 7.09, surface-sunken 7.73). A pairing below 5.05
+would be a bug in the ramp, not a trade — none is.
+
 ### Surface ramp: depth and state
 
 The four surface steps carry two different jobs, and no step does both.
@@ -106,11 +121,35 @@ plane; `surface` is a panel resting on it. Elevation above that is a separate me
 **Two steps carry interaction state, not a third and fourth level of nesting.** `surface-subtle`
 is a row under the pointer; `surface-emphasis` is a row that is selected. A row *at rest* takes its
 panel's own depth step — there is no separate token for rest, because state should only spend
-contrast when the pointer or a selection asks for it. State is always a named step, never an alpha
-overlay: an alpha composites differently against whichever depth step sits underneath it, so one
-declaration (`bg-foreground/10`) would mean several different colours depending on where it landed.
-Eight feature screens hold exactly one authored row interaction between them today — the ramp gave
-an agent no state step to reach for, so every agent reached for an alpha wash instead.
+contrast when the pointer or a selection asks for it.
+
+**The ban is on an ad-hoc alpha spelled at a call site, not on the alpha mechanism itself.** This
+rule originally forbade an alpha overlay outright; that was broader than the evidence supports and
+is narrowed here. The defect it was written against was never "alpha" as a technique — it was a
+colour composited without a name, invented fresh at whichever call site needed one, so the same
+declaration (`bg-foreground/10`) meant a different rendered colour depending on which depth step it
+landed on, and eight feature screens held exactly one authored row interaction between them because
+the ramp gave an agent no named step to reach for instead. That failure is what stays banned: no
+`bg-x/10`, no `text-y/70`, spelled inline in a component.
+
+What is not banned is a single primitive that owns every interaction state together and composites
+through `currentcolor` rather than a fixed grey — `getsentry/sentry`'s `InteractionStateLayer`
+(`components/core/interactionStateLayer/interactionStateLayer.tsx`) is the worked example: one
+absolutely-positioned overlay, rest at `opacity: 0`, hover at 0.06, pressed at 0.09, inheriting
+`border-radius` and `border` from whatever it sits inside. Because its fill is `currentcolor`, it is
+always an alpha of *the ink already on the element*, not of an invented neutral — a step toward the
+foreground on any surface, in any theme, at any nesting depth, one declaration with one meaning. A
+sanctioned overlay of that shape must satisfy three things: it is one primitive owning every state
+together, not one class per state scattered across call sites; its fill is `currentcolor`, never a
+literal or a fixed neutral; and it inherits the shape of whatever it sits inside rather than assuming
+a pill, a card corner or a square cell.
+
+**This console keeps named surface steps for its own state anyway, and the reason survives the
+narrower rule.** After Task 12's reallocation there are exactly two depth steps for state to land
+on — few enough that a named step costs nothing extra, and a named value is greppable in a way an
+overlay is not. The composition ambiguity the original ban was written against is nearly absent at
+two steps. A future primitive built the `InteractionStateLayer` way remains a legitimate alternative
+construction; it is simply not the one this tree has chosen.
 
 **A panel header takes the panel's own depth step, not a background of its own.** It separates from
 the body by weight and the hairline rule (`--color-line`) already kept for table rules — cheaper
@@ -429,6 +468,23 @@ resolves against whichever value `--color-line` and `--color-shadow` are live on
 ## Motion
 
 Two mechanisms, because two different kinds of motion need two different gates.
+
+**The gate a new transition is checked against is frequency, not duration.** A surface the operator
+crosses repeatedly takes no transition at all; a surface they meet only occasionally may take one.
+This console tried two other rules first and reversed both: "no motion anywhere," measured from three
+landing pages with near-zero authored interactions, and "150ms because a dense screen has many
+controls," reasoned from a component-count comparison. Neither is decidable by whoever is writing a
+component, and a landing page's near-zero transition count and a dense table's forty is the same rule
+producing opposite numbers at two different interaction densities — not a contradiction to arbitrate.
+`getsentry/sentry` writes the actual variable down directly: "frequent interactions… should avoid
+animation all together" (`components/core/principles/motion/motion.mdx:39`), while the same system
+publishes a 120–240ms token set and spends it on overlays, modals and toasts — interactions an
+operator meets occasionally, not on every pointer move. Its own row-hover primitive,
+`InteractionStateLayer`, declares no transition at all, which is why `TableRow`'s hover fill carries
+none either: a row hover is the most frequent interaction in this console, crossed on every pointer
+move over every table, all day. `ErrorSurface` arriving is the opposite case — rare, and where a
+transition earns its place. **When adding a transition, ask how often the operator crosses this
+surface, not how large the page is or how long feels right.**
 
 `web/src/lib/motion.ts` owns the three deliberate, framer-motion-driven usages: `ErrorSurface`
 arriving and leaving, the changed-under-poll wash, and the paged table container settling into

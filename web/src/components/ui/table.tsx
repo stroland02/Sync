@@ -47,6 +47,13 @@ function TableFooter({ className, ...props }: React.ComponentProps<"tfoot">) {
 // No row responds to the pointer by default: a highlight on a row that leads nowhere is a
 // promise made forty times a screen. `interactive` is how a caller that wires a row to
 // navigation (a click handler, a wrapping `<Link>`) opts back in.
+//
+// No transition on the hover fill. The gate is frequency, not duration: a row hover is the
+// most frequent interaction in this console, crossed on every pointer move over every table,
+// all day. Sentry's own row primitive, which owns the same job, declares no transition either
+// -- its written rule is that frequent interactions should avoid animation altogether
+// (`motion.mdx:39`, cited in DESIGN.md's Motion section). An occasional surface, like an
+// overlay arriving, still gets one; a row does not.
 function TableRow({
   className,
   interactive = false,
@@ -57,7 +64,7 @@ function TableRow({
       data-slot="table-row"
       data-interactive={interactive ? "true" : undefined}
       className={cn(
-        "has-aria-expanded:bg-surface-subtle data-[state=selected]:bg-surface-emphasis data-[interactive=true]:cursor-pointer data-[interactive=true]:transition-colors data-[interactive=true]:hover:bg-surface-subtle",
+        "has-aria-expanded:bg-surface-subtle data-[state=selected]:bg-surface-emphasis data-[interactive=true]:cursor-pointer data-[interactive=true]:hover:bg-surface-subtle",
         className
       )}
       {...props}
@@ -70,12 +77,22 @@ function TableRow({
 // step, not a separately chosen number -- a header row (`--text-meta`, 16px line height) lands
 // at 36px and a body row (`--text-body`, 20px line height) lands at 40px from the identical
 // padding declaration.
+//
+// `aria-[sort]:text-foreground` renders a column at primary ink whenever it carries an
+// `aria-sort` attribute -- a recorded fact about which ordering produced the rows beneath it,
+// not a judgement, matching Sentry's own `&[aria-sort] { color: content.primary }`. No table
+// in this console sorts yet, so nothing sets the attribute today, and the selector is a no-op
+// against this component's own default ink (already `text-foreground`; that default is a
+// separate, earlier decision this change does not revisit). A future caller declares a sort by
+// passing `aria-sort="ascending" | "descending" | "none"` down to this component -- ideally
+// through a header-cell primitive that owns the sort control and the attribute together, so
+// the ink rule stays enforced in one place rather than per table.
 function TableHead({ className, ...props }: React.ComponentProps<"th">) {
   return (
     <th
       data-slot="table-head"
       className={cn(
-        "px-row py-2.5 text-left align-middle text-meta font-medium break-words text-foreground [&:has([role=checkbox])]:pr-0",
+        "px-row py-2.5 text-left align-middle text-meta font-medium break-words text-foreground aria-[sort]:text-foreground [&:has([role=checkbox])]:pr-0",
         className
       )}
       {...props}

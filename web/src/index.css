@@ -32,6 +32,14 @@
   --color-ink-secondary: oklch(0.83 0 0);
   --color-ink: oklch(0.955 0 0);
 
+  /* Icons and other graphical marks, never text. An icon rendered at a text ink is
+     optically louder than the prose beside it -- a filled shape carries more area than a
+     stroke pattern at the same lightness -- so it takes its own name rather than borrowing
+     `ink` or `ink-secondary`. Same value as `--color-ink-muted`: an allocation of an
+     existing step, not a tenth lightness on the ramp. DESIGN.md's neutral-ramp section
+     carries the contrast arithmetic. */
+  --color-graphics: oklch(0.715 0 0);
+
   /* 265 degrees, outside the 30-145 arc the status palette occupies, so the
      brand can never be read as a verdict. */
   --color-brand: oklch(0.775 0.113 265);
