@@ -200,6 +200,13 @@ def create_app(
             repo_id=repo_id,
             severity=request.query_params.get("severity"),
             path=request.query_params.get("path"),
+            # `None` means the URL named no ordering, and the transport does not know what the
+            # orderings are -- it hands over what the URL said. The view resolves both an absent
+            # and an unrecognised value, *and echoes the ordering it applied*, so a hand-edited URL
+            # cannot leave the screen naming an ordering the rows are not in. Naming the vocabulary
+            # here as well would put it in two places and let them disagree, and rejecting here
+            # would turn a typo in a sort parameter into a failed page load.
+            order=request.query_params.get("order"),
             limit=_limit_param(request),
             offset=_offset_param(request),
         )

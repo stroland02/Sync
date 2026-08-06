@@ -13,7 +13,13 @@ import psycopg
 from psycopg.rows import dict_row
 
 from sync.core import CallSite, Finding, FindingStatus, MigrationOutcome, VendorChange
-from sync.core.models import UNATTRIBUTED, ObservedCall, ObservedErrorWindow, ObservedShape
+from sync.core.models import (
+    SEVERITY_ORDER,
+    UNATTRIBUTED,
+    ObservedCall,
+    ObservedErrorWindow,
+    ObservedShape,
+)
 from sync.graph.sources import TRAFFIC_SOURCES
 
 
@@ -39,6 +45,43 @@ def _statements(ddl: str) -> list[str]:
     """
     without_comments = "\n".join(line.split("--", 1)[0] for line in ddl.splitlines())
     return [statement.strip() for statement in without_comments.split(";") if statement.strip()]
+
+
+# The order a page of open findings arrives in. Named orderings, not column names -- see
+# `open_findings_at_risk`'s docstring for why a column name must never reach this from a URL.
+#
+# `first-seen` is what this shipped with and is unchanged: `created_at` ascending, the order Sync
+# raised the findings in. It keeps the name it earned rather than being called "default", because a
+# reader has to be told which ordering they are looking at when they have chosen nothing, and
+# "default" tells them nothing.
+DEFAULT_FINDING_ORDER = "first-seen"
+FINDING_ORDERS = (DEFAULT_FINDING_ORDER, "severity")
+
+# `finding.created_at, finding.id` is the tiebreak on every ordering, not only the default: two
+# findings of one severity need a total order or `LIMIT`/`OFFSET` pages overlap and skip rows, and
+# the reader never sees the row that fell between two pages.
+_TIEBREAK = "finding.created_at, finding.id"
+
+# `array_position` over the rank rather than a `CASE` expression, so the ordering has exactly one
+# copy and it is the tuple in `sync.core.models`. A severity the rank does not name yields NULL,
+# which Postgres sorts last under `ASC` -- the behaviour to want: an unrankable finding at the top
+# of a page opened to see the worst first is a false claim about which finding matters most.
+_FINDING_ORDER_CLAUSES = {
+    DEFAULT_FINDING_ORDER: (_TIEBREAK, []),
+    "severity": (
+        f"array_position(%s::text[], finding.severity), {_TIEBREAK}",
+        [list(SEVERITY_ORDER)],
+    ),
+}
+
+
+def _finding_order_clause(order: str) -> tuple[str, list[object]]:
+    if order not in _FINDING_ORDER_CLAUSES:
+        raise ValueError(
+            f"unknown ordering {order!r}; must be one of {sorted(_FINDING_ORDER_CLAUSES)}"
+        )
+    clause, parameters = _FINDING_ORDER_CLAUSES[order]
+    return clause, list(parameters)
 
 
 def _open_findings_predicate(
@@ -925,6 +968,7 @@ class GraphStore:
         vendor_id: str | None = None,
         severity: str | None = None,
         path_prefix: str | None = None,
+        order: str = DEFAULT_FINDING_ORDER,
         limit: int | None = None,
         offset: int = 0,
     ) -> list[dict]:
@@ -944,10 +988,18 @@ class GraphStore:
         `binding_rung` is `finding.binding_rung` -- the rung of that row's own claim, per finding
         because a page can hold findings from several binders and no one value is true of all of
         them. `open_findings_summary` carries the page-level rung, null when they disagree.
+
+        `order` names an ordering rather than a column, and `FINDING_ORDERS` is the whole of what
+        it may be. A column name reaching this from a query string would let a reader order by
+        whatever a header happened to hold -- a rank over `binding_rung`, which is an evidence
+        class and not a good-to-bad scale, or over a path, which sorts a codebase alphabetically
+        and calls it a priority.
         """
         predicate, parameters = _open_findings_predicate(
             repo_id=repo_id, vendor_id=vendor_id, severity=severity, path_prefix=path_prefix
         )
+        order_clause, order_parameters = _finding_order_clause(order)
+        parameters = parameters + order_parameters
         limit_clause = ""
         if limit is not None:
             limit_clause = " LIMIT %s OFFSET %s"
@@ -970,7 +1022,7 @@ class GraphStore:
               JOIN call_site ON call_site.id = finding.call_site_id
               LEFT JOIN vendor_change ON vendor_change.id = finding.vendor_change_id
              WHERE {predicate}
-             ORDER BY finding.created_at, finding.id{limit_clause}
+             ORDER BY {order_clause}{limit_clause}
             """,
             parameters,
         ).fetchall()

@@ -580,70 +580,33 @@ specification.
 answer is right, the two remaining reads refuse like their siblings, and the decode gate either
 sees `ValueError`-spelled chains or says in its own text that it cannot.
 
-### B100 — The long tables can be narrowed and still cannot be ordered
+### B110 — The binding surface has the same tall rows and nothing opaque to reclaim
 
-B90's first slice ruled sorting out and named what blocked it: a correct sort is a server-side
-`ORDER BY`, and the vendor findings route read the frozen `GraphSurface.whats_at_risk`, which offers
-one ordering and takes no parameter. B92 then moved that route to `graph_views.vendor_findings` over
-`open_findings_at_risk`, a real join with a real `ORDER BY` this repository owns. The block is gone;
-the affordance is still missing, on the two tables a customer repository makes thousands of rows
-long.
+Measured 2026-08-06 at 1440x900 with `--scale 10000`, while closing B109 on the vendor findings
+table next door.
 
-**What must not be built.** A sort over the rows already on screen orders fifty of two and a half
-thousand and reports a total drawn from all of them. That is the "a reader cannot tell what this
-view can see" defect this milestone has closed six times, shipped as a feature, and it is the
-failure mode a headless table library invites — B90's TanStack ruling turns on the same point.
+A body row on the binding surface's call-site table measures **76px** and **eleven** fit above the
+fold — the same numbers the vendor table had before M4.5-W141, and for the same reason: the call-site
+path needs about 837px to sit on one line and gets **572px**, because eight other columns are ahead
+of it.
 
-Three questions the work has to settle rather than assume, because each has a wrong answer:
+**The fix that worked next door does not exist here, and that is why this is an entry rather than a
+commit.** The vendor table gave up 164px by deleting a column that carried an opaque 32-character
+hash — something a reader clicks rather than reads. Every one of these nine columns is a distinct
+fact the graph stores about the call site: repository, path, symbol, SDK version, argument keys,
+response fields read, loop depth, rung, indexed-at. Taking 164px here means removing information,
+which is a different decision from removing an artifact and belongs to whoever can say which of the
+nine an operator does not need.
 
-- **What an operator actually orders by.** Severity is a closed vocabulary with no natural order
-  stored anywhere — `Severity` is a `Literal`, not a rank — so ordering by it means inventing a
-  ranking and putting it somewhere a reader can see. Newest-first already exists and is the default.
-  A column header that sorts by whatever the column happens to hold is the catalogue talking.
-- **What a stable order costs at scale.** `ORDER BY` over a join with `LIMIT`/`OFFSET` needs an
-  index that matches, or the pagination walks. Time it at `--scale 10000` before and after, the
-  same way the filters were.
-- **What the control claims.** An unsorted table today is in `created_at` order and says so
-  nowhere. Whatever ships has to state the current ordering even when nobody has chosen one,
-  because a table that silently reorders is a table whose page boundaries move under a reader.
+`break-words` must survive whatever closes this. It is what keeps the rung column on screen at
+1280px on a nine-column table: a customer's 200-character path grows a row taller instead of pushing
+provenance out of the viewport.
 
-**The latency this entry would once have inherited is already gone.** B92's replacement took the
-vendor route from about six seconds at `--scale 10000` to 25–40 ms, and B90's slice-1 note carries
-the re-timed figures. So this is an interface question with a clear budget rather than a
-performance one wearing an interface hat — an `ORDER BY` that costs more than the page it orders
-is the thing to watch for, and there is now a fast baseline to notice it against.
-
-**Evidence that closes this:** an ordering an operator can change on at least the vendor findings
-table, applied in SQL with the page total drawn from the same query, the ordering stated on screen
-whether or not one was chosen, and three numbers at `--scale 10000` before and after.
-
-### B109 — A finding id wraps to three lines and that, not padding, is what a long table costs
-
-Measured 2026-08-06 at 1440x900 with `--scale 10000`, while closing B104
-(`reports/2026-08-06-console-conformance.md` carries the method).
-
-On the vendor findings table a body row measures **76px** and only **16px** of that is padding. The
-tallest thing in the row is the Finding cell: a 32-character id in a **164px** column, wrapping to
-three lines at **56px**. Eleven rows fit above the fold, and they fit whether the cell pads at 8px
-or 10px — 900/76 and 900/80 both floor to 11. **The row height is set by one column's width, not by
-the spacing ramp**, and B104 was closed on the contract's argument rather than on the density one
-for exactly this reason.
-
-`break-words` is why it wraps rather than overflows, and that is deliberate and must stay: it is
-what keeps the `Rung` column on screen at 1280px on a nine-column table, structurally rather than
-by fixture luck, because a customer's 200-character path grows a row instead of pushing provenance
-out of the viewport.
-
-So the lever is what that column is asked to hold. A finding id is an opaque 32-character hash that
-a reader does not read — they click it. Three candidates, in the order they cost least: render a
-leading fragment with the full id in the accessible name; give the column a `whitespace-nowrap` and
-let the table's own `overflow-x-auto` wrapper hold it, which trades a row of height for a horizontal
-scroll on one column; or stop rendering the id as a column at all and make the row itself the link,
-which `TableRow`'s `interactive` prop already supports.
-
-**Closes when:** a body row on that table at `--scale 10000` measures at or under `row-md` plus one
-wrapped line, with the before-and-after heights and the rows-above-the-fold count, and the id stays
-reachable in full for a reader who needs to copy it. **Not** by removing `break-words`.
+**Closes when:** a body row there measures at or under `row-md` plus one wrapped line at
+`--scale 10000`, with the before-and-after heights and the rows-above-the-fold count — by narrowing
+what a column holds, by virtualising, or by an argued case that one of the nine columns is not
+carrying its width. **Not** by removing `break-words`, and not by truncating a path without leaving
+the whole of it reachable.
 
 ### B105 — Four statements in `DESIGN.md`'s rendered-pixel section are contradicted by the rendered pixels
 
@@ -720,27 +683,6 @@ that assertion starting with something that is not a level.
 **Closes when:** the palette's accessible name comes from inside `DialogContent`, or from an
 `aria-label` rather than a heading, and a walk of every route finds `h1` first.
 
-### B107 — A third neutral ink renders on the two screens carrying the densest evidence
-
-Same measurement. Section 8's invariant is two ink levels plus one accent, never three, and the
-console holds it on seven of nine routes: `--color-ink` and `--color-ink-muted`, plus the brand hue
-on exactly one element where a link exists.
-
-On the solution workflow and pull request screens a third appears — **`oklch(0.83 0 0)`,
-`--color-ink-secondary`, on 3 elements each** — from the wrapper at `run-outcome.tsx:28`, which sets
-`text-body text-ink-secondary` on a container the abandoned-run prose inherits from. `DESIGN.md`
-says two ink levels hold for text and names a `graphics` allocation rather than a third text step,
-so this is the one place the ramp's own promise does not render.
-
-It is worth a line rather than a shrug because of *where* it lands: these are the two screens whose
-argument is that a reviewer can see what the system did and why, and a third grey there means a
-reader cannot tell recessive prose from a deliberate second voice.
-
-**Closes when:** the wrapper takes `text-ink-muted` or nothing, the ink census on both routes reads
-two plus an accent, and the choice is recorded — if `ink-secondary` is the right step for
-abandoned-run prose, `DESIGN.md` gains the third text level as an argued decision rather than as a
-class that arrived without one.
-
 ### B108 — The validation ring is washed the way the focus ring was, and it is spelled against a token that does not exist
 
 Found while closing B105 (M4-W149), and left rather than swept into it because it is a different
@@ -807,6 +749,73 @@ Entries stay under **Ready** above with their full reasoning until they land, be
 is what a reviewer needs and duplicating it here would let the two copies drift.
 
 ## Done
+
+- **B100** — the long tables can be ordered, and every page says how it is ordered. A named
+ordering reaches SQL as an `ORDER BY` ahead of the page's own `LIMIT`, so the page is the first page
+of the ordered set rather than an ordering of the first page. Two orderings and no more:
+`first-seen`, which is what this shipped with and is now *named* rather than merely happening, and
+`severity`. Landed on `m45-affordance` under M4.5-W141.
+
+  All three questions the entry said had to be settled rather than assumed:
+
+  **What an operator orders by.** Severity, and the ranking is invented because nothing stores one
+  — `Severity` is a `Literal` with no order anywhere in the graph. So `SEVERITY_ORDER` sits in
+  `sync/core/models.py` beside the vocabulary it ranks, not in a view, and
+  `tests/test_core_contracts.py` asserts the two cover each other exactly: a sixth severity fails a
+  test instead of silently sorting to the end of a page somebody opened to see the worst first. The
+  rank then **travels in the payload** rather than being restated in TypeScript, so the sentence on
+  screen is derived from the ordering that ran. A severity outside the rank sorts last, not first —
+  `array_position` yields NULL and NULLs sort last under `ASC`, which is the behaviour to want.
+
+  **What a stable order costs at scale.** Nothing measurable. At `--scale 10000` over 2,500 matching
+  findings: default **27–38ms**, severity-ordered **26–37ms**, and a deep page at offset 2400
+  **35–43ms**. `finding.created_at, finding.id` is the tiebreak on *both* orderings, because two
+  findings of one severity without a total order make `LIMIT`/`OFFSET` pages overlap and skip, and
+  the row that falls between two pages is the one nobody sees.
+
+  **What the control claims.** The ordering is stated in words on every page whether or not anybody
+  chose one — *"Ordered as Sync found them — the oldest open finding first"* — which was the honest
+  half of this entry: the table was never unordered, it just never said so. The applied ordering
+  comes back in the envelope rather than being read from the URL, so a hand-edited `?order=` cannot
+  leave the screen naming an arrangement the rows are not in, and changing the ordering clears the
+  page offset because offset 250 in one ordering is fifty different findings in the other.
+
+  **A dependency was not added.** B90's slice-1 worker declined TanStack Table with an argument and
+  this did not overturn it. The argument holds and got stronger: the failure mode a table library
+  invites is a client-side sort over the fifty rows already fetched, reported against a total drawn
+  from all 2,500. What was needed was one `ORDER BY` and one sentence, and neither is what a headless
+  table library is for.
+
+- **B109** — the finding-id column is gone and the call site is the way into the finding. Measured
+at 1440x900 with `--scale 10000`, before and after: a body row **76px → 56px**, rows above the fold
+**11 → 16** at 900px and **14** at 800px, DOM nodes **733 → 689**, and the call-site column
+**644px → 797px**. The API page is unchanged in cost — 17,081B → 17,174B, the +93B being the two new
+envelope fields — because this is a rendering change and not a payload one. Landed on
+`m45-affordance` under M4.5-W141.
+
+  **The entry named the wrong column and the measurement caught it.** It said the finding id was the
+  tallest thing in the row, at three wrapped lines in a 164px column. The call-site path beside it
+  was wrapping to **four**, needing 837px in a 644px column. Both had to move, and only one of them
+  could: the path is the row's identity in the operator's own terms and `break-words` on it is what
+  keeps the rung column on screen at 1280px. So the id column — an opaque 32-character hash that a
+  reader clicks rather than reads — gave its 164px to the path, and the click moved onto the path
+  itself.
+
+  The id stays reachable in full, which was the closing condition: it is the heading of the page the
+  link opens, and it rides the link's accessible name so a screen reader announces which finding a
+  path leads to. A sentence under the table says both, because a column that disappears without
+  explanation reads as a column that was lost.
+
+  **Two candidates the entry offered were measured and rejected.** A leading fragment of the id
+  fails on data Sync does not control: the fixture's ids are `seed-console-scale-finding-000004`, so
+  the first eight characters are identical on every row and the column would render `seed-con…`
+  two and a half thousand times. `whitespace-nowrap` plus the table's own horizontal scroll keeps the
+  id verbatim but buys the same 20px at the cost of a sideways scrollbar on the console's primary
+  table, which is a worse trade than an opaque column being one click away.
+
+  **What did not close, honestly.** The path still wraps to two lines: 797px against 837px of
+  natural width, forty pixels short. Closing that last line means truncating a path, and B110 carries
+  the same question for the binding surface where it is sharper.
 
 - **B104** — the table's rows measure what the contract says they measure. `table.tsx` took
 `py-row` on both cells and `h-10` on the header, so the padding is derived from a height chosen

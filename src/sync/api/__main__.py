@@ -144,12 +144,14 @@ def app_factory() -> Starlette:
         repo_id: str | None = None,
         severity: str | None = None,
         path: str | None = None,
+        order: str | None = None,
         limit: int,
         offset: int,
     ):
         return graph_views.vendor_findings(
             store, vendor_id,
-            repo_id=repo_id, severity=severity, path=path, limit=limit, offset=offset,
+            repo_id=repo_id, severity=severity, path=path, order=order,
+            limit=limit, offset=offset,
         )
 
     return create_app(

@@ -25,6 +25,7 @@ import type {
   RepositoriesResponse,
   RunsPage,
   VendorChangeRow,
+  FindingOrder,
   VendorFindingsPage,
   WorkflowState,
 } from "@/api/types"
@@ -124,6 +125,12 @@ export interface VendorFindingsParams extends PageParams, ScopeParams {
   severity?: string
   /** A path prefix matched against the call site, never a substring; absent means every path. */
   path?: string
+  /**
+   * Which ordering to apply. Absent means the API's own default, which the payload names back —
+   * so the screen states the ordering whether or not one was chosen. An ordering is not a filter
+   * and narrows nothing: `total` is the same number under either.
+   */
+  order?: FindingOrder
 }
 
 /**
@@ -149,6 +156,7 @@ export function fetchVendorFindings(
     repo_id: params.repoId,
     severity: params.severity,
     path: params.path,
+    order: params.order,
   })
   return getJson<VendorFindingsPage>(path, signal)
 }

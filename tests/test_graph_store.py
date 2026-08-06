@@ -6,6 +6,7 @@ import psycopg
 import pytest
 
 from sync.core import CallSite, Finding, ObservedCall, ObservedErrorWindow, ObservedShape, VendorChange
+from sync.core.models import SEVERITY_ORDER
 from sync.graph.store import GraphStore
 
 DSN = os.environ.get("SYNC_DSN", "postgresql://sync:sync@localhost:5433/sync")
@@ -1063,6 +1064,103 @@ def test_open_findings_at_risk_limit_is_sql_not_a_python_slice(store, fetch_coun
 
     assert len(rows) == 2, "rows returned"
     assert fetch_counts[-1] == 2, "rows read off the wire"
+
+
+def _sites_by_severity(store, severities: list[str]) -> None:
+    """One open finding per severity, inserted in an order that is not the ranked one.
+
+    Insertion order matters to these tests: the default ordering is `created_at`, so a fixture
+    inserted most-severe-first would pass a severity-ordered assertion while doing nothing at all.
+    """
+    for i, severity in enumerate(severities):
+        site_id = store.upsert_call_site(
+            _site(path=f"src/{i}.ts", line=i, content_hash=f"hash-{i}")
+        )
+        store.insert_finding(_finding_for_open(site_id, claim=f"claim-{i}", severity=severity))
+
+
+def test_open_findings_at_risk_defaults_to_the_order_findings_were_raised_in(store):
+    """The default is unchanged and is asserted rather than assumed. A table that silently
+    reorders is a table whose page boundaries move under a reader, so the ordering this shipped
+    with stays the ordering nobody chose -- what changes is that the screen now names it.
+    """
+    _sites_by_severity(store, ["info", "breaking", "warning"])
+
+    rows = store.open_findings_at_risk()
+
+    assert [row["path"] for row in rows] == ["src/0.ts", "src/1.ts", "src/2.ts"]
+
+
+def test_open_findings_at_risk_can_order_by_declared_severity(store):
+    _sites_by_severity(store, ["info", "deprecation", "breaking", "addition", "warning"])
+
+    rows = store.open_findings_at_risk(order="severity")
+
+    assert [row["severity"] for row in rows] == list(SEVERITY_ORDER)
+
+
+def test_the_severity_ordering_is_a_sql_order_by_not_a_python_sort(store, fetch_counts):
+    """A page ordered in Python is fifty rows of two and a half thousand put in order and
+    presented as the worst fifty. The ordering has to reach the database, so the page this reads
+    is the first page of the ordered set rather than an ordering of the first page.
+    """
+    _sites_by_severity(store, ["info", "deprecation", "breaking", "addition", "warning"])
+
+    rows = store.open_findings_at_risk(order="severity", limit=2)
+
+    assert [row["severity"] for row in rows] == ["breaking", "warning"]
+    assert fetch_counts[-1] == 2, "rows read off the wire"
+
+
+def test_the_severity_ordering_breaks_ties_the_same_way_every_time(store):
+    """Two findings of one severity need a total order or the pages overlap and skip. The
+    tiebreak is the default ordering, so a severity-ordered page is the default ordering inside
+    each severity rather than whatever the planner returned.
+    """
+    _sites_by_severity(store, ["breaking", "breaking", "breaking"])
+
+    first = store.open_findings_at_risk(order="severity", limit=2, offset=0)
+    second = store.open_findings_at_risk(order="severity", limit=2, offset=2)
+
+    assert [row["path"] for row in first] == ["src/0.ts", "src/1.ts"]
+    assert [row["path"] for row in second] == ["src/2.ts"]
+
+
+def test_a_severity_the_rank_does_not_name_sorts_last_rather_than_first(store):
+    """`schema.sql` stores severity as TEXT, so a value outside the vocabulary can exist -- an
+    older row, or a vendor adapter ahead of `sync.core`. It must not be promoted: an unrankable
+    finding at the top of a page an operator opened to see the worst first is a false claim about
+    which finding matters most, and silence at the end is merely a gap.
+    """
+    _sites_by_severity(store, ["breaking", "info"])
+    site_id = store.upsert_call_site(_site(path="src/x.ts", line=9, content_hash="hash-x"))
+    store.insert_finding(_finding_for_open(site_id, claim="claim-x", severity="breaking"))
+    store._connect().execute(
+        "UPDATE finding SET severity = %s WHERE claim = %s", ("catastrophic", "claim-x")
+    )
+
+    rows = store.open_findings_at_risk(order="severity")
+
+    assert [row["severity"] for row in rows] == ["breaking", "info", "catastrophic"]
+
+
+def test_an_ordering_the_store_does_not_know_raises_rather_than_falling_back(store):
+    """Internal contract, so it raises. A typo in our own call site that fell back to the default
+    would reorder a page while the screen went on naming the ordering it was asked for, which is
+    the one failure an echoed ordering cannot catch.
+    """
+    with pytest.raises(ValueError, match="unknown ordering"):
+        store.open_findings_at_risk(order="severty")
+
+
+def test_the_count_is_the_same_whichever_ordering_the_page_took(store):
+    """An ordering narrows nothing. If a total ever moved with a sort, the sort would be filtering
+    and saying it was arranging.
+    """
+    _sites_by_severity(store, ["info", "breaking", "warning"])
+
+    assert store.open_findings_at_risk_count() == 3
+    assert len(store.open_findings_at_risk(order="severity")) == 3
 
 
 def test_open_findings_at_risk_count_matches_the_filter_not_the_page(store):

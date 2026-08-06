@@ -112,3 +112,32 @@ def test_a_finding_cannot_name_its_claim_with_an_empty_string():
             severity="info",
             rationale="called 40 times in one unit of work",
         )
+
+
+def test_severity_order_ranks_every_severity_the_vocabulary_declares():
+    """The rank and the vocabulary have to cover each other exactly.
+
+    A rank that lives away from the `Severity` literal drifts the moment the literal widens, and
+    this one has widened once already -- `warning` was added when oasdiff's own grading stopped
+    being discarded. An unranked severity sorts to the end of a severity-ordered page, so the
+    failure is a finding an operator asked to see first arriving last, which nothing else would
+    catch.
+    """
+    from typing import get_args
+
+    from sync.core.models import SEVERITY_ORDER, Severity
+
+    assert set(SEVERITY_ORDER) == set(get_args(Severity))
+    assert len(SEVERITY_ORDER) == len(set(SEVERITY_ORDER)), "a severity is ranked twice"
+
+
+def test_severity_order_puts_breaking_first_and_info_last():
+    """The order is a declared judgement, not a discovered fact, so it is asserted rather than
+    described: `breaking` is a call site that will fail, `info` is a note. Everything between
+    them is graded by what it costs the operator whose code calls the operation.
+    """
+    from sync.core.models import SEVERITY_ORDER
+
+    assert SEVERITY_ORDER[0] == "breaking"
+    assert SEVERITY_ORDER[-1] == "info"
+    assert SEVERITY_ORDER.index("deprecation") > SEVERITY_ORDER.index("warning")

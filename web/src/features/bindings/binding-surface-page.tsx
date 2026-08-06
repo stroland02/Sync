@@ -25,7 +25,7 @@ import { useParams, useSearchParams } from "react-router"
 import { DEFAULT_LIMIT } from "@/api/client"
 import { useBindingSurface } from "@/api/queries"
 import type { BindingSurfaceResponse } from "@/api/types"
-import { ActiveFilters, FacetChips, FilterBar, PrefixFilter } from "@/components/filters"
+import { ActiveFilters, FacetChips, ControlBar, PrefixFilter } from "@/components/filters"
 import { PageControls } from "@/components/page-controls"
 import { RungBadge } from "@/components/provenance"
 import { EmptyState, ErrorState, LoadingState } from "@/components/states"
@@ -225,7 +225,7 @@ function BindingSurfaceDetail({
               </CardDescription>
             </CardHeader>
             <CardContent className="flex flex-col gap-section">
-              <FilterBar>
+              <ControlBar>
                 <FacetChips
                   legend="Repository"
                   options={query.data.repositories.map((repo) => ({
@@ -244,7 +244,7 @@ function BindingSurfaceDetail({
                   placeholder="src/billing/"
                   note="Matched as a prefix of the call site's path, never as a substring. It narrows the call sites only: a vendor change has no position in your codebase, so the table below it is untouched."
                 />
-              </FilterBar>
+              </ControlBar>
               <ActiveFilters filters={activeFilters} onClear={clearCallSiteFilters} />
               {query.data.call_sites.items.length === 0 ? (
                 <CallSitesEmptyState
