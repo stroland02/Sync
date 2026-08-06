@@ -52,19 +52,24 @@ Every one of those decisions was argued, in writing, in the right file, by someo
 The argument was just never made against the authority. That is the defect this rule catches, and
 it is a cheap one to catch: it costs one file open.
 
-## What is supposed to hold it when nobody reads this, and does not yet
+## What holds it when nobody reads this
 
-`tests/test_console_hierarchy.py` (Task 10 of `2026-08-05-sync-console-architecture.md`) is to parse
-the specification's authoritative fenced block and `GRAPH_LEVELS`, and assert the two name the same
-levels in the same order. It deliberately would not assert which route sits at which level — that is
-a judgement with a wrong answer, and it belongs to a reviewer. The test holds the vocabulary, which
+`tests/test_console_hierarchy.py` (Task 10 of `2026-08-05-sync-console-architecture.md`, landed
+2026-08-06) parses the specification's authoritative fenced block and `GRAPH_LEVELS`, and asserts
+the two name the same levels in the same order, and that every route's `level` is a member of
+`GRAPH_LEVELS`. It deliberately does not assert which route sits at which level — that is a
+judgement with a wrong answer, and it belongs to a reviewer. The test holds the vocabulary, which
 is the thing that drifted silently.
 
-**That file does not exist yet, on this branch or on `main`.** The specification at `:447` and an
-earlier draft of this rule both describe it in the present tense; they are describing Task 10, not
-the tree. Until it lands, the only thing standing between `GRAPH_LEVELS` and a fourth invented level
-is a reviewer opening the specification — which is exactly the check that failed three times. Write
-the test before trusting the guard, and do not read either sentence as evidence one is running.
+Block selection fails loudly rather than guessing: the specification's Information architecture
+section carries two fenced hierarchies on purpose, and the test picks the one whose immediately
+preceding paragraph marks it authoritative. If it finds none or more than one, it raises rather
+than reading either block — proven by pointing the parser at the superseded, unmarked block and
+watching it go red instead of passing against a diagram the section no longer treats as current.
+
+This closes the gap the rest of this file was honest about: until Task 10 landed, the only thing
+standing between `GRAPH_LEVELS` and a fourth invented level was a reviewer opening the
+specification — which is exactly the check that failed three times.
 
 A rule alone was not enough here before, and saying so is the point: the fleet exception was written
 down honestly and read by nobody for the twenty-four hours it took three more levels to appear

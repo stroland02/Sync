@@ -1302,21 +1302,21 @@ question 3 already sanctions the Python form.
 
 What it asserts, exactly:
 
-- [ ] **Step 1:** Parse the authoritative fenced hierarchy block in
+- [x] **Step 1:** Parse the authoritative fenced hierarchy block in
   `docs/superpowers/specs/2026-07-25-sync-self-maintaining-apis-design.md` — the one under
   *Amendment, 2026-08-05*, which the section marks as authoritative — into an ordered list of level
   names, reading indentation for depth. **The section holds two blocks on purpose**, the original
   kept unamended beside what changed, so the test selects by the amendment heading and fails loudly
   if it finds neither block or both unmarked. `encoding="utf-8"`, and the block contains `└──`, so
   this is a file where the encoding rule bites.
-- [ ] **Step 2:** Parse `GRAPH_LEVELS` out of `web/src/lib/routes.ts`.
-- [ ] **Step 3:** Assert the two sets are equal, and that the shared ordering matches. **The failure
+- [x] **Step 2:** Parse `GRAPH_LEVELS` out of `web/src/lib/routes.ts`.
+- [x] **Step 3:** Assert the two sets are equal, and that the shared ordering matches. **The failure
   message names the offending level and both files**, and states the fix: either the route changes,
   or the specification gains a dated amendment — never the test.
-- [ ] **Step 4:** Assert every `level:` value in `ROUTES` is a member of `GRAPH_LEVELS`. TypeScript
+- [x] **Step 4:** Assert every `level:` value in `ROUTES` is a member of `GRAPH_LEVELS`. TypeScript
   already enforces this; the assertion is here so that the *set* is checked against the
   specification rather than against itself, which is precisely the check that was missing.
-- [ ] **Step 5:** **Prove it can fail, twice** — once by adding a level to `GRAPH_LEVELS` that the
+- [x] **Step 5:** **Prove it can fail, twice** — once by adding a level to `GRAPH_LEVELS` that the
   specification does not have, once by removing a level from the specification's block. Watch both
   go red for the reason expected, restore. A guard that has never rejected anything has not been
   shown to guard, and the naive version of this test — comparing `routes.ts` to `routes.ts` — passes
@@ -1325,6 +1325,17 @@ What it asserts, exactly:
 **What it deliberately does not assert:** which route sits at which level. That is a judgement with
 a wrong answer and it belongs in a plan and a review, not in a parser. The test holds the level
 *vocabulary*, which is the thing that drifted silently.
+
+**Landed 2026-08-06.** `tests/test_console_hierarchy.py`, four tests. Steps 1-4 landed as scoped
+above, with two permanent regression tests added beyond the checklist: the block-selection failure
+mode (neither block marked authoritative, or both marked) is asserted directly rather than left to
+a one-off manual check, since a "fails loudly" contract that is only ever proven by hand tends to
+stop being proven. Step 5's two required failures were reproduced, plus a third the checklist did
+not ask for and the brief that dispatched this task did: pointing the block selector at the
+original, unmarked block instead of the amended one, to confirm the test goes red against a
+superseded diagram rather than passing it. All three mutations were applied to in-memory copies of
+the file text, never to the committed spec or to `web/src/lib/routes.ts`, so the guard's own
+fail-loudly behavior could be proven without touching the files it is a guard *for*.
 
 ---
 
