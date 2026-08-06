@@ -7,6 +7,11 @@
  *
  * The operation column links into the Binding surface level. `repoId`, when the caller has
  * one, rides along so the surface that opens is scoped to it.
+ *
+ * `repoId` also narrows the query itself. It is not a hint the table decorates a link with: a
+ * page fetched for the fleet and rendered under a repository's name is a false claim about that
+ * repository, so the same value reaches `GET /api/vendors/{vendor_id}` as `repo_id` and the
+ * answer comes back naming the scope it was computed in.
  */
 
 import { Link } from "react-router"
@@ -41,7 +46,11 @@ export function VendorFindingsTable({
   repoId?: string | null
 }) {
   const [offset, setOffset] = useOffsetParam("findings_offset")
-  const query = useVendorFindings(vendorId, { limit: DEFAULT_LIMIT, offset })
+  const query = useVendorFindings(vendorId, {
+    limit: DEFAULT_LIMIT,
+    offset,
+    repoId: repoId ?? undefined,
+  })
 
   if (query.isPending) return <LoadingState what={`open findings for ${vendorId}`} />
   if (query.isError) {
@@ -54,7 +63,11 @@ export function VendorFindingsTable({
     <div className="flex flex-col gap-section">
       {page.items.length === 0 ? (
         <EmptyState
-          headline={`No open findings for ${vendorId}.`}
+          headline={
+            repoId === null
+              ? `No open findings for ${vendorId} in any repository the index has seen.`
+              : `No open findings for ${vendorId} in ${repoId}.`
+          }
           detail="The API answered with an empty page. Either nothing in this codebase calls that vendor, or nothing that does is currently at risk."
         />
       ) : (

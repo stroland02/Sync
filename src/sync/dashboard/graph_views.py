@@ -8,7 +8,9 @@ alone and never `sync.remediate`, matching the convention both of those modules 
 every function returns primitives -- dicts, lists, strings, numbers -- never a live model, so a
 page that received one could not lazily re-query or mutate it.
 
-Six functions, six questions:
+Seven functions, seven questions. Four of them take an optional `repo_id` and echo it back:
+repository scope is what every console level below Codebase inherits, and a payload that names
+the scope it was computed in cannot be rendered under the wrong heading in silence.
 
 - `binding_surface` -- given a vendor operation, which call sites currently depend on it, and
   what has the vendor changed about it. The API Dependency Graph made visible.
@@ -17,6 +19,9 @@ Six functions, six questions:
   that knowledge is -- neither had an answer anywhere in the console before this.
 - `observed_telemetry` -- for one repository, what traffic showed up, what shape it had, and how
   often it failed. The telemetry rung of the graph, which has no surface at all before this.
+- `vendor_findings` -- open findings against one vendor, as the rows the API Services screen
+  renders. What the frozen `GraphSurface.whats_at_risk` answers for an agent, answered here
+  because that method cannot be narrowed to a repository and `sync.mcp.tools` does not change.
 - `detector_accountability` -- across every open finding, which detector raised how many, at
   which rungs, with what claims. `CLAUDE.md` requires a false positive be attributable to a rung;
   this is what lets an operator see that per detector rather than per row.
@@ -335,7 +340,83 @@ def observed_telemetry(
     }
 
 
-def severity_rollup(store: GraphStore) -> dict:
+def vendor_findings(
+    store: GraphStore,
+    vendor_id: str,
+    *,
+    repo_id: str | None = None,
+    severity: str | None = None,
+    path: str | None = None,
+    limit: int = DEFAULT_LIMIT,
+    offset: int = 0,
+) -> dict:
+    """Open findings against one vendor, as the binding rows the API Services screen renders --
+    one page, with the provenance envelope every console page carries.
+
+    This is what `/api/vendors/{vendor_id}` reads instead of the frozen
+    `GraphSurface.whats_at_risk`, for two reasons that are one reason: `sync.mcp.tools` is frozen,
+    and `whats_at_risk` cannot answer this question for a repository -- its rows carry no
+    `repo_id`, and adding the filter would mean changing a file that does not change. Repository
+    scope is what every level below Codebase inherits (B92), and API Services is the first level
+    under it, so an unscoped page here is a fleet-wide answer rendered under a repository's name.
+
+    The same replacement `overview_summary` already made for `/api/overview`, and it carries the
+    same second benefit: `whats_at_risk` walks every open finding doing one `get_call_site` round
+    trip per row before slicing the result in Python, so no `limit` handed to it bounds the scan
+    underneath. This is a real SQL `LIMIT` over a join, and `total` is its own aggregate rather
+    than the length of a list the page was carved out of.
+
+    `repo_id` is echoed back rather than left to the caller's memory. A payload that names the
+    scope it was computed in cannot be rendered under the wrong heading silently, which is the
+    failure mode this whole scoping exists to close.
+
+    Three fields the envelope carries and what each means here:
+
+    - `binding_source` is the rung the *whole page* rests on, null when its rows disagree -- read
+      under the same filters as the rows, so it never describes a set the reader cannot see. The
+      per-row `binding_source` is the rung of that row's own claim and is the one to weigh a
+      finding by.
+    - `feed_fetched_at` is always `None`, for the reason `overview_summary` records: this
+      deployment constructs the frozen surface with no feed timestamp, so the field this route
+      has always reported was already always null.
+    - `context_savings` is the page window's length times `_TOKENS_PER_AVOIDED_READ`, the same
+      arithmetic `whats_at_risk`'s own envelope does over the same constant, read from
+      `sync.mcp.tools` rather than restated so the two cannot drift.
+    """
+    offset = max(offset, 0)
+    filters = dict(repo_id=repo_id, vendor_id=vendor_id, severity=severity, path_prefix=path)
+    rows = store.open_findings_at_risk(**filters, limit=limit, offset=offset)
+    total = store.open_findings_at_risk_count(**filters)
+    summary = store.open_findings_summary(**filters)
+    indexed_at = summary["indexed_at"]
+    return {
+        **_page(
+            [
+                {
+                    "file": row["path"],
+                    "line": row["line"],
+                    "symbol": row["symbol"],
+                    "operation": row["operation_id"],
+                    "vendor": row["vendor_id"],
+                    "change_kind": row["change_kind"],
+                    "severity": row["severity"],
+                    "finding_id": row["finding_id"],
+                    "binding_source": row["binding_rung"],
+                }
+                for row in rows
+            ],
+            total,
+            offset,
+        ),
+        "repo_id": repo_id,
+        "indexed_at": indexed_at.isoformat() if indexed_at else None,
+        "feed_fetched_at": None,
+        "binding_source": summary["binding_rung"],
+        "context_savings": len(rows) * _TOKENS_PER_AVOIDED_READ,
+    }
+
+
+def severity_rollup(store: GraphStore, *, repo_id: str | None = None) -> dict:
     """Every open finding's severity, tallied once: a count per severity and the total.
 
     `by_severity` is `open_findings_severity_counts`, a real SQL `GROUP BY` -- not a `Counter`
@@ -347,8 +428,15 @@ def severity_rollup(store: GraphStore) -> dict:
     paginated set silently understates the true total the moment either is introduced, which is
     the recurring defect this milestone keeps closing (`overview_summary` carries the same
     independence for the vendor breakdown beside it).
+
+    `repo_id` narrows both aggregates together. Narrowing one and not the other would report a
+    breakdown of one repository against a fleet-wide denominator, which is the same class of
+    false claim with the arithmetic done for the reader.
     """
-    return {"by_severity": store.open_findings_severity_counts(), "total": store.open_findings_count()}
+    return {
+        "by_severity": store.open_findings_severity_counts(repo_id=repo_id),
+        "total": store.open_findings_count(repo_id=repo_id),
+    }
 
 
 # Ceiling on how many open findings `/api/overview`'s total counts before it stops looking and
@@ -360,7 +448,9 @@ def severity_rollup(store: GraphStore) -> dict:
 OPEN_FINDING_COUNT_BOUND = 1000
 
 
-def overview_summary(store: GraphStore, *, bound: int = OPEN_FINDING_COUNT_BOUND) -> dict:
+def overview_summary(
+    store: GraphStore, *, repo_id: str | None = None, bound: int = OPEN_FINDING_COUNT_BOUND
+) -> dict:
     """The fleet screen's lead answer: open findings by vendor, and a total that says honestly
     whether it stopped counting early.
 
@@ -406,12 +496,18 @@ def overview_summary(store: GraphStore, *, bound: int = OPEN_FINDING_COUNT_BOUND
       about *this* number, not for the mechanism behind it, so a future change to how savings is
       estimated (a per-finding cost rather than a flat multiplier, say) would not silently strand
       a render site that had learned to read `total_findings_bound_reached` for both.
+
+    `repo_id` narrows every one of those reads together and is echoed back in the payload. It is
+    `None` on the fleet screen, which is the level above Codebase and the one place a fleet-wide
+    answer is the answer; anywhere below it, a null here rendered under a repository's name is a
+    false claim about that repository.
     """
-    total, bound_reached = store.open_findings_count_bounded(bound)
-    vendor_counts = store.open_findings_vendor_counts()
-    summary = store.open_findings_summary()
+    total, bound_reached = store.open_findings_count_bounded(bound, repo_id=repo_id)
+    vendor_counts = store.open_findings_vendor_counts(repo_id=repo_id)
+    summary = store.open_findings_summary(repo_id=repo_id)
     indexed_at = summary["indexed_at"]
     return {
+        "repo_id": repo_id,
         "vendors": [
             {"vendor_id": vendor_id, "open_finding_count": count}
             for vendor_id, count in vendor_counts.items()
@@ -427,7 +523,7 @@ def overview_summary(store: GraphStore, *, bound: int = OPEN_FINDING_COUNT_BOUND
     }
 
 
-def detector_accountability(store: GraphStore) -> dict:
+def detector_accountability(store: GraphStore, *, repo_id: str | None = None) -> dict:
     """Every open finding, aggregated by the detector that raised it: how many, at which rungs,
     with what claims and severities.
 
@@ -443,8 +539,14 @@ def detector_accountability(store: GraphStore) -> dict:
     is making a claim of one kind, and one whose findings mix `static` and `observed` is making
     two different kinds of claim under one name. Collapsing the rungs into a single count per
     detector would erase exactly the distinction this column exists to preserve.
+
+    `repo_id` narrows it to one codebase, which is what makes this readable underneath the
+    Codebase level rather than only beside it: "which detector is producing my false positives"
+    is a question about one repository at least as often as about the fleet. `open_findings_page`
+    unbounded rather than `open_findings` is one read for both cases -- the unpaginated method
+    takes no filter, because `sync.mcp.tools.GraphReader` pins its signature exactly.
     """
-    findings = store.open_findings()
+    findings = store.open_findings_page(repo_id=repo_id)
 
     by_detector: dict[str, dict] = {}
     for finding in findings:
@@ -473,4 +575,8 @@ def detector_accountability(store: GraphStore) -> dict:
         }
         for _, entry in sorted(by_detector.items())
     ]
-    return {"detectors": detectors, "total_open_findings": len(findings)}
+    return {
+        "repo_id": repo_id,
+        "detectors": detectors,
+        "total_open_findings": len(findings),
+    }

@@ -23,6 +23,7 @@ from sync.dashboard.graph_views import (
     observed_telemetry,
     overview_summary,
     severity_rollup,
+    vendor_findings,
 )
 from sync.graph.store import GraphStore
 
@@ -585,7 +586,7 @@ def test_detector_accountability_excludes_findings_that_are_no_longer_open(store
 def test_detector_accountability_with_no_findings_is_empty_not_an_error(store):
     result = detector_accountability(store)
 
-    assert result == {"detectors": [], "total_open_findings": 0}
+    assert result == {"repo_id": None, "detectors": [], "total_open_findings": 0}
 
 
 # -- severity_rollup ----------------------------------------------------------------
@@ -759,6 +760,7 @@ def test_overview_summary_with_no_findings_is_empty_not_an_error(store):
     result = overview_summary(store)
 
     assert result == {
+        "repo_id": None,
         "vendors": [],
         "total_findings": 0,
         "total_findings_bound": 1000,
@@ -785,3 +787,182 @@ def test_overview_summary_reaches_the_store_in_a_flat_number_of_queries(store, m
 
     assert result["total_findings"] == 10
     assert len(calls) <= 4, f"expected at most four queries for ten findings, made {len(calls)}"
+
+
+# -- repository scope, across every view a console level below Codebase reads -----------------
+#
+# B92: repository scope is what every level under Codebase inherits, and an unscoped answer
+# rendered under a repository heading is a false claim about that repository. Each view below
+# takes an optional `repo_id` and echoes it back, so a payload says which scope it was computed
+# in rather than leaving a render site to remember.
+
+
+def _one_finding_per_repository(store) -> None:
+    mine = store.upsert_call_site(_site(repo_id="r1", path="src/a.ts", line=1))
+    theirs = store.upsert_call_site(
+        _site(repo_id="r2", path="src/b.ts", line=2, vendor_id="shopify", operation_id="GetOrders")
+    )
+    store.insert_finding(_finding(mine, claim="c1", severity="breaking"))
+    store.insert_finding(_finding(theirs, claim="c2", severity="warning"))
+
+
+def test_overview_summary_scoped_to_a_repository_counts_only_that_repository(store):
+    _one_finding_per_repository(store)
+
+    scoped = overview_summary(store, repo_id="r1")
+
+    assert scoped["total_findings"] == 1
+    assert scoped["vendors"] == [{"vendor_id": "stripe", "open_finding_count": 1}]
+    assert scoped["repo_id"] == "r1"
+
+
+def test_overview_summary_unscoped_still_answers_for_the_fleet_and_says_so(store):
+    _one_finding_per_repository(store)
+
+    fleet = overview_summary(store)
+
+    assert fleet["total_findings"] == 2
+    assert fleet["repo_id"] is None, "null is the fleet scope, and the payload has to carry it"
+
+
+def test_severity_rollup_scoped_to_a_repository(store):
+    _one_finding_per_repository(store)
+
+    assert severity_rollup(store, repo_id="r1") == {"by_severity": {"breaking": 1}, "total": 1}
+    assert severity_rollup(store)["total"] == 2
+
+
+def test_detector_accountability_scoped_to_a_repository(store):
+    mine = store.upsert_call_site(_site(repo_id="r1", path="src/a.ts", line=1))
+    theirs = store.upsert_call_site(_site(repo_id="r2", path="src/b.ts", line=2))
+    store.insert_finding(_finding(mine, claim="c1", detector="vendor-change"))
+    store.insert_finding(_finding(theirs, claim="c2", detector="status-rate", binding_rung="observed"))
+
+    scoped = detector_accountability(store, repo_id="r1")
+
+    assert [entry["detector"] for entry in scoped["detectors"]] == ["vendor-change"]
+    assert scoped["total_open_findings"] == 1
+    assert scoped["repo_id"] == "r1"
+    assert detector_accountability(store)["total_open_findings"] == 2
+
+
+# -- vendor_findings -----------------------------------------------------------------------
+#
+# The API Services level's own page. `GraphSurface.whats_at_risk` answers the same question for
+# an agent and cannot answer it for a repository -- `sync/mcp/tools.py` is frozen and its rows
+# carry no `repo_id` -- which is the same reason `overview_summary` replaced it on `/api/overview`.
+
+
+def test_vendor_findings_returns_the_console_rows_for_one_vendor(store):
+    change_id = store.upsert_vendor_change(_change(kind="response-property-removed"))
+    site_id = store.upsert_call_site(_site())
+    store.insert_finding(_finding(site_id, vendor_change_id=change_id, severity="breaking"))
+
+    page = vendor_findings(store, "stripe")
+
+    assert page["total"] == 1
+    row = page["items"][0]
+    assert row["file"] == "src/billing.ts"
+    assert row["line"] == 42
+    assert row["symbol"] == "stripe.charges.create"
+    assert row["operation"] == "PostCharges"
+    assert row["vendor"] == "stripe"
+    assert row["change_kind"] == "response-property-removed"
+    assert row["severity"] == "breaking"
+    assert row["binding_source"] == "static"
+    assert isinstance(row["finding_id"], str)
+
+
+def test_vendor_findings_omits_another_vendors_finding(store):
+    stripe = store.upsert_call_site(_site(path="src/a.ts", line=1))
+    shopify = store.upsert_call_site(
+        _site(path="src/b.ts", line=2, vendor_id="shopify", operation_id="GetOrders")
+    )
+    store.insert_finding(_finding(stripe, claim="c1"))
+    store.insert_finding(_finding(shopify, claim="c2"))
+
+    assert vendor_findings(store, "stripe")["total"] == 1
+
+
+def test_vendor_findings_scoped_to_a_repository(store):
+    mine = store.upsert_call_site(_site(repo_id="r1", path="src/a.ts", line=1))
+    theirs = store.upsert_call_site(_site(repo_id="r2", path="src/b.ts", line=2))
+    store.insert_finding(_finding(mine, claim="c1"))
+    store.insert_finding(_finding(theirs, claim="c2"))
+
+    scoped = vendor_findings(store, "stripe", repo_id="r1")
+
+    assert scoped["total"] == 1
+    assert scoped["repo_id"] == "r1"
+    assert vendor_findings(store, "stripe")["total"] == 2
+
+
+def test_vendor_findings_scoped_by_severity_and_by_path_prefix(store):
+    billing = store.upsert_call_site(_site(path="src/billing/pay.ts", line=1))
+    other = store.upsert_call_site(_site(path="src/other/pay.ts", line=2))
+    store.insert_finding(_finding(billing, claim="c1", severity="breaking"))
+    store.insert_finding(_finding(other, claim="c2", severity="warning"))
+
+    assert vendor_findings(store, "stripe", severity="breaking")["total"] == 1
+    assert vendor_findings(store, "stripe", path="src/billing")["total"] == 1
+
+
+def test_vendor_findings_pages_with_a_real_sql_limit(store):
+    for i in range(5):
+        site_id = store.upsert_call_site(_site(path=f"src/{i}.ts", line=i))
+        store.insert_finding(_finding(site_id, claim=f"c{i}"))
+
+    page = vendor_findings(store, "stripe", limit=2, offset=1)
+
+    assert page["total"] == 5, "the total is the filtered set, never the page"
+    assert len(page["items"]) == 2
+    assert page["next_offset"] == 3
+
+
+def test_vendor_findings_last_page_has_no_next_offset(store):
+    site_id = store.upsert_call_site(_site())
+    store.insert_finding(_finding(site_id))
+
+    assert vendor_findings(store, "stripe", limit=50)["next_offset"] is None
+
+
+def test_vendor_findings_envelope_carries_the_pages_own_rung(store):
+    site_a = store.upsert_call_site(_site(path="src/a.ts", line=1))
+    site_b = store.upsert_call_site(_site(path="src/b.ts", line=2))
+    store.insert_finding(_finding(site_a, claim="c1", binding_rung="static"))
+    store.insert_finding(_finding(site_b, claim="c2", binding_rung="observed"))
+
+    assert vendor_findings(store, "stripe")["binding_source"] is None, "two rungs disagree"
+
+
+def test_vendor_findings_envelope_rung_is_scoped_with_the_rows_it_describes(store):
+    """The envelope's rung describes the page. A rung computed across the fleet while the rows
+    were narrowed to one repository would be provenance for a set the reader cannot see.
+    """
+    mine = store.upsert_call_site(_site(repo_id="r1", path="src/a.ts", line=1))
+    theirs = store.upsert_call_site(_site(repo_id="r2", path="src/b.ts", line=2))
+    store.insert_finding(_finding(mine, claim="c1", binding_rung="static"))
+    store.insert_finding(_finding(theirs, claim="c2", binding_rung="observed"))
+
+    assert vendor_findings(store, "stripe", repo_id="r1")["binding_source"] == "static"
+
+
+def test_vendor_findings_of_a_vendor_with_nothing_open_is_an_empty_page(store):
+    page = vendor_findings(store, "nobody")
+
+    assert page["total"] == 0
+    assert page["items"] == []
+    assert page["binding_source"] is None
+    assert page["indexed_at"] is None
+
+
+def test_vendor_findings_reaches_the_store_in_a_flat_number_of_queries(store, monkeypatch):
+    for i in range(10):
+        site_id = store.upsert_call_site(_site(path=f"src/{i}.ts", line=i))
+        store.insert_finding(_finding(site_id, claim=f"c{i}"))
+
+    calls = _query_count(monkeypatch)
+    page = vendor_findings(store, "stripe", limit=2)
+
+    assert page["total"] == 10
+    assert len(calls) <= 3, f"expected at most three queries for ten findings, made {len(calls)}"

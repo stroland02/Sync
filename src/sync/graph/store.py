@@ -41,6 +41,44 @@ def _statements(ddl: str) -> list[str]:
     return [statement.strip() for statement in without_comments.split(";") if statement.strip()]
 
 
+def _open_findings_predicate(
+    *,
+    repo_id: str | None = None,
+    vendor_id: str | None = None,
+    severity: str | None = None,
+    path_prefix: str | None = None,
+) -> tuple[str, list[object]]:
+    """The `WHERE` clause every open-findings read shares, and its parameters.
+
+    Seven reads answer questions about the same set -- open status, and a call site the code
+    still has -- and each of them can now be narrowed to one repository, because repository
+    scope is what every console level below Codebase inherits. One builder rather than seven
+    copies of the clause: a filter added to six of them and forgotten in the seventh is a screen
+    that renders a fleet-wide figure under a repository heading, which is precisely the false
+    claim this scoping exists to remove.
+
+    Every filter is a placeholder rather than interpolated text. The clause itself carries no
+    caller-supplied string, so the `f`-strings that embed it are composing SQL this module wrote.
+    """
+    clauses = ["finding.status = 'open'", "call_site.retracted_at IS NULL"]
+    parameters: list[object] = []
+    if repo_id is not None:
+        clauses.append("call_site.repo_id = %s")
+        parameters.append(repo_id)
+    if vendor_id is not None:
+        clauses.append("call_site.vendor_id = %s")
+        parameters.append(vendor_id)
+    if severity is not None:
+        clauses.append("finding.severity = %s")
+        parameters.append(severity)
+    if path_prefix is not None:
+        # `starts_with` rather than `LIKE prefix || '%'`: the caller's string is a path, and a
+        # path holding `%` or `_` is a wildcard under `LIKE` and a literal under this.
+        clauses.append("starts_with(call_site.path, %s)")
+        parameters.append(path_prefix)
+    return " AND ".join(clauses), parameters
+
+
 def _table_name(create: str) -> str:
     return create[: create.index("(")].split()[-1]
 
@@ -620,47 +658,54 @@ class GraphStore:
         ).fetchall()
         return [Finding(**row) for row in rows]
 
-    def open_findings_page(self, *, limit: int | None = None, offset: int = 0) -> list[Finding]:
+    def open_findings_page(
+        self, *, limit: int | None = None, offset: int = 0, repo_id: str | None = None
+    ) -> list[Finding]:
         """`open_findings`, windowed by a real SQL `LIMIT` -- a sibling rather than a parameter
         on `open_findings` itself, because `open_findings(self)` is pinned exactly by
         `sync.mcp.tools.GraphReader`'s structural protocol and gaining a parameter there fails
         `tests/test_mcp_tools.py::test_the_real_graph_store_satisfies_the_reader_protocol`.
-        `detector_accountability` keeps reading the whole set through the unpaginated method,
-        which is the shape its aggregate needs.
 
         `limit=None` is unbounded, matching `open_findings`. `open_findings_count` is the
-        matching denominator.
+        matching denominator. `repo_id` narrows to one repository and is why
+        `detector_accountability` reads this method rather than the unpaginated one: an
+        aggregate scoped to a codebase and the same aggregate across the fleet are the same
+        query with one predicate, not two reads.
         """
-        parameters: list[object] = []
+        predicate, parameters = _open_findings_predicate(repo_id=repo_id)
         limit_clause = ""
         if limit is not None:
             limit_clause = " LIMIT %s OFFSET %s"
-            parameters = [limit, offset]
+            parameters = parameters + [limit, offset]
         rows = self._connect().execute(
             f"""
             SELECT finding.* FROM finding
               JOIN call_site ON call_site.id = finding.call_site_id
-             WHERE finding.status = 'open' AND call_site.retracted_at IS NULL
+             WHERE {predicate}
              ORDER BY finding.created_at{limit_clause}
             """,
             parameters,
         ).fetchall()
         return [Finding(**row) for row in rows]
 
-    def open_findings_count(self) -> int:
+    def open_findings_count(self, *, repo_id: str | None = None) -> int:
         """How many rows `open_findings`/`open_findings_page` return unbounded, through the same
         join -- a retracted call site's finding is invisible to both or neither.
         """
+        predicate, parameters = _open_findings_predicate(repo_id=repo_id)
         row = self._connect().execute(
-            """
+            f"""
             SELECT count(*) AS n FROM finding
               JOIN call_site ON call_site.id = finding.call_site_id
-             WHERE finding.status = 'open' AND call_site.retracted_at IS NULL
-            """
+             WHERE {predicate}
+            """,
+            parameters,
         ).fetchone()
         return row["n"]
 
-    def open_findings_count_bounded(self, bound: int) -> tuple[int, bool]:
+    def open_findings_count_bounded(
+        self, bound: int, *, repo_id: str | None = None
+    ) -> tuple[int, bool]:
         """How many open findings there are, up to `bound` -- and whether the true count reaches
         it.
 
@@ -678,21 +723,22 @@ class GraphStore:
         rather than merely approached. A caller that wants a bound-free answer already has
         `open_findings_count`; this is a different question, not a faster version of that one.
         """
+        predicate, parameters = _open_findings_predicate(repo_id=repo_id)
         row = self._connect().execute(
-            """
+            f"""
             SELECT count(*) AS n FROM (
                 SELECT finding.id FROM finding
                   JOIN call_site ON call_site.id = finding.call_site_id
-                 WHERE finding.status = 'open' AND call_site.retracted_at IS NULL
+                 WHERE {predicate}
                  LIMIT %s
             ) AS bounded
             """,
-            (bound,),
+            parameters + [bound],
         ).fetchone()
         n = row["n"]
         return n, n >= bound
 
-    def open_findings_vendor_counts(self) -> dict[str, int]:
+    def open_findings_vendor_counts(self, *, repo_id: str | None = None) -> dict[str, int]:
         """Every open finding, tallied by vendor -- one `GROUP BY`, never a loop over findings.
 
         The vendor cardinality a customer integrates against does not grow with how many
@@ -704,19 +750,21 @@ class GraphStore:
         `/api/overview` read every open finding, looked up its call site one row at a time, and
         tallied vendors in a Python loop.
         """
+        predicate, parameters = _open_findings_predicate(repo_id=repo_id)
         rows = self._connect().execute(
-            """
+            f"""
             SELECT call_site.vendor_id AS vendor_id, count(*) AS n
               FROM finding
               JOIN call_site ON call_site.id = finding.call_site_id
-             WHERE finding.status = 'open' AND call_site.retracted_at IS NULL
+             WHERE {predicate}
              GROUP BY call_site.vendor_id
              ORDER BY call_site.vendor_id
-            """
+            """,
+            parameters,
         ).fetchall()
         return {row["vendor_id"]: row["n"] for row in rows}
 
-    def open_findings_severity_counts(self) -> dict[str, int]:
+    def open_findings_severity_counts(self, *, repo_id: str | None = None) -> dict[str, int]:
         """Every open finding, tallied by severity -- the same reasoning
         `open_findings_vendor_counts` carries, over `finding.severity` instead of
         `call_site.vendor_id`.
@@ -729,19 +777,28 @@ class GraphStore:
         every row's severity, aggregated in SQL, rather than counting a `Counter` in Python over
         a full fetch of every `Finding`.
         """
+        predicate, parameters = _open_findings_predicate(repo_id=repo_id)
         rows = self._connect().execute(
-            """
+            f"""
             SELECT finding.severity AS severity, count(*) AS n
               FROM finding
               JOIN call_site ON call_site.id = finding.call_site_id
-             WHERE finding.status = 'open' AND call_site.retracted_at IS NULL
+             WHERE {predicate}
              GROUP BY finding.severity
              ORDER BY finding.severity
-            """
+            """,
+            parameters,
         ).fetchall()
         return {row["severity"]: row["n"] for row in rows}
 
-    def open_findings_summary(self) -> dict:
+    def open_findings_summary(
+        self,
+        *,
+        repo_id: str | None = None,
+        vendor_id: str | None = None,
+        severity: str | None = None,
+        path_prefix: str | None = None,
+    ) -> dict:
         """The newest `indexed_at` among every open finding's call site, and the rung they all
         share -- `None` when there are none or when they disagree -- read together in one round
         trip.
@@ -751,18 +808,111 @@ class GraphStore:
         so a write landing between them could pair one fact with a revision the other fact does
         not describe -- here that would mean an `indexed_at` newer than the finding set
         `binding_rung` was computed over. One query has one snapshot, so the two cannot disagree.
+
+        The three filters take the same values `open_findings_at_risk` takes, because that page
+        and this envelope describe one answer: a rung that summarised the fleet while the rows
+        beneath it were narrowed to one repository would be provenance for a set the reader
+        cannot see.
         """
+        predicate, parameters = _open_findings_predicate(
+            repo_id=repo_id, vendor_id=vendor_id, severity=severity, path_prefix=path_prefix
+        )
         row = self._connect().execute(
-            """
+            f"""
             SELECT max(call_site.indexed_at) AS indexed_at,
                    CASE WHEN count(DISTINCT finding.binding_rung) = 1
                         THEN max(finding.binding_rung) END AS binding_rung
               FROM finding
               JOIN call_site ON call_site.id = finding.call_site_id
-             WHERE finding.status = 'open' AND call_site.retracted_at IS NULL
-            """
+             WHERE {predicate}
+            """,
+            parameters,
         ).fetchone()
         return {"indexed_at": row["indexed_at"], "binding_rung": row["binding_rung"]}
+
+    def open_findings_at_risk(
+        self,
+        *,
+        repo_id: str | None = None,
+        vendor_id: str | None = None,
+        severity: str | None = None,
+        path_prefix: str | None = None,
+        limit: int | None = None,
+        offset: int = 0,
+    ) -> list[dict]:
+        """One row per open finding, joined to the call site it names and the vendor change it
+        rests on -- the binding an operator reads, rather than the `Finding` model.
+
+        This is what `GraphSurface.whats_at_risk` answers for an agent, and it exists separately
+        because that method cannot answer it for a repository: `sync/mcp/tools.py` is frozen, its
+        rows carry no `repo_id`, and it walks every open finding doing one `get_call_site` round
+        trip per row before slicing the result in Python. Repository scope is what every console
+        level below Codebase inherits, so the filter has to reach the database.
+
+        `LEFT JOIN vendor_change`, not an inner one: a finding raised from watched traffic names
+        no change, and dropping it would silently shorten the page for exactly the detectors
+        whose claims rest on the observed rung.
+
+        `binding_rung` is `finding.binding_rung` -- the rung of that row's own claim, per finding
+        because a page can hold findings from several binders and no one value is true of all of
+        them. `open_findings_summary` carries the page-level rung, null when they disagree.
+        """
+        predicate, parameters = _open_findings_predicate(
+            repo_id=repo_id, vendor_id=vendor_id, severity=severity, path_prefix=path_prefix
+        )
+        limit_clause = ""
+        if limit is not None:
+            limit_clause = " LIMIT %s OFFSET %s"
+            parameters = parameters + [limit, offset]
+        return self._connect().execute(
+            f"""
+            SELECT finding.id AS finding_id,
+                   finding.severity AS severity,
+                   finding.binding_rung AS binding_rung,
+                   finding.detector AS detector,
+                   call_site.repo_id AS repo_id,
+                   call_site.path AS path,
+                   call_site.line AS line,
+                   call_site.symbol AS symbol,
+                   call_site.vendor_id AS vendor_id,
+                   call_site.operation_id AS operation_id,
+                   call_site.indexed_at AS indexed_at,
+                   vendor_change.kind AS change_kind
+              FROM finding
+              JOIN call_site ON call_site.id = finding.call_site_id
+              LEFT JOIN vendor_change ON vendor_change.id = finding.vendor_change_id
+             WHERE {predicate}
+             ORDER BY finding.created_at, finding.id{limit_clause}
+            """,
+            parameters,
+        ).fetchall()
+
+    def open_findings_at_risk_count(
+        self,
+        *,
+        repo_id: str | None = None,
+        vendor_id: str | None = None,
+        severity: str | None = None,
+        path_prefix: str | None = None,
+    ) -> int:
+        """The true total `open_findings_at_risk` pages over, under the same filters.
+
+        Separate from the page rather than derived from it: a total counted off a page is the
+        page's own length wearing a bigger number's name, which is the defect this milestone
+        keeps closing.
+        """
+        predicate, parameters = _open_findings_predicate(
+            repo_id=repo_id, vendor_id=vendor_id, severity=severity, path_prefix=path_prefix
+        )
+        row = self._connect().execute(
+            f"""
+            SELECT count(*) AS n FROM finding
+              JOIN call_site ON call_site.id = finding.call_site_id
+             WHERE {predicate}
+            """,
+            parameters,
+        ).fetchone()
+        return row["n"]
 
     def set_finding_status(self, finding_id: str, status: FindingStatus) -> None:
         self._connect().execute("UPDATE finding SET status = %s WHERE id = %s", (status, finding_id))

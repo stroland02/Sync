@@ -248,6 +248,19 @@ fleet index by clicking a repository row; `/bindings` and `/observed-telemetry` 
 `routes.ts`; and picking a different repository changes every figure on every screen below it.
 `2026-08-05-sync-console-architecture.md` Task 9 carries it.
 
+**Closed 2026-08-06.** All three. The level and the two deletions landed with Task 9's steps 1-4;
+the scope landed with steps 5 and 7. Measured against `scripts/seed_console.py`'s two repositories:
+`seed-console-repo-a` reports 3 open findings across 1 vendor (1 breaking, 2 warning),
+`seed-console-repo-b` reports 2 across 2 vendors (1 deprecation, 1 warning), and the same vendor
+screen reports 3 findings under the first repository, 1 under the second and 4 unscoped. Detector
+attribution moves the same way: 2 findings across 2 detectors for one repository against 10,007
+across 4 for the fleet.
+
+Two figures are deliberately not scoped and say so on screen rather than moving: what a vendor
+published is a fact about the vendor, and the repair record stores no `repo_id` at all by the
+schema decision that makes it safe to aggregate across customers. Task 9's landed note carries the
+ruling per figure.
+
 ### B93 — Observed telemetry is declared at Errors & Incidents; the specification puts it under Signals
 
 `routes.ts:124-139` declares both observed-telemetry routes at level `Errors & Incidents`. Observed

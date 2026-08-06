@@ -29,28 +29,13 @@ src/sync/route/templates.py:omit_property_at
 # commit that notices it, and the deletion is the thing that keeps this list load-bearing
 # rather than accumulating names nobody re-checks.
 
-# `open_findings_page` is a paginated sibling `071a590` gave `open_findings`, for the same
-# reason `call_sites_for_operation` and its `_count` sibling got one: `open_findings(self)` is
-# pinned exactly by `sync.mcp.tools.GraphReader`'s structural protocol
-# (`test_mcp_tools.py::test_the_real_graph_store_satisfies_the_reader_protocol` proves it), so a
-# widened signature there is not available and the paginated capability has to live under a new
-# name instead. `open_findings_count` was the same kind of sibling; it is no longer dead --
-# `sync.dashboard.graph_views.severity_rollup` reads it as the independent total beside
-# `open_findings_severity_counts`'s breakdown -- so it is removed from this list rather than
-# carried alongside a call site that would contradict it.
-#
-# Nothing calls `open_findings_page` yet because nothing today wants a bounded page of open
-# findings on its own. `GraphSurface.whats_at_risk` -- the one console route slow enough to want
-# this (9-19s at scale, measured against `/api/overview`) -- reads `open_findings()` to build a
-# per-finding call-site join and a vendor-count aggregate; a page of *findings* does not shrink
-# that work, because the join and the aggregate both need every row regardless of how many are
-# eventually returned, and `whats_at_risk` talks to the graph only through the frozen
-# `GraphReader` protocol this method was built to not touch. `severity_rollup` and
-# `detector_accountability` read the whole set for the identical reason, by the same
-# reasoning their own docstrings already carry.
-# What retires this: a console screen that wants a raw page of open findings without the
-# per-finding join `whats_at_risk` does today -- filed as follow-up, not attempted here.
-src/sync/graph/store.py:GraphStore.open_findings_page
+# `open_findings_page` was listed here as a paginated sibling nothing called. It is called now:
+# `sync.dashboard.graph_views.detector_accountability` reads it unbounded so that the same
+# aggregate serves one repository and the whole fleet, which the unpaginated `open_findings` can
+# never do -- its signature is pinned exactly by `sync.mcp.tools.GraphReader`'s structural
+# protocol, so it takes no filter and never will. The entry is deleted rather than annotated,
+# per this file's own rule: a repaired entry is removed by whoever notices the repair, in the
+# commit that notices it.
 
 # `_SafeStreamHandler.emit` overrides `logging.StreamHandler.emit`. The logging framework calls
 # it by the base class's contract whenever a record reaches the handler, never by name from
