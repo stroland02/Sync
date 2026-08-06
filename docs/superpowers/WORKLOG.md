@@ -41,6 +41,7 @@ M4 continues the sequence at 126. Everything before that is in `git log`.
 | M4-W148 | One milestone table, and M4 says what is now true | landed | `BACKLOG.md` |
 | M4-W149 | Two documents that assert what the page does not do — B105, B106 | landed | `cb6b3d6`; B108 filed for the aria-invalid rings |
 | M4-W150 | Briefs for the four defects the measurement found | landed | this file |
+| M4-W151 | The dev proxy takes a port instead of being edited to reach one | landed | `web/vite.config.ts` |
 
 ## M4.5 — the console is worth looking at
 
