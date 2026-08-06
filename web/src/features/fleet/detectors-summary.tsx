@@ -38,12 +38,14 @@ export function DetectorsSummaryCard() {
   const query = useDetectors()
 
   return (
-    <div className="flex flex-col gap-4">
+    <div className="flex flex-col gap-section">
       {query.isPending && <LoadingState what="the detector attribution" />}
       {query.isError && <ErrorState error={query.error} what="the detector attribution" />}
 
       {query.isSuccess && (
-        <Card>
+        // "grouping": this card sits beside `RepositoriesCard` at the same depth with
+        // nothing else separating them, the one case a surface step alone can't cover.
+        <Card variant="grouping">
           <CardHeader>
             <CardTitle className="text-emphasis">
               {query.data.detectors.length}{" "}
@@ -59,7 +61,7 @@ export function DetectorsSummaryCard() {
               .
             </CardDescription>
           </CardHeader>
-          <CardContent className="flex flex-col gap-4">
+          <CardContent className="flex flex-col gap-section">
             {query.data.detectors.length === 0 ? (
               <EmptyState
                 headline="No detector has an open finding."

@@ -15,6 +15,15 @@
  * There is no composite health figure here on purpose. A scalar that averaged three gates
  * would collapse "we could not check" onto the same axis as "we checked and it passed",
  * which is the failure this console exists to replace.
+ *
+ * The panel order below is the operator's own ranking, not the order the five routes were
+ * built in: open findings (the thing to act on today), then runs (is anything stuck), then
+ * the standing limits of both — placed immediately beside what it qualifies rather than at
+ * the bottom of the screen, because a qualification that scrolls out of view before the
+ * figure it limits is a qualification that has been hidden by distance. The repair record
+ * stays full width, since a chart plus three tallied breakdowns is an evidence surface, not
+ * a summary; the repository roll-up and the detector attribution close the screen paired,
+ * because both are lower-cardinality context an operator checks rather than acts on.
  */
 
 import { CorpusSummaryCard } from "@/features/fleet/corpus-summary"
@@ -27,9 +36,9 @@ import { Breadcrumbs } from "@/layouts/breadcrumbs"
 
 export function FleetPage() {
   return (
-    <section className="flex flex-col gap-6">
+    <section className="flex flex-col gap-8">
       <Breadcrumbs trail={[{ label: "Fleet" }]} />
-      <div className="flex flex-col gap-3">
+      <div className="flex flex-col gap-section">
         <h1 className="text-page">Fleet</h1>
         <p className="text-body text-muted-foreground">
           There is no composite health figure here on purpose. A scalar that averaged three
@@ -40,11 +49,13 @@ export function FleetPage() {
         </p>
       </div>
       <VendorDistributionCard />
-      <ScreenLimitsCard />
       <RunsCard />
+      <ScreenLimitsCard />
       <CorpusSummaryCard />
-      <RepositoriesCard />
-      <DetectorsSummaryCard />
+      <div className="grid gap-8 lg:grid-cols-2">
+        <RepositoriesCard />
+        <DetectorsSummaryCard />
+      </div>
     </section>
   )
 }

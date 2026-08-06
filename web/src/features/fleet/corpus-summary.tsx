@@ -33,8 +33,8 @@ const CorpusChart = lazy(() =>
 function TallyTable({ heading, tally }: { heading: string; tally: Tally }) {
   const entries = Object.entries(tally).sort(([a], [b]) => a.localeCompare(b))
   return (
-    <div className="flex flex-col gap-2">
-      <h3 className="text-meta uppercase tracking-wide text-muted-foreground">{heading}</h3>
+    <div className="flex flex-col gap-row">
+      <h3 className="furniture text-meta text-muted-foreground">{heading}</h3>
       <Table>
         <TableHeader>
           <TableRow>
@@ -59,7 +59,7 @@ export function CorpusSummaryCard() {
   const query = useCorpus()
 
   return (
-    <div className="flex flex-col gap-4">
+    <div className="flex flex-col gap-section">
       {query.isPending && <LoadingState what="the repair record" />}
       {query.isError && <ErrorState error={query.error} what="the repair record" />}
 
@@ -74,7 +74,7 @@ export function CorpusSummaryCard() {
               findings.
             </CardDescription>
           </CardHeader>
-          <CardContent className="flex flex-col gap-4">
+          <CardContent className="flex flex-col gap-section">
             {query.data.attempts === 0 ? (
               <EmptyState
                 headline="The graph holds no repair attempts."
@@ -85,7 +85,7 @@ export function CorpusSummaryCard() {
                 <Suspense fallback={null}>
                   <CorpusChart data={query.data} />
                 </Suspense>
-                <div className="grid gap-4 sm:grid-cols-3">
+                <div className="grid gap-section sm:grid-cols-3">
                   <TallyTable heading="By disposition" tally={query.data.by_terminal_status} />
                   <TallyTable heading="By strategy" tally={query.data.by_strategy} />
                   <TallyTable heading="By tier" tally={query.data.by_tier} />

@@ -20,8 +20,8 @@ import { EChart } from "@/components/charts/echart"
 
 function StatTile({ label, value }: { label: string; value: number }) {
   return (
-    <div className="flex flex-col gap-1">
-      <span className="text-meta uppercase tracking-wide text-muted-foreground">{label}</span>
+    <div className="flex flex-col gap-field">
+      <span className="furniture text-meta text-muted-foreground">{label}</span>
       <span className="text-figure text-foreground">{value.toLocaleString()}</span>
     </div>
   )
@@ -181,15 +181,13 @@ export function CorpusChart({ data }: { data: CorpusSummary }) {
     .join(", ")
 
   return (
-    <div className="flex flex-col gap-4">
-      <div className="flex flex-wrap gap-8">
+    <div className="flex flex-col gap-section">
+      <div className="flex flex-wrap gap-section">
         <StatTile label="Attempts" value={data.attempts} />
         <StatTile label="Distinct findings" value={data.distinct_findings} />
       </div>
-      <figure className="flex flex-col gap-1">
-        <span className="text-meta uppercase tracking-wide text-muted-foreground">
-          By disposition
-        </span>
+      <figure className="flex flex-col gap-field">
+        <span className="furniture text-meta text-muted-foreground">By disposition</span>
         <EChart
           buildOption={buildOption}
           ariaLabel={`Attempts by disposition: ${summary}`}

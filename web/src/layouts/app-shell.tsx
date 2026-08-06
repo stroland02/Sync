@@ -26,11 +26,11 @@ export function AppShell() {
           at the component level (see `run-outcome.tsx`, `states.tsx`). The shell's job is only
           the gutter. */}
       <header className="border-b border-border">
-        <div className="flex flex-wrap items-center justify-between gap-2 px-6 py-3">
+        <div className="flex flex-wrap items-center justify-between gap-row px-6 py-row">
           <Link to="/" className="text-emphasis">
             Sync — operator console
           </Link>
-          <div className="flex flex-wrap items-center gap-3">
+          <div className="flex flex-wrap items-center gap-row">
             <span className="text-meta text-muted-foreground">
               <kbd className="rounded-control border border-border bg-muted px-field font-mono text-meta">
                 ⌘K
@@ -41,6 +41,10 @@ export function AppShell() {
         </div>
       </header>
       <SiteNav />
+      {/* The frame stays at 24px (`px-6`) regardless of the between-panel gap a page chooses —
+          DESIGN.md's Space section: the nav rail and header already hold the composition's
+          edge, so the frame does no hierarchical work of its own and is not required to match
+          or exceed whatever gap a page renders between its panels. */}
       <main className="px-6 py-6">
         <ErrorBoundary>
           <Outlet />

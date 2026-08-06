@@ -68,18 +68,20 @@ export function VendorDistributionCard() {
   const query = useOverview()
 
   return (
-    <div className="flex flex-col gap-4">
+    <div className="flex flex-col gap-section">
       {query.isPending && <LoadingState what="the open findings" />}
       {query.isError && <ErrorState error={query.error} what="the open findings" />}
 
       {query.isSuccess && (
         <Card>
           <CardHeader>
-            <CardTitle className="text-emphasis">
-              {query.data.total_findings.toLocaleString()} open{" "}
-              {query.data.total_findings === 1 ? "finding" : "findings"} across{" "}
-              {query.data.vendors.length}{" "}
-              {query.data.vendors.length === 1 ? "vendor" : "vendors"}
+            <CardTitle className="flex flex-wrap items-baseline gap-field">
+              <span className="text-figure">{query.data.total_findings.toLocaleString()}</span>
+              <span>
+                open {query.data.total_findings === 1 ? "finding" : "findings"} across{" "}
+                {query.data.vendors.length}{" "}
+                {query.data.vendors.length === 1 ? "vendor" : "vendors"}
+              </span>
             </CardTitle>
             <CardDescription className="text-body">
               Every open finding the graph holds, grouped by the vendor whose API the call
@@ -90,7 +92,7 @@ export function VendorDistributionCard() {
               can narrow it.
             </CardDescription>
           </CardHeader>
-          <CardContent className="flex flex-col gap-4">
+          <CardContent className="flex flex-col gap-section">
             {query.data.vendors.length === 0 ? (
               <EmptyState
                 headline="No vendor is at risk."

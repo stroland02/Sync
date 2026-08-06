@@ -25,12 +25,14 @@ export function RepositoriesCard() {
   const query = useRepositories()
 
   return (
-    <div className="flex flex-col gap-4">
+    <div className="flex flex-col gap-section">
       {query.isPending && <LoadingState what="the indexed repositories" />}
       {query.isError && <ErrorState error={query.error} what="the indexed repositories" />}
 
       {query.isSuccess && (
-        <Card>
+        // "grouping": this card sits beside `DetectorsSummaryCard` at the same depth with
+        // nothing else separating them, the one case a surface step alone can't cover.
+        <Card variant="grouping">
           <CardHeader>
             <CardTitle className="text-emphasis">
               {query.data.repo_ids.length}{" "}

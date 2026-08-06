@@ -56,15 +56,16 @@ export function RunsCard() {
   const query = useRuns({ limit: DEFAULT_LIMIT, offset })
 
   return (
-    <div className="flex flex-col gap-4">
+    <div className="flex flex-col gap-section">
       {query.isPending && <LoadingState what="the fleet's runs" />}
       {query.isError && <ErrorState error={query.error} what="the fleet's runs" />}
 
       {query.isSuccess && (
         <Card>
           <CardHeader>
-            <CardTitle className="text-emphasis">
-              {query.data.total} {query.data.total === 1 ? "run" : "runs"}
+            <CardTitle className="flex flex-wrap items-baseline gap-field">
+              <span className="text-figure">{query.data.total.toLocaleString()}</span>
+              <span>{query.data.total === 1 ? "run" : "runs"}</span>
             </CardTitle>
             <CardDescription className="text-body">
               One row per checkpoint thread, not one per finding — a finding retried across
@@ -72,7 +73,7 @@ export function RunsCard() {
               own row here.
             </CardDescription>
           </CardHeader>
-          <CardContent className="flex flex-col gap-4">
+          <CardContent className="flex flex-col gap-section">
             {query.data.items.length === 0 ? (
               <EmptyState
                 headline="No run has ever checkpointed."
@@ -80,8 +81,8 @@ export function RunsCard() {
               />
             ) : (
               <>
-                <div className="flex flex-col gap-1">
-                  <span className="text-meta uppercase tracking-wide text-muted-foreground">
+                <div className="flex flex-col gap-field">
+                  <span className="furniture text-meta text-muted-foreground">
                     By disposition, this page only
                   </span>
                   <p className="font-mono text-body">
@@ -130,7 +131,7 @@ export function RunsCard() {
                         <TableCell className="text-body">
                           {describeOutcome(run.outcome)}
                           {run.outcome === "abandoned" && (
-                            <div className="mt-1 font-mono text-meta text-muted-foreground">
+                            <div className="mt-field font-mono text-meta text-muted-foreground">
                               <Formatted value={orAbsent(run.abandon_reason)} />
                             </div>
                           )}
@@ -156,7 +157,7 @@ export function RunsCard() {
               </>
             )}
 
-            <p className="border-t border-border pt-3 text-body text-muted-foreground">
+            <p className="border-t border-border pt-section text-body text-muted-foreground">
               There is no heartbeat and no process registry — the only evidence a run exists
               is a checkpoint row, and "last checkpoint" is staleness, not liveness. A run
               parked at <code className="font-mono">await_ci</code> blocks inside that node

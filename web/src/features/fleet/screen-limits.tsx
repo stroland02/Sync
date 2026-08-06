@@ -49,10 +49,16 @@ export function ScreenLimitsCard() {
         </CardDescription>
       </CardHeader>
       <CardContent>
-        <dl className="grid gap-4 sm:grid-cols-2">
+        {/* Each headline is lifted to `text-emphasis` -- the same weight the figure cards
+            beside this one use for their own headline -- so a standing limit reads at the
+            same tier as the thing it limits rather than as a footnote underneath it.
+            `tracking-normal` cancels the heading tracking `text-emphasis` otherwise carries:
+            DESIGN.md ties that tracking to the panel-title role, and each `dt` here is
+            in-row emphasis repeated four times, not a panel title. */}
+        <dl className="grid gap-section sm:grid-cols-2">
           {LIMITS.map((limit) => (
-            <div key={limit.headline} className="flex flex-col gap-1">
-              <dt className="text-body text-foreground">{limit.headline}</dt>
+            <div key={limit.headline} className="flex flex-col gap-field">
+              <dt className="text-emphasis tracking-normal text-foreground">{limit.headline}</dt>
               <dd className="text-body text-muted-foreground">{limit.detail}</dd>
             </div>
           ))}
