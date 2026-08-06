@@ -26,10 +26,24 @@ Replace `web/src/layouts/` (369 lines) and add the primitives every page will us
 `features/` changes in this work item** — the pages keep rendering exactly what they render today,
 inside a new frame. That constraint is what makes this reviewable.
 
-- **`layouts/app-frame.tsx`** — a fixed icon rail for the product's areas, plus a contextual sidebar
-  for the level you are inside, carrying that level's name as a heading and grouping its
-  destinations under small-caps letterspaced labels. The rail does not change between routes; the
-  sidebar does. It collapses, and the content reflows into the space.
+- **`layouts/app-frame.tsx`** — **one sidebar with two widths, not two components.** Corrected
+  2026-08-06 by the owner, and the correction matters because the wrong reading is the more common
+  pattern and this brief originally specified it.
+
+  **Wrong:** a fixed 40px icon rail *plus* a separate contextual panel that slides out beside it, so
+  expanding produces two columns of chrome. That is Supabase's arrangement and it is not what we
+  want.
+
+  **Right:** a single sidebar carrying the same destinations at all times, in the same vertical
+  order. Expanded (~215px) each row is an icon **and** its label, with small-caps letterspaced group
+  headings above each cluster. Collapsed (~48px) the labels and the group headings go, the icons
+  stay **in the identical vertical positions**, and nothing else about the list changes. One toggle
+  at the top switches between them. The content region reflows into the reclaimed width.
+
+  The test that you have built the right thing: **an icon must not move vertically when the sidebar
+  collapses.** If it does, you have two components rather than one at two widths. A collapsed row
+  keeps its label as an accessible name and as a tooltip — the text disappears visually, never
+  semantically.
 - **`layouts/page-header.tsx`** — a display-size title and one sentence saying what the page is for.
   **That sentence already exists**: `RouteEntry.question` in `lib/routes.ts`, one per route, written
   for exactly this.

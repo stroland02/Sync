@@ -333,3 +333,43 @@ the fleet-wide diagram Task 11 refused.
 
 Every one of the four properties above, plus the chassis, is buildable against data we already hold.
 None of it needs a write path except the settings pattern, which needs one and therefore waits.
+
+---
+
+## 6. Superlog — the sidebar is one component at two widths (2026-08-06)
+
+The owner supplied both states side by side to correct a reading in the chassis brief, and the
+correction is worth its own entry because the wrong version is the more common pattern.
+
+**Expanded, ~215px.** A wordmark and a collapse toggle at the top. Then small-caps letterspaced
+group headings — `Workspace`, `Observe` — each above a cluster of destinations. Every row is an icon
+**and** its label: Overview, Incidents, Errors, Alerts, GitHub Issues, then Explore, Dashboards. The
+active row carries a filled surface behind the whole row.
+
+**Collapsed, ~48px.** The toggle stays. The group headings and every label are gone. **The icons
+remain in the identical vertical positions**, with the same gap between clusters where a heading
+used to be, and the active row keeps its filled surface — now a square around its icon.
+
+### The distinction that matters
+
+This is **one sidebar with two widths**, not an icon rail plus a panel that opens beside it. Those
+look similar in a screenshot and are different components:
+
+- Two components: expanding adds a second column of chrome, and the icons sit in a strip that never
+  changes while a separate panel appears next to it. Supabase does this — a 40px rail plus a ~215px
+  contextual sidebar — and it suits a product whose areas each own a different sub-navigation.
+- One component: expanding widens the same list in place. Nothing appears beside anything; labels
+  arrive next to icons that have not moved.
+
+**The test: an icon must not move vertically when the sidebar collapses.** If it does, it is two
+components.
+
+Sync has nine levels in one hierarchy rather than a set of independent product areas, so a single
+list that widens is the right shape for us as well as the owner's preference — a contextual second
+panel would have nothing distinct to hold.
+
+### What must survive the collapse
+
+A label that disappears visually must not disappear semantically: the collapsed row keeps its
+accessible name and gains a tooltip. This is the same rule the console already applies to the rung
+badge, which is monochrome on screen and carries `describeRung` in its title.
