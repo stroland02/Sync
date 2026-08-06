@@ -27,10 +27,15 @@
  *   the specification says so explicitly at `:445` — so it carries the `Errors & Incidents`
  *   level rather than one invented for it.
  *
- * A level with no route below still belongs in `GRAPH_LEVELS`: `Signals` and `Pull Request`
- * are both stored, specified, and only partly built. `SiteNav` and `CommandPalette` already
- * drop a level group with nothing under it, so an unbuilt level costs nothing here — leaving
- * it out would cost the next reconciliation the same afternoon this one took.
+ * `Signals` gained its third panel on 2026-08-06: `/repositories/:repoId/observed` now renders
+ * all three M5 roles (vendor, signal source, human surface) instead of the signal-source-only
+ * screen that used to sit under a stale "Observed telemetry" label — `features/signals/signals-page.tsx`
+ * carries the level's own docstring. `Pull Request` gained its route the same day: the evidence
+ * bundle a reviewer can now open at its own address, bounded by what `sync.dashboard.queries`
+ * exposes rather than by what the design document's evidence bundle describes —
+ * `features/pullrequests/pull-request-page.tsx` names the gap. A level with no route at all would
+ * still belong in `GRAPH_LEVELS` regardless — `SiteNav` and `CommandPalette` already drop a level
+ * group with nothing under it, so an unbuilt level costs nothing here.
  */
 
 import type { ComponentType } from "react"
@@ -40,7 +45,8 @@ import { CodebasePage } from "@/features/repositories/codebase-page"
 import { DetectorsPage } from "@/features/detectors/detectors-page"
 import { FindingPage } from "@/features/findings/finding-page"
 import { FleetPage } from "@/features/fleet/fleet-page"
-import { ObservedTelemetryPage } from "@/features/telemetry/observed-telemetry-page"
+import { PullRequestPage } from "@/features/pullrequests/pull-request-page"
+import { SignalsPage } from "@/features/signals/signals-page"
 import { VendorPage } from "@/features/vendors/vendor-page"
 import { WorkflowPage } from "@/features/workflows/workflow-page"
 
@@ -107,12 +113,12 @@ export const ROUTES: readonly RouteEntry[] = [
   },
   {
     path: "/repositories/:repoId/observed",
-    label: "Observed telemetry",
+    label: "Signals",
     level: "Signals",
     question:
-      "What traffic did Sync observe for this repository, and where did error rates move?",
+      "What vendor, signal source and human surface does this repository have attached, and what has each reported?",
     params: ["repoId"],
-    element: ObservedTelemetryPage,
+    element: SignalsPage,
   },
   {
     path: "/bindings/vendors/:vendorId/operations/:operationId",
@@ -142,8 +148,16 @@ export const ROUTES: readonly RouteEntry[] = [
     path: "/findings/:findingId/workflow",
     label: "Solution workflow",
     level: "Solution Workflow",
-    question: "Sync opened this pull request — should I merge it?",
+    question: "What did Sync's remediation graph do about this finding, node by node?",
     params: ["findingId"],
     element: WorkflowPage,
+  },
+  {
+    path: "/findings/:findingId/workflow/pull-request",
+    label: "Pull request",
+    level: "Pull Request",
+    question: "Did Sync open a pull request for this finding, and what proof backs it?",
+    params: ["findingId"],
+    element: PullRequestPage,
   },
 ] as const
