@@ -12,13 +12,23 @@
  * is a static read plus a resolution step, `observed` is correlated from watched traffic,
  * `unresolved` is the named absence of a binding, and `unattributed` is a row written
  * before the column existed.
+ *
+ * An array rather than a bare union because the order is load-bearing: the rung composition
+ * chart assigns one categorical series slot per member by position, so a member added in the
+ * middle repaints every existing bar's colours without changing a count.
+ * `tests/test_api_routes.py::test_the_consoles_rung_vocabulary_matches_the_models_in_order`
+ * holds it against `sync.core.models`, which is the only thing that can — the console cannot
+ * import Python, and nothing in TypeScript knows this list is a restatement.
  */
-export type BindingSource =
-  | "static"
-  | "resolved"
-  | "observed"
-  | "unresolved"
-  | "unattributed"
+export const BINDING_SOURCES = [
+  "static",
+  "resolved",
+  "observed",
+  "unresolved",
+  "unattributed",
+] as const
+
+export type BindingSource = (typeof BINDING_SOURCES)[number]
 
 /**
  * On every payload the API returns.

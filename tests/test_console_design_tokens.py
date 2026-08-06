@@ -188,7 +188,15 @@ def test_the_spacing_guard_permits_the_two_sanctioned_exceptions(tmp_path: Path)
 
 # -- assertion 2: no keyframes or animation shorthand outside a loading indicator --------------
 
-_KEYFRAME_OR_ANIMATION = re.compile(r"@keyframes\b|\banimate-[\w-]+\b|\banimation\s*:")
+# `(?!\s*false)` exempts the one spelling that serves this guard rather than breaking it.
+# `echarts` animates on entry unless an option says otherwise, so `animation: false` is how a
+# chart in `features/` obeys "nothing decorative running at rest" -- and without the exemption
+# this guard banned the only line that could turn it off, which is why `corpus-chart.tsx` has
+# never carried one. Nothing else is exempt: a duration, a variable, or any other value is a
+# chart asking for motion and is still a violation.
+_KEYFRAME_OR_ANIMATION = re.compile(
+    r"@keyframes\b|\banimate-[\w-]+\b|\banimation\s*:(?!\s*false)"
+)
 
 
 def _keyframe_violations(root: Path) -> list[str]:
@@ -239,6 +247,31 @@ def test_the_keyframe_guard_rejects_an_animate_utility_in_a_feature_screen(tmp_p
     violations = _keyframe_violations(tmp_path)
 
     assert violations and "animate-pulse" in violations[0]
+
+
+def test_the_keyframe_guard_permits_switching_an_animation_off(tmp_path: Path) -> None:
+    # `animation: false` is a chart declining the entry transition `echarts` would otherwise
+    # give it. Banning it would mean a feature screen could not turn motion off, which inverts
+    # what this guard is for.
+    (tmp_path / "rung-composition-option.ts").write_text(
+        "const option = { animation: false, series: [] }\n", encoding="utf-8"
+    )
+
+    violations = _keyframe_violations(tmp_path)
+
+    assert not violations
+
+
+def test_the_keyframe_guard_still_rejects_an_animation_that_is_switched_on(tmp_path: Path) -> None:
+    # The other half, and the one that keeps the exemption honest: only the literal `false` is
+    # waved through, so a chart asking for motion by any other spelling is still caught.
+    (tmp_path / "chart.ts").write_text(
+        "const a = { animation: true }\nconst b = { animation: 300 }\n", encoding="utf-8"
+    )
+
+    violations = _keyframe_violations(tmp_path)
+
+    assert len(violations) == 2
 
 
 def test_index_css_declares_no_keyframes_beyond_its_recorded_baseline():

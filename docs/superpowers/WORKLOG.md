@@ -64,4 +64,4 @@ published.
 | M4.5-W142 | Type, ink and space measured against rendered pixels — B104 and B107 closed, B108 filed | pushed, `m4-tokens`, not merged |
 | M4.5-W143 | Motion audited: one of three framer-motion usages deleted after measuring it had never run, and the registry made a test. B113 and B114 filed | landed | `0de5a44`, `f3b3059` |
 | M4.5-W144 | Density that is legible — the 11px floor held, the provenance column on screen at 1280px, prose wrapping at 1920px | reserved |
-| M4.5-W145 | The one visual that earns itself — a question the table beside it cannot answer, surviving `--scale 10000` | dispatched |
+| M4.5-W145 | Rung composition per detector — length encodes composition, because volume drew three of four as a sliver reading 'found nothing' | landed |

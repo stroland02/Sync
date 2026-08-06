@@ -17,6 +17,11 @@ import { useCallback } from "react"
 import type { CorpusSummary, Tally } from "@/api/types"
 import type { ChartTokens } from "@/components/charts/echart"
 import { EChart } from "@/components/charts/echart"
+import {
+  INLINE_LABEL_SHARE_FLOOR,
+  escapeHtml,
+  labelInkFor,
+} from "@/components/charts/chart-text"
 
 function StatTile({ label, value }: { label: string; value: number }) {
   return (
@@ -27,43 +32,6 @@ function StatTile({ label, value }: { label: string; value: number }) {
   )
 }
 
-function escapeHtml(value: string): string {
-  return value.replace(
-    /[&<>"']/g,
-    (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[char]!,
-  )
-}
-
-let luminanceCtx: CanvasRenderingContext2D | null = null
-
-/**
- * White or the chart's own ink, picked by the fill's luminance, so a label set
- * inside a light categorical segment (aqua, yellow) never renders illegible text on
- * itself — the one case `marks-and-anatomy.md` carries as an exception to "text
- * never wears the data colour".
- */
-function labelInkFor(fill: string, ink: string, labelOnLight: string): string {
-  if (!luminanceCtx) luminanceCtx = document.createElement("canvas").getContext("2d")
-  if (!luminanceCtx) return ink
-  luminanceCtx.fillStyle = fill
-  luminanceCtx.fillRect(0, 0, 1, 1)
-  const [r, g, b] = luminanceCtx.getImageData(0, 0, 1, 1).data
-  const linear = (channel: number) => {
-    const s = channel / 255
-    return s <= 0.03928 ? s / 12.92 : Math.pow((s + 0.055) / 1.055, 2.4)
-  }
-  const luminance = 0.2126 * linear(r) + 0.7152 * linear(g) + 0.0722 * linear(b)
-  return luminance > 0.45 ? ink : labelOnLight
-}
-
-/**
- * Below this share a segment rarely has room for a name and a count inside a
- * 24px-tall bar. Below the floor the value stays reachable through the legend, the
- * tooltip, and the table beneath the chart rather than being clipped — there is no
- * layout pass available here to measure the rendered text before the option is
- * built, so this is a documented approximation of a fit check, not a fit check.
- */
-const INLINE_LABEL_SHARE_FLOOR = 0.15
 
 /**
  * Disposition -> series slot, keyed on the value itself rather than where it lands in the

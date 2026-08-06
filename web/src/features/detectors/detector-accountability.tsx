@@ -14,6 +14,7 @@
  * detectors are not competing: more findings is neither better nor worse than fewer.
  */
 
+import { Suspense, lazy, useMemo } from "react"
 import { Link } from "react-router"
 
 import { useDetectors } from "@/api/queries"
@@ -29,7 +30,21 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
+import { rungComposition } from "@/features/detectors/rung-series"
 import { describeRung, orAbsent } from "@/lib/format"
+
+/**
+ * `echarts` is ~1.1 MB minified and this screen is one of nine. Lazy, so it lands in its own
+ * chunk and never in the initial bundle — the same arrangement `corpus-summary.tsx` makes, and
+ * `vite.config.ts`'s `chunkSizeWarningLimit` comment carries why the warning it raises is
+ * expected. `fallback={null}` rather than a placeholder: the cards below are the same numbers,
+ * already on screen, so nothing is waiting on this.
+ */
+const RungCompositionChart = lazy(() =>
+  import("@/features/detectors/rung-composition-chart").then((mod) => ({
+    default: mod.RungCompositionChart,
+  })),
+)
 
 function isBindingSource(value: string): value is BindingSource {
   return (
@@ -128,6 +143,79 @@ function DetectorCard({ row, repoId }: { row: DetectorRow; repoId: string | null
   )
 }
 
+/**
+ * The one chart on this screen, and the sentences that keep it honest.
+ *
+ * Every bar is full width and carries one detector's composition; the count it is a share of is
+ * printed beside the detector's name rather than encoded as length. Both facts are said below
+ * rather than left to be inferred, because a stacked bar is exactly where a reader starts
+ * reading length as quantity and then as quality.
+ */
+function RungComposition({ rows }: { rows: DetectorRow[] }) {
+  const composition = useMemo(() => rungComposition(rows), [rows])
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-emphasis">What these claims rest on</CardTitle>
+        <CardDescription className="max-w-prose text-body">
+          Every open finding in this scope, split by the rung of evidence behind it, one bar per
+          detector. The same counts are in each detector's own <code className="font-mono">By
+          rung</code> table below; this is the one view where they can be compared across
+          detectors without arithmetic.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="flex flex-col gap-section">
+        <Suspense fallback={null}>
+          <RungCompositionChart composition={composition} />
+        </Suspense>
+        <p className="max-w-prose text-body text-muted-foreground">
+          Every bar is the same length because it is a composition, not a quantity: the segments
+          are that detector's own findings split by rung, and the number of findings they are a
+          share of is printed beside the detector's name. Volume is not encoded here at all —
+          one detector on this screen can hold four figures' worth of findings and another
+          three, and drawing that as length would render the smaller ones as a sliver
+          indistinguishable from nothing.
+        </p>
+        <p className="max-w-prose text-body text-muted-foreground">
+          The rung is a class of evidence, not a position on a good-to-bad scale, so no colour
+          here grades anything: each is an identity, and each is named in the legend, in the
+          segment where it fits, and in the table beneath. A detector resting entirely on{" "}
+          <code className="font-mono">static</code> is not doing worse than one correlating
+          watched traffic — it is making a different kind of claim, which is the thing an
+          operator weighing a false positive needs first.
+        </p>
+        {composition.absentRungs.length > 0 && (
+          <p className="max-w-prose text-body text-muted-foreground">
+            Nothing in this scope rests on{" "}
+            {composition.absentRungs.map((rung, index) => (
+              <span key={rung}>
+                {index > 0 && (index === composition.absentRungs.length - 1 ? " or " : ", ")}
+                <code className="font-mono">{rung}</code>
+              </span>
+            ))}
+            . Those rungs keep their place in the legend and draw no segment — an absence, which
+            is not the same fact as a rung this console does not have.
+          </p>
+        )}
+        {composition.unrecognisedRungs.length > 0 && (
+          <p className="max-w-prose text-body text-muted-foreground">
+            One series counts findings whose rung this console does not recognise:{" "}
+            {composition.unrecognisedRungs.map((rung, index) => (
+              <span key={rung}>
+                {index > 0 && ", "}
+                <code className="font-mono">{rung}</code>
+              </span>
+            ))}
+            . They are counted rather than dropped, so the bars still sum to each detector's own
+            total — the provenance vocabulary has grown since this view was written.
+          </p>
+        )}
+      </CardContent>
+    </Card>
+  )
+}
+
 export function DetectorAccountability({ repoId = null }: { repoId?: string | null }) {
   const query = useDetectors(repoId ?? undefined)
 
@@ -156,6 +244,7 @@ export function DetectorAccountability({ repoId = null }: { repoId?: string | nu
               {detectors.length} {detectors.length === 1 ? "detector" : "detectors"}.
             </span>
           </p>
+          <RungComposition rows={detectors} />
           <div className="flex flex-col gap-section">
             {detectors.map((row) => (
               <DetectorCard key={row.detector} row={row} repoId={repoId} />
