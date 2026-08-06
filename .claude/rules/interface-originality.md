@@ -37,14 +37,47 @@ Ideas about the problem, not renderings of the solution:
 - **A negative finding.** Learning that an approach does not work, or costs more than it returns,
   is worth as much as learning that one does.
 
+## The conventions of the form, which are learnable
+
+**Amended 2026-08-06, and the amendment is the important part of this file.** The list below used to
+open with "a layout, a screen composition, a navigation shape, a visual hierarchy" and nothing
+distinguished those from identity. Read literally — and it was read literally, correctly, by every
+agent that met it — that forbade a sidebar, a breadcrumb, a two-column detail and a display type
+step, because a competitor has each of them. The console that resulted is measured in
+`docs/superpowers/reports/2026-08-06-why-the-console-came-out-flat.md`: a type range of 2.0 against
+a 3.4 bar, seven side-by-side placements in the entire application, and one vertical stack on every
+screen.
+
+A control plane has a grammar, the same way a form has one. **These are conventions, not
+inventions, and learning them from anything is permitted:**
+
+- A persistent navigation rail, and a second contextual level inside it.
+- A breadcrumb or scope switcher that says what contains what.
+- A page header that names the screen and says what it is for.
+- A control bar: scope, search, and one primary action.
+- A footer bar owning pagination and the record count.
+- A detail that opens in a drawer instead of navigating away.
+- A fact rendered as a tile — label register above value register.
+- A metric panel whose value sits above its own evidence.
+- A type ramp with a display step, and a frame that is larger than the gaps inside it.
+
+Taking these is not copying, any more than using a table is copying. **What makes a screen ours is
+what we put in them, what we refuse to put in them, and how the two are arranged.**
+
 ## What may not be taken
 
-- A layout, a screen composition, a navigation shape, a visual hierarchy.
 - A component's appearance, or a component built by looking at a screenshot.
 - Copy, labels, microcopy, or a turn of phrase lifted from their interface.
-- A colour system, type scale, spacing rhythm, iconography, or motion design.
+- A colour system, a wordmark, iconography, illustration, or motion design.
+- **The specific arrangement that makes a screen recognisably theirs** — which is a judgement, and
+  the test is whether somebody who knows the reference would see it rather than see a control plane.
 - A feature reproduced because a competitor has it, absent an argument from Sync's own users and
   Sync's own graph.
+- **Any claim their screen makes that our data cannot support.** This is the one that matters most
+  and the one a beautiful reference makes tempting: Superlog's incident view is the best thing in
+  the reference set and it carries `Root cause confidence: 9`. Take its structure, refuse its
+  scalar. Composition and honesty are independent axes, and conflating them is how "we must not
+  lie" became "we must not compose".
 
 ## How to use the reference material
 

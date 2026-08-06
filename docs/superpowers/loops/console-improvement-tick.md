@@ -59,6 +59,18 @@ is the tick's work.
    and a silent empty table are both failures.
 4. **Is the top item of the Deferred table now worth building?** Each row in that table names the
    condition that retires it. Check the condition, not the appetite.
+5. **Does this screen have a focal point, and does the eye reach the right thing first?** Added
+   2026-08-06. The first four questions are all about whether the console lies. A console can answer
+   all four perfectly and still be a wall of equal-weight text, which is what happened — measured at
+   a 2.0:1 type range against a 3.4 bar, with seven side-by-side placements in the whole
+   application. `reports/2026-08-06-why-the-console-came-out-flat.md` carries why. This question
+   fails when a route renders nothing at the display tier, when a page places nothing beside
+   anything else, or when a label and its value share a register.
+
+**The ordering above is deliberate and has a known failure mode.** "The first one that answers no is
+the tick's work" meant question 5 was never reached, because on a console this dense there was
+always a correctness *no* at questions 1 through 3. If four consecutive ticks have taken a
+correctness item, take question 5's item next regardless of what the earlier questions say.
 
 **The seven-item interface-quality checklist.** Copied from
 `docs/superpowers/references/notes/impeccable-interface-quality.md:328-417`, unparaphrased, because
@@ -339,9 +351,14 @@ understood well enough to build.
 
 ## What a tick must not do
 
-- **Do not restyle ahead of the data.** Functionality before polish is a plan constraint, not a
-  preference. A beautiful console showing the wrong rung is a failure; a plain one showing the right
-  rung is a success.
+- ~~**Do not restyle ahead of the data.**~~ **Retired 2026-08-06, its condition met.** The sentence
+  it carried is still true — a beautiful console showing the wrong rung is a failure, a plain one
+  showing the right rung is a success — and it stopped being *useful* the moment the ninth specified
+  level landed. It was written when the console rendered five screens and none showed the thing the
+  product is built on. After that it worked as a permanent brake: every tick that considered
+  composition read it and took a correctness item instead, for weeks.
+  **The rule that replaces it:** a screen that is correct and unreadable has failed differently, not
+  less. Both are defects and neither outranks the other by default.
 - **Do not add a route the graph cannot answer.** A screen that needs data the graph does not hold
   is a question about the graph, and it belongs in a plan rather than in a component.
 - **Do not reach past the HTTP transport.** The console consumes `src/sync/api/`, which consumes
