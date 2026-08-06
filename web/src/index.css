@@ -79,6 +79,12 @@
   --color-chart-grid: oklch(0.29 0 0);
   --color-chart-axis: oklch(0.42 0 0);
 
+  /* The ink an in-segment label switches to over a light categorical fill (aqua,
+     yellow), where `--color-ink` itself would sit unreadably close to white-on-white.
+     Pure white rather than a step on the ink ramp, because it is picked for contrast
+     against the segment's own colour, not for a role in the surface's ink hierarchy. */
+  --color-chart-label-on-light: #ffffff;
+
   /* The drop colour of the floating level, carried as a colour token because
      the `shadow-*` utility resolves its theme value at build time: a literal
      written into --shadow-float would be baked into the class, whereas a

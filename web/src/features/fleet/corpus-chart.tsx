@@ -42,7 +42,7 @@ let luminanceCtx: CanvasRenderingContext2D | null = null
  * itself — the one case `marks-and-anatomy.md` carries as an exception to "text
  * never wears the data colour".
  */
-function labelInkFor(fill: string, ink: string): string {
+function labelInkFor(fill: string, ink: string, labelOnLight: string): string {
   if (!luminanceCtx) luminanceCtx = document.createElement("canvas").getContext("2d")
   if (!luminanceCtx) return ink
   luminanceCtx.fillStyle = fill
@@ -53,7 +53,7 @@ function labelInkFor(fill: string, ink: string): string {
     return s <= 0.03928 ? s / 12.92 : Math.pow((s + 0.055) / 1.055, 2.4)
   }
   const luminance = 0.2126 * linear(r) + 0.7152 * linear(g) + 0.0722 * linear(b)
-  return luminance > 0.45 ? ink : "#ffffff"
+  return luminance > 0.45 ? ink : labelOnLight
 }
 
 /**
@@ -122,7 +122,7 @@ function buildDispositionOption(tally: Tally, tokens: ChartTokens) {
       label: {
         show: share >= INLINE_LABEL_SHARE_FLOOR,
         position: "inside" as const,
-        color: labelInkFor(color, tokens.ink),
+        color: labelInkFor(color, tokens.ink, tokens.labelOnLight),
         fontSize: 12,
         formatter: () => `${name}: ${count.toLocaleString()}`,
       },

@@ -24,6 +24,7 @@ export interface ChartTokens {
   surface: string
   grid: string
   axis: string
+  labelOnLight: string
   /** Fixed slot order, index 0 is series-1. Never reassigned by value or reversed. */
   series: string[]
 }
@@ -35,6 +36,7 @@ const TOKEN_PROPERTIES = {
   surface: "--color-surface",
   grid: "--color-chart-grid",
   axis: "--color-chart-axis",
+  labelOnLight: "--color-chart-label-on-light",
 } as const
 
 const SERIES_PROPERTIES = Array.from({ length: 8 }, (_, i) => `--color-series-${i + 1}`)
@@ -61,6 +63,7 @@ function readTokens(): ChartTokens {
     surface: read(TOKEN_PROPERTIES.surface),
     grid: read(TOKEN_PROPERTIES.grid),
     axis: read(TOKEN_PROPERTIES.axis),
+    labelOnLight: read(TOKEN_PROPERTIES.labelOnLight),
     series: SERIES_PROPERTIES.map(read),
   }
 }
