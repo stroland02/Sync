@@ -25,11 +25,8 @@ by content, because items were never tagged with a milestone as they landed.
 | **M3** | Multi-vendor, MCP, plugin SDK | **~95%** | Packaging closed 2026-07-30; nothing structural left |
 | **M4** | Hosted control plane (**the front end**) | **~50%** | Nine levels and the honesty discipline are built and scoped; nothing is hosted, and three of the milestone's four deliverables have no code |
 | **M4.5** | The console is worth looking at | **0%** | Split out 2026-08-06 so M4 can close; starts when M4's console half does |
-| **M5** | Integration layer | **~25%** | Feed and registry exist; nothing correlates anything |
-| **M6** | Show it, rather than describe it | **0%** | Needs a UI to film, so it sits behind M4.5 rather than M4 |
-| **M4** | Hosted control plane (**the front end**) | **0%** | Not started, and has no plan file yet |
 | **M5** | Integration layer | **~35%** | Sentry feeds counts in now; still nothing correlates anything |
-| **M6** | Show it, rather than describe it | **0%** | Needs a UI to film |
+| **M6** | Show it, rather than describe it | **0%** | Needs a UI to film, so it sits behind M4.5 rather than M4 |
 
 ### M0 — Walking skeleton, one real pull request · ~90%
 
@@ -85,7 +82,7 @@ packaging level, not only the import level.
 **Remaining.** Publishing `sync-core` anywhere is public and irreversible and is the user's call. The
 wheel builds and installs; nobody has uploaded it.
 
-### M4 — Hosted control plane · ~45% — **this is where the front end lives**
+### M4 — Hosted control plane · ~50% — **this is where the front end lives**
 
 Reconciled against the tree on 2026-08-05. The previous entry said "0%, nothing started, no plan file
 exists", which was true when written and has been false for about seventy commits.
@@ -113,19 +110,20 @@ and closed, several by removing a field or a column rather than adding one.
   control plane" is the milestone's name and that half is at zero.
 - **No write path.** Every route is read-only by design and by test. An operator cannot start a run,
   retry one, or close a finding from the console.
-- **The navigation hierarchy is not the one the design document specifies**, established
-  2026-08-05 by reconciling all eleven routes against
-  `specs/2026-07-25-sync-self-maintaining-apis-design.md:392-411`. Three match. Four levels are
-  invented, two are reparented, and three specified levels — the repository entry point, Signals,
-  and Pull Request — were never built. The index route is a level the design document does not
-  contain. B92 through B96, and Tasks 9 and 10 of `2026-08-05-sync-console-architecture.md`. The
-  design document was amended the same day for the three levels where it, rather than the console,
-  was what had gone stale.
-- **The interface is one idiom, eight times.** Measured: 21 `<Card>`, 17 `<Table>`, 1 chart across
-  5,781 lines. Three shadcn primitives exist — button, card, table. The whole frontend contains 7
-  `onChange`, 3 `<Button>`, 2 `onClick` and 1 `<input>`. There is no filtering, sorting, search,
-  drill-down, tab, dialog, skeleton or command palette anywhere, on a console whose tables will
-  hold thousands of call sites.
+- ~~**The navigation hierarchy is not the one the design document specifies.**~~ **Closed
+  2026-08-06.** All three unbuilt levels are in — the repository entry point (M4-W130), Signals
+  (M4-W127) and Pull Request (M4-W126) — every level below Codebase inherits repository scope, and
+  the two figures that genuinely cannot be scoped say so on screen rather than inheriting one.
+  `tests/test_console_hierarchy.py` now holds `GRAPH_LEVELS` against the specification's
+  authoritative block, which is the part that stops it drifting again: the reconciliation was
+  needed because three plans checked the console against itself.
+- **The interface is one idiom, and that is now half true.** Measured 2026-08-05: 21 `<Card>`, 17
+  `<Table>`, 1 chart across 5,781 lines, and 7 `onChange`, 3 `<Button>`, 2 `onClick`, 1 `<input>`
+  in the whole frontend. M4-W135 gave the two tables that will actually be long a server-side
+  filter each, with facets computed without the filter they set. What remains is sorting — which
+  needs an `ORDER BY` the frozen surface does not offer, filed as B100 — and the rest of the
+  affordance layer, which is M4.5-W141 rather than M4. See B90, whose opening counts were wrong
+  when written and are corrected in place.
 
 **The condition on the deferred *premium components* row is now met.** That row said: after the data
 model is visible. It is — eight screens cover the graph end to end. It retires now, and the work it
