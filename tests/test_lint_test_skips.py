@@ -115,11 +115,15 @@ def test_repository_is_clean() -> None:
 
 
 def test_current_skip_sites_are_a_pinned_baseline() -> None:
-    """Ten skip sites exist in this tree today, and every one is accepted on purpose.
+    """Twelve skip sites exist in this tree today, and every one is accepted on purpose.
 
-    A count rather than a name-by-name list, because the point is not which ten -- it is
-    that an eleventh arriving silently is impossible: this test goes red until whoever
+    A count rather than a name-by-name list, because the point is not which twelve -- it is
+    that a thirteenth arriving silently is impossible: this test goes red until whoever
     added it either states a qualifying reason or takes the count up deliberately.
+
+    Ten held before `tests/test_console_design_tokens.py`; that file added two, both naming
+    an absent local checkout in the same words `test_api_routes.py`'s `_web_source` already
+    uses for the identical condition ("this checkout carries no console").
     """
     from scripts.lint_test_skips import find_skip_sites
 
@@ -127,7 +131,7 @@ def test_current_skip_sites_are_a_pinned_baseline() -> None:
     for path in sorted((REPO_ROOT / "tests").rglob("test_*.py")):
         sites.extend(find_skip_sites(path.read_text(encoding="utf-8"), str(path)))
 
-    assert len(sites) == 10, [f"{s.filename}:{s.line}" for s in sites]
+    assert len(sites) == 12, [f"{s.filename}:{s.line}" for s in sites]
     assert all(s.permitted for s in sites)
 
 

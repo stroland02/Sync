@@ -17,6 +17,8 @@ from typing import Any, NamedTuple
 
 import pytest
 from starlette.applications import Starlette
+from starlette.responses import JSONResponse
+from starlette.routing import Route
 from starlette.testclient import TestClient
 
 from sync.api.__main__ import DEFAULT_PORT, _reload_enabled, app_factory
@@ -1203,6 +1205,107 @@ def test_a_zero_limit_is_floored_so_the_cursor_terminates():
     client.get("/api/vendors/stripe?limit=0")
 
     assert [kwargs["limit"] for _, kwargs in surface.calls if "limit" in kwargs] == [1]
+
+
+# -- every collection route paginates --------------------------------------------
+#
+# Sentry's `MissingPaginationError` (`src/sentry/api/base.py:487-494`) raises when a `GET`
+# returns a bare list with no pagination. `app.py` has no such gate, so the same guard is built
+# here as a test: a route declares itself a collection by the shape of what it actually returns
+# rather than by a name on a hand-written list, because a list restating the routes passes even
+# on a build that serves none of them -- the exact failure mode this class of test exists to
+# catch. `_PAGE_ENVELOPE_KEYS` is the one page shape every paginated answer in this file already
+# uses (`_EMPTY_PAGE` above, and `GraphSurface._page` in production): `items`, `total` and
+# `next_offset` together. A response carrying that trio -- whatever else it also carries, as
+# `vendor_detail` and `vendor_changes` do with `indexed_at` and `binding_source` beside them --
+# is a collection; every other route answers one resource or a fixed-size aggregate and has
+# nothing to page through.
+
+_PAGE_ENVELOPE_KEYS = {"items", "total", "next_offset"}
+
+
+def _page_shaped(body: object) -> bool:
+    return isinstance(body, dict) and _PAGE_ENVELOPE_KEYS <= body.keys()
+
+
+def _dummy_path(path: str) -> str:
+    return re.sub(r"\{[^}]*\}", "x", path)
+
+
+def _pagination_violations(app: Starlette) -> list[str]:
+    """Every GET route on `app` whose answer is page-shaped, checked for whether `limit` and
+    `offset` actually change what it returns -- not merely whether the route names them.
+
+    Built from `app.routes` rather than a path list this file restates, so a route `create_app`
+    renames or adds is covered without anyone remembering a second place to update it.
+    """
+    client = TestClient(app)
+    violations = []
+    for route in app.routes:
+        methods = getattr(route, "methods", None)
+        path = getattr(route, "path", None)
+        if not methods or "GET" not in methods or path is None:
+            continue
+        url = _dummy_path(path)
+        baseline = client.get(url)
+        if baseline.status_code != 200:
+            continue
+        body = baseline.json()
+        if not _page_shaped(body):
+            continue
+        if len(body["items"]) <= 1:
+            violations.append(f"{path}: fixture offers <=1 item, `limit` cannot be proven here")
+            continue
+        limited = client.get(f"{url}?limit=1").json()
+        if not _page_shaped(limited) or len(limited["items"]) != 1:
+            violations.append(f"{path} does not honour `limit`")
+            continue
+        offset_page = client.get(f"{url}?limit=1&offset=1").json()
+        if not _page_shaped(offset_page) or offset_page["items"] == limited["items"]:
+            violations.append(f"{path} does not honour `offset`")
+    return violations
+
+
+def test_every_collection_route_accepts_limit_and_offset():
+    # `vendor="x"` matches `_dummy_path`'s own placeholder, so `/api/vendors/x` and
+    # `/api/vendors/x/changes` hit this fixture's data rather than an empty page for an
+    # unrecognised vendor. Each change gets its own `op`: `whats_changed`'s row carries no
+    # change id (`tools.py:200-209`), so four changes sharing one operation would render as four
+    # identical rows and `offset` could never be proven to move between them.
+    changes = [_change(f"c{i}", vendor="x", op=f"Op{i}") for i in range(1, 5)]
+    findings, sites = [], []
+    for i in range(5):
+        site = _site(f"s{i}", vendor="x", path=f"src/a{i}.ts", line=i + 1)
+        sites.append(site)
+        findings.append(_finding(f"f{i}", f"s{i}", "c1"))
+    run_items = [{"thread_id": f"f{i}:0", "finding_id": f"f{i}", "outcome": "opened"} for i in range(5)]
+
+    def runs_reader(*, limit: int, offset: int) -> dict[str, Any]:
+        window = run_items[offset : offset + limit]
+        consumed = offset + len(window)
+        return {
+            "items": window,
+            "total": len(run_items),
+            "next_offset": consumed if consumed < len(run_items) else None,
+        }
+
+    surface = GraphSurface(FakeGraph(findings=findings, sites=sites, changes=changes), feed_fetched_at=FETCHED)
+    app = _build_app(surface=surface, runs_reader=runs_reader)
+
+    violations = _pagination_violations(app)
+
+    assert not violations, "\n".join(violations)
+
+
+def test_the_pagination_guard_rejects_a_route_that_ignores_its_query_string():
+    async def broken_collection(request):
+        return JSONResponse({"items": [1, 2, 3], "total": 3, "next_offset": None})
+
+    app = Starlette(routes=[Route("/api/broken", broken_collection, methods=["GET"])])
+
+    violations = _pagination_violations(app)
+
+    assert violations and "does not honour `limit`" in violations[0]
 
 
 # -- the console's mirrored constants -------------------------------------------
