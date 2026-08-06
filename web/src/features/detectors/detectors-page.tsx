@@ -37,6 +37,11 @@ export function DetectorsPage() {
         written. A detector currently raising nothing does not appear, and that absence is
         indistinguishable from a detector that does not exist.
       </p>
+      <p className="text-body text-muted-foreground">
+        This is a fleet-wide aggregate, not a repository's own answer: GET /api/detectors
+        takes no repo_id, so a detector's tally here counts its open findings across every
+        repository the index has seen at once.
+      </p>
       <DetectorAccountability />
     </section>
   )

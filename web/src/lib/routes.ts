@@ -6,42 +6,59 @@
  * router, the navigation and the palette at once, because all three read the same array
  * rather than three copies of the same thirteen-file habit.
  *
- * `level` is the route's position in the API Dependency Graph, in the order the app shell's
- * header used to render as a static caption: Fleet -> Codebase -> API Services ->
- * Errors & Incidents -> Finding -> Solution Workflow. Two rulings this file makes concrete,
- * recorded here because neither is settled by a single page's own docstring:
+ * `level` is the route's position in the API Dependency Graph, and `GRAPH_LEVELS` is not this
+ * file's invention: `docs/superpowers/specs/2026-07-25-sync-self-maintaining-apis-design.md:429-443`
+ * is the authority, and `.claude/rules/console-hierarchy.md` is the rule that a level with no
+ * line in that document does not belong in the array below. Reconciled 2026-08-05 after the
+ * console shipped eleven routes against a hierarchy nobody had opened — three matched, four
+ * were invented, two were reparented, three specified levels had never been built. The count
+ * is nine now because the specification gained three levels that day (Fleet, Binding surface,
+ * and the Signals/Errors & Incidents split already implied one more), not because this file
+ * decided it needed more screens.
  *
- * - `/bindings` sits at API Services rather than Codebase, because its own docstring leads
- *   with "which call sites bind to a vendor operation" before "what the index holds per
- *   repository" — the vendor-operation question is primary.
- * - `/detectors` sits at Errors & Incidents rather than Finding. `/codebase` (Codebase)
- *   aggregates over the API Services entities one level below it; by the same pattern, an
- *   aggregate over every open finding sits one level above Finding, which is
- *   Errors & Incidents.
+ * Two placements worth recording here, because neither is settled by a single page's own
+ * docstring:
+ *
+ * - `Binding surface` is its own level, a sibling of `Signals` under `API Services` — the
+ *   specification's amended block draws it that way (`:437-438`), not as a sub-case of
+ *   `API Services` the way this file used to file it.
+ * - `Detector attribution` (`/detectors`) is deliberately *not* a level. It aggregates over
+ *   `Errors & Incidents` the same way the old `/codebase` aggregated over `API Services` —
+ *   the specification says so explicitly at `:445` — so it carries the `Errors & Incidents`
+ *   level rather than one invented for it.
+ *
+ * A level with no route below still belongs in `GRAPH_LEVELS`: `Signals` and `Pull Request`
+ * are both stored, specified, and only partly built. `SiteNav` and `CommandPalette` already
+ * drop a level group with nothing under it, so an unbuilt level costs nothing here — leaving
+ * it out would cost the next reconciliation the same afternoon this one took.
  */
 
 import type { ComponentType } from "react"
 
 import { BindingSurfacePage } from "@/features/bindings/binding-surface-page"
-import { BindingsPage } from "@/features/bindings/bindings-page"
-import { RepositoryCoveragePage } from "@/features/bindings/repository-coverage-page"
+import { CodebasePage } from "@/features/repositories/codebase-page"
 import { DetectorsPage } from "@/features/detectors/detectors-page"
 import { FindingPage } from "@/features/findings/finding-page"
 import { FleetPage } from "@/features/fleet/fleet-page"
-import { OverviewPage } from "@/features/repositories/overview-page"
-import { ObservedTelemetryHubPage } from "@/features/telemetry/observed-telemetry-hub-page"
 import { ObservedTelemetryPage } from "@/features/telemetry/observed-telemetry-page"
 import { VendorPage } from "@/features/vendors/vendor-page"
 import { WorkflowPage } from "@/features/workflows/workflow-page"
 
-/** The six levels, in graph order. Every grouping and every ordering reads from this. */
+/**
+ * The specification's levels, in the specification's order. Each comment is the line in
+ * `2026-07-25-sync-self-maintaining-apis-design.md` that defines that level — the citation
+ * `.claude/rules/console-hierarchy.md` requires before a value may land here.
+ */
 export const GRAPH_LEVELS = [
-  "Fleet",
-  "Codebase",
-  "API Services",
-  "Errors & Incidents",
-  "Finding",
-  "Solution Workflow",
+  "Fleet", // :430
+  "Codebase", // :433
+  "API Services", // :434
+  "Signals", // :435
+  "Binding surface", // :437
+  "Errors & Incidents", // :439
+  "Finding", // :440
+  "Solution Workflow", // :441
+  "Pull Request", // :442
 ] as const
 
 export type GraphLevel = (typeof GRAPH_LEVELS)[number]
@@ -73,28 +90,12 @@ export const ROUTES: readonly RouteEntry[] = [
     element: FleetPage,
   },
   {
-    path: "/codebase",
+    path: "/repositories/:repoId",
     label: "Codebase",
-    level: "Codebase",
-    question: "Which vendors have open findings against this codebase right now?",
-    params: [],
-    element: OverviewPage,
-  },
-  {
-    path: "/bindings/repositories/:repoId",
-    label: "Repository coverage",
     level: "Codebase",
     question: "Is this repository actually covered, and what does Sync not see in it?",
     params: ["repoId"],
-    element: RepositoryCoveragePage,
-  },
-  {
-    path: "/bindings",
-    label: "Bindings",
-    level: "API Services",
-    question: "Which call sites bind to a vendor operation, and what changed about it?",
-    params: [],
-    element: BindingsPage,
+    element: CodebasePage,
   },
   {
     path: "/vendors/:vendorId",
@@ -105,9 +106,18 @@ export const ROUTES: readonly RouteEntry[] = [
     element: VendorPage,
   },
   {
+    path: "/repositories/:repoId/observed",
+    label: "Observed telemetry",
+    level: "Signals",
+    question:
+      "What traffic did Sync observe for this repository, and where did error rates move?",
+    params: ["repoId"],
+    element: ObservedTelemetryPage,
+  },
+  {
     path: "/bindings/vendors/:vendorId/operations/:operationId",
     label: "Binding surface",
-    level: "API Services",
+    level: "Binding surface",
     question: "A vendor shipped a breaking change — what call sites does it hit?",
     params: ["vendorId", "operationId"],
     element: BindingSurfacePage,
@@ -119,23 +129,6 @@ export const ROUTES: readonly RouteEntry[] = [
     question: "Which detector is producing my false positives?",
     params: [],
     element: DetectorsPage,
-  },
-  {
-    path: "/observed-telemetry",
-    label: "Observed telemetry",
-    level: "Errors & Incidents",
-    question: "Which repository's observed traffic do I want to see?",
-    params: [],
-    element: ObservedTelemetryHubPage,
-  },
-  {
-    path: "/repositories/:repoId/observed",
-    label: "Observed telemetry",
-    level: "Errors & Incidents",
-    question:
-      "What traffic did Sync observe for this repository, and where did error rates move?",
-    params: ["repoId"],
-    element: ObservedTelemetryPage,
   },
   {
     path: "/findings/:findingId",

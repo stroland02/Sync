@@ -70,7 +70,7 @@ export function RepositoriesCard() {
                       <TableRow key={repoId}>
                         <TableCell className="font-mono text-body">
                           <Link
-                            to={`/bindings/repositories/${encodeURIComponent(repoId)}`}
+                            to={`/repositories/${encodeURIComponent(repoId)}`}
                             className="underline underline-offset-2"
                           >
                             {repoId}

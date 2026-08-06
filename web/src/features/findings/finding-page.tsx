@@ -60,7 +60,6 @@ function FindingDetail({ findingId }: { findingId: string }) {
 
   const trail = [
     { label: "Fleet", to: "/" },
-    { label: "Codebase", to: "/codebase" },
     ...(query.isSuccess
       ? [
           {

@@ -101,9 +101,9 @@ function DetectorCard({ row }: { row: DetectorRow }) {
             below is real and goes to real findings; it is just not scoped to this row,
             and the sentence says so rather than letting the link imply otherwise. */}
         <p className="text-meta text-muted-foreground">
-          No route filters findings by detector yet.{" "}
-          <Link to="/codebase" className="underline underline-offset-2">
-            Browse every open finding
+          No route filters findings by detector yet. Every open finding, by vendor, is on{" "}
+          <Link to="/" className="underline underline-offset-2">
+            the fleet screen
           </Link>{" "}
           instead.
         </p>

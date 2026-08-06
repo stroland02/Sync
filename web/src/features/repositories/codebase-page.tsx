@@ -1,6 +1,12 @@
 /**
- * One repository: what the index has actually indexed, per vendor, and what telemetry showed
- * up for it.
+ * Codebase: the selected repository, and the root of everything beneath it.
+ *
+ * `docs/superpowers/specs/2026-07-25-sync-self-maintaining-apis-design.md:397` names this
+ * level "Codebase (the selected repository)" and the amended hierarchy (`:433`) keeps it —
+ * this screen did not exist until the 2026-08-05 reconciliation found the console had no way
+ * to select one, and everything below it (`/vendors/:id`, `/detectors`, the old `/codebase`)
+ * was answering fleet-wide for exactly that reason. This is the fix: pick a repository here,
+ * and drill down from it into the vendor rows below.
  *
  * Two view models, two questions. `index_coverage` answers "how much of this codebase has
  * Sync read" from `call_site` alone. `observed_telemetry` answers "what traffic did Sync see"
@@ -10,7 +16,7 @@
  * implying either one confirms the other.
  */
 
-import { useParams } from "react-router"
+import { Link, useParams } from "react-router"
 
 import { DEFAULT_LIMIT } from "@/api/client"
 import { useRepositoryCoverage, useRepositoryObserved } from "@/api/queries"
@@ -43,7 +49,11 @@ function IndexCoverageCard({ repoId }: { repoId: string }) {
         <CardDescription>
           Call sites the index holds for this repository, per vendor. A vendor absent from the
           table is not zero — it is a question this view cannot answer: whether the indexer
-          looked and found nothing, or nothing declares which package to look for.
+          looked and found nothing, or nothing declares which package to look for. A vendor
+          name below opens that vendor's own page, which reads across every repository the
+          index has seen rather than staying scoped to this one —{" "}
+          <code className="font-mono">GET /api/vendors/&#123;vendor_id&#125;</code> takes no{" "}
+          <code className="font-mono">repo_id</code> yet.
         </CardDescription>
       </CardHeader>
       <CardContent>
@@ -76,7 +86,14 @@ function IndexCoverageCard({ repoId }: { repoId: string }) {
                     .sort(([a], [b]) => a.localeCompare(b))
                     .map(([vendorId, count]) => (
                       <TableRow key={vendorId}>
-                        <TableCell className="font-mono">{vendorId}</TableCell>
+                        <TableCell className="font-mono">
+                          <Link
+                            to={`/vendors/${encodeURIComponent(vendorId)}?repo_id=${encodeURIComponent(repoId)}`}
+                            className="underline underline-offset-2"
+                          >
+                            {vendorId}
+                          </Link>
+                        </TableCell>
                         <TableCell className="font-mono">{count}</TableCell>
                         <TableCell className="font-mono text-meta">
                           {/* Optional access, not the type contract: `last_indexed` shares
@@ -156,7 +173,16 @@ function ObservedTelemetryCard({ repoId }: { repoId: string }) {
         <CardDescription>
           What traffic showed up for this repository, what shape it had, and how often it
           failed. A row here is evidence a call site was exercised — it is not proof the
-          binding correlating it to an operation is correct.
+          binding correlating it to an operation is correct. The specification's own Signals
+          level (design doc line 435) holds this traffic as one panel among three roles; only
+          the signal-source panel is built, which is also why it has its own screen —{" "}
+          <Link
+            to={`/repositories/${encodeURIComponent(repoId)}/observed`}
+            className="underline underline-offset-2"
+          >
+            observed telemetry, on its own
+          </Link>{" "}
+          — rather than being folded silently into this card alone.
         </CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-6">
@@ -347,19 +373,13 @@ function ObservedTelemetryCard({ repoId }: { repoId: string }) {
   )
 }
 
-export function RepositoryCoveragePage() {
+export function CodebasePage() {
   const { repoId } = useParams<{ repoId: string }>()
   if (repoId === undefined) return <UnknownRoute />
 
   return (
     <section className="flex flex-col gap-4">
-      <Breadcrumbs
-        trail={[
-          { label: "Fleet", to: "/" },
-          { label: "Bindings", to: "/bindings" },
-          { label: repoId },
-        ]}
-      />
+      <Breadcrumbs trail={[{ label: "Fleet", to: "/" }, { label: repoId }]} />
       <h1 className="font-mono text-page">{repoId}</h1>
       <IndexCoverageCard repoId={repoId} />
       <ObservedTelemetryCard repoId={repoId} />

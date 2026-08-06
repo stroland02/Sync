@@ -93,8 +93,8 @@ function BindingSurfaceDetail({
       <Breadcrumbs
         trail={[
           { label: "Fleet", to: "/" },
-          { label: "Bindings", to: "/bindings" },
-          { label: `${vendorId} / ${operationId}` },
+          { label: vendorId, to: `/vendors/${encodeURIComponent(vendorId)}` },
+          { label: operationId },
         ]}
       />
       <h1 className="font-mono text-page">

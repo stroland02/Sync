@@ -7,7 +7,14 @@
  * This route's envelope carries a null `indexed_at` and a null `binding_source`, and both
  * are correct rather than missing: the answer is built from vendor changes alone and holds
  * no binding, so naming a rung would claim a mapping that does not appear in the payload.
+ *
+ * The operation column links into the Binding surface level — reached from the operation a
+ * user is already looking at, rather than from a lookup form on a hub page that no longer
+ * exists. `repoId`, when the caller has one, rides along in the query string so the surface
+ * that opens is scoped to it; `binding_surface` already accepts that parameter.
  */
+
+import { Link } from "react-router"
 
 import { DEFAULT_LIMIT } from "@/api/client"
 import { useVendorChanges } from "@/api/queries"
@@ -26,7 +33,18 @@ import {
 import { ABSENT, formatTimestamp, orAbsent } from "@/lib/format"
 import { useOffsetParam } from "@/lib/use-offset-param"
 
-export function VendorChangesTable({ vendorId }: { vendorId: string }) {
+function bindingSurfaceHref(vendorId: string, operation: string, repoId: string | null): string {
+  const path = `/bindings/vendors/${encodeURIComponent(vendorId)}/operations/${encodeURIComponent(operation)}`
+  return repoId === null ? path : `${path}?repo_id=${encodeURIComponent(repoId)}`
+}
+
+export function VendorChangesTable({
+  vendorId,
+  repoId = null,
+}: {
+  vendorId: string
+  repoId?: string | null
+}) {
   const [offset, setOffset] = useOffsetParam("changes_offset")
   const query = useVendorChanges(vendorId, { limit: DEFAULT_LIMIT, offset })
 
@@ -74,7 +92,16 @@ export function VendorChangesTable({ vendorId }: { vendorId: string }) {
                     <Formatted value={orAbsent(change.severity)} />
                   </TableCell>
                   <TableCell className="font-mono">
-                    <Formatted value={orAbsent(change.operation)} />
+                    {change.operation ? (
+                      <Link
+                        to={bindingSurfaceHref(vendorId, change.operation, repoId)}
+                        className="underline underline-offset-2"
+                      >
+                        {change.operation}
+                      </Link>
+                    ) : (
+                      <Formatted value={orAbsent(change.operation)} />
+                    )}
                   </TableCell>
                   <TableCell className="font-mono">
                     <Formatted value={orAbsent(change.path_ptr)} />

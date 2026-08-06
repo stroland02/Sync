@@ -4,6 +4,9 @@
  * The rung column is per row and is the one to weigh a finding by. The envelope's rung
  * below the table is a property of the page and goes null the moment the page mixes rungs,
  * which is exactly when the per-row column stops being redundant.
+ *
+ * The operation column links into the Binding surface level. `repoId`, when the caller has
+ * one, rides along so the surface that opens is scoped to it.
  */
 
 import { Link } from "react-router"
@@ -25,7 +28,18 @@ import {
 import { orAbsent } from "@/lib/format"
 import { useOffsetParam } from "@/lib/use-offset-param"
 
-export function VendorFindingsTable({ vendorId }: { vendorId: string }) {
+function bindingSurfaceHref(vendorId: string, operation: string, repoId: string | null): string {
+  const path = `/bindings/vendors/${encodeURIComponent(vendorId)}/operations/${encodeURIComponent(operation)}`
+  return repoId === null ? path : `${path}?repo_id=${encodeURIComponent(repoId)}`
+}
+
+export function VendorFindingsTable({
+  vendorId,
+  repoId = null,
+}: {
+  vendorId: string
+  repoId?: string | null
+}) {
   const [offset, setOffset] = useOffsetParam("findings_offset")
   const query = useVendorFindings(vendorId, { limit: DEFAULT_LIMIT, offset })
 
@@ -75,7 +89,16 @@ export function VendorFindingsTable({ vendorId }: { vendorId: string }) {
                     <Formatted value={orAbsent(row.symbol)} />
                   </TableCell>
                   <TableCell className="font-mono">
-                    <Formatted value={orAbsent(row.operation)} />
+                    {row.operation ? (
+                      <Link
+                        to={bindingSurfaceHref(vendorId, row.operation, repoId)}
+                        className="underline underline-offset-2"
+                      >
+                        {row.operation}
+                      </Link>
+                    ) : (
+                      <Formatted value={orAbsent(row.operation)} />
+                    )}
                   </TableCell>
                   <TableCell>
                     <Formatted value={orAbsent(row.change_kind)} />

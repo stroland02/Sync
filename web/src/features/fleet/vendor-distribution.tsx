@@ -1,9 +1,11 @@
 /**
- * The operator's first question, answered here and at `/codebase`: which vendors have open
- * findings right now. Both screens read `GET /api/overview` and render the same row shape
- * through `VendorFindingsTable` — this file is the one place that table's columns and links
- * are declared, so `/codebase`'s full detail and this screen's summary cannot silently
- * disagree about what a vendor row shows.
+ * The operator's first question: which vendors have open findings right now, across every
+ * repository the index has seen. `/codebase` used to answer the same question from the same
+ * `GET /api/overview` payload, unpaginated; that route was retired in the 2026-08-05
+ * hierarchy reconciliation because it wore the Codebase level's name over data no repository
+ * scopes it to, and this panel — capped, and honest about the cap — is what a fleet-wide
+ * answer to that question looks like once the borrowed name is gone. The per-repository
+ * answer lives one level down, at a repository's own Codebase screen.
  *
  * Ordering by open-finding count, descending, is a client-side re-sort of a set `/api/overview`
  * already returns in full — honest under Decision 4 because nothing here is paginated. It is
@@ -29,7 +31,7 @@ import {
 } from "@/components/ui/table"
 import { CardinalityStatement, describeCardinality, sliceForDisplay } from "@/features/fleet/cardinality"
 
-/** The vendor rows, unpaginated. Shared so `/codebase` and this screen render one table, not two. */
+/** The vendor rows, unpaginated. */
 export function VendorFindingsTable({ vendors }: { vendors: readonly VendorSummary[] }) {
   return (
     <Table>
@@ -81,12 +83,11 @@ export function VendorDistributionCard() {
             </CardTitle>
             <CardDescription className="text-body">
               Every open finding the graph holds, grouped by the vendor whose API the call
-              site binds to. The full per-vendor detail lives at{" "}
-              <Link to="/codebase" className="underline underline-offset-2">
-                Codebase
-              </Link>
-              ; this panel is that same answer, ordered by which vendor has the most open
-              findings.
+              site binds to, ordered by which vendor has the most open findings. This is a
+              fleet-wide roll-up — <code className="font-mono">GET /api/overview</code> takes
+              no <code className="font-mono">repo_id</code> — so it is the closest this
+              console gets to "every vendor at risk" until a repository's own Codebase screen
+              can narrow it.
             </CardDescription>
           </CardHeader>
           <CardContent className="flex flex-col gap-4">

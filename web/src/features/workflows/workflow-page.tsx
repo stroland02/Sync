@@ -89,7 +89,6 @@ function Workflow({ findingId }: { findingId: string }) {
       <Breadcrumbs
         trail={[
           { label: "Fleet", to: "/" },
-          { label: "Codebase", to: "/codebase" },
           { label: findingId, to: `/findings/${encodeURIComponent(findingId)}` },
           { label: "Solution workflow" },
         ]}

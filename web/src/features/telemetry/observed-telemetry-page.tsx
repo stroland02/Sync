@@ -70,8 +70,8 @@ function ObservedTelemetryDetail({ repoId }: { repoId: string }) {
       <Breadcrumbs
         trail={[
           { label: "Fleet", to: "/" },
-          { label: "Observed telemetry", to: "/observed-telemetry" },
-          { label: repoId },
+          { label: repoId, to: `/repositories/${encodeURIComponent(repoId)}` },
+          { label: "Observed telemetry" },
         ]}
       />
       <h1 className="font-mono text-page">{repoId}</h1>
