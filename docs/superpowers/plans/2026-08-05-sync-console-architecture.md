@@ -1504,3 +1504,434 @@ recorded here so an agent arriving cold reads a question rather than invents an 
    with. The cost was never the method; it is that a frozen surface changed once changes again —
    the same reasoning that kept `repo_id` off `whats_at_risk`. Raising `_SCAN_LIMIT` is the wrong
    answer and is named here so nobody reaches for it.
+
+---
+
+# Amendment, 2026-08-05 — the surface, measured against a reference and against itself
+
+The owner's verdict on the console as it stands is that it "still looks bad, unorganized and
+confusing", and their target is a surface that feels like "a sophisticated, super advanced
+spaceship, an F1 race car" — engaged and immersed, not "basic dashboards with information".
+
+An interface reference was studied to answer *why a dense surface can feel engineered rather than
+busy*. `.claude/rules/interface-originality.md` binds, so what follows carries **numbers and
+mechanisms, never a layout, a palette, a component or a phrase**. Every recommendation below is
+justified from the operator, the graph or the product position, and any that needed the reference to
+survive was cut — the cuts are listed at the end.
+
+Two things about the F1 framing, because they decide the shape of this amendment. An F1 cockpit is
+**dense with instrumentation and every instrument is legible at speed**, which is the opposite of a
+sparse dashboard and equally the opposite of a decorated one. And an F1 car has **no fake gauges**:
+every dial reads a real sensor. The second of those is this console's honesty discipline restated in
+somebody else's vocabulary, which is why the metaphor and the constraints agree rather than
+conflict. Where they do not agree is named honestly in *The one real tension* below.
+
+## 1. What was measured on the reference
+
+Measured in a real browser at 1440×900 through `getComputedStyle` over all 2,700 elements, not read
+from markup. Numbers, not impressions.
+
+**Surface and colour.** One plane, `rgb(0,0,0)`. **Zero elements in the document declare a border.**
+Depth is carried entirely by translucent white layers at five alpha steps — 0.02, 0.05, 0.1 (458
+elements), 0.2, 0.3. Six distinct text colours exist and two are artifacts; the working set is white
+(104 elements), white at 0.7 alpha (106), white at 0.5 (2), and a single accent used three times as
+text and nine times as a fill. **Two ink levels and one accent, for a whole page.**
+
+**Type.** Ten sizes present, six doing real work: 12px (50 elements), 14 (23), 16 (102), 20 (24), 24
+(6), and a display tier at 40/48/56 (18 combined). Range ratio **56/12 = 4.67:1**.
+
+**Weight does almost nothing.** Two values exist in the entire document: 400 (141 elements) and 500
+(93). There is no 600 and no 700 anywhere. Hierarchy is carried by size, by ink level, and by
+tracking — not by weight.
+
+**Tracking is a mechanism, and its sign flips.** Every size at 13px and above carries a uniform
+**−0.02em**: −1.12px at 56, −0.96 at 48, −0.8 at 40, −0.48 at 24, −0.4 at 20, −0.36 at 18, −0.32 at
+16, −0.28 at 14. The 12px step instead carries **+0.1em** (1.2px), and every element on that step is
+uppercase. So the smallest step is treated as a different job from the rest of the ramp rather than
+as the bottom of it.
+
+**Leading loosens as size falls.** 1.2 at display (67.2/56, 57.6/48), 1.3 at 40 and 16 (52, 20.8),
+1.4 at 20, 14 and 12 (28, 19.6, 16.8), 1.6 at 18.
+
+**Space, and the ratio that matters more than the values.** Base 4. Inside a component: 4, 8, 12,
+16, 24 — with 24 dominant (140 padding declarations) and 16 next (65). Between blocks: 32, 40, 64.
+Between sections: **80px, top and bottom, on every section**. Page frame: **160px** — the hero's top
+padding, and also the side gutter, since the 1105px content column inside a 1425px viewport leaves
+320 = 2 × 160. The three levels stand at **160 : 80 : 24, a ratio of 6.7 : 3.3 : 1**. Prose blocks
+are held to 460–553px while the content column is 1105.
+
+**Controls.** Buttons are 138 × 36 with `0 16px` padding and **radius 0**. Their label is the 12px
+uppercase +0.1em step. Primary and secondary have identical geometry and type and differ **only by
+fill**. Elsewhere, 81 elements are fully pilled and six large panels take a 40px radius.
+
+**Motion, which is the most useful measurement of the lot.** The entire stylesheet declares **two
+transitions — `color 0.15s` and `opacity 0.4s ease-out` — and one keyframe, a loading spinner.**
+At rest, no element on the page has a running transition or animation. Scroll reveal is staged
+through 59 elements held at inline `opacity: 0`, resolved by that single 400ms opacity transition;
+458 elements carry inline transforms and 91 declare `will-change`.
+
+And the finding that decides our motion budget, measured by hovering the primary call to action with
+a real pointer and reading its computed style while `:hover` matched: **background unchanged,
+transform `none`, opacity unchanged, `transition-duration: 0s`.** The entire hover affordance on the
+page's primary action is `cursor: pointer`. The only hover rules in the stylesheet are the
+framework's boilerplate link colours and a form-input clear button.
+
+**Hierarchy in the first screenful**, by y-position: navigation at 49 (14px / 500 / white 0.7);
+headline at 160 (56px / 500 / −0.02em / solid white); supporting sentence at 318 (20px / 400 / white
+0.7); action at 416 (12px / uppercase / +0.1em / on the accent fill); reassurance row at 509 (14px /
+white 0.7). The eye is directed by **a 2.8× size step from first to second, and by a drop to the
+smallest step for the action** — the thing you are meant to click is the smallest text in the
+composition and wins on fill and tracking instead.
+
+## 2. The gap against our console, per item, with file and line
+
+Measured on `m4-dashboard` at `94c274d`, which is well past this plan's original baseline: 7,262
+lines, 20 `<Card>`, 18 `<Table>`, 8 `<Button>`, 8 `onClick`. Each candidate defect named in the
+brief was checked rather than assumed, and one of them is rejected.
+
+**CONFIRMED — everything renders at one visual weight, so nothing leads.** Across `features/`,
+`layouts/` and `components/` there are 184 type-step declarations: `text-body` 79 and `text-meta` 65,
+which is **78% of all rendered type sitting on the two smallest steps**. Above them: `text-emphasis`
+14, `text-page` 8, `text-section` 3, and **`text-figure` exactly once in the whole console**. A
+further 14 declarations are on Tailwind stock steps (`text-sm` 11, `text-xs` 2, `text-lg` 1) that
+`DESIGN.md` says are not the scale. So the declared range of 12→32 (2.67:1) is not the experienced
+range: most screens run 12→24, a ratio of **2.0:1**, which is exactly the failing threshold recorded
+at `docs/superpowers/references/notes/impeccable-interface-quality.md:386`. The top of the ramp is
+declared and not spent.
+
+**CONFIRMED — cards are the default container rather than a grouping.** `features/fleet/fleet-page.tsx:42-47`
+stacks six sibling `<Card>` components in one `flex flex-col gap-6`. Identical container, identical
+`shadow-flat` ring, identical full width, one gap between them, no ordering by what the operator came
+for. Twenty `<Card>` sites across the tree and thirteen of the files holding one wrap a single table
+in it. Because every surface takes the same hairline ring, the ring — which `DESIGN.md` defines as
+*the* elevation mechanism — encodes nothing.
+
+**CONFIRMED — there is no rhythm, because the token layer is not governing.** `DESIGN.md` declares
+three spacing tokens. Across `features/`, `layouts/` and `components/` those tokens are spelled **19
+times** against **128 raw Tailwind spacing declarations**, and the two overlap on the same values:
+`gap-1` (9 uses) and `gap-field` (6) are both 4px; `p-4` (4) and `p-section` (2) are both 16px;
+`px-2` (6) and `px-row` (5) are both 8px. The tokens carry roughly **13%** of the spacing decisions
+they exist to own, so a change to the rhythm cannot be made in one place — which is the only reason
+to have them.
+
+**CONFIRMED, and this is the sharpest number — the page has one spacing level where it needs three.**
+Page gutter `px-6` = 24px (`layouts/app-shell.tsx:46`). Between-panel gap `gap-6` = 24px
+(`features/fleet/fleet-page.tsx:30`). In-panel gap `gap-4` = 16px
+(`features/fleet/screen-limits.tsx:52`). Field gap `gap-1` = 4px (`screen-limits.tsx:54`). So the
+frame and the section gap are **the same value**, and the whole page runs at **24 : 24 : 16 : 4 —
+a ratio of 1.5 : 1.5 : 1** between its outer three levels. The reference's equivalent three levels
+stand at 6.7 : 3.3 : 1. Our largest spacing value is 1.5× our most common one. That is what "no
+rhythm" means when it is measured.
+
+**CONFIRMED — density is low while the data is dense.** `lg:grid-cols-4` appears **once** in
+`features/` and `layouts/` combined. Every screen is a single column of full-width cards. At 1440px
+a four-cell summary panel and a nine-column evidence table both occupy the same 1392px, and the lead
+screen is six panels tall, so an operator answering "what do I act on today" scrolls past four
+panels to reach one. `DESIGN.md`'s own currency argument — every unit of vertical space is a row that
+fell off the viewport — is the argument against this, and nothing in the tree acts on it.
+
+**CONFIRMED, smaller — the radius token is not true.** In `components/ui/` there are 10 Tailwind-stock
+radius declarations (`rounded-lg` 5, `rounded-t-xl` 2, `rounded-b-xl` 2, `rounded-xl` 1) against 13
+token ones. `Card`, the console's most-used container, renders `rounded-xl` = 12px at
+`components/ui/card.tsx:16`, where `DESIGN.md` declares `--radius-surface` = 10px for exactly that
+job and states that everything resolves to one of two values. Task 0's own verification grep was
+written to catch this and the value is present.
+
+**REJECTED — "nothing responds to the pointer, so the surface feels inert."** Not true as stated.
+`components/ui/table.tsx:58` gives every row `transition-colors hover:bg-muted/50`, so the densest
+and most-clicked surface in the console does respond. What is true is narrower and worth keeping:
+there are 21 hover, focus and transition declarations in the tree and 15 of them are inside
+`components/ui/`; across the eight feature screens exactly **one** is authored by hand
+(`features/workflows/node-sequence.tsx`). The interaction the console has is inherited from its
+primitives rather than designed, which is a different defect and a much cheaper one.
+
+**And one thing the console already got right, recorded because the fix should generalise it rather
+than replace it.** `layouts/site-nav.tsx:65` renders its graph-level labels as
+`text-meta tracking-wide uppercase text-muted-foreground` — the same treatment of the smallest step
+that the reference applies to every one of its 12px elements, arrived at here independently, from the
+same problem. It exists in one file and nowhere else. Separately, the console's 112 `font-mono`
+declarations are carrying a semantic distinction the reference has no equivalent of — mono means the
+system recorded this verbatim — and that is a genuine advantage to protect, not a density problem.
+
+## 3. The direction
+
+Four moves. None adds a token, an elevation level, a spacing value or a seventh type step; each
+spends something `DESIGN.md` has already declared and validated.
+
+**Spend the type range instead of declaring it.** The console's hierarchy *is* the API Dependency
+Graph, six levels deep, and an operator arriving on a screen must know which level they are on before
+reading a word. Today 78% of type sits on two adjacent steps and the top step is used once, so the
+graph's depth is invisible in the rendering of it. The fix is a usage rule, not a new value: **every
+screen renders at least four of the six steps, and the figure step stops being ornamental** — a
+count an operator acts on is a figure, and there are several on the lead screen currently rendered
+as body text. This is justified from the graph: the levels are real, they are stored, and the type
+ramp is the only channel that can show depth without asserting a judgement.
+
+**Make tracking part of the step at the display end, and a class at the small end.** `DESIGN.md`
+declares letter-spacing on two of six steps and nothing else, while `site-nav.tsx:65` reaches for it
+by hand. `DESIGN.md`'s own test decides where each belongs: *if two agents building two screens could
+reasonably choose differently and the difference would be visible, it is a token; if they could not,
+it is a class.* Two agents setting a section heading could choose differently, so tracking travels
+with `--text-section` and `--text-emphasis` as it already does with `--text-page` and `--text-figure`.
+Two agents rendering a graph-level label would both reach for uppercase and open tracking, so the
+furniture treatment is **one class**, defined once, replacing the ad-hoc pair in `site-nav.tsx`.
+Justified from the operator: the 12px step carries what is scanned rather than read — level names,
+column headers, rung labels, timestamps — and open tracking on short uppercase runs is legibility at
+speed, which is the whole of what the F1 framing actually asks for.
+
+**Let grouping ride the surface ramp we already validated, and give the ring back its job.** The dark
+column already holds four surface steps — `surface-sunken` 0.155, `surface` 0.205, `surface-subtle`
+0.255, `surface-emphasis` 0.305 — with every ink pairing on them computed and clearing the 5.05
+floor by a wide margin (`ink` on surface 15.73, on subtle 13.79, on emphasis 11.75). That is enough
+to separate a panel from the page and a header from a body without drawing a box around each of
+twenty cards. So a surface's step, not its ring, says what kind of thing it is; the ring is kept for
+a surface that must be told apart from a neighbour at the same step. This adds no elevation level —
+`DESIGN.md` still has exactly two, and only `ErrorSurface` floats. The reference's demonstration that
+2,700 elements can be organised with zero borders is what prompted checking whether ours were doing
+work; the argument for the change is that ours measurably are not.
+
+**Use the width, because vertical space is the currency and we are spending it on air.** Panels that
+are *summaries* pair two-up at the viewport's width; panels that are *evidence tables* stay full
+width, which `app-shell.tsx:23-28` already argues for correctly. On the lead screen this alone takes
+six full-width panels to roughly three rows without hiding anything — density gained by layout rather
+than by disclosure, which is the only kind this plan's Decision 3 permits without a qualification
+audit. And separate the page frame from the between-panel gap so the two stop being the same number;
+the goal is a distinguishable step between nesting levels, **not the reference's magnitudes**, which
+would cost rows and which `DESIGN.md` explicitly refuses.
+
+**One thing that must get louder rather than quieter, and it follows from the constraints rather than
+from taste.** `features/fleet/screen-limits.tsx:42-63` renders the console's product position — what
+this screen cannot tell you — in a `<Card>` identical to the five figure panels beside it, which
+satisfies Task 2 step 3's requirement that it sit "at the same visual weight as the figures". That
+requirement was written to stop it becoming a footnote. In a console whose figures are about to get
+larger and whose panels are about to be ranked, *same weight* read literally makes it the quietest
+thing on screen by contrast. The honest reading is **same tier**, and every task below re-verifies it
+after the hierarchy moves. A denser console must be more legible about what it cannot prove, not
+less, and this is the specific place that fails first.
+
+## 4. Tasks
+
+Ranked. Rank 11 stays the layered bipartite diagram, which still loses, so these begin at 12.
+
+### Task 12: The system layer — the type range, tracking, and the surface ramp's grouping job
+
+**Files:** `DESIGN.md`, `web/src/index.css`. **~half a day.**
+
+**Not parallel.** Both files are held by the session removing the light column for dark-mode-only.
+This task starts after that lands and takes both files whole; there is no way to split them, and two
+agents in `index.css` is a lost morning.
+
+- [ ] **Step 1:** Add letter-spacing to `--text-section` and `--text-emphasis` on the pattern
+  `--text-page` and `--text-figure` already set, and record both in `DESIGN.md`'s Type table with the
+  reasoning. **No seventh step, no changed size, no changed weight.**
+- [ ] **Step 2:** Define the furniture class once, in `@layer components` — the uppercase, open-tracked
+  treatment of `--text-meta` that `site-nav.tsx:65` currently spells by hand. `DESIGN.md` gains a
+  short section saying which of the smallest step's two jobs it covers and which it does not: a
+  scanned label takes it, a timestamp does not.
+- [ ] **Step 3:** State the surface ramp's grouping contract in `DESIGN.md` — which step a page, a
+  panel, a panel header and a selected row take in dark mode, and that the ring is no longer applied
+  to every surface by default. Cite the contrast figures already computed rather than recomputing
+  them; none of these pairings is new.
+- [ ] **Step 4:** Record the spacing ruling: the three tokens are the only spelling permitted inside
+  `features/`, and the page-frame value stays unnamed on Tailwind's base scale as
+  `DESIGN.md` already decided. **No fourth spacing token.**
+- [ ] **Step 5:** The honesty audit. Nothing in this task may make colour, motion or depth carry a
+  claim. Confirm the three channels licensed to assert — run outcome, error state, absence — are
+  unchanged, and that the provenance rung is still monochrome.
+- [ ] **Step 6:** `npm run build` clean. Commit.
+
+**Verification a reviewer can run:** `grep -c "text-" web/src/index.css` still shows six steps.
+Then re-read `DESIGN.md`'s "Deliberately absent" list and confirm every item is still absent. Then
+set `--text-section`'s tracking to a deliberately wrong value, load a screen, see it, and revert —
+a token nothing reads is a token that is not wired.
+
+### Task 13: The primitives carry the grouping, and the radius token becomes true
+
+**Files:** `web/src/components/ui/card.tsx`, `web/src/components/ui/table.tsx`,
+`web/src/components/provenance.tsx`. **~half a day. Follows Task 12.**
+
+**Exclusive.** Touches nothing under `features/`, `layouts/` or `lib/`.
+
+- [ ] **Step 1:** `Card` takes its surface step and its radius from the tokens: `rounded-xl` at
+  `card.tsx:16` and the four `rounded-t-xl`/`rounded-b-xl` variants become `--radius-surface`. This
+  is a 2px change and it is the difference between a token layer that governs and one that describes.
+- [ ] **Step 2:** `Card` gains a variant expressing whether it is a grouping or a plain surface,
+  carried by the surface step rather than by an added elevation level. **The default stops being
+  ring-on-everything.**
+- [ ] **Step 3:** `TableHeader` sits on `surface-subtle` so a dense table reads as header-then-body
+  without a rule. **Leave `TableRow`'s `hover:bg-muted/50` and `transition-colors` at `table.tsx:58`
+  exactly as they are** — that is the one interaction in the console that was already right.
+- [ ] **Step 4:** `RungBadge` adopts the furniture class from Task 12 and **stays monochrome**. If
+  this step ends with a hue anywhere near the rung, it is wrong.
+- [ ] **Step 5:** The honesty audit. A surface step now distinguishes a grouping from a plain panel —
+  confirm that distinction is structural and never a judgement, and that no reader could take a
+  lighter surface for a better result.
+- [ ] **Step 6:** `npm run build` clean, `npm run lint` no new error-level violations. Commit.
+
+**Verification a reviewer can run:**
+`grep -rnE "rounded-(lg|xl|t-xl|b-xl)" web/src/components/ui/` returns nothing. Then open any screen
+with the theme's surface tokens temporarily collapsed to one value and confirm the page becomes
+illegible as *grouping* while remaining legible as *text* — which proves the grouping is carried by
+surface and not by the ring that is still there.
+
+### Task 14: The lead screen uses its width and ranks its panels
+
+**Files:** `web/src/features/fleet/**`, `web/src/layouts/app-shell.tsx`. **~1 day. Follows Task 13.
+Parallel with Task 15.**
+
+- [ ] **Step 1:** Separate the page frame from the between-panel gap in `app-shell.tsx:46` so the two
+  stop being 24px each. One step, not the reference's three.
+- [ ] **Step 2:** Rank the six panels at `fleet-page.tsx:42-47` by the operator's first question and
+  pair the summary panels two-up. Evidence tables keep the full width.
+- [ ] **Step 3:** The figures an operator acts on take `--text-figure`, which is currently used once
+  in the console. Every figure keeps the sentence naming its scope **at the same tier**, which after
+  this change means a larger step than body, not the same one.
+- [ ] **Step 4:** `ScreenLimitsCard` is re-checked against the new hierarchy and lifted to whatever
+  tier keeps it level with the figures. **It is not moved below the fold, not collapsed, and not
+  shortened.**
+- [ ] **Step 5:** Every spacing declaration in these files uses a token spelling.
+- [ ] **Step 6:** The honesty audit, and it is the one that matters most here. A ranked screen asserts
+  that the top panel is the most important; confirm the ranking follows the operator's question and
+  not the panel's size. A two-up pairing asserts the two are comparable; confirm they are. And diff
+  the rendered text before and after — **the protected sentences at `fleet-page.tsx:15-17`,
+  `runs-table.tsx`, `corpus-summary.tsx` and `repositories-table.tsx` must be present at full
+  length**.
+- [ ] **Step 7:** `npm run build` clean, `npm run lint` no new error-level violations. Commit.
+
+**Verification a reviewer can run:** load `/` at 1440×900 and count how many panels are visible
+before scrolling, before and after. Then read the screen asking *"what would I wrongly believe if I
+only read the largest things?"* and confirm the answer is nothing. Then diff the visible text against
+the previous commit; the set of qualifications must be identical or larger.
+
+### Task 15: The remaining screens adopt the ranked hierarchy
+
+**Files:** `web/src/features/{bindings,telemetry,vendors,repositories,detectors,findings,workflows}/**`.
+**~1 day. Follows Task 13. Parallel with Task 14.**
+
+- [ ] **Step 1:** Each screen renders at least four of the six type steps, with its `h1` on
+  `--text-page` and its scanned furniture on the Task 12 class.
+- [ ] **Step 2:** Panels that are summaries pair or grid; panels that are evidence tables keep the
+  full width.
+- [ ] **Step 3:** Every spacing declaration in these files uses a token spelling. This is the bulk of
+  the 128 raw declarations and it is mechanical.
+- [ ] **Step 4:** The honesty audit, per screen: every "cannot tell the two apart" sentence, every
+  denominator caption, every absence marker and every per-row rung is still on screen at full length
+  and not behind a disclosure.
+- [ ] **Step 5:** `npm run build` clean, `npm run lint` no new error-level violations. Commit.
+
+**Verification a reviewer can run:** walk all routes at 1440×900 and confirm each one's headline
+question is answered above the fold with no horizontal scroll — Decision 8's check, now applied per
+screen. Then grep the diff for a removed sentence.
+
+### Task 16: The guard that holds the token layer
+
+**Files:** `tests/test_console_design_tokens.py`. **~2 hours. Follows Task 15.**
+
+Python rather than Vitest, for Task 10's stated reason and under open question 3: this is an
+assertion over source text, it needs no DOM and no runner, and Vitest does not exist in the tree yet
+(`web/package.json` has no `test` script). Same shape as `tests/test_api_routes.py:440-460`.
+
+- [ ] **Step 1:** Assert no file under `web/src/features/` spells a raw Tailwind spacing step where a
+  `DESIGN.md` token holds the same value. The failure message names the file, the line and the token
+  to use. `encoding="utf-8"` on every read.
+- [ ] **Step 2:** Assert no file under `web/src/` declares a radius outside the two tokens, and none
+  declares a type step outside the six.
+- [ ] **Step 3:** Assert nothing renders below `--text-meta` — no `text-[10px]`, no `text-[11px]`,
+  covering the standing temptation `DESIGN.md` names by hand.
+- [ ] **Step 4:** **Prove it can fail, three times** — once per assertion. Introduce the violation,
+  watch it go red for the reason expected, revert. A guard that has never rejected anything has not
+  been shown to guard.
+- [ ] **Step 5:** `uv run pytest tests/test_console_design_tokens.py`,
+  `uv run python scripts/lint_encoding.py tests`. Commit.
+
+**Verification a reviewer can run:** add `gap-4` to any file under `web/src/features/` and watch the
+test name it and the token to replace it with. Revert.
+
+### The parallel partition for these tasks
+
+| Task | Exclusive file set | Runs |
+|---|---|---|
+| **12 — System layer** | `DESIGN.md`, `web/src/index.css` | after dark-mode-only lands; alone |
+| **13 — Primitives** | `web/src/components/ui/card.tsx`, `web/src/components/ui/table.tsx`, `web/src/components/provenance.tsx` | after 12; alone |
+| **14 — Lead screen** | `web/src/features/fleet/**`, `web/src/layouts/app-shell.tsx` | after 13; parallel with 15 |
+| **15 — Remaining screens** | `web/src/features/{bindings,telemetry,vendors,repositories,detectors,findings,workflows}/**` | after 13; parallel with 14 |
+| **16 — Token guard** | `tests/test_console_design_tokens.py` | after 15; alone |
+
+Tasks 14 and 15 are disjoint by directory and are the only pair that runs concurrently. Tasks 12 and
+13 are serialised because a token layer and the primitives reading it cannot be changed in parallel
+without one of them being wrong for a commit.
+
+## 5. What this amendment does not propose, and what decided it
+
+The design-system plan's rejections stand and are **not reopened**: no 3D, no spatial canvas, no
+draggable widgets, no composite score. Nothing below revisits them.
+
+- **No score, health figure, traffic light, green dot or liveness pulse.** Rejected three times on
+  the record and rendered as a refusal on screen at `fleet-page.tsx:15-17` and
+  `runs-table.tsx:159-168` — that sentence has moved since *Establish 2* cited it at `:114-123`, and
+  the citation here is the one checked against the tree at `94c274d`.
+  A denser, more immersive console is the single most likely place for one to reappear, in the
+  specific form of a "system status" indicator that a spaceship metaphor invites. There is no
+  heartbeat in the data. There is no dot.
+- **No new motion, and this is now a measurement rather than a preference.** The reference's entire
+  stylesheet declares two transitions and its primary action does nothing at all on hover. Whatever
+  produces the feel the owner is describing, it is demonstrably not motion. Decision 8 already said
+  immersion is the absence of decisions the reader has to make; this is the evidence for it.
+- **Not the reference's spacing magnitudes.** 80px between sections and a 160px page frame would cost
+  rows on every screen, and `DESIGN.md` is explicit that whitespace is what is being spent. The
+  **ratio between nesting levels** is the mechanism that transfers; the values are theirs and would be
+  wrong here.
+- **Not a single-plane, borderless surface.** It works on a marketing page with 24 elements per
+  screenful. Our screens are evidence tables with hundreds of cells, and a table needs a header rule.
+  We keep both channels and stop spending only one of them.
+- **Not two font weights.** The reference reaches 4.67:1 of type range with only 400 and 500, which is
+  elegant and is not available to us: our range is 2.67:1 by deliberate decision, since rows per
+  screen is the currency, and at that range weight is doing necessary work that size cannot.
+- **Not a backdrop blur, a translucent nav, or any decorative layer.** The reference carries a blurred
+  nav and named decorative elements. Each is depth or motion asserting something the data does not
+  hold, which `DESIGN.md`'s first rule forbids outright.
+- **Not a radius of 0 on controls, and not pills.** Both are appearance with no argument from the
+  operator behind them. `--radius-control` and `--radius-surface` already exist and Task 13's job is
+  to make them true, not to change them.
+- **Not a new accent colour or a second chromatic channel.** The reference runs on two ink levels and
+  one accent. We already run on a nine-step neutral ramp with the brand hue reserved for links, focus
+  and the current node, which is a stricter version of the same discipline arrived at independently.
+- **No column of the honesty sentences is shortened, collapsed, moved into a tooltip or restyled into
+  quietness.** The twenty-four protected sentences in *Establish 2* are restyled at most. Task 14 step
+  6 and Task 15 step 4 both diff the rendered text, and a reworded qualification is a changed claim.
+
+## 6. The one real tension, stated plainly
+
+The F1 framing and this console's honesty discipline agree on three of four axes, and the agreement
+is not a rhetorical convenience.
+
+**Density agrees.** A cockpit shows everything at once; Decision 3 already forbids hiding a
+qualification behind a click. Density and honesty pull the same direction here, which is unusual and
+worth saying out loud.
+
+**Legibility at speed agrees, and is the actual defect.** Every measurement in section 2 is a
+legibility failure, not a decoration failure. 78% of type on two steps, one grid in the tree, a page
+frame equal to a panel gap — an instrument panel where every dial is the same size is not dense, it
+is unreadable.
+
+**No fake gauges agrees exactly.** This is the console's whole position in somebody else's words.
+
+**Immersion is where it conflicts, and the conflict is real.** The felt quality of a spaceship
+interface, as the phrase is normally meant, comes from decoration that asserts activity — a sweep, a
+pulse, a live readout, a counter that moves. Every one of those is a claim about time or liveness,
+and this console has already ruled, three times and on screen, that it cannot make that claim:
+`runs-table.tsx:159-168` refuses a liveness dot because nothing in the data distinguishes a run
+parked on the customer's CI from one that has died. **So the animated, alive-looking register of the
+metaphor is permanently unavailable here, and no amount of design will recover it.**
+
+The honest resolution, and the reason this is a tension rather than a contradiction: the reference
+was measured precisely to test whether that register is where the feeling comes from, and it is not.
+A page with two transitions in its entire stylesheet and a primary button that does nothing on hover
+reads as engineered because of typographic range, tracking discipline, a spacing ratio of nearly 7:1
+across three nesting levels, and a colour system of two inks and one accent. **All four of those are
+available to this console at zero cost to its honesty**, and all four are what section 3 proposes.
+
+What the owner should know is the limit: this will make the console feel considered, deliberate and
+fast to read. It will not make it feel *alive*, because being alive is a claim, and this product's
+entire position is that it does not make claims it cannot support. That is the trade, it was decided
+before this amendment, and it is the right one.
