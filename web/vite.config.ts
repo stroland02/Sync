@@ -24,9 +24,18 @@ export default defineConfig({
     },
   },
   build: {
-    // echarts is lazy-loaded into its own chunk (see corpus-summary.tsx) so it
-    // never lands in the initial bundle; the default 500kB warning still fires
-    // on that chunk alone because echarts itself is that large minified.
+    // echarts is lazy-loaded into its own chunk (see corpus-summary.tsx and
+    // detector-accountability.tsx) so it never lands in the initial bundle; the default
+    // 500kB warning still fires on that chunk alone because echarts itself is that large
+    // minified.
     chunkSizeWarningLimit: 1200,
+    // **Do not name that chunk with `manualChunks`.** It is tempting: with two lazy charts
+    // Rollup puts everything they share into one chunk and names it after whichever member
+    // came first, so 1.1 MB of echarts currently reports under `chart-text`, a fifty-line
+    // pure module. Measured on 2026-08-06: forcing `node_modules/echarts` and
+    // `node_modules/zrender` into a chunk called `echarts` renames it correctly and also
+    // makes the entry chunk import it *statically* — `import{…}from"./echarts-*.js"` at the
+    // top of `index-*.js` — which is echarts in the first paint, the one thing this whole
+    // arrangement exists to prevent. A misleading chunk name is cheaper than that.
   },
 })

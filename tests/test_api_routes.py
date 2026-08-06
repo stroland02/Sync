@@ -17,6 +17,7 @@ from pathlib import Path
 from typing import Any, NamedTuple
 
 import pytest
+from typing import get_args
 from starlette.applications import Starlette
 from starlette.responses import JSONResponse
 from starlette.routing import Route
@@ -25,6 +26,7 @@ from starlette.testclient import TestClient
 from sync.api.__main__ import DEFAULT_PORT, _reload_enabled, app_factory
 from sync.api.app import _MAX_LIMIT, create_app
 from sync.core import CallSite, Finding, VendorChange
+from sync.core.models import UNATTRIBUTED, BindingRung
 from sync.dashboard.queries import _FINISHED
 from sync.graph.store import FINDING_ORDERS, GraphStore
 from sync.mcp.tools import DEFAULT_LIMIT, GraphSurface
@@ -1568,6 +1570,25 @@ def test_the_consoles_proxy_target_matches_the_apis_default_port():
     match = re.search(r'target:\s*[^\n]*\?\?\s*"http://127\.0\.0\.1:(\d+)"', source)
     assert match is not None, "web/vite.config.ts no longer proxies /api to a fixed fallback port"
     assert int(match.group(1)) == DEFAULT_PORT
+
+
+def test_the_consoles_rung_vocabulary_matches_the_models_in_order():
+    # `web/src/api/types.ts` restates `FindingRung` as `BINDING_SOURCES` because the console
+    # cannot import Python. Order is part of the contract here, not only membership: the rung
+    # composition chart assigns one categorical series slot per member *by position*, so a rung
+    # missing from the array is a segment silently absent from every bar, and a reordering
+    # repaints every existing chart's colours without changing a single count.
+    #
+    # `unattributed` is the member `BindingRung` deliberately excludes and `FindingRung` adds --
+    # a fact about history rather than a rung any binder emits -- so this reads the wider type,
+    # which is the one a persisted finding can actually carry.
+    source = _web_source("src/api/types.ts")
+    match = re.search(r"export const BINDING_SOURCES\s*=\s*\[(.*?)\]", source, re.S)
+    assert match is not None, "web/src/api/types.ts no longer declares BINDING_SOURCES"
+    declared = re.findall(r'"([a-z]+)"', match.group(1))
+
+    expected = [*get_args(BindingRung), UNATTRIBUTED]
+    assert declared == expected
 
 
 def test_the_consoles_run_disposition_matches_the_finished_outcomes():
