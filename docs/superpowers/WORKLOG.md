@@ -65,3 +65,17 @@ published.
 | M4.5-W143 | Motion audited: one of three framer-motion usages deleted after measuring it had never run, and the registry made a test. B113 and B114 filed | landed | `0de5a44`, `f3b3059` |
 | M4.5-W144 | Density: the binding surface's rows 76px to 57px by factoring out the directory 2,500 rows shared. B110 closed, B115 filed | pushed, `m45-density`, not merged |
 | M4.5-W145 | Rung composition per detector — length encodes composition, because volume drew three of four as a sliver reading 'found nothing' | landed |
+
+## M7 — the console becomes a product
+
+`docs/superpowers/plans/2026-08-06-m7-console-as-product.md`, on branch `console-identity`. The
+milestone exists because the console clears eight of fourteen measured invariants and is still flat;
+`reports/2026-08-06-why-the-console-came-out-flat.md` carries the six causes, all of them rules this
+repository wrote rather than mistakes anyone made.
+
+| Item | Subject | State | Where |
+|---|---|---|---|
+| M7-W157 | Why the console came out flat, and the three rules that caused it | landed | `cf3a161` |
+| M7-W158 | The honesty sentences guarded before the screens they sit on are rewritten | landed | `7bef206` |
+| M7-W159 | Read Supabase as source, for mechanism | dispatched | `briefs/2026-08-06-m7-read-supabase-source.md` |
+| M7-W160 | The chassis, and the type and space revision it makes possible | dispatched | `briefs/2026-08-06-m7-the-chassis.md` |
