@@ -55,35 +55,54 @@ export function ProvenanceStrip({
   /** What a null `indexed_at` means here. Defaults to the honest generic. */
   indexedNullLabel?: string
 }) {
-  const { indexed_at, feed_fetched_at, binding_source, context_savings } = provenance
+  const { indexed_at, feed_fetched_at, binding_source, context_savings, context_savings_bound_reached } =
+    provenance
   return (
-    <dl className="flex flex-wrap gap-x-8 gap-y-3 border-t border-border pt-3">
-      <Field label="Binding source">
-        {binding_source === null ? (
-          <Absent>{bindingNullLabel}</Absent>
-        ) : (
-          <span title={describeRung(binding_source)}>{binding_source}</span>
-        )}
-      </Field>
-      <Field label="Indexed at">
-        {indexed_at === null ? (
-          <Absent>{indexedNullLabel}</Absent>
-        ) : (
-          <time dateTime={indexed_at}>
-            <Formatted value={formatTimestamp(indexed_at)} />
-          </time>
-        )}
-      </Field>
-      <Field label="Feed fetched at">
-        {feed_fetched_at === null ? (
-          <Absent>no feed recorded</Absent>
-        ) : (
-          <time dateTime={feed_fetched_at}>
-            <Formatted value={formatTimestamp(feed_fetched_at)} />
-          </time>
-        )}
-      </Field>
-      <Field label="Context savings">{`${context_savings.toLocaleString()} tokens`}</Field>
-    </dl>
+    <div className="flex flex-col gap-2 border-t border-border pt-3">
+      <dl className="flex flex-wrap gap-x-8 gap-y-3">
+        <Field label="Binding source">
+          {binding_source === null ? (
+            <Absent>{bindingNullLabel}</Absent>
+          ) : (
+            <span title={describeRung(binding_source)}>{binding_source}</span>
+          )}
+        </Field>
+        <Field label="Indexed at">
+          {indexed_at === null ? (
+            <Absent>{indexedNullLabel}</Absent>
+          ) : (
+            <time dateTime={indexed_at}>
+              <Formatted value={formatTimestamp(indexed_at)} />
+            </time>
+          )}
+        </Field>
+        <Field label="Feed fetched at">
+          {feed_fetched_at === null ? (
+            <Absent>no feed recorded</Absent>
+          ) : (
+            <time dateTime={feed_fetched_at}>
+              <Formatted value={formatTimestamp(feed_fetched_at)} />
+            </time>
+          )}
+        </Field>
+        {/* `+` mirrors `describeBoundedTotal` (`features/fleet/cardinality.tsx`) rather than
+            importing it: that module is fleet-scoped and this strip is not, and the format is a
+            two-token ternary, cheap enough to restate exactly rather than pull a feature into a
+            shared component's dependency graph for it. Wording, not the fact, is what may vary --
+            see that module's own docstring for the vocabulary this must not drift from. */}
+        <Field label="Context savings">
+          {context_savings_bound_reached
+            ? `${context_savings.toLocaleString()}+ tokens`
+            : `${context_savings.toLocaleString()} tokens`}
+        </Field>
+      </dl>
+      {context_savings_bound_reached && (
+        <p className="max-w-prose text-body text-muted-foreground">
+          This figure is a floor, not the true savings: it is derived from a count that stopped
+          early, and it does not say how much more the graph would save if that count had kept
+          going.
+        </p>
+      )}
+    </div>
   )
 }

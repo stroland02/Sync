@@ -27,15 +27,25 @@ export type BindingSource =
  * holds no binding at all, or the page mixes rungs. Null is a fact, not a missing value,
  * and every render site is required to say which fact it means.
  *
- * `context_savings` is required. `/api/overview` used to compose its payload by hand and drop
- * the field; it now forwards the figure from the `whats_at_risk` page it already reads, so
- * every route carries it the same way the other four always have.
+ * `context_savings` is required. It is read straight from `sync.dashboard` on every route now
+ * — `/api/overview` no longer composes its payload from the `whats_at_risk` page `app.py`'s own
+ * history describes; `overview_summary`'s docstring carries what replaced it.
+ *
+ * `context_savings_bound_reached` is optional and false-shaped absent: only a route whose
+ * `context_savings` can be derived from a bounded scan sets it, `/api/overview` today
+ * (`sync.dashboard.graph_views.overview_summary`). Every other route's `context_savings` is an
+ * exact figure over the page it actually read, so leaving the field `undefined` there is not a
+ * gap in the payload — a render site that has never heard of the flag renders the number
+ * unqualified and is not wrong, because it never lies for a route this flag was not written
+ * for. A render site that does check it must never show `context_savings` as an exact number
+ * once this is `true`.
  */
 export interface Provenance {
   indexed_at: string | null
   feed_fetched_at: string | null
   binding_source: BindingSource | null
   context_savings: number
+  context_savings_bound_reached?: boolean
 }
 
 /** A paginated answer. `next_offset` is null on the last page — an offset that always exists is a loop. */
@@ -85,6 +95,12 @@ export interface VendorSummary {
  * `total_findings_bound`. That is deliberate: a distribution truncated at the same ceiling as
  * the count would be the distribution of whichever rows the ordering reached, not of the
  * population, so past the bound their sum legitimately exceeds `total_findings`.
+ *
+ * This route always sets `context_savings_bound_reached` (never leaves it `undefined`):
+ * `context_savings` here is `total_findings * a constant`, so it inherits the same truncation
+ * `total_findings_bound_reached` names. A render site that shows this card's `context_savings`
+ * without checking the flag is the exact defect `total_findings_bound_reached` exists to catch,
+ * one field over.
  */
 export interface OverviewResponse extends Provenance {
   vendors: VendorSummary[]

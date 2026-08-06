@@ -102,7 +102,10 @@ keeps a separate `graphics` category for exactly this (`components/core/principl
 "Categories": `content` is "text and icons which need to stand out the most", `graphics` is "icons and
 other graphical elements which don't need to stand out as much"). `--color-graphics` names step 7 of
 the ramp above — the same value as `--color-ink-muted`, `oklch(0.715 0 0)` — under its own job so an
-icon reaches for it rather than for a text token. No new lightness, and the contrast already published
+icon reaches for it rather than for a text token. **Declared ahead of its first consumer**: no
+component in the tree reaches for it yet, because the console has shipped no icon for it to colour
+— the allocation exists so the first icon that ships reaches for `graphics` on day one rather than
+borrowing `ink-muted` and leaving a migration for later. No new lightness, and the contrast already published
 for `ink-muted` in *Contrast, computed* below applies unchanged: for an achromatic OKLCH colour,
 relative luminance is exactly `L^3`, so contrast against a surface of lightness `L_surface` is
 `(0.715³ + 0.05) / (L_surface³ + 0.05)`. Worst case is `--color-surface-emphasis` (`L` 0.305): `(0.3655

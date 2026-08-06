@@ -397,6 +397,15 @@ def overview_summary(store: GraphStore, *, bound: int = OPEN_FINDING_COUNT_BOUND
       apart. Built from the *bounded* total rather than the true one: past `bound` this
       understates the real savings, which is the honest direction for a number the console
       already renders beside a total that says it stopped counting early.
+    - `context_savings_bound_reached` travels with `context_savings` for the same reason
+      `total_findings_bound_reached` travels with `total_findings`: a figure derived from a
+      truncated scan must carry the fact that it was truncated, rather than leaving a render
+      site to notice on its own that the sibling total was bounded and infer the multiplication
+      inherited the same ceiling. Today the two flags are always equal -- `context_savings` has
+      no scan of its own, only `total_findings`'s -- but the field is named for what it asserts
+      about *this* number, not for the mechanism behind it, so a future change to how savings is
+      estimated (a per-finding cost rather than a flat multiplier, say) would not silently strand
+      a render site that had learned to read `total_findings_bound_reached` for both.
     """
     total, bound_reached = store.open_findings_count_bounded(bound)
     vendor_counts = store.open_findings_vendor_counts()
@@ -414,6 +423,7 @@ def overview_summary(store: GraphStore, *, bound: int = OPEN_FINDING_COUNT_BOUND
         "feed_fetched_at": None,
         "binding_source": summary["binding_rung"],
         "context_savings": total * _TOKENS_PER_AVOIDED_READ,
+        "context_savings_bound_reached": bound_reached,
     }
 
 

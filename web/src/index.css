@@ -37,7 +37,18 @@
      stroke pattern at the same lightness -- so it takes its own name rather than borrowing
      `ink` or `ink-secondary`. Same value as `--color-ink-muted`: an allocation of an
      existing step, not a tenth lightness on the ramp. DESIGN.md's neutral-ramp section
-     carries the contrast arithmetic. */
+     carries the contrast arithmetic.
+
+     Declared and unconsumed today: no component in this tree reaches for it, because the
+     console has shipped no icon yet for it to colour. That is the allocation working as
+     designed, not drift -- `docs/superpowers/plans/2026-08-05-sync-console-architecture.md`
+     section 22.5 adds this token ahead of the icon it will serve, the same order DESIGN.md's
+     own "graphics is an allocation, not a tenth step" argument is written in: name the step
+     before spending it, so the first icon this console ships reaches for `graphics` on day
+     one instead of borrowing `ink-muted` and leaving a second migration to do later. The
+     retiring condition is the first icon: the day one lands anywhere in this tree, it either
+     takes this token or the token is the one that should go, and that choice belongs to
+     whichever change ships the icon, not to a token audit that ships none. */
   --color-graphics: oklch(0.715 0 0);
 
   /* 265 degrees, outside the 30-145 arc the status palette occupies, so the

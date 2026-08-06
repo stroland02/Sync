@@ -692,6 +692,10 @@ def test_overview_summary_bound_not_reached_when_the_true_count_is_under_it(stor
     assert result["total_findings"] == 1
     assert result["total_findings_bound"] == 1000
     assert result["total_findings_bound_reached"] is False
+    # `context_savings` rests on the same scan as `total_findings`: under the bound, it is the
+    # true figure, and the flag that says so must agree with `total_findings_bound_reached`
+    # rather than a reader having to infer one from the other.
+    assert result["context_savings_bound_reached"] is False
 
 
 def test_overview_summary_context_savings_is_derived_from_the_bounded_total(store):
@@ -705,6 +709,11 @@ def test_overview_summary_context_savings_is_derived_from_the_bounded_total(stor
 
     assert result["total_findings"] == 2
     assert result["context_savings"] == 2 * _TOKENS_PER_AVOIDED_READ
+    # The defect this guards: `context_savings` understating past the bound is correct, but
+    # rendering it bare, with nothing marking it as a floor, claims an exactness the truncated
+    # scan behind it never produced -- the same failure `total_findings_bound_reached` exists to
+    # name for the sibling figure in the same card.
+    assert result["context_savings_bound_reached"] is True
 
 
 def test_overview_summary_indexed_at_and_binding_source_reflect_every_open_finding(store):
@@ -758,6 +767,7 @@ def test_overview_summary_with_no_findings_is_empty_not_an_error(store):
         "feed_fetched_at": None,
         "binding_source": None,
         "context_savings": 0,
+        "context_savings_bound_reached": False,
     }
 
 

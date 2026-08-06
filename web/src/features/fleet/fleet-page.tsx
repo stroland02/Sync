@@ -3,14 +3,26 @@
  * an operator has to act on today.
  *
  * Five routes make this screen, each read through the view model built for its own grain
- * rather than the frozen `GraphSurface`: `GET /api/overview` for open findings by vendor
- * (the one source here that does carry the frozen surface's provenance envelope, since it
- * reads `GraphSurface.whats_at_risk` directly), `GET /api/runs` for the checkpointer,
- * `GET /api/corpus` for the repair record, `GET /api/repositories` for the index's repo_id
- * roll-up, and `GET /api/detectors` for open-finding attribution. The latter four read
- * `sync.dashboard.fleet` and `sync.dashboard.graph_views`, and none of them carries an
- * indexing timestamp or a binding rung envelope — inheriting one would invent a field the
- * transport never sends.
+ * rather than the frozen `GraphSurface`: `GET /api/overview` for open findings by vendor,
+ * `GET /api/runs` for the checkpointer, `GET /api/corpus` for the repair record,
+ * `GET /api/repositories` for the index's repo_id roll-up, and `GET /api/detectors` for
+ * open-finding attribution. The latter four read `sync.dashboard.fleet` and
+ * `sync.dashboard.graph_views`, and none of them carries an indexing timestamp or a binding
+ * rung envelope — inheriting one would invent a field the transport never sends.
+ *
+ * `/api/overview` is the one exception, and it earns a full paragraph rather than a
+ * parenthetical because getting this wrong is exactly how the milestone's Critical review
+ * finding hid: this route used to compose its envelope by re-reading the frozen
+ * `GraphSurface.whats_at_risk` page, and an earlier version of this comment still described
+ * that path after it was gone. `sync.dashboard.graph_views.overview_summary` has read
+ * `GraphStore` directly since the fleet screen's scale fix — no `whats_at_risk` scan anywhere
+ * in this route — and its envelope carries two fields the frozen surface's never did:
+ * `total_findings_bound_reached` and `context_savings_bound_reached`, both naming a bounded
+ * scan rather than a page-shaped one. A render site that treats `/api/overview`'s payload as
+ * "the same envelope every other route gets, just also carrying vendors" is the render site
+ * that shows a bounded figure as if it were exact — `VendorDistributionCard` and
+ * `ProvenanceStrip` are where that is actually held, this paragraph is only where a reader
+ * learns to expect it.
  *
  * There is no composite health figure here on purpose. A scalar that averaged three gates
  * would collapse "we could not check" onto the same axis as "we checked and it passed",

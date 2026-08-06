@@ -78,15 +78,23 @@ function TableRow({
 // at 36px and a body row (`--text-body`, 20px line height) lands at 40px from the identical
 // padding declaration.
 //
-// `aria-[sort]:text-foreground` renders a column at primary ink whenever it carries an
-// `aria-sort` attribute -- a recorded fact about which ordering produced the rows beneath it,
-// not a judgement, matching Sentry's own `&[aria-sort] { color: content.primary }`. No table
-// in this console sorts yet, so nothing sets the attribute today, and the selector is a no-op
-// against this component's own default ink (already `text-foreground`; that default is a
-// separate, earlier decision this change does not revisit). A future caller declares a sort by
-// passing `aria-sort="ascending" | "descending" | "none"` down to this component -- ideally
-// through a header-cell primitive that owns the sort control and the attribute together, so
-// the ink rule stays enforced in one place rather than per table.
+// Declared and unconsumed today, on purpose, not by oversight: `aria-[sort]:text-foreground`
+// renders a column at primary ink whenever it carries an `aria-sort` attribute -- a recorded
+// fact about which ordering produced the rows beneath it, not a judgement, matching Sentry's
+// own `&[aria-sort] { color: content.primary }`. No table in this console sorts yet, so nothing
+// sets the attribute today, which makes the selector a no-op in both directions: it never fires
+// (nothing sets `aria-sort`), and if it did fire it would repaint text that is already
+// `text-foreground` by this component's own default -- that default is a separate, earlier
+// decision this change does not revisit.
+//
+// The retiring condition, not just the intent: `docs/superpowers/plans/2026-08-05-sync-console-
+// architecture.md` section 21.6 names the primitive this is waiting on -- a sortable header cell
+// that owns `aria-sort` and the sort control together (Sentry's
+// `sortableHeaderCell.tsx`), listed there as "added, and it is cheap" but not yet built. This
+// selector stops being a no-op the day that primitive lands and a caller passes
+// `aria-sort="ascending" | "descending" | "none"` through it -- not before, and deleting the
+// selector now would be removing a rule Task 13 already argued for and priced, only to have the
+// header-cell task re-add the identical line.
 function TableHead({ className, ...props }: React.ComponentProps<"th">) {
   return (
     <th
