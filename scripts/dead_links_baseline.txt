@@ -42,3 +42,12 @@ src/sync/route/templates.py:omit_property_at
 # anywhere `src/` would show a caller for -- the same shape as `__init__`, `__repr__`, or any
 # other dunder a scanner built on static call-graph reachability cannot see reflection reach.
 src/sync/obs/log.py:_SafeStreamHandler.emit
+
+# `_BorrowedTextIOWrapper.close` overrides `io.TextIOWrapper.close`, and the calls that matter
+# come from the interpreter rather than from a line in `src/` -- the collector reaching a
+# wrapper the previous `configure` dropped is the exact path this override exists to make safe.
+# Same shape as `_SafeStreamHandler.emit` above: a base-class contract a static call-graph
+# scanner cannot see. Deleting the override to satisfy this lint would restore the defect it
+# fixes, which `tests/test_obs_log.py` holds by writing to the borrowed stream after a second
+# `configure` and a forced collection.
+src/sync/obs/log.py:_BorrowedTextIOWrapper.close

@@ -46,6 +46,34 @@ class _JsonFormatter(logging.Formatter):
         return json.dumps(payload)
 
 
+class _BorrowedTextIOWrapper(io.TextIOWrapper):
+    """A `TextIOWrapper` that never closes the buffer it was handed.
+
+    `io.TextIOWrapper` closes its underlying buffer both on `close()` and when the collector
+    reaches it, which is right for a buffer it owns and wrong for one it borrowed. The buffer
+    here belongs to `sys.stderr`. So a second `configure` call drops the first wrapper, the
+    collector closes it, and `sys.stderr` is closed underneath every other component in the
+    process -- each of which then raises `ValueError: I/O operation on closed file` from a line
+    that did nothing wrong.
+
+    Measured under pytest, where a worker's captured stderr is a real file with a real buffer:
+    one extra `configure` in a process failed 1,791 subsequent tests, none of which touch
+    logging. `detach` is the documented way to give a buffer back rather than shut it.
+    """
+
+    def close(self) -> None:
+        try:
+            self.flush()
+        except ValueError:
+            # Already detached, or the buffer went away first. Either way there is nothing to
+            # flush and nothing to report -- this runs from the collector as often as not.
+            pass
+        try:
+            self.detach()
+        except ValueError:
+            pass
+
+
 def _rewrapped_at_utf8(stream: TextIO) -> TextIO:
     """`stream`, rewrapped over its byte buffer at UTF-8 when one is available.
 
@@ -53,11 +81,16 @@ def _rewrapped_at_utf8(stream: TextIO) -> TextIO:
     customer file path with an accented character writes correctly instead of racing the
     console's codepage. A stream with no `.buffer` -- a test double, or a capture harness --
     is returned unchanged; `_SafeStreamHandler.emit` is the backstop for that case.
+
+    The wrapper borrows the buffer rather than owning it, which is what
+    `_BorrowedTextIOWrapper` exists to say: this module is the guest here.
     """
     buffer = getattr(stream, "buffer", None)
     if buffer is None:
         return stream
-    return io.TextIOWrapper(buffer, encoding="utf-8", errors="backslashreplace", newline="")
+    return _BorrowedTextIOWrapper(
+        buffer, encoding="utf-8", errors="backslashreplace", newline=""
+    )
 
 
 class _SafeStreamHandler(logging.StreamHandler):
