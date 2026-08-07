@@ -672,6 +672,30 @@ whose repository ids and argument-key lists are visibly longer than this one's, 
 both. A width that only holds for one seed is not a fix, it is a coincidence that will be read as
 one.
 
+**Amended 2026-08-06 by M7-W160, which made this worse and says so.** The chassis takes 88px of
+content width from every screen — the frame grew 24 to 40px to clear the 4.7–7.2 ratio, and the icon
+rail is 56px — and this table had no 88px to give. Measured on the binding surface at
+`--scale 10000`, reading the content box inside the frame:
+
+| | content | call site column | row |
+|---|---|---|---|
+| before M7-W160, 1440 | 1232px | 256px | 57px |
+| after, 1440, sidebar closed | 1289px | 279px | **57px** |
+| after, 1440, sidebar open | 1049px | 204px | **77px** |
+| after, 1280, sidebar closed | 1129px | 229px | **77px** |
+
+At 1440 with the sidebar collapsed the row is unchanged, so nothing is lost where there is room. At
+1280 it is 77px **with the sidebar already closed** — the frame and rail alone are enough to push the
+call-site path onto a third line, which is what a column 5px short of fitting does when 88px leaves
+the page. The sidebar's default is set by viewport for this reason (`app-frame.tsx` carries the
+numbers), and that mitigates the 1440 case rather than the 1280 one.
+
+This does not argue for a narrower frame: 40px is the smallest value clearing the ratio, and the
+ratio is what
+`docs/superpowers/reports/2026-08-06-why-the-console-came-out-flat.md` identifies as one of the two
+refusals that kept the console flat. It argues that **this entry is now on the critical path for the
+1280 case rather than an improvement to it.**
+
 ### B105 — Four statements in `DESIGN.md`'s rendered-pixel section are contradicted by the rendered pixels
 
 **Closed 2026-08-06 (M4-W149).** The ring renders at full strength — `focus-visible:ring-ring` on
@@ -821,6 +845,43 @@ everywhere. Both are arguable and neither is measured.
 **Closes when:** the disagreement is resolved in `DESIGN.md`'s Motion section — with the rendered
 `transition-duration` on a paginator and on a dialog control measured either side of whatever
 changes, or with an argued statement that one value is right for both.
+
+### B116 — The chassis exists and nine screens have not moved into it
+
+M7-W160 replaced `layouts/` with a rail, a contextual sidebar, a page header, a control bar, a footer
+bar, fact tiles, a fact list and a skeleton, and reversed the two `DESIGN.md` refusals that the flat
+console rested on. **Nothing in `features/` changed, on purpose** — that constraint is what made the
+frame reviewable apart from the pages — and the measurement says exactly what is left because of it.
+
+Measured at 1440x900 across all nine routes plus the router's fallback, before and after:
+
+| | before | after |
+|---|---|---|
+| frame ratio (frame ÷ `--spacing-row`) | 3.0 on nine of nine | **5.0 on ten of ten** |
+| type range, the nine feature routes | 2.00–2.67 | **2.00–2.67, unchanged** |
+| type range, the one route the chassis owns | 2.00 | **3.43** |
+| widest text on six routes | a stat-tile figure | a stat-tile figure, unchanged |
+
+The frame moved because it is now a token the chassis owns. **The type range did not move on any
+feature route, and it cannot until those screens render `PageHeader`.** The display step is declared,
+guarded to exactly one consumer, and mounted on `layouts/unknown-route.tsx` — the router's fallback,
+the one screen the chassis owns — where it measures 48px and takes the range to 3.43:1 against that
+route's 14px floor. Nine screens still open with a `text-page` `h1` and, on four of them, several
+paragraphs of prose before any data.
+
+So the remaining work is not more chassis. It is: give each screen a `PageHeader` carrying its own
+`RouteEntry.question`, move its filters into `ControlBar` and its paging into `FooterBar`, and turn
+the facts it renders as prose or table columns into `FactTile` and `FactList`.
+
+**The guard that finishes this is written and cannot land yet.**
+`reports/2026-08-06-why-the-console-came-out-flat.md`'s fifth correction asks for a test that fails
+when a route renders nothing at the display tier. `test_exactly_one_component_spends_the_display_step`
+holds the half that is true today; the other half needs all nine screens to have adopted the header,
+so it goes red on nine routes if written now. It belongs in the commit that finishes the migration,
+and writing it earlier would mean either nine skips or a guard nobody can keep green.
+
+**Closes when:** every route renders something at the display tier, measured, and the type range
+clears 3.4:1 on each of the nine — with the presence guard landing in the same commit.
 
 ## In flight
 
