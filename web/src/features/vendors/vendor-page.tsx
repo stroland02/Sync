@@ -1,7 +1,7 @@
 /**
  * One API service: what is at risk across the codebase, and what the vendor changed.
  *
- * The two tables query independently so a failure on one does not blank the other — the
+ * The two panels query independently so a failure on one does not blank the other — the
  * vendor's changes are still an answer when the findings query fails, and vice versa.
  *
  * The screen carries two scopes on purpose, and says which is which beside each.
@@ -24,16 +24,31 @@
  * assumed. The paragraphs stay where they are — the list says *which* scope, the sentence beside
  * each table says *why it cannot be otherwise*, and those are different claims.
  *
- * The cards are gone for the reason `binding-surface-page.tsx` records: a card costs 32px of
- * horizontal room, the findings table is the widest thing on this screen, and the two regions are
- * told apart by their headings and by the rule each footer bar draws under itself.
+ * ## Ported onto the vendored substrate by M7-W174
+ *
+ * `docs/superpowers/briefs/2026-08-07-substrate-api-services.md` is the mapping table this port was
+ * gated on. Read that before porting a level, not this docstring.
+ *
+ * Both sections are now panels: the `h2` that named each is the panel's own name in the furniture
+ * register, the paragraph under it is the panel's caption, and both tables take the Studio anatomy
+ * through `components/data-table.tsx`. The findings panel gains the figure this level never
+ * rendered — open findings for this vendor in this scope, before any filter — and the changes panel
+ * deliberately gains none, because `vendor_change` rows are at-least-once and a count of them is
+ * not a measurement.
+ *
+ * **No page-level `ControlBar`, and the chassis is complete without one.** The bar is already on
+ * this screen: the findings panel has held severity, path and ordering since the filters landed.
+ * A second bar could only carry the scope, and the scope is already stated by the fact list and by
+ * the paragraph beside it — a third copy is a fact that will disagree with itself. The action slot
+ * stays empty because the one candidate, detector attribution, is scoped by repository and not by
+ * vendor, so offering it here would silently widen the scope this page is about.
  */
 
 import { useParams, useSearchParams } from "react-router"
 
 import { FactList } from "@/components/fact-list"
-import { VendorChangesTable } from "@/features/vendors/vendor-changes-table"
-import { VendorFindingsTable } from "@/features/vendors/vendor-findings-table"
+import { VendorChangesCard } from "@/features/vendors/vendor-changes-table"
+import { VendorFindingsCard } from "@/features/vendors/vendor-findings-table"
 import { Breadcrumbs } from "@/layouts/breadcrumbs"
 import { PageHeader } from "@/layouts/page-header"
 import { UnknownRoute } from "@/layouts/unknown-route"
@@ -49,7 +64,12 @@ export function VendorPage() {
   const repoId = searchParams.get("repo_id")
 
   return (
-    <>
+    <section className="flex flex-col gap-8">
+      {/* The header and the fact list share one band, which is where M7-W164 put them and why:
+          the four facts are what a reader checks before deciding whether a number below means
+          what they assumed, so they belong beside the question rather than under it. Measured at
+          1280x800, stacking the header full width instead cost 105px above the first table row and
+          bought nothing this arrangement does not already give. */}
       <div className="grid items-start gap-8 lg:grid-cols-[minmax(0,1fr)_minmax(0,22rem)]">
         <div className="flex min-w-0 flex-col gap-section">
           <PageHeader
@@ -78,10 +98,9 @@ export function VendorPage() {
             </p>
           ) : (
             <p className="max-w-prose text-body text-muted-foreground">
-              Open findings for {vendorId} in{" "}
-              <span className="font-mono">{repoId}</span> alone. The vendor changes below are the
-              exception and say so: what {vendorId} published is a fact about the vendor, not
-              about this repository.
+              Open findings for {vendorId} in <span className="font-mono">{repoId}</span> alone.
+              The vendor changes below are the exception and say so: what {vendorId} published is
+              a fact about the vendor, not about this repository.
             </p>
           )}
         </div>
@@ -109,48 +128,11 @@ export function VendorPage() {
         />
       </div>
 
-      <section className="flex flex-col gap-section">
-        <div className="flex flex-col gap-field">
-          <h2 className="text-section">Errors and incidents</h2>
-          <p className="max-w-prose text-body text-ink-muted">
-            Call sites that an open finding touches
-            {repoId === null ? (
-              <>
-                , in every repository the index has seen — this table is not scoped to one
-                codebase, because nothing selected one on the way here
-              </>
-            ) : (
-              <>
-                {" "}
-                in <span className="font-mono">{repoId}</span>, and in no other repository
-              </>
-            )}
-            . The rung on each row says how the system knows the site is bound to the
-            operation.
-          </p>
-        </div>
-        <VendorFindingsTable vendorId={vendorId} repoId={repoId} />
-      </section>
-
-      <section className="flex flex-col gap-section">
-        <div className="flex flex-col gap-field">
-          <h2 className="text-section">Vendor changes</h2>
-          <p className="max-w-prose text-body text-ink-muted">
-            What {vendorId} published, whether or not this codebase is affected. Every change
-            the feed has recorded, and{" "}
-            {repoId === null ? "not narrowed to any repository" : (
-              <>
-                <span className="font-mono">not</span> narrowed to{" "}
-                <span className="font-mono">{repoId}</span>
-              </>
-            )}
-            : a vendor publishes a change once, to everyone, so this list is the same whichever
-            repository you reached it from. To see what it hits here, open an operation's
-            binding surface from the table above.
-          </p>
-        </div>
-        <VendorChangesTable vendorId={vendorId} repoId={repoId} />
-      </section>
-    </>
+      {/* Both panels take the full width. Six columns each, and the widest cell on the screen is a
+          call-site path from a customer repository — halving either wraps every row, which is the
+          constraint the findings table's own rung-column comment already records at full width. */}
+      <VendorFindingsCard vendorId={vendorId} repoId={repoId} />
+      <VendorChangesCard vendorId={vendorId} repoId={repoId} />
+    </section>
   )
 }

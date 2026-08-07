@@ -90,6 +90,7 @@ repository wrote rather than mistakes anyone made.
 | M7-W171 | Task 4 of the substrate plan: the 40px icon rail and the contextual sidebar replace the single sidebar; routes gain area and pages; every level reachable from the rail | landed | `web/src/layouts/app-frame.tsx` |
 | M7-W172 | Task 5 of the substrate plan: Fleet is the first level on the vendored components — mapping table first, fact tiles and metric panels, Studio table anatomy, completeness walk against the same seed | landed | `docs/superpowers/briefs/2026-08-07-substrate-fleet.md` |
 | M7-W173 | Task 6: the Codebase level on the substrate — coverage and findings as metric panels, watched vendors in Studio table anatomy, mapping table first | landed | `docs/superpowers/briefs/2026-08-07-substrate-codebase.md` |
+| M7-W174 | Task 6: the API Services level on the substrate — vendor changes and findings in Studio table anatomy, the at-least-once sentence kept, mapping table first | landed | `docs/superpowers/briefs/2026-08-07-substrate-api-services.md` |
 | M4-W166 | B117: `GraphStore` reconnects a closed connection, instead of handing the dead one back forever | dispatched | `briefs/2026-08-07-b117-graphstore-reconnect.md` |
 | CI-W167 | B111: the suite runs three times per pull request, and what moving two of them costs | dispatched | `briefs/2026-08-07-b111-ci-critical-path.md` |
 

@@ -37,6 +37,14 @@
  * path currently chosen, because an option list narrowed by the filter it sets collapses to
  * whatever is already selected. So they disagree with the range under the table whenever a
  * filter is on, and the screen says which is which rather than leaving a reader to assume.
+ *
+ * **`severity_total` is the panel's figure, and `total` deliberately is not.** M7-W174 put this
+ * level on the substrate, and the two counts in this envelope answer different questions: `total`
+ * is what the current filter matched and is already asserted by the range in the footer bar, while
+ * `severity_total` is what this vendor has open in this scope before any narrowing. A headline that
+ * moved every time a chip was clicked would be the panel restating the footer rather than naming
+ * its own grain. `docs/superpowers/briefs/2026-08-07-substrate-api-services.md` carries the mapping
+ * this port was gated on, and it is what to read before porting a level, not this docstring.
  */
 
 import { Link } from "react-router"
@@ -44,11 +52,6 @@ import { Link } from "react-router"
 import { DEFAULT_LIMIT } from "@/api/client"
 import { useVendorFindings } from "@/api/queries"
 import type { FindingOrder, VendorFindingsPage } from "@/api/types"
-import { ActiveFilters, FacetChips, PrefixFilter, type FacetOption } from "@/components/filters"
-import { OrderChoice } from "@/components/ordering"
-import { ProvenanceStrip, RungBadge } from "@/components/provenance"
-import { EmptyState, ErrorState, LoadingState } from "@/components/states"
-import { Formatted } from "@/components/status"
 import {
   Table,
   TableBody,
@@ -56,7 +59,13 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-} from "@/components/ui/table"
+} from "@/components/data-table"
+import { ActiveFilters, FacetChips, PrefixFilter, type FacetOption } from "@/components/filters"
+import { MetricPanel } from "@/components/metric-panel"
+import { OrderChoice } from "@/components/ordering"
+import { ProvenanceStrip, RungBadge } from "@/components/provenance"
+import { EmptyState, ErrorState, LoadingState } from "@/components/states"
+import { Formatted } from "@/components/status"
 import { ControlBar } from "@/layouts/control-bar"
 import { FooterBar } from "@/layouts/footer-bar"
 import { orAbsent } from "@/lib/format"
@@ -151,7 +160,7 @@ function FindingsEmptyState({
   )
 }
 
-export function VendorFindingsTable({
+export function VendorFindingsCard({
   vendorId,
   repoId = null,
 }: {
@@ -192,7 +201,32 @@ export function VendorFindingsTable({
   const page = query.data
 
   return (
-    <div className="flex flex-col gap-section">
+    <MetricPanel
+      label="Errors and incidents"
+      metric={{
+        value: page.severity_total.toLocaleString(),
+        unit: `open ${page.severity_total === 1 ? "finding" : "findings"}${
+          repoId === null ? " across every repository the index has seen" : ` in ${repoId}`
+        }`,
+      }}
+      caption={
+        <p className="max-w-prose">
+          Call sites that an open finding touches
+          {repoId === null ? (
+            <>
+              , in every repository the index has seen — this table is not scoped to one
+              codebase, because nothing selected one on the way here
+            </>
+          ) : (
+            <>
+              {" "}
+              in <span className="font-mono">{repoId}</span>, and in no other repository
+            </>
+          )}
+          . The rung on each row says how the system knows the site is bound to the operation.
+        </p>
+      }
+    >
       <div className="flex flex-col gap-section">
         <ControlBar>
           <FacetChips
@@ -321,6 +355,6 @@ export function VendorFindingsTable({
             : "mixed: the findings on this page do not all rest on one rung"
         }
       />
-    </div>
+    </MetricPanel>
   )
 }

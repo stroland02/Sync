@@ -12,15 +12,22 @@
  * user is already looking at, rather than from a lookup form on a hub page that no longer
  * exists. `repoId`, when the caller has one, rides along in the query string so the surface
  * that opens is scoped to it; `binding_surface` already accepts that parameter.
+ *
+ * **This panel has no headline figure, and that is the ruling M7-W174 exists to make.**
+ * `src/sync/graph/schema.sql` declares `vendor_change` as the one source in the pipeline that
+ * does not converge: the rows are at-least-once, and a count of them is not a measurement. A
+ * figure at the panel's largest register would have been the console asserting one anyway. The
+ * range under the table stays, because it is how a reader knows which rows they are looking at,
+ * and the caption is what stops it being read as a total.
+ *
+ * `docs/superpowers/briefs/2026-08-07-substrate-api-services.md` carries the mapping this port was
+ * gated on, and it is what to read before porting a level, not this docstring.
  */
 
 import { Link } from "react-router"
 
 import { DEFAULT_LIMIT } from "@/api/client"
 import { useVendorChanges } from "@/api/queries"
-import { ProvenanceStrip } from "@/components/provenance"
-import { EmptyState, ErrorState, LoadingState } from "@/components/states"
-import { Formatted } from "@/components/status"
 import {
   Table,
   TableBody,
@@ -28,7 +35,11 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-} from "@/components/ui/table"
+} from "@/components/data-table"
+import { MetricPanel } from "@/components/metric-panel"
+import { ProvenanceStrip } from "@/components/provenance"
+import { EmptyState, ErrorState, LoadingState } from "@/components/states"
+import { Formatted } from "@/components/status"
 import { FooterBar } from "@/layouts/footer-bar"
 import { formatTimestamp, orAbsent } from "@/lib/format"
 import { useOffsetParam } from "@/lib/use-offset-param"
@@ -38,7 +49,7 @@ function bindingSurfaceHref(vendorId: string, operation: string, repoId: string 
   return repoId === null ? path : `${path}?repo_id=${encodeURIComponent(repoId)}`
 }
 
-export function VendorChangesTable({
+export function VendorChangesCard({
   vendorId,
   repoId = null,
 }: {
@@ -56,7 +67,33 @@ export function VendorChangesTable({
   const page = query.data
 
   return (
-    <div className="flex flex-col gap-section">
+    <MetricPanel
+      label="Vendor changes"
+      caption={
+        <>
+          <p className="max-w-prose">
+            What {vendorId} published, whether or not this codebase is affected. Every change
+            the feed has recorded, and{" "}
+            {repoId === null ? "not narrowed to any repository" : (
+              <>
+                <span className="font-mono">not</span> narrowed to{" "}
+                <span className="font-mono">{repoId}</span>
+              </>
+            )}
+            : a vendor publishes a change once, to everyone, so this list is the same whichever
+            repository you reached it from. To see what it hits here, open an operation's
+            binding surface from the table above.
+          </p>
+          <p className="max-w-prose">
+            There is no count above this sentence on purpose. These rows are recorded at least
+            once rather than exactly once — comparing the same two published specifications twice
+            can return a different set — so a count of them is not a measurement. The range under
+            the table says which rows this page holds, which is a fact about the page and not
+            about the vendor.
+          </p>
+        </>
+      }
+    >
       {page.items.length === 0 ? (
         <EmptyState
           headline={`Nothing recorded for ${vendorId}.`}
@@ -130,6 +167,6 @@ export function VendorChangesTable({
         bindingNullLabel="none: this answer is built from vendor changes and holds no binding"
         indexedNullLabel="not applicable: nothing here was read out of the codebase"
       />
-    </div>
+    </MetricPanel>
   )
 }

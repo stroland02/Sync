@@ -25,8 +25,8 @@ state branch is a row.
 | breadcrumb trail "Fleet" → repository id → vendor id, scoped | `PageHeader` trail, unchanged |
 | `h1` vendor id, mono, at the display step | `PageHeader` title, unchanged — the header moves to full width, see ruling 1 |
 | the route's own question, read from `ROUTES` | `PageHeader` question, unchanged |
-| scope paragraph, unscoped: "Every open finding and every published change… open it from a repository to narrow the findings below." | page body, beside the fact list, unchanged in wording — ruling 1 |
-| scope paragraph, scoped: "Open findings for {vendor} in {repo} alone. The vendor changes below are the exception and say so…" | page body, beside the fact list, unchanged in wording — ruling 1 |
+| scope paragraph, unscoped: "Every open finding and every published change… open it from a repository to narrow the findings below." | page body, beside the fact list, unchanged |
+| scope paragraph, scoped: "Open findings for {vendor} in {repo} alone. The vendor changes below are the exception and say so…" | page body, beside the fact list, unchanged |
 | fact "Vendor" → the vendor id, mono | `FactList`, unchanged — ruling 3 |
 | fact "Repository scope" → the repository id, or "Nothing selected one on the way here" | `FactList`, unchanged |
 | fact "Findings counted over" → the repository id, or "Every repository the index has seen" | `FactList`, unchanged |
@@ -36,7 +36,7 @@ state branch is a row.
 | `h2` "Vendor changes" at `--text-section` | `MetricPanel` label, furniture register |
 | the changes paragraph, both scope variants | `MetricPanel` caption, first paragraph, unchanged in wording |
 | — (nothing on screen today says a count of vendor changes is not a measurement) | `MetricPanel` caption, second paragraph — ruling 5, and it is the reason this level needed a ruling at all |
-| the two sections stacked full width, header and fact list paired at `lg` | header full width; prose and fact list paired at `xl`; both panels full width — rulings 1 and 2 |
+| the two sections stacked full width, header and fact list paired at `lg` | the header/fact-list pairing is kept exactly — ruling 1; both panels stay full width — ruling 2 |
 
 ### `vendor-findings-table.tsx`
 
@@ -89,7 +89,7 @@ state branch is a row.
 
 ## The rulings
 
-Six arrangements had no slot the two earlier levels had already settled. Fleet's eleven and
+Seven arrangements had no slot the two earlier levels had already settled. Fleet's eleven and
 Codebase's nine are not restated: the metric value at `--text-figure`, the panel name in the
 furniture register carrying its own `h2`, the accepted collapse of `variant="grouping"`, the kept
 `components/skeleton.tsx`, the untouched `fact-tile.tsx` and `fact-list.tsx`, and the refusal of a
@@ -113,18 +113,22 @@ vendor's page that silently widened to every vendor would make a claim about sco
 does not honour. Fleet's own ruling for its action slot was that the link had to be one an operator
 actually takes next; here there is no such link that keeps the scope the page is about.
 
-What does change is placement. `PageHeader` moves out of a two-column grid and takes the full
-width, which is where Fleet and Codebase both put it, and the scope paragraph pairs with the fact
-list underneath — the same two-thirds-and-a-third arrangement Fleet uses for its rail and the
-paragraph that qualifies it. The display step gets the whole measure instead of two thirds of it.
+Placement does not change either, and that was tried the other way first. Fleet and Codebase both
+put `PageHeader` full width, so the port initially lifted it out of this level's two-column band and
+paired the scope paragraph with the fact list underneath. Measured at 1280x800, that cost 105px
+above the first table row — three rows visible became none — and bought nothing: the display step
+did not wrap in the narrower column either way, because the widest vendor id in the fixture set
+fits. M7-W164 put the fact list beside the header deliberately, on the argument that four scope
+facts are what a reader checks *before* reading a figure, and nothing in the substrate contradicts
+it. So the band stays as it was and only its contents below become panels.
 
 **2. Both panels stay full width, and this level pairs nothing.** Codebase paired its two narrow
 panels and left its wide one alone. Here both panels are wide: the findings table is six columns
 including a call-site path that a customer repository makes the widest cell on the screen, and the
 changes table is six columns including a JSON pointer and a version pair. Halving either wraps
 every row, and the findings table's own comment records that keeping the rung column on screen at
-1280px was already a constraint at full width. The side-by-side placement this screen gains is the
-prose beside the fact list, which is prose and a `dl` and reads well narrow.
+1280px was already a constraint at full width. The screen's one side-by-side placement is the header
+band it already had, and ruling 7 is what it cost to keep even that much table on screen.
 
 **3. The "Vendor" row stays in the fact list, although the `h1` carries the same id.** Fleet's
 ruling 2 — a count the rail already carries is never re-rendered at the figure register — is about
@@ -178,3 +182,27 @@ was two different components in two feature directories — this one, taking a v
 `features/fleet/vendor-distribution.tsx`'s, taking a list of vendors — and `open-findings-card.tsx`
 imports the second. One name for two components is a mistake waiting for whoever edits both in one
 session.
+
+**7. `components/data-table.tsx` gives back the two class names the substrate dropped, and this is
+the first level wide enough to have noticed.** Two defects, both introduced by M7-W172 and both
+invisible on Fleet and Codebase because no table there is more than four columns.
+
+The vendored `TableHead` carries `whitespace-nowrap` and the vendored `TableCell` carries no
+`break-words`; `components/ui/table.tsx`, the anatomy `DESIGN.md`'s arithmetic is written against,
+spells the opposite of both, and its own comment gives the reason — *"a row that grows taller costs
+less than a table the viewport has to scroll to read."* Restored.
+
+That alone was not enough, and the second defect is the one worth arguing. Fleet's ruling 8 set the
+cell's horizontal padding to `--spacing-section` because that is what the vendored header spells,
+so a heading would sit over its values rather than beside them. The constraint being protected there
+is that head and cell **agree**, not that they agree on Studio's number — and sixteen rather than
+eight costs a six-column table 96px of minimum width. Measured at 1280x800 on this route: 953px of
+table inside a 903px panel, with the change-kind column clipped behind a sideways scroll. Both are
+now `--spacing-row`, the head and the cell still agree, and the table fits at 903 with nothing
+clipped.
+
+This is the substrate returning to a value the contract already held rather than departing from
+one, so it is recorded as a correction rather than a deviation. It is nonetheless a shared file that
+three ported levels render through, and it was re-measured on both: Fleet's seven tables and
+Codebase's six all fit their containers afterwards, header 40.0 and single-line body row 37.0
+unchanged.
