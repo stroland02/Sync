@@ -22,6 +22,9 @@ export default defineConfig({
   test: {
     environment: "jsdom",
     include: ["src/**/*.test.{ts,tsx}"],
+    // One file, and it only fills in `matchMedia`, which jsdom does not implement and the vendored
+    // sidebar calls on mount. Its own docstring carries why the stub answers the way it does.
+    setupFiles: ["./src/test-setup.ts"],
     // The suite is pure functions and small component mounts; a run that needs a longer
     // default is a test reaching for something this scope does not cover.
     testTimeout: 5_000,

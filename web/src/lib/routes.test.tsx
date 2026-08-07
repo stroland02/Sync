@@ -18,10 +18,26 @@ import { MemoryRouter } from "react-router"
 import { afterEach, describe, expect, it } from "vitest"
 
 import App from "@/App"
-import { GRAPH_LEVELS, ROUTES } from "@/lib/routes"
+import { AREAS, GRAPH_LEVELS, ROUTES, isActiveMenuItem } from "@/lib/routes"
 import { AppFrame } from "@/layouts/app-frame"
 
 afterEach(cleanup)
+
+/**
+ * The rail's vocabulary, written out rather than imported.
+ *
+ * Spelled as a literal so this file pins the union instead of agreeing with whatever the registry
+ * currently says — `AREA_IDS` rather than `AREAS`, because the registry exports that name and a
+ * shadow would make the cross-check below compare the list against itself.
+ */
+const AREA_IDS = [
+  "fleet",
+  "codebase",
+  "api-services",
+  "signals",
+  "observe",
+  "remediation",
+] as const
 
 /**
  * A route whose `params` is non-empty needs a subject the registry does not hold — a vendor id,
@@ -76,6 +92,69 @@ describe("the navigation covers the route registry", () => {
   it("declares each path once", () => {
     const paths = ROUTES.map((route) => route.path)
     expect(new Set(paths).size).toBe(paths.length)
+  })
+})
+
+describe("the rail groups levels into areas without inventing one", () => {
+  it("gives every route a declared area", () => {
+    for (const route of ROUTES) expect(AREA_IDS).toContain(route.area)
+  })
+
+  it("names the same areas on the rail as the routes claim", () => {
+    expect(AREAS.map((area) => area.id)).toEqual([...AREA_IDS])
+  })
+
+  it("claims no level outside GRAPH_LEVELS", () => {
+    // The vocabulary is pinned to the specification by `tests/test_console_hierarchy.py`; here:
+    // an area groups levels the specification declares and never a level of its own invention.
+    for (const route of ROUTES) expect(GRAPH_LEVELS).toContain(route.level)
+    for (const area of AREAS) {
+      for (const level of area.levels) expect(GRAPH_LEVELS).toContain(level)
+    }
+  })
+
+  it("files each route under the area that claims its level", () => {
+    // `area` is declared per route and derivable from `level`, which is two spellings of one fact.
+    // This is the assertion that stops them disagreeing.
+    for (const route of ROUTES) {
+      const owner = AREAS.find((area) => area.levels.includes(route.level))
+      expect(route.area).toBe(owner?.id)
+    }
+  })
+
+  it("covers every level exactly once across the areas", () => {
+    // A level in two areas is a destination that appears twice; a level in none is a screen the
+    // rail cannot reach. Both are the failure the reconciliation of 2026-08-05 found.
+    const claimed = AREAS.flatMap((area) => [...area.levels])
+    expect(claimed.sort()).toEqual([...GRAPH_LEVELS].sort())
+  })
+})
+
+describe("a menu item can own more than one route", () => {
+  it("says so in data rather than through a regex over the path", () => {
+    expect(
+      isActiveMenuItem({ path: "/findings", pages: ["/findings", "/findings/:id"] }, "/findings/42")
+    ).toBe(true)
+    expect(isActiveMenuItem({ path: "/findings" }, "/signals")).toBe(false)
+  })
+
+  it("does not let the root path claim every address", () => {
+    // `startsWith` on `"/"` matches the whole console. The helper's non-parameterised branch has to
+    // read `"/" + "/"`, which nothing is, or the Fleet row is active on every screen.
+    expect(isActiveMenuItem({ path: "/" }, "/")).toBe(true)
+    expect(isActiveMenuItem({ path: "/" }, "/detectors")).toBe(false)
+  })
+
+  it("matches a parameterised path to its end, so a child never activates its parent", () => {
+    expect(
+      isActiveMenuItem({ path: "/findings/:findingId/workflow" }, "/findings/42/workflow")
+    ).toBe(true)
+    expect(
+      isActiveMenuItem(
+        { path: "/findings/:findingId/workflow" },
+        "/findings/42/workflow/pull-request"
+      )
+    ).toBe(false)
   })
 })
 

@@ -87,6 +87,7 @@ repository wrote rather than mistakes anyone made.
 | M7-W168 | Task 1 of the substrate plan: the interface-originality carve-out, direction note 6's reversal amendment, and the M7 plan pointer | landed | plans/2026-08-06-console-supabase-substrate.md |
 | M7-W169 | Task 2 of the substrate plan: `packages/ui` vendored at 6ac0316 under `web/src/vendor/supabase/`, theme.css captured, NOTICE guard proven RED then green | landed | `web/NOTICE` |
 | M7-W170 | Task 3 of the substrate plan: Supabase's dark palette, type ramp and radii become the declared token contract; DESIGN.md and its guard rewritten in one commit; contrast measured, deviations named | landed | `DESIGN.md` |
+| M7-W171 | Task 4 of the substrate plan: the 40px icon rail and the contextual sidebar replace the single sidebar; routes gain area and pages; every level reachable from the rail | landed | `web/src/layouts/app-frame.tsx` |
 | M4-W166 | B117: `GraphStore` reconnects a closed connection, instead of handing the dead one back forever | dispatched | `briefs/2026-08-07-b117-graphstore-reconnect.md` |
 | CI-W167 | B111: the suite runs three times per pull request, and what moving two of them costs | dispatched | `briefs/2026-08-07-b111-ci-critical-path.md` |
 
@@ -107,3 +108,11 @@ human can reverse, each argued in `web/src/layouts/app-frame.tsx`'s docstring:
 - **The sidebar's auto-collapse threshold is 1473px, corrected from 1440.** At exactly 1440 the old
   rule expanded, and B115's re-measurement shows expanding there costs 20px on every row of the
   binding surface.
+
+**M7-W171 reversed that arrangement on the owner's later ruling, and the three items above are
+history rather than current behaviour.** The chassis is two tiers again — a 40px rail of six areas
+with Settings pinned last, and a 208px contextual sidebar on the vendored `sidebar` primitive — and
+the collapse machinery is deleted rather than disabled. The defect that sank the first two-tier
+attempt was reachability, not the arrangement: this one renders every one of the nine levels in the
+sidebar of the area that owns it, and the walk in `.superpowers/sdd/2026-08-06-console-supabase-substrate/task-4-report.md`
+records all nine reached with the heading, the group labels and the active row correct on each.

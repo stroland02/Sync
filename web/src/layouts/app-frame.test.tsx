@@ -1,178 +1,251 @@
 /**
- * The sidebar is one component at two widths, and this is the test that decides it.
+ * The chassis is two tiers, and this is the test that decides it.
  *
- * `references/direction/NOTES.md` entry 6 states the discriminator: **an icon must not move
- * vertically when the sidebar collapses.** If it moves, expanding added a column of chrome rather
- * than widening one list, and the thing built is an icon rail plus a contextual panel — which the
- * owner ruled against on 2026-08-06 and which this item's first dispatch built.
+ * A fixed icon rail carries the product's areas; a contextual sidebar carries the destinations
+ * inside the area that is active. The discriminator between that and the single sidebar it
+ * replaces is **which tier changes when you navigate**: the rail's items are the same items in
+ * the same order on every route, and only the sidebar's contents move.
  *
  * **jsdom has no layout, so vertical position cannot be read directly** — `getBoundingClientRect`
  * returns zeroes here. Saying so matters, because a test that asserted on those numbers would pass
- * against any tree at all. What is asserted instead is the structural cause: the ordered sequence of
- * rows in the list is identical in both states, and the group headings still occupy their rows when
- * collapsed. An icon can only move if a row above it appears or disappears, so a list whose row
- * sequence is invariant is a list whose icons hold their positions. The pixels are measured in Chrome
- * and recorded in `docs/superpowers/BACKLOG.md`; this holds the property that makes that measurement
- * come out right.
+ * against any tree at all. What is asserted instead is the structural cause: the rail's ordered
+ * sequence of accessible names is identical on every route, and an item can only move if one above
+ * it appears or disappears. The pixels are measured in Chrome and recorded in `DESIGN.md`; this
+ * holds the property that makes that measurement come out right.
+ *
+ * Rewritten for M7-W171 from the M7-W160 file that pinned the one-sidebar arrangement. Four of its
+ * assertions described a collapse threshold and a reserved heading row and describe nothing that
+ * exists now; three described reachability, accessible naming and `reachedFrom`, which the two-tier
+ * shell owes exactly as much, and those are carried forward against the new tiers.
  */
 
-import { cleanup, fireEvent, render, screen } from "@testing-library/react"
+import { cleanup, fireEvent, render, screen, within } from "@testing-library/react"
 import { MemoryRouter } from "react-router"
-import { afterEach, beforeEach, describe, expect, it } from "vitest"
+import { afterEach, describe, expect, it } from "vitest"
 
 import { AppFrame } from "@/layouts/app-frame"
-import { AREAS, ROUTES } from "@/lib/routes"
+import { AREAS, ROUTES, type AreaEntry } from "@/lib/routes"
 
 afterEach(cleanup)
 
-// jsdom reports a 1024px window, which is below the width at which the frame opens the sidebar, so
-// without this every test here would start collapsed by accident rather than by choice. Setting it
-// makes the starting state deliberate and lets the toggle assertions below name a direction.
-beforeEach(() => {
-  window.innerWidth = 1600
-})
-
-function renderFrame() {
+function renderAt(path: string) {
   return render(
-    <MemoryRouter initialEntries={["/"]}>
+    <MemoryRouter initialEntries={[path]}>
       <AppFrame />
     </MemoryRouter>
   )
 }
 
-/** Every row of the one list, in document order: a heading reserves a row, a destination is a row. */
-function rowShape(container: HTMLElement): string[] {
-  return [...container.querySelectorAll("nav ul > li")].map((li) => {
-    const destination = li.querySelector("[data-destination]")
-    return destination === null
-      ? `heading:${li.textContent?.trim()}`
-      : `destination:${destination.getAttribute("data-destination")}`
-  })
+/** The icon rail: the tier that does not change. */
+function rail(): HTMLElement {
+  return screen.getByRole("navigation", { name: /areas/i })
 }
 
-function toggle(container: HTMLElement): HTMLElement {
-  const button = container.querySelector("nav button")
-  if (button === null) throw new Error("the sidebar has no collapse toggle")
-  return button as HTMLElement
+/** The contextual sidebar: the tier that does. */
+function destinations(): HTMLElement {
+  return screen.getByRole("navigation", { name: /destinations/i })
 }
 
 /**
- * Click the toggle and assert the state actually changed.
+ * Every rail item's accessible name, in document order.
  *
- * The assertion is here rather than in one test because of what happened without it: the first draft
- * called `element.click()` directly, React never flushed the update outside `act`, and every
- * assertion below compared the expanded tree against itself. All of them passed. A test that cannot
- * fail is worse than no test, and the whole file was one — `fireEvent` wraps in `act`, and reading
- * `aria-expanded` back proves the collapse happened before anything is compared.
+ * Read off `aria-label` rather than through `getAllByRole("link")`, because the rail deliberately
+ * holds three kinds of control: a link for an area with a landing route, a button for an area whose
+ * every destination needs a subject the registry does not hold, and one `aria-disabled` entry for
+ * Settings. A role query would see one of the three and report the rail as shorter than it is.
  */
-function collapse(container: HTMLElement): void {
-  const before = toggle(container).getAttribute("aria-expanded")
-  fireEvent.click(toggle(container))
-  expect(toggle(container).getAttribute("aria-expanded")).not.toBe(before)
+function railNames(): string[] {
+  return [...rail().querySelectorAll("[aria-label]")].map(
+    (el) => el.getAttribute("aria-label") ?? ""
+  )
 }
 
-describe("the sidebar is one list at two widths", () => {
-  it("keeps every row in the same order when it collapses, so no icon can move", () => {
-    const { container } = renderFrame()
-    const expanded = rowShape(container)
+function routesOf(area: AreaEntry) {
+  return ROUTES.filter((route) => area.levels.includes(route.level))
+}
 
-    collapse(container)
-    const collapsed = rowShape(container)
+/** A concrete URL for a route, since `:findingId` matches nothing on its own. */
+function concrete(path: string): string {
+  return path.replace(/:([A-Za-z]+)/g, "subject")
+}
 
-    expect(collapsed).toEqual(expanded)
+describe("the rail carries the product's areas", () => {
+  it("names every area exactly once and Settings last", () => {
+    renderAt("/")
+
+    const items = railNames()
+
+    expect(items[items.length - 1]).toMatch(/settings/i)
+    expect(new Set(items).size).toBe(items.length)
+    expect(items).toHaveLength(AREAS.length + 1)
   })
 
-  it("adds no row and drops none, which is the other half of not moving", () => {
-    const { container } = renderFrame()
-    const expanded = rowShape(container)
+  it("keeps every rail item in the same position on every route", () => {
+    // The two-tier property, asserted where jsdom can see it. If the rail's sequence differed
+    // between two routes, an icon would move under the pointer as an operator navigated, which is
+    // the one thing a persistent rail must not do.
+    renderAt("/")
+    const atRoot = railNames()
+    cleanup()
 
-    collapse(container)
+    for (const route of ROUTES) {
+      renderAt(concrete(route.path))
+      expect(railNames()).toEqual(atRoot)
+      cleanup()
+    }
 
-    // A count assertion on its own would pass if one row were swapped for another, and the order
-    // assertion above would pass on an empty list. Both, plus this, is what closes it.
-    expect(rowShape(container)).toHaveLength(expanded.length)
-    expect(expanded.length).toBe(ROUTES.length + AREAS.length)
+    expect(atRoot.length).toBeGreaterThan(1)
   })
 
-  it("still occupies the group headings' rows when collapsed", () => {
-    // The structural cause of the property above. A heading that rendered nothing when collapsed
-    // would take its row out of the flow and every icon below it would rise — which is what "two
-    // layouts rather than one at two widths" looks like in a DOM.
-    const { container } = renderFrame()
+  it("names each rail item for a screen reader, not only in a tooltip", () => {
+    // A tooltip supplements the name; it is not the mechanism that supplies it. Every rail control
+    // is icon-only, so without `aria-label` the rail is a column of unnamed buttons.
+    renderAt("/")
 
-    collapse(container)
-
-    const headings = rowShape(container).filter((row) => row.startsWith("heading:"))
-    expect(headings).toHaveLength(AREAS.length)
+    expect(within(rail()).getByRole("link", { name: /fleet/i })).toBeTruthy()
+    for (const area of AREAS) {
+      expect(railNames()).toContain(area.label)
+    }
   })
 
-  it("renders every declared destination at both widths", () => {
-    // The collapse must change density, never reachability. The first version of this chassis left
-    // four area icons behind when collapsed and the nine levels were unreachable without expanding.
-    const { container } = renderFrame()
-    const paths = () =>
-      [...container.querySelectorAll("[data-destination]")].map((el) =>
-        el.getAttribute("data-destination")
-      )
+  it("offers Settings no destination and says what it is waiting for", () => {
+    // Settings is not an area: no route declares it and `GRAPH_LEVELS` gains nothing for it. It is
+    // on the rail because the write path is where it arrives, and the entry says so rather than
+    // leaving a gap somebody fills with an invented level.
+    renderAt("/")
 
-    expect(paths()).toEqual(ROUTES.map((route) => route.path))
+    const settings = within(rail()).getByLabelText(/settings/i)
 
-    collapse(container)
+    expect(settings.getAttribute("aria-disabled")).toBe("true")
+    expect(settings.getAttribute("href")).toBeNull()
+    // Asserted on `title` rather than on the tooltip: a Radix tooltip is in the document only while
+    // it is open, so the sentence has to be readable without one.
+    expect(settings.getAttribute("title")).toBe("Settings arrives with the write path")
+  })
 
-    expect(paths()).toEqual(ROUTES.map((route) => route.path))
+  it("keeps an area's rail item current on every route that area owns", () => {
+    // This is the `pages` mechanism where it is genuinely load-bearing. A rail item owns a run of
+    // levels rather than one address, so it says which addresses it owns in data — the alternative
+    // is a regex over the path, which quietly stops matching the day a route is added beneath it.
+    for (const area of AREAS) {
+      for (const route of routesOf(area)) {
+        renderAt(concrete(route.path))
+
+        const current = [...rail().querySelectorAll('[aria-current="true"]')].map((el) =>
+          el.getAttribute("aria-label")
+        )
+        expect(current).toEqual([area.label])
+
+        cleanup()
+      }
+    }
   })
 })
 
-describe("a collapsed row keeps its label semantically", () => {
-  it("names every destination for a screen reader at both widths", () => {
-    const { container } = renderFrame()
+describe("the contextual sidebar carries the active area's destinations", () => {
+  it("heads itself with the area the current route belongs to", () => {
+    for (const area of AREAS) {
+      const route = routesOf(area)[0]
+      renderAt(concrete(route.path))
 
-    collapse(container)
+      expect(within(destinations()).getByRole("heading", { name: area.label })).toBeTruthy()
 
+      cleanup()
+    }
+  })
+
+  it("renders the active area's destinations and no other area's", () => {
+    for (const area of AREAS) {
+      const route = routesOf(area)[0]
+      renderAt(concrete(route.path))
+
+      const shown = [...destinations().querySelectorAll("[data-destination]")].map((el) =>
+        el.getAttribute("data-destination")
+      )
+      expect(shown).toEqual(routesOf(area).map((r) => r.path))
+
+      cleanup()
+    }
+  })
+
+  it("groups them under the graph levels the specification names", () => {
+    // The grouping is the specification's vocabulary rendered, not a second hierarchy: an area is a
+    // run of consecutive levels, and the sidebar prints the level names it holds. Read off the
+    // group labels rather than by text, because a level name and a destination's label are the same
+    // word on five of the nine routes.
+    for (const area of AREAS) {
+      renderAt(concrete(routesOf(area)[0].path))
+
+      const labels = [...destinations().querySelectorAll('[data-sidebar="group-label"]')].map(
+        (el) => el.textContent
+      )
+      expect(labels).toEqual([...area.levels])
+
+      cleanup()
+    }
+  })
+
+  it("marks the row for the current route, and marks only it", () => {
     for (const route of ROUTES) {
-      const row = container.querySelector(`[data-destination="${route.path}"]`)
-      expect(row?.getAttribute("aria-label")).toContain(route.label)
-      // The tooltip is the sighted reader's equivalent of the accessible name, so it carries the
-      // same string rather than a shortened one.
-      expect(row?.getAttribute("title")).toBe(row?.getAttribute("aria-label"))
+      renderAt(concrete(route.path))
+
+      const current = [...destinations().querySelectorAll('[aria-current="page"]')].map((el) =>
+        el.getAttribute("data-destination")
+      )
+      expect(current).toEqual([route.path])
+
+      cleanup()
+    }
+  })
+
+  it("names every destination for a screen reader", () => {
+    for (const area of AREAS) {
+      renderAt(concrete(routesOf(area)[0].path))
+
+      for (const route of routesOf(area)) {
+        const row = destinations().querySelector(`[data-destination="${route.path}"]`)
+        expect(row?.getAttribute("aria-label")).toContain(route.label)
+        // The tooltip is the sighted reader's equivalent of the accessible name, so it carries the
+        // same string rather than a shortened one.
+        expect(row?.getAttribute("title")).toBe(row?.getAttribute("aria-label"))
+      }
+
+      cleanup()
     }
   })
 
   it("carries where a subject comes from on the routes that need one", () => {
-    // `reachedFrom` was a line of prose in the panel this replaced. Prose cannot be a row here — a
-    // sentence rendering expanded and not collapsed changes the height above every icon beneath it —
-    // so it rides the accessible name at both widths instead of appearing at one.
-    const { container } = renderFrame()
-
+    // A destination the registry cannot link is not a dead label: `reachedFrom` says which screen
+    // supplies the subject, at the row itself, which is how seven of eleven routes stopped being
+    // unreachable.
     for (const route of ROUTES.filter((r) => r.params.length > 0)) {
-      const row = container.querySelector(`[data-destination="${route.path}"]`)
+      renderAt(concrete(route.path))
+
+      const row = destinations().querySelector(`[data-destination="${route.path}"]`)
       expect(row?.getAttribute("aria-label")).toContain(route.reachedFrom ?? "")
+      expect(row?.getAttribute("href")).toBeNull()
+
+      cleanup()
     }
   })
+})
 
-  it("keeps the toggle reachable and labelled in both states", () => {
-    const { container } = renderFrame()
+describe("every declared destination is one rail activation away", () => {
+  it("shows an area's whole run of levels the moment its rail item is used", () => {
+    // The reachability claim the whole chassis exists to make, and the one the first version of this
+    // shell failed: four area icons remained and the nine specification levels could not be reached.
+    renderAt("/")
 
-    expect(toggle(container).getAttribute("aria-expanded")).toBe("true")
-    expect(screen.getByTitle("Collapse the sidebar")).toBeTruthy()
+    const seen = new Set<string>()
+    for (const area of AREAS) {
+      fireEvent.click(within(rail()).getByLabelText(area.label))
 
-    fireEvent.click(toggle(container))
+      for (const route of routesOf(area)) {
+        expect(destinations().querySelector(`[data-destination="${route.path}"]`)).toBeTruthy()
+        seen.add(route.path)
+      }
+    }
 
-    expect(toggle(container).getAttribute("aria-expanded")).toBe("false")
-    expect(screen.getByTitle("Expand the sidebar")).toBeTruthy()
-
-    fireEvent.click(toggle(container))
-
-    // Back again, because a toggle that only works once is a toggle that has state and no inverse.
-    expect(toggle(container).getAttribute("aria-expanded")).toBe("true")
-  })
-
-  it("starts collapsed on a window too narrow to spend the width on labels", () => {
-    // The other side of the `beforeEach` above, asserted rather than left implicit: the default is a
-    // measurement about content width, not a preference, and B115 carries the numbers.
-    window.innerWidth = 1280
-    const { container } = renderFrame()
-
-    expect(toggle(container).getAttribute("aria-expanded")).toBe("false")
+    expect([...seen].sort()).toEqual(ROUTES.map((route) => route.path).sort())
   })
 })
