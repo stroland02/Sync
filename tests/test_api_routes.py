@@ -114,6 +114,10 @@ def _fake_repositories_reader() -> dict[str, Any]:
     return {"repo_ids": []}
 
 
+def _fake_abandonment_reader() -> dict[str, Any]:
+    return {"groups": []}
+
+
 _EMPTY_PAGE = {"items": [], "total": 0, "next_offset": None}
 
 
@@ -207,6 +211,7 @@ def _build_app(
     runs_reader=_fake_runs_reader,
     corpus_reader=_fake_corpus_reader,
     repositories_reader=_fake_repositories_reader,
+    abandonment_reader=_fake_abandonment_reader,
     binding_reader=_fake_binding_reader,
     coverage_reader=_fake_coverage_reader,
     observed_reader=_fake_observed_reader,
@@ -229,6 +234,7 @@ def _build_app(
         runs_reader=runs_reader,
         corpus_reader=corpus_reader,
         repositories_reader=repositories_reader,
+        abandonment_reader=abandonment_reader,
         binding_reader=binding_reader,
         coverage_reader=coverage_reader,
         observed_reader=observed_reader,
@@ -1137,6 +1143,7 @@ class _RecordingClient(NamedTuple):
     runs_reads: list[dict[str, int]]
     corpus_reads: list[None]
     repositories_reads: list[None]
+    abandonment_reads: list[None]
     binding_reads: list[tuple[str, str, str | None]]
     coverage_reads: list[str]
     observed_reads: list[str]
@@ -1152,6 +1159,7 @@ def _recording_client(**graph_kw) -> _RecordingClient:
     runs_reads: list[dict[str, int]] = []
     corpus_reads: list[None] = []
     repositories_reads: list[None] = []
+    abandonment_reads: list[None] = []
     binding_reads: list[tuple[str, str, str | None]] = []
     coverage_reads: list[str] = []
     observed_reads: list[str] = []
@@ -1175,6 +1183,10 @@ def _recording_client(**graph_kw) -> _RecordingClient:
     def repositories_reader():
         repositories_reads.append(None)
         return _fake_repositories_reader()
+
+    def abandonment_reader():
+        abandonment_reads.append(None)
+        return _fake_abandonment_reader()
 
     def binding_reader(vendor_id: str, operation_id: str, *, repo_id=None, **_):
         binding_reads.append((vendor_id, operation_id, repo_id))
@@ -1210,6 +1222,7 @@ def _recording_client(**graph_kw) -> _RecordingClient:
         runs_reader=runs_reader,
         corpus_reader=corpus_reader,
         repositories_reader=repositories_reader,
+        abandonment_reader=abandonment_reader,
         binding_reader=binding_reader,
         coverage_reader=coverage_reader,
         observed_reader=observed_reader,
@@ -1220,6 +1233,7 @@ def _recording_client(**graph_kw) -> _RecordingClient:
     )
     return _RecordingClient(
         TestClient(app), surface, workflow_reads, runs_reads, corpus_reads, repositories_reads,
+        abandonment_reads,
         binding_reads, coverage_reads, observed_reads, detector_reads, severity_reads, overview_reads,
         vendor_findings_reads,
     )
@@ -1234,6 +1248,7 @@ def test_no_route_reaches_past_the_read_surface():
     change = _change("c1")
     (
         client, surface, workflow_reads, runs_reads, corpus_reads, repositories_reads,
+        abandonment_reads,
         binding_reads, coverage_reads, observed_reads, detector_reads, severity_reads, overview_reads,
         vendor_findings_reads,
     ) = _recording_client(findings=[_finding("f1", "s1", "c1")], sites=[site], changes=[change])
@@ -1246,6 +1261,7 @@ def test_no_route_reaches_past_the_read_surface():
     assert client.get("/api/runs").status_code == 200
     assert client.get("/api/corpus").status_code == 200
     assert client.get("/api/repositories").status_code == 200
+    assert client.get("/api/corpus/abandonment").status_code == 200
     assert client.get("/api/vendors/stripe/operations/PostCharges/bindings").status_code == 200
     assert client.get("/api/repositories/r1/coverage").status_code == 200
     assert client.get("/api/repositories/r1/observed").status_code == 200
@@ -1260,6 +1276,7 @@ def test_no_route_reaches_past_the_read_surface():
     assert len(runs_reads) == 1, "the runs route must reach its own reader exactly once"
     assert len(corpus_reads) == 1, "the corpus route must reach its own reader exactly once"
     assert len(repositories_reads) == 1, "the repositories route must reach its own reader exactly once"
+    assert len(abandonment_reads) == 1, "the abandonment route must reach its own reader exactly once"
     assert len(binding_reads) == 1, "the bindings route must reach its own reader exactly once"
     assert len(coverage_reads) == 1, "the coverage route must reach its own reader exactly once"
     assert len(observed_reads) == 1, "the observed route must reach its own reader exactly once"
@@ -1394,11 +1411,16 @@ _MULTI_CURSOR_COLLECTIONS = {
 # - `/api/corpus` and `/api/repositories/{repo_id}/coverage` are aggregate counts grouped into
 #   dicts (`by_terminal_status`, `by_vendor`, ...), not lists of records -- there is nothing to
 #   page through.
+# - `/api/corpus/abandonment` is the same shape one level deeper: `groups` is one entry per
+#   `(change_kind, tier)` pair actually attempted, bounded by the vocabulary of change kinds and
+#   tiers rather than growing with usage the way `/api/runs` does, so it is an aggregate list
+#   rather than a page of records.
 _NOT_COLLECTIONS = {
     "/api/overview",
     "/api/findings/{finding_id}",
     "/api/workflows/{finding_id}",
     "/api/corpus",
+    "/api/corpus/abandonment",
     "/api/repositories",
     "/api/repositories/{repo_id}/coverage",
     "/api/detectors",
@@ -1687,6 +1709,17 @@ def _normalized(path: str) -> str:
     return re.sub(r"\{[^}]*\}", "{param}", path)
 
 
+# Routes `create_app` declares with no console consumer yet, because the aggregate and the
+# route are Phase 1 of `docs/superpowers/plans/2026-08-07-m12-dashboards-that-earn-their-screen.md`
+# and the panel that fetches one is Phase 2 -- a separate work item for whoever holds `web/` when
+# it is scheduled. Each entry is a receipt for "not wired yet", not a standing exception: remove
+# it the day its panel lands and `client.ts` fetches the path, so this set cannot quietly become
+# a place routes go to be exempted from the drift guard forever.
+_NOT_YET_FETCHED_BY_CONSOLE = {
+    "/api/corpus/abandonment",  # M12-W196: aggregate and route only, panel not yet scheduled
+}
+
+
 def test_the_consoles_fetched_paths_match_the_apps_declared_routes():
     # `web/src/api/client.ts` writes the eight paths as string and template literals because
     # the console cannot import Python, and `create_app` declares them by hand at the bottom
@@ -1700,7 +1733,13 @@ def test_the_consoles_fetched_paths_match_the_apps_declared_routes():
     fetched_literals = re.findall(r'[`"](/api[^`"]*)[`"]', source)
     console_paths = {_normalized(literal) for literal in fetched_literals}
 
-    missing_from_console = app_paths - console_paths
+    stale_exemptions = _NOT_YET_FETCHED_BY_CONSOLE - app_paths
+    assert not stale_exemptions, (
+        f"_NOT_YET_FETCHED_BY_CONSOLE names a path create_app no longer declares: "
+        f"{sorted(stale_exemptions)} -- remove the stale entry"
+    )
+
+    missing_from_console = app_paths - console_paths - _NOT_YET_FETCHED_BY_CONSOLE
     missing_from_app = console_paths - app_paths
     assert not missing_from_console and not missing_from_app, (
         f"routes create_app declares that client.ts never fetches: {sorted(missing_from_console)}; "
