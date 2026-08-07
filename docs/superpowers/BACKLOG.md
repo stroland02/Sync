@@ -2080,3 +2080,50 @@ fails `test_the_two_licence_copies_cannot_drift_apart`, removing `license-files`
   deletions including a whole test file; against its real base it is 449 insertions and zero
   deletions. And the first cherry-pick took only `HEAD`, which was the docs commit, missing the
   feature entirely — the six-file diff is what caught it.
+
+### B117 - GraphStore never reconnects, so one dropped connection 500s every route until a restart
+
+`sync.graph.store.GraphStore._connect` caches the connection and reconnects only when it is `None`:
+
+```python
+def _connect(self) -> psycopg.Connection:
+    if self._conn is None:
+        self._conn = psycopg.connect(self._dsn, row_factory=dict_row, autocommit=True)
+    return self._conn
+```
+
+A connection that has been *closed* is not `None`, so it is handed back forever and every query
+raises `psycopg.OperationalError: the connection is closed`. `sync.api.__main__.app_factory` builds
+one store per process and holds it for the process lifetime, which means a single dropped connection
+takes the whole console API down until somebody notices and restarts it.
+
+Measured 2026-08-06: the console rendered a screenful of unreachable errors while Postgres was
+healthy and idle at 11 of 300 connections, and a `GraphStore` constructed fresh in the same
+interpreter answered `repo_ids()` immediately. The API had been up since 12:40 and its connection had
+died at some point nobody can name, which is the point - nothing anywhere signals it.
+
+The fix is a liveness check on the cached connection (`self._conn.closed`) and a reconnect, not a
+pool. It is a boundary: the database is outside this process and a connection dying is a condition
+that occurs, so `CLAUDE.md`'s "do not handle conditions that cannot occur" does not exempt it.
+
+### B118 - Killing a server's child leaves the wrapper holding the port, and the PID is dead
+
+Stopping a dev server or API by killing the `python.exe`/`node.exe` that appears in the process list
+leaves the shell wrapper that launched it alive, and the wrapper still owns the inherited listening
+socket. The port then reports as `LISTENING` under a PID that no longer exists, `taskkill` answers
+`ERROR: The process "26488" not found`, and nothing can bind it.
+
+Measured 2026-08-06 on 8787: `Get-NetTCPConnection -LocalPort 8787` named three different dead PIDs
+across successive calls, six orphaned `bash.exe` wrappers from 12:40 and 21:02 were still alive, and
+killing all six did not release the socket - the last holder was a dead uvicorn reloader whose handle
+Windows had not reclaimed. 8788 and 8790 were in the same state from earlier runs.
+
+Two consequences, and the second is the expensive one. Operationally: **kill the wrapper chain, not
+the child** - walk `ParentProcessId` up through `bash`/`sh` and stop those too. Diagnostically: a
+process that cannot bind logs `Application startup complete` *before* the bind error, so a log tail
+that stops at that line looks like a healthy server and is not. That is how an hour went into
+debugging a `GraphStore` on a process that had never been listening, while every probe was answered
+by a zombie from eight hours earlier.
+
+`SYNC_API_ORIGIN` (M4-W151) is what makes this recoverable without a reboot: the API moves to a free
+port and the console's proxy follows it.

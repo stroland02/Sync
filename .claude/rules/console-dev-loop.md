@@ -64,9 +64,31 @@ those is real. The order below removes the question.
 4. **After every merge the coordinator restarts 5173** so the owner's console is the merged tree,
    and says so. Until a merge lands, 5173 serving the previous tree is correct rather than a fault —
    say that plainly instead of implying newer work is visible.
-5. **One API, on 8787**, started from the same worktree with `SYNC_GRAPH_DSN` set. A console with no
-   API behind it produces a screenful of unreachable errors that look like a defect in the console
-   and are not.
+5. **One API, on 8787 by default**, started from the same worktree with `SYNC_GRAPH_DSN` set. A
+   console with no API behind it produces a screenful of unreachable errors that look like a defect
+   in the console and are not. When 8787 is unavailable — see below, it happens — move the API with
+   `SYNC_API_PORT` and point the console at it with `SYNC_API_ORIGIN`. **Never edit
+   `vite.config.ts` to reach a port**; M4-W151 made the proxy take an origin precisely so nobody
+   would.
+
+## Stopping a server means stopping its wrapper, and a dead PID can still hold the port
+
+**Measured 2026-08-06, after an hour spent debugging the wrong process.** Killing the `python.exe` or
+`node.exe` that shows in the process list leaves the shell wrapper that launched it alive, still
+owning the inherited listening socket. The port then reports `LISTENING` under a PID that does not
+exist and `taskkill` answers `ERROR: The process "26488" not found`. Walk `ParentProcessId` up
+through `bash`/`sh` and stop those too.
+
+Two things this cost, both worth knowing before the next session repeats them:
+
+- **A process that cannot bind logs `Application startup complete` before the bind error.** A log
+  tail that stops at that line looks like a healthy server and is not. Confirm a server is listening
+  by asking the socket — `Get-NetTCPConnection -LocalPort <n> -State Listen`, or simply binding it —
+  never by reading the startup log.
+- **Every probe was being answered by a zombie API from eight hours earlier**, whose database
+  connection had died and which never reconnects (B117). The symptom read as a fresh defect in a
+  fresh process. When an API returns `Internal Server Error`, establish *which* process is answering
+  before diagnosing what it is doing wrong.
 
 The failure this prevents is not wasted ports. It is the owner forming a judgement about the product
 from a half-built branch, or from a stale one, with no way to tell which they are looking at.
