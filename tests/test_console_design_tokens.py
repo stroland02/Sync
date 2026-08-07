@@ -120,18 +120,35 @@ def _sanctioned_spacing_exceptions() -> set[int]:
 
 # -- the contract and the declaration cannot disagree without a test naming which one moved -----
 #
-# `DESIGN.md` publishes a value and a contrast figure for every colour; `index.css` declares them.
-# Until M7-W170 nothing held the two vocabularies together, and the substrate swap is exactly the
-# shape of change that breaks that quietly: a token renamed in one file and not the other leaves a
-# published contrast figure describing a colour nothing resolves, or a colour on screen that no
-# document argued for. Both directions fail here, by name.
+# `DESIGN.md` publishes a value for every token; `index.css` declares them. Until M7-W170 nothing
+# held the two vocabularies together, and a substrate swap is exactly the shape of change that
+# breaks that quietly: a token renamed in one file and not the other leaves a published contrast
+# figure describing a colour nothing resolves, or a value on screen no document argued for. Both
+# directions fail here, by name.
 #
-# Scoped to `--color-*`. The type, spacing, radius and row-height tables are already held by the
-# arithmetic guards further down, which read their numbers out of the same document and multiply
-# them against what `table.tsx` sets.
+# **Every theme family, not just colour.** `.claude/rules/console-surface.md` puts a new type step,
+# a third elevation level and a fourth spacing value in the same category as a new colour -- each is
+# a decision argued in `DESIGN.md`, never a value added elsewhere -- so scoping this to `--color-*`
+# left twelve type steps declared and argued nowhere, which is the gap this covers.
 
-_THEME_DECLARATION = re.compile(r"^\s*(--color-[\w-]+)\s*:", re.MULTILINE)
-_CONTRACT_TOKEN = re.compile(r"`(--color-[\w-]+)`")
+_THEME_FAMILY = r"--(?:background-color|border-color|color|text|spacing|radius|shadow|font)-[\w-]+"
+_THEME_DECLARATION = re.compile(r"^\s*(" + _THEME_FAMILY + r")\s*:", re.MULTILINE)
+_CONTRACT_TOKEN = re.compile(r"`(" + _THEME_FAMILY + r")`")
+
+# Tailwind spells a type step's line height, weight and tracking as `--text-page--line-height` and
+# friends -- properties *of* a step rather than steps of their own, and already published as the
+# columns of the row that names the step. Only the step itself is a token this guard holds.
+_STEP_MODIFIER = re.compile(r".--")
+
+_STOCK_KEY_SECTION = re.compile(
+    r"^## Stock Tailwind keys this contract leaves alone$(.*?)(?=^## |\Z)",
+    re.MULTILINE | re.DOTALL,
+)
+# The *first cell* of a row in that section's table, not any token the section mentions. Reading
+# the whole section swept `--radius-control` and `--text-meta` into the exemption because the "why
+# it stands" column names them -- which would have let a rename of either hide behind a paragraph
+# that was only explaining something else.
+_STOCK_KEY_ROW = re.compile(r"^\| `(" + _THEME_FAMILY + r")` \|", re.MULTILINE)
 
 
 def _index_css_text() -> str:
@@ -140,67 +157,118 @@ def _index_css_text() -> str:
     return path.read_text(encoding="utf-8")
 
 
-def _declared_colour_tokens(text: str | None = None) -> set[str]:
-    """Every `--color-*` custom property `index.css` declares.
+def _declared_theme_tokens(text: str | None = None) -> set[str]:
+    """Every theme custom property `index.css` declares, across all eight families.
 
     Anchored to the start of a line so a `var(--color-line)` sitting inside another token's value
     is not counted as a declaration of it -- `--shadow-flat` and the `@layer base` block both
     reference tokens they do not declare.
     """
-    found = set(_THEME_DECLARATION.findall(_index_css_text() if text is None else text))
-    assert found, "no `--color-*` declaration found in index.css -- the parser or the file moved"
+    found = {
+        name
+        for name in _THEME_DECLARATION.findall(_index_css_text() if text is None else text)
+        if not _STEP_MODIFIER.search(name[2:])
+    }
+    assert found, "no theme declaration found in index.css -- the parser or the file moved"
     return found
 
 
-def _contracted_colour_tokens(text: str | None = None) -> set[str]:
-    """Every `--color-*` name DESIGN.md spells inside backticks."""
-    found = set(_CONTRACT_TOKEN.findall(_design_md_text() if text is None else text))
-    assert found, "DESIGN.md names no `--color-*` token -- the contract or the parser moved"
+def _stock_tailwind_keys(text: str | None = None) -> set[str]:
+    """The keys DESIGN.md names precisely to record that it leaves them at Tailwind's default.
+
+    Read out of the document rather than hardcoded here, for the reason every threshold in this
+    file is: an exemption that lives in the test is an exemption nobody reviewing the contract can
+    see. Deleting the section fails loudly instead of quietly widening what may go undeclared.
+    """
+    section = _STOCK_KEY_SECTION.search(_design_md_text() if text is None else text)
+    assert section, (
+        "DESIGN.md no longer carries the stock-Tailwind-keys section. It is where a key named but "
+        "deliberately not declared is argued; without it this guard cannot tell one from an "
+        "undeclared token"
+    )
+    keys = set(_STOCK_KEY_ROW.findall(section.group(1)))
+    assert keys, "the stock-Tailwind-keys section carries no table row naming a key"
+    return keys
+
+
+def _contracted_theme_tokens(text: str | None = None) -> set[str]:
+    """Every theme token name DESIGN.md spells inside backticks, minus the stock-key exemptions."""
+    found = {
+        name
+        for name in _CONTRACT_TOKEN.findall(_design_md_text() if text is None else text)
+        if not _STEP_MODIFIER.search(name[2:])
+    }
+    assert found, "DESIGN.md names no theme token -- the contract or the parser moved"
     return found
 
 
-def test_every_colour_the_contract_names_is_declared():
+def test_every_token_the_contract_names_is_declared():
     _require_web_src()
-    missing = sorted(_contracted_colour_tokens() - _declared_colour_tokens())
+    missing = sorted(_contracted_theme_tokens() - _declared_theme_tokens() - _stock_tailwind_keys())
     assert not missing, (
-        "DESIGN.md publishes a value and a contrast figure for these tokens and index.css declares "
-        "none of them, so the figure describes a colour nothing on screen resolves. Declare the "
-        "token or stop naming it:\n" + "\n".join(missing)
+        "DESIGN.md publishes a value for these tokens and index.css declares none of them, so the "
+        "value describes something nothing on screen resolves. Declare the token, argue it in the "
+        "stock-Tailwind-keys section, or stop naming it:\n" + "\n".join(missing)
     )
 
 
-def test_every_colour_declared_is_named_in_the_contract():
+def test_every_token_declared_is_named_in_the_contract():
     _require_web_src()
-    undocumented = sorted(_declared_colour_tokens() - _contracted_colour_tokens())
+    undocumented = sorted(_declared_theme_tokens() - _contracted_theme_tokens())
     assert not undocumented, (
-        "index.css declares these colours and DESIGN.md argues for none of them. A colour that no "
-        "document names is a value nobody chose and nobody measured -- give it a row in the table "
-        "its job belongs to, with the arithmetic:\n" + "\n".join(undocumented)
+        "index.css declares these and DESIGN.md argues for none of them. A colour, a type step, a "
+        "spacing value or an elevation level that no document names is a value nobody chose and "
+        "nobody measured -- give it a row in the table its job belongs to, with the "
+        "arithmetic:\n" + "\n".join(undocumented)
     )
 
 
-def test_the_vocabulary_guard_sees_a_token_declared_but_never_argued(tmp_path: Path) -> None:
-    declared = _declared_colour_tokens("--color-ink: oklch(0.95 0 0);\n  --color-smuggled: #ff0000;\n")
-    contracted = _contracted_colour_tokens("The ink is `--color-ink`.\n")
+def test_the_vocabulary_guard_sees_a_token_declared_but_never_argued() -> None:
+    declared = _declared_theme_tokens(
+        "--color-ink: oklch(0.95 0 0);\n  --color-smuggled: #ff0000;\n  --text-fake: 99px;\n"
+    )
+    contracted = _contracted_theme_tokens("The ink is `--color-ink`.\n")
 
-    assert sorted(declared - contracted) == ["--color-smuggled"]
-
-
-def test_the_vocabulary_guard_sees_a_token_argued_but_never_declared(tmp_path: Path) -> None:
-    declared = _declared_colour_tokens("--color-ink: oklch(0.95 0 0);\n")
-    contracted = _contracted_colour_tokens("`--color-ink` and `--color-imaginary` are steps.\n")
-
-    assert sorted(contracted - declared) == ["--color-imaginary"]
+    assert sorted(declared - contracted) == ["--color-smuggled", "--text-fake"]
 
 
-def test_the_vocabulary_guard_ignores_a_reference_inside_another_tokens_value(tmp_path: Path) -> None:
+def test_the_vocabulary_guard_sees_a_token_argued_but_never_declared() -> None:
+    declared = _declared_theme_tokens("--color-ink: oklch(0.95 0 0);\n")
+    contracted = _contracted_theme_tokens("`--color-ink` and `--spacing-imaginary` are steps.\n")
+
+    assert sorted(contracted - declared) == ["--spacing-imaginary"]
+
+
+def test_the_vocabulary_guard_ignores_a_reference_inside_another_tokens_value() -> None:
     # `--shadow-flat: 0 0 0 1px var(--color-line)` mentions a token it does not declare. Counting
     # that as a declaration would make the guard pass on a file that declared nothing at all.
-    declared = _declared_colour_tokens(
+    declared = _declared_theme_tokens(
         "--color-line: oklch(0.95 0 0 / 7%);\n  --shadow-flat: 0 0 0 1px var(--color-nonexistent);\n"
     )
 
-    assert declared == {"--color-line"}
+    assert declared == {"--color-line", "--shadow-flat"}
+
+
+def test_the_vocabulary_guard_treats_a_line_height_as_part_of_its_step() -> None:
+    # A step's line height, weight and tracking are the columns of the row that names it. Holding
+    # them as tokens of their own would demand `--text-page--letter-spacing` appear in backticks,
+    # which is a table cell, not a name anything spells.
+    declared = _declared_theme_tokens(
+        "--text-page: 1.375rem;\n  --text-page--line-height: 2rem;\n"
+        "  --text-page--font-weight: 600;\n"
+    )
+
+    assert declared == {"--text-page"}
+
+
+def test_the_stock_key_exemption_is_read_out_of_the_contract() -> None:
+    keys = _stock_tailwind_keys(
+        "## Stock Tailwind keys this contract leaves alone\n\n"
+        "| `--text-xs` | 0.75rem | it is the floor |\n\n"
+        "## Deliberately absent\n\n`--color-not-an-exemption` lives here.\n"
+    )
+
+    assert keys == {"--text-xs"}
 
 
 def _banned_spacing_pixel_values() -> dict[int, str]:

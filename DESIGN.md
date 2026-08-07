@@ -49,9 +49,19 @@ way.** Two independent reasons, and both are load-bearing:
   document's arithmetic into a CSS file nobody measures.
 
 **`web/scripts/theme-contrast.mjs` is the resolver and the re-measurement tool.** It carries the
-eight inputs above and the derivations transcribed from upstream, and prints every value and every
-ratio published below. Change a parameter, run `node web/scripts/theme-contrast.mjs`, paste what it
-says. Nothing in the tables below was typed in by hand.
+eight inputs above and the derivations transcribed from upstream, and it declares each token once,
+as numbers. That single declaration produces both the CSS literal it prints under
+`== declarations ==` and the sRGB bytes every ratio is computed over, **so a figure in this document
+cannot describe a colour different from the one `index.css` ships.** The declarations block is meant
+to be pasted into `index.css` verbatim; if the two ever differ, the script is right and the
+stylesheet is stale.
+
+**What that claim covers, precisely.** Every `--color-*`, `--background-color-*` and
+`--border-color-*` declaration, and every contrast figure in this document, is printed by that
+script and was pasted rather than typed. **Three things are not**, and each is a length or a
+constant with no arithmetic to reproduce and no contrast to measure: the type ramp (carried from
+`apps/studio/styles/globals.css`), the spacing and radius values, and the two `--shadow-*`
+compositions. They are argued in their own sections below.
 
 Three derived quantities are used repeatedly and are worth naming here, because every alpha in the
 palette is one of them:
@@ -488,11 +498,42 @@ halves of the bar clear — at least 3.4:1 overall and a display step at least 3
 costs no rows, because **exactly one element per route may take it**: the page title in
 `layouts/page-header.tsx`. A second one on a screen is two focal points, which is none.
 
-**The substrate's other steps stay reachable under their own names.** `--text-sm` through
-`--text-9xl` are declared with Studio's values, because the vendored catalog spells `text-xs`,
-`text-sm`, `text-base` and `text-lg` directly and nothing should resolve those against Tailwind's
-defaults while the components around them come from Supabase. `--text-xs` is left at Tailwind's
-0.75rem, which is what upstream does and what makes `--text-meta` and `text-xs` the same 12px floor.
+### The substrate's own steps, under their own names
+
+Twelve more steps are declared, and they are a decision rather than a convenience. The vendored
+catalog spells `text-xs`, `text-sm`, `text-base` and `text-lg` directly, and nothing should resolve
+those against Tailwind's defaults while the components around them come from Supabase — a vendored
+dialog would sit at 14px body while the screen around it sat at 13px, which is two ramps on one
+screen. So Studio's whole ramp is carried, from `apps/studio/styles/globals.css`, tuned there for
+its body face.
+
+**These are lengths carried across, not values derived from anything** — there is no arithmetic to
+reproduce and no contrast to measure, which is why `web/scripts/theme-contrast.mjs` does not emit
+them. The seven role steps above are the ones a screen this project writes reaches for.
+
+| Token | Value | px | Role step on it | |
+|---|---|---|---|---|
+| `--text-sm` | 0.8125rem | 13 | `--text-body` | |
+| `--text-base` | 0.9375rem | 15 | `--text-emphasis` | |
+| `--text-lg` | 1rem | 16 | — | |
+| `--text-xl` | 1.125rem | 18 | `--text-section` | |
+| `--text-2xl` | 1.375rem | 22 | `--text-page` | |
+| `--text-3xl` | 1.75rem | 28 | `--text-figure` | |
+| `--text-4xl` | 2.125rem | 34 | — | display step |
+| `--text-5xl` | 2.875rem | 46 | `--text-display` | display step |
+| `--text-6xl` | 3.625rem | 58 | — | display step |
+| `--text-7xl` | 4.375rem | 70 | — | display step |
+| `--text-8xl` | 5.875rem | 94 | — | display step |
+| `--text-9xl` | 7.875rem | 126 | — | display step |
+
+**The six display steps are declared and none of them is licensed.** `--text-display` at 46px is
+the only step above `--text-figure` a screen may take, and *exactly one element per route may take
+it*. `--text-4xl` and everything above `--text-5xl` exist because the ramp is carried whole and a
+vendored component may reach one; a screen in `features/` reaching for `text-6xl` is a second focal
+point argued nowhere, and `tests/test_console_design_tokens.py` already fails on a second consumer
+of the display tier. The steps above 46px have no consumer in this tree and are the first entries
+to delete if the substrate's ramp is ever narrowed.
+
 New code in `features/` and `components/` uses the seven role names.
 
 **Tracking is two-tiered, and it belongs to the heading role, not to size alone.**
@@ -636,8 +677,9 @@ ships, `rounded-lg` on every card and dialog.
 | `--radius-control` | 6px | buttons, inputs, badges, chips |
 | `--radius-surface` | 8px | cards, panels, dialogs |
 
-The surface radius was 10px before the swap. Tailwind's `--radius-md` (6px) is unchanged and still
-resolves, because `button.tsx` reads it through `var(--radius-md)` in an arbitrary value.
+The surface radius was 10px before the swap. Tailwind's stock `--radius-md` is left alone and still resolves,
+because `button.tsx` reads it through `var(--radius-md)` in an arbitrary value — see *Stock Tailwind
+keys this contract leaves alone* below.
 
 ---
 
@@ -749,9 +791,10 @@ that resolved a `"system"` preference are all removed, not merely unused.
 
 ## Changing a colour
 
-1. Change the value in `web/src/index.css`. If it is one of the substrate's, change the parameter in
-   `web/scripts/theme-contrast.mjs` instead and take what it prints — a hand-edited literal breaks
-   the derivation this document rests on.
+1. **Do not edit `web/src/index.css`.** Change the number in `web/scripts/theme-contrast.mjs` —
+   a generator parameter for a substrate colour, the token's own `decl(…)` for one of ours — and
+   paste its `== declarations ==` block back over the declarations in `index.css`. A literal
+   hand-edited into the stylesheet is a colour the measurement below never saw.
 2. Run `node web/scripts/theme-contrast.mjs`. Nothing may fall below **5.05:1**. A pairing that
    regresses is a bug in the ramp, not an acceptable trade.
 3. Paste the new tables into *Contrast, computed* below. A figure whose run is not reproducible is
@@ -873,6 +916,25 @@ four clear 3:1. The `brand` mark measures 8.76, the same value as `good`, which 
 Chrome renders `outline-style: auto`, its own two-tone ring, contrast-safe by construction.
 Deliberately left alone — a ring the browser adapts is better than one this contract would have to
 re-measure per surface.
+
+---
+
+## Stock Tailwind keys this contract leaves alone
+
+Two theme keys are named in this document, are not declared in `index.css`, and are not an
+oversight: the stock value is already the right one, and redeclaring it would put a second copy of a
+number nobody chose into a file that has to be maintained. **This section exists so that "named but
+not declared" is a category with two members rather than an untested gap** —
+`tests/test_console_design_tokens.py` reads the table below and holds every other token in this
+document to being declared.
+
+| Key | Stock value | Why it stands |
+|---|---|---|
+| `--text-xs` | 0.75rem | Upstream leaves it alone too. It is the same 12px as `--text-meta`, so the floor is one number whichever spelling a component reaches for. |
+| `--radius-md` | 0.375rem | Already equal to `--radius-control`, and `button.tsx` reads it through `var(--radius-md)` inside an arbitrary value. Redeclaring it would give the same 6px two names in one file. |
+
+A third entry here is a claim that a stock Tailwind value is correct for this console, which is a
+decision — argue it in this table or declare the token.
 
 ---
 
