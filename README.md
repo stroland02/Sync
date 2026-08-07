@@ -171,6 +171,149 @@ moved parameter — a codemod applies it, with no model call. Otherwise an agent
 Neither path is trusted: `tsc` runs first because it is fast, then the customer's own CI is the
 final word.
 
+### Provenance rungs — the alternative to a confidence score
+
+Every binding between a call site and a vendor operation carries **the class of evidence it rests
+on**. This is the single most important design decision in the system.
+
+```
+  observed   ── a real client span was seen calling this operation
+      ▲
+  resolved   ── the symbol resolved through an import graph to a known SDK export
+      ▲
+  static     ── the symbol matched an adapter's naming convention
+      ▲
+ unresolved  ── a call site exists; nothing binds it
+      ▲
+unattributed ── the default a write refuses to leave in place
+```
+
+It is a **column, not a join** (`schema.sql:162`), and deliberately outside the natural key: *the
+rung describes the binding a count rests on, rather than which count it is.* A scalar confidence
+score collapses "we could not check" onto the same axis as "we checked and it passed". A rung is
+**attributable** — when a false positive appears you can ask which rung produced it, and fix that
+rung. A `9` is neither.
+
+### The remediation state machine
+
+A LangGraph `StateGraph` over `RunState`, checkpointed to Postgres at **every** node
+(`src/sync/remediate/graph.py`). Every node can also reach `abandon`.
+
+```
+                          START
+                            │
+                            ▼
+                      ┌──────────┐
+                      │  locate  │  find the call sites the change touches
+                      └────┬─────┘
+                           ▼
+                      ┌──────────┐
+                      │ prepare  │  clone, install deps with --ignore-scripts
+                      └────┬─────┘
+              ┌────────────┼────────────┐
+              ▼            ▼            ▼
+          [report]     ┌───────┐    [abandon]
+       nothing to try  │ patch │◄──────────────┐
+                       └───┬───┘               │
+                           ▼                   │
+                  ┌─────────────────┐          │
+                  │  static_verify  │  tsc     │  feedback
+                  └────────┬────────┘          │  ≤3 attempts
+                           ▼                   │
+                      ┌─────────┐              │
+                      │ replay  │  execute the patched path if it can
+                      └────┬────┘              │
+                           ▼                   │
+                    ┌─────────────┐            │
+                    │ push_branch │            │
+                    └──────┬──────┘            │
+                           ▼                   │
+                    ┌─────────────┐            │
+                    │  await_ci   │  3–30 min  │
+                    └──────┬──────┘            │
+                           ├───────────────────┘  ≤2 attempts
+                           ▼
+                    ┌─────────────┐
+                    │   open_pr   │ ──► END
+                    └─────────────┘
+```
+
+Three details a diagram usually hides, all deliberate:
+
+- **A replay that could not run is not a failure.** No resolvable export, a language it cannot
+  execute, a file the index has outlived — none is a verdict on the patch. They reach the push path
+  carrying the fact that the run was **not replay-verified**, because *"the patched path was
+  executed"* is a sentence that goes in front of a reviewer.
+- **`reported` is not a kind of abandonment.** Abandonment means Sync tried and could not finish;
+  `reported` means the decision table found there was correctly nothing to try. Writing the second
+  into `abandon_reason` would corrupt the signal routing learns from.
+- **Routers branch on booleans a node set deliberately, never on the shape of a string.** A real
+  `tsc` failure can exit non-zero with nothing on either stream — a silent `npx` fetch failure, for
+  instance — which would otherwise read as success.
+
+### The tier cascade — do not call a model if you do not have to
+
+The tier decision table is **data** (`src/sync/route/matrix.py`), so *"tier 0 was wrong for this
+change kind"* is a query rather than an excavation.
+
+| Tier | Name | Cost | When |
+|---:|---|---|---|
+| `-1` | `NO_PATCH` | free | The change needs no code edit. *The cheapest patch is the one you do not write* |
+| `0` | `CODEMOD` | deterministic | The change maps to a known AST transform and the graph says the site is shaped for it |
+| `1` | `TEMPLATED` | deterministic | A parameterised template covers it |
+| `2` | `AGENT` | a model call | Everything else |
+
+It reads **`RoutingFacts`** — what the graph actually knows about the sites a change touches:
+whether the changed field could be named at all, how many call sites read it, and whether it is
+passed as a **literal rather than a variable**, because *a codemod can remove a literal; it cannot
+reason about where a variable came from.* Every decision records the name of the row that made it.
+
+### Durable execution
+
+A customer's CI takes 3–30 minutes and dominates the critical path, so `await_ci` is a **resumable
+park rather than a blocking sleep**, and state is checkpointed at every node. Two constraints follow:
+
+- **Any state key written by parallel branches must declare a reducer.** Without one, concurrent
+  writes are silently dropped — no error, no warning, missing results.
+- **The checkpoint serialiser has an allowlist.** A checkpoint is data that re-enters the process
+  later, so deserialising arbitrary types out of it is a remote-code-execution shape.
+  `serde.CHECKPOINTED_TYPES` is exactly six types, and the msgpack decoder is constrained to them.
+
+### Containing the agent
+
+The patch agent holds `Bash`, `Write` and `Edit` **inside a customer's clone** — a directory that
+routinely carries `.env`, `.npmrc` and fixture credentials. Three independent mechanisms:
+
+| Mechanism | What it covers that the others cannot |
+|---|---|
+| **A predicate on the run** (`tool_gate.py`) | Every other gate asks what the *branch would contain*. The top-ranked threat does not want to ship anything — the taking happens mid-run, and the diff afterwards can be a correct migration. So this asks what the run is **doing**: it refuses by default, and records every refusal with the command verbatim |
+| **Untrusted text is data** (`untrusted.py`) | The prompt is assembled from a vendor's prose and a customer's source. Those are fenced as text the agent reads **about**, never instruction it follows — and a fence whose content carries a marker is **refused rather than escaped**, because a marker cannot appear there by accident |
+| **The shipped tree** (`shipped_tree`, `dependency_edits`) | `tsc` compiles what a *push would carry*, not the working directory. A file ships only if the agent **staged** it, which is the agent asserting the patch needs it |
+
+> **Why a `PreToolUse` hook and not `can_use_tool`** — measured against the installed SDK, not
+> inferred. `_get_can_use_tool_shadowed_warning` states that an `allowed_tools` entry allowing a
+> whole tool auto-approves it *before* the permission callback runs. Every entry in the patch
+> agent's allow-list is a whole-tool entry, so a `can_use_tool` gate would have been consulted for
+> nothing **and looked like it was working**.
+
+`WebSearch` and `WebFetch` are denied, and that is real — but `curl` is a program rather than a
+tool, which is the whole reason the gate exists.
+
+### The vocabulary
+
+| Term | Meaning here |
+|---|---|
+| **ADG** | API Dependency Graph — call sites joined to vendor operations and telemetry |
+| **Binding** | The edge between a call site and a vendor operation |
+| **Rung** | The class of evidence a binding rests on. A column, never a join |
+| **Finding** | The one type every detector emits and the pipeline consumes |
+| **Grain** | What one row of a table means. Declared as a comment before a column is added |
+| **Tier** | How expensive a repair strategy is |
+| **Abandon** | Sync tried and could not finish. Carries a queryable reason |
+| **Reported** | The decision table found nothing to try. **Not** an abandonment |
+| **Checkpoint** | One durable state snapshot per node. The only evidence a run exists |
+| **Shipped tree** | What a push would carry, which is not what is in the working directory |
+
 ### Two invariants
 
 **Nothing reaches a pull request unverified.** Every patch passes `tsc` and then the customer's own
