@@ -120,6 +120,11 @@ Most of the `Done` list below is this: the corpus, the binder defects it caught,
 carries, and a long family of encoding defects that all shared one shape — a text read that answered
 confidently instead of refusing.
 
+**One intervention is designed against an unsampled axis.** `B116` aims at merge rate by giving the
+patch agent durable per-repository facts instead of making it rediscover them per finding. It is
+planned and unstarted, and it cannot be evaluated until merge rate has samples — so it is recorded
+as an argued improvement, sequenced behind the console work rather than ahead of it.
+
 ---
 
 ## Ready
@@ -270,6 +275,51 @@ specification.
 **Closes when:** each of the three is either fixed or carries a comment saying why the current
 answer is right, the two remaining reads refuse like their siblings, and the decode gate either
 sees `ValueError`-spelled chains or says in its own text that it cannot.
+
+### B116 — every remediation run starts cold, and the facts it rediscovers do not change
+
+**Designed and planned, deliberately not started.** The console is the current focus, and this is
+pipeline work; it sits at the bottom of Ready so a tick takes the console items first. Numbered
+B116 rather than B80 because the console line already holds B90 through B115 unmerged, and two
+items sharing a number would be worse than a gap.
+
+- Design: [`specs/2026-08-06-sync-repo-context-design.md`](specs/2026-08-06-sync-repo-context-design.md)
+- Plan: [`plans/2026-08-06-sync-repo-context.md`](plans/2026-08-06-sync-repo-context.md), seven tasks
+- Branch: `repo-context`, based on `178ff7b`. Carries these two documents and no code. Both are
+  also on `main`, cherry-picked rather than merged — `178ff7b` is 188 commits ahead of `main`, so
+  merging that branch would have brought the entire console line with it.
+
+`build_patch_prompt` assembles the vendor change, the call site and the required edit, and nothing
+else. So an agent rediscovers the same stable facts about a repository on every finding — which
+package manager the lockfile names, which directories are generated, which conventions the codebase
+keeps. The facts do not change between findings and the rediscovery is not free.
+
+The design adds a `repo_context` table at one row per repository, a `sync.context` package that
+touches no database, a section in the prompt's cacheable prefix, an operator write path on the
+console API and the CLI, and an optional `.sync/context.md` a customer may commit and Sync never
+writes back. Two constraints shaped it: `sync.mcp.tools` is frozen, so context reaches an agent as
+a resource template and an `initialize`-time `instructions` field rather than a fifth tool; and
+nothing is written into a customer's checkout, so the store holds a copy and the committed file
+stays the original. Precedence follows from the second — when Sync and the customer disagree about
+what is true of the customer's repository, the customer wins.
+
+**Why it is worth doing rather than merely appealing.** `CLAUDE.md` requires every agent to shorten
+the critical path or improve a result. The context section sits ahead of the diagnostics block, so
+it is inside the prefix that stays byte-identical across retries of one finding: supplied facts are
+facts not derived, and a retry re-reads them from cache rather than paying for them again.
+
+**What it does not do, on purpose.** No agent writes context. That is memory rather than context and
+is a separate item; `CONTEXT_SOURCES` ships with `seeded-file` and `operator` only, and the plan
+asserts that so a third member is a deliberate edit rather than a quiet one.
+
+**One dependency on unmerged work.** Task 5 extends `sync.dashboard.graph_views`, which exists on
+the console line and not on `main`. This cannot be dispatched against `main` as it stands; it wants
+a base that carries the console work, which is another reason it sits behind that work rather than
+beside it.
+
+**Evidence that closes this:** the seven tasks land with `uv run pytest` green,
+`tests/golden/tool_schemas.json` unmodified, and `build_patch_prompt` proved byte-identical for a
+repository with no context. The first two are assertions in the plan rather than review judgements.
 
 ## In flight
 
