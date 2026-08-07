@@ -29,6 +29,7 @@ by content, because items were never tagged with a milestone as they landed.
 | **M6** | Show it, rather than describe it | **0%** | Needs a UI to film, so it sits behind M4.5 rather than M4 |
 | **M7** | The console becomes a product | **~85%** | All nine levels are on the vendored Supabase substrate; the fidelity pass is in flight and Phases 5-6 are unbuilt |
 | **M8–M11** | The resolution loop | **0%** | Proposed 2026-08-06, nothing scheduled; Sync opens a pull request and stops watching it |
+| **M12** | Dashboards that earn their screen | **0%** | Proposed 2026-08-07 from the owner's review of our screens against the references; full-stack, because the useful panels need aggregates `sync.dashboard` does not compute |
 
 ### M0 — Walking skeleton, one real pull request · ~90%
 
