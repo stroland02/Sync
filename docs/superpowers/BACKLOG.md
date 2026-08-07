@@ -672,23 +672,52 @@ whose repository ids and argument-key lists are visibly longer than this one's, 
 both. A width that only holds for one seed is not a fix, it is a coincidence that will be read as
 one.
 
-**Amended 2026-08-06 by M7-W160, which made this worse and says so.** The chassis takes 88px of
-content width from every screen — the frame grew 24 to 40px to clear the 4.7–7.2 ratio, and the icon
-rail is 56px — and this table had no 88px to give. Measured on the binding surface at
-`--scale 10000`, reading the content box inside the frame:
+**Amended 2026-08-06 by M7-W160, which made this worse and says so.** The chassis takes content width
+from every screen — the frame grew 24 to 40px to clear the 4.7–7.2 ratio, and the sidebar takes the
+rest — and this table had no width to give.
+
+**Re-measured the same day after the sidebar was rebuilt as one component at two widths**, replacing
+a 56px icon rail plus a 240px contextual panel. The rebuild changes every figure below, so the first
+table is replaced rather than annotated. Measured on the binding surface at `--scale 10000`, reading
+the content box inside the frame, at both viewports and both widths:
 
 | | content | call site column | row |
 |---|---|---|---|
 | before M7-W160, 1440 | 1232px | 256px | 57px |
-| after, 1440, sidebar closed | 1289px | 279px | **57px** |
-| after, 1440, sidebar open | 1049px | 204px | **77px** |
-| after, 1280, sidebar closed | 1129px | 229px | **77px** |
+| 1440, collapsed *(the default here)* | 1297px | 281px | **57px** |
+| 1440, expanded | 1137px | 231px | **77px** |
+| 1280, collapsed *(the default here)* | 1137px | 231px | **77px** |
+| 1280, expanded | 977px | 181px | **77px** |
 
-At 1440 with the sidebar collapsed the row is unchanged, so nothing is lost where there is room. At
-1280 it is 77px **with the sidebar already closed** — the frame and rail alone are enough to push the
-call-site path onto a third line, which is what a column 5px short of fitting does when 88px leaves
-the page. The sidebar's default is set by viewport for this reason (`app-frame.tsx` carries the
-numbers), and that mitigates the 1440 case rather than the 1280 one.
+Two things the shape of that table says that the previous one could not. Collapsed at 1440 the
+console now has **65px more** content width than before M7-W160 rather than 57px less, because one
+48px sidebar is narrower than the 56px rail it replaced — the chassis is no longer a net cost at the
+viewport it is measured at. And 1440-expanded and 1280-collapsed land on the same 1137px, which is
+the useful coincidence: the sidebar's two widths and the two viewports are one axis, not two.
+
+**This measurement corrected the default rather than only describing it.** The sidebar auto-collapsed
+below 1440, which expanded at exactly 1440 — the row-height row above says that costs 20px on every
+row there. The threshold is now **1473px**, the narrowest viewport at which an expanded sidebar still
+leaves 1170px of content: the frame, the sidebar and a scrollbar take 303px. Both viewports in the
+table therefore load collapsed, which is why the parenthetical moved.
+
+**The 1280 row height does not improve. It is 77px collapsed and 77px expanded**, unchanged from the
+first pass, and stating that plainly was the point of re-measuring. The mechanism, found by holding
+the sidebar collapsed and stepping the surface's width in 2px increments: the row drops from 77px to
+57px at **1170px of content width** and nowhere else. 1440-collapsed clears it by 127px. Every other
+configuration — including 1280 with the sidebar already shut, at 1137px — is below it, 1280-collapsed
+by **33px**. So the collapse is worth 20px of row height at 1440 and worth nothing at 1280, and no
+sidebar width reachable from here closes a 33px gap that a 48px sidebar has already spent.
+
+That threshold is the number this entry was missing. It converts "four columns are short by 5 to 22px"
+into a single testable figure, and it is what a fix has to clear.
+
+**And there is a second one above it, which is the first evidence that the target height is reachable
+at all.** At 1920 wide — the window the owner actually works in — the sidebar loads expanded and the
+content box is 1617px, where the row measures **37px**. That is the figure this entry names as what
+closing it would buy, arrived at by width alone with no column widths declared. So the shortfall is
+confirmed to be exactly what it says it is — a few pixels per column, not a structural cost — and a
+fix that reclaimed 33px at 1280 would be buying a known result rather than an estimated one.
 
 This does not argue for a narrower frame: 40px is the smallest value clearing the ratio, and the
 ratio is what
