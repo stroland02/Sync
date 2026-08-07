@@ -401,7 +401,7 @@ a defect found nightly is found later — and that risk is the thing to argue, n
 it, and every check that stopped running per-pull-request is named along with where it runs instead.
 A gate deleted rather than moved does not close this.
 
-### B112 — Hosted runners stopped acquiring this repository's jobs, so CI's verdict means nothing
+### B112 — Hosted runners stopped acquiring this repository's jobs, so CI's verdict means nothing - CLOSED
 
 Observed 2026-08-06. Run `31124124263` on `81d6c96`: all three jobs recorded a start and an end
 fifteen minutes apart, ran **zero steps**, and were cancelled. The annotation is
@@ -877,6 +877,18 @@ colour.
 **Closes when:** the invalid state is expressed in declared tokens at a strength measured against the
 3:1 non-text floor, `destructive` is either declared in `DESIGN.md` or gone from `web/src`, and the
 ring guard's scope widens from focus rings to every `ring-*/n` with the narrowing comment deleted.
+
+**Closed 2026-08-07 by observation, and how it was read wrong first matters more than the closure.**
+Twelve consecutive runs from 02:27 to 13:51 UTC ran zero zero-step jobs, checked run by run. The
+cause was never visible from here and is not now; it stopped.
+
+`zero_step_jobs` in the profiler stayed flat at **14 across both profiles**, which read as the
+failure persisting and nearly stopped a tick on its own. All 14 were the 2026-08-06 incident, still
+inside a 30-run sliding window. **A cumulative count over a sliding window cannot tell a failure
+that is continuing from one that has stopped** — only the per-run check can, and it is one `gh api`
+call. The metric stays because a rising count is still the alarm; what changes is that it is a
+prompt to check per-run, never a verdict.
+
 
 ### B113 — Two guards in the node-status wash are unreachable, and the audit could not safely delete them
 
