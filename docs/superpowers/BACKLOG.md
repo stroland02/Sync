@@ -27,6 +27,7 @@ by content, because items were never tagged with a milestone as they landed.
 | **M4.5** | The console is worth looking at | **0%** | Split out 2026-08-06 so M4 can close; starts when M4's console half does |
 | **M5** | Integration layer | **~35%** | Sentry feeds counts in now; still nothing correlates anything |
 | **M6** | Show it, rather than describe it | **0%** | Needs a UI to film, so it sits behind M4.5 rather than M4 |
+| **M8–M11** | The resolution loop | **0%** | Proposed 2026-08-06, nothing scheduled; Sync opens a pull request and stops watching it |
 
 ### M0 — Walking skeleton, one real pull request · ~90%
 
@@ -174,6 +175,28 @@ a build rather than a defect, which is why nothing here is queued.
 ### M6 — Show it, rather than describe it · 0%
 
 Remotion videography of the product working. Needs a working UI to film, so it sits behind M4.
+
+### M8–M11 — The resolution loop · 0%
+
+**Proposed, not scheduled.** Plan:
+[`plans/2026-08-06-sync-m8-m11-resolution-loop.md`](plans/2026-08-06-sync-m8-m11-resolution-loop.md).
+Source study, with a `path:line` citation behind every claim:
+[`references/notes/superlog-investigation-mechanism.md`](references/notes/superlog-investigation-mechanism.md).
+Numbered from M8 because M7 is the console.
+
+Four milestones, ordered by what unblocks the most. **M8** puts the model call behind a protocol so
+the remediation pipeline can be tested without a key. **M9** gives a run more outcomes than "diff"
+and "abandoned" — an external cause and a question for a human are both real answers today that
+have to be spelled as failures. **M10** parks a run instead of ending it, so a pull request CI
+rejects is Sync's problem rather than nobody's. **M11** groups findings sharing a vendor change
+into one remediation, instead of eight findings producing eight pull requests against one
+repository.
+
+M8 → M9 → M10 is a dependency chain; M11 needs M9 and is otherwise independent.
+
+**Sequenced behind M7.** All four are pipeline work and none of it is visible in the console. M8 is
+the exception worth taking opportunistically: a refactor that makes the existing remediation suite
+key-free and faster, and it pays for itself before anything below it is scheduled.
 
 ### Measurement, which cuts across all of them
 
@@ -947,6 +970,49 @@ clears 3.4:1 on each of the nine — with the presence guard landing in the same
 measured at 1440x900 and 1280x800 at **4.00:1**, with regions placed beside another going from one
 to two on each. The presence guard still cannot land — it goes red on whatever remains — and the
 count of routes it would fail is the only thing this entry needs updating for.
+
+### B122 — every remediation run starts cold, and the facts it rediscovers do not change
+
+**Designed and planned, deliberately not started.** The console is the current focus and this is
+pipeline work; it sits at the bottom of Ready so a tick takes the console items first.
+
+- Design: [`specs/2026-08-06-sync-repo-context-design.md`](specs/2026-08-06-sync-repo-context-design.md)
+- Plan: [`plans/2026-08-06-sync-repo-context.md`](plans/2026-08-06-sync-repo-context.md), seven tasks
+
+`build_patch_prompt` assembles the vendor change, the call site and the required edit, and nothing
+else. So an agent rediscovers the same stable facts about a repository on every finding — which
+package manager the lockfile names, which directories are generated, which conventions the codebase
+keeps. The facts do not change between findings and the rediscovery is not free.
+
+The design adds a `repo_context` table at one row per repository, a `sync.context` package that
+touches no database, a section in the prompt's cacheable prefix, an operator write path on the
+console API and the CLI, and an optional `.sync/context.md` a customer may commit and Sync never
+writes back. Two constraints shaped it: `sync.mcp.tools` is frozen, so context reaches an agent as
+a resource template and an `initialize`-time `instructions` field rather than a fifth tool; and
+nothing is written into a customer's checkout, so the store holds a copy and the committed file
+stays the original. Precedence follows from the second — when Sync and the customer disagree about
+what is true of the customer's repository, the customer wins.
+
+**Why it is worth doing rather than merely appealing.** `CLAUDE.md` requires every agent to shorten
+the critical path or improve a result. The context section sits ahead of the diagnostics block, so
+it is inside the prefix that stays byte-identical across retries of one finding: supplied facts are
+facts not derived, and a retry re-reads them from cache rather than paying for them again.
+
+**Independent corroboration.** Superlog probes a candidate repository's default branch for
+`CLAUDE.md`, `AGENTS.md`, `.cursorrules` and `.github/copilot-instructions.md` before handing it to
+an agent, so the agent follows the repository's conventions
+(`references/notes/superlog-investigation-mechanism.md`, section 7). Same instinct, arrived at
+independently — evidence for the seed-file half of this design rather than the operator-written
+half.
+
+**What it does not do, on purpose.** No agent writes context. That is memory rather than context
+and is a separate item; `CONTEXT_SOURCES` ships with `seeded-file` and `operator` only, and the
+plan asserts that so a third member is a deliberate edit rather than a quiet one.
+
+**Evidence that closes this:** the seven tasks land with `uv run pytest` green,
+`tests/golden/tool_schemas.json` unmodified, and `build_patch_prompt` proved byte-identical for a
+repository with no context. The first two are assertions in the plan rather than review
+judgements.
 
 ## In flight
 
