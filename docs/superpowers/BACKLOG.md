@@ -2117,7 +2117,7 @@ fails `test_the_two_licence_copies_cannot_drift_apart`, removing `license-files`
   deletions. And the first cherry-pick took only `HEAD`, which was the docs commit, missing the
   feature entirely — the six-file diff is what caught it.
 
-### B117 - GraphStore never reconnects, so one dropped connection 500s every route until a restart
+### B117 - GraphStore never reconnects, so one dropped connection 500s every route until a restart - CLOSED
 
 `sync.graph.store.GraphStore._connect` caches the connection and reconnects only when it is `None`:
 
@@ -2141,6 +2141,19 @@ died at some point nobody can name, which is the point - nothing anywhere signal
 The fix is a liveness check on the cached connection (`self._conn.closed`) and a reconnect, not a
 pool. It is a boundary: the database is outside this process and a connection dying is a condition
 that occurs, so `CLAUDE.md`'s "do not handle conditions that cannot occur" does not exempt it.
+
+Closed by M4-W166. `_connect` replaces a connection reporting `closed` -- which covers `broken`
+too, because psycopg marks a broken connection closed -- and the reconnect is guarded by a
+transaction-depth counter so it never happens under an open `transaction()` block. The
+transactional case is real, not scoped out: `transaction()` is the only way a block opens, so the
+store tracks depth itself, and inside a block a dead connection is handed back and the next
+statement raises `OperationalError` rather than committing later writes on a fresh autocommit
+connection while the block's transaction dies with the old one. A block that *starts* on a dead
+connection gets a live one, because `transaction()` resolves the connection before raising the
+depth. Both behaviours are pinned in `tests/test_graph_store.py`: the reconnect test asserts the
+query answers with the real rows written before the drop -- reconnect, not an empty result
+swallowing the outage -- and the transaction test asserts the raise and that nothing from the
+failed block committed.
 
 ### B118 - Killing a server's child leaves the wrapper holding the port, and the PID is dead
 

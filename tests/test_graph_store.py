@@ -87,6 +87,40 @@ def test_many_calls_open_one_connection(monkeypatch):
     assert connects == 1
 
 
+def test_a_closed_connection_is_replaced_and_the_query_answers_with_real_rows(store):
+    """B117: the API holds one store for the process lifetime, so a connection that died
+    must be replaced on the next call -- and replaced rather than swallowed: the row written
+    before the drop comes back, not an empty result wearing the outage's name.
+    """
+    store.upsert_call_site(_site())
+    store._connect().close()
+
+    sites = store.call_sites_for_operation("stripe", "PostCharges")
+
+    assert len(sites) == 1
+    assert sites[0].symbol == "stripe.charges.create"
+    # The store stays usable, not merely un-broken for one call.
+    assert store.call_sites_for_operation_count("stripe", "PostCharges") == 1
+
+
+def test_a_connection_lost_under_an_open_transaction_raises_rather_than_reconnecting(store):
+    """A reconnect inside `transaction()` would hand later writes to a fresh autocommit
+    connection while the block's own transaction dies with the old one -- a failed write
+    turned into a silently partial one. The honest behaviour is to raise, and to leave
+    nothing from the failed block committed.
+    """
+    store.upsert_call_site(_site())
+
+    with pytest.raises(psycopg.OperationalError):
+        with store.transaction():
+            store._connect().close()
+            store.upsert_call_site(_site(line=99, col=2, content_hash="hash-99"))
+
+    # Nothing from the failed block reached the database; the store recovered afterwards.
+    sites = store.call_sites_for_operation("stripe", "PostCharges")
+    assert [s.line for s in sites] == [42]
+
+
 def _site(**kw) -> CallSite:
     base = dict(
         repo_id="r1",
