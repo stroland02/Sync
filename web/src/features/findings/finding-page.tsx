@@ -5,17 +5,42 @@
  * this finding's own column and always says something definite — it is what a false positive
  * here has to be attributable to. The envelope's rung describes the whole answer, which is
  * built from every finding naming this call site, and goes null when those disagree. Showing
- * only the envelope's would lose the definite value at the exact moment it matters.
+ * only the envelope's would lose the definite value at the exact moment it matters. That
+ * distinction used to live only here; the provenance panel's caption now says it on screen,
+ * which is where a reader needs it.
+ *
+ * ## Ported onto the vendored substrate by M7-W178
+ *
+ * `docs/superpowers/briefs/2026-08-07-substrate-finding.md` is the mapping table this port was
+ * gated on. Read that before porting a level, not this docstring.
+ *
+ * **This is the first detail-shaped level, and the fact rail is a left column rather than a band.**
+ * Vendor, API Services and the Binding surface spell `lg:grid-cols-[minmax(0,1fr)_minmax(0,22rem)]`
+ * — content left, facts right, tables full width beneath — because each of them is a list and a
+ * table wants the frame. A detail has one subject, so the grid inverts: a 360px rail carrying the
+ * page header, the facts and the links down, and the content column beside it from the top of the
+ * page rather than under a header band. Below `lg` it stacks, because a definition list reads the
+ * same at either width.
+ *
+ * **Four of the seven facts a rail would want are not in this payload, and none is invented.**
+ * `sync.api.app.finding_detail` reads a risk row and forwards two of its fields, so this level
+ * holds no severity of its own, no repository, and no call-site path or line — the severity on
+ * screen belongs to a vendor change and says something different, and `indexed_at` is when the
+ * index last read the call site rather than a first detection. B122 carries the payload change and
+ * the brief's ruling 3 carries why each substitute was refused.
+ *
+ * **This level asks the checkpointer for the first time.** `useWorkflow` answers the Remediation
+ * fact and gates the pull-request link, which would otherwise be a claim the console cannot support.
+ * Two consequences: the page polls while a run is in flight, exactly as the Solution Workflow level
+ * does, and the level below this one now opens against a warm cache because both read one query key.
  */
 
+import type { ReactNode } from "react"
 import { Link, useParams } from "react-router"
 
 import { NotFoundError } from "@/api/errors"
-import { useFinding } from "@/api/queries"
-import { ProvenanceStrip, RungBadge } from "@/components/provenance"
-import { ErrorState, LoadingState, NotFoundState } from "@/components/states"
-import { Absent, Formatted } from "@/components/status"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { useFinding, useWorkflow } from "@/api/queries"
+import type { FindingDetail } from "@/api/types"
 import {
   Table,
   TableBody,
@@ -23,15 +48,39 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-} from "@/components/ui/table"
+} from "@/components/data-table"
+import { type Fact, FactList } from "@/components/fact-list"
+import { MetricPanel } from "@/components/metric-panel"
+import { ProvenanceStrip, RungBadge } from "@/components/provenance"
+import { Skeleton } from "@/components/skeleton"
+import { EmptyState, ErrorState, LoadingState, NotFoundState } from "@/components/states"
+import { Absent, Formatted } from "@/components/status"
+import {
+  describeRemediation,
+  reachedPullRequest,
+  type RemediationStanding,
+  type RemediationState,
+} from "@/features/findings/remediation"
 import { orAbsent } from "@/lib/format"
 import { Breadcrumbs } from "@/layouts/breadcrumbs"
+import { PageHeader } from "@/layouts/page-header"
 import { UnknownRoute } from "@/layouts/unknown-route"
+import { routeQuestion } from "@/lib/routes"
 
+/** This screen's own entry in the registry, so `PageHeader` renders the registry's sentence. */
+const ROUTE_PATH = "/findings/:findingId"
+
+/**
+ * A set of recorded strings from the customer's own source, one chip each.
+ *
+ * A chip here is not a badge claiming a status: an argument key is evidence, so it takes the
+ * console's chip anatomy — the weight, the hairline and the control radius `RungBadge` spells — and
+ * never one of the four reserved status colours.
+ */
 function FieldList({ label, values }: { label: string; values: string[] }) {
   return (
     <div className="flex flex-col gap-field">
-      <h3 className="furniture text-meta text-muted-foreground">{label}</h3>
+      <h3 className="furniture text-meta text-ink-muted">{label}</h3>
       {values.length === 0 ? (
         <p className="text-body">
           <Absent>none recorded</Absent>
@@ -39,7 +88,10 @@ function FieldList({ label, values }: { label: string; values: string[] }) {
       ) : (
         <ul className="flex flex-wrap gap-row">
           {values.map((value) => (
-            <li key={value} className="rounded border border-border px-field py-0.5 font-mono text-meta">
+            <li
+              key={value}
+              className="rounded-control border border-line px-field py-0.5 font-mono text-meta"
+            >
               {value}
             </li>
           ))}
@@ -49,16 +101,146 @@ function FieldList({ label, values }: { label: string; values: string[] }) {
   )
 }
 
+/**
+ * How the newest run stands, as the rail's one remediation row.
+ *
+ * Four kinds of nothing before there is anything to say, and they are not interchangeable: the
+ * query is still in flight, the checkpointer holds no run for this finding, the request did not
+ * produce an answer, or a run exists. `remediation.ts` is where they are told apart and why.
+ *
+ * The sentence under a retried finding points at the fleet's runs table rather than at a link this
+ * route cannot serve: `GET /api/workflows/{finding_id}` answers with the newest generation only, and
+ * `sync.dashboard.fleet.runs` is the query that lists every generation as its own row.
+ */
+function remediationFact(state: RemediationState): ReactNode {
+  if (state.kind === "pending") return <Skeleton width="w-28" />
+  if (state.kind === "none") {
+    return <Absent>the checkpointer holds no run for this finding</Absent>
+  }
+  if (state.kind === "unavailable") return <Absent>the API did not answer</Absent>
+
+  return (
+    <div className="flex flex-col gap-field">
+      <span>{standingWord(state.standing, state.outcome)}</span>
+      {state.retried && (
+        <span className="text-meta text-ink-muted">
+          The newest of {state.generations} runs on this finding. The others are rows on the fleet's
+          runs table; this level can see only that they exist.
+        </span>
+      )}
+    </div>
+  )
+}
+
+function standingWord(standing: RemediationStanding, outcome: string | null): ReactNode {
+  if (standing === "in-flight") return "In flight — no outcome written yet"
+  if (standing === "opened") return "Opened a pull request"
+  if (standing === "abandoned") return "Abandoned"
+  if (standing === "reported") return "Reported, not patched"
+  // Named rather than folded into whichever branch fell through last, which is the rule
+  // `features/workflows/run-outcome.tsx` states at its own final branch: an unknown outcome
+  // rendered as a known one is a confident wrong verdict.
+  return (
+    <>
+      <span className="font-mono">{String(outcome)}</span> — an outcome this console has not caught
+      up with
+    </>
+  )
+}
+
+/**
+ * The finding's own facts, label left and value right, in the rail beside the content.
+ *
+ * Three states per fact and they are three different claims, the same three every ported level
+ * spells: a `Skeleton` says the query is in flight, `<Absent>` says it failed, and a value is a
+ * value. Remediation is answered by a second query and carries its own four.
+ *
+ * `failure` is the caller's sentence rather than a boolean, because this level can fail two ways
+ * and only one of them is silence. A 404 here is the API answering that the graph holds no open
+ * finding, and rendering "the API did not answer" over that would be a false report of the failure
+ * the reader is looking at.
+ */
+function findingFacts(
+  data: FindingDetail | null,
+  failure: ReactNode | null,
+  remediation: RemediationState,
+): Fact[] {
+  function fact(width: string, render: (found: FindingDetail) => ReactNode): ReactNode {
+    if (data !== null) return render(data)
+    if (failure !== null) return failure
+    return <Skeleton width={width} />
+  }
+
+  return [
+    {
+      label: "Vendor",
+      value: fact("w-32", (found) => (
+        <Link
+          to={`/vendors/${encodeURIComponent(found.vendor)}`}
+          className="font-mono underline underline-offset-2"
+        >
+          {found.vendor}
+        </Link>
+      )),
+    },
+    {
+      label: "Operation",
+      value: fact("w-28", (found) => (
+        <span className="font-mono">
+          <Formatted value={orAbsent(found.operation)} />
+        </span>
+      )),
+    },
+    {
+      label: "Symbol",
+      value: fact("w-36", (found) => (
+        <span className="font-mono">
+          <Formatted value={orAbsent(found.symbol)} />
+        </span>
+      )),
+    },
+    {
+      label: "SDK version",
+      value: fact("w-16", (found) => (
+        <span className="font-mono">
+          <Formatted value={orAbsent(found.sdk_version)} />
+        </span>
+      )),
+    },
+    {
+      label: "This finding's rung",
+      value: fact("w-20", (found) => <RungBadge rung={found.finding.binding_source} />),
+    },
+    { label: "Remediation", value: remediationFact(remediation) },
+  ]
+}
+
 export function FindingPage() {
   // A URL is user input, so the identifier is checked here rather than assumed. The query
   // lives one level down so that check happens before a request is made for it.
   const { findingId } = useParams<{ findingId: string }>()
   if (findingId === undefined) return <UnknownRoute />
-  return <FindingDetail findingId={findingId} />
+  return <FindingDetailPage findingId={findingId} />
 }
 
-function FindingDetail({ findingId }: { findingId: string }) {
+function FindingDetailPage({ findingId }: { findingId: string }) {
   const query = useFinding(findingId)
+  const run = useWorkflow(findingId)
+  const remediation = describeRemediation({
+    data: run.data,
+    missing: run.isError && run.error instanceof NotFoundError,
+    failed: run.isError,
+  })
+
+  // Short, because it renders once per fact and the panel beside the rail carries the same answer
+  // in full: five rows spelling out that panel's sentence would be one fact written six times.
+  const failure = query.isError ? (
+    query.error instanceof NotFoundError ? (
+      <Absent>this finding is not open</Absent>
+    ) : (
+      <Absent>the API did not answer</Absent>
+    )
+  ) : null
 
   const trail = [
     { label: "Fleet", to: "/" },
@@ -74,128 +256,78 @@ function FindingDetail({ findingId }: { findingId: string }) {
   ]
 
   return (
-    <section className="flex flex-col gap-8">
-      <Breadcrumbs trail={trail} />
-      <h1 className="font-mono text-page">{findingId}</h1>
+    <div className="grid items-start gap-8 lg:grid-cols-[minmax(0,22.5rem)_minmax(0,1fr)]">
+      <div className="flex min-w-0 flex-col gap-section">
+        <PageHeader
+          trail={<Breadcrumbs trail={trail} />}
+          title={<span className="font-mono">{findingId}</span>}
+          question={routeQuestion(ROUTE_PATH)}
+        />
+        <FactList
+          facts={findingFacts(query.isSuccess ? query.data : null, failure, remediation)}
+        />
+        <p className="text-body text-ink-muted">
+          What this call site calls, and how the system knows it does.
+        </p>
 
-      {/* Outside the success branch on purpose. A finding that has been patched or
-          abandoned is no longer open, so this page 404s for it — and that is exactly the
-          finding whose run is most worth reading. The workflow lives in the checkpointer,
-          which does not care whether the graph still holds the finding. */}
-      <p className="max-w-prose text-body">
-        <Link
-          to={`/findings/${encodeURIComponent(findingId)}/workflow`}
-          className="underline underline-offset-2"
-        >
-          Solution workflow
-        </Link>{" "}
-        <span className="text-muted-foreground">
-          — what Sync did about this finding, node by node.
-        </span>
-      </p>
+        {/* Outside the success branch on purpose. A finding that has been patched or
+            abandoned is no longer open, so this page 404s for it — and that is exactly the
+            finding whose run is most worth reading. The workflow lives in the checkpointer,
+            which does not care whether the graph still holds the finding, so both links below
+            can be live on a page whose finding is gone. */}
+        <div className="flex flex-col gap-field">
+          <p className="text-body">
+            <Link
+              to={`/findings/${encodeURIComponent(findingId)}/workflow`}
+              className="underline underline-offset-2"
+            >
+              Solution workflow
+            </Link>{" "}
+            <span className="text-muted-foreground">
+              — what Sync did about this finding, node by node.
+            </span>
+          </p>
+          {reachedPullRequest(remediation) && (
+            <p className="text-body">
+              <Link
+                to={`/findings/${encodeURIComponent(findingId)}/workflow/pull-request`}
+                className="underline underline-offset-2"
+              >
+                Pull request
+              </Link>{" "}
+              <span className="text-muted-foreground">
+                — the evidence bundle behind the patch this run opened.
+              </span>
+            </p>
+          )}
+        </div>
+      </div>
 
-      {query.isPending && <LoadingState what={`finding ${findingId}`} />}
+      <div className="flex min-w-0 flex-col gap-8">
+        {query.isPending && <LoadingState what={`finding ${findingId}`} />}
 
-      {query.isError &&
-        (query.error instanceof NotFoundError ? (
-          <NotFoundState
-            headline="That finding is not open."
-            detail="The API answered, and the graph holds no open finding with this identifier. It may have been patched, abandoned, or it may never have existed. This is an answer about the finding, not a failure of the console."
-            identifier={query.error.identifier}
-          />
-        ) : (
-          <ErrorState error={query.error} what={`finding ${findingId}`} />
-        ))}
+        {query.isError &&
+          (query.error instanceof NotFoundError ? (
+            <NotFoundState
+              headline="That finding is not open."
+              detail="The API answered, and the graph holds no open finding with this identifier. It may have been patched, abandoned, or it may never have existed. This is an answer about the finding, not a failure of the console."
+              identifier={query.error.identifier}
+            />
+          ) : (
+            <ErrorState error={query.error} what={`finding ${findingId}`} />
+          ))}
 
-      {query.isSuccess && (
-        <>
-          <Card>
-            <CardHeader>
-              <CardTitle>Binding</CardTitle>
-              <CardDescription>
-                What this call site calls, and how the system knows it does.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="flex flex-col gap-section">
-              <dl className="grid gap-section sm:grid-cols-2 lg:grid-cols-4">
-                <div>
-                  <dt className="furniture text-meta text-muted-foreground">Vendor</dt>
-                  <dd className="font-mono text-body">
-                    <Link
-                      to={`/vendors/${encodeURIComponent(query.data.vendor)}`}
-                      className="underline underline-offset-2"
-                    >
-                      {query.data.vendor}
-                    </Link>
-                  </dd>
-                </div>
-                <div>
-                  <dt className="furniture text-meta text-muted-foreground">Operation</dt>
-                  <dd className="font-mono text-body">
-                    <Formatted value={orAbsent(query.data.operation)} />
-                  </dd>
-                </div>
-                <div>
-                  <dt className="furniture text-meta text-muted-foreground">Symbol</dt>
-                  <dd className="font-mono text-body">
-                    <Formatted value={orAbsent(query.data.symbol)} />
-                  </dd>
-                </div>
-                <div>
-                  <dt className="furniture text-meta text-muted-foreground">SDK version</dt>
-                  <dd className="font-mono text-body">
-                    <Formatted value={orAbsent(query.data.sdk_version)} />
-                  </dd>
-                </div>
-                <div>
-                  <dt className="furniture text-meta text-muted-foreground">
-                    This finding's rung
-                  </dt>
-                  <dd className="text-body">
-                    <RungBadge rung={query.data.finding.binding_source} />
-                  </dd>
-                </div>
-              </dl>
-              <ProvenanceStrip
-                provenance={query.data}
-                bindingNullLabel="mixed: more than one detector names this call site and they disagree on the rung — this finding's own rung is above"
-              />
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle>What the call site touches</CardTitle>
-              <CardDescription>
-                The argument keys sent and the response fields read — the surface a change
-                has to break for this finding to matter.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="flex flex-col gap-section">
-              <FieldList label="Argument keys" values={query.data.args_keys} />
-              <FieldList
-                label="Response fields read"
-                values={query.data.response_fields_read}
-              />
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle>Known changes</CardTitle>
-              <CardDescription>
-                Vendor changes naming this call site, shallow. The full record is fetched by
-                identifier.
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
+        {query.isSuccess && (
+          <>
+            <MetricPanel
+              label="Known changes"
+              caption="Vendor changes naming this call site, shallow. The full record is fetched by identifier."
+            >
               {query.data.known_changes.length === 0 ? (
-                <p className="max-w-prose text-body">
-                  <Absent>
-                    No vendor change names this call site. The finding was raised by something
-                    other than a spec diff.
-                  </Absent>
-                </p>
+                <EmptyState
+                  headline="No vendor change names this call site."
+                  detail="The finding was raised by something other than a spec diff."
+                />
               ) : (
                 <Table>
                   <TableHeader>
@@ -208,9 +340,7 @@ function FindingDetail({ findingId }: { findingId: string }) {
                   <TableBody>
                     {query.data.known_changes.map((change) => (
                       <TableRow key={change.change_id}>
-                        <TableCell className="font-mono">
-                          {change.change_id}
-                        </TableCell>
+                        <TableCell className="font-mono">{change.change_id}</TableCell>
                         <TableCell>{change.kind}</TableCell>
                         <TableCell>{change.severity}</TableCell>
                       </TableRow>
@@ -218,10 +348,28 @@ function FindingDetail({ findingId }: { findingId: string }) {
                   </TableBody>
                 </Table>
               )}
-            </CardContent>
-          </Card>
-        </>
-      )}
-    </section>
+            </MetricPanel>
+
+            <MetricPanel
+              label="What the call site touches"
+              caption="The argument keys sent and the response fields read — the surface a change has to break for this finding to matter."
+            >
+              <FieldList label="Argument keys" values={query.data.args_keys} />
+              <FieldList label="Response fields read" values={query.data.response_fields_read} />
+            </MetricPanel>
+
+            <MetricPanel
+              label="Provenance"
+              caption="Where this answer came from. The rung in the facts beside this is the column on this one finding and always says something definite; the rung below describes the whole answer, which is built from every finding naming this call site."
+            >
+              <ProvenanceStrip
+                provenance={query.data}
+                bindingNullLabel="mixed: more than one detector names this call site and they disagree on the rung — this finding's own rung is in the facts beside this panel"
+              />
+            </MetricPanel>
+          </>
+        )}
+      </div>
+    </div>
   )
 }

@@ -220,10 +220,11 @@ evidence holding a `pr_url` is the same trap — it says a pull request was open
 some thread, not that the run this payload describes ended with one. `outcome === "opened"` is the
 whole predicate and it is the only one this level uses.
 
-**7. `bindingNullLabel` keeps its claim and loses one positional word.** It read *"mixed: more than
-one detector names this call site and they disagree on the rung — this finding's own rung is
-above"*. With the rail on the left the rung is beside rather than above, so the last word changes
-and nothing else does.
+**7. `bindingNullLabel` keeps its claim and repoints the one clause that names a position.** It read
+*"mixed: more than one detector names this call site and they disagree on the rung — this finding's
+own rung is above"*, which was true when the rung sat in a `dl` above the strip inside one card. It
+now reads *"…this finding's own rung is in the facts beside this panel"*, because that is where the
+rung is. Nothing else in the sentence moves.
 
 It is not one of the twenty-four catalogued sentences and it is not one of
 `tests/test_console_honesty_sentences.py`'s seventeen fragments — both of those hold `null is a
@@ -296,3 +297,124 @@ nothing exist for exactly this and the glyph belongs to a value that is missing 
 answer that is empty. The headline is the first sentence and the detail is the second, both verbatim:
 *"No vendor change names this call site."* / *"The finding was raised by something other than a spec
 diff."*
+
+## What it measured
+
+Chrome, `/findings/9f176dea35907f95beb29553e574a037` — the richest seeded finding, and richest on
+the axis this level is about. It is the only seeded finding with more than one remediation
+generation: an abandoned first attempt and a second that opened a pull request, `generation_count`
+2. It also carries one known change at `breaking` and rests on the `static` rung. The old screen was
+served from a scratch worktree at `5a31798` on port 5194 and the new one on 5195, both proxied to
+the same API on 8787, so the two readings are of one seed.
+
+| | 1440x900 before | 1440x900 after | 1280x800 before | 1280x800 after |
+|---|---|---|---|---|
+| type range | 1.83:1 | **3.83:1** | 1.83:1 | **3.83:1** |
+| type steps | 12 / 13 / 15 / 22 | 12 / 13 / **46** | unchanged | unchanged |
+| side-by-side region placements | 0 | **1** | 0 | **1** |
+| `h1` | 22px, 32px tall | 46px, 153px tall | 22px, 32px tall | 46px, 153px tall |
+| first panel heading, from the page's top | 220px | **57px** | 220px | **57px** |
+| last rendered pixel | 875px | **716px** | 875px | **757px** |
+| column heading, changes table | 40.0px | 40.0px | 40.0px | 40.0px |
+| body row, changes table | 36.5px | 36.5px | 36.5px | 36.5px |
+| table against its container | 1065 of 1065 | 686 of 686 | 905 of 905 | 526 of 526 |
+| horizontal overflow | none | none | none | none |
+
+Two readings need their method stated, because both are easy to take wrongly.
+
+**The first-panel-heading row is the first `h2` in `main`.** On the old screen that heading is
+"Binding", 220px down, under a breadcrumb, an `h1`, a paragraph of link prose and a card's own
+padding. On the new one it is "KNOWN CHANGES" 57px down — the grid's top edge plus the panel's own
+header inset — because the two columns start level and the content no longer waits for the header
+to finish. That 163px is what ruling 1's arrangement buys, and it is the reason a rail 360px wide
+costs this level nothing vertically.
+
+**"Last rendered pixel" is the greatest `bottom` of any element inside `main`**, not
+`document.scrollHeight` — that value is floored at the viewport height and reads 900 and 800 on the
+new screen, which says only that nothing scrolls. The honest number is 716px at 1440 and 757px at
+1280 against 875px at both widths before, so the page is **159px and 118px shorter** while carrying
+two facts it did not carry before.
+
+**The rail does not push content under the fold at either width. It removes the fold.** The old
+screen ran to 875px and scrolled at 1280x800; the new one ends at 757px and does not. Everything on
+this level — six facts, both links, all three panels, the change row and the whole provenance strip
+— is above the fold at 1280x800, which was not true before. So the measurement the direction asked
+for has no cost to report on this level.
+
+**The rail is 360px at both widths**, which is `minmax(0,22.5rem)` resolving exactly, and the content
+column takes 720px at 1440 and 560px at 1280. The changes table draws in 686px and 526px of that and
+fits both without a sideways scroll.
+
+**The changes table's heights did not move, and that is the expected reading.** Every level before
+this one gained a pixel per row moving to `components/data-table`. This one gained nothing, because
+the old screen's `components/ui/table.tsx` already spelled `px-row py-row` — the arithmetic
+`DESIGN.md` publishes, and the value M7-W174's correction brought the substrate back to. The visible
+change is the register: `Change` / `Kind` / `Severity` are now uppercase and open-tracked.
+
+**The type range moves because the display step arrives, and the 15px step leaves with the cards.**
+`--text-emphasis` was on this screen only as the three `CardTitle`s; a panel name sits in the
+furniture register now, so this route's ramp is 12 / 13 / 46 rather than 12 / 13 / 15 / 22. That is
+3.83:1 against the 3.4 bar `reports/2026-08-06-why-the-console-came-out-flat.md` sets, and this route
+is one more of the nine B116 counts off.
+
+**The `h1` takes three lines and 153px**, which is ruling 1's stated cost. A 32-character hex
+identifier at 46px in a 360px column has no break opportunity, and `PageHeader`'s own `break-words`
+is what keeps it inside the rail instead of overflowing it. Nothing clips at either width and the
+document has no horizontal scroll.
+
+## The completeness walk
+
+Every field the old screen asserted, asserted by the new one, read off both screens against the same
+seed rather than off the diff. Four states were walked at 1280x800, each on both ports:
+
+- `/findings/9f176dea35907f95beb29553e574a037` — one known change, two generations, a pull request.
+- `/findings/443b1719164579873939aaaecfa2902d` — three argument keys, three response fields, the
+  `resolved` rung, and a run still in flight.
+- `/findings/9e44cb35095a641c02b48f93104a2e0b` — no known change, no argument keys, no response
+  fields, and no run at all.
+- `/findings/does-not-exist` — the 404.
+
+Carried unchanged, string for string: the breadcrumb trail and its conditional vendor crumb; the
+`h1`'s content; the Solution workflow link, its destination and its note; the not-found headline, its
+detail and its identifier; all five binding facts with the same formatters, the same values and the
+same rung badge; the "What this call site calls" sentence; both `FieldList` labels and every chip;
+the "none recorded" absence on both; the "surface a change has to break" sentence; the "shallow /
+fetched by identifier" sentence; the empty-changes wording in both of its sentences; the three column
+headings and every cell; and all four fields of `ProvenanceStrip` with their values.
+
+Changed in rendering and not in content: the three column headings are uppercase and open-tracked;
+the three card titles are panel names in the furniture register; the five binding facts are a rail
+rather than a four-column `dl`; the empty-changes branch is an `EmptyState` rather than an `<Absent>`
+inside a paragraph; and the panels read known changes, then what the call site touches, then
+provenance, where the cards ran binding, touches, changes.
+
+Gained: the route's own question at the display step; a Remediation fact reading *"Opened a pull
+request"* with *"The newest of 2 runs on this finding"* under it on the two-generation finding,
+*"In flight — no outcome written yet"* on the running one, and the checkpointer's own absence on the
+finding that has no run; and a Pull request link on the one finding that has one.
+
+Lost: nothing.
+
+**One thing changed because the walk found it**, and it is recorded here rather than quietly fixed.
+The 404 state rendered the not-found sentence six times — once per rail fact and once in the panel —
+because the rail's absence phrase was the panel's whole sentence. Six copies of one fact is the
+defect `CLAUDE.md` names as the most expensive kind, so the rail's phrase is now the short form,
+*"this finding is not open"*, which matches the panel's headline and leaves the full explanation in
+the one place with room for it. Each row still says which nothing it is, which is what the absence
+vocabulary requires.
+
+## The protected sentences
+
+One of the seventeen fragments `tests/test_console_honesty_sentences.py` holds lives in the file this
+port opened. Every fragment was grepped against `features/findings/` before the port and against the
+whole of `web/src` after it.
+
+| Fragment | Before | After |
+|---|---|---|
+| `not a failure of the console` | `features/findings/finding-page.tsx`, and two files outside this feature | the same three files, the sentence unchanged |
+
+The other sixteen were checked against `features/findings/` before the port and none of them was
+there, so none could be lost by it; all sixteen still have holders elsewhere. `null is a fact` and
+`deliberately not merged` were checked specifically, because ruling 7 edits a `bindingNullLabel`:
+both live in `components/provenance.tsx`, which this port consumes and does not open. The whole
+file, seventeen parametrised cases, is green.
