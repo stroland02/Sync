@@ -372,6 +372,38 @@ Realistic after M5's correlation join, not before.
 
 ### B111 — The test suite runs three times on every pull request
 
+**Closed 2026-08-07 (CI-W167).** A pull request now runs the suite once. Coverage moved into a job
+of its own on a nightly schedule (03:43 UTC) plus `workflow_dispatch`; the serial job left
+`pull_request` and runs on every push to `main` plus `workflow_dispatch`. Neither check was
+deleted, and the serial condition is an event rather than a path filter — every change reaches
+`main` as a fast-forward push, and every such push runs the serial job, so nothing lands without a
+serial run at its landing. What a pull request's green no longer says is "serial passed"; it says
+the gate passed and serial runs at the landing, with `-n0` remaining the local gate every brief
+mandates. The accepted risk: coverage's recorded point arrives nightly rather than per push, which
+its baseline series (`specs/2026-07-29-sync-coverage-baseline.md`) tolerates because nothing gates
+on it and nobody waits for it.
+
+Before and after, medians from `reports/ci-profile-2026-08-06.md` (25 runs) and
+`reports/ci-profile-2026-08-07.md` (6 `workflow_dispatch` runs of the new shape on
+`ci-critical-path`, all four jobs, zero-step check clean):
+
+| Shape | Before | After |
+|---|---:|---:|
+| Pull request (`test` vs `web`) | 200s | **123s** |
+| Push to `main` (adds `serial`) | 200s | 170s |
+| Compute per pull request | ~435s | ~165s |
+
+Two findings from the same pass. The concurrency group now includes `github.event_name`: `schedule`
+and a push to `main` share `refs/heads/main`, so without it the nightly landing beside a push would
+cancel one of them, and a cancelled run reads as red — the B112 misreading. And caching is already
+done: `uv sync` and the oasdiff install sit below the profiler's 3s display floor in every job, so
+there was no dependency-caching win to take instead.
+
+One caveat for the profile series: coverage is now its own job, so `test`-job medians before and
+after this change measure different step sets, and a window spanning 2026-08-07 mixes them.
+
+The original entry, kept as the record:
+
 Measured 2026-08-06 over 25 runs by `scripts/profile_ci.py`
 (`reports/ci-profile-2026-08-06.md`). Jobs run concurrently, so the critical path is the `test` job
 at a median of **200s**, and inside it:

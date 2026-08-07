@@ -126,7 +126,7 @@ write path, are unbuilt; Phase 6 needs auth and tenancy and belongs to M4's host
 | M7-W191 | `ARCHITECTURE.md`: the remediation state machine node by node, the tier cascade, provenance rungs, durable execution, and the three mechanisms that contain the agent | landed | `ARCHITECTURE.md` |
 | M7-W188 | Fidelity Task 2: the type ramp's middle is populated — section headings take `--text-section`, labels stay furniture, the display step stays `PageHeader`'s alone. **Dispatched as `M7-W186`** — `M12-W186` and `M7-W187` had both landed on the integration branch before this reached a commit, so it takes the next free number rather than a third duplicate | landed | `DESIGN.md` |
 | M4-W166 | B117: `GraphStore` reconnects a closed connection, instead of handing the dead one back forever | dispatched | `briefs/2026-08-07-b117-graphstore-reconnect.md` |
-| CI-W167 | B111: coverage moved to a nightly and the serial job off the pull-request path; the concurrency group gains `event_name` so a schedule and a push to `main` stop cancelling each other | landed | `briefs/2026-08-07-b111-ci-critical-path.md` |
+| CI-W167 | B111 closed: coverage into its own nightly job, the serial job off `pull_request` and onto every push to `main`, and `event_name` in the concurrency group so a schedule and a push stop cancelling each other. PR critical path 200s to 123s | landed | `.github/workflows/ci.yml`, `reports/ci-profile-2026-08-07.md` |
 
 **M7-W160's navigation was rebuilt once, on the owner's ruling of 2026-08-06.** The first pass built a
 56px icon rail of four product areas beside a 240px contextual panel, and collapsing removed the

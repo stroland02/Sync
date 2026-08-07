@@ -140,3 +140,54 @@ the landing run above, which the old code would have counted as a fifteenth B112
 
 **This is why a timing item was not taken this tick.** Two changes to the same workflow between two
 profiles cannot be attributed, and the metric that would attribute them was itself broken until now.
+
+---
+
+## The new shape measured in isolation (CI-W167's own profile)
+
+The profile above is a **mixed population** — 30 runs, most of them the old workflow. `CI-W167`
+profiled six `workflow_dispatch` runs of the new shape alone, which is cleaner evidence for what the
+change does, and **0 of those six ran a zero-step job**:
+
+## Jobs
+
+| Job | n | median | min | max |
+|---|---:|---:|---:|---:|
+| `serial` | 6 | 170s | 165s | 177s |
+| `coverage` | 6 | 130s | 123s | 137s |
+| `test` | 6 | 123s | 119s | 126s |
+| `web` | 6 | 42s | 36s | 46s |
+
+## Steps above 3s
+
+| Median | n | Job | Step |
+|---:|---:|---|---|
+| 148s | 6 | `serial` | Tests, serial scheduler |
+| 102s | 6 | `coverage` | Coverage (recorded, not gated) |
+| 65s | 6 | `test` | Tests |
+| 20s | 6 | `test` | Score the frozen corpus |
+| 14s | 6 | `web` | Test |
+| 12s | 6 | `serial` | Initialize containers |
+| 11s | 6 | `test` | Initialize containers |
+| 10s | 6 | `coverage` | Initialize containers |
+| 8s | 6 | `web` | Install Node |
+| 7s | 6 | `web` | Install dependencies |
+| 7s | 6 | `web` | Build |
+| 5s | 6 | `coverage` | Warm the TypeScript npx cache |
+| 4s | 6 | `test` | Stage the pinned Stripe specifications |
+| 4s | 6 | `test` | Fetch the frozen corpus |
+| 3s | 6 | `test` | Warm the TypeScript npx cache |
+
+Read beside the push-run pair recorded above (211s → 156s), the two agree on shape and differ on
+number because they measure **different events**: a pull request now runs `test` and `web` only,
+where a push to `main` also runs `serial`. So the pull-request critical path is **123s** and the push
+critical path is **170s**, both from 200s. **A single "critical path" figure for this workflow no
+longer exists**, and the series must say which event it means from here on.
+
+**One caveat the worker recorded, and it binds the series:** `test`-job medians before and after
+2026-08-07 measure **different step sets**, because coverage left that job. Comparing them across
+that boundary compares two different jobs wearing one name.
+
+**A win looked for and not found:** dependency caching. `uv sync` and the oasdiff install complete in
+under 3s in every job, so no safer caching win existed. Recorded because the next tick would
+otherwise spend time re-deriving it.

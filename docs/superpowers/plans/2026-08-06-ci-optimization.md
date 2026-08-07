@@ -77,7 +77,23 @@ request**, and that is the opening this workstream starts from — B111.
   is not where the time is.
 - **Do not optimise against a synthetic run.** The numbers come from the repository's own history.
 
+## Landed
+
+- **B111** (CI-W167, 2026-08-07) — coverage to a nightly job of its own, the serial job off
+  `pull_request` and onto every push to `main`. Pull-request critical path 200s → 123s, push
+  critical path 200s → 170s, measured over six `workflow_dispatch` runs of the new shape
+  (`reports/ci-profile-2026-08-07.md`); the closure in `BACKLOG.md` carries the argument and the
+  risk accepted. Same pass: `github.event_name` added to the concurrency group so the nightly and
+  a push to `main` stop sharing `refs/heads/main`, and a finding that dependency caching was
+  already effective — `uv sync` and the oasdiff install are under 3s in every job, so there was no
+  cache win to prefer.
+
+  **A caveat the series has to carry:** coverage left the `test` job on 2026-08-07, so `test`
+  medians before and after measure different step sets. Compare step medians across that date, not
+  the job median.
+
 ## Open items
 
-- **B111** — the suite runs three times per pull request.
-- **B112** — jobs are not being acquired by hosted runners, so CI's verdict currently means nothing.
+- **B112** — jobs are not being acquired by hosted runners, so CI's verdict currently means
+  nothing. Not observed today: the six CI-W167 measurement runs all acquired runners and ran
+  steps, but the entry stays open because the cause was never recorded.
