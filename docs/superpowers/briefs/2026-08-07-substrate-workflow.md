@@ -68,15 +68,16 @@ count, every state branch is a row.
 | — (nothing linked up to the finding except the breadcrumb) | fact rail, row 1: Finding, as a link — the direction's *"what arrived"*, ruling 4 |
 | the pull-request link, worded off `outcome` | the rail's action stack, unchanged in destination and in both wordings — ruling 9 |
 | its note, "— the five nodes below that answer whether this run earned a merge…" | same line; **"below" is dropped**, because the five nodes are no longer below it — ruling 9 |
-| the closing paragraph, "Read from the checkpointer, which is a different database…" with the finding link | the narrative's opening entry — ruling 4 |
-| — (nothing said the run carries no clock) | the same opening entry, a new sentence — ruling 6 |
+| the closing paragraph, "Read from the checkpointer, which is a different database…" with the finding link | the narrative's opening entry, verbatim — ruling 4 |
+| — (nothing said what a run is an answer to) | the opening entry's first sentence, **new**: "A finding arrived from the API Dependency Graph, and this run is what Sync did about it." — ruling 4 |
+| — (nothing said the run carries no clock) | the same opening entry, **new**: "It carries no clock either: the checkpoints hold a timestamp and this route does not read it, so no entry below says when it ran or how long it took." — ruling 6 |
 
 ### The "The run, node by node" card
 
 | Field rendered today | Substrate slot |
 |---|---|
 | title "The run, node by node" | **dissolved.** The narrative is the content column and needs no panel around it — ruling 5 |
-| description "The remediation graph's own order, with the evidence each node produced." | the narrative's opening entry, unchanged |
+| description "The remediation graph's own order, with the evidence each node produced." | the narrative's opening entry, **reworded for position**: prefixed "The entries below are", because the phrase was the subject of a card title that no longer exists and now has to name what it describes — the same class of correction as ruling 11 |
 | description "A node marked due after it has already run is a retry the graph owes another visit, not a finished step — the loop is real and this view does not hide it." | the same opening entry, unchanged (protected in claim) |
 
 ### `node-sequence.tsx` — the entries
@@ -255,9 +256,17 @@ not elapsed time, and rendering it as though it were would be the invention this
 refuse.
 
 **B123** is the entry: forward the checkpoint `ts` per node, which the checkpointer holds one row
-per hop of and which this route already opens a connection to. Until then the opening entry says
-plainly that the sequence carries no times, which is the honest version of the field rather than
-its absence.
+per hop of and which this route already opens a connection to.
+
+**The sentence that ships has to say which thing has no clock, and the first draft did not.** It
+read *"A checkpoint records what a node produced and not when it produced it"*, which is false: a
+checkpoint row carries `ts`, and `sync.dashboard.fleet` ships that very field as
+`last_checkpoint_at` on the runs route. Written that way the screen claimed the time was never
+recorded, where the truth is that this route does not read it — *we could not check* rendered as
+*there was nothing to check*, which is the one distinction `.claude/rules/console-surface.md`
+exists to keep. It now reads: *"It carries no clock either: the checkpoints hold a timestamp and
+this route does not read it, so no entry below says when it ran or how long it took."* One
+sentence, and it names the gap as a gap in the read rather than in the data.
 
 **7. A superseded generation cannot be reached from this route, and this level does not go looking
 for it.** The direction asks for an abandoned generation to render in sequence, and for a
@@ -442,13 +451,19 @@ finding itself" still the link inside it.
 Changed in rendering and not in content: the outcome moved from a bordered banner above the sequence
 to an entry inside it at the point the run stopped; the card that contained the sequence dissolved
 and its description became the opening entry; the run's `thread_id` and generation count moved from a
-prose line into two labelled rail rows; three of `BelowThisPanel`'s four sentences were repointed
-because they named a position that moved; multi-line evidence gained a label strip on the card plane;
+prose line into two labelled rail rows; multi-line evidence gained a label strip on the card plane;
 and `PASS`/`FAIL` gained the console's chip radius and hairline.
 
-Gained: the route's own question at the display step; a Finding row in the rail, as a link; a
-Generations row that says `1` on a run that previously said nothing about generations at all; and
-the sentence saying this route carries no clock.
+Reworded, four sentences, each because it named a position that had moved and none shortened: three
+of `BelowThisPanel`'s four, and the dissolved card's description, which was prefixed "The entries
+below are" — it had been the predicate of a card title and needed a subject once the card was gone.
+
+Gained, three sentences and two rows: the route's own question at the display step; a Finding row in
+the rail, as a link; a Generations row that says `1` on a run that previously said nothing about
+generations at all; the opening entry's first sentence, *"A finding arrived from the API Dependency
+Graph, and this run is what Sync did about it."*; and the no-clock sentence, *"It carries no clock
+either: the checkpoints hold a timestamp and this route does not read it, so no entry below says
+when it ran or how long it took."*
 
 Lost: three words and a title. The `h1`'s " — solution workflow" suffix (ruling 2, said three times
 around it), the word "below" from the pull-request note (ruling 9, no longer true), and the card

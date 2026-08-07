@@ -153,8 +153,8 @@ function Arrival({ findingId }: { findingId: string }) {
           carries both.
         </p>
         <p>
-          It carries no clock either. A checkpoint records what a node produced and not when it
-          produced it, so no entry below says when it ran or how long it took.
+          It carries no clock either: the checkpoints hold a timestamp and this route does not read
+          it, so no entry below says when it ran or how long it took.
         </p>
         <p>
           The entries below are the remediation graph's own order, with the evidence each node
