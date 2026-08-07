@@ -5,7 +5,7 @@
  * figures themselves.
  */
 
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { MetricPanel } from "@/components/metric-panel"
 
 const LIMITS: readonly { headline: string; detail: string }[] = [
   {
@@ -41,34 +41,33 @@ const LIMITS: readonly { headline: string; detail: string }[] = [
 
 export function ScreenLimitsCard() {
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="text-emphasis">What this screen cannot tell you</CardTitle>
-        <CardDescription className="max-w-prose text-body">
+    <MetricPanel
+      label="What this screen cannot tell you"
+      caption={
+        <p className="max-w-prose">
           Four standing limits of the data behind this page, not gaps in how it is drawn.
-        </CardDescription>
-      </CardHeader>
-      <CardContent>
-        {/* Each headline is lifted to `text-emphasis` -- the same weight the figure cards
-            beside this one use for their own headline -- so a standing limit reads at the
-            same tier as the thing it limits rather than as a footnote underneath it.
-            `tracking-normal` cancels the heading tracking `text-emphasis` otherwise carries:
-            DESIGN.md ties that tracking to the panel-title role, and each `dt` here is
-            in-row emphasis repeated four times, not a panel title. */}
-        {/* One column, not two. M7-W163 moved this panel beside the figures it qualifies rather
-            than under them, which is what this file's own docstring always claimed — and at a third
-            of the content width `sm:grid-cols-2` put four paragraphs into two 190px columns.
-            Measured at 1440x900: eleven lines of prose in a column narrower than the sentence it
-            carries. A limit nobody reads limits nothing. */}
-        <dl className="grid gap-section">
-          {LIMITS.map((limit) => (
-            <div key={limit.headline} className="flex flex-col gap-field">
-              <dt className="text-emphasis tracking-normal text-foreground">{limit.headline}</dt>
-              <dd className="max-w-prose text-body text-muted-foreground">{limit.detail}</dd>
-            </div>
-          ))}
-        </dl>
-      </CardContent>
-    </Card>
+        </p>
+      }
+    >
+      {/* Each headline is lifted to `text-emphasis` -- the same weight the figure cards
+          beside this one use for their own headline -- so a standing limit reads at the
+          same tier as the thing it limits rather than as a footnote underneath it.
+          `tracking-normal` cancels the heading tracking `text-emphasis` otherwise carries:
+          DESIGN.md ties that tracking to the panel-title role, and each `dt` here is
+          in-row emphasis repeated four times, not a panel title. */}
+      {/* One column, not two. M7-W163 moved this panel beside the figures it qualifies rather
+          than under them, which is what this file's own docstring always claimed — and at a third
+          of the content width `sm:grid-cols-2` put four paragraphs into two 190px columns.
+          Measured at 1440x900: eleven lines of prose in a column narrower than the sentence it
+          carries. A limit nobody reads limits nothing. */}
+      <dl className="grid gap-section">
+        {LIMITS.map((limit) => (
+          <div key={limit.headline} className="flex flex-col gap-field">
+            <dt className="text-emphasis tracking-normal text-foreground">{limit.headline}</dt>
+            <dd className="max-w-prose text-body text-muted-foreground">{limit.detail}</dd>
+          </div>
+        ))}
+      </dl>
+    </MetricPanel>
   )
 }

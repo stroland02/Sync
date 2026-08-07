@@ -64,6 +64,27 @@
  * surface, not a summary; the repository roll-up and the detector attribution still close the
  * screen paired, because both are lower-cardinality context an operator checks rather than acts
  * on.
+ *
+ * ## Ported onto the vendored substrate by M7-W172, and the panel order still did not move
+ *
+ * Fleet is the first level on the vendored Supabase components, so what it does here is the
+ * pattern the remaining eight copy. `docs/superpowers/briefs/2026-08-07-substrate-fleet.md` is the
+ * gate that came first: every field this screen and its six children render, mapped to a slot
+ * before a line of it changed, with nine rulings for the fields that had no obvious one. Read that
+ * before porting a level, not this.
+ *
+ * Three things changed and none of them is the composition. Every panel is now `MetricPanel` over
+ * the vendored `Card`, so the plane, the radius and the rule under a panel's header are the
+ * substrate's rather than a second set of values. Every table takes the Studio anatomy through
+ * `components/data-table.tsx` — the furniture register on a column heading, `DESIGN.md`'s own row
+ * heights on the cells. And two panels now lead with a figure above their evidence: the vendor
+ * count, which is that panel's own grain, and the corpus panel's distinct-findings count. No
+ * other panel does, because the fact rail already carries every other count on this screen and
+ * M7-W163's ruling against rendering one twice is what makes the rail worth having.
+ *
+ * **No row on this screen has an overflow menu.** Every row has exactly one action — the link it
+ * already is — and the API is read-only, so a second would have to be invented. A menu whose only
+ * entry duplicates the row is furniture claiming a choice nobody has.
  */
 
 import { Link } from "react-router"

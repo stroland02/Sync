@@ -1,19 +1,22 @@
 /**
  * The repair record, aggregated: every `migration_outcome` row the graph holds.
  *
- * `attempts` and `distinct_findings` render as two stat tiles rather than one combined
- * figure, because they are two different facts. `sync.remediate.corpus` writes one row per
- * attempt, so a finding retried three times is three attempts and one finding — a screen
- * that showed a single number for both would be the grain defect `CLAUDE.md` names for
- * this table.
+ * `attempts` and `distinct_findings` are two different facts and this screen still renders both,
+ * in the two places each belongs. `sync.remediate.corpus` writes one row per attempt, so a finding
+ * retried three times is three attempts and one finding — a screen that showed a single number for
+ * both would be the grain defect `CLAUDE.md` names for this table.
+ *
+ * **Which is where, and why.** `attempts` is the fact rail's fourth tile at the top of this screen.
+ * `distinct_findings` is this panel's own metric, because it is the figure the rail cannot carry
+ * and because the sentence that relates the two sits directly beneath it. Rendering `attempts`
+ * here as well is what M7-W163 ruled out: two renderings of one count is a fact written twice, and
+ * the one that stays is the one an operator reaches first.
  */
 
 import { lazy, Suspense } from "react"
 
 import { useCorpus } from "@/api/queries"
 import type { Tally } from "@/api/types"
-import { EmptyState, ErrorState, LoadingState } from "@/components/states"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import {
   Table,
   TableBody,
@@ -21,7 +24,9 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-} from "@/components/ui/table"
+} from "@/components/data-table"
+import { MetricPanel } from "@/components/metric-panel"
+import { EmptyState, ErrorState, LoadingState } from "@/components/states"
 
 // Lazy so echarts and echarts-for-react — the corpus chart's only heavy
 // dependency — land in their own chunk instead of the console's initial
@@ -34,19 +39,19 @@ function TallyTable({ heading, tally }: { heading: string; tally: Tally }) {
   const entries = Object.entries(tally).sort(([a], [b]) => a.localeCompare(b))
   return (
     <div className="flex flex-col gap-row">
-      <h3 className="furniture text-meta text-muted-foreground">{heading}</h3>
+      <h3 className="furniture text-meta text-ink-muted">{heading}</h3>
       <Table>
         <TableHeader>
           <TableRow>
-            <TableHead className="text-meta">Value</TableHead>
-            <TableHead className="text-meta">Attempts</TableHead>
+            <TableHead>Value</TableHead>
+            <TableHead>Attempts</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
           {entries.map(([value, count]) => (
             <TableRow key={value}>
-              <TableCell className="font-mono text-body">{value}</TableCell>
-              <TableCell className="font-mono text-body">{count}</TableCell>
+              <TableCell className="font-mono">{value}</TableCell>
+              <TableCell className="font-mono">{count}</TableCell>
             </TableRow>
           ))}
         </TableBody>
@@ -64,42 +69,50 @@ export function CorpusSummaryCard() {
       {query.isError && <ErrorState error={query.error} what="the repair record" />}
 
       {query.isSuccess && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-emphasis">Repair record</CardTitle>
-            <CardDescription className="max-w-prose text-body">
-              Every repair attempt the graph has recorded, one row of{" "}
-              <code className="font-mono">migration_outcome</code> per attempt. A finding
-              retried three times writes three attempts here and counts once toward
-              findings.
-            </CardDescription>
-            <p className="max-w-prose text-body text-muted-foreground">
-              This one cannot be narrowed to a repository, and no screen below this level
-              renders it: <code className="font-mono">migration_outcome</code> stores no
-              repository at all — nothing in it identifies a customer, which is the decision
-              that makes it safe to aggregate across them.
-            </p>
-          </CardHeader>
-          <CardContent className="flex flex-col gap-section">
-            {query.data.attempts === 0 ? (
-              <EmptyState
-                headline="The graph holds no repair attempts."
-                detail="The API answered, and migration_outcome has no rows. That is an answer, not a failure — nothing has reached a patch attempt on this database yet."
-              />
-            ) : (
-              <>
-                <Suspense fallback={null}>
-                  <CorpusChart data={query.data} />
-                </Suspense>
-                <div className="grid gap-section sm:grid-cols-3">
-                  <TallyTable heading="By disposition" tally={query.data.by_terminal_status} />
-                  <TallyTable heading="By strategy" tally={query.data.by_strategy} />
-                  <TallyTable heading="By tier" tally={query.data.by_tier} />
-                </div>
-              </>
-            )}
-          </CardContent>
-        </Card>
+        <MetricPanel
+          label="Repair record"
+          metric={{
+            value: query.data.distinct_findings.toLocaleString(),
+            unit:
+              query.data.distinct_findings === 1
+                ? "finding with a repair attempt"
+                : "findings with a repair attempt",
+          }}
+          caption={
+            <>
+              <p className="max-w-prose">
+                Every repair attempt the graph has recorded, one row of{" "}
+                <code className="font-mono">migration_outcome</code> per attempt. A finding
+                retried three times writes three attempts here and counts once toward
+                findings.
+              </p>
+              <p className="max-w-prose">
+                This one cannot be narrowed to a repository, and no screen below this level
+                renders it: <code className="font-mono">migration_outcome</code> stores no
+                repository at all — nothing in it identifies a customer, which is the decision
+                that makes it safe to aggregate across them.
+              </p>
+            </>
+          }
+        >
+          {query.data.attempts === 0 ? (
+            <EmptyState
+              headline="The graph holds no repair attempts."
+              detail="The API answered, and migration_outcome has no rows. That is an answer, not a failure — nothing has reached a patch attempt on this database yet."
+            />
+          ) : (
+            <>
+              <Suspense fallback={null}>
+                <CorpusChart data={query.data} />
+              </Suspense>
+              <div className="grid gap-section sm:grid-cols-3">
+                <TallyTable heading="By disposition" tally={query.data.by_terminal_status} />
+                <TallyTable heading="By strategy" tally={query.data.by_strategy} />
+                <TallyTable heading="By tier" tally={query.data.by_tier} />
+              </div>
+            </>
+          )}
+        </MetricPanel>
       )}
     </div>
   )

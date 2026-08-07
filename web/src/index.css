@@ -352,6 +352,14 @@
 @layer base {
   :root {
     color-scheme: dark;
+
+    /* `vendor/supabase/ui/card.tsx` spells its horizontal padding as `px-(--card-padding-x)`
+       and Supabase declares this variable in the globals we did not vendor -- undeclared, every
+       card on the substrate renders flush to its own border. Wired to the section token, which
+       is the same 16px the vendored card's own `py-4` already uses, so the box is square. Not a
+       theme token: it names no new value and belongs to none of the eight families DESIGN.md's
+       contract governs, which is why it is declared here rather than in `@theme`. */
+    --card-padding-x: var(--spacing-section);
   }
 
   body {

@@ -4,13 +4,14 @@
  *
  * The rung column is the point, not an incidental one: CLAUDE.md requires a false positive
  * be attributable to the rung that produced it, and a detector whose findings mix rungs is
- * making more than one kind of claim under a single name.
+ * making more than one kind of claim under a single name. It is never hidden and never coloured.
+ *
+ * No metric figure: the fact rail's fourth tile already names how many detectors have open
+ * findings, and the count stays in this panel's own name.
  */
 
 import { useDetectors } from "@/api/queries"
 import type { DetectorRow, Tally } from "@/api/types"
-import { EmptyState, ErrorState, LoadingState } from "@/components/states"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import {
   Table,
   TableBody,
@@ -18,7 +19,9 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-} from "@/components/ui/table"
+} from "@/components/data-table"
+import { MetricPanel } from "@/components/metric-panel"
+import { EmptyState, ErrorState, LoadingState } from "@/components/states"
 import { CardinalityStatement, describeCardinality, sliceForDisplay } from "@/features/fleet/cardinality"
 
 function summariseTally(tally: Tally): string {
@@ -41,15 +44,12 @@ export function DetectorsSummaryCard() {
       {query.isError && <ErrorState error={query.error} what="the detector attribution" />}
 
       {query.isSuccess && (
-        // "grouping": this card sits beside `RepositoriesCard` at the same depth with
-        // nothing else separating them, the one case a surface step alone can't cover.
-        <Card variant="grouping">
-          <CardHeader>
-            <CardTitle className="text-emphasis">
-              {query.data.detectors.length}{" "}
-              {query.data.detectors.length === 1 ? "detector" : "detectors"} with open findings
-            </CardTitle>
-            <CardDescription className="max-w-prose text-body">
+        <MetricPanel
+          label={`${query.data.detectors.length} ${
+            query.data.detectors.length === 1 ? "detector" : "detectors"
+          } with open findings`}
+          caption={
+            <p className="max-w-prose">
               {/* The link to the Detectors level was here, mid-sentence. M7-W163 moved it to the
                   screen's control bar, which is where a control plane keeps a primary action —
                   a destination reached by reading to the end of a paragraph is a destination
@@ -57,52 +57,49 @@ export function DetectorsSummaryCard() {
               Every open finding, aggregated by the detector that raised it — scoped to open
               findings, the only findings read the graph offers today. A closed finding is
               invisible here exactly as it is invisible everywhere else in the console.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="flex flex-col gap-section">
-            {query.data.detectors.length === 0 ? (
-              <EmptyState
-                headline="No detector has an open finding."
-                detail="The API answered, and no open finding names a detector — there are no open findings to attribute. That is an answer, not a failure."
+            </p>
+          }
+        >
+          {query.data.detectors.length === 0 ? (
+            <EmptyState
+              headline="No detector has an open finding."
+              detail="The API answered, and no open finding names a detector — there are no open findings to attribute. That is an answer, not a failure."
+            />
+          ) : (
+            <>
+              <CardinalityStatement
+                text={describeCardinality(
+                  query.data.detectors.length,
+                  "detector",
+                  "detectors",
+                  "open finding count, descending",
+                )}
               />
-            ) : (
-              <>
-                <CardinalityStatement
-                  text={describeCardinality(
-                    query.data.detectors.length,
-                    "detector",
-                    "detectors",
-                    "open finding count, descending",
-                  )}
-                />
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead className="text-meta">Detector</TableHead>
-                      <TableHead className="text-meta">Open findings</TableHead>
-                      <TableHead className="text-meta">By rung</TableHead>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Detector</TableHead>
+                    <TableHead>Open findings</TableHead>
+                    <TableHead>By rung</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {sliceForDisplay(
+                    [...query.data.detectors].sort(byTotalDescending),
+                  ).map((detector) => (
+                    <TableRow key={detector.detector}>
+                      <TableCell className="font-mono">{detector.detector}</TableCell>
+                      <TableCell className="font-mono">{detector.total}</TableCell>
+                      <TableCell className="font-mono text-meta text-muted-foreground">
+                        {summariseTally(detector.by_rung)}
+                      </TableCell>
                     </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {sliceForDisplay(
-                      [...query.data.detectors].sort(byTotalDescending),
-                    ).map((detector) => (
-                      <TableRow key={detector.detector}>
-                        <TableCell className="font-mono text-body">
-                          {detector.detector}
-                        </TableCell>
-                        <TableCell className="font-mono text-body">{detector.total}</TableCell>
-                        <TableCell className="font-mono text-meta text-muted-foreground">
-                          {summariseTally(detector.by_rung)}
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </>
-            )}
-          </CardContent>
-        </Card>
+                  ))}
+                </TableBody>
+              </Table>
+            </>
+          )}
+        </MetricPanel>
       )}
     </div>
   )

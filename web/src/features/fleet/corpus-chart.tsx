@@ -1,5 +1,12 @@
 /**
- * The corpus KPI row and the disposition chart.
+ * The disposition chart.
+ *
+ * **The two KPI figures that opened this component are gone from it, and neither is gone from the
+ * screen.** `attempts` is the fact rail's fourth tile and has been since M7-W163; rendering it here
+ * as well put one number on screen twice at the same weight, which is the fact-written-twice defect
+ * that ruling reversed. `distinct_findings` moved up into the panel's own metric slot, directly
+ * above this chart, where `docs/superpowers/briefs/2026-08-07-substrate-fleet.md` records the whole
+ * mapping. What is left here is the chart and the sentence that qualifies it.
  *
  * Disposition is the only `migration_outcome` dimension charted: `strategy` (read
  * from `sync.core.PatchStrategy`, a two-value literal) and `tier` (read from
@@ -22,16 +29,6 @@ import {
   escapeHtml,
   labelInkFor,
 } from "@/components/charts/chart-text"
-
-function StatTile({ label, value }: { label: string; value: number }) {
-  return (
-    <div className="flex flex-col gap-field">
-      <span className="furniture text-meta text-muted-foreground">{label}</span>
-      <span className="text-figure text-foreground">{value.toLocaleString()}</span>
-    </div>
-  )
-}
-
 
 /**
  * Disposition -> series slot, keyed on the value itself rather than where it lands in the
@@ -149,28 +146,22 @@ export function CorpusChart({ data }: { data: CorpusSummary }) {
     .join(", ")
 
   return (
-    <div className="flex flex-col gap-section">
-      <div className="flex flex-wrap gap-section">
-        <StatTile label="Attempts" value={data.attempts} />
-        <StatTile label="Distinct findings" value={data.distinct_findings} />
-      </div>
-      <figure className="flex flex-col gap-field">
-        <span className="furniture text-meta text-muted-foreground">By disposition</span>
-        <EChart
-          buildOption={buildOption}
-          ariaLabel={`Attempts by disposition: ${summary}`}
-          style={{ height: 160 }}
-        />
-        <figcaption className="max-w-prose text-body text-muted-foreground">
-          This table holds nothing for a run abandoned before any attempt (at{" "}
-          <code className="font-mono">locate</code> or{" "}
-          <code className="font-mono">prepare</code>), for a run where no tier applied, or for
-          a run whose state was missing its finding, site, or change — those runs are real,
-          and the runs table above still names them through an abandon reason, but they leave
-          no attempt for this table to count. A <code className="font-mono">null</code> row
-          below is an attempt whose column was never written, not a count of zero.
-        </figcaption>
-      </figure>
-    </div>
+    <figure className="flex flex-col gap-field">
+      <span className="furniture text-meta text-ink-muted">By disposition</span>
+      <EChart
+        buildOption={buildOption}
+        ariaLabel={`Attempts by disposition: ${summary}`}
+        style={{ height: 160 }}
+      />
+      <figcaption className="max-w-prose text-body text-muted-foreground">
+        This table holds nothing for a run abandoned before any attempt (at{" "}
+        <code className="font-mono">locate</code> or{" "}
+        <code className="font-mono">prepare</code>), for a run where no tier applied, or for
+        a run whose state was missing its finding, site, or change — those runs are real,
+        and the runs table above still names them through an abandon reason, but they leave
+        no attempt for this table to count. A <code className="font-mono">null</code> row
+        below is an attempt whose column was never written, not a count of zero.
+      </figcaption>
+    </figure>
   )
 }
