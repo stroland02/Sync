@@ -13,7 +13,9 @@ commit subject: `feat: M4-W131 ...`. A work item is one reviewable unit — the 
 or a tick takes — not one commit and not one file. Several commits under one number is normal; two
 numbers for one change is not.
 
-**A row is a fact, not a plan.** `landed` means the commit is on `m4-dashboard` and gated. Anything
+**A row is a fact, not a plan.** `landed` means the commit is on the integration branch and gated —
+`console-identity` since M7 opened, `m4-dashboard` before it, and `main` tracks the integration
+branch by fast-forward at least daily. Anything
 else says what it actually is. A row whose state stops being true is a row to correct, and correcting
 it belongs to whoever notices.
 
@@ -53,25 +55,40 @@ condition. **The milestone's first item is already running as M4.5-W137 above**,
 deliberately first: it is the measurement every task below closes against, so without it each of
 them is an opinion.
 
-The five numbers below are reserved rather than started. A reserved row is a claim about what the
-work is, not about when it happens — the start condition is what decides that, and it is checkable:
-Tasks 4 through 7 of the architecture plan landed, the review wave closed, the conformance report
-published.
+**All five landed and are merged to `main` as of 2026-08-07**, verified by
+`git merge-base --is-ancestor` rather than from memory — three of these rows read "pushed, not
+merged" for a day after they were not. What remains of "worth looking at" moved into M7, which
+rebuilt the presentation layer the measurements below were taken against; the measurements still
+stand as the before-figures M7 is judged on.
 
 | Item | Task | State |
 |---|---|---|
-| M4.5-W141 | The affordance layer — a severity ordering in SQL and the ordering stated on screen, and the row that cost three wrapped lines to say nothing. B100 and B109 closed, B110 filed | pushed, `m45-affordance`, not merged |
-| M4.5-W142 | Type, ink and space measured against rendered pixels — B104 and B107 closed, B108 filed | pushed, `m4-tokens`, not merged |
+| M4.5-W141 | The affordance layer — a severity ordering in SQL and the ordering stated on screen, and the row that cost three wrapped lines to say nothing. B100 and B109 closed, B110 filed | landed |
+| M4.5-W142 | Type, ink and space measured against rendered pixels — B104 and B107 closed, B108 filed | landed |
 | M4.5-W143 | Motion audited: one of three framer-motion usages deleted after measuring it had never run, and the registry made a test. B113 and B114 filed | landed | `0de5a44`, `f3b3059` |
-| M4.5-W144 | Density: the binding surface's rows 76px to 57px by factoring out the directory 2,500 rows shared. B110 closed, B115 filed | pushed, `m45-density`, not merged |
+| M4.5-W144 | Density: the binding surface's rows 76px to 57px by factoring out the directory 2,500 rows shared. B110 closed, B115 filed | landed |
 | M4.5-W145 | Rung composition per detector — length encodes composition, because volume drew three of four as a sliver reading 'found nothing' | landed |
 
 ## M7 — the console becomes a product
 
 `docs/superpowers/plans/2026-08-06-m7-console-as-product.md`, on branch `console-identity`. The
-milestone exists because the console clears eight of fourteen measured invariants and is still flat;
-`reports/2026-08-06-why-the-console-came-out-flat.md` carries the six causes, all of them rules this
-repository wrote rather than mistakes anyone made.
+milestone exists because the console cleared eight of fourteen measured invariants and was still
+flat; `reports/2026-08-06-why-the-console-came-out-flat.md` carries the six causes, all of them
+rules this repository wrote rather than mistakes anyone made.
+
+**The plan was amended mid-milestone and the register reads oddly without knowing that.**
+`specs/2026-08-06-sync-console-supabase-substrate-design.md` is the standing design from `M7-W165`
+onward: on the owner's ruling, Supabase's `packages/ui` is vendored at code level, navigation went
+two-tier, and the token contract became Supabase's. So `W157`–`W164` built a chassis from scratch
+and `W165`–`W180` replaced it. The first pass is not dead work — it produced the honesty-sentence
+gate every later port is merged against, the before-measurements the substrate is judged by, and the
+finding that the console's flatness was caused by our own rules, which is what made the carve-out
+arguable at all. `reports/2026-08-07-m7-what-was-built-and-what-drove-it.md` carries the whole
+account, and `reports/screens/2026-08-07/` shows what it produced.
+
+**Where M7 stands on 2026-08-07.** All nine levels are on the substrate. `M7-W182`, the fidelity
+pass, is in flight. Phase 5 — the workflow as a narrative, and one binding drawn — and Phase 6, the
+write path, are unbuilt; Phase 6 needs auth and tenancy and belongs to M4's hosted half.
 
 | Item | Subject | State | Where |
 |---|---|---|---|
@@ -100,6 +117,7 @@ repository wrote rather than mistakes anyone made.
 | M7-W181 | The 28 direction screenshots committed, one record of what M7 built and what drove it, and seven of our own screens beside them | landed | `reports/2026-08-07-m7-what-was-built-and-what-drove-it.md`, `reports/screens/2026-08-07/` |
 | M7-W181 | The fidelity scout: 28 owner screenshots filed under `references/direction/`, and the gap analysis joining them against Studio's source at 6ac0316 and the console measured in Chrome | landed | `reports/2026-08-07-console-fidelity-gaps.md` |
 | M7-W182 | The fidelity pass planned: six tasks from the gap report's five largest findings, before the final review | landed | `plans/2026-08-07-console-fidelity-pass.md` |
+| M7-W183 | Fidelity Task 1: a 48px banner above the chassis — home, fleet/repository/vendor switchers with command-menu popovers, the palette trigger, and errors displacing rather than floating | landed | `web/src/layouts/scope-switchers.tsx` |
 | M4-W166 | B117: `GraphStore` reconnects a closed connection, instead of handing the dead one back forever | dispatched | `briefs/2026-08-07-b117-graphstore-reconnect.md` |
 | CI-W167 | B111: the suite runs three times per pull request, and what moving two of them costs | dispatched | `briefs/2026-08-07-b111-ci-critical-path.md` |
 

@@ -24,9 +24,10 @@ by content, because items were never tagged with a milestone as they landed.
 | **M2** | Production error detector | **~85%** | Built; never exercised against real telemetry |
 | **M3** | Multi-vendor, MCP, plugin SDK | **~95%** | Packaging closed 2026-07-30; nothing structural left |
 | **M4** | Hosted control plane (**the front end**) | **~50%** | Nine levels and the honesty discipline are built and scoped; nothing is hosted, and three of the milestone's four deliverables have no code |
-| **M4.5** | The console is worth looking at | **0%** | Split out 2026-08-06 so M4 can close; starts when M4's console half does |
+| **M4.5** | The console is worth looking at | **~90%** | W141-W145 all landed and merged; the conformance gaps it existed to close are closed, and what remains of "worth looking at" moved into M7 |
 | **M5** | Integration layer | **~35%** | Sentry feeds counts in now; still nothing correlates anything |
 | **M6** | Show it, rather than describe it | **0%** | Needs a UI to film, so it sits behind M4.5 rather than M4 |
+| **M7** | The console becomes a product | **~85%** | All nine levels are on the vendored Supabase substrate; the fidelity pass is in flight and Phases 5-6 are unbuilt |
 | **M8–M11** | The resolution loop | **0%** | Proposed 2026-08-06, nothing scheduled; Sync opens a pull request and stops watching it |
 
 ### M0 — Walking skeleton, one real pull request · ~90%
@@ -1016,46 +1017,52 @@ judgements.
 
 ## In flight
 
-- **B77** — branch `b77-keep-the-red`, worktree `m1-forge`. Its session died mid-task: the branch
-  carries one commit, an uncommitted `tests/test_red_run_capture.py`, and an untracked `red-runs/`
-  at the worktree root — which is the exact failure mode its own brief said not to introduce. Needs
-  finishing or reverting; do not dispatch a second worker at it without reading that tree first.
+**Rewritten 2026-08-07.** The section had gone stale in the way it warns against below: it described
+Orca dispatch as undelivered, briefs as needing a file because messages truncate, and a toolchain
+gap as affecting one worktree. Two of those are now wrong and the third is wrong in its detail.
 
-Both dispatched through the Agent tool with the brief written to a file in the worktree's `.claude/`
-and the path handed over. Orca dispatch is still not delivering — see HANDOFF.md — and every agent
-that has done real work in the last two days went this way instead.
+### Actually in flight
 
-An entry here that outlives its work makes this section read as capacity in use when there is none,
-which is the opposite of what a tick needs from it. **B61 and B55 sat here for days after landing**
-— `89ac057` and `c32f99e` record them, and B55 has a report at
-`reports/2026-07-29-adapter-selection-explains-its-refusal.md`. So: whoever lands an item clears its
-line in the landing commit, and whoever dispatches one adds it in the same breath as the dispatch.
+- **`M7-W182`, the fidelity pass** — six tasks against the measured gaps, held by the console
+  session in this worktree. Its working tree has `DESIGN.md`, `app-frame.tsx`, `command-palette.tsx`,
+  `error-surface.tsx`, `error-log.ts`, `motion.ts` and two test files open, plus an untracked
+  `scope-switchers.test.tsx` written before its component. **Do not gate `web/` against the working
+  tree while this runs** — `tsc` will fail on a test whose subject does not exist yet, and that is
+  correct RED rather than a defect. Gate a commit instead.
+- **`CI-W167`, B111** — dispatched twice into `m4-idiom` and started neither time. Its brief rendered
+  into the terminal and was never submitted. Needs a fresh terminal rather than a third nudge.
 
-**38 local failures that are not a regression.** `sync.signals.oasdiff._binary()` resolves
-`tools/oasdiff.exe` relative to `Path(__file__).resolve().parents[3]` — the **worktree root**, not the
-repository. `tools/` is gitignored, so a worktree where `scripts/bootstrap_tools.sh` has never run
-raises `FileNotFoundError` out of every test that reaches oasdiff. CI installs the pinned version
-from `.oasdiff-version` and is green, so this is local only, and it looks exactly like a regression
-to anyone baselining a suite in a fresh tree.
+### What is no longer true
 
-Measured on 2026-08-04 across all eleven worktrees: **only `sync-m4-dashboard` is missing it.**
-Everything else is bootstrapped, which is why the same suite reads `2902 passed` in one tree and 38
-red in another. Run `scripts/bootstrap_tools.sh` in the tree, once, and it goes away. Reported by
-the chat that hit it, after ruling out yarn — the other thing `tools/` holds.
+- **Orca dispatch works.** `worker-start --task <id> --worktree "id:<repo>::<path>" --agent claude`
+  has delivered every item from `M7-W159` onward. The Agent-tool workaround this section described is
+  retired. What does still bite: **a spec passed to the CLI must be ASCII** — em dashes arrive as
+  cp1252 mojibake — and a long mid-turn `send` can still reach a worker truncated, which is how
+  `M7-W160` was built to a superseded brief and had to be reworked.
+- **`status.worker == "ready"` does not mean a worker finished.** A worker mid-edit reports exactly
+  that with `terminal: running`. And a worker may finish without ever sending `worker_done`:
+  `M7-W160` did, and a coordinator blocking on the mailbox would have waited forever. Read the
+  terminal.
+- **The oasdiff gap is not one worktree's.** The measurement below said only `sync-m4-dashboard`
+  lacked `tools/`; that tree has it and three others do not. It is a property of **any fresh
+  worktree**, because `tools/` is gitignored and `_binary()` resolves it relative to the worktree
+  root. On 2026-08-07 it cost an hour in `superlog-reference`: 38 failures and 9 errors, identical
+  under `-n auto` and `-n0`, which rules out the Postgres contention a coordinator reaches for first.
+  Run `bash scripts/bootstrap_tools.sh` once per checkout and the suite returns its exact baseline.
 
-**Workers keep landing in the wrong worktree.** Three times today a worker has written into a tree
-its brief did not name, twice into one another worker already held. The brief names the path and
-`dispatch.py` picks whichever terminal is free, and nothing ties those two together — so the
-assignment is advisory and the terminal's own working directory wins. Assume any tree may hold
-someone else's work: stage by explicit path, and check `git status` before any reset.
+### Two hazards that survive
 
-**Briefs go in a file now, not in the dispatch spec.** Long message bodies are being truncated in
-delivery — three briefs today, and B52 received a correction paragraph while the four numbered
-answers that followed it in the same message never arrived. Write the brief to
-`.claude/<task>-brief.txt` and let the spec carry a short summary and that path.
+- **Two sessions share `sync-m4-dashboard`.** Commits from the other session appear in the tree
+  between a gate and a push, and one has already been carried to `origin` by a push that meant to
+  carry only its own. Stage by explicit path, read `git log --oneline -5` before assuming the tree is
+  yours, and never `git stash` in it.
+- **`SYNC_API_RELOAD=true` bounces the owner's API on every save** another agent makes in the shared
+  worktree. It killed 8789 once on 2026-08-07. The flag still earns its place — a long-lived API
+  serving stale Python is the more expensive failure — but expect the blip.
 
 Entries stay under **Ready** above with their full reasoning until they land, because the reasoning
-is what a reviewer needs and duplicating it here would let the two copies drift.
+is what a reviewer needs and duplicating it here would let the two copies drift. Whoever lands an
+item clears its line here in the landing commit; whoever dispatches one adds it in the same breath.
 
 ## Done
 
