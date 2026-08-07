@@ -8,9 +8,27 @@
  * `prepare` decide whether a patch is attempted at all, and `patch` produces the edit; none
  * of the three is evidence *for* a pull request, so none is repeated here. The Solution
  * Workflow page already shows all eight, node by node.
+ *
+ * ## The stage is the frame, M7-W180
+ *
+ * `docs/superpowers/briefs/2026-08-07-substrate-pull-request.md` is the mapping table this port was
+ * gated on, and ruling 3 is this file. Each stage drew its own `rounded border border-border` around
+ * an `li`; M7-W179 then gave a multi-line evidence value the vendored card's plane, so a stage
+ * carrying `diagnostics` or `replay_evidence` drew a card inside a hand-spelled border — two plain
+ * hairline rectangles at two different radii with nothing to tell them apart. The stage is a
+ * `MetricPanel` now: the title in the header strip, the blurb and the evidence in the body, and the
+ * `li` draws nothing.
+ *
+ * **A stage that carries a block still nests one card, so the box count did not change and the
+ * honest claim is narrower than one frame instead of two.** What changed is that the outer box has a
+ * label strip: it reads as a named stage containing an artifact rather than as a rectangle that
+ * acquired another rectangle. Flattening the block would undo M7-W179 from outside the file that
+ * made it; flattening the stage would leave five verdicts running together in one column. Ruling 4
+ * carries both.
  */
 
 import type { WorkflowNode, WorkflowNodeName, WorkflowOutcome } from "@/api/types"
+import { MetricPanel } from "@/components/metric-panel"
 import { NodeEvidence } from "@/features/workflows/evidence"
 import { STANDING_SENTENCE } from "@/features/workflows/node-standing"
 
@@ -168,6 +186,17 @@ export function EvidenceBundle({
   )
 }
 
+/**
+ * The five stages, each a titled block on the card plane, in the order the graph runs them.
+ *
+ * An `ol` rather than a `div`, because the order is a fact about the run rather than a layout
+ * choice: `sync.dashboard.queries` returns `WORKFLOW_NODES` order and this file renders five of
+ * them in it, so the list is ordered in the markup as well as on screen.
+ *
+ * The panel body is one child rather than several. `MetricPanel`'s content is a `gap-section`
+ * column and `NodeEvidence` already carries its own `mt-section`, so handing the panel three
+ * siblings would spend both and double every gap inside a stage.
+ */
 function BundleStages({
   staged,
 }: {
@@ -179,19 +208,22 @@ function BundleStages({
         const hasEvidence = node !== undefined && Object.keys(node.evidence).length > 0
 
         return (
-          <li key={stage.name} className="rounded border border-border p-section">
-            <h3 className="text-emphasis">{stage.title}</h3>
-            <p className="mt-field max-w-prose text-body text-muted-foreground">{stage.blurb}</p>
-            {node?.standing === "due_again" && (
-              <p className="mt-field max-w-prose text-body">{STANDING_SENTENCE.due_again}</p>
-            )}
-            {hasEvidence ? (
-              <NodeEvidence name={stage.name} evidence={node.evidence} />
-            ) : (
-              <div className="mt-field">
-                <EmptyStage node={node} />
+          <li key={stage.name} className="min-w-0">
+            <MetricPanel label={stage.title}>
+              <div className="min-w-0">
+                <p className="max-w-prose text-body text-muted-foreground">{stage.blurb}</p>
+                {node?.standing === "due_again" && (
+                  <p className="mt-field max-w-prose text-body">{STANDING_SENTENCE.due_again}</p>
+                )}
+                {hasEvidence ? (
+                  <NodeEvidence name={stage.name} evidence={node.evidence} />
+                ) : (
+                  <div className="mt-field">
+                    <EmptyStage node={node} />
+                  </div>
+                )}
               </div>
-            )}
+            </MetricPanel>
           </li>
         )
       })}

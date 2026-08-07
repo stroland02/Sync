@@ -26,8 +26,10 @@ evidence that earned it, and is a stage that produced nothing still *stated* rat
 gave a multi-line evidence value a label strip on the vendored card's plane, and said plainly that
 `features/pullrequests/evidence-bundle.tsx` imports that file and would inherit it. It did — into a
 stage that was already drawing its own hand-spelled `rounded border border-border p-section` around
-an `li`. A card inside a hand-drawn frame is two frames claiming one grouping, and the level that
-owns the outer one is this one. Ruling 3 removes it.
+an `li`. Two plain hairline rectangles at two different radii, with nothing to tell them apart, and
+the level that owns the outer one is this one. Ruling 3 replaces it with a titled block; ruling 4
+states plainly what that does and does not fix, because the count of nested boxes is unchanged and
+saying otherwise would be the kind of claim this console exists to refuse.
 
 **Three of the six facts a rail would want are not on this payload, and none is invented.** The
 direction's rail for a pull request is *"number, branch, state, opened at, repository, and the
@@ -64,7 +66,7 @@ line, not from memory. Every rendered string, every count, every state branch is
 | — (nothing linked up to the finding except the breadcrumb) | fact rail, row 1: Finding, as a link — ruling 1 |
 | — (the pull request's number was only ever a row inside the last panel) | fact rail, row 2: Pull request, `#{pr_number}` — ruling 5 |
 | — (the branch was only ever a row inside the third panel) | fact rail, row 3: Branch — ruling 5 |
-| — (nothing on this level left the console) | the rail's action stack: the pull request on GitHub, an external link — ruling 9 |
+| — (nothing on this level left the console) | the rail's action stack: "Open the pull request", an external link — ruling 9 |
 | the closing paragraph, "Read from the checkpointer, the same source as the solution workflow, which shows all eight nodes; this page shows the five that carry the evidence a pull request rests on." | the rail's caption, beneath the facts, verbatim including the workflow link |
 | `RunOutcome` with `BELOW`, above the bundle | unchanged: still a panel, still first in the content column — ruling 10 |
 | `BELOW`'s four sentences | unchanged, all four, string for string — ruling 10 |
@@ -81,9 +83,9 @@ line, not from memory. Every rendered string, every count, every state branch is
 | `Framing` rendering nothing on `opened`, and the comment arguing why | unchanged |
 | `NothingAttempted` — the five node names and "a run that reports rather than patches ends before any of them runs" | unchanged, including all five `<code>` names |
 | the `ol` of five stages, in the graph's own order | unchanged as an ordered list — ruling 12 |
-| each stage's bordered `li` (`rounded border border-border p-section`) | **removed.** The stage is the frame now — ruling 3 |
+| each stage's bordered `li` (`rounded border border-border p-section`) | **removed.** The `MetricPanel` is the frame, and the `li` draws nothing — ruling 3 |
 | stage title, `h3` at `--text-emphasis` | `MetricPanel` label, furniture register, `h2` — rulings 3 and 4 |
-| stage blurb, five of them | `MetricPanel` caption, all five verbatim |
+| stage blurb, five of them | the panel body, first line, all five verbatim — ruling 3 |
 | `STANDING_SENTENCE.due_again` on a retried stage | unchanged, inside the panel body |
 | `NodeEvidence` for a stage that produced something | unchanged, inside the panel body — `features/workflows/evidence.tsx` is consumed, never opened |
 | `EmptyStage`'s "The run carries no node under this name — the remediation graph has changed since this bundle was written." | unchanged (protected in claim) — ruling 11 |
@@ -146,21 +148,35 @@ vendored card's plane and its own label strip: a `replay` stage carrying `replay
 frames, one grouping, and the outer one is not even the substrate's — `border-border` at
 `p-section` is a third rounding and a third padding beside the vendored card's own.
 
-The stage becomes a `MetricPanel`: the vendored `Card`, the stage title in the header strip at the
-furniture register, the blurb as the caption directly under it, and the evidence in the body. The
-`li` keeps the list semantics and draws nothing.
+The stage becomes a `MetricPanel`: the vendored `Card`, the stage title alone in the header strip at
+the furniture register, and the blurb, the retry sentence and the evidence in the body. The `li`
+keeps the list semantics and draws nothing.
 
-Three things this buys beyond removing a frame. The stage title stops competing with the node
+Two things this buys beyond removing a frame. The stage title stops competing with the node
 evidence's own `dt` labels, because both are now in the furniture register and the panel's is the
-one with a rule under it. The five stages become the same object every other ported level's content
-column is made of, so a reader moving from the Finding to the Workflow to here meets one panel
-anatomy rather than three. And the blurb moves from a paragraph under a heading to a caption inside
-the header, which is where `MetricPanel` puts the sentence that says what a panel's contents mean —
-this is the same relocation the Fleet port made for six panels at once.
+one with a rule under it. And the five stages become the same object every other ported level's
+content column is made of, so a reader moving from the Finding to the Workflow to here meets one
+panel anatomy rather than three.
 
-**4. One nesting survives, and it is the right one.** A stage that carries a block field renders a
-card inside a card: the stage panel, and `BlockField`'s own titled block around the compiler output
-or the replay evidence. That is deliberate rather than overlooked.
+**The blurb stays in the body rather than becoming the panel's caption, and the reason is
+arithmetic.** `MetricPanel`'s content is a `gap-section` column and `NodeEvidence` carries its own
+`mt-section`, so a panel handed the blurb and the evidence as two siblings spends both and doubles
+every gap inside a stage. The body is therefore one child, and the spacing inside a stage is
+unchanged from before the port. `features/workflows/evidence.tsx` owns that margin and is another
+level's file, so the fix is on this side of the boundary rather than in it.
+
+**4. One nesting survives, the box count does not change, and the honest statement of what this
+port fixes is narrower than "one frame instead of two."** A stage that carries a block field still
+renders a box inside a box: the stage panel, and `BlockField`'s own titled block around the compiler
+output or the replay evidence. Measured in Chrome on the seeded `opened` run, the number of bordered
+elements with a bordered ancestor inside `main` is the same before and after.
+
+What changed is that the two boxes stopped being the same box. Before, both were a plain hairline
+rectangle at two different radii with nothing to tell them apart, and the screenshot reads as a
+rectangle that accidentally acquired another rectangle. After, the outer one carries a label strip
+with a rule under it — the panel anatomy every other ported level uses — and the inner one is
+visibly an artifact sitting inside a named stage. Depth still claims a relationship, and now the
+relationship is legible.
 
 The two are not the same claim at two depths. The panel is *a stage of the run* — "What replay
 found", with its verdict and its reason in the definition list. The block is *one verbatim artifact
@@ -229,6 +245,10 @@ link is in the rail's action stack, under the facts, worded as its destination a
 tone glyphs and the chassis's navigation set. Adding a glyph here would be a fifth vocabulary for
 one link.
 
+It reads *"Open the pull request — leaves the console for the forge it was opened on."* and names no
+forge, for ruling 7's reason applied to a word rather than to a field: the payload says which URL,
+not whose. GitHub is what the fixture happens to hold.
+
 `bundleFacts` returns `prUrl` only for `http:` and `https:`, which is the same boundary check
 `features/workflows/evidence.tsx`'s `asHttpUrl` applies to the same value. The check is duplicated
 rather than shared, and that is worth stating plainly: `asHttpUrl` is not exported, and
@@ -273,3 +293,145 @@ panels and a definition list. The vendored `dropdown-menu` is not imported here 
 The `ol` stays an `ol`. The graph's order is a fact about the run — `sync.dashboard.queries` returns
 `WORKFLOW_NODES` order and this file renders five of them in it — so the list is ordered in the
 markup as well as on screen, which is what a screen reader needs to hear.
+
+## What it measured
+
+Chrome, `/findings/9f176dea35907f95beb29553e574a037/workflow/pull-request` — the richest seeded pull
+request, and the only run in the fixture that has one. It ran all eight nodes and opened
+`https://github.com/example/repo/pull/101`, so it is the run carrying the most of what this level
+exists to show: a `tsc` verdict, a replay outcome with its reason and a block of evidence, a branch,
+a CI URL with its attempt and result, and the pull request with its number. It is also the only
+seeded finding with more than one generation (`generation_count` 2). The old screen was served from
+a scratch worktree at `cb55ddf` on port 5198 and the new one on 5199, both proxied to the same API
+on 8787, so the two readings are of one seed.
+
+| | 1440x900 before | 1440x900 after | 1280x800 before | 1280x800 after |
+|---|---|---|---|---|
+| type range | 1.83:1 | **3.83:1** | 1.83:1 | **3.83:1** |
+| type steps | 12 / 13 / 15 / 22 | 12 / 13 / 15 / **46** | unchanged | unchanged |
+| side-by-side region placements | 0 | **1** | 0 | **1** |
+| `h1` | 22px, 32px tall | 46px, 153px tall | 22px, 32px tall | 46px, 153px tall |
+| first heading in `main`, from the page's top | 266px | **57px** | 266px | **57px** |
+| last rendered pixel | 1627px | **1431px** | 1627px | **1483px** |
+| rail / content column | — | 360px / 705px | — | 360px / 545px |
+| horizontal overflow | none | none | none | none |
+
+Three readings need their method stated.
+
+**The first-heading row is the first `h2` or `h3` inside `main`.** It is the same heading on both
+screens — "This run opened a pull request." — which makes the comparison clean: 266px down on the
+old one, under a breadcrumb, an `h1` and a paragraph of run prose, and 57px down on the new one
+because the rail and the content column start level. That 209px is what ruling 1's arrangement buys,
+and it is the same effect the Finding level measured at 163px and the Workflow level at 210px.
+
+**"Last rendered pixel" is the greatest `bottom` of any element inside `main`**, not
+`document.scrollHeight`, which floors at the viewport height. The page is **196px shorter at 1440 and
+144px shorter at 1280** while carrying four things it did not carry before — the route's own
+question, a Pull request row, a Branch row and a Finding row — and while nothing was deleted. The
+narrower content column is why the two figures differ: 545px wraps more prose than 705px.
+
+**The old screen measured identically at both widths**, because it was a single column already
+capped at the prose measure, so nothing about it reflowed between 1440 and 1280. Every difference in
+the table's last two columns belongs to the new arrangement.
+
+**The `h1` takes three lines and 153px**, exactly as the Finding and Workflow levels do and for the
+same reason: a 32-character hex identifier at 46px in a 360px column has no break opportunity, and
+`PageHeader`'s own `break-words` is what keeps it inside the rail. Nothing clips at either width and
+the document has no horizontal scroll at either.
+
+**The 15px step stays.** `--text-emphasis` is on the outcome panel's headline, which is read rather
+than scanned — the same reading the Workflow port made of its narrative entry headings. So this
+route's ramp is 12 / 13 / 15 / 46, which is 3.83:1 against the 3.4 bar
+`reports/2026-08-06-why-the-console-came-out-flat.md` sets. This is the ninth and last of the routes
+B116 counts off.
+
+**One cost is real and is recorded rather than argued away.** On the `opened` run the rail ends
+around 800px and the content column runs to 1431px, so a reader who scrolls past the first screen has
+an empty 360px column beside them. That is the shape of a detail level whose content is long, it is
+the same trade both earlier detail levels took, and no fix is applied: a sticky rail is behaviour
+nothing asked for.
+
+## The completeness walk
+
+Every field the old screen asserted, asserted by the new one, read off both screens against the same
+seed rather than off the diff. Four states were walked, each on both ports:
+
+- `/findings/9f176dea35907f95beb29553e574a037/workflow/pull-request` — `opened`, two generations, all
+  five stages carrying evidence, one block field.
+- `/findings/b45fb667d653b9187fe0d05ffe20a7df/workflow/pull-request` — `reported`, one generation,
+  the framing sentence and `NothingAttempted` in place of the five stages.
+- `/findings/443b1719164579873939aaaecfa2902d/workflow/pull-request` — in flight, `static_verify`
+  due, four stages not reached yet, five empty stages each saying which nothing it is.
+- `/findings/does-not-exist/workflow/pull-request` — the 404.
+
+Carried unchanged, string for string: the breadcrumb trail and all four crumbs; the run's
+`thread_id`; the generations clause including *"An earlier generation may have reached a pull request
+even where this one has not"* and the fleet link inside it; all four `RunOutcome` headlines walked
+and their prose; the reason label and the reason value on the `reported` run; all four `BELOW`
+sentences; all four `Framing` sentences and the `opened` case rendering none; `NothingAttempted` with
+its five node names in mono; every one of the five stage titles and blurbs; every evidence field of
+every stage with its label, its value and its help sentence; the `tsc` verdict flag and both external
+links; the "graph has changed since this bundle was written" sentence; the "see the run's outcome
+above for why" sentence; all four `STANDING_SENTENCE` wordings on the in-flight run; the not-found
+headline, its detail, its identifier and its "Check again" button; and the
+checkpointer-is-the-same-source paragraph with "the solution workflow" still the link inside it.
+
+Changed in rendering and not in content: the five stages are titled blocks on the card plane rather
+than bordered list items with an emphasis heading, and their blurbs sit in the panel body under the
+label strip; the run's `thread_id` and generation count moved from a prose line into two labelled
+rail rows; and the checkpointer paragraph moved from the foot of the page to the rail, where it is
+beside the facts it describes rather than under the evidence it does not.
+
+Gained: the route's own question at the display step; a Finding row in the rail, as a link; a Pull
+request row reading `#101`; a Branch row reading `sync/fix-post-charges-param`; a Generations row
+that reads `1` on a run that previously said nothing about generations at all; and one external link,
+"Open the pull request", the only link in the console that leaves it.
+
+Lost: two words. The `h1`'s " — pull request" suffix, which ruling 2 strikes because it is said three
+times around the title. No sentence was shortened, none was collapsed behind a disclosure, and none
+moved into a tooltip.
+
+**One thing changed because the walk found it.** The in-flight rail read *"— not opened yet — this
+run is still in flight"*, which is the absence glyph's own em dash followed by a second em dash four
+words later. Two dashes in a six-word clause reads as a fault in the value rather than as a sentence,
+so both in-flight phrases were rewritten without one: *"the run has not opened one yet"* and *"the
+run has not pushed anything yet"*. Each still names the state and still refuses finality, which is
+what `bundle-facts.test.ts` asserts rather than the wording.
+
+**One repetition is accepted rather than fixed, and it is worth naming.** On the 404 all four
+query-answered rail rows read *"— no run for this finding"*, because that is the one fact and every
+row has to say which nothing it is. It is already the short form — it matches the panel headline
+below it word for word, which is the correction both earlier detail walks landed on — and shortening
+it further would stop it saying which nothing it is. Four rows is more than the Workflow level's two,
+and the alternative is a rail row with no answer in it, which is worse.
+
+**One branch the seed cannot walk.** No seeded finding's newest generation is `abandoned` — the four
+seeded runs are one `reported`, one in flight, and the two generations of `9f176dea…`, of which this
+route answers with the `opened` one. So `RunOutcome`'s abandoned branch, `Framing`'s abandoned
+sentence and `noPullRequestPhrase("abandoned")` were exercised by `bundle-facts.test.ts` rather than
+in Chrome. The `reported` run demonstrates the identical mechanism against the same code path — a
+terminal outcome with a recorded reason, the framing sentence that follows it, and a rail row saying
+which nothing the pull request is.
+
+## The protected sentences
+
+One of the seventeen fragments `tests/test_console_honesty_sentences.py` holds lives in the files
+this port opened. Every fragment was grepped against `features/pullrequests/` before the port and
+against the whole of `web/src` after it.
+
+| Fragment | Before | After |
+|---|---|---|
+| `not a failure of the console` | `features/pullrequests/pull-request-page.tsx`, and two files outside this feature | the same three files, the sentence unchanged |
+
+The other sixteen were checked against `features/pullrequests/` before the port and none of them was
+there, so none could be lost by it; all sixteen still have holders elsewhere. The whole file,
+seventeen parametrised cases, is green.
+
+The seventeen fragments are not the whole set. Eleven more sentences these two files own are
+load-bearing without being catalogued, and each was grepped after the port and is unchanged: the
+"remediation graph has changed since this bundle was written" admission; the "see the run's outcome
+above for why" pointer that tells a node that ran and produced nothing apart from one that never ran;
+all four `BELOW` sentences, which name this screen's geometry and are the reason `BelowThisPanel` is
+required rather than defaulted; all four `Framing` sentences, which stop a `reported` run's page
+being headed by a promise of a pull request; and `NothingAttempted`, which keeps the five node names
+visible on the one run that reached none of them.
