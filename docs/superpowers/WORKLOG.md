@@ -81,6 +81,8 @@ repository wrote rather than mistakes anyone made.
 | M7-W160 | The chassis: one sidebar at two widths, a page header, and the two DESIGN.md refusals reversed on measurement. B116 filed, B115 re-measured | landed | `briefs/2026-08-06-m7-the-chassis.md` |
 | M7-W161 | Landing on `main` is a scheduled fast-forward, not a milestone event | landed | `CLAUDE.md` |
 | M7-W162 | The console's API was answered by an eight-hour-old zombie — B117 and B118 | landed | `.claude/rules/console-dev-loop.md` |
+| M7-W163 | Phase 4: the Fleet level onto the chassis, and the display step proven on a feature route | dispatched | `briefs/2026-08-06-m7-phase4-fleet.md` |
+| M7-W164 | Phase 4: the Binding surface and Vendor levels, and the two components named `ControlBar` | dispatched | `briefs/2026-08-06-m7-phase4-binding-surface.md` |
 
 **M7-W160's navigation was rebuilt once, on the owner's ruling of 2026-08-06.** The first pass built a
 56px icon rail of four product areas beside a 240px contextual panel, and collapsing removed the
