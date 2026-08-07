@@ -141,6 +141,18 @@ it exists.
 | a call site's own key, as the URL spells it | `bindingKey(site)` — repository, path, line and column, the natural key the row key already uses — ruling 6 |
 | whether the URL names a call site, and whether this page holds it | `selectBinding(key, sites)` → `none` / `resolved` / `unresolved` — ruling 7 |
 
+### `change-set.ts` — new in this port
+
+Nothing here renders either. It is what keeps a sentence about the operation's vendor changes from
+being derived from the page of them the table happens to be showing.
+
+| What it answers | Where it lands |
+|---|---|
+| whether the vendor has ever changed this operation — `total > 0`, never `items.length` | `everChanged`, read by the second edge — ruling 10 |
+| how many changes the drawer draws | `drawn`, read by the partial-page sentence |
+| how many the operation has | `total`, read by the same sentence |
+| whether the page is short of the set | `partial`, and deliberately position-free — ruling 10 |
+
 ### `binding-drawer.tsx` — new in this port
 
 One binding, drawn. Every field below is a field the level already renders in a table cell; nothing
@@ -152,11 +164,11 @@ here is invented, and ruling 8 is why one binding may be drawn where a fleet of 
 | `SheetTitle` — the call site's `path:line:col`, mono | drawer header |
 | `SheetDescription` — what the drawing is, and that it is one binding rather than a diagram | drawer header — ruling 8 |
 | the call-site card: repository, full path, line, column, symbol, SDK version, argument keys, response fields read, loop depth, indexed at | vendored `Card` over `FactList` — ruling 13 |
-| the edge from the call site to the operation, carrying that row's own `binding_rung` and `describeRung`'s words | the edge between the first and second card — ruling 9 |
+| the edge from the call site to the operation, carrying that row's own `binding_rung` through `RungBadge` — whose `title` is where `describeRung`'s words reach the screen, exactly as they do in the table | the edge between the first and second card — ruling 9 |
 | the operation card: vendor id and operation id, both mono, the vendor as a link carrying the scope | vendored `Card` |
 | the edge from the vendor change to the operation, carrying that there is no rung and why | the edge between the second and third card — ruling 9 |
 | the change cards: kind, severity, versions, JSON pointer, detected at | vendored `Card` each |
-| the change section's empty state, when the vendor has never changed this operation | `EmptyState`, the same sentence the table below already uses |
+| the drawing's answer when the vendor has never changed this operation | **the second edge's own paragraph, not `EmptyState`** — an edge with no node beyond it is still an edge, and this feature never imports that component. It carries the same claim as the table's empty state in its own words: that no ingested feed names a change, which is an answer rather than a failure and is not a claim the operation is safe |
 | the sentence naming what the drawer's changes are counted over, when the table is paged | beneath the change cards — ruling 10 |
 | the unresolved state: the URL names a call site this page does not hold | its own panel, with what to do about it — ruling 7 |
 
@@ -302,23 +314,42 @@ plotting, no graph library, and **no new dependency**. The vendored `Card` and a
 edge is the whole mechanism, which is also why it survives at any width the drawer takes.
 
 **9. Each edge states its rung, and the change edge states that it has none.** The call site → the
-operation is a binding, so that edge carries that row's own `binding_rung` through `RungBadge` and
-`describeRung`, consumed from `components/provenance.tsx` and never re-derived. The vendor change →
-the operation is not a binding, and the section caption on the screen behind the drawer already
-says why: *"A vendor change is not a binding and carries no rung — it is evidence about the vendor,
-not about the codebase."*
+operation is a binding, so that edge carries that row's own `binding_rung` through `RungBadge`,
+consumed from `components/provenance.tsx` and never re-derived — which means `describeRung`'s words
+reach the screen exactly where they reach it in the table, in that badge's `title`, rather than
+being spelled a second time in the edge's prose. The vendor change → the operation is not a
+binding, and the section caption on the screen behind the drawer already says why: *"A vendor
+change is not a binding and carries no rung — it is evidence about the vendor, not about the
+codebase."*
 
 Leaving that second edge bare would be the cheaper option and it is wrong. An edge with a rung
 beside an edge with nothing reads as a missing value; an edge that says it has no rung, and why,
 reads as the distinction it is. This is the same rule `bindingNullLabel` enforces one level up —
 null is a fact, and it differs per place.
 
-**10. The drawer names the changes this page holds, and says so when the page is not the whole
-set.** `changes` is an `ItemPage`, and the drawer draws from the items the current page carries.
-When `changes.total` exceeds what is on that page, a count read off the drawer would be a fact about
-the page wearing the clothes of a fact about the operation — the failure Signals' ruling 12 refused
-a whole catalogue over. So the sentence beneath the change cards names both numbers when they
-differ and says which is which, and says nothing when they agree.
+**The first edge says nothing about the other rows, and the first version of it did.** It closed
+with *"Nothing on this page mixes rungs — every call site here is what the index found by reading
+the source"*, which is a page-level claim standing beside a badge rendered from one row's own
+field: two copies of one fact, able to disagree the day a row arrives on another rung. `RungNote`
+on the screen behind the drawer owns that claim and derives it from the payload, so the edge now
+carries only what the row carries.
+
+**10. The drawer draws a page and may only make set claims through `change-set.ts`.** `changes` is
+an `ItemPage`: `items` is the window the table behind the drawer is showing and `total` is what the
+operation has. Every sentence about vendor changes reads `describeChangeSet`, which names the two
+apart — `everChanged` is the set, `drawn` is the page, `partial` is the second being short of the
+first.
+
+**That separation is a correction rather than a design, and it is written here because the first
+version shipped the confusion.** The no-change edge branched on `items.length`, so
+`?changes_offset=50` on an operation with one change rendered *"The vendor has never changed this
+operation"* directly over a table showing that change. And the partial-page sentence said the rest
+were on *later* pages, which is false on every page but the first — after one Next they are behind
+the reader. `partial` is therefore position-free by construction: it answers whether the drawing is
+complete and never which direction the remainder lies in.
+
+`change-set.test.ts` holds both, and the offset-past-the-only-change case is the one that was shown
+red against the shipped predicate.
 
 **11. The sheet's entry transition is permitted, and nothing on this screen animates at rest.**
 `test_no_keyframes_or_animation_shorthand_outside_the_component_catalog` scans `features/`,

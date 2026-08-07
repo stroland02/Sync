@@ -22,6 +22,12 @@
  * than about this codebase — and an edge left silently bare would read as a missing value rather
  * than as the distinction it is.
  *
+ * **This drawer draws a page and is only allowed to claim what the set holds through
+ * `change-set.ts`.** `changes` is an `ItemPage`, so the rows it draws are the window the table
+ * behind it is showing while `total` is what the operation actually has. Every sentence here about
+ * vendor changes reads `describeChangeSet` rather than `items.length`, and that module's docstring
+ * carries the two ways the first version of this file got it wrong.
+ *
  * **A key this page does not hold is its own answer.** A binding address is shareable, which is
  * most of the reason it is in the URL; the reader who opens one may be under a filter the sender
  * did not have, or on another page. Rendering the list with no drawer would tell them their link
@@ -39,6 +45,7 @@ import { Formatted } from "@/components/status"
 import { formatTimestamp, orAbsent } from "@/lib/format"
 import type { BindingSelection } from "@/features/bindings/binding-selection"
 import { joinOrAbsent } from "@/features/bindings/call-site-fields"
+import { describeChangeSet } from "@/features/bindings/change-set"
 import { Card, CardContent, CardHeader } from "@/vendor/supabase/ui/card"
 import {
   Sheet,
@@ -121,8 +128,7 @@ function OneBinding({
   data: BindingSurfaceResponse
 }) {
   const site = selection.site
-  const changes = data.changes.items
-  const paged = data.changes.total > changes.length
+  const changes = describeChangeSet(data.changes)
 
   return (
     <>
@@ -187,11 +193,14 @@ function OneBinding({
         />
       </Node>
 
+      {/* The rung is the row's own, and the sentence says nothing about the other rows. What every
+          call site on this page rests on is the page-level claim, and `RungNote` on the screen
+          behind this drawer owns it — a second copy here would be a fact able to disagree with the
+          badge beside it the day a row arrives on a different rung. */}
       <Edge>
         This call site binds to the operation below on the <RungBadge rung={site.binding_rung} />{" "}
         rung: the row's own value, and it says which class of evidence established the binding
-        rather than how much to trust it. Nothing on this page mixes rungs — every call site here
-        is what the index found by reading the source.
+        rather than how much to trust it.
       </Edge>
 
       <Node label="Operation">
@@ -218,21 +227,28 @@ function OneBinding({
         />
       </Node>
 
+      {/* `everChanged` rather than the drawn count: an operation whose one change sits on a page
+          the reader has left still has that change, and saying otherwise would contradict the
+          table behind this drawer. */}
       <Edge>
-        {changes.length === 0
-          ? "The vendor has never changed this operation, so there is no third node to draw. That is an answer about the ingested feeds and not a failure — nothing here says the operation is safe, only that no feed has named a change against it."
-          : "The vendor changed the operation above. That edge carries no rung, and the absence is the point: a vendor change is evidence about the vendor rather than about this codebase, so nothing in it was read out of your source. Whether this call site is affected by it is a detector's answer, and a detector's answer is a finding rather than an edge."}
+        {changes.everChanged
+          ? "The vendor changed the operation above. That edge carries no rung, and the absence is the point: a vendor change is evidence about the vendor rather than about this codebase, so nothing in it was read out of your source. Whether this call site is affected by it is a detector's answer, and a detector's answer is a finding rather than an edge."
+          : "The vendor has never changed this operation, so there is no third node to draw. That is an answer about the ingested feeds and not a failure — nothing here says the operation is safe, only that no feed has named a change against it."}
       </Edge>
 
-      {changes.map((change) => (
+      {data.changes.items.map((change) => (
         <ChangeNode key={change.change_id} change={change} />
       ))}
 
-      {paged && (
+      {changes.partial && (
         <p className="max-w-prose text-body text-muted-foreground">
-          {changes.length} of {data.changes.total.toLocaleString()} changes are drawn here — the
-          rest are on later pages of the table behind this drawer. The count above the table is the
-          operation's; this one is the page's.
+          {/* No direction in this sentence. After one Next the undrawn changes are behind the
+              reader rather than ahead, so "later pages" would be false on every page but the
+              first. */}
+          {changes.drawn === 0
+            ? `The ${changes.total === 1 ? "one change" : `${changes.total.toLocaleString()} changes`} this operation carries ${changes.total === 1 ? "is" : "are"} not on the page behind this drawer, so nothing is drawn here.`
+            : `${changes.drawn} of ${changes.total.toLocaleString()} changes are drawn here — the rest are elsewhere in the table behind this drawer.`}{" "}
+          The count above the table is the operation's; this one is the page's.
         </p>
       )}
     </>
