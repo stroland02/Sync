@@ -373,3 +373,24 @@ panel would have nothing distinct to hold.
 A label that disappears visually must not disappear semantically: the collapsed row keeps its
 accessible name and gains a tooltip. This is the same rule the console already applies to the rung
 badge, which is monochrome on screen and carries `describeRung` in its title.
+
+---
+
+## Correction to the measurement in this file (2026-08-06)
+
+The entry above headed *"Measurement: the console at 1890px"* concluded that the app fills the
+window and that the emptiness was a composition defect. **The first half was right for the wrong
+reason and the second half stands.**
+
+The owner's screenshots showed the console pinned to roughly 1272px inside a 1911px window, with
+white to the right and below. That was **a CDP device-metrics override left applied on the shared
+Chrome instance** by `superpowers-chrome`'s `set_viewport`, from a measurement taken the previous
+day. It survives navigation and survives the session; only `clear_viewport` ends it.
+
+Re-measured with it cleared: `innerWidth` 1920, `main` 1905, no horizontal overflow, zoom 1.
+
+So two things were true at once and both observations were honest. The app has always been
+full-width, and the screen still looks empty because `max-w-prose` caps every paragraph at 491px
+beside a table spending 1290px on a vendor name, in a single column that is never placed beside
+anything. **The composition finding is unaffected; the windowing was an artefact of how it was being
+observed.** `.claude/rules/console-dev-loop.md` now carries the rule that prevents it.

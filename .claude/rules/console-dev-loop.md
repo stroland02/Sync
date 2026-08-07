@@ -42,6 +42,28 @@ than falling back, because a typo falling back either way would be invisible. If
 either restart the API or confirm its start time postdates the last Python commit before believing
 anything on screen.
 
+## Clear the viewport override, every time, or the owner sees a windowed console
+
+`superpowers-chrome`'s `set_viewport` is a **CDP device-metrics override on a persistent, shared
+Chrome instance**. It is the right tool for measuring a screen at 1440×900 or 1280×800, and it does
+not end when your task does: it survives navigation, it survives the page being closed, and it
+survives the session. Nothing clears it but `clear_viewport`.
+
+**Measured on 2026-08-06, after most of a day of confusion.** An override left applied the previous
+day pinned the console to a fraction of the window in every screenshot the owner took, with white
+space to the right and below. Two agents measured `main` at full width and the owner's own eyes said
+otherwise, repeatedly, and both were correct — they were looking at the same page through different
+overrides. With it cleared: `innerWidth` 1920, `main` 1905, no horizontal overflow. The app had
+always filled the window.
+
+**The rule:** every `set_viewport` is paired with a `clear_viewport` before the task ends, in the
+same way a dev server started is a dev server stopped. If you are unsure whether one is applied,
+`get_viewport` costs nothing and a reported size that does not match the window is the answer.
+
+This matters more than it sounds. A viewport override does not look like a bug — it looks like a CSS
+defect in the thing you are building, and it will send the next session hunting for a `max-width`
+that does not exist.
+
 ## `npm run build` passing is not evidence
 
 TypeScript checks the console against the types the console declares, not against what the API

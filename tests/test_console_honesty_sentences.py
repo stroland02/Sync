@@ -111,7 +111,7 @@ PROTECTED: tuple[tuple[str, str], ...] = (
 )
 
 
-@pytest.mark.skipif(not WEB_SRC.is_dir(), reason="the console is not checked out here")
+@pytest.mark.skipif(not WEB_SRC.is_dir(), reason="web/src is absent; this checkout carries no console")
 @pytest.mark.parametrize("fragment,purpose", PROTECTED, ids=[f for f, _ in PROTECTED])
 def test_a_protected_honesty_sentence_is_still_on_screen(fragment: str, purpose: str) -> None:
     """Each protected sentence still appears somewhere under `web/src`.
