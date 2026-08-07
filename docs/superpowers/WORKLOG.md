@@ -121,7 +121,7 @@ write path, are unbuilt; Phase 6 needs auth and tenancy and belongs to M4's host
 | M7-W185 | The 28 direction screenshots committed, one record of what M7 built and what drove it, and seven of our own screens beside them. **Its commits `25a4a10` and `d67c5c5` carry `M7-W181` in their subjects** — `7d8901b` had already taken that number and merged first, so it keeps it and this row holds the correction | landed | `reports/2026-08-07-m7-what-was-built-and-what-drove-it.md`, `reports/screens/2026-08-07/` |
 | M12-W186 | M12 proposed: the four questions a panel must answer, the two prescriptions refused with their reasons, and the colour rule the disposition bar earned | landed | `plans/2026-08-07-m12-dashboards-that-earn-their-screen.md` |
 | M4-W166 | B117: `GraphStore` reconnects a closed connection, instead of handing the dead one back forever | dispatched | `briefs/2026-08-07-b117-graphstore-reconnect.md` |
-| CI-W167 | B111: the suite runs three times per pull request, and what moving two of them costs | dispatched | `briefs/2026-08-07-b111-ci-critical-path.md` |
+| CI-W167 | B111: coverage moved to a nightly and the serial job off the pull-request path; the concurrency group gains `event_name` so a schedule and a push to `main` stop cancelling each other | landed | `briefs/2026-08-07-b111-ci-critical-path.md` |
 
 **M7-W160's navigation was rebuilt once, on the owner's ruling of 2026-08-06.** The first pass built a
 56px icon rail of four product areas beside a 240px contextual panel, and collapsing removed the
