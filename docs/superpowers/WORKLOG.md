@@ -77,5 +77,6 @@ repository wrote rather than mistakes anyone made.
 |---|---|---|---|
 | M7-W157 | Why the console came out flat, and the three rules that caused it | landed | `cf3a161` |
 | M7-W158 | The honesty sentences guarded before the screens they sit on are rewritten | landed | `7bef206` |
-| M7-W159 | Read Supabase as source, for mechanism | dispatched | `briefs/2026-08-06-m7-read-supabase-source.md` |
-| M7-W160 | The chassis, and the type and space revision it makes possible | dispatched | `briefs/2026-08-06-m7-the-chassis.md` |
+| M7-W159 | Read Supabase as source, for mechanism | landed | `references/notes/supabase-control-plane-mechanism.md` |
+| M7-W160 | The chassis, and the type and space revision it makes possible | in rework, `m7-chassis` — a rail plus a panel was built where one sidebar at two widths was ruled | `briefs/2026-08-06-m7-the-chassis.md` |
+| M7-W161 | Landing on `main` is a scheduled fast-forward, not a milestone event | landed | `CLAUDE.md` |

@@ -238,6 +238,36 @@ this repository has spent a week fixing exactly that. What earns a full restatem
 expensive tiers is what an agent must not be able to miss regardless of what it happens to be
 editing — nothing else.
 
+## Branches, and how work reaches `main`
+
+**One integration branch at a time.** It is named in the milestone's plan — `console-identity`
+during M7. Every worker branches from it, gates on it, and pushes its own branch. The coordinator
+merges into the integration branch. **A worker never opens a pull request and never pushes `main`.**
+
+**`main` catches up by fast-forward, on a schedule rather than at a milestone boundary.** The
+integration branch is only ever ahead of `main`, never divergent, so landing it is
+`git push origin <sha>:refs/heads/main` and nothing else — no merge commit, no conflict, no review
+round. Do it at least daily.
+
+The failure this exists to stop was measured on 2026-08-06: `main` sat 27 hours and 192 commits
+behind while eighteen branches accumulated, and the owner could not tell which of five running dev
+servers held current code. **Nothing had actually diverged** — fifteen of the sixteen work branches
+were already ancestors of the integration branch, contributing zero unique commits. The mess was
+entirely staleness plus uncleaned refs, and it read as merge debt. A stale `main` is expensive
+because it makes everything downstream unprovable, not because it is hard to fix.
+
+**Containment is a command, not a memory.** Before treating a branch as merged,
+`git merge-base --is-ancestor <branch> <integration>`. Before landing,
+`git merge-base --is-ancestor origin/main <integration>` — if that fails, the branch diverged and
+the fast-forward assumption is wrong.
+
+**A pull request is a record, not the merge mechanism.** Open one per milestone if the history is
+worth annotating. Landing the integration branch closes it automatically, because its head is
+already an ancestor. Do not gate a landing on CI: as of 2026-08-06 hosted runners acquire jobs
+intermittently and report a job that never started as `failure` (B112), so **the local gate is the
+authority** — `uv run pytest tests/ -q -n0`, then `npm run build`, `npm run lint`, `npm test` from
+`web/`. Say which of those ran. Never say CI covered something it never executed.
+
 ## Commits
 
 Conventional Commits (`feat:`, `fix:`, `test:`, `docs:`, `chore:`). Write the body in normal prose explaining why, not what — the diff already says what.
