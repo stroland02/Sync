@@ -232,10 +232,13 @@ class GraphStore:
 
     A per-call connection costs a TCP handshake, an authentication round trip
     and a teardown for every row: an ingest of a few thousand vendor changes
-    spends most of its time connecting. The connection is never reopened once
-    it breaks -- a run whose database went away has no correct way to continue,
-    and reconnecting inside `transaction()` would silently turn one atomic
-    ingest into a partially committed one.
+    spends most of its time connecting. A connection that has died is replaced
+    on the next call -- the database is outside this process and a connection
+    dying is a condition that occurs, and the API holds one store for the
+    process lifetime, so handing the dead one back forever turned one dropped
+    connection into every console route failing until a restart (B117). The
+    one place that must not reconnect is under an open `transaction()` block,
+    and `_connect` carries why.
 
     A store is meant for one caller at a time. psycopg serialises statements on
     a shared connection, so concurrent callers corrupt nothing -- but they share
@@ -247,9 +250,16 @@ class GraphStore:
     def __init__(self, dsn: str) -> None:
         self._dsn = dsn
         self._conn: psycopg.Connection | None = None
+        self._transaction_depth = 0
 
     def _connect(self) -> psycopg.Connection:
-        if self._conn is None:
+        # Never reconnect under an open `transaction()` block: the block's transaction lives
+        # on the dead connection, so a fresh autocommit connection here would commit each
+        # later write on its own while the block rolls back -- a failed write turned into a
+        # silently partial one, which is worse than the outage. Inside a block the dead
+        # connection is handed back and the next statement raises OperationalError instead.
+        # `closed` covers a broken connection too: psycopg marks a broken connection closed.
+        if self._conn is None or (self._conn.closed and self._transaction_depth == 0):
             self._conn = psycopg.connect(self._dsn, row_factory=dict_row, autocommit=True)
         return self._conn
 
@@ -277,8 +287,15 @@ class GraphStore:
         ACCESS SHARE an ordinary SELECT takes, so the reader blocks for the
         duration of the block and then reads whatever it committed.
         """
-        with self._connect().transaction():
-            yield
+        # Resolve the connection before raising the depth, so a block starting on a dead
+        # connection gets a live one -- only calls inside the block are pinned to it.
+        connection = self._connect()
+        self._transaction_depth += 1
+        try:
+            with connection.transaction():
+                yield
+        finally:
+            self._transaction_depth -= 1
 
     def apply_schema(self) -> None:
         """Bring a database to the current schema, whether or not it already has one.
