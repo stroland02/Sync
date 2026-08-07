@@ -100,3 +100,90 @@ describe("the node-status wash", () => {
     expect(washCount(container)).toBe(1)
   })
 })
+
+/**
+ * The narrative's two bracket entries — what arrived, and how the run ended — and where the second
+ * one lands.
+ *
+ * `narrative-order.test.ts` holds the arithmetic; this holds that the component spends it. The two
+ * are separable and were separated on purpose: a correct index rendered at the wrong end of the list
+ * is the same defect on screen as a wrong index, and only one of the two files can see it.
+ *
+ * Position is read off `ol > li` order rather than off a class or a test id, which keeps this a
+ * structural assertion about what renders — the only kind this suite makes about appearance.
+ */
+function entryIndexOf(container: HTMLElement, text: string): number {
+  const items = Array.from(container.querySelectorAll("ol > li"))
+  return items.findIndex((item) => item.textContent?.includes(text) ?? false)
+}
+
+describe("the narrative's bracket entries", () => {
+  it("renders neither when the caller passes neither, which is the eight-node sequence", () => {
+    const { container } = render(<NodeSequence nodes={[node(), node({ name: "static_verify" })]} />)
+
+    expect(container.querySelectorAll("ol > li")).toHaveLength(2)
+  })
+
+  it("opens with the arrival entry, above every node", () => {
+    const { container } = render(
+      <NodeSequence nodes={[node({ standing: "ran" })]} opening={<p>What arrived</p>} />
+    )
+
+    expect(entryIndexOf(container, "What arrived")).toBe(0)
+  })
+
+  it("closes an abandoned run where it stopped, above the nodes it never reached", () => {
+    const { container } = render(
+      <NodeSequence
+        nodes={[
+          node({ name: "locate", standing: "ran" }),
+          node({ name: "static_verify", standing: "ran" }),
+          node({ name: "replay", standing: "never_reached" }),
+          node({ name: "open_pr", standing: "never_reached" }),
+        ]}
+        closing={<p>Sync abandoned this run.</p>}
+      />
+    )
+
+    // Third entry of five: two nodes that ran, then the reason, then the two that never did.
+    expect(entryIndexOf(container, "Sync abandoned this run.")).toBe(2)
+    expect(entryIndexOf(container, "replay")).toBe(3)
+  })
+
+  it("closes a completed run last, because that is where the run stopped", () => {
+    const { container } = render(
+      <NodeSequence
+        nodes={[node({ name: "await_ci", standing: "ran" }), node({ name: "open_pr", standing: "ran" })]}
+        closing={<p>This run opened a pull request.</p>}
+      />
+    )
+
+    expect(entryIndexOf(container, "This run opened a pull request.")).toBe(2)
+  })
+
+  it("closes a run that reached nothing first, above the entries it explains", () => {
+    const { container } = render(
+      <NodeSequence
+        nodes={[
+          node({ name: "patch", standing: "never_reached" }),
+          node({ name: "open_pr", standing: "never_reached" }),
+        ]}
+        opening={<p>What arrived</p>}
+        closing={<p>This run reported rather than patched.</p>}
+      />
+    )
+
+    expect(entryIndexOf(container, "What arrived")).toBe(0)
+    expect(entryIndexOf(container, "This run reported rather than patched.")).toBe(1)
+  })
+
+  it("washes nothing for a bracket entry, which is not a node and holds no checkpoint", () => {
+    const { container, rerender } = render(
+      <NodeSequence nodes={[node({ status: "current" })]} closing={<p>still in flight</p>} />
+    )
+
+    rerender(<NodeSequence nodes={[node({ status: "done", standing: "ran" })]} closing={<p>done</p>} />)
+
+    expect(washCount(container)).toBe(1)
+  })
+})

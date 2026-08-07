@@ -361,12 +361,147 @@ on a genuine failure of the console.
 
 ## What it measured
 
-Filled in by the port commit.
+Chrome, `/findings/9f176dea35907f95beb29553e574a037/workflow` — the richest seeded run and the one
+the controller named. It is the only seeded finding with more than one generation
+(`generation_count` 2), and the generation this route answers with is the one that ran all eight
+nodes and opened a pull request, so it is also the run carrying the most evidence: a routing tier
+and row, two prepare flags, an attempt count and strategy, a `tsc` verdict, a replay outcome with a
+block of evidence, a branch, a CI URL with its attempt and result, and a pull request with its
+number. The old screen was served from a scratch worktree at `ff556f8` on port 5196 and the new one
+on 5197, both proxied to the same API on 8787, so the two readings are of one seed.
+
+| | 1440x900 before | 1440x900 after | 1280x800 before | 1280x800 after |
+|---|---|---|---|---|
+| type range | 1.83:1 | **3.83:1** | 1.83:1 | **3.83:1** |
+| type steps | 12 / 13 / 15 / 22 | 12 / 13 / 15 / **46** | unchanged | unchanged |
+| side-by-side region placements | 0 | **1** | 0 | **1** |
+| `h1` | 22px, 32px tall | 46px, 153px tall | 22px, 32px tall | 46px, 153px tall |
+| first heading in `main`, from the page's top | 250px | **40px** | 250px | **40px** |
+| last rendered pixel | 1908px | **1741px** | 1908px | **1809px** |
+| rail / content column | — | 360px / 705px | — | 360px / 545px |
+| horizontal overflow | none | none | none | none |
+
+Three readings need their method stated.
+
+**The first-heading row is the first `h2` or `h3` inside `main`.** On the old screen that is the
+outcome banner's headline — "This run opened a pull request." — 250px down, under a breadcrumb, an
+`h1` and a paragraph of run prose. On the new one it is "What arrived" at 40px, because the two
+columns start level and the narrative no longer waits for a header to finish. That 210px is what
+ruling 1's arrangement buys, and it is the same effect the Finding level measured at 163px.
+
+**"Last rendered pixel" is the greatest `bottom` of any element inside `main`**, not
+`document.scrollHeight`, which floors at the viewport height. The page is **167px shorter at 1440
+and 99px shorter at 1280** while carrying three things it did not carry before — the route's own
+question, a Finding row, and a Generations row — and while nothing was deleted. The narrower
+content column is why the two figures differ: 545px wraps more prose than 705px.
+
+**The 15px step stays, and this level is the first ported one where that is correct.** On the
+Finding level `--text-emphasis` left with the card titles, because a panel name belongs in the
+furniture register. Here it is on the narrative's own entry headings — "What arrived", "This run
+opened a pull request." — which are read rather than scanned, and `DESIGN.md` assigns type by role.
+So this route's ramp is 12 / 13 / 15 / 46 rather than 12 / 13 / 46, which is 3.83:1 against the 3.4
+bar `reports/2026-08-06-why-the-console-came-out-flat.md` sets, and one more of the nine B116 counts
+off.
+
+**The `h1` takes three lines and 153px**, exactly as the Finding level's does and for the same
+reason: a 32-character hex identifier at 46px in a 360px column has no break opportunity, and
+`PageHeader`'s own `break-words` is what keeps it inside the rail. Nothing clips at either width and
+the document has no horizontal scroll at either.
+
+**One cost is real and is recorded rather than argued away.** The rail ends around 590px and the
+narrative runs to 1741px, so a reader who scrolls past the first screen has an empty 360px column
+beside them. That is the shape of a detail level whose content is long, it is the same trade the
+Finding level took with a much shorter content column, and no fix is applied here: a sticky rail is
+behaviour nothing asked for, and the alternative arrangement costs the 210px this port just bought.
 
 ## The completeness walk
 
-Filled in by the port commit.
+Every field the old screen asserted, asserted by the new one, read off both screens against the same
+seed rather than off the diff. Four states were walked, each on both ports:
+
+- `/findings/9f176dea35907f95beb29553e574a037/workflow` — `opened`, two generations, all eight nodes
+  ran, every evidence field the fixture holds.
+- `/findings/b45fb667d653b9187fe0d05ffe20a7df/workflow` — `reported`, one generation, `locate` ran
+  and the other seven never did. This is the walk that proves ruling 3: the closing entry lands
+  second, directly under `locate`'s routing evidence and above seven entries reading "never ran".
+- `/findings/443b1719164579873939aaaecfa2902d/workflow` — in flight, `static_verify` due, four nodes
+  not reached yet. The closing entry lands fifth, under the due node, above the four that have not
+  been reached.
+- `/findings/does-not-exist/workflow` — the 404.
+
+Carried unchanged, string for string: the breadcrumb trail and all three crumbs; the run's
+`thread_id`; the "most recent of 2 runs the checkpointer holds for this finding" clause and the
+fleet link inside it; all four `RunOutcome` headlines walked and their prose; both reason labels and
+both reason values; every one of the eight node names, its standing label and its purpose sentence;
+every evidence field of every node with its label, its value and its help sentence; the two `PASS`
+flags and the `tsc` verdict flag with their full wordings; both external links; the pull-request
+link in both of its outcome-dependent wordings; the not-found headline, its detail, its identifier
+and its "Check again" button; and the checkpointer-is-a-different-database paragraph with "The
+finding itself" still the link inside it.
+
+Changed in rendering and not in content: the outcome moved from a bordered banner above the sequence
+to an entry inside it at the point the run stopped; the card that contained the sequence dissolved
+and its description became the opening entry; the run's `thread_id` and generation count moved from a
+prose line into two labelled rail rows; three of `BelowThisPanel`'s four sentences were repointed
+because they named a position that moved; multi-line evidence gained a label strip on the card plane;
+and `PASS`/`FAIL` gained the console's chip radius and hairline.
+
+Gained: the route's own question at the display step; a Finding row in the rail, as a link; a
+Generations row that says `1` on a run that previously said nothing about generations at all; and
+the sentence saying this route carries no clock.
+
+Lost: three words and a title. The `h1`'s " — solution workflow" suffix (ruling 2, said three times
+around it), the word "below" from the pull-request note (ruling 9, no longer true), and the card
+title "The run, node by node" (ruling 5, the card it named is gone). No sentence was shortened, none
+was collapsed behind a disclosure, and none moved into a tooltip.
+
+**One thing changed because the walk found it.** The 404 rendered the rail's absence phrase as "the
+checkpointer holds no run for this finding" on both the Run row and the Generations row, directly
+above a panel whose headline is "No remediation run for this finding." — three near-copies of one
+sentence in 200 vertical pixels. The rail's phrase is now the short form, "no run for this finding",
+which matches the panel's headline and leaves the full explanation in the one place with room for
+it. Each row still says which nothing it is, which is what the absence vocabulary requires. This is
+the same defect the Finding port's walk found on its own 404, and it arrived the same way.
+
+**One thing the seed cannot walk, and it is worth saying plainly.** No seeded finding's newest
+generation is `abandoned` — the four seeded runs are one `reported`, one in flight, and the two
+generations of `9f176dea…`, of which this route answers with the `opened` one. So the abandoned
+branch of the closing entry was exercised by `node-sequence.test.tsx` and by `narrative-order.ts`'s
+own cases rather than in Chrome. The `reported` run demonstrates the identical mechanism against the
+same code path — a terminal outcome with a recorded reason, placed where the run stopped, above the
+nodes it explains — which is why that finding is the one walked in detail above.
 
 ## The protected sentences
 
-Filled in by the port commit.
+One of the seventeen fragments `tests/test_console_honesty_sentences.py` holds lives in the files
+this port opened. Every fragment was grepped against `features/workflows/` before the port and
+against the whole of `web/src` after it.
+
+| Fragment | Before | After |
+|---|---|---|
+| `not a failure of the console` | `features/workflows/workflow-page.tsx`, and two files outside this feature | the same three files, the sentence unchanged |
+
+The other sixteen were checked against `features/workflows/` before the port and none of them was
+there, so none could be lost by it; all sixteen still have holders elsewhere. The whole file,
+seventeen parametrised cases, is green.
+
+The seventeen fragments are not the whole set. Three of the twenty-four catalogued sentences in
+`plans/2026-08-05-sync-console-architecture.md:102-207` sit in these files, two of them under the
+"the console admits when it is out of date with its own backend" heading, and each was grepped
+individually after the port:
+
+| Sentence | Holder |
+|---|---|
+| `the remediation graph has changed since this view was written` | `node-sequence.tsx`, unchanged |
+| `has not caught up with` — the unrecognised outcome | `run-outcome.tsx`, unchanged |
+| `not a failure of the console` — the 404 detail | `workflow-page.tsx`, unchanged |
+
+And eight more sentences this level owns that are load-bearing without being catalogued. Each was
+grepped after the port and each is unchanged: the standing sentence that refuses a liveness claim
+(`not a claim that anything is running`, `node-standing.ts`); the retry sentence
+(`the loop is real and this view does not hide it`); the two-databases sentence
+(`no indexing timestamp and no binding rung`); both halves of the stale banner
+(`the run is still live, so polling continues`, `nothing is polling in the background`); both
+missing-reason absences (`which is itself a gap worth chasing`,
+`the run reported without recording why`); and the abandonment sentence
+(`teaches routing which change kinds are not mechanically safe`).

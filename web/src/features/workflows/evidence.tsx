@@ -9,13 +9,25 @@
  * A key absent from the payload means the run never produced it, and nothing is drawn. A
  * key present holding null means the run produced null, and that draws the absence marker.
  * Collapsing those two would make "not run yet" and "ran, found nothing" the same cell.
+ *
+ * ## The block treatment, M7-W179
+ *
+ * A multi-line value is no longer a `pre` under a label in a definition list. It is a titled block
+ * with its own label strip on the vendored card's plane — the one convention both direction notes
+ * single out, and the only depth this narrative spends. Scalars stay a definition list, because
+ * that is what they are; the blocks follow it, which is also the order every node's `FIELDS` entry
+ * already declares them in.
+ *
+ * `features/pullrequests/evidence-bundle.tsx` imports this file, so the Pull Request level's
+ * compiler output and replay evidence take the same strip. That is the substrate migration working
+ * rather than a scope leak.
  */
 
 import type { ReactNode } from "react"
 
 import { Absent, Formatted } from "@/components/status"
 import { orAbsent } from "@/lib/format"
-import { cn } from "@/lib/utils"
+import { Card, CardContent, CardHeader } from "@/vendor/supabase/ui/card"
 
 type FieldKind = "text" | "flag" | "url" | "block"
 
@@ -167,16 +179,14 @@ function scalarOrAbsent(value: unknown): string | null {
 function Row({
   label,
   help,
-  className,
   children,
 }: {
   label: string
   help?: string
-  className?: string
   children: ReactNode
 }) {
   return (
-    <div className={cn("flex flex-col gap-field", className)}>
+    <div className="flex flex-col gap-field">
       <dt className="furniture text-meta text-muted-foreground">{label}</dt>
       <dd className="flex flex-col gap-field text-body">
         {children}
@@ -205,7 +215,7 @@ function Flag({ field, value }: { field: Field; value: unknown }) {
     ? (field.trueLabel ?? "yes")
     : (field.falseLabel ?? "no")
   return (
-    <span className="rounded border border-border px-field py-0.5 text-meta">
+    <span className="rounded-control border border-line px-field py-0.5 text-meta">
       {value ? "PASS" : "FAIL"} — {wording}
     </span>
   )
@@ -215,7 +225,8 @@ function Flag({ field, value }: { field: Field; value: unknown }) {
  * A multi-line value, kept multi-line.
  *
  * `tsc` output is line-per-diagnostic and unreadable folded into a paragraph, so the block
- * preserves its newlines and scrolls in its own box rather than widening the page.
+ * preserves its newlines and scrolls in its own box rather than widening the page. The box is the
+ * card `BlockField` puts around it; this renders the text and the two kinds of nothing.
  */
 function Block({ value }: { value: unknown }) {
   // Null is tested before stringifying, not after. `JSON.stringify(null)` is the string
@@ -230,9 +241,35 @@ function Block({ value }: { value: unknown }) {
     return <Absent />
   }
   return (
-    <pre className="max-h-72 overflow-auto rounded border border-border bg-muted p-row font-mono text-meta whitespace-pre-wrap">
+    <pre className="max-h-72 overflow-auto font-mono text-meta whitespace-pre-wrap">
       {rendered}
     </pre>
+  )
+}
+
+/**
+ * A block with a label strip, which is what a reader recognises before reading a character of it.
+ *
+ * The label is in the strip and nowhere else — a `dt` above the card as well would be the same word
+ * twice, one of them competing with the thing it names. That is why this sits outside the
+ * definition list rather than inside it as a row: a card is not a `dt`/`dd` pair and pretending
+ * otherwise would cost the semantics the list is there for.
+ */
+function BlockField({ field, value }: { field: Field; value: unknown }) {
+  return (
+    <div className="flex min-w-0 flex-col gap-field">
+      <Card>
+        <CardHeader>
+          <h4 className="furniture text-meta text-ink-muted">{field.label}</h4>
+        </CardHeader>
+        <CardContent>
+          <Block value={value} />
+        </CardContent>
+      </Card>
+      {field.help !== undefined && (
+        <p className="max-w-prose text-meta text-muted-foreground">{field.help}</p>
+      )}
+    </div>
   )
 }
 
@@ -263,6 +300,7 @@ function FieldValue({ field, value }: { field: Field; value: unknown }) {
     case "flag":
       return <Flag field={field} value={value} />
     case "block":
+      // Blocks never reach here: `NodeEvidence` routes them to `BlockField`, outside the list.
       return <Block value={value} />
     case "url":
       return <ExternalLink value={value} />
@@ -291,6 +329,8 @@ export function NodeEvidence({
 }) {
   const fields = FIELDS[name] ?? []
   const named = fields.filter((field) => field.key in evidence)
+  const scalars = named.filter((field) => field.kind !== "block")
+  const blocks = named.filter((field) => field.kind === "block")
   const unnamed = Object.keys(evidence).filter(
     (key) => !fields.some((field) => field.key === key),
   )
@@ -298,24 +338,26 @@ export function NodeEvidence({
   if (named.length === 0 && unnamed.length === 0) return null
 
   return (
-    <dl className="mt-section grid gap-section sm:grid-cols-2">
-      {named.map((field) => (
-        <Row
-          key={field.key}
-          label={field.label}
-          help={field.help}
-          className={field.kind === "block" ? "sm:col-span-2" : undefined}
-        >
-          <FieldValue field={field} value={evidence[field.key]} />
-        </Row>
+    <div className="mt-section flex flex-col gap-section">
+      {(scalars.length > 0 || unnamed.length > 0) && (
+        <dl className="grid gap-section sm:grid-cols-2">
+          {scalars.map((field) => (
+            <Row key={field.key} label={field.label} help={field.help}>
+              <FieldValue field={field} value={evidence[field.key]} />
+            </Row>
+          ))}
+          {unnamed.map((key) => (
+            <Row key={key} label={key}>
+              <span className="font-mono text-body">
+                {asScalarText(evidence[key]) ?? JSON.stringify(evidence[key])}
+              </span>
+            </Row>
+          ))}
+        </dl>
+      )}
+      {blocks.map((field) => (
+        <BlockField key={field.key} field={field} value={evidence[field.key]} />
       ))}
-      {unnamed.map((key) => (
-        <Row key={key} label={key}>
-          <span className="font-mono text-body">
-            {asScalarText(evidence[key]) ?? JSON.stringify(evidence[key])}
-          </span>
-        </Row>
-      ))}
-    </dl>
+    </div>
   )
 }

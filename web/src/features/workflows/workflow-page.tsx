@@ -9,21 +9,48 @@
  * The route carries no provenance envelope, unlike the other four. It reads the LangGraph
  * checkpointer tables and the rest read the graph; they are two databases, so there is no
  * `indexed_at` and no rung to report and nothing is invented to fill the gap.
+ *
+ * ## Recomposed as a narrative by M7-W179
+ *
+ * `docs/superpowers/briefs/2026-08-07-substrate-workflow.md` is the mapping table this port was
+ * gated on. Read that before porting a level, not this docstring.
+ *
+ * **The reading order is the change.** This screen rendered a status list: a banner saying how the
+ * run ended, then a card containing eight nodes. It now reads as an investigation — what arrived,
+ * what happened in order with each node's evidence attached to it, and how it ended **at the point
+ * where it ended**. On an abandoned run that last part is the whole of it: the reason sits under the
+ * evidence of the node that failed and over the nodes reading "the run ended before the graph got
+ * here", instead of in a banner four screens above them.
+ *
+ * **Two of the direction's asks are not in this payload and neither is invented.** There is no
+ * per-node elapsed time anywhere in a checkpoint this route reads (B123), and a superseded
+ * generation is not reachable from it (B124) — `GET /api/workflows/{finding_id}` answers with the
+ * newest thread only. The rail says how many generations there are and where the others are listed,
+ * which is what the payload supports, and the opening entry says plainly that the sequence carries
+ * no times.
  */
 
+import type { ReactNode } from "react"
 import { Link, useParams } from "react-router"
 
 import { NotFoundError } from "@/api/errors"
 import { WORKFLOW_POLL_MS, isRunTerminal, useWorkflow } from "@/api/queries"
+import type { WorkflowState } from "@/api/types"
+import { type Fact, FactList } from "@/components/fact-list"
+import { Skeleton } from "@/components/skeleton"
 import { ErrorState, LoadingState, NotFoundState } from "@/components/states"
-import { Formatted } from "@/components/status"
+import { Absent, Formatted } from "@/components/status"
 import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { NodeSequence } from "@/features/workflows/node-sequence"
 import { RunOutcome, type BelowThisPanel } from "@/features/workflows/run-outcome"
 import { Breadcrumbs } from "@/layouts/breadcrumbs"
+import { PageHeader } from "@/layouts/page-header"
 import { UnknownRoute } from "@/layouts/unknown-route"
 import { formatTimestamp } from "@/lib/format"
+import { routeQuestion } from "@/lib/routes"
+
+/** This screen's own entry in the registry, so `PageHeader` renders the registry's sentence. */
+const ROUTE_PATH = "/findings/:findingId/workflow"
 
 export function WorkflowPage() {
   // The identifier comes out of the URL, so it is checked before a request is made for it.
@@ -80,18 +107,120 @@ function StaleBanner({
 }
 
 /**
- * What `RunOutcome` may say about this screen, which renders all eight nodes as a sequence.
+ * What `RunOutcome` may say about this screen, which renders all eight nodes as a narrative.
  * The panel does not know that; this page does.
+ *
+ * Three of these named a position that has moved. The outcome is no longer above the sequence, so
+ * nothing is "below" it in the sense these were written for — and the `abandoned` sentence gains
+ * what the old arrangement could not carry, because there was no *where* for the outcome to be
+ * relative to. The `opened` sentence is untouched: "under `open_pr`" names a heading.
  */
 const BELOW: BelowThisPanel = {
-  inFlight: `The sequence below is the last state the checkpointer recorded, re-read every ${WORKFLOW_POLL_MS / 1000} seconds until the run finishes.`,
-  abandoned: "The attempt is still below in full, with everything each node produced.",
+  inFlight: `Every entry here is the last state the checkpointer recorded, re-read every ${WORKFLOW_POLL_MS / 1000} seconds until the run finishes.`,
+  abandoned:
+    "The attempt is still here in full: the entries above this one are what ran, with everything each node produced, and any entry after it is a node the run never reached.",
   opened: (
     <>
       The pull request is under <code>open_pr</code>.
     </>
   ),
-  unrecognised: "The sequence below is still what the run produced.",
+  unrecognised: "The entries here are still what the run produced.",
+}
+
+/**
+ * The narrative's opening entry: what arrived, and what this screen can and cannot see about it.
+ *
+ * Every sentence but the third was already on this screen — the checkpointer-is-a-different-database
+ * paragraph from the foot of the page, and the two sentences from the description of the card the
+ * sequence used to sit inside. They are here because this is where a reader meets them before
+ * reading anything they qualify, rather than after.
+ */
+function Arrival({ findingId }: { findingId: string }) {
+  return (
+    <>
+      <h3 className="text-emphasis">What arrived</h3>
+      <div className="mt-row flex max-w-prose flex-col gap-row text-body text-muted-foreground">
+        <p>A finding arrived from the API Dependency Graph, and this run is what Sync did about it.</p>
+        <p>
+          Read from the checkpointer, which is a different database from the API Dependency
+          Graph — this screen carries no indexing timestamp and no binding rung for that reason.{" "}
+          <Link
+            to={`/findings/${encodeURIComponent(findingId)}`}
+            className="underline underline-offset-2"
+          >
+            The finding itself
+          </Link>{" "}
+          carries both.
+        </p>
+        <p>
+          It carries no clock either. A checkpoint records what a node produced and not when it
+          produced it, so no entry below says when it ran or how long it took.
+        </p>
+        <p>
+          The entries below are the remediation graph's own order, with the evidence each node
+          produced. A node marked due after it has already run is a retry the graph owes another
+          visit, not a finished step — the loop is real and this view does not hide it.
+        </p>
+      </div>
+    </>
+  )
+}
+
+/**
+ * The run's own facts, in the rail beside the narrative.
+ *
+ * Three states per fact and they are three different claims, the same three every ported detail
+ * level spells: a `Skeleton` says the query is in flight, `<Absent>` says it failed, and a value is
+ * a value. The finding is answered by the URL rather than by the query, so it never wears either.
+ *
+ * There is no Outcome row here on purpose. The outcome is the narrative's closing entry, where it
+ * carries its reason and its position; a word for it in the rail as well would be the same fact at
+ * two weights, which is the defect the Fleet port's ruling 2 named.
+ */
+function runFacts(data: WorkflowState | undefined, failure: ReactNode | null, findingId: string): Fact[] {
+  function fact(width: string, render: (state: WorkflowState) => ReactNode): ReactNode {
+    if (data !== undefined) return render(data)
+    if (failure !== null) return failure
+    return <Skeleton width={width} />
+  }
+
+  return [
+    {
+      label: "Finding",
+      value: (
+        <Link
+          to={`/findings/${encodeURIComponent(findingId)}`}
+          className="font-mono break-words underline underline-offset-2"
+        >
+          {findingId}
+        </Link>
+      ),
+    },
+    {
+      label: "Run",
+      value: fact("w-40", (state) => (
+        <span className="font-mono break-words">{state.thread_id}</span>
+      )),
+    },
+    {
+      label: "Generations",
+      value: fact("w-12", (state) => (
+        <div className="flex flex-col gap-field">
+          <span className="font-mono">{state.generation_count}</span>
+          {state.generation_count > 1 && (
+            <span className="text-meta text-ink-muted">
+              This is the most recent of {state.generation_count} runs the checkpointer holds for
+              this finding.{" "}
+              <Link to="/" className="underline underline-offset-2">
+                The fleet screen
+              </Link>{" "}
+              lists every one.
+            </span>
+          )}
+        </div>
+      )),
+    },
+  ]
 }
 
 function Workflow({ findingId }: { findingId: string }) {
@@ -99,75 +228,36 @@ function Workflow({ findingId }: { findingId: string }) {
   const data = query.data
   const terminal = isRunTerminal(data)
 
+  // Short, because the content column carries the same answer in full: two rows spelling out that
+  // state's whole sentence would be one fact written three times. Each still says which nothing it is.
+  const failure = query.isError ? (
+    query.error instanceof NotFoundError ? (
+      <Absent>no run for this finding</Absent>
+    ) : (
+      <Absent>the API did not answer</Absent>
+    )
+  ) : null
+
   return (
-    <section className="flex flex-col gap-8">
-      <Breadcrumbs
-        trail={[
-          { label: "Fleet", to: "/" },
-          { label: findingId, to: `/findings/${encodeURIComponent(findingId)}` },
-          { label: "Solution workflow" },
-        ]}
-      />
-      <h1 className="font-mono text-page">{findingId} — solution workflow</h1>
-
-      {query.isPending && <LoadingState what={`the run for finding ${findingId}`} />}
-
-      {data === undefined &&
-        query.isError &&
-        (query.error instanceof NotFoundError ? (
-          <div className="flex flex-col items-start gap-section">
-            <NotFoundState
-              headline="No remediation run for this finding."
-              detail="The API answered, and the checkpointer holds no run under this identifier. Either remediation has not been started for this finding, or it has never been started for any finding on this database. This is an answer about the run, not a failure of the console — a finding can be perfectly real and have no attempt against it yet."
-              identifier={query.error.identifier}
+    <div className="grid items-start gap-8 lg:grid-cols-[minmax(0,22.5rem)_minmax(0,1fr)]">
+      <div className="flex min-w-0 flex-col gap-section">
+        <PageHeader
+          trail={
+            <Breadcrumbs
+              trail={[
+                { label: "Fleet", to: "/" },
+                { label: findingId, to: `/findings/${encodeURIComponent(findingId)}` },
+                { label: "Solution workflow" },
+              ]}
             />
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={query.isFetching}
-              onClick={() => void query.refetch()}
-            >
-              {query.isFetching ? "Asking…" : "Check again"}
-            </Button>
-          </div>
-        ) : (
-          <ErrorState error={query.error} what={`the run for finding ${findingId}`} />
-        ))}
+          }
+          title={<span className="font-mono">{findingId}</span>}
+          question={routeQuestion(ROUTE_PATH)}
+        />
+        <FactList facts={runFacts(data, failure, findingId)} />
 
-      {data !== undefined && (
-        <>
-          {query.isError && (
-            <StaleBanner
-              fetchedAt={query.dataUpdatedAt}
-              live={!terminal}
-              isFetching={query.isFetching}
-              onRetry={() => void query.refetch()}
-            />
-          )}
-
-          <p className="max-w-prose text-meta text-ink-muted">
-            Run <span className="font-mono">{data.thread_id}</span>
-            {data.generation_count > 1 && (
-              <>
-                {" — the most recent of "}
-                {data.generation_count}
-                {" runs the checkpointer holds for this finding. "}
-                <Link to="/" className="underline underline-offset-2">
-                  The fleet screen
-                </Link>
-                {" lists every one."}
-              </>
-            )}
-          </p>
-
-          <RunOutcome
-            outcome={data.outcome}
-            abandonReason={data.abandon_reason}
-            reportReason={data.report_reason}
-            below={BELOW}
-          />
-
-          <p className="max-w-prose text-body text-muted-foreground">
+        {data !== undefined && (
+          <p className="text-body text-muted-foreground">
             <Link
               to={`/findings/${encodeURIComponent(findingId)}/workflow/pull-request`}
               className="underline underline-offset-2"
@@ -179,39 +269,64 @@ function Workflow({ findingId }: { findingId: string }) {
                 ? "See the pull request's evidence bundle"
                 : "See the evidence bundle for this run"}
             </Link>{" "}
-            — the five nodes below that answer whether this run earned a merge, at their own
-            address a reviewer can send on.
+            — the five nodes that answer whether this run earned a merge, at their own address a
+            reviewer can send on.
           </p>
+        )}
+      </div>
 
-          <Card>
-            <CardHeader>
-              <CardTitle>The run, node by node</CardTitle>
-              <CardDescription>
-                The remediation graph's own order, with the evidence each node produced. A
-                node marked due after it has already run is a retry the graph owes another
-                visit, not a finished step — the loop is real and this view does not hide
-                it.
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <NodeSequence nodes={data.nodes} />
-            </CardContent>
-          </Card>
+      <div className="flex min-w-0 flex-col gap-8">
+        {query.isPending && <LoadingState what={`the run for finding ${findingId}`} />}
 
-          <p className="max-w-prose text-body text-muted-foreground">
-            Read from the checkpointer, which is a different database from the API
-            Dependency Graph — this screen carries no indexing timestamp and no binding rung
-            for that reason.{" "}
-            <Link
-              to={`/findings/${encodeURIComponent(findingId)}`}
-              className="underline underline-offset-2"
-            >
-              The finding itself
-            </Link>{" "}
-            carries both.
-          </p>
-        </>
-      )}
-    </section>
+        {data === undefined &&
+          query.isError &&
+          (query.error instanceof NotFoundError ? (
+            <div className="flex flex-col items-start gap-section">
+              <NotFoundState
+                headline="No remediation run for this finding."
+                detail="The API answered, and the checkpointer holds no run under this identifier. Either remediation has not been started for this finding, or it has never been started for any finding on this database. This is an answer about the run, not a failure of the console — a finding can be perfectly real and have no attempt against it yet."
+                identifier={query.error.identifier}
+              />
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={query.isFetching}
+                onClick={() => void query.refetch()}
+              >
+                {query.isFetching ? "Asking…" : "Check again"}
+              </Button>
+            </div>
+          ) : (
+            <ErrorState error={query.error} what={`the run for finding ${findingId}`} />
+          ))}
+
+        {data !== undefined && (
+          <>
+            {query.isError && (
+              <StaleBanner
+                fetchedAt={query.dataUpdatedAt}
+                live={!terminal}
+                isFetching={query.isFetching}
+                onRetry={() => void query.refetch()}
+              />
+            )}
+
+            <NodeSequence
+              nodes={data.nodes}
+              opening={<Arrival findingId={findingId} />}
+              closing={
+                <RunOutcome
+                  outcome={data.outcome}
+                  abandonReason={data.abandon_reason}
+                  reportReason={data.report_reason}
+                  below={BELOW}
+                  frame="entry"
+                />
+              }
+            />
+          </>
+        )}
+      </div>
+    </div>
   )
 }
