@@ -62,6 +62,19 @@ def _seconds(started: str | None, completed: str | None) -> float | None:
     return (end - start).total_seconds()
 
 
+def never_acquired(job: dict) -> bool:
+    """True when a job recorded a start and an end without a runner ever picking it up.
+
+    Zero steps alone is not that fact. `CI-W167` put coverage behind an event condition, so on a
+    push or a pull request the job is **skipped** — deliberate, correct, and also stepless. Counting
+    it as an allocation failure would make the B112 alarm climb on every healthy run, and an alarm
+    that always rises stops a tick for a reason that is not real.
+    """
+    if job.get("steps"):
+        return False
+    return job.get("conclusion") != "skipped"
+
+
 def collect(run_count: int) -> dict[str, object]:
     runs = _gh_json(f"repos/{REPO}/actions/runs?per_page={run_count}")
     assert isinstance(runs, dict)
@@ -70,6 +83,7 @@ def collect(run_count: int) -> dict[str, object]:
     step_durations: dict[tuple[str, str], list[float]] = defaultdict(list)
     critical_path: list[float] = []
     zero_step_jobs = 0
+    skipped_jobs = 0
     measured_runs = 0
 
     for run in runs["workflow_runs"][:run_count]:
@@ -81,7 +95,10 @@ def collect(run_count: int) -> dict[str, object]:
         for job in jobs["jobs"]:
             steps = job.get("steps") or []
             if not steps:
-                zero_step_jobs += 1
+                if never_acquired(job):
+                    zero_step_jobs += 1
+                else:
+                    skipped_jobs += 1
                 continue
             if job.get("conclusion") != "success":
                 continue
@@ -108,6 +125,7 @@ def collect(run_count: int) -> dict[str, object]:
         "steps": step_durations,
         "critical_path": critical_path,
         "zero_step_jobs": zero_step_jobs,
+        "skipped_jobs": skipped_jobs,
         "measured_runs": measured_runs,
         "requested_runs": run_count,
     }
@@ -128,9 +146,11 @@ def render(data: dict[str, object]) -> str:
         "",
         f"Measured over the last {data['requested_runs']} workflow runs, of which "
         f"**{data['measured_runs']}** contributed at least one successful job. "
-        f"**{data['zero_step_jobs']} jobs ran zero steps** — a job that records a start and an end "
-        "without running a step was never acquired by a runner, and its elapsed time is not a "
-        "duration.",
+        f"**{data['zero_step_jobs']} jobs were never acquired by a runner** — a start and an end "
+        "with no step between them, whose elapsed time is not a duration. A rising count is B112. "
+        f"A further **{data['skipped_jobs']}** were *skipped*, which is also stepless and is not a "
+        "failure: `coverage` runs only on the nightly schedule as of CI-W167, so every push and "
+        "pull request skips it by design.",
         "",
         f"**Critical path, median: {_median(critical):.0f}s.** Jobs run concurrently, so a run "
         "costs its slowest job rather than the sum of them; shortening anything else buys nothing.",
