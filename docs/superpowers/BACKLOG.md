@@ -2421,7 +2421,13 @@ shortening a protected sentence. The likely route is progressive disclosure on t
 which is Task 7 of `plans/2026-08-05-sync-console-architecture.md` and unstarted - so this entry is a
 caller for that task rather than a new piece of work.
 
-### B122 - The Finding level cannot name its own severity, repository or call site, because the route drops them
+### B127 - The Finding level cannot name its own severity, repository or call site, because the route drops them
+
+**Renumbered from B122 on 2026-08-07.** Two sessions share this register and both took 122; the entry
+that merged first keeps the number, checked by reachability rather than recalled - `6f0d7a1` reached
+`main` at 00:50 UTC through PR #2, this one was committed at 10:30. **`19c70d7` and any commit around
+it carry `B122` in their text**, which is left alone: rewriting pushed history to correct a label is
+worse than the label.
 
 `GET /api/findings/{finding_id}` reads a `_risk_row` through `GraphSurface.finding_by_id` and forwards
 exactly two of its fields - `finding_id` and `binding_source` - merged onto `explain_call_site`'s
@@ -2546,3 +2552,37 @@ will not.
 **Closes when:** `workflow_state` returns the run's repository alongside `thread_id`, the Pull
 Request level renders it as a rail row linking to that repository's Codebase screen, and the URL
 boundary check is one function in `lib/` that both features import.
+
+### B126 - `abandon_reason` is free text, so the claim that abandonment is queryable is weaker than it reads
+
+`docs/superpowers/specs/2026-07-27-sync-pipeline-discipline.md` states that abandoned runs are data
+and that `abandon_reason` stays queryable, because *"abandoned attempts are where routing learns
+which change kinds are not mechanically safe"*. `M12-W196` built the first query that reads them
+back and found the field is **diagnostics prose, not a coded vocabulary**.
+
+So the aggregate tallies whatever strings occurred. You can count two identical sentences; you
+cannot group two spellings of one cause, and you cannot ask "how often did tier 2 abandon because
+the compiler never recovered" without matching substrings. A vocabulary is exactly what the spec's
+own argument needs and exactly what does not exist.
+
+**This is the shape `.claude/rules/interface-originality.md` already names as adoptable** - *"a
+reason for giving up should be a closed set of codes rather than free text, because free text cannot
+be aggregated and a promise to learn from failures needs a schema that can answer the question."*
+The shape transfers; the values are ours to derive from routing predicates rather than borrowed.
+
+**What this is not.** It is not a case for deleting the prose. The sentence an operator reads is
+what makes an abandonment reviewable, and `RunState.diagnostics` exists precisely because the
+operator's one line and the next attempt's feedback are different audiences. The fix is a **coded
+reason beside the prose**, not instead of it.
+
+**Closes when:** a run writes a code from a closed set alongside its diagnostics, the set is
+declared in one place, and the abandonment aggregate groups by the code. **Do not invent the
+vocabulary from the outside** - derive it from the abandonment paths that actually exist in
+`sync.remediate.nodes`, and record the ones observed but not yet coded rather than forcing them into
+a bucket.
+
+**Measured 2026-08-07 and worth stating before anyone plans against it:** the corpus holds **4**
+`migration_outcome` rows across 3 `(change_kind, tier)` groups, with **one** abandonment. There is
+no signal to learn from yet whatever the schema does, so this ranks behind getting attempts on the
+board.
+
