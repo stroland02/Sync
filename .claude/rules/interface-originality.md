@@ -89,6 +89,19 @@ If a proposed change cannot be justified without pointing at a competitor's scre
 justified. Delete the pointer and make the argument from the graph, the operator, and the product
 position — or drop the change.
 
+## The Supabase carve-out (owner-authorized, 2026-08-06)
+
+`specs/2026-08-06-sync-console-supabase-substrate-design.md` records the owner's ruling: Supabase's
+component code (`github.com/supabase/supabase`, Apache-2.0) is adopted at code level as the
+console's foundation — vendored nearly verbatim under `web/src/vendor/supabase/`, with attribution
+in `web/NOTICE`. For this one source, "a component's appearance" and "a component built by looking
+at a screenshot" are no longer refusals; the code itself is taken.
+
+The carve-out does not touch the rest of this rule. Identity elements stay excluded — the Supabase
+wordmark, logo, identifying iconography, marketing and product copy. Every other reference is
+governed exactly as before. And no vendored component may assert a claim our data cannot support:
+a slot for a confidence score renders the rung instead, per the spec's section 6.
+
 ## The reason this is not merely legal caution
 
 Sync's position is that competing tools present a black box and a result, and ask a reviewer to

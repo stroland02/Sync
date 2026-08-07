@@ -374,6 +374,15 @@ A label that disappears visually must not disappear semantically: the collapsed 
 accessible name and gains a tooltip. This is the same rule the console already applies to the rung
 badge, which is monochrome on screen and carries `describeRung` in its title.
 
+### Reversed by the owner, 2026-08-06
+
+Entry 6 chose one sidebar at two widths and the chassis (M7-W160) built it. Choosing the Supabase
+substrate, the owner ruled for Supabase's arrangement instead: a 40px icon rail for areas plus a
+contextual sidebar for the level you are inside. The mechanical test in this entry — an icon must
+not move vertically on collapse — now applies within the rail alone. The entry above stays as
+written because it records what the screenshots showed; this amendment records that the target
+changed. `specs/2026-08-06-sync-console-supabase-substrate-design.md` §4 carries the new shape.
+
 ---
 
 ## Correction to the measurement in this file (2026-08-06)

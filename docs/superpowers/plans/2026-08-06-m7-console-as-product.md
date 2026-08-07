@@ -1,6 +1,12 @@
 # M7 — the console becomes a product
 
 **Status:** approved 2026-08-06, in execution on branch `console-identity`.
+
+**Amended 2026-08-06 by `specs/2026-08-06-sync-console-supabase-substrate-design.md` (M7-W165):**
+Phase 1's "no component is copied" is superseded — Supabase's components are vendored wholesale
+under an owner-authorized carve-out. Phase 2's chassis is rebuilt two-tier. Phases 4–5 continue on
+the vendored substrate; each remaining level port follows the spec's §10 mapping-table gate.
+
 **Root cause this milestone answers:** `reports/2026-08-06-why-the-console-came-out-flat.md`.
 **The owner's direction:** `references/direction/NOTES.md`, five examples with mappings.
 
