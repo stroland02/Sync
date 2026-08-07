@@ -62,7 +62,6 @@ import { ObservedCallsTable } from "@/features/telemetry/observed-calls-table"
 import { ObservedShapesTable } from "@/features/telemetry/observed-shapes-table"
 import { IndexCoverageCard } from "@/features/repositories/index-coverage-card"
 import { OpenFindingsCard } from "@/features/repositories/open-findings-card"
-import { Breadcrumbs } from "@/layouts/breadcrumbs"
 import { ControlBar } from "@/layouts/control-bar"
 import { FooterBar } from "@/layouts/footer-bar"
 import { PageHeader } from "@/layouts/page-header"
@@ -259,10 +258,12 @@ export function CodebasePage() {
 function PageHeaderRegion({ repoId }: { repoId: string }) {
   return (
     <div className="flex flex-col gap-section">
+      {/* No trail. Fleet and the repository are both segments the top bar's scope trail derives
+          from this same address, so a breadcrumb here repeated all of it 90px lower — M7-W195,
+          Task 1's review finding 1. `layouts/scope-switchers.tsx` carries what the bar reaches. */}
       <PageHeader
         title={<span className="font-mono">{repoId}</span>}
         question={routeQuestion("/repositories/:repoId")}
-        trail={<Breadcrumbs trail={[{ label: "Fleet", to: "/" }, { label: repoId }]} />}
       />
       <ControlBar
         action={

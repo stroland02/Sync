@@ -17,11 +17,18 @@
  * cannot see. Drawing the trail from the list would blank the bar on exactly that screen. It also
  * means a switcher never waits on a fetch to say where you are.
  *
- * **The trail stops at the vendor.** A finding's vendor is in the payload, not in the address, so
- * carrying the trail deeper would mean this bar issuing a query per route to restate an answer the
- * page below it already has. `layouts/breadcrumbs.tsx` keeps the full in-page path, including its
- * own root: a breadcrumb that started mid-hierarchy would no longer be one, and the scope trail and
- * the breadcrumb are two derivations with two jobs rather than one fact written twice.
+ * **The trail stops at the vendor**, and that boundary is now what the pages below it are trimmed
+ * against. A finding's vendor is in the payload, not in the address, so carrying the trail deeper
+ * would mean this bar issuing a query per route to restate an answer the page below it already has.
+ *
+ * This docstring used to say that `layouts/breadcrumbs.tsx` kept the full in-page path, root
+ * included, and that the two derivations therefore did two jobs. **It did not.** Measured on the
+ * five list routes: the page's own breadcrumb repeated Fleet, the repository and the vendor about
+ * 90px under the bar that had just drawn them — one fact written twice, which was Task 1's review
+ * finding 1. M7-W195 trimmed exactly the three segments this bar owns and left everything deeper:
+ * `/detectors` and the Signals level keep their level name, the binding surface keeps its
+ * operation, and the vendor and repository routes render no trail at all because the bar reaches
+ * every segment they had.
  *
  * **Fleet is a link and not a switcher.** There is one fleet. A chevron opening a popover with a
  * single entry is the invented furniture the gap report refused on the right-hand side of this same

@@ -36,20 +36,35 @@
  * deliberately gains none, because `vendor_change` rows are at-least-once and a count of them is
  * not a measurement.
  *
- * **No page-level `ControlBar`, and the chassis is complete without one.** The bar is already on
- * this screen: the findings panel has held severity, path and ordering since the filters landed.
- * A second bar could only carry the scope, and the scope is already stated by the fact list and by
- * the paragraph beside it — a third copy is a fact that will disagree with itself. The action slot
- * stays empty because the one candidate, detector attribution, is scoped by repository and not by
- * vendor, so offering it here would silently widen the scope this page is about.
+ * ## The control bar arrives in M7-W195, and it carries no scope
+ *
+ * M7-W174 refused a page-level bar here, and the refusal was about scope: a bar could only restate
+ * what the fact list and the paragraph beside it already say, and a third copy is a fact that will
+ * disagree with itself. **That still holds and this bar carries no scope.** What it carries is the
+ * three narrowings that were sitting inside the findings panel's body at `y=469-585`, under a
+ * heading, a figure and a caption — `reports/2026-08-07-console-fidelity-gaps.md` Surface 3 row 3
+ * measured that position, and `briefs/2026-08-07-substrate-fidelity-task-4.md` is the inventory the
+ * move was gated on.
+ *
+ * The bar states what those three narrow, because this screen has two tables and they reach one.
+ * The action slot stays empty for the reason it always did: the one candidate, detector
+ * attribution, is scoped by repository and not by vendor, so offering it here would silently widen
+ * the scope this page is about.
+ *
+ * **The breadcrumb is gone rather than shortened.** The top bar landed in M7-W183 and renders
+ * Fleet, then the repository, then the vendor, derived from this same address — every segment this
+ * page's own trail held. `layouts/scope-switchers.tsx` carries what the bar reaches; a trail that
+ * repeated all of it 90px lower was the same fact drawn twice, which is Task 1's review finding 1.
  */
 
 import { useParams, useSearchParams } from "react-router"
 
 import { FactList } from "@/components/fact-list"
 import { VendorChangesCard } from "@/features/vendors/vendor-changes-table"
-import { VendorFindingsCard } from "@/features/vendors/vendor-findings-table"
-import { Breadcrumbs } from "@/layouts/breadcrumbs"
+import {
+  VendorFindingsCard,
+  VendorFindingsControls,
+} from "@/features/vendors/vendor-findings-table"
 import { PageHeader } from "@/layouts/page-header"
 import { UnknownRoute } from "@/layouts/unknown-route"
 import { routeQuestion } from "@/lib/routes"
@@ -73,19 +88,6 @@ export function VendorPage() {
       <div className="grid items-start gap-8 lg:grid-cols-[minmax(0,1fr)_minmax(0,22rem)]">
         <div className="flex min-w-0 flex-col gap-section">
           <PageHeader
-            trail={
-              <Breadcrumbs
-                trail={
-                  repoId === null
-                    ? [{ label: "Fleet", to: "/" }, { label: vendorId }]
-                    : [
-                        { label: "Fleet", to: "/" },
-                        { label: repoId, to: `/repositories/${encodeURIComponent(repoId)}` },
-                        { label: vendorId },
-                      ]
-                }
-              />
-            }
             title={<span className="font-mono">{vendorId}</span>}
             question={routeQuestion(ROUTE_PATH)}
           />
@@ -127,6 +129,11 @@ export function VendorPage() {
           ]}
         />
       </div>
+
+      {/* The bar itself is composed inside `VendorFindingsControls`, beside the state it sets and
+          the sentence saying which of the two tables below it reaches. A page that assembled the
+          bar here would hold the composition in one file and the meaning in another. */}
+      <VendorFindingsControls vendorId={vendorId} repoId={repoId} />
 
       {/* Both panels take the full width. Six columns each, and the widest cell on the screen is a
           call-site path from a customer repository — halving either wraps every row, which is the

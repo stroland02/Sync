@@ -130,15 +130,10 @@ function SignalsDetail({ repoId }: { repoId: string }) {
       <PageHeader
         title={<span className="font-mono">{repoId}</span>}
         question={routeQuestion(ROUTE_PATH)}
-        trail={
-          <Breadcrumbs
-            trail={[
-              { label: "Fleet", to: "/" },
-              { label: repoId, to: `/repositories/${encodeURIComponent(repoId)}` },
-              { label: "Signals" },
-            ]}
-          />
-        }
+        // Fleet and the repository are the top bar's, derived from this same address. "Signals"
+        // stays: it is the level, the bar's trail stops at the vendor, and this page's title is
+        // the repository id rather than the level name. M7-W195.
+        trail={<Breadcrumbs trail={[{ label: "Signals" }]} />}
       />
 
       {/* The two sentences beside one another rather than stacked: the first says what the screen

@@ -6,8 +6,13 @@
  * be attributable to the rung that produced it, and a detector whose findings mix rungs is
  * making more than one kind of claim under a single name. It is never hidden and never coloured.
  *
- * No metric figure: the fact rail's fourth tile already names how many detectors have open
- * findings, and the count stays in this panel's own name.
+ * No metric figure: the fact rail's fourth tile already names how many detectors have open findings.
+ *
+ * **The panel's name used to carry that count a third time**, reading `4 detectors with open
+ * findings` over a cardinality sentence that read `This is all 4 detectors.` — the `h2` the gap
+ * report measured on a screen with no footer under any of its rows. The heading is the section's
+ * name now and the count sits under the rows it counts;
+ * `2026-08-07-substrate-fidelity-task-4.md` carries why that footer takes no pager.
  */
 
 import { useDetectors } from "@/api/queries"
@@ -23,6 +28,7 @@ import {
 import { MetricPanel } from "@/components/metric-panel"
 import { EmptyState, ErrorState, LoadingState } from "@/components/states"
 import { CardinalityStatement, describeCardinality, sliceForDisplay } from "@/features/fleet/cardinality"
+import { FooterBar } from "@/layouts/footer-bar"
 
 function summariseTally(tally: Tally): string {
   return Object.entries(tally)
@@ -45,9 +51,7 @@ export function DetectorsSummaryCard() {
 
       {query.isSuccess && (
         <MetricPanel
-          label={`${query.data.detectors.length} ${
-            query.data.detectors.length === 1 ? "detector" : "detectors"
-          } with open findings`}
+          label="Detectors with open findings"
           caption={
             <p className="max-w-prose">
               {/* The link to the Detectors level was here, mid-sentence. M7-W163 moved it to the
@@ -67,14 +71,6 @@ export function DetectorsSummaryCard() {
             />
           ) : (
             <>
-              <CardinalityStatement
-                text={describeCardinality(
-                  query.data.detectors.length,
-                  "detector",
-                  "detectors",
-                  "open finding count, descending",
-                )}
-              />
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -97,6 +93,18 @@ export function DetectorsSummaryCard() {
                   ))}
                 </TableBody>
               </Table>
+              <FooterBar
+                left={
+                  <CardinalityStatement
+                    text={describeCardinality(
+                      query.data.detectors.length,
+                      "detector",
+                      "detectors",
+                      "open finding count, descending",
+                    )}
+                  />
+                }
+              />
             </>
           )}
         </MetricPanel>
