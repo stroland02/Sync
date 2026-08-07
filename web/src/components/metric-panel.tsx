@@ -29,9 +29,17 @@
  * page: `PageHeader`'s `h1`, then a panel, then whatever a panel's own body headings are —
  * `corpus-summary.tsx`'s three tally headings are `h3` and are contained by their panel, so a
  * panel at `h3` would put a container and its contents on one outline level and leave the document
- * with no `h2` at all. The register is unaffected: a panel name is scanned rather than read, so it
- * takes the furniture treatment whatever element carries it. Screen-reader outline and visual
- * weight are two different decisions and this is the file where they stop being confused.
+ * with no `h2` at all. Screen-reader outline and visual weight are two different decisions and this
+ * is the file where they stop being confused.
+ *
+ * **The title takes `--text-section`, and until M7-W188 it took the furniture register.** The
+ * argument for furniture was that a panel name is scanned rather than read. It is — but so is a
+ * table column header, and the two rendered at the same 12px uppercase step, inside the panel and
+ * on its header, with nothing between them saying which contained which. A panel heads a region a
+ * reader enters; a column header names the values under it. `DESIGN.md`'s *Type* section carries
+ * that boundary and `tests/test_console_design_tokens.py` holds this heading to the section side
+ * of it. The display step stays `PageHeader`'s alone: this is the step between the two, not a
+ * second focal point.
  */
 
 import type { ReactNode } from "react"
@@ -50,7 +58,7 @@ export function MetricPanel({
   children,
   className,
 }: {
-  /** Scanned, not read. The panel's name in the furniture register. */
+  /** The section's name, at `--text-section`. It heads everything below it in this panel. */
   label: ReactNode
   /**
    * The panel's own figure and what it counts. Omitted when the fact rail already carries this
@@ -67,7 +75,7 @@ export function MetricPanel({
   return (
     <Card className={cn("flex min-w-0 flex-col", className)}>
       <CardHeader>
-        <h2 className="furniture text-meta text-ink-muted">{label}</h2>
+        <h2 className="text-section">{label}</h2>
         {metric !== undefined && (
           <p className="flex flex-wrap items-baseline gap-row">
             <span className="text-figure text-foreground">{metric.value}</span>

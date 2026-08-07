@@ -103,11 +103,12 @@ function RoleGroup({ role, children }: { role: SignalRole; children: ReactNode }
   return (
     <div className="flex min-w-0 flex-col gap-section">
       <div className="flex flex-col gap-field">
-        {/* The role name stays at `--text-section` while the panels beneath it take the furniture
-            register. A role group contains panels, so levelling the two would render a container
-            and its contents at one weight. */}
+        {/* A role group contains panels, so the two cannot share a step: levelling them renders a
+            container and its contents at one weight. The role name was `--text-section` while a
+            panel heading was furniture; M7-W188 moved the panel heading onto the section step, so
+            the role name moves up to `--text-page` to keep the ordering it always had. */}
         <div className="flex flex-wrap items-center gap-row">
-          <h2 className="text-section">{role.role}</h2>
+          <h2 className="text-page">{role.role}</h2>
           <AttachmentChip attached={role.source !== null} />
         </div>
         <p className="max-w-prose text-body text-muted-foreground">{role.relationship}</p>

@@ -1522,3 +1522,92 @@ def test_the_raw_animate_guard_sees_a_utility_named_only_in_a_comment(tmp_path: 
 
     assert _keyframe_violations(tmp_path) == []
     assert _raw_animate_violations(tmp_path), "the raw guard missed what the stripped one cannot see"
+
+
+# -- assertion 14: the section step reaches the panel heading -------------------------------------
+#
+# The mirror of assertion 11, failing for the opposite reason. That guard caps the display step at
+# one consumer, because two focal points on a screen is none. This one requires the *section* step
+# to be spent at all, because a step declared and never reached is a ramp with a hole in the middle
+# of it.
+#
+# `docs/superpowers/reports/2026-08-07-console-fidelity-gaps.md` measured the rendered census across
+# seven routes -- 46 / 28 / 18 / 15 / 13 / 12 -- and found 18px on exactly one heading in the whole
+# application, with almost every other `h2` and `h3` at 12px uppercase furniture. That is the same
+# size a table column header renders at, so a panel's name and the name of a column inside it were
+# one register, and every route read as a single display-size title over an undifferentiated field.
+#
+# The guard is anchored on `components/metric-panel.tsx` rather than on a count across `features/`,
+# because the panel is the component every level's sections are actually built from -- one class
+# there is roughly forty renderings on nine routes, and a count would pass just as happily on forty
+# screens each hand-spelling their own heading. A screen that composes a section some other way is
+# deliberately not covered here.
+
+_SECTION_CLASS = re.compile(r"(?<![\w-])text-section(?![\w-])")
+_FURNITURE_CLASS = re.compile(r"(?<![\w-])(?:furniture|text-meta)(?![\w-])")
+
+
+def _panel_title_classes(text: str | None = None) -> str:
+    """The class string `components/metric-panel.tsx` sets on the panel's own title.
+
+    Anchored on the heading element rather than on the module's text, so this is an assertion
+    about the register that heading renders in and not about the word `text-section` appearing
+    somewhere in the file.
+    """
+    if text is None:
+        path = _WEB_SRC / "components" / "metric-panel.tsx"
+        assert path.is_file(), f"{path} is gone -- the panel moved and this guard is blind"
+        text = _read_stripped(path)
+    match = re.search(r"<h2\s+className=\"([^\"]+)\"", text)
+    assert match, "metric-panel.tsx no longer sets a literal class string on its <h2> title"
+    return match.group(1)
+
+
+def test_the_section_step_is_declared_so_a_panel_heading_has_somewhere_to_land():
+    # Read out of the contract for the same reason the display step's own declaration test is:
+    # DESIGN.md's Type table is the authority, and an undeclared `text-section` resolves to
+    # nothing at all rather than failing.
+    steps = _type_line_heights()
+    assert "section" in steps, (
+        "DESIGN.md's Type table no longer declares `--text-section`. It is the step between the "
+        "furniture register and the page title, and without it a panel heading has nowhere to "
+        "land but back on the 12px label register it shares with a table column header."
+    )
+
+
+def test_the_panel_heading_spends_the_section_step():
+    _require_web_src()
+    classes = _panel_title_classes()
+
+    assert _SECTION_CLASS.search(classes), (
+        "`components/metric-panel.tsx`'s `h2` is the console's section heading, on every level "
+        "that has one. It takes `text-section`; the furniture register belongs to what a reader "
+        f"scans rather than enters -- a `dt`, a column header, a rail label.\nFound: {classes!r}"
+    )
+    assert not _FURNITURE_CLASS.search(classes), (
+        "the panel heading carries both the section step and the furniture register. `.furniture` "
+        "is uppercase and open-tracked and `--text-section` is a heading role with its own "
+        f"tracking; the two together are one element in two registers.\nFound: {classes!r}"
+    )
+
+
+# Verbatim what `metric-panel.tsx` carried before M7-W188, so the two halves below are this guard
+# refusing the real defect rather than a fixture invented to be refusable.
+_OLD_PANEL_TITLE = '<h2 className="furniture text-meta text-ink-muted">{label}</h2>'
+
+
+def test_the_panel_heading_guard_rejects_the_furniture_register_that_was_there() -> None:
+    classes = _panel_title_classes(_OLD_PANEL_TITLE)
+
+    assert not _SECTION_CLASS.search(classes)
+    assert _FURNITURE_CLASS.search(classes)
+
+
+def test_the_panel_heading_guard_rejects_a_heading_wearing_both_registers() -> None:
+    # The likelier regression than a straight revert: somebody adds the step and leaves the
+    # uppercase treatment beside it, which renders 18px small-caps -- neither register, and a
+    # substring check for `text-section` alone would wave it through.
+    classes = _panel_title_classes('<h2 className="furniture text-section">{label}</h2>')
+
+    assert _SECTION_CLASS.search(classes)
+    assert _FURNITURE_CLASS.search(classes)

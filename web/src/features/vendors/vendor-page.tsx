@@ -29,8 +29,8 @@
  * `docs/superpowers/briefs/2026-08-07-substrate-api-services.md` is the mapping table this port was
  * gated on. Read that before porting a level, not this docstring.
  *
- * Both sections are now panels: the `h2` that named each is the panel's own name in the furniture
- * register, the paragraph under it is the panel's caption, and both tables take the Studio anatomy
+ * Both sections are now panels: the `h2` that named each is the panel's own name at
+ * `--text-section`, the paragraph under it is the panel's caption, and both tables take the Studio anatomy
  * through `components/data-table.tsx`. The findings panel gains the figure this level never
  * rendered — open findings for this vendor in this scope, before any filter — and the changes panel
  * deliberately gains none, because `vendor_change` rows are at-least-once and a count of them is

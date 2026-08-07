@@ -477,9 +477,9 @@ lands `--text-body` on a 20px line box — the number *Row height* below derives
 |---|---|---|---|---|---|
 | `--text-meta` | 12px | 16px | inherit | normal | labels, timestamps, furniture. **The floor.** |
 | `--text-body` | 13px | 20px | inherit | normal | prose and table cells; rows per screen is the currency |
-| `--text-emphasis` | 15px | 24px | 600 | −0.02em | card titles, panel headlines |
-| `--text-section` | 18px | 28px | 600 | −0.02em | a section heading inside a view |
-| `--text-page` | 22px | 32px | 600 | −0.04em | the `h1` on every view |
+| `--text-emphasis` | 15px | 24px | 600 | −0.02em | a card's own title, inside a repeating grid of them |
+| `--text-section` | 18px | 28px | 600 | −0.02em | a section heading — every `MetricPanel` title |
+| `--text-page` | 22px | 32px | 600 | −0.04em | a heading that groups sections, above `--text-section` |
 | `--text-figure` | 28px | 36px | 600 | −0.04em | stat-tile values only; carries `tabular-nums` |
 | `--text-display` | 46px | 48px | 600 | −0.045em | **the page title, once per route.** Nothing else, ever |
 
@@ -497,6 +497,42 @@ On this ramp the range is **46 / 12 = 3.83**, and the display step is **46 / 13 
 halves of the bar clear — at least 3.4:1 overall and a display step at least 3× body — and the step
 costs no rows, because **exactly one element per route may take it**: the page title in
 `layouts/page-header.tsx`. A second one on a screen is two focal points, which is none.
+
+**The middle of that ramp was declared and never spent, and closing it is an assignment rather
+than a step.** `docs/superpowers/reports/2026-08-07-console-fidelity-gaps.md` read the rendered
+census across seven routes and found six distinct sizes — 46, 28, 18, 15, 13, 12 — with **18px on
+exactly one heading in the whole application**. Almost every other `h2` and `h3` was 12px uppercase
+furniture: Fleet's *Open findings by vendor*, *Runs* and *Repair record*; the repository's *Index
+coverage* and *Observed telemetry*; the finding's *Known changes* and *Provenance*; the pull
+request's *What the compiler said*. So a section's name and the name of a column inside that
+section rendered at one size, in one register, and every route was a display-size title above an
+undifferentiated field of 13 and 12.
+
+**The boundary between the section step and the furniture register is what a heading does, not
+whether it is scanned.** Both are scanned; that is why the distinction was missed. The test:
+
+- **A section heading names a region a reader enters** — a panel with a figure, a caption and the
+  evidence under it. It takes `--text-section`. Every `MetricPanel` title is one, which is where
+  M7-W188 assigned the step: one class in `components/metric-panel.tsx`, roughly forty renderings
+  across all nine routes. `tests/test_console_design_tokens.py` holds it there, and holds it
+  against wearing both registers at once — `.furniture` beside `text-section` is 18px small-caps,
+  which is neither.
+- **A label names a value beside or beneath it** — a `dt`, a table column header, a rail group
+  label, a fact tile's caption, a tally's axis. It stays furniture. Nothing in that list moved.
+
+**`--text-page` is reassigned in the same breath, because the assignment above would otherwise
+collide with it.** Its job read "the `h1` on every view" — untrue since M7-W160 gave the `h1`
+`--text-display`, and 22px appears nowhere in the census above. It is now the step for a heading
+that *groups* sections. There is one such heading in the console: `signals-page.tsx`'s role group,
+which contains panels rather than tables, and whose own comment has always said that a container
+and its contents may not render at one weight. Moving the panel heading to 18px without moving the
+role name to 22px would have broken exactly that. The ordering is what is being held — 22 over 18
+over 12 — not the individual numbers.
+
+**This adds a section step, never a second display step.** A panel heading at 46px would be the
+failure the display step's own rule exists to prevent, and
+`test_exactly_one_component_spends_the_display_step` is deliberately untouched by the assignment
+above.
 
 ### The substrate's own steps, under their own names
 
@@ -553,7 +589,9 @@ open-tracked treatment for graph-level labels, defined once so nothing in the tr
 again. It is a class, not a token — this document's own test says so: two agents rendering a
 graph-level label would both reach for uppercase and open tracking, so there is nothing for them to
 choose differently. It covers **one of `--text-meta`'s two jobs**: a scanned label — a graph-level
-name, a column header, a rung label — takes it; a read value — a timestamp, a count — does not. It
+name, a column header, a rung label — takes it; a read value — a timestamp, a count — does not.
+**Being scanned is necessary and not sufficient**: a section heading is scanned too and takes
+`--text-section` instead, on the boundary the *Type* argument above states. It
 sets `text-transform: uppercase` in CSS rather than in copy, because a screen reader spells out
 letters that are already capitalised in a string. It is deliberately outside the `text-*` namespace:
 `web/src/lib/utils.ts` teaches `tailwind-merge` exactly the seven font-size names above, and an

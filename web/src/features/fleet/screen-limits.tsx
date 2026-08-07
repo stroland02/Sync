@@ -49,12 +49,11 @@ export function ScreenLimitsCard() {
         </p>
       }
     >
-      {/* Each headline sits at `text-emphasis`, which is heavier than the furniture register
-          the panel name above it takes, and that inversion is deliberate rather than a leftover.
-          A panel name is scanned and a standing limit is read, which DESIGN.md assigns as two
-          roles rather than two weights on one scale -- `metric-panel.tsx` states the rule. The
-          failure this guards against is the older one: a limit rendered smaller than the figures
-          it limits reads as a footnote, and a limit nobody reads limits nothing.
+      {/* Each headline sits at `text-emphasis`, one step under the `text-section` the panel name
+          above it takes since M7-W188. It used to be the heavier of the two, when a panel name was
+          furniture; the ordering is now the ordinary one and the reason for the step has not
+          changed. The failure it guards against is the older one: a limit rendered smaller than
+          the figures it limits reads as a footnote, and a limit nobody reads limits nothing.
           `tracking-normal` cancels the heading tracking `text-emphasis` carries from the ramp,
           because four `dt`s in a column are in-row emphasis repeated, not four headings. */}
       {/* One column, not two. M7-W163 moved this panel beside the figures it qualifies rather
