@@ -44,13 +44,7 @@ import { Link } from "react-router"
 import { DEFAULT_LIMIT } from "@/api/client"
 import { useVendorFindings } from "@/api/queries"
 import type { FindingOrder, VendorFindingsPage } from "@/api/types"
-import {
-  ActiveFilters,
-  FacetChips,
-  ControlBar,
-  PrefixFilter,
-  type FacetOption,
-} from "@/components/filters"
+import { ActiveFilters, FacetChips, PrefixFilter, type FacetOption } from "@/components/filters"
 import { OrderChoice } from "@/components/ordering"
 import { PageControls } from "@/components/page-controls"
 import { ProvenanceStrip, RungBadge } from "@/components/provenance"
@@ -64,6 +58,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
+import { ControlBar } from "@/layouts/control-bar"
 import { orAbsent } from "@/lib/format"
 import { useClearFilters, useFilterParam } from "@/lib/use-filter-param"
 import { useOffsetParam } from "@/lib/use-offset-param"

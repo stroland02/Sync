@@ -13,7 +13,7 @@
  * No icons either. An icon is a label, not a distinction the graph holds, and the words fit.
  */
 
-import { useState, type FormEvent, type ReactNode } from "react"
+import { useState, type FormEvent } from "react"
 
 import { Button } from "@/components/ui/button"
 import { chipSurface } from "@/lib/selectable-surface"
@@ -196,23 +196,6 @@ function PrefixFilterForm({
  * filters in prose rather than only as a selected chip is what makes a narrowed view legible as
  * narrow, which is the whole precondition for reading its emptiness correctly.
  */
-/**
- * The controls that govern one table, laid out together above it.
- *
- * A row rather than a stack because the table is what the screen is for: stacked controls with an
- * explanatory sentence each cost a quarter of the viewport before the first row of data. It wraps
- * rather than shrinking, so a narrow window gets the stack back instead of controls too small to
- * use.
- *
- * Named for controls rather than filters because an ordering goes in it too, and an ordering is not
- * a filter — it narrows nothing and the total under the table is the same number either way. The
- * bar is a layout, and the one thing it must not do is imply that everything inside it does the
- * same job.
- */
-export function ControlBar({ children }: { children: ReactNode }) {
-  return <div className="flex flex-wrap items-start gap-section">{children}</div>
-}
-
 export function ActiveFilters({
   filters,
   onClear,
