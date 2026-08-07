@@ -19,7 +19,7 @@ import { afterEach, describe, expect, it } from "vitest"
 
 import App from "@/App"
 import { GRAPH_LEVELS, ROUTES } from "@/lib/routes"
-import { SiteNav } from "@/layouts/site-nav"
+import { AppFrame } from "@/layouts/app-frame"
 
 afterEach(cleanup)
 
@@ -32,12 +32,16 @@ afterEach(cleanup)
 const LINKABLE = ROUTES.filter((route) => route.params.length === 0)
 
 function renderNav(routes: readonly (typeof ROUTES)[number][] = ROUTES) {
-  // `SiteNav` reads the module's own `ROUTES`, so the sub-setting a failure proof needs happens
+  // `AppFrame` reads the module's own `ROUTES`, so the sub-setting a failure proof needs happens
   // by filtering what this helper asserts over, never by mutating the registry at runtime.
   void routes
+  // The whole chassis rather than the old `SiteNav`, because the navigation is now two levels: the
+  // rail links each area's landing route and the sidebar links the destinations inside the selected
+  // area. A guard that rendered only one of the two would pass while the other lost every link --
+  // which is the shape of the defect this file exists for.
   render(
     <MemoryRouter initialEntries={["/"]}>
-      <SiteNav />
+      <AppFrame />
     </MemoryRouter>
   )
 }

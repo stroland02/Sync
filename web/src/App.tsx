@@ -14,13 +14,13 @@ import { Route, Routes, useLocation } from "react-router"
 
 import { ErrorBoundary } from "@/components/error-boundary"
 import { ROUTES } from "@/lib/routes"
-import { AppShell } from "@/layouts/app-shell"
+import { AppFrame } from "@/layouts/app-frame"
 import { UnknownRoute } from "@/layouts/unknown-route"
 
 /**
  * One error boundary per routed screen, reset by the address bar.
  *
- * The boundary used to sit in `AppShell`, outside the `Outlet`, where it survived every
+ * The boundary used to sit in the app shell, outside the `Outlet`, where it survived every
  * navigation — so one crashed screen left the console showing a crash panel for every screen
  * after it, and the only way out was a reload. Keying it by pathname makes navigating away the
  * recovery, including between two findings, which react-router otherwise renders through the
@@ -38,7 +38,7 @@ function RoutedScreen({ element: Screen }: { element: ComponentType }) {
 export default function App() {
   return (
     <Routes>
-      <Route element={<AppShell />}>
+      <Route element={<AppFrame />}>
         {ROUTES.map((route) =>
           route.path === "/" ? (
             <Route key={route.path} index element={<RoutedScreen element={route.element} />} />

@@ -672,6 +672,59 @@ whose repository ids and argument-key lists are visibly longer than this one's, 
 both. A width that only holds for one seed is not a fix, it is a coincidence that will be read as
 one.
 
+**Amended 2026-08-06 by M7-W160, which made this worse and says so.** The chassis takes content width
+from every screen — the frame grew 24 to 40px to clear the 4.7–7.2 ratio, and the sidebar takes the
+rest — and this table had no width to give.
+
+**Re-measured the same day after the sidebar was rebuilt as one component at two widths**, replacing
+a 56px icon rail plus a 240px contextual panel. The rebuild changes every figure below, so the first
+table is replaced rather than annotated. Measured on the binding surface at `--scale 10000`, reading
+the content box inside the frame, at both viewports and both widths:
+
+| | content | call site column | row |
+|---|---|---|---|
+| before M7-W160, 1440 | 1232px | 256px | 57px |
+| 1440, collapsed *(the default here)* | 1297px | 281px | **57px** |
+| 1440, expanded | 1137px | 231px | **77px** |
+| 1280, collapsed *(the default here)* | 1137px | 231px | **77px** |
+| 1280, expanded | 977px | 181px | **77px** |
+
+Two things the shape of that table says that the previous one could not. Collapsed at 1440 the
+console now has **65px more** content width than before M7-W160 rather than 57px less, because one
+48px sidebar is narrower than the 56px rail it replaced — the chassis is no longer a net cost at the
+viewport it is measured at. And 1440-expanded and 1280-collapsed land on the same 1137px, which is
+the useful coincidence: the sidebar's two widths and the two viewports are one axis, not two.
+
+**This measurement corrected the default rather than only describing it.** The sidebar auto-collapsed
+below 1440, which expanded at exactly 1440 — the row-height row above says that costs 20px on every
+row there. The threshold is now **1473px**, the narrowest viewport at which an expanded sidebar still
+leaves 1170px of content: the frame, the sidebar and a scrollbar take 303px. Both viewports in the
+table therefore load collapsed, which is why the parenthetical moved.
+
+**The 1280 row height does not improve. It is 77px collapsed and 77px expanded**, unchanged from the
+first pass, and stating that plainly was the point of re-measuring. The mechanism, found by holding
+the sidebar collapsed and stepping the surface's width in 2px increments: the row drops from 77px to
+57px at **1170px of content width** and nowhere else. 1440-collapsed clears it by 127px. Every other
+configuration — including 1280 with the sidebar already shut, at 1137px — is below it, 1280-collapsed
+by **33px**. So the collapse is worth 20px of row height at 1440 and worth nothing at 1280, and no
+sidebar width reachable from here closes a 33px gap that a 48px sidebar has already spent.
+
+That threshold is the number this entry was missing. It converts "four columns are short by 5 to 22px"
+into a single testable figure, and it is what a fix has to clear.
+
+**And there is a second one above it, which is the first evidence that the target height is reachable
+at all.** At 1920 wide — the window the owner actually works in — the sidebar loads expanded and the
+content box is 1617px, where the row measures **37px**. That is the figure this entry names as what
+closing it would buy, arrived at by width alone with no column widths declared. So the shortfall is
+confirmed to be exactly what it says it is — a few pixels per column, not a structural cost — and a
+fix that reclaimed 33px at 1280 would be buying a known result rather than an estimated one.
+
+This does not argue for a narrower frame: 40px is the smallest value clearing the ratio, and the
+ratio is what
+`docs/superpowers/reports/2026-08-06-why-the-console-came-out-flat.md` identifies as one of the two
+refusals that kept the console flat. It argues that **this entry is now on the critical path for the
+1280 case rather than an improvement to it.**
+
 ### B105 — Four statements in `DESIGN.md`'s rendered-pixel section are contradicted by the rendered pixels
 
 **Closed 2026-08-06 (M4-W149).** The ring renders at full strength — `focus-visible:ring-ring` on
@@ -821,6 +874,43 @@ everywhere. Both are arguable and neither is measured.
 **Closes when:** the disagreement is resolved in `DESIGN.md`'s Motion section — with the rendered
 `transition-duration` on a paginator and on a dialog control measured either side of whatever
 changes, or with an argued statement that one value is right for both.
+
+### B116 — The chassis exists and nine screens have not moved into it
+
+M7-W160 replaced `layouts/` with a rail, a contextual sidebar, a page header, a control bar, a footer
+bar, fact tiles, a fact list and a skeleton, and reversed the two `DESIGN.md` refusals that the flat
+console rested on. **Nothing in `features/` changed, on purpose** — that constraint is what made the
+frame reviewable apart from the pages — and the measurement says exactly what is left because of it.
+
+Measured at 1440x900 across all nine routes plus the router's fallback, before and after:
+
+| | before | after |
+|---|---|---|
+| frame ratio (frame ÷ `--spacing-row`) | 3.0 on nine of nine | **5.0 on ten of ten** |
+| type range, the nine feature routes | 2.00–2.67 | **2.00–2.67, unchanged** |
+| type range, the one route the chassis owns | 2.00 | **3.43** |
+| widest text on six routes | a stat-tile figure | a stat-tile figure, unchanged |
+
+The frame moved because it is now a token the chassis owns. **The type range did not move on any
+feature route, and it cannot until those screens render `PageHeader`.** The display step is declared,
+guarded to exactly one consumer, and mounted on `layouts/unknown-route.tsx` — the router's fallback,
+the one screen the chassis owns — where it measures 48px and takes the range to 3.43:1 against that
+route's 14px floor. Nine screens still open with a `text-page` `h1` and, on four of them, several
+paragraphs of prose before any data.
+
+So the remaining work is not more chassis. It is: give each screen a `PageHeader` carrying its own
+`RouteEntry.question`, move its filters into `ControlBar` and its paging into `FooterBar`, and turn
+the facts it renders as prose or table columns into `FactTile` and `FactList`.
+
+**The guard that finishes this is written and cannot land yet.**
+`reports/2026-08-06-why-the-console-came-out-flat.md`'s fifth correction asks for a test that fails
+when a route renders nothing at the display tier. `test_exactly_one_component_spends_the_display_step`
+holds the half that is true today; the other half needs all nine screens to have adopted the header,
+so it goes red on nine routes if written now. It belongs in the commit that finishes the migration,
+and writing it earlier would mean either nine skips or a guard nobody can keep green.
+
+**Closes when:** every route renders something at the display tier, measured, and the type range
+clears 3.4:1 on each of the nine — with the presence guard landing in the same commit.
 
 ## In flight
 

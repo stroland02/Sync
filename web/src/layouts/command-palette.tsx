@@ -6,14 +6,15 @@
  * is a slice of its own, not a widening of this one. This palette answers "where is the
  * screen that does X", not "where is entity X".
  *
- * Reads `ROUTES` — the same array the router and `SiteNav` read — so a route removed from the
+ * Reads `ROUTES` — the same array the router and `AppFrame` read — so a route removed from the
  * registry disappears from here in the same edit, not as a follow-up.
  *
  * A route whose `params` is non-empty needs a subject this palette cannot supply — a vendor
  * id, a repository id, a finding id — so it is left out rather than listed disabled. Wiring
  * the palette to accept a subject and jump straight to, say, a named vendor is a real feature
  * and a later slice; a disabled row that never becomes enabled is not a placeholder for it,
- * it is dead weight in the list. `SiteNav` makes the same call for the same reason.
+ * it is dead weight in the list. `AppFrame`'s sidebar makes the same call for the same reason,
+ * and shows `reachedFrom` beside the destination rather than dropping it.
  */
 
 import { useEffect, useState } from "react"

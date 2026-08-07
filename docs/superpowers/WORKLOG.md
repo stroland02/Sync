@@ -78,5 +78,23 @@ repository wrote rather than mistakes anyone made.
 | M7-W157 | Why the console came out flat, and the three rules that caused it | landed | `cf3a161` |
 | M7-W158 | The honesty sentences guarded before the screens they sit on are rewritten | landed | `7bef206` |
 | M7-W159 | Read Supabase as source, for mechanism | landed | `references/notes/supabase-control-plane-mechanism.md` |
-| M7-W160 | The chassis, and the type and space revision it makes possible | in rework, `m7-chassis` — a rail plus a panel was built where one sidebar at two widths was ruled | `briefs/2026-08-06-m7-the-chassis.md` |
+| M7-W160 | The chassis: one sidebar at two widths, a page header, and the two DESIGN.md refusals reversed on measurement. B116 filed, B115 re-measured | landed | `briefs/2026-08-06-m7-the-chassis.md` |
 | M7-W161 | Landing on `main` is a scheduled fast-forward, not a milestone event | landed | `CLAUDE.md` |
+
+**M7-W160's navigation was rebuilt once, on the owner's ruling of 2026-08-06.** The first pass built a
+56px icon rail of four product areas beside a 240px contextual panel, and collapsing removed the
+panel — two components, which is not what a sidebar collapsing to a thin width is. What ships is one
+list at two widths: every destination is a row at both, the four areas are group headings rather than
+a navigation level, and an icon holds its vertical position when the labels go. Three rulings the
+human can reverse, each argued in `web/src/layouts/app-frame.tsx`'s docstring:
+
+- **Group heading rows are reserved when collapsed** — `h-9` kept, text `sr-only` — rather than made
+  zero-height in both states. Zero-height would have meant no visible grouping expanded, which is
+  what the grouping is for.
+- **`area.purpose` and `reachedFrom` moved from rows of prose onto each row's `title` and accessible
+  name.** A sentence that renders at one width and not the other changes the height above every icon
+  beneath it. Neither is one of the twenty-four protected sentences; both were added by this item's
+  own first pass.
+- **The sidebar's auto-collapse threshold is 1473px, corrected from 1440.** At exactly 1440 the old
+  rule expanded, and B115's re-measurement shows expanding there costs 20px on every row of the
+  binding surface.

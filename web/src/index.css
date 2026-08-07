@@ -150,6 +150,10 @@
   --text-figure--line-height: 2.25rem;
   --text-figure--font-weight: 600;
   --text-figure--letter-spacing: -0.04em;
+  --text-display: 3rem;
+  --text-display--line-height: 3.25rem;
+  --text-display--font-weight: 600;
+  --text-display--letter-spacing: -0.045em;
 
   --font-sans: system-ui, -apple-system, "Segoe UI", sans-serif;
   --font-mono: ui-monospace, "Cascadia Code", "Segoe UI Mono", Menlo, Consolas,
@@ -160,6 +164,7 @@
   --spacing-field: 0.25rem;
   --spacing-row: 0.5rem;
   --spacing-section: 1rem;
+  --spacing-frame: 2.5rem;
 
   --radius-control: 0.375rem;
   --radius-surface: 0.625rem;
@@ -170,9 +175,10 @@
   --shadow-float: 0 0 0 1px var(--color-line), 0 12px 32px -12px var(--color-shadow);
 }
 
-/* `.furniture` is the uppercase, open-tracked treatment `site-nav.tsx:65` already renders
-   by hand for its graph-level labels -- defined once so nothing else in the tree hand-spells
-   it again. Outside the `text-*` namespace on purpose: `web/src/lib/utils.ts` teaches
+/* `.furniture` is the uppercase, open-tracked treatment the old `site-nav.tsx` rendered by
+   hand for its graph-level labels -- defined once so nothing else in the tree hand-spells it
+   again. Its consumers as of M7-W160 are `fact-tile.tsx`, `fact-list.tsx` and the sidebar's
+   level labels in `app-frame.tsx`, which is what this class was defined for and never had. Outside the `text-*` namespace on purpose: `web/src/lib/utils.ts` teaches
    `tailwind-merge` exactly six font-size names under that prefix, and an unlisted `text-*`
    class merges as a text-*colour* conflict instead, which is the defect that file's docstring
    already records once (`text-emphasis` dropped against `text-critical-ink`). Sets the
