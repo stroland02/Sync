@@ -2299,3 +2299,64 @@ repository and its call site path and line, read from the payload rather than de
 that brief is amended to record which of its three refusals expired. The third stays open behind a
 declared grain for a first-detection timestamp, or is retired with an argument for why the level does
 not need one.
+
+### B123 - The Solution Workflow has no clock, so no entry on it can say when or how long
+
+`WorkflowNode` is `{name, status, standing, evidence}` and `WorkflowState` carries no timestamp
+either. `sync.dashboard.queries.workflow_state` reads the newest checkpoint row of the newest thread
+and forwards its channel values; the row's own `ts` is not forwarded, and one row could not give a
+per-node duration if it were.
+
+The consequence is that the screen the product's argument lives on cannot say when a node ran, how
+long it took, or how long the run has been parked. `references/direction/NOTES.md` entry 2 asks for
+elapsed time on every entry of the narrative, and M7-W179 rendered none of it -
+`briefs/2026-08-07-substrate-workflow.md`'s ruling 6 refuses all three available substitutes:
+`query.dataUpdatedAt` is when the console last fetched, `RunRow.last_checkpoint_at` is on a different
+route and is staleness rather than duration, and node order is not time.
+
+The fix is a read rather than a schema change. The checkpointer writes one row per hop, each with its
+own `checkpoint_id` (a UUIDv6, so text order is creation order) and its own `ts`. A second query over
+`checkpoints` for this thread, grouped by the node each checkpoint advanced, gives a first-seen and a
+last-seen per node from rows the route's connection is already open against.
+
+Two things to get right when it lands, and both are the reason this is filed rather than done in
+passing:
+
+- **A duration between two checkpoints is not the node's execution time.** It is the wall clock
+  between two writes, which for `await_ci` is the customer's CI and for a dead run is unbounded. The
+  label has to say which - the same distinction `last_checkpoint_at` already carries on the fleet
+  screen, and the same one this console refuses to guess at.
+- **A node with one checkpoint has no duration at all**, and rendering a zero would be the absence
+  collapsed onto a measurement.
+
+**Closes when:** each node entry on the Solution Workflow carries a timestamp read from the
+checkpointer, labelled as what it is, with the no-clock sentence in the level's opening entry removed
+in the same commit.
+
+### B124 - A superseded remediation generation is not reachable from the run that superseded it
+
+`GET /api/workflows/{finding_id}` answers with the newest thread only, which its own type docstring
+states. A finding retried across generations therefore has `generation_count` threads on screen as a
+number and one of them as content: the abandoned first attempt that taught routing something is
+counted and not shown.
+
+The seeded fixture is the case exactly - `9f176dea35907f95beb29553e574a037` carries two generations,
+an abandoned first attempt reading *"static verification failed after 3 attempts"* and a second that
+opened a pull request. **Abandoned runs are data** is one of `CLAUDE.md`'s four pipeline rules, and
+the console currently renders the newest generation's abandonment beautifully and a superseded one not
+at all.
+
+`GET /api/runs` holds those rows and is not the answer: it is fleet-wide and paged with no finding
+filter, so on any real fleet the other generations of one finding are several pages away, and
+`useRuns` takes no `enabled` option - so every reader of every workflow page would pay a fleet-wide
+polled request to serve a minority case. `briefs/2026-08-07-substrate-workflow.md`'s ruling 7 carries
+the whole refusal.
+
+The fix is small and sits in the query that already runs. `workflow_state`'s
+`COUNT(DISTINCT thread_id)` subquery is over exactly the rows wanted; returning a `generations` array
+of `{thread_id, generation, outcome, abandon_reason}` alongside the count costs one more scan of the
+same threads.
+
+**Closes when:** the Solution Workflow renders each superseded generation as its own entry, with its
+`abandon_reason` where the run stopped - which is the direction's collapsed-generation slot, and the
+one the level currently has nothing true to put in.
