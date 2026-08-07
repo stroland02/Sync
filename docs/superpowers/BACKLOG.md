@@ -17,17 +17,50 @@ milestone names come from
 [the design document](specs/2026-07-25-sync-self-maintaining-apis-design.md); the mapping below is
 by content, because items were never tagged with a milestone as they landed.
 
+### Where development stands, 2026-08-07
+
+Fifty commits landed on `main` today, from two sessions working the same tree. The shape of the day:
+
+- **The console was rebuilt twice and the second one shipped.** A chassis built from scratch
+  (`W157`–`W164`), then replaced on the owner's ruling by Supabase's `packages/ui` vendored at code
+  level (`W165`–`W180`). All nine specification levels are on the substrate. The first pass is not
+  waste: it produced the honesty-sentence gate every later port merges against, and the
+  before-measurements the substrate is judged by.
+- **The measured bars moved.** Type range **2.00–2.67 → 4.00** against a 3.4 bar on the levels
+  ported so far; frame ratio **3.0 → 5.0** on ten of ten routes. Two things deliberately did not
+  move and say so: six feature routes still sit at the old range pending the migration `B116` files,
+  and the binding surface at 1280 is **one pixel** short of its row-height threshold, which `B115`
+  keeps open because a one-pixel margin on one fixture is a coincidence rather than a fix.
+- **CI got 26% faster and the metric that watches it got fixed.** `B111` closed: coverage to a
+  nightly, the serial job off the pull-request path. Pull-request critical path **200s → 123s**,
+  push **200s → 170s**. `B112` closed on per-run evidence. Then `CI-W190` fixed the alarm that
+  change broke — a skipped job is also stepless, so `zero_step_jobs` would have climbed forever.
+- **One production defect closed.** `B117`: `GraphStore` handed back a *closed* connection forever,
+  so one dropped connection took every console route down until a restart.
+- **Two milestones proposed, neither scheduled.** M8–M11 (the resolution loop) and M12 (dashboards).
+
+**What is not true yet, stated plainly.** Nothing is hosted. The acceptance run has not executed in
+1,073 commits. Three of five quality axes have never had a sample. The console is a local
+development surface with no auth, no tenancy and no write path.
+
+**Two things the owner named that are not yet scheduled**, from reviewing our own screens against
+the reference set: the layout is one vertical stack where it should be a grid, and Fleet carries
+more prose than data. Both are M12's, and M12 is proposed rather than started. Two further points
+from the same review were already answered and are recorded in the M12 plan rather than re-derived —
+the background has not been pure black since `W170`, and the type scale already carries 22px, 28px
+and a 48px display step, so the defect there was assignment rather than absence.
+
 | | Milestone | % | The one sentence that matters |
 |---|---|---|---|
-| **M0** | Walking skeleton, one real PR | **~90%** | Every component exists; the proof is ~200 commits stale |
+| **M0** | Walking skeleton, one real PR | **~90%** | Every component exists; **the proof is 1,073 commits stale** — measured 2026-08-07, not the "~200" this row claimed for a fortnight |
 | **M1** | Runtime signals, efficiency detector | **~85%** | Built; the dollar estimate is deliberately unbuilt |
 | **M2** | Production error detector | **~85%** | Built; never exercised against real telemetry |
 | **M3** | Multi-vendor, MCP, plugin SDK | **~95%** | Packaging closed 2026-07-30; nothing structural left |
 | **M4** | Hosted control plane (**the front end**) | **~50%** | Nine levels and the honesty discipline are built and scoped; nothing is hosted, and three of the milestone's four deliverables have no code |
 | **M4.5** | The console is worth looking at | **~90%** | W141-W145 all landed and merged; the conformance gaps it existed to close are closed, and what remains of "worth looking at" moved into M7 |
 | **M5** | Integration layer | **~35%** | Sentry feeds counts in now; still nothing correlates anything |
-| **M6** | Show it, rather than describe it | **0%** | Needs a UI to film, so it sits behind M4.5 rather than M4 |
-| **M7** | The console becomes a product | **~85%** | All nine levels are on the vendored Supabase substrate; the fidelity pass is in flight and Phases 5-6 are unbuilt |
+| **M6** | Show it, rather than describe it | **0%** | Needs a UI worth filming. That is M7's line now, not M4.5's, and M7 is close enough that this is becoming schedulable |
+| **M7** | The console becomes a product | **~88%** | All nine levels are on the vendored Supabase substrate. Fidelity Tasks 1-3 of 6 are done; Phase 5 (the workflow as narrative, one binding drawn) and Phase 6 (the write path, which belongs to M4's hosted half) are unbuilt |
 | **M8–M11** | The resolution loop | **0%** | Proposed 2026-08-06, nothing scheduled; Sync opens a pull request and stops watching it |
 | **M12** | Dashboards that earn their screen | **0%** | Proposed 2026-08-07 from the owner's review of our screens against the references; full-stack, because the useful panels need aggregates `sync.dashboard` does not compute |
 
@@ -42,7 +75,10 @@ registration, and the tier cascade.
 
 **Remaining — one item, and it is a decision rather than a build.** `B7`, the acceptance run.
 `tests/test_e2e_stripe.py` is `@pytest.mark.e2e` and deselected by `addopts`, so it has not executed
-since roughly two hundred commits landed underneath it. It opens a real pull request against a real
+since **1,073 commits** landed underneath it — measured 2026-08-07 as
+`git rev-list --count f21a1c0..origin/main`, where `f21a1c0` (2026-07-27) is the last commit to
+touch the test. This row said "roughly two hundred" for a fortnight, which is the failure mode a
+backlog is most prone to: a number written once and then read as current forever. It opens a real pull request against a real
 repository and spends `xhigh` model time, so it needs the user's go-ahead. **It is also the only
 thing that gives three of the five quality axes their first sample** — `migration_outcome` holds 3
 rows and **0** carry a `pr_number`.

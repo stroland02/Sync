@@ -129,6 +129,7 @@ write path, are unbuilt; Phase 6 needs auth and tenancy and belongs to M4's host
 | M4-W166 | B117: `GraphStore` reconnects a closed connection, instead of handing the dead one back forever | dispatched | `briefs/2026-08-07-b117-graphstore-reconnect.md` |
 | CI-W167 | B111 closed: coverage into its own nightly job, the serial job off `pull_request` and onto every push to `main`, and `event_name` in the concurrency group so a schedule and a push stop cancelling each other. PR critical path 200s to 123s | landed | `.github/workflows/ci.yml`, `reports/ci-profile-2026-08-07.md` |
 | M7-W193 | Fidelity Task 3: the three detail headers span both columns and carry derived names; the hex id becomes a monospace rail fact. **Dispatched as `M7-W190`** — `CI-W190` landed on the integration branch while this was paused, so it takes the next free number rather than a duplicate, following `M7-W188`'s precedent | landed | `web/src/lib/detail-title.tsx` |
+| M7-W194 | The milestone table and a dated progress summary say what is true: M7 at 88 percent, M0 stale by 1,073 commits rather than 200, M6 unblocked by M7 rather than M4.5 | landed | `BACKLOG.md` |
 
 **M7-W160's navigation was rebuilt once, on the owner's ruling of 2026-08-06.** The first pass built a
 56px icon rail of four product areas beside a 240px contextual panel, and collapsing removed the
