@@ -7,14 +7,17 @@
  * read", Signals asks "which vendor subjects are attached to this repository's graph" — and
  * both are honest readings of `by_vendor`, which is why this stays one component rather than
  * one query duplicated into two renderings that could drift.
+ *
+ * **Two callers is also why the call-site figure is this panel's own metric rather than a tile in
+ * a rail.** M7-W173 ported the Codebase level onto the substrate and did not give it a fact rail:
+ * a rail is a Codebase-only region, so hoisting `total_call_sites` into one would either take the
+ * figure off the Signals screen or render it twice on this one.
+ * `docs/superpowers/briefs/2026-08-07-substrate-codebase.md` carries the mapping and that ruling.
  */
 
 import { Link } from "react-router"
 
 import { useRepositoryCoverage } from "@/api/queries"
-import { Formatted } from "@/components/status"
-import { EmptyState, ErrorState, LoadingState } from "@/components/states"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import {
   Table,
   TableBody,
@@ -22,42 +25,51 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-} from "@/components/ui/table"
+} from "@/components/data-table"
+import { MetricPanel } from "@/components/metric-panel"
+import { Formatted } from "@/components/status"
+import { EmptyState, ErrorState, LoadingState } from "@/components/states"
 import { formatTimestamp } from "@/lib/format"
 
 export function IndexCoverageCard({ repoId }: { repoId: string }) {
   const query = useRepositoryCoverage(repoId)
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Index coverage</CardTitle>
-        <CardDescription className="max-w-prose">
-          Call sites the index holds for this repository, per vendor. A vendor absent from the
-          table is not zero — it is a question this view cannot answer: whether the indexer
-          looked and found nothing, or nothing declares which package to look for. A vendor
-          name below opens that vendor's own page with this repository's scope carried into
-          it, so the findings there are this codebase's; what the vendor published is not
-          scoped, and that page says which of its two halves is which.
-        </CardDescription>
-      </CardHeader>
-      <CardContent>
-        {query.isPending && <LoadingState what={`index coverage for ${repoId}`} />}
-        {query.isError && (
-          <ErrorState error={query.error} what={`index coverage for ${repoId}`} />
-        )}
-        {query.isSuccess &&
-          (query.data.total_call_sites === 0 ? (
+    <div className="flex min-w-0 flex-col gap-section">
+      {query.isPending && <LoadingState what={`index coverage for ${repoId}`} />}
+      {query.isError && (
+        <ErrorState error={query.error} what={`index coverage for ${repoId}`} />
+      )}
+
+      {query.isSuccess && (
+        <MetricPanel
+          label="Index coverage"
+          metric={
+            query.data.total_call_sites === 0
+              ? undefined
+              : {
+                  value: query.data.total_call_sites.toLocaleString(),
+                  unit: `call site${query.data.total_call_sites === 1 ? "" : "s"} indexed`,
+                }
+          }
+          caption={
+            <p className="max-w-prose">
+              Call sites the index holds for this repository, per vendor. A vendor absent from the
+              table is not zero — it is a question this view cannot answer: whether the indexer
+              looked and found nothing, or nothing declares which package to look for. A vendor
+              name below opens that vendor's own page with this repository's scope carried into
+              it, so the findings there are this codebase's; what the vendor published is not
+              scoped, and that page says which of its two halves is which.
+            </p>
+          }
+        >
+          {query.data.total_call_sites === 0 ? (
             <EmptyState
               headline={`The index holds no call site for ${repoId}.`}
               detail="This repository was never indexed, or it was indexed and nothing bound to a vendor was found. Those are the same answer here: the index has no configuration table, so a repository it has never seen a call site from is indistinguishable from one nobody ever configured."
             />
           ) : (
-            <div className="flex flex-col gap-section">
-              <p className="flex flex-wrap items-baseline gap-field text-body">
-                <span className="text-figure">{query.data.total_call_sites}</span>
-                <span>call site{query.data.total_call_sites === 1 ? "" : "s"} indexed.</span>
-              </p>
+            <>
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -71,10 +83,10 @@ export function IndexCoverageCard({ repoId }: { repoId: string }) {
                     .sort(([a], [b]) => a.localeCompare(b))
                     .map(([vendorId, count]) => (
                       <TableRow key={vendorId}>
-                        <TableCell className="font-mono">
+                        <TableCell>
                           <Link
                             to={`/vendors/${encodeURIComponent(vendorId)}?repo_id=${encodeURIComponent(repoId)}`}
-                            className="underline underline-offset-2"
+                            className="font-mono underline underline-offset-2"
                           >
                             {vendorId}
                           </Link>
@@ -100,9 +112,10 @@ export function IndexCoverageCard({ repoId }: { repoId: string }) {
                 staleness, not a promise the index is current. A repository re-scanned weeks ago
                 reports the same value every day after, until another re-index moves it.
               </p>
-            </div>
-          ))}
-      </CardContent>
-    </Card>
+            </>
+          )}
+        </MetricPanel>
+      )}
+    </div>
   )
 }

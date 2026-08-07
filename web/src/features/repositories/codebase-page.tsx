@@ -24,30 +24,69 @@
  * routes it reads take the repository — `/api/overview`, `/api/repositories/{repo}/coverage`
  * and `/api/repositories/{repo}/observed` — and each answer names the scope it was computed
  * in, so picking a different repository changes every number here rather than some of them.
+ *
+ * ## Ported onto the chassis and the vendored substrate by M7-W173
+ *
+ * `docs/superpowers/briefs/2026-08-07-substrate-codebase.md` is the mapping table this port was
+ * gated on, and it is what to read before porting a level, not this docstring.
+ *
+ * **The chassis arrives here in the same work item as the substrate, because this level never had
+ * it.** Fleet took the chassis in M7-W163 and the substrate in M7-W172; Codebase had neither, and
+ * rendered a bare 22px heading over three stacked full-width panels while the route's own question
+ * sat unread in `lib/routes.ts`. So `PageHeader` now carries that question at the display step,
+ * a `ControlBar` states the scope and holds one action, and the two panels the question is
+ * actually about sit beside one another.
+ *
+ * **Neither of this level's outbound links moved into the control bar.** Fleet lifted its
+ * detector-attribution link out of a card description and into the action slot; here the detectors
+ * link and the Signals link each complete a sentence that argues for them, and a qualification with
+ * its link taken out is a qualification shortened. The action slot takes the Signals screen as a
+ * plain navigation instead — the one thing an operator does next that is not a row on this page.
+ *
+ * **No fact rail, and that is ruling 9 of the brief rather than an omission.** `IndexCoverageCard`
+ * is mounted by the Signals level too, so hoisting its call-site figure into a Codebase-only rail
+ * would either delete that figure from Signals or render it twice here.
  */
 
+import type { ReactNode } from "react"
 import { Link, useParams } from "react-router"
 
 import { DEFAULT_LIMIT } from "@/api/client"
 import { useRepositoryObserved } from "@/api/queries"
 import type { ObservedTelemetryResponse } from "@/api/types"
-import { PageControls } from "@/components/page-controls"
+import { MetricPanel } from "@/components/metric-panel"
 import { RungBadge } from "@/components/provenance"
 import { EmptyState, ErrorState, LoadingState } from "@/components/states"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { ErrorWindowsTable } from "@/features/telemetry/error-windows-table"
 import { ObservedCallsTable } from "@/features/telemetry/observed-calls-table"
 import { ObservedShapesTable } from "@/features/telemetry/observed-shapes-table"
 import { IndexCoverageCard } from "@/features/repositories/index-coverage-card"
 import { OpenFindingsCard } from "@/features/repositories/open-findings-card"
 import { Breadcrumbs } from "@/layouts/breadcrumbs"
+import { ControlBar } from "@/layouts/control-bar"
+import { FooterBar } from "@/layouts/footer-bar"
+import { PageHeader } from "@/layouts/page-header"
 import { UnknownRoute } from "@/layouts/unknown-route"
+import { routeQuestion } from "@/lib/routes"
 import { useOffsetParam } from "@/lib/use-offset-param"
+
+/** A section inside the telemetry panel. Furniture register, `h3` under the panel's own `h2`. */
+function TelemetrySection({ title, children }: { title: string; children: ReactNode }) {
+  return (
+    <div className="flex flex-col gap-section">
+      <h3 className="furniture text-meta text-ink-muted">{title}</h3>
+      {children}
+    </div>
+  )
+}
 
 /**
  * The page-level rung for the telemetry half, in prose rather than through `ProvenanceStrip`
  * — this payload carries no feed-fetch timestamp or context-savings figure to fill that
  * component's envelope with, the same reasoning `binding-surface-page.tsx` documents.
+ *
+ * It stays a paragraph beneath the table rather than moving into `FooterBar`'s `left` slot, because
+ * the branch that matters most is the one with no rows and therefore no footer at all.
  */
 function TelemetryRungNote({ data }: { data: ObservedTelemetryResponse }) {
   if (data.calls.total === 0) {
@@ -89,115 +128,111 @@ function ObservedTelemetryCard({ repoId }: { repoId: string }) {
   })
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Observed telemetry</CardTitle>
-        <CardDescription className="max-w-prose">
-          What traffic showed up for this repository, what shape it had, and how often it
-          failed. A row here is evidence a call site was exercised — it is not proof the
-          binding correlating it to an operation is correct. The specification's own Signals
-          level (design doc line 435) holds this traffic as the signal-source role's one panel,
-          beside the vendor role and the human-surface role —{" "}
-          <Link
-            to={`/repositories/${encodeURIComponent(repoId)}/observed`}
-            className="underline underline-offset-2"
-          >
-            see it grouped with the other two roles, on the Signals screen
-          </Link>{" "}
-          — rather than reading this card alone as the whole level.
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="flex flex-col gap-section">
-        {query.isPending && <LoadingState what={`observed telemetry for ${repoId}`} />}
-        {query.isError && (
-          <ErrorState error={query.error} what={`observed telemetry for ${repoId}`} />
-        )}
+    <div className="flex min-w-0 flex-col gap-section">
+      {query.isPending && <LoadingState what={`observed telemetry for ${repoId}`} />}
+      {query.isError && (
+        <ErrorState error={query.error} what={`observed telemetry for ${repoId}`} />
+      )}
 
-        {query.isSuccess && (
-          <>
-            <div className="flex flex-col gap-section">
-              <h3 className="text-section">Calls</h3>
-              {query.data.calls.total === 0 ? (
-                <EmptyState
-                  headline="No call has been observed for this repository."
-                  detail="The API answered with an empty list. Either nothing has watched this repository's traffic, or nothing arrived while it was watching — this view cannot tell the two apart."
+      {query.isSuccess && (
+        <MetricPanel
+          label="Observed telemetry"
+          caption={
+            <p className="max-w-prose">
+              What traffic showed up for this repository, what shape it had, and how often it
+              failed. A row here is evidence a call site was exercised — it is not proof the
+              binding correlating it to an operation is correct. The specification's own Signals
+              level (design doc line 435) holds this traffic as the signal-source role's one panel,
+              beside the vendor role and the human-surface role —{" "}
+              <Link
+                to={`/repositories/${encodeURIComponent(repoId)}/observed`}
+                className="underline underline-offset-2"
+              >
+                see it grouped with the other two roles, on the Signals screen
+              </Link>{" "}
+              — rather than reading this card alone as the whole level.
+            </p>
+          }
+        >
+          <TelemetrySection title="Calls">
+            {query.data.calls.total === 0 ? (
+              <EmptyState
+                headline="No call has been observed for this repository."
+                detail="The API answered with an empty list. Either nothing has watched this repository's traffic, or nothing arrived while it was watching — this view cannot tell the two apart."
+              />
+            ) : (
+              <>
+                <ObservedCallsTable calls={query.data.calls.items} />
+                <FooterBar
+                  offset={callsOffset}
+                  limit={DEFAULT_LIMIT}
+                  shown={query.data.calls.items.length}
+                  total={query.data.calls.total}
+                  nextOffset={query.data.calls.next_offset}
+                  busy={query.isFetching}
+                  onOffsetChange={setCallsOffset}
                 />
-              ) : (
-                <>
-                  <ObservedCallsTable calls={query.data.calls.items} />
-                  <PageControls
-                    offset={callsOffset}
-                    limit={DEFAULT_LIMIT}
-                    shown={query.data.calls.items.length}
-                    total={query.data.calls.total}
-                    nextOffset={query.data.calls.next_offset}
-                    busy={query.isFetching}
-                    onOffsetChange={setCallsOffset}
-                  />
-                </>
-              )}
-              <TelemetryRungNote data={query.data} />
-            </div>
+              </>
+            )}
+            <TelemetryRungNote data={query.data} />
+          </TelemetrySection>
 
-            <div className="flex flex-col gap-section">
-              <h3 className="text-section">Shapes</h3>
-              <p className="max-w-prose text-body text-muted-foreground">
-                What the operations this repository calls have looked like on the wire, scoped
-                to the vendor/operation pairs this repository's own calls above name — a shape
-                is a vendor-wide fact, not a per-repository one, so nothing here belongs to this
-                repository alone.
-              </p>
-              {query.data.shapes.total === 0 ? (
-                <EmptyState
-                  headline="No shape recorded for this repository's operations."
-                  detail="Either no traffic for these operations has been shaped yet, or this repository's calls did not correlate to any operation."
+          <TelemetrySection title="Shapes">
+            <p className="max-w-prose text-body text-muted-foreground">
+              What the operations this repository calls have looked like on the wire, scoped
+              to the vendor/operation pairs this repository's own calls above name — a shape
+              is a vendor-wide fact, not a per-repository one, so nothing here belongs to this
+              repository alone.
+            </p>
+            {query.data.shapes.total === 0 ? (
+              <EmptyState
+                headline="No shape recorded for this repository's operations."
+                detail="Either no traffic for these operations has been shaped yet, or this repository's calls did not correlate to any operation."
+              />
+            ) : (
+              <>
+                <ObservedShapesTable shapes={query.data.shapes.items} />
+                <FooterBar
+                  offset={shapesOffset}
+                  limit={DEFAULT_LIMIT}
+                  shown={query.data.shapes.items.length}
+                  total={query.data.shapes.total}
+                  nextOffset={query.data.shapes.next_offset}
+                  busy={query.isFetching}
+                  onOffsetChange={setShapesOffset}
                 />
-              ) : (
-                <>
-                  <ObservedShapesTable shapes={query.data.shapes.items} />
-                  <PageControls
-                    offset={shapesOffset}
-                    limit={DEFAULT_LIMIT}
-                    shown={query.data.shapes.items.length}
-                    total={query.data.shapes.total}
-                    nextOffset={query.data.shapes.next_offset}
-                    busy={query.isFetching}
-                    onOffsetChange={setShapesOffset}
-                  />
-                </>
-              )}
-            </div>
+              </>
+            )}
+          </TelemetrySection>
 
-            <div className="flex flex-col gap-section">
-              <h3 className="text-section">Error windows</h3>
-              <p className="max-w-prose text-body text-muted-foreground">
-                Failure counts have no denominator in this table — a count is not a rate, and
-                this view does not compute one.
-              </p>
-              {query.data.error_windows.total === 0 ? (
-                <EmptyState
-                  headline="No error window recorded for this repository."
-                  detail="Either nothing has tracked errors for this repository, or nothing tracked ever recorded a window — this view cannot tell the two apart."
+          <TelemetrySection title="Error windows">
+            <p className="max-w-prose text-body text-muted-foreground">
+              Failure counts have no denominator in this table — a count is not a rate, and
+              this view does not compute one.
+            </p>
+            {query.data.error_windows.total === 0 ? (
+              <EmptyState
+                headline="No error window recorded for this repository."
+                detail="Either nothing has tracked errors for this repository, or nothing tracked ever recorded a window — this view cannot tell the two apart."
+              />
+            ) : (
+              <>
+                <ErrorWindowsTable windows={query.data.error_windows.items} />
+                <FooterBar
+                  offset={errorWindowsOffset}
+                  limit={DEFAULT_LIMIT}
+                  shown={query.data.error_windows.items.length}
+                  total={query.data.error_windows.total}
+                  nextOffset={query.data.error_windows.next_offset}
+                  busy={query.isFetching}
+                  onOffsetChange={setErrorWindowsOffset}
                 />
-              ) : (
-                <>
-                  <ErrorWindowsTable windows={query.data.error_windows.items} />
-                  <PageControls
-                    offset={errorWindowsOffset}
-                    limit={DEFAULT_LIMIT}
-                    shown={query.data.error_windows.items.length}
-                    total={query.data.error_windows.total}
-                    nextOffset={query.data.error_windows.next_offset}
-                    busy={query.isFetching}
-                    onOffsetChange={setErrorWindowsOffset}
-                  />
-                </>
-              )}
-            </div>
-          </>
-        )}
-      </CardContent>
-    </Card>
+              </>
+            )}
+          </TelemetrySection>
+        </MetricPanel>
+      )}
+    </div>
   )
 }
 
@@ -207,11 +242,48 @@ export function CodebasePage() {
 
   return (
     <section className="flex flex-col gap-8">
-      <Breadcrumbs trail={[{ label: "Fleet", to: "/" }, { label: repoId }]} />
-      <h1 className="font-mono text-page">{repoId}</h1>
-      <OpenFindingsCard repoId={repoId} />
-      <IndexCoverageCard repoId={repoId} />
+      <PageHeaderRegion repoId={repoId} />
+      {/* The two halves of the route's own question, beside one another. Both tables are narrow —
+          two columns and three — and stacking them is what put the telemetry panel below the fold
+          on every width. The telemetry panel keeps the full width because its three tables are
+          eight to twelve columns each. */}
+      <div className="grid gap-8 xl:grid-cols-2">
+        <OpenFindingsCard repoId={repoId} />
+        <IndexCoverageCard repoId={repoId} />
+      </div>
       <ObservedTelemetryCard repoId={repoId} />
     </section>
+  )
+}
+
+function PageHeaderRegion({ repoId }: { repoId: string }) {
+  return (
+    <div className="flex flex-col gap-section">
+      <PageHeader
+        title={<span className="font-mono">{repoId}</span>}
+        question={routeQuestion("/repositories/:repoId")}
+        trail={<Breadcrumbs trail={[{ label: "Fleet", to: "/" }, { label: repoId }]} />}
+      />
+      <ControlBar
+        action={
+          <Link
+            to={`/repositories/${encodeURIComponent(repoId)}/observed`}
+            className="text-body underline underline-offset-2"
+          >
+            Signals for this repository
+          </Link>
+        }
+      >
+        {/* One line. The long form — that every figure below moves when a different repository is
+            selected — is already in `OpenFindingsCard`'s caption, and saying it twice is a fact
+            that will disagree with itself. */}
+        <div className="flex min-w-0 flex-col gap-field">
+          <span className="furniture text-meta text-ink-muted">Scope</span>
+          <span className="text-body">
+            This repository alone. Fleet is every repository the index has seen.
+          </span>
+        </div>
+      </ControlBar>
+    </div>
   )
 }
