@@ -133,6 +133,7 @@ write path, are unbuilt; Phase 6 needs auth and tenancy and belongs to M4's host
 | M12-W196 | M12 Phase 1, first aggregate: abandonment by change kind and tier, so routing can learn what is not mechanically safe | dispatched | `briefs/2026-08-07-m12-abandonment-by-change-kind.md` |
 | M12-W197 | The route exemption cannot outlive its panel, and B126 files the free-text `abandon_reason` the first read-back exposed | landed | `tests/test_api_routes.py`, `BACKLOG.md` |
 | M7-W195 | Fidelity Task 4: the control and footer bars are fed — the vendor page's three narrowings leave a card body, `/detectors` gains the widen control the top bar cannot reach, record counts leave two `h2` headings for the footer under the rows they count, and the five list breadcrumbs stop repeating the top bar's scope trail | landed | `web/src/layouts/footer-bar.tsx`, `briefs/2026-08-07-substrate-fidelity-task-4.md` |
+| M7-W198 | M7-W195's review: the untrimmed `Fleet` crumbs are four named routes rather than one, and the binding surface's kept crumb is redundant like `/detectors`' rather than informative like Signals' — a correction to the brief, no code | landed | `briefs/2026-08-07-substrate-fidelity-task-4.md` |
 
 **M7-W160's navigation was rebuilt once, on the owner's ruling of 2026-08-06.** The first pass built a
 56px icon rail of four product areas beside a 240px contextual panel, and collapsing removed the
