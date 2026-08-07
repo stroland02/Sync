@@ -365,8 +365,22 @@ makes focus visible and makes the `link` button variant a link.
 
 ## Type
 
-Six steps. The console previously lived at 12 / 12.8 / 14 / 16 / 18px, a measured range ratio of
-1.5:1 against a 2.0 threshold; the `page` step alone takes it to 2.0.
+Seven steps. The console previously lived at 12 / 12.8 / 14 / 16 / 18px, a measured range ratio of
+1.5:1 against a 2.0 threshold; the `page` step alone took it to 2.0.
+
+**`--text-display` was added 2026-08-06 (M7-W160), and this reverses a refusal recorded here.** The
+earlier argument was that a wider range costs vertical space and vertical space is rows. That is
+true of a step spent on a *table*, and it was applied to a step nothing renders in a table: measured
+across all nine routes at 1440x900, the range was **2.00 on five of them and 2.67 on four**, against
+a 3.4:1 bar, and the widest text on six routes was a stat-tile figure rather than anything naming the
+screen. So the console had no focal point on any route, and
+`docs/superpowers/reports/2026-08-06-why-the-console-came-out-flat.md` measures what that produced.
+
+The step is 48px, and the arithmetic is the reason for that number rather than 40 or 56: against the
+12px floor it gives a range of **4.00:1**, and against 14px body it is **3.43x**, so it clears both
+halves of the bar — at least 3.4:1 overall and a display step at least 3x body — with the smallest
+value that does. It costs no rows, because **exactly one element per route may take it**: the page
+title in `layouts/page-header.tsx`. A second one on a screen is two focal points, which is none.
 
 | Token | Size | Line height | Weight | Tracking | Job |
 |---|---|---|---|---|---|
@@ -376,8 +390,10 @@ Six steps. The console previously lived at 12 / 12.8 / 14 / 16 / 18px, a measure
 | `--text-section` | 18px | 24px | 600 | −0.02em | a section heading inside a view |
 | `--text-page` | 24px | 30px | 600 | −0.04em | the `h1` on every view |
 | `--text-figure` | 32px | 36px | 600 | −0.04em | stat-tile values only; carries `tabular-nums` — see below |
+| `--text-display` | 48px | 52px | 600 | −0.045em | **the page title, once per route.** Nothing else, ever |
 
-Utilities: `text-meta`, `text-body`, `text-emphasis`, `text-section`, `text-page`, `text-figure`.
+Utilities: `text-meta`, `text-body`, `text-emphasis`, `text-section`, `text-page`, `text-figure`,
+`text-display`.
 Weight, line height and tracking travel with the step, so `text-page` is the whole decision rather
 than three of them. Override with `font-normal` or `leading-*` where a specific case needs it.
 
@@ -427,14 +443,15 @@ proportional figures.
 
 ## Space
 
-Three tokens. `p-row`, `gap-field`, `space-y-section` and the rest of the spacing utilities all
-take them.
+Four tokens. `p-row`, `gap-field`, `space-y-section`, `p-frame` and the rest of the spacing
+utilities all take them.
 
 | Token | Value | Job |
 |---|---|---|
 | `--spacing-field` | 4px | a label to its value, inside a card |
 | `--spacing-row` | 8px | table cell padding |
 | `--spacing-section` | 16px | between blocks inside a panel |
+| `--spacing-frame` | 40px | the page frame: content to the chassis. One consumer, `app-frame.tsx` |
 
 **Recorded decision: the 24px gap between top-level sections of a page is not a fourth token.** It
 is written `gap-6` or `space-y-6` on Tailwind's base 4px scale. It stays unnamed because it is a
@@ -458,14 +475,23 @@ measured: the page had one spacing level where it needed three. The between-pane
 **32px** (`gap-8`, unnamed on the same grounds as the frame) so that `32 : 16 : 8 : 4` holds the 2×
 floor at every inner step.
 
-**Recorded decision, and it reverses earlier reasoning: the page frame is not required to exceed
-the between-panel gap.** A console's edge is held by the navigation rail and the header, not by the
-frame — the frame does no hierarchical work here the way it does on a page with no chrome around
-it. The frame stays at **24px** (`px-6`, unnamed), set to the smallest value that keeps content off
-the chrome, not to a multiple of anything below it. **The frame-to-section ratio this console
-adopts is 24 : 32, or 0.75 : 1** — the frame is smaller than the gap it sits outside of, and that
-only holds because the nav rail and header are already saying "this is a composition," so the frame
-does not have to.
+**Reversed 2026-08-06 (M7-W160): the frame is 40px, and the argument that kept it at 24 rested on a
+component that did not exist.** The refusal read: *"A console's edge is held by the navigation rail
+and the header, not by the frame."* **There was no rail.** `layouts/site-nav.tsx` rendered a
+horizontal strip with a bottom border, and `app-shell.tsx` put the whole page in a 24px gutter under
+it — so the premise was false when it was written and stayed unexamined because it had been recorded
+as a ruling. M7-W160 builds the rail, which is what makes the sentence checkable, and the answer once
+it is checkable is the opposite of the recorded one: a rail holds the *left* edge and holds nothing
+about the space between the content and the frame's other three sides.
+
+`--spacing-frame` is **40px** and is a token rather than a raw utility, which is the second half of
+the correction: the frame was `px-6`, spelled inline, so nothing could read it and no guard could
+check it. Against the 8px in-component unit that gives a ratio of **5.0**, inside the 4.7–7.2 band
+three measured reference surfaces hold. It was **3.0 on all nine routes** before this.
+
+**The frame is now larger than the gap it sits outside of — 40 : 32 — and that ordering is the
+point.** Four levels, each at least 1.25x the one below and the three inner ones at 2x:
+`40 : 32 : 16 : 8 : 4`.
 
 ---
 
@@ -862,8 +888,9 @@ rule is kept for colour-blind readers regardless of what the surviving palette m
 - **A composite score, a health number, a traffic light, a liveness dot.** Rejected on the merits.
   A design system is exactly the moment somebody reaches for a coloured badge, which is why it is
   named here.
-- **A third elevation level, a fourth spacing value, a seventh type step.** Each is a decision to
-  be argued in this file, not a value to be added.
+- **A third elevation level, a fifth spacing value, an eighth type step.** Each is a decision to
+  be argued in this file, not a value to be added. The seventh type step and the fourth spacing
+  value were added on 2026-08-06 by M7-W160, argued in the Type and Space sections above.
 - **A light mode.** Retired 2026-08-05 on explicit instruction. Not a placeholder for a future
   toggle — the theme resolver, its storage key and its `prefers-color-scheme` listener are deleted,
   not disabled, and a component that branches on `prefers-color-scheme` again would be a regression

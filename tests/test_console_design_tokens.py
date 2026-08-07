@@ -95,13 +95,21 @@ def _spacing_tokens() -> dict[str, int]:
 
 
 def _sanctioned_spacing_exceptions() -> set[int]:
+    """The page-layout pixel values DESIGN.md permits spelled raw, because no token names them.
+
+    **One, as of M7-W160.** It was two: the 24px page frame and the 32px between-panel gap, both
+    unnamed on the same grounds. The frame is now `--spacing-frame` at 40px, which moves it out of
+    this set and *into* the banned list -- `p-10` in a feature screen now duplicates a token under a
+    different name, which is exactly what this guard is for. That is the second half of the
+    correction M7-W160 made: the frame was `px-6` spelled inline, so nothing could read it and no
+    guard could check the ratio the design contract was arguing about.
+    """
     # Line-wrapped in the source file, so whitespace is normalised before matching rather than
     # anchoring to one physical line.
     flat = re.sub(r"\s+", " ", _design_md_text())
-    frame = re.search(r"frame stays at \*\*(\d+)px\*\*", flat)
     gap = re.search(r"gap moves to \*\*(\d+)px\*\*", flat)
-    assert frame and gap, "DESIGN.md no longer names its two sanctioned spacing exceptions"
-    return {int(frame.group(1)), int(gap.group(1))}
+    assert gap, "DESIGN.md no longer names the between-panel gap as a sanctioned raw value"
+    return {int(gap.group(1))}
 
 
 def _banned_spacing_pixel_values() -> dict[int, str]:
@@ -176,14 +184,25 @@ def test_require_examined_fails_loudly_on_a_directory_that_is_not_there(tmp_path
         _require_examined(_iter_source_files(missing), missing)
 
 
-def test_the_spacing_guard_permits_the_two_sanctioned_exceptions(tmp_path: Path) -> None:
-    # `gap-8` (32px) and `px-6` (24px) are the page-frame and between-panel-gap exceptions
-    # DESIGN.md names; a banned set that has already excluded them must not flag either.
-    (tmp_path / "page.tsx").write_text('<div className="gap-8 px-6" />\n', encoding="utf-8")
+def test_the_spacing_guard_permits_the_sanctioned_between_panel_gap(tmp_path: Path) -> None:
+    # `gap-8` (32px) is the one page-layout value DESIGN.md still leaves unnamed; a banned set that
+    # has already excluded it must not flag it.
+    (tmp_path / "page.tsx").write_text('<div className="gap-8" />\n', encoding="utf-8")
 
     violations = _spacing_violations(tmp_path, _banned_spacing_pixel_values())
 
     assert not violations
+
+
+def test_the_spacing_guard_now_flags_the_frame_spelled_raw(tmp_path: Path) -> None:
+    # The frame stopped being an exception when it became `--spacing-frame`, so `p-10` in a feature
+    # screen is a token duplicated under a different name -- the case this guard exists for, and one
+    # it could not see while the frame was an unnamed 24px.
+    (tmp_path / "page.tsx").write_text('<div className="p-10" />\n', encoding="utf-8")
+
+    violations = _spacing_violations(tmp_path, _banned_spacing_pixel_values())
+
+    assert violations and "--spacing-frame" in violations[0]
 
 
 # -- assertion 2: no keyframes or animation shorthand outside a loading indicator --------------
@@ -1131,3 +1150,193 @@ def test_the_registry_guard_rejects_a_stale_entry() -> None:
     importers = {"components/error-surface.tsx"}
 
     assert [e for e in registry if e not in importers] == ["components/page-controls.tsx"]
+
+
+# -- assertion 11: the display step has exactly one consumer, and it is the page header ----------
+#
+# The first guard in this file that fails for a *presence* reason rather than an absence one.
+# `docs/superpowers/reports/2026-08-06-why-the-console-came-out-flat.md`, cause 5: every guard in
+# this file fails when a screen adds something, and no test anywhere fails when a screen is flat --
+# "the only automated feedback in the system pushes in one direction, and it is the direction that
+# was already the problem."
+#
+# This is the narrow half of that correction, and the narrow half is the one that can be held today.
+# The report asks for a guard that fails when a route renders nothing at the display tier; that
+# needs the nine feature screens to adopt `PageHeader`, and M7-W160 deliberately changes nothing in
+# `features/`. What is holdable now is the invariant that makes the wider guard possible later:
+# **the step exists, and exactly one component spends it.** Two consumers is two focal points, which
+# is none, and it is the failure this would drift into first -- a screen reaching for `text-display`
+# on its own headline figure because it looked flat.
+
+_DISPLAY_STEP_OWNER = "layouts/page-header.tsx"
+_DISPLAY_CLASS = re.compile(r"(?<![\w-])text-display(?![\w-])")
+
+
+def _display_step_consumers() -> list[str]:
+    consumers = []
+    for path in _iter_source_files(_WEB_SRC):
+        if path.name.endswith((".test.ts", ".test.tsx")):
+            continue
+        text = _read_stripped(path)
+        if _DISPLAY_CLASS.search(text):
+            consumers.append(path.relative_to(_WEB_SRC).as_posix())
+    return sorted(consumers)
+
+
+def test_the_display_step_is_declared_so_a_page_title_has_somewhere_to_land():
+    # Read out of the contract rather than asserted as 48: DESIGN.md's Type table is the authority
+    # and this fails loudly if the step is removed, instead of the class silently resolving to
+    # nothing the way an unlisted `text-*` utility does.
+    steps = _type_line_heights()
+    assert "display" in steps, (
+        "DESIGN.md's Type table no longer declares `--text-display`. It was added by M7-W160 so a "
+        "page title has a step of its own; without it every route's widest text is whichever "
+        "stat-tile figure happens to be on screen, which is what the flat-console report measured."
+    )
+
+
+def test_exactly_one_component_spends_the_display_step():
+    _require_web_src()
+    _require_examined(_iter_source_files(_WEB_SRC), _WEB_SRC)
+    consumers = _display_step_consumers()
+    assert consumers == [_DISPLAY_STEP_OWNER], (
+        "`text-display` is the page title's step and `layouts/page-header.tsx` is the only place it "
+        "belongs. A second consumer is a second focal point on one screen, which is none -- and the "
+        "likeliest way it arrives is a screen that looks flat reaching for the biggest step it can "
+        f"find rather than composing.\nFound: {consumers}"
+    )
+
+
+def test_the_display_step_guard_rejects_a_second_consumer(tmp_path: Path) -> None:
+    (tmp_path / "fleet-page.tsx").write_text(
+        '<span className="text-display">1,000+</span>\n', encoding="utf-8"
+    )
+    (tmp_path / "page-header.tsx").write_text(
+        '<h1 className="text-display">{title}</h1>\n', encoding="utf-8"
+    )
+
+    found = sorted(
+        path.name
+        for path in _iter_source_files(tmp_path)
+        if _DISPLAY_CLASS.search(_read_stripped(path))
+    )
+
+    assert found == ["fleet-page.tsx", "page-header.tsx"]
+
+
+# -- assertion 12: every route carries the sentence the page header renders ----------------------
+#
+# `RouteEntry.question` has existed since the registry did, one per route, written for a page header
+# that did not exist -- so nine sentences sat unrendered while every screen opened with a bare `h1`.
+# `PageHeader` renders it now, which makes an empty one a blank line under a display-size title
+# rather than a field nobody reads.
+#
+# `reachedFrom` is the other half and the sidebar depends on it: a destination it cannot link renders
+# that sentence instead of a dead label. The two fields have to disagree in exactly one direction --
+# a route with parameters needs one, a route without must not claim one -- and asserting the
+# biconditional is what stops a new route being added with neither.
+
+_ROUTE_BLOCK = re.compile(r"\{\s*path: \"([^\"]+)\",(.*?)\n  \}", re.DOTALL)
+
+
+def _route_fields() -> list[tuple[str, str]]:
+    text = _read_stripped(_WEB_SRC / "lib" / "routes.ts")
+    body = text[text.index("export const ROUTES") :]
+    blocks = _ROUTE_BLOCK.findall(body)
+    assert blocks, "lib/routes.ts no longer matches this parser -- update it here too"
+    return blocks
+
+
+def test_every_route_carries_the_question_its_page_header_renders():
+    _require_web_src()
+    missing = []
+    for path, block in _route_fields():
+        match = re.search(r'question:\s*\n?\s*"([^"]*)"', block)
+        if match is None or len(match.group(1).strip()) < 20:
+            missing.append(path)
+    assert not missing, (
+        "these routes declare no usable `question`, and `layouts/page-header.tsx` renders it as the "
+        "one sentence saying what the screen is for -- an empty one is a blank line under a "
+        f"display-size title:\n{missing}"
+    )
+
+
+def test_a_route_names_where_its_subject_comes_from_exactly_when_it_needs_one():
+    _require_web_src()
+    wrong = []
+    for path, block in _route_fields():
+        needs_subject = re.search(r"params: \[\s*\"", block) is not None
+        names_source = re.search(r'reachedFrom:\s*"[^"]+"', block) is not None
+        if needs_subject != names_source:
+            wrong.append(
+                f"{path}: params={'yes' if needs_subject else 'no'}, "
+                f"reachedFrom={'yes' if names_source else 'no'}"
+            )
+    assert not wrong, (
+        "`reachedFrom` has to be a sentence exactly when `params` is non-empty. The sidebar renders "
+        "it beside a destination it cannot link, so a route with parameters and no sentence is a "
+        "dead label -- which is how seven of eleven routes were once unreachable -- and a route "
+        f"without parameters claiming one is a sentence nothing shows:\n" + "\n".join(wrong)
+    )
+
+
+# -- assertion 13: the compiler reads comments, so this guard reads them too ----------------------
+#
+# Every other guard in this file scans `_read_stripped` text, which blanks comments first, and that
+# is right: this codebase's own docstrings describe the patterns being banned, so scanning raw text
+# would flag the explanation along with the violation.
+#
+# **Tailwind does not have that luxury and neither does this.** Its scanner extracts class-name
+# candidates from raw file text with no idea which of it is code. M7-W160 wrote a docstring in
+# `components/skeleton.tsx` explaining why a skeleton does *not* pulse, named the utility while doing
+# so, and put `@keyframes pulse` in `dist/assets/*.css` -- measured there before the wording changed.
+# The existing keyframe guard could not see it, by construction.
+#
+# So this one scans raw source for the utility *prefix*, over the same roots, and it is deliberately
+# narrower than its stripped sibling: only `animate-`, because that is the prefix that compiles a
+# keyframe. A comment may say "no motion" all it likes; it may not spell a utility that emits one.
+
+_RAW_ANIMATE_UTILITY = re.compile(r"(?<![\w-])animate-[\w-]+")
+
+
+def _raw_animate_violations(root: Path) -> list[str]:
+    violations = []
+    for path in _iter_source_files(root, suffixes=(".ts", ".tsx", ".css")):
+        if path.name.endswith((".test.ts", ".test.tsx")):
+            continue
+        text = path.read_text(encoding="utf-8")
+        for match in _RAW_ANIMATE_UTILITY.finditer(text):
+            violations.append(f"{path}:{_line_at(text, match.start())}: {match.group(0)!r}")
+    return violations
+
+
+def test_no_animate_utility_reaches_the_compiler_even_from_a_comment():
+    _require_web_src()
+    violations = []
+    for name in _ANIMATION_FREE_ROOTS:
+        root = _WEB_SRC / name
+        _require_examined(_iter_source_files(root), root)
+        for entry in _raw_animate_violations(root):
+            if "/components/ui/" in entry.replace("\\", "/"):
+                continue
+            violations.append(entry)
+    assert not violations, (
+        "Tailwind's scanner reads raw text and cannot tell a comment from a class attribute, so "
+        "naming an `animate-*` utility anywhere in these files compiles its keyframe into the "
+        "bundle -- including in a docstring explaining that the console has no animation, which is "
+        "how this was found. Describe the utility without spelling it:\n" + "\n".join(violations)
+    )
+
+
+def test_the_raw_animate_guard_sees_a_utility_named_only_in_a_comment(tmp_path: Path) -> None:
+    # The exact shape the real defect took: no class attribute anywhere, one mention in prose, and a
+    # keyframe in the output. `_read_stripped` blanks this line, which is why the stripped guard
+    # reports clean on it.
+    (tmp_path / "skeleton.tsx").write_text(
+        "/** It does not pulse: animate-pulse would need a keyframe. */\n"
+        'export const Skeleton = () => <span className="h-4 rounded-control" />\n',
+        encoding="utf-8",
+    )
+
+    assert _keyframe_violations(tmp_path) == []
+    assert _raw_animate_violations(tmp_path), "the raw guard missed what the stripped one cannot see"
