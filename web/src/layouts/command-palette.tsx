@@ -15,9 +15,16 @@
  * and a later slice; a disabled row that never becomes enabled is not a placeholder for it,
  * it is dead weight in the list. `AppFrame`'s sidebar makes the same call for the same reason,
  * and shows `reachedFrom` beside the destination rather than dropping it.
+ *
+ * **The open state lives here rather than in the chassis, and the trigger reads it through a
+ * context.** The palette was a keybind with nothing on screen naming it — an affordance nobody can
+ * discover, which the fidelity report measured as the only piece of Studio's right-hand furniture
+ * that transfers honestly. The trigger sits in the top bar, several elements away from the dialog,
+ * so one of the two had to own the state and the owner is the component that also owns the keybind:
+ * two sources for one boolean is how a trigger and a shortcut end up disagreeing.
  */
 
-import { useEffect, useState } from "react"
+import { createContext, useContext, useEffect, useState, type ReactNode } from "react"
 import { useNavigate } from "react-router"
 
 import {
@@ -31,7 +38,48 @@ import {
 } from "@/components/ui/command"
 import { GRAPH_LEVELS, ROUTES } from "@/lib/routes"
 
-export function CommandPalette() {
+/** What the palette calls itself, in one place: the dialog's placeholder and the trigger agree. */
+const PALETTE_LABEL = "Jump to a destination"
+
+const OpenPalette = createContext<(() => void) | null>(null)
+
+/**
+ * The keybind hint the trigger prints.
+ *
+ * The palette answers either modifier, so the hint is about the keyboard in front of the reader
+ * rather than about the handler. A hint naming the wrong key is worse than no hint: it is a fact
+ * about the console, stated wrongly, on every screen.
+ */
+export function shortcutHint(userAgent: string): string {
+  return /Mac|iPhone|iPad/.test(userAgent) ? "⌘ K" : "Ctrl K"
+}
+
+/**
+ * The on-screen way in.
+ *
+ * Deliberately the only thing on the right of the bar. We have no account, no organisation, no
+ * assistant and no feedback channel, and rendering furniture for them would be chrome with nothing
+ * behind it — the gap report's ruling, kept.
+ */
+export function CommandPaletteTrigger() {
+  const open = useContext(OpenPalette)
+  if (open === null) {
+    throw new Error("CommandPaletteTrigger must render inside CommandPaletteProvider")
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={open}
+      className="flex h-7 shrink-0 items-center gap-row rounded-full border border-line bg-surface-subtle px-row text-meta text-ink-muted hover:text-foreground"
+    >
+      <span>{PALETTE_LABEL}</span>
+      <span className="font-mono">{shortcutHint(navigator.userAgent)}</span>
+    </button>
+  )
+}
+
+export function CommandPaletteProvider({ children }: { children: ReactNode }) {
   const [open, setOpen] = useState(false)
   const navigate = useNavigate()
 
@@ -52,38 +100,41 @@ export function CommandPalette() {
   }
 
   return (
-    <CommandDialog
-      open={open}
-      onOpenChange={setOpen}
-      title="Jump to a destination"
-      description="Search the console's declared routes."
-    >
-      <Command>
-        <CommandInput placeholder="Jump to a destination…" />
-        <CommandList>
-          <CommandEmpty>No declared route matches.</CommandEmpty>
-          {GRAPH_LEVELS.map((level) => {
-            const routesAtLevel = ROUTES.filter(
-              (route) => route.level === level && route.params.length === 0
-            )
-            if (routesAtLevel.length === 0) return null
+    <OpenPalette.Provider value={() => setOpen(true)}>
+      {children}
+      <CommandDialog
+        open={open}
+        onOpenChange={setOpen}
+        title={PALETTE_LABEL}
+        description="Search the console's declared routes."
+      >
+        <Command>
+          <CommandInput placeholder={`${PALETTE_LABEL}…`} />
+          <CommandList>
+            <CommandEmpty>No declared route matches.</CommandEmpty>
+            {GRAPH_LEVELS.map((level) => {
+              const routesAtLevel = ROUTES.filter(
+                (route) => route.level === level && route.params.length === 0
+              )
+              if (routesAtLevel.length === 0) return null
 
-            return (
-              <CommandGroup key={level} heading={level}>
-                {routesAtLevel.map((route) => (
-                  <CommandItem
-                    key={route.path}
-                    value={`${route.label} ${route.question}`}
-                    onSelect={() => select(route.path)}
-                  >
-                    <span>{route.label}</span>
-                  </CommandItem>
-                ))}
-              </CommandGroup>
-            )
-          })}
-        </CommandList>
-      </Command>
-    </CommandDialog>
+              return (
+                <CommandGroup key={level} heading={level}>
+                  {routesAtLevel.map((route) => (
+                    <CommandItem
+                      key={route.path}
+                      value={`${route.label} ${route.question}`}
+                      onSelect={() => select(route.path)}
+                    >
+                      <span>{route.label}</span>
+                    </CommandItem>
+                  ))}
+                </CommandGroup>
+              )
+            })}
+          </CommandList>
+        </Command>
+      </CommandDialog>
+    </OpenPalette.Provider>
   )
 }

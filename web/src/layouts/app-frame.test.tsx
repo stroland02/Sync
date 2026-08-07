@@ -21,12 +21,38 @@
 
 import { cleanup, fireEvent, render, screen, within } from "@testing-library/react"
 import { MemoryRouter, useNavigate } from "react-router"
-import { afterEach, describe, expect, it } from "vitest"
+import { afterEach, describe, expect, it, vi } from "vitest"
 
 import { AppFrame } from "@/layouts/app-frame"
+import { shortcutHint } from "@/layouts/command-palette"
+import { KINDS_SHOWN, clearErrors, reportError } from "@/lib/error-log"
 import { AREAS, ROUTES, type AreaEntry } from "@/lib/routes"
 
-afterEach(cleanup)
+// The top bar's switchers read the same two queries the list screens read. Mocked rather than
+// served through a client, for the reason `fleet-facts.test.tsx` gives: this file is about the
+// chassis, and a live client would make every assertion here depend on a fetch.
+vi.mock(import("@/api/queries"), async (importOriginal) => ({
+  ...(await importOriginal()),
+  useRepositories: () =>
+    ({
+      isPending: false,
+      isError: false,
+      isSuccess: true,
+      data: { repo_ids: ["seed-console"] },
+    }) as never,
+  useOverview: () =>
+    ({
+      isPending: false,
+      isError: false,
+      isSuccess: true,
+      data: { vendors: [{ vendor_id: "stripe", open_finding_count: 1 }] },
+    }) as never,
+}))
+
+afterEach(() => {
+  cleanup()
+  clearErrors()
+})
 
 function renderAt(path: string) {
   return render(
@@ -91,6 +117,98 @@ function routesOf(area: AreaEntry) {
 function concrete(path: string): string {
   return path.replace(/:([A-Za-z]+)/g, "subject")
 }
+
+describe("the top bar sits above the chassis", () => {
+  it("renders a banner on every route", () => {
+    // The measured gap this closes: `[role=banner]` counted 0 on every route, so the console had
+    // no persistent statement of which subject a nine-level hierarchy had you inside.
+    for (const route of ROUTES) {
+      renderAt(concrete(route.path))
+
+      expect(screen.getByRole("banner")).toBeTruthy()
+
+      cleanup()
+    }
+  })
+
+  it("puts the bar above the rail rather than inside the scrolling column", () => {
+    // The structural claim, asserted where jsdom can see it: the header is a sibling *before* the
+    // rail-and-content row. Inside `main` it would be the breadcrumb again — gone on first scroll.
+    renderAt("/")
+
+    const banner = screen.getByRole("banner")
+
+    expect(banner.contains(rail())).toBe(false)
+    expect(
+      banner.compareDocumentPosition(rail()) & Node.DOCUMENT_POSITION_FOLLOWING
+    ).toBeTruthy()
+  })
+
+  it("carries the scope trail, and it names the subject the address is inside", () => {
+    renderAt("/vendors/stripe?repo_id=seed-console")
+
+    const banner = screen.getByRole("banner")
+    const trail = within(banner).getByRole("navigation", { name: /scope/i })
+
+    expect(within(trail).getByText("seed-console")).toBeTruthy()
+    expect(within(trail).getByText("stripe")).toBeTruthy()
+  })
+
+  it("offers the command palette a trigger a pointer can find", () => {
+    // The palette was `Ctrl/Cmd-K` with nothing on screen saying so — a keyboard-only affordance
+    // nobody can discover. The dialog is not in the document until it opens, which is what makes
+    // this assertion a real one rather than a query against a permanently mounted node.
+    renderAt("/")
+    expect(screen.queryByRole("dialog")).toBeNull()
+
+    fireEvent.click(within(screen.getByRole("banner")).getByRole("button", { name: /destination/i }))
+
+    expect(screen.getByRole("dialog")).toBeTruthy()
+  })
+})
+
+describe("the keybind the trigger prints", () => {
+  // Asserted here because the app frame is what composes the trigger. The palette answers either
+  // modifier, so the hint is about the keyboard in front of the reader; naming the wrong key would
+  // be a fact about the console stated wrongly on every screen.
+  it("names the modifier the reader's keyboard actually has", () => {
+    expect(shortcutHint("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)")).toContain("⌘")
+    expect(shortcutHint("Mozilla/5.0 (Windows NT 10.0; Win64; x64)")).toBe("Ctrl K")
+  })
+})
+
+describe("a failure displaces the chassis rather than floating over it", () => {
+  it("puts the error banner above the top bar", () => {
+    // The owner's own capture showed 92 stacked "API is unreachable" cards obscuring the page. A
+    // slot above the header is the structural fix: it pushes the console down instead of covering
+    // it, so nothing a reader needs is behind it.
+    reportError({ summary: "The API is unreachable.", detail: "connection refused" })
+    renderAt("/")
+
+    const alert = screen.getByRole("alert")
+    const banner = screen.getByRole("banner")
+
+    expect(banner.contains(alert)).toBe(false)
+    expect(
+      alert.compareDocumentPosition(banner) & Node.DOCUMENT_POSITION_FOLLOWING
+    ).toBeTruthy()
+  })
+
+  it("draws three kinds and says how many it is not drawing", () => {
+    // The cap, where it is visible. `groupErrorsByKind` is tested on its own; this is the claim
+    // that the banner honours it and states the remainder rather than silently dropping it.
+    for (const summary of ["first", "second", "third", "fourth"]) {
+      reportError({ summary, detail: summary })
+    }
+    renderAt("/")
+
+    const alert = screen.getByRole("alert")
+
+    expect(alert.querySelectorAll("li")).toHaveLength(KINDS_SHOWN)
+    expect(alert.textContent).toContain("1 further kind")
+    expect(alert.textContent).toContain("Nothing was dropped")
+  })
+})
 
 describe("the rail carries the product's areas", () => {
   it("names every area exactly once and Settings last", () => {

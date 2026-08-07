@@ -30,8 +30,11 @@ import { useReducedMotion as useFramerReducedMotion } from "framer-motion"
  * animates it. If that sentence cannot be written, the animation has not earned itself.
  */
 export const MOTION_USAGES = [
-  // An unhandled error arrived. Rare by construction, it floats over the viewport, and the arrival
-  // is the state change — `ErrorSurface` is the one thing in this console that occludes content.
+  // An unhandled error arrived, and the arrival is the state change. Rare by construction: a
+  // console with an API behind it shows this surface on a genuine failure and never otherwise.
+  // **It stopped occluding content in M7-W183** — it is now a banner above the chassis that
+  // displaces it — so the animated prop is opacity alone. A translate here would be animating a
+  // layout shift, which claims a time for a movement the reader did not ask for.
   "components/error-surface.tsx",
   // A node's status changed under a poll: the checkpointer wrote a checkpoint at a moment, which is
   // a time the graph actually holds. Guarded against its own mount and against an unchanged
@@ -41,9 +44,8 @@ export const MOTION_USAGES = [
 
 export const EASE_STANDARD: [number, number, number, number] = [0.4, 0, 0.2, 1]
 
-/** `ErrorSurface` arriving and leaving — the one thing in the console that floats. */
+/** `ErrorSurface` arriving and leaving. */
 export const ERROR_SURFACE_DURATION = 0.12
-export const ERROR_SURFACE_TRANSLATE_PX = 4
 
 /** The changed-under-poll wash: a real checkpoint, not a re-render. */
 export const CHANGE_WASH_DURATION = 0.6

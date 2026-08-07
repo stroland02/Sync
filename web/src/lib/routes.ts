@@ -34,7 +34,7 @@
  * bundle a reviewer can now open at its own address, bounded by what `sync.dashboard.queries`
  * exposes rather than by what the design document's evidence bundle describes —
  * `features/pullrequests/pull-request-page.tsx` names the gap. A level with no route at all would
- * still belong in `GRAPH_LEVELS` regardless — `AppFrame` and `CommandPalette` already drop a level
+ * still belong in `GRAPH_LEVELS` regardless — `AppFrame` and the command palette already drop a level
  * group with nothing under it, so an unbuilt level costs nothing here.
  */
 

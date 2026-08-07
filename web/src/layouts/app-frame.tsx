@@ -48,7 +48,8 @@ import {
 import { Link, Outlet, useLocation } from "react-router"
 
 import { ErrorSurface } from "@/components/error-surface"
-import { CommandPalette } from "@/layouts/command-palette"
+import { CommandPaletteProvider, CommandPaletteTrigger } from "@/layouts/command-palette"
+import { ScopeTrail } from "@/layouts/scope-switchers"
 import {
   AREAS,
   ROUTES,
@@ -180,10 +181,11 @@ function AreaRail({
   return (
     <nav
       aria-label="Areas"
-      // `sticky` with `h-screen`, not a full-height static column. Every level here scrolls well
-      // past one viewport, and a static rail is as tall as the document — a persistent navigation
-      // that leaves the screen after one scroll is not persistent.
-      className="sticky top-0 flex h-screen w-10 shrink-0 flex-col border-r border-line bg-sidebar py-row"
+      // `sticky` and one viewport tall, not a full-height static column. Every level here scrolls
+      // well past one viewport, and a static rail is as tall as the document — a persistent
+      // navigation that leaves the screen after one scroll is not persistent. The height is the
+      // viewport less the bar above it, and `top-12` is that same bar: both tiers begin under it.
+      className="sticky top-12 flex h-[calc(100vh-3rem)] w-10 shrink-0 flex-col border-r border-line bg-sidebar py-row"
     >
       <ul className="flex flex-1 flex-col items-center gap-field">
         {AREAS.map((area) => (
@@ -297,7 +299,7 @@ function ContextualSidebar({ area, pathname }: { area: AreaEntry; pathname: stri
   return (
     <Sidebar
       collapsible="none"
-      className="sticky top-0 h-screen shrink-0 border-r border-line bg-sidebar"
+      className="sticky top-12 h-[calc(100vh-3rem)] shrink-0 border-r border-line bg-sidebar"
     >
       <nav aria-label="Destinations" className="flex min-h-0 flex-1 flex-col">
         <SidebarHeader className="gap-field px-row py-section">
@@ -329,24 +331,43 @@ export function AppFrame() {
   const area = AREAS.find((entry) => entry.id === activeId) ?? AREAS[0]
 
   return (
-    <SidebarProvider className="bg-background text-foreground">
-      <ErrorSurface />
-      <CommandPalette />
+    <CommandPaletteProvider>
+      <div className="flex min-h-svh flex-col bg-background text-foreground">
+        {/* The banner slot. Above the header and in flow, so a failure pushes the console down
+            rather than covering it — `components/error-surface.tsx` carries what that fixed. */}
+        <ErrorSurface />
 
-      <AreaRail activeId={activeId} onSelect={(id) => setPicked({ id, at: pathname })} />
-      <ContextualSidebar area={area} pathname={pathname} />
+        <header
+          role="banner"
+          // Sticky, because the whole reason this exists is that the breadcrumb left the screen on
+          // the first scroll. The two tiers below therefore start under it rather than at 0.
+          className="sticky top-0 z-30 flex h-12 shrink-0 items-center justify-between gap-section border-b border-line bg-background px-section"
+        >
+          {/* `min-w-0` so the trail truncates inside its own box. Studio's header is
+              `overflow-x-auto` and lets the current subject scroll off the side; ours holds it. */}
+          <div className="flex min-w-0 flex-1 items-center">
+            <ScopeTrail />
+          </div>
+          <CommandPaletteTrigger />
+        </header>
 
-      {/* `min-w-0` is what lets a nine-column table shrink instead of pushing the chassis off the
-          viewport: a flex child defaults to its content's minimum width, and a table's is the sum of
-          its columns. */}
-      <div className="flex min-w-0 flex-1 flex-col">
-        {/* No error boundary here. `App.tsx` puts one inside each routed screen instead, keyed by
-            pathname — one out here survives navigation and turns a single crash into a console that
-            stays crashed. */}
-        <main className="flex flex-1 flex-col gap-8 p-frame">
-          <Outlet />
-        </main>
+        <SidebarProvider className="min-h-0 flex-1 items-start">
+          <AreaRail activeId={activeId} onSelect={(id) => setPicked({ id, at: pathname })} />
+          <ContextualSidebar area={area} pathname={pathname} />
+
+          {/* `min-w-0` is what lets a nine-column table shrink instead of pushing the chassis off
+              the viewport: a flex child defaults to its content's minimum width, and a table's is
+              the sum of its columns. */}
+          <div className="flex min-w-0 flex-1 flex-col">
+            {/* No error boundary here. `App.tsx` puts one inside each routed screen instead, keyed
+                by pathname — one out here survives navigation and turns a single crash into a
+                console that stays crashed. */}
+            <main className="flex flex-1 flex-col gap-8 p-frame">
+              <Outlet />
+            </main>
+          </div>
+        </SidebarProvider>
       </div>
-    </SidebarProvider>
+    </CommandPaletteProvider>
   )
 }

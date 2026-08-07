@@ -695,7 +695,15 @@ should not draw a ring either.
 | `--shadow-float` | the same ring, plus a soft drop shadow | only something that occludes content |
 
 There is no third level *of ours*. Cards do not float above tables. Today exactly one thing this
-project draws floats: `ErrorSurface`, which is `fixed` over the viewport.
+project draws floats: the command palette's dialog, which is modal and covers the console
+deliberately.
+
+**`ErrorSurface` used to be the example here and is no longer one, which is the clearest case this
+section has of the rule working.** It was `fixed` over the viewport with `--shadow-float`, and the
+owner's capture of a branch with no API behind it showed ninety-two stacked error cards covering the
+page. A debugging log is not worth occluding for. M7-W183 moved it into a banner slot above the top
+bar, in flow, where it displaces the chassis instead — and it took the float token off on the way
+out, because the elevation was the claim that it deserved to be in front.
 
 **The vendored catalog carries Tailwind's stock `shadow-xs / sm / md / lg` instead, and that is the
 boundary rather than a fourth level.** A vendored dialog, popover and card arrive with the elevation
@@ -728,8 +736,9 @@ should avoid animation all together" (`components/core/principles/motion/motion.
 same system publishes a 120–240ms token set and spends it on overlays, modals and toasts. Its own
 row-hover primitive declares no transition at all, which is why `TableRow`'s hover fill carries none
 either: a row hover is the most frequent interaction in this console. `ErrorSurface` arriving is the
-opposite case. **When adding a transition, ask how often the operator crosses this surface, not how
-large the page is or how long feels right.**
+opposite case — a genuine failure, and nothing else, puts it on screen. **When adding a transition,
+ask how often the operator crosses this surface, not how large the page is or how long feels
+right.**
 
 `web/src/lib/motion.ts` owns the framer-motion-driven usages, and **it is a registry rather than a
 list in prose**: `MOTION_USAGES` names every module permitted to import framer-motion, and
@@ -743,9 +752,10 @@ merely sped up would still be motion. This is code, not a token, because the bra
 there is no CSS value that expresses "skip this prop entirely."
 
 **Two usages, and the third was deleted on evidence rather than on taste.** `ErrorSurface` arriving
-and leaving is the occasional, occluding surface this section already licensed. The
-changed-under-poll wash tracks a checkpoint the checkpointer wrote at a moment, which is a time the
-graph holds. The third was "the paged table container settling into its new height", and it had
+and leaving is the occasional surface this section already licensed; its animated property is
+opacity alone, because a banner that displaces the chassis would otherwise be animating a layout
+shift. The changed-under-poll wash tracks a checkpoint the checkpointer wrote at a moment, which is
+a time the graph holds. The third was "the paged table container settling into its new height", and it had
 never once run: every screen that paginates returns a loading state while `query.isPending`, so a
 page change unmounts the subtree a layout animation would need to persist across. Sampled every 40ms
 across a swap from 50 rows to 34: zero transforms, zero entries in `document.getAnimations()`.

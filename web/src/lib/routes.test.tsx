@@ -55,10 +55,15 @@ function renderNav(routes: readonly (typeof ROUTES)[number][] = ROUTES) {
   // rail links each area's landing route and the sidebar links the destinations inside the selected
   // area. A guard that rendered only one of the two would pass while the other lost every link --
   // which is the shape of the defect this file exists for.
+  // The chassis reads two queries now — the top bar's scope switchers — so it needs a client the
+  // way the whole-`App` renders below already do. `retry: false` for the same reason they give.
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   render(
-    <MemoryRouter initialEntries={["/"]}>
-      <AppFrame />
-    </MemoryRouter>
+    <QueryClientProvider client={client}>
+      <MemoryRouter initialEntries={["/"]}>
+        <AppFrame />
+      </MemoryRouter>
+    </QueryClientProvider>
   )
 }
 
