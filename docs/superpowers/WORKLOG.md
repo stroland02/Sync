@@ -93,6 +93,7 @@ repository wrote rather than mistakes anyone made.
 | M7-W174 | Task 6: the API Services level on the substrate — vendor changes and findings in Studio table anatomy, the at-least-once sentence kept, mapping table first | landed | `docs/superpowers/briefs/2026-08-07-substrate-api-services.md` |
 | M7-W175 | Task 6: the Signals level on the substrate — sources as a role-grouped catalogue, telemetry tables onto the Studio anatomy, the not-attached sentences kept in the grid | landed | `docs/superpowers/briefs/2026-08-07-substrate-signals.md` |
 | M7-W176 | Task 6: the Binding surface on the substrate — the join in Studio anatomy, a binding's detail in a URL-addressable drawer, one binding drawn as cards with its rungs | landed | `docs/superpowers/briefs/2026-08-07-substrate-binding-surface.md` |
+| M7-W177 | Task 6: Errors & Incidents on the substrate — the faceted explorer keeps its zero counts, accountability keeps its abandoned attempts, the rung chart becomes a panel's evidence | landed | `docs/superpowers/briefs/2026-08-07-substrate-errors-incidents.md` |
 | M4-W166 | B117: `GraphStore` reconnects a closed connection, instead of handing the dead one back forever | dispatched | `briefs/2026-08-07-b117-graphstore-reconnect.md` |
 | CI-W167 | B111: the suite runs three times per pull request, and what moving two of them costs | dispatched | `briefs/2026-08-07-b111-ci-critical-path.md` |
 

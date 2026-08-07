@@ -12,6 +12,28 @@
  * how `sync.dashboard.graph_views.detector_accountability` already sorts it -- and nothing
  * here re-sorts by total. Sorting by count is what turns a roll-up into a leaderboard, and
  * detectors are not competing: more findings is neither better nor worse than fewer.
+ *
+ * ## Recomposed onto the vendored substrate by M7-W177
+ *
+ * `docs/superpowers/briefs/2026-08-07-substrate-errors-incidents.md` carries the mapping table
+ * and the eleven rulings. Three of them are visible here.
+ *
+ * **The screen's total moved into the panel whose chart decomposes it.** It was a loose
+ * paragraph at `--text-figure` floating above the card, which is the figure register spent with
+ * no evidence attached to it; `MetricPanel` is the arrangement that pairs the two.
+ *
+ * **The rung tally is new, and it answers a question the chart cannot.**
+ * `rung-composition-chart.tsx` opens by asking how much of everything the console claims rests on
+ * a static read alone, and every bar it draws is normalised to one detector's own total — so that
+ * answer appears nowhere on it. `RungSeries.total` has been computed and tested in the data seam
+ * since the chart was written and nothing rendered it. A rung nothing rests on renders `0` rather
+ * than being suppressed, which is the same claim the paragraph beneath it makes in words.
+ *
+ * **Two sentences moved down to the rows they are about.** The registry sentence was the third
+ * paragraph of the page's intro, two panels above the cards it qualifies; the unscoped-link
+ * sentence was rendered once per card, which is one fact written as many times as the graph has
+ * detectors. Both are now the catalogue's caption. Every word survives — only the number of
+ * copies falls.
  */
 
 import { Suspense, lazy, useMemo } from "react"
@@ -19,9 +41,6 @@ import { Link } from "react-router"
 
 import { useDetectors } from "@/api/queries"
 import type { BindingSource, DetectorRow, Tally } from "@/api/types"
-import { EmptyState, ErrorState, LoadingState } from "@/components/states"
-import { Formatted } from "@/components/status"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import {
   Table,
   TableBody,
@@ -29,9 +48,16 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-} from "@/components/ui/table"
-import { rungComposition } from "@/features/detectors/rung-series"
+} from "@/components/data-table"
+import { MetricPanel } from "@/components/metric-panel"
+import { EmptyState, ErrorState, LoadingState } from "@/components/states"
+import { Formatted } from "@/components/status"
+import {
+  rungComposition,
+  type RungComposition as Composition,
+} from "@/features/detectors/rung-series"
 import { describeRung, orAbsent } from "@/lib/format"
+import { Card, CardContent, CardHeader } from "@/vendor/supabase/ui/card"
 
 /**
  * `echarts` is ~1.1 MB minified and this screen is one of nine. Lazy, so it lands in its own
@@ -61,6 +87,10 @@ function rungTooltip(key: string): string | undefined {
   return isBindingSource(key) ? describeRung(key) : undefined
 }
 
+function plural(count: number, singular: string): string {
+  return count === 1 ? singular : `${singular}s`
+}
+
 function TallyTable({
   heading,
   tally,
@@ -72,13 +102,14 @@ function TallyTable({
 }) {
   const entries = Object.entries(tally).sort(([a], [b]) => a.localeCompare(b))
   return (
-    <div className="flex flex-col gap-row">
-      <h3 className="furniture text-meta text-muted-foreground">{heading}</h3>
+    <div className="flex min-w-0 flex-col gap-row">
+      {/* `h4` under the card's own `h3`: a tally is contained by the detector it belongs to. */}
+      <h4 className="furniture text-meta text-ink-muted">{heading}</h4>
       <Table>
         <TableHeader>
           <TableRow>
-            <TableHead className="text-meta">Value</TableHead>
-            <TableHead className="text-meta">Findings</TableHead>
+            <TableHead>Value</TableHead>
+            <TableHead>Findings</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -88,10 +119,10 @@ function TallyTable({
                   real, distinct key (a claim or a severity nothing named), not a missing
                   cell, so it takes the same absence mark as every other unnamed value
                   rather than rendering as blank space with no mark at all. */}
-              <TableCell className="font-mono text-body" title={tooltipFor?.(value)}>
+              <TableCell className="font-mono" title={tooltipFor?.(value)}>
                 <Formatted value={orAbsent(value)} />
               </TableCell>
-              <TableCell className="font-mono text-body">{count}</TableCell>
+              <TableCell className="font-mono">{count.toLocaleString()}</TableCell>
             </TableRow>
           ))}
         </TableBody>
@@ -100,17 +131,22 @@ function TallyTable({
   )
 }
 
-function DetectorCard({ row, repoId }: { row: DetectorRow; repoId: string | null }) {
+function DetectorCard({ row }: { row: DetectorRow }) {
   return (
-    <Card>
+    <Card className="flex min-w-0 flex-col">
       <CardHeader>
-        <CardTitle className="font-mono text-emphasis">{row.detector}</CardTitle>
-        <CardDescription className="text-body">
+        {/* An `h3` written here rather than the vendored `CardTitle`, which is mono uppercase at
+            12px — the label register, and a detector's name is an identifier read rather than a
+            label scanned. */}
+        <h3 className="font-mono text-emphasis break-words">{row.detector}</h3>
+        <p className="text-body text-muted-foreground">
           {/* Weight carries the count, not a size step: this card repeats once per
               detector, so a stat-tile figure here would cost a row on every one of them. */}
-          <span className="font-semibold text-foreground tabular-nums">{row.total}</span> open{" "}
-          {row.total === 1 ? "finding" : "findings"} currently attributed to this detector.
-        </CardDescription>
+          <span className="font-semibold text-foreground tabular-nums">
+            {row.total.toLocaleString()}
+          </span>{" "}
+          open {plural(row.total, "finding")} currently attributed to this detector.
+        </p>
       </CardHeader>
       <CardContent className="flex flex-col gap-section">
         <div className="grid gap-section sm:grid-cols-3">
@@ -118,11 +154,171 @@ function DetectorCard({ row, repoId }: { row: DetectorRow; repoId: string | null
           <TallyTable heading="By claim" tally={row.by_claim} />
           <TallyTable heading="By severity" tally={row.by_severity} />
         </div>
+      </CardContent>
+    </Card>
+  )
+}
+
+/**
+ * Every rung this console declares, with what rests on it across the whole scope.
+ *
+ * The chart above draws each detector's composition and normalises every bar to that detector's
+ * own total, so it cannot say how much of everything on this screen rests on one rung. This can,
+ * and it is the question the chart's own docstring opens with.
+ *
+ * A rung nothing rests on renders `0` rather than being dropped, for the reason `rung-series.ts`
+ * gives for keeping it as a series: "no open finding here rests on observed traffic" and "this
+ * console does not have that rung" are opposite facts about the same picture.
+ */
+function RungTally({ composition }: { composition: Composition }) {
+  return (
+    <div className="flex min-w-0 flex-col gap-row">
+      <h3 className="furniture text-meta text-ink-muted">By rung, across every detector</h3>
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead>Rung</TableHead>
+            <TableHead>Open findings</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {composition.series.map((entry) => (
+            <TableRow key={entry.rung}>
+              <TableCell className="font-mono" title={rungTooltip(entry.rung)}>
+                {entry.rung}
+              </TableCell>
+              <TableCell className="font-mono">{entry.total.toLocaleString()}</TableCell>
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
+      <p className="max-w-prose text-meta text-muted-foreground">
+        Counted over every open finding in this scope, once each, by the rung behind it — not
+        over the bars above, each of which is a share of one detector's own total.
+      </p>
+    </div>
+  )
+}
+
+/**
+ * The one chart on this screen, and the sentences that keep it honest.
+ *
+ * Every bar is full width and carries one detector's composition; the count it is a share of is
+ * printed beside the detector's name rather than encoded as length. Both facts are said below
+ * rather than left to be inferred, because a stacked bar is exactly where a reader starts
+ * reading length as quantity and then as quality.
+ *
+ * The panel's figure is `total_open_findings` from the payload — the set the chart partitions,
+ * and the number this screen already spent the figure register on before the port.
+ */
+function RungComposition({ rows, total }: { rows: DetectorRow[]; total: number }) {
+  const composition = useMemo(() => rungComposition(rows), [rows])
+
+  return (
+    <MetricPanel
+      label="What these claims rest on"
+      metric={{
+        value: total.toLocaleString(),
+        unit: `open ${plural(total, "finding")} across ${rows.length} ${plural(rows.length, "detector")}`,
+      }}
+      caption={
+        <p className="max-w-prose">
+          Every open finding in this scope, split by the rung of evidence behind it, one bar per
+          detector. The same counts are in each detector's own <code className="font-mono">By
+          rung</code> table below; this is the one view where they can be compared across
+          detectors without arithmetic.
+        </p>
+      }
+    >
+      <Suspense fallback={null}>
+        <RungCompositionChart composition={composition} />
+      </Suspense>
+      <p className="max-w-prose text-body text-muted-foreground">
+        Every bar is the same length because it is a composition, not a quantity: the segments
+        are that detector's own findings split by rung, and the number of findings they are a
+        share of is printed beside the detector's name. Volume is not encoded here at all —
+        one detector on this screen can hold four figures' worth of findings and another
+        three, and drawing that as length would render the smaller ones as a sliver
+        indistinguishable from nothing.
+      </p>
+      <p className="max-w-prose text-body text-muted-foreground">
+        The rung is a class of evidence, not a position on a good-to-bad scale, so no colour
+        here grades anything: each is an identity, and each is named in the legend, in the
+        segment where it fits, and in the table beneath. A detector resting entirely on{" "}
+        <code className="font-mono">static</code> is not doing worse than one correlating
+        watched traffic — it is making a different kind of claim, which is the thing an
+        operator weighing a false positive needs first.
+      </p>
+      <RungTally composition={composition} />
+      {composition.absentRungs.length > 0 && (
+        <p className="max-w-prose text-body text-muted-foreground">
+          Nothing in this scope rests on{" "}
+          {composition.absentRungs.map((rung, index) => (
+            <span key={rung}>
+              {index > 0 && (index === composition.absentRungs.length - 1 ? " or " : ", ")}
+              <code className="font-mono">{rung}</code>
+            </span>
+          ))}
+          . Those rungs keep their place in the legend and draw no segment — an absence, which
+          is not the same fact as a rung this console does not have.
+        </p>
+      )}
+      {composition.unrecognisedRungs.length > 0 && (
+        <p className="max-w-prose text-body text-muted-foreground">
+          One series counts findings whose rung this console does not recognise:{" "}
+          {composition.unrecognisedRungs.map((rung, index) => (
+            <span key={rung}>
+              {index > 0 && ", "}
+              <code className="font-mono">{rung}</code>
+            </span>
+          ))}
+          . They are counted rather than dropped, so the bars still sum to each detector's own
+          total — the provenance vocabulary has grown since this view was written.
+        </p>
+      )}
+    </MetricPanel>
+  )
+}
+
+/**
+ * Why a detector may be missing from a screen that has no registry of them.
+ *
+ * **Rendered on both branches, and that is the point of it being a component.** It was the page
+ * intro's third paragraph before M7-W177, so it appeared over an empty screen as well as over a
+ * full one — and the empty screen is where it bites hardest, because "no detector raised
+ * anything" and "no detector is installed" are the two readings it exists to keep apart. Moving
+ * it down beside the cards without rendering it here would have dropped the qualification on
+ * exactly the branch that needs it.
+ */
+function RegistryNote() {
+  return (
+    <p className="max-w-prose text-body text-muted-foreground">
+      A card here exists only for a detector that has raised an open finding -- the graph keeps
+      no registry of which detectors are installed, only the findings they have written. A
+      detector currently raising nothing does not appear, and that absence is indistinguishable
+      from a detector that does not exist.
+    </p>
+  )
+}
+
+/**
+ * The cards, and the two things a reader has to know before reading one.
+ *
+ * Both sentences below were rendered elsewhere before M7-W177 — the first at the top of the
+ * page, two panels above the cards it is about, and the second once inside every card. They are
+ * one copy each, here, beside the rows they qualify.
+ */
+function DetectorCatalogue({ rows, repoId }: { rows: DetectorRow[]; repoId: string | null }) {
+  return (
+    <section className="flex min-w-0 flex-col gap-section">
+      <div className="flex flex-col gap-field">
+        <h2 className="text-section">By detector</h2>
+        <RegistryNote />
         {/* No route filters an open finding by the detector that raised it -- that
             attribution exists nowhere else in the console before this screen. The link
-            below is real and goes to real findings; it is just not scoped to this row,
+            below is real and goes to real findings; it is just not scoped to any row here,
             and the sentence says so rather than letting the link imply otherwise. */}
-        <p className="max-w-prose text-meta text-muted-foreground">
+        <p className="max-w-prose text-body text-muted-foreground">
           No route filters findings by detector yet. Every open finding, by vendor, is on{" "}
           {repoId === null ? (
             <Link to="/" className="underline underline-offset-2">
@@ -138,81 +334,13 @@ function DetectorCard({ row, repoId }: { row: DetectorRow; repoId: string | null
           )}{" "}
           instead.
         </p>
-      </CardContent>
-    </Card>
-  )
-}
-
-/**
- * The one chart on this screen, and the sentences that keep it honest.
- *
- * Every bar is full width and carries one detector's composition; the count it is a share of is
- * printed beside the detector's name rather than encoded as length. Both facts are said below
- * rather than left to be inferred, because a stacked bar is exactly where a reader starts
- * reading length as quantity and then as quality.
- */
-function RungComposition({ rows }: { rows: DetectorRow[] }) {
-  const composition = useMemo(() => rungComposition(rows), [rows])
-
-  return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="text-emphasis">What these claims rest on</CardTitle>
-        <CardDescription className="max-w-prose text-body">
-          Every open finding in this scope, split by the rung of evidence behind it, one bar per
-          detector. The same counts are in each detector's own <code className="font-mono">By
-          rung</code> table below; this is the one view where they can be compared across
-          detectors without arithmetic.
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="flex flex-col gap-section">
-        <Suspense fallback={null}>
-          <RungCompositionChart composition={composition} />
-        </Suspense>
-        <p className="max-w-prose text-body text-muted-foreground">
-          Every bar is the same length because it is a composition, not a quantity: the segments
-          are that detector's own findings split by rung, and the number of findings they are a
-          share of is printed beside the detector's name. Volume is not encoded here at all —
-          one detector on this screen can hold four figures' worth of findings and another
-          three, and drawing that as length would render the smaller ones as a sliver
-          indistinguishable from nothing.
-        </p>
-        <p className="max-w-prose text-body text-muted-foreground">
-          The rung is a class of evidence, not a position on a good-to-bad scale, so no colour
-          here grades anything: each is an identity, and each is named in the legend, in the
-          segment where it fits, and in the table beneath. A detector resting entirely on{" "}
-          <code className="font-mono">static</code> is not doing worse than one correlating
-          watched traffic — it is making a different kind of claim, which is the thing an
-          operator weighing a false positive needs first.
-        </p>
-        {composition.absentRungs.length > 0 && (
-          <p className="max-w-prose text-body text-muted-foreground">
-            Nothing in this scope rests on{" "}
-            {composition.absentRungs.map((rung, index) => (
-              <span key={rung}>
-                {index > 0 && (index === composition.absentRungs.length - 1 ? " or " : ", ")}
-                <code className="font-mono">{rung}</code>
-              </span>
-            ))}
-            . Those rungs keep their place in the legend and draw no segment — an absence, which
-            is not the same fact as a rung this console does not have.
-          </p>
-        )}
-        {composition.unrecognisedRungs.length > 0 && (
-          <p className="max-w-prose text-body text-muted-foreground">
-            One series counts findings whose rung this console does not recognise:{" "}
-            {composition.unrecognisedRungs.map((rung, index) => (
-              <span key={rung}>
-                {index > 0 && ", "}
-                <code className="font-mono">{rung}</code>
-              </span>
-            ))}
-            . They are counted rather than dropped, so the bars still sum to each detector's own
-            total — the provenance vocabulary has grown since this view was written.
-          </p>
-        )}
-      </CardContent>
-    </Card>
+      </div>
+      <div className="flex flex-col gap-section">
+        {rows.map((row) => (
+          <DetectorCard key={row.detector} row={row} />
+        ))}
+      </div>
+    </section>
   )
 }
 
@@ -224,9 +352,9 @@ export function DetectorAccountability({ repoId = null }: { repoId?: string | nu
 
   const { detectors, total_open_findings } = query.data
 
-  return (
-    <div className="flex flex-col gap-8">
-      {detectors.length === 0 ? (
+  if (detectors.length === 0) {
+    return (
+      <div className="flex flex-col gap-section">
         <EmptyState
           headline={
             repoId === null
@@ -235,23 +363,15 @@ export function DetectorAccountability({ repoId = null }: { repoId?: string | nu
           }
           detail="The API answered, and the graph holds no open findings in this scope right now. That is an answer, not a failure -- nothing indexed here is currently flagged by any detector."
         />
-      ) : (
-        <>
-          <p className="flex flex-wrap items-baseline gap-field text-body text-muted-foreground">
-            <span className="text-figure text-foreground">{total_open_findings}</span>
-            <span>
-              open {total_open_findings === 1 ? "finding" : "findings"} across{" "}
-              {detectors.length} {detectors.length === 1 ? "detector" : "detectors"}.
-            </span>
-          </p>
-          <RungComposition rows={detectors} />
-          <div className="flex flex-col gap-section">
-            {detectors.map((row) => (
-              <DetectorCard key={row.detector} row={row} repoId={repoId} />
-            ))}
-          </div>
-        </>
-      )}
+        <RegistryNote />
+      </div>
+    )
+  }
+
+  return (
+    <div className="flex flex-col gap-8">
+      <RungComposition rows={detectors} total={total_open_findings} />
+      <DetectorCatalogue rows={detectors} repoId={repoId} />
     </div>
   )
 }

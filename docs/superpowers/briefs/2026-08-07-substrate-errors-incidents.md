@@ -285,3 +285,128 @@ five puts two button treatments on every screen that renders a filter beside a p
 That is a shared-layer decision with its own measurement, not a rider on a level's port. The
 behaviour the direction pins — a zero-count option rendered, the narrowing sent to the API — is
 untouched, and `filters.test.tsx` is unmodified.
+
+## What ruling 6 cost, and the correction the walk found
+
+**Written here rather than folded into ruling 6, because the first version of this port shipped the
+defect and the walk is what caught it.** The registry sentence â€” *"A card here exists only for a
+detector that has raised an open findingâ€¦ that absence is indistinguishable from a detector that
+does not exist"* â€” moved out of the page intro and into the catalogue's caption. The catalogue does
+not render when no detector has anything, so on a `repo_id` naming a repository the graph holds no
+open findings for, the sentence disappeared entirely.
+
+**That is the branch it matters most on.** "No detector raised anything" and "no detector is
+installed" are the two readings the sentence exists to keep apart, and an empty screen is precisely
+where a reader has to be told they cannot be told apart. Walked against the old screen on
+`/detectors?repo_id=nope`, the old rendered it and the new did not.
+
+It is now a component â€” `RegistryNote` â€” rendered on both branches: beneath the catalogue's heading
+when there are cards, beneath the empty state when there are none. One copy in source, one copy on
+screen in either case. The general shape is worth carrying to the three levels still unported: **a
+sentence moved from a page intro into a region inherits that region's render condition**, and the
+intro's condition was "always".
+
+## What it measured
+
+Chrome, `/detectors` â€” the fleet-wide route, which is the richest this level has: four detectors,
+10,007 open findings, three of the five declared rungs carrying findings and two carrying none. The
+old screen was served from a scratch worktree at `d4332e9` on port 5186 and the new one on 5187,
+both proxied to the same API on 8787, so the two readings are of one seed.
+
+| | 1440x900 before | 1440x900 after | 1280x800 before | 1280x800 after |
+|---|---|---|---|---|
+| type range | 2.33:1 | **3.83:1** | 2.33:1 | **3.83:1** |
+| type steps | 12 / 13 / 15 / 22 / 28 | 12 / 13 / 15 / 18 / 28 / **46** | as 1440 | as 1440 |
+| largest step | 28px (the total) | 46px (the `h1`) | 28px | 46px |
+| side-by-side placements | 4 | **5** | 4 | 5 |
+| column heading | sentence-case, 40.0px | uppercase, 40.0px | sentence-case, 40.0px | uppercase, 40.0px |
+| body row | 36.0 / 36.5px | 36.5 / 37.0px | 36.0 / 36.5px | 36.5 / 37.0 / **57.0**px |
+| widest table against its container | 344 of 344 | 1063 of 1063 | 291 of 291 | 903 of 903 |
+| clipped by a sideways scroll | 0px | 0px | 0px | 0px |
+| document height | 2746px | 3014px | 2746px | 3034px |
+
+`DESIGN.md`'s bar is 3.4:1 and the display step is what clears it, exactly as on the four levels
+that gained `PageHeader` before this one. The four placements the old screen already had are the
+four cards' `sm:grid-cols-3` tally grids; the fifth is the intro band, which is the first time this
+screen puts anything beside anything else at the page level.
+
+The row grew by half a pixel to one pixel, which is the rule the vendored `TableRow` draws under
+itself and the same delta the four ported levels before this one measured.
+
+**One row is 20px taller at 1280 and it is the honest cost of the shared anatomy.** It is
+`response-field-type-changed` in the `vendor-change` card's `By claim` tally, and nothing else on
+the screen wraps at either width. The cause is measured rather than guessed: the furniture register
+is wider per glyph than sentence case, so `FINDINGS` sets a 125px second column where `Findings` set
+a narrower one, leaving 165px for the value in a 290px table â€” a few pixels short of what that
+string needs. Signals' *What it measured* recorded the same mechanism on the twelve-column telemetry
+table.
+
+Recorded rather than fixed, on that level's reasoning. The alternatives are dropping a column, which
+is a completeness loss, or hand-spelling a narrower register in this one feature, which is the drift
+`components/data-table.tsx` exists to prevent. Nothing is hidden by it â€” the row is taller, not
+clipped â€” and the rung tally, which is the table the graph-grain rule actually cares about here,
+sits in 1063px at 1440 and 903px at 1280 with nothing behind a scroll at either.
+
+The document is 268px taller at 1440. That is the header band, the control bar, the rung tally and
+the catalogue heading, all of which are content this screen did not have.
+
+## The completeness walk
+
+Every field the old screen asserted, asserted by the new one, read off both screens against the same
+seed rather than off the diff. Three states were walked: `/detectors` unfiltered,
+`/detectors?repo_id=seed-console-repo-a` (the richest scoped route â€” two detectors, three findings,
+three rungs absent), and `/detectors?repo_id=nope` (the empty state, and the branch that found the
+correction above).
+
+Carried unchanged, string for string: both breadcrumb trails; the `h1`; all four intro paragraphs in
+both scope branches, including the mono repository id inside the scoped one; the panel's title and
+its full description; both standing paragraphs under the chart; the absent-rung paragraph, with its
+`or` before the last item, in both its two-rung and three-rung forms; every detector name; every
+count sentence, with its singular and plural forms; all three tallies on every card, in the same
+order, with the same values, the same sort and the same `describeRung` tooltip on the rung tally's
+cells; the unscoped-link sentence with both of its link destinations; the empty state's headline in
+both branches and its detail in full; the registry sentence on every branch that rendered it before.
+
+Changed in rendering and not in content: every column heading is uppercase and open-tracked; every
+count is written with thousands separators â€” `10,002` rather than `10002` â€” which the chart's own
+axis labels and tooltip have always done; the panel title moves to the furniture register; the
+total's trailing full stop goes, because it is now a metric's unit rather than a sentence, which is
+how every other `MetricPanel` on the console spells one.
+
+Reworded, one noun: "A row here exists only for a detectorâ€¦" is now "A card hereâ€¦", per ruling 6.
+
+Gained: the route's own question at the display step; a `SCOPE` statement in the furniture register;
+the total at the figure register inside the panel whose chart decomposes it, rather than floating
+above it; a `By detector` heading over the cards; and the rung tally â€” `static 3,336`,
+`resolved 3,334`, `observed 3,337`, `unresolved 0`, `unattributed 0`, summing to the 10,007 the
+panel's own figure carries â€” with its scope sentence beneath it.
+
+Lost: nothing.
+
+Verified separately, because each is a branch the fleet route does not reach:
+
+- **The scoped route** renders the three-segment breadcrumb, the repository id in the scope slot in
+  mono, the repository branch of the intro paragraph, and the repository link rather than the fleet
+  link in the catalogue caption.
+- **A scope with three absent rungs** (`seed-console-repo-a`) renders `observed`, `unresolved` and
+  `unattributed` at `0` in the tally and names all three in the absence paragraph.
+- **The empty state** renders the headline, the detail, and the registry sentence beneath it, and
+  renders no panel, no chart, no tally and no catalogue heading.
+
+The document outline reads `h1` â†’ `h2` panel â†’ `h3` tally â†’ `h2` catalogue â†’ `h3` card â†’ `h4` tally,
+with no level skipped, which is ruling 9 checked on the running screen rather than in the source.
+
+## The protected sentences
+
+**None of the seventeen fragments `tests/test_console_honesty_sentences.py` holds lives in
+`features/detectors/`, before this port or after it.** Grepped per fragment across `web/src` in both
+states; the per-fragment file counts are identical either side, and zero in this feature both times.
+The whole file, 17 parametrised cases, is green, as are `tests/test_console_hierarchy.py` and
+`tests/test_console_design_tokens.py` â€” 85 cases between the three.
+
+That is a fact about where those sentences sit rather than about this screen's honesty, and it is
+worth saying plainly rather than reporting as a clean bill. The claims this level makes â€” that it is
+not a leaderboard, that a detector with no findings is indistinguishable from one that does not
+exist, that a rung is a class of evidence and not a grade â€” are unpinned by that guard, and were
+carried by the walk instead. Two of them are why ruling 3 refused to build a control and ruling 5
+refused to move a figure.
