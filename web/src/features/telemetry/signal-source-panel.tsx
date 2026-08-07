@@ -1,5 +1,5 @@
 /**
- * The signal-source role's one built panel: what traffic showed up for this repository, what
+ * The signal-source role's three panels: what traffic showed up for this repository, what
  * shape it had, and where error rates moved.
  *
  * Extracted out of what used to be the standalone `ObservedTelemetryPage`, now that the
@@ -20,28 +20,55 @@
  * on a shape or error window names the *mechanism* that produced the row (`interceptor`,
  * `error-payload`, `replay`) — never a vendor's name, per `sync.graph.sources`'s own docstring
  * — so nothing here claims to know which product reported it.
+ *
+ * ## Ported onto the substrate by M7-W175
+ *
+ * `docs/superpowers/briefs/2026-08-07-substrate-signals.md` is the mapping table this port was
+ * gated on. Three panels, three totals, and each total is its own panel's grain — which is why each
+ * takes the figure register here and the one panel Codebase builds out of the same payload takes
+ * none. **A total of zero takes no figure at all.** Rendering `0` at the largest register on the
+ * screen would draw an absence as a measured zero, and the empty state beneath says in words why
+ * this payload cannot tell the difference.
+ *
+ * **No catalogue is derived from `source`.** The mechanisms it names would be the truest reading of
+ * this role, and two facts refuse it: `observed_call` carries no `source` at all, so a catalogue
+ * built from the other two tables would imply the calls came from nowhere; and the rows here are
+ * one page of each table, so a set of distinct sources read off them is a fact about the page
+ * wearing the clothes of a fact about the deployment. Ruling 12.
  */
 
 import { DEFAULT_LIMIT } from "@/api/client"
 import { useRepositoryObserved } from "@/api/queries"
-import { PageControls } from "@/components/page-controls"
-import { ErrorState, LoadingState } from "@/components/states"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { MetricPanel } from "@/components/metric-panel"
+import { EmptyState, ErrorState, LoadingState } from "@/components/states"
 import { ErrorWindowsTable } from "@/features/telemetry/error-windows-table"
 import { ObservedCallsTable } from "@/features/telemetry/observed-calls-table"
 import { ObservedShapesTable } from "@/features/telemetry/observed-shapes-table"
+import { FooterBar } from "@/layouts/footer-bar"
 import { useOffsetParam } from "@/lib/use-offset-param"
 
-function NothingRecorded({ what, repoId }: { what: string; repoId: string }) {
-  return (
-    <p className="max-w-prose text-body text-muted-foreground">
-      No {what} recorded for <span className="font-mono">{repoId}</span>. That could mean the
-      relevant code path has never run since telemetry started, that telemetry was never wired
-      up for this repository, or that this identifier does not name a repository the index has
-      seen at all — this payload answers the same way in all three cases, so nothing here picks
-      one.
-    </p>
-  )
+/**
+ * The three meanings this payload cannot tell apart, said in full every time.
+ *
+ * `EmptyState` rather than a bare paragraph, so a source with nothing to report sits in the same
+ * vocabulary as every other kind of nothing in this console. The repository id loses its mono
+ * setting in the move — `EmptyState` takes strings — which is the trade the Codebase level already
+ * made for these same three states.
+ */
+function nothingRecorded(what: string, repoId: string) {
+  return {
+    headline: `No ${what} recorded for ${repoId}.`,
+    detail:
+      "That could mean the relevant code path has never run since telemetry started, that " +
+      "telemetry was never wired up for this repository, or that this identifier does not name " +
+      "a repository the index has seen at all — this payload answers the same way in all three " +
+      "cases, so nothing here picks one.",
+  }
+}
+
+/** A total at the figure register, or nothing at all when the total is zero. */
+function countMetric(total: number, unit: string) {
+  return total === 0 ? undefined : { value: total.toLocaleString(), unit }
 }
 
 export function SignalSourcePanel({ repoId }: { repoId: string }) {
@@ -57,101 +84,104 @@ export function SignalSourcePanel({ repoId }: { repoId: string }) {
     errorWindowsOffset,
   })
 
+  if (query.isPending) return <LoadingState what={`observed telemetry for ${repoId}`} />
+  if (query.isError) {
+    return <ErrorState error={query.error} what={`observed telemetry for ${repoId}`} />
+  }
+
+  const { calls, shapes, error_windows } = query.data
+
   return (
-    <div className="flex flex-col gap-section">
-      {query.isPending && <LoadingState what={`observed telemetry for ${repoId}`} />}
-      {query.isError && <ErrorState error={query.error} what={`observed telemetry for ${repoId}`} />}
+    <div className="flex min-w-0 flex-col gap-section">
+      <MetricPanel
+        label="Observed calls"
+        metric={countMetric(calls.total, `call${calls.total === 1 ? "" : "s"} observed`)}
+        caption={
+          <p className="max-w-prose">
+            One row per unit of work's use of one vendor operation. A row proves the call ran at
+            least once; it does not prove the operation it names is the operation that was actually
+            called — that is what the rung says.
+          </p>
+        }
+      >
+        {calls.total === 0 ? (
+          <EmptyState {...nothingRecorded("observed calls", repoId)} />
+        ) : (
+          <>
+            <ObservedCallsTable calls={calls.items} />
+            <FooterBar
+              offset={callsOffset}
+              limit={DEFAULT_LIMIT}
+              shown={calls.items.length}
+              total={calls.total}
+              nextOffset={calls.next_offset}
+              busy={query.isFetching}
+              onOffsetChange={setCallsOffset}
+            />
+          </>
+        )}
+      </MetricPanel>
 
-      {query.isSuccess && (
-        <>
-          <Card>
-            <CardHeader>
-              <CardTitle>Observed calls</CardTitle>
-              <CardDescription className="max-w-prose">
-                One row per unit of work's use of one vendor operation. A row proves the call
-                ran at least once; it does not prove the operation it names is the operation
-                that was actually called — that is what the rung says.
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              {query.data.calls.total === 0 ? (
-                <NothingRecorded what="observed calls" repoId={repoId} />
-              ) : (
-                <div className="flex flex-col gap-section">
-                  <ObservedCallsTable calls={query.data.calls.items} />
-                  <PageControls
-                    offset={callsOffset}
-                    limit={DEFAULT_LIMIT}
-                    shown={query.data.calls.items.length}
-                    total={query.data.calls.total}
-                    nextOffset={query.data.calls.next_offset}
-                    busy={query.isFetching}
-                    onOffsetChange={setCallsOffset}
-                  />
-                </div>
-              )}
-            </CardContent>
-          </Card>
+      <MetricPanel
+        label="Response shapes"
+        metric={countMetric(shapes.total, `field shape${shapes.total === 1 ? "" : "s"} seen`)}
+        caption={
+          <p className="max-w-prose">
+            What the operations this repository's own traffic names have actually been seen to
+            return, joined in through those operations rather than stored per repository — a shape
+            is a fact about the vendor, not about who calls it.
+          </p>
+        }
+      >
+        {shapes.total === 0 ? (
+          <EmptyState {...nothingRecorded("response shapes", repoId)} />
+        ) : (
+          <>
+            <ObservedShapesTable shapes={shapes.items} />
+            <FooterBar
+              offset={shapesOffset}
+              limit={DEFAULT_LIMIT}
+              shown={shapes.items.length}
+              total={shapes.total}
+              nextOffset={shapes.next_offset}
+              busy={query.isFetching}
+              onOffsetChange={setShapesOffset}
+            />
+          </>
+        )}
+      </MetricPanel>
 
-          <Card>
-            <CardHeader>
-              <CardTitle>Response shapes</CardTitle>
-              <CardDescription className="max-w-prose">
-                What the operations this repository's own traffic names have actually been
-                seen to return, joined in through those operations rather than stored per
-                repository — a shape is a fact about the vendor, not about who calls it.
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              {query.data.shapes.total === 0 ? (
-                <NothingRecorded what="response shapes" repoId={repoId} />
-              ) : (
-                <div className="flex flex-col gap-section">
-                  <ObservedShapesTable shapes={query.data.shapes.items} />
-                  <PageControls
-                    offset={shapesOffset}
-                    limit={DEFAULT_LIMIT}
-                    shown={query.data.shapes.items.length}
-                    total={query.data.shapes.total}
-                    nextOffset={query.data.shapes.next_offset}
-                    busy={query.isFetching}
-                    onOffsetChange={setShapesOffset}
-                  />
-                </div>
-              )}
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle>Error windows</CardTitle>
-              <CardDescription className="max-w-prose">
-                How many times one operation failed, over a window an error tracker recorded.
-                A count here has no denominator and is not a rate — it says nothing on its own
-                about whether traffic is getting worse, only how many failures one window held.
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              {query.data.error_windows.total === 0 ? (
-                <NothingRecorded what="error windows" repoId={repoId} />
-              ) : (
-                <div className="flex flex-col gap-section">
-                  <ErrorWindowsTable windows={query.data.error_windows.items} />
-                  <PageControls
-                    offset={errorWindowsOffset}
-                    limit={DEFAULT_LIMIT}
-                    shown={query.data.error_windows.items.length}
-                    total={query.data.error_windows.total}
-                    nextOffset={query.data.error_windows.next_offset}
-                    busy={query.isFetching}
-                    onOffsetChange={setErrorWindowsOffset}
-                  />
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        </>
-      )}
+      <MetricPanel
+        label="Error windows"
+        metric={countMetric(
+          error_windows.total,
+          `window${error_windows.total === 1 ? "" : "s"} recorded`,
+        )}
+        caption={
+          <p className="max-w-prose">
+            How many times one operation failed, over a window an error tracker recorded. A count
+            here has no denominator and is not a rate — it says nothing on its own about whether
+            traffic is getting worse, only how many failures one window held.
+          </p>
+        }
+      >
+        {error_windows.total === 0 ? (
+          <EmptyState {...nothingRecorded("error windows", repoId)} />
+        ) : (
+          <>
+            <ErrorWindowsTable windows={error_windows.items} />
+            <FooterBar
+              offset={errorWindowsOffset}
+              limit={DEFAULT_LIMIT}
+              shown={error_windows.items.length}
+              total={error_windows.total}
+              nextOffset={error_windows.next_offset}
+              busy={query.isFetching}
+              onOffsetChange={setErrorWindowsOffset}
+            />
+          </>
+        )}
+      </MetricPanel>
     </div>
   )
 }

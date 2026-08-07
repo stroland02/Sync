@@ -1,17 +1,21 @@
 /**
  * Index coverage, for one repository: which vendors the static index found call sites for.
  *
- * Extracted out of `codebase-page.tsx` so `signals-page.tsx` can render the same query under
- * the Signals level's vendor role without a second implementation. The two callers ask
- * different questions of one answer — Codebase asks "how much of this codebase has Sync
- * read", Signals asks "which vendor subjects are attached to this repository's graph" — and
- * both are honest readings of `by_vendor`, which is why this stays one component rather than
- * one query duplicated into two renderings that could drift.
+ * Extracted out of `codebase-page.tsx` so the Signals level could render the same query under its
+ * vendor role without a second implementation. **M7-W175 ended that arrangement**: Signals now
+ * draws a card per vendor rather than a table of them, and
+ * `features/signals/subject-catalogue.tsx` is where that lives. Ruling 6 of
+ * `docs/superpowers/briefs/2026-08-07-substrate-signals.md` carries what it cost and why it was
+ * still the right trade — chiefly that neither rendering computes anything, so there is no
+ * derivation duplicated between them, only a sort.
  *
- * **Two callers is also why the call-site figure is this panel's own metric rather than a tile in
- * a rail.** M7-W173 ported the Codebase level onto the substrate and did not give it a fact rail:
- * a rail is a Codebase-only region, so hoisting `total_call_sites` into one would either take the
- * figure off the Signals screen or render it twice on this one.
+ * This component therefore has one caller again. The two protected sentences it carries — a vendor
+ * absent from the table is a question rather than a zero, and "last indexed" is staleness rather
+ * than a promise — are reproduced in full over there rather than paraphrased, which is the part
+ * that had to survive the split.
+ *
+ * **The call-site figure is this panel's own metric rather than a tile in a rail**, and that is
+ * unchanged: M7-W173 ported the Codebase level onto the substrate and did not give it a fact rail.
  * `docs/superpowers/briefs/2026-08-07-substrate-codebase.md` carries the mapping and that ruling.
  */
 

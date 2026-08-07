@@ -69,15 +69,22 @@ restyle happens entirely in the files that consume it.
 |---|---|
 | the bordered container, `rounded border border-border p-section` | vendored `Card`, so the plane, the radius and the hairline are the substrate's — ruling 7 |
 | headline "No integration of this role is attached." | `CardHeader`, at `text-emphasis`, unchanged wording |
-| — (the state carries no chip today) | the absence chip, `NOT ATTACHED`, beside the headline — ruling 4 |
 | the `detail` prop — the role's `absence` sentence | `CardContent`, unchanged wording, still `max-w-prose` |
 | the docstring's fifth-kind-of-nothing argument, carrying "still asking" | unchanged, verbatim (protected fragment) |
 
-### `features/signals/attached-vendors.tsx` — new in this port
+### `features/signals/subject-catalogue.tsx` — new in this port
 
 The vendor role's catalogue. Every field below is a field the level renders today through
 `features/repositories/index-coverage-card.tsx`; nothing here is invented, and ruling 6 is why the
 rendering moved rather than the component.
+
+**The exported component is named for what the role's members are rather than for the payload's
+key, and that is a constraint rather than a preference.** The M5 table's relationship sentence for
+this role is "A subject. Code calls it; it can break you," and
+`test_the_page_reads_each_role_name_from_the_roster_rather_than_repeating_it` forbids that role's
+name appearing literally in `signals-page.tsx`. An import spelling the role's own noun would put the
+name straight back into the file the guard exists to keep clean. The derivation inside the module
+keeps the payload's noun, because nothing imports it into the page.
 
 | Field rendered today (in `index-coverage-card.tsx`) | Substrate slot |
 |---|---|
@@ -237,6 +244,11 @@ different jobs: the chip is scanned beside the role it belongs to, and the sente
 *why*, which no chip can. Removing the sentence to keep only the chip would be exactly the
 collapse-into-an-icon the rule forbids.
 
+**One chip per role, on the role's own heading, and none inside `NotAttachedState`.** The mapping
+table above originally gave the unattached state a chip of its own. Built, it was a second
+`NOT ATTACHED` twelve pixels below the first, which is the fact-written-twice defect in miniature.
+The chip belongs to the role, so it sits where the role is named.
+
 **5. A role heading stays at `--text-section` while the panels under it take the furniture
 register.** Fleet's ruling 11 moved *panel names* to the furniture register, and every panel on this
 screen follows it. A role group is one level above a panel — it contains panels — so leaving it at
@@ -370,7 +382,7 @@ rather than about the deployment — a claim of the shape this console exists to
 available when the payload carries the source roll-up; until then the role's integrations are its
 three panels, named for what they hold.
 
-**13. A closed vocabulary is not automatically a chip.** `nullable_seen` renders "yes"/"no" and
+**13. A closed vocabulary is not automatically a chip, and this level says so twice over.** `nullable_seen` renders "yes"/"no" and
 `status_class` renders values like `5xx`; both are closed sets, and neither becomes a badge.
 `console-surface.md` permits three vocabularies to carry a claim as a badge — run outcome, error
 state, absence — and permits is not requires. A badge earns its weight by being scanned across rows;
@@ -378,3 +390,78 @@ inside a twelve-column and an eight-column table it would add a border and a fil
 value is already one short mono token, and it would put two of the three permitted channels on
 values that are neither a verdict nor a state transition. `status_class` in particular is a
 classification of a response code, not the error state the rule means. Both stay as text.
+
+## What it measured
+
+Chrome, `/repositories/seed-console-repo-b/observed` — the seeded route that renders richest, with
+two vendors in coverage and all three telemetry tables non-empty. The old screen was served from a
+scratch worktree at `0fc13a8` on port 5198 and the new one on 5199, both proxied to the same API on
+8787, so the two readings are of one seed.
+
+| | 1440x900 before | 1440x900 after | 1280x800 before | 1280x800 after |
+|---|---|---|---|---|
+| type range | 2.33:1 | **3.83:1** | 2.33:1 | **3.83:1** |
+| largest step | 28px (a figure) | 46px (the `h1`) | 28px | 46px |
+| side-by-side placements | 0 | 2 | 0 | 2 |
+| column heading, telemetry | sentence-case, 48.5px | uppercase, **40.0px** | sentence-case, 48.5px | uppercase, **40.0px** |
+| body row, 7-column table | 36.5px | 36.5px | 56.5px | 56.5px |
+| document height | 2321px | 2537px | 2396px | 2588px |
+
+`DESIGN.md`'s bar is 3.4:1 and the display step is what clears it, exactly as it did on the three
+levels before this one. The two placements are the intro band, which pairs the catalogue sentence
+with the roster sentence, and the vendor grid, which is two cards abreast at both widths.
+
+**One number moved the wrong way and it is the honest cost of the shared anatomy.** The
+twelve-column observed-calls table is the widest thing this console draws, and the furniture
+register is wider per glyph than sentence case — `DISTINCT TARGETS` sets a broader column than
+`Distinct targets`. Measured at 1440: its body row goes 80.5px to 97.0px, and the table fits its
+container either way (1063 of 1063, nothing clipped). At 1280 it does not fit either way: 934px of
+table in a 905px scroller before, 1007px in 903px after. So a sideways scroll that already existed
+at that width grew by 75px.
+
+Recorded rather than fixed, and the reason is what the constraint actually protects. The comment
+`vendor-findings-table.tsx` carries — the one whose fragment `test_console_honesty_sentences.py`
+pins as "sideways scroll" — is about the **rung column** staying visible, because provenance
+rendered is not provenance visible. The rung is the first column in both telemetry tables that carry
+one, so it is never what the scroll hides; the last column, a pair of timestamps, is. Narrowing the
+table further would mean dropping a column, which is a completeness loss, or hand-spelling a
+narrower register in this one feature, which is the drift `components/data-table.tsx` exists to
+prevent. The document is also 216px taller, all of it the header band and the role headings, and
+that is the chassis being rendered rather than a regression.
+
+## The completeness walk
+
+Every field the old screen asserted, asserted by the new one, read off both screens against the same
+seed rather than off the diff.
+
+Carried unchanged: the breadcrumb trail; the `h1`; both intro paragraphs (see ruling 3 for the one
+noun that moved); all three role names and all three relationship sentences; the coverage caption in
+full; both vendor rows, with their counts, their timestamps and their `?repo_id=`-carrying links;
+the staleness sentence; all three telemetry captions; every column and every cell of all three
+telemetry tables, in the same order, with the same formatters and the same absence markers; all
+three pagination ranges and their controls; the not-attached headline and the absence sentence.
+
+Gained: the route's own question at the display step; an attachment chip per role; a figure per
+telemetry panel; a figure per vendor card.
+
+Moved register: `total_call_sites`, from a figure at 28px to a clause in the catalogue's caption —
+ruling 6, because each vendor card now carries its own share of it at that register.
+
+Lost: nothing.
+
+Verified separately on `/repositories/r/observed`, the seeded repository whose three telemetry
+totals are all zero: no figure renders in any of the three panels, and each renders the empty state
+carrying all three meanings this payload cannot tell apart.
+
+## The protected sentences
+
+Two of the seventeen fragments `tests/test_console_honesty_sentences.py` holds live in the files this
+port opened. Both were checked before the port and after.
+
+| Fragment | Before | After |
+|---|---|---|
+| `has no denominator` | `features/telemetry/error-windows-table.tsx`, `features/telemetry/signal-source-panel.tsx` (docstring and the error-windows caption) | same three sites, unchanged |
+| `still asking` | `features/signals/not-attached-state.tsx` (docstring) | same, unchanged |
+
+The other fifteen sit outside these seven files and were not touched. The whole file, 17 parametrised
+cases, is green.

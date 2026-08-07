@@ -15,13 +15,25 @@
  * conflation the M5 role split exists to keep apart: *attached and quiet* is a fact about
  * traffic, *nothing is attached* is a fact about configuration, and this console does not let
  * one stand in for the other.
+ *
+ * **It is drawn on the vendored `Card`, at the same depth and radius as every attached
+ * integration's card, and that placement is the argument.** A role with nothing attached rendered as
+ * loose prose beneath three carded roles reads as an afterthought — something the screen ran out of
+ * room for. Rendered as a card in the catalogue, it reads as what it is: an answer, sitting where
+ * an answer goes. `docs/superpowers/briefs/2026-08-07-substrate-signals.md` ruling 7.
  */
+
+import { Card, CardContent, CardHeader } from "@/vendor/supabase/ui/card"
 
 export function NotAttachedState({ detail }: { detail: string }) {
   return (
-    <div className="max-w-prose rounded border border-border p-section text-muted-foreground">
-      <p className="text-emphasis text-foreground">No integration of this role is attached.</p>
-      <p className="mt-field text-body">{detail}</p>
-    </div>
+    <Card className="max-w-prose">
+      <CardHeader>
+        <p className="text-emphasis text-foreground">No integration of this role is attached.</p>
+      </CardHeader>
+      <CardContent>
+        <p className="text-body text-muted-foreground">{detail}</p>
+      </CardContent>
+    </Card>
   )
 }

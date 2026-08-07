@@ -17,7 +17,7 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-} from "@/components/ui/table"
+} from "@/components/data-table"
 import { formatTimestamp, orAbsent } from "@/lib/format"
 
 export function ObservedShapesTable({ shapes }: { shapes: ObservedShapeRow[] }) {
