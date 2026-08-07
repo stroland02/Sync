@@ -42,6 +42,45 @@ than falling back, because a typo falling back either way would be invisible. If
 either restart the API or confirm its start time postdates the last Python commit before believing
 anything on screen.
 
+## One console, one port, one branch — the ordered methodology
+
+**Set by the owner on 2026-08-06, after an afternoon of looking at four different consoles and being
+unable to tell which was current.** Five workspaces had dev servers up; Vite picks the next free port
+on every restart, so their URLs moved; one was serving a mid-build branch with no API behind it and
+rendered ninety-two *"The API is unreachable"* errors. The owner is not required to know which of
+those is real. The order below removes the question.
+
+1. **There is exactly one console the owner looks at: `http://localhost:5173`.** It is started from
+   the **coordinator's worktree** (`.claude/worktrees/sync-m4-dashboard`) with `--port 5173
+   --strictPort`, and it serves the **integration branch** — whatever branch merged work lands on,
+   `console-identity` during M7. Nothing else is ever given to the owner as a URL.
+2. **A worker never serves the owner.** Work happens on a branch in a workspace, is gated there,
+   is pushed, and is **merged by the coordinator**. The owner sees it after the merge, on 5173, and
+   never before. A worker's branch is not a preview.
+3. **A worker may still run a server to verify its own work** — the rule that a change ships with a
+   stated observation of a running screen has not moved. It runs on a free port the worker chooses,
+   it is never mentioned to the owner, and **it is stopped before the worker reports.** A server
+   left listening is the defect this section exists to stop.
+4. **After every merge the coordinator restarts 5173** so the owner's console is the merged tree,
+   and says so. Until a merge lands, 5173 serving the previous tree is correct rather than a fault —
+   say that plainly instead of implying newer work is visible.
+5. **One API, on 8787**, started from the same worktree with `SYNC_GRAPH_DSN` set. A console with no
+   API behind it produces a screenful of unreachable errors that look like a defect in the console
+   and are not.
+
+The failure this prevents is not wasted ports. It is the owner forming a judgement about the product
+from a half-built branch, or from a stale one, with no way to tell which they are looking at.
+
+## The owner should not be looking at the automation browser
+
+`superpowers-chrome` drives **one persistent shared Chrome**, launched with `--no-sandbox` — which is
+why that infobar sits at the top of every screenshot taken in it. Any agent that measures a screen
+resizes **that window**, and the owner watching it sees the console jump between widths for no reason
+they can see. Measured on 2026-08-06: 1920×889, then 929×861 a minute later, mid-worker.
+
+Open the owner's console in an ordinary browser window. The automation browser belongs to the agents
+and is expected to change size under them.
+
 ## Clear the viewport override, every time, or the owner sees a windowed console
 
 `superpowers-chrome`'s `set_viewport` is a **CDP device-metrics override on a persistent, shared
