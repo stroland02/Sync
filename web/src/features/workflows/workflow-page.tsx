@@ -28,6 +28,16 @@
  * newest thread only. The rail says how many generations there are and where the others are listed,
  * which is what the payload supports, and the opening entry says plainly that the sequence carries
  * no times.
+ *
+ * ## The header spans both columns, and the title is "Run N", by M7-W193
+ *
+ * The header was inside the 360px rail with the finding's 32-character identifier at the display
+ * step. It is now the grid's first row across both columns, and the title is which run this is among
+ * the generations the checkpointer holds. **The finding's own name is not in it, and that is a
+ * ruling rather than an omission** — it is not on this payload, and fetching it would put this
+ * page's only focal point behind a query that 404s for every patched or abandoned finding, which is
+ * exactly the run most worth reading. `lib/detail-title.tsx` carries the argument; the breadcrumb
+ * and the rail's first row both still reach the finding in one click.
  */
 
 import type { ReactNode } from "react"
@@ -46,6 +56,7 @@ import { RunOutcome, type BelowThisPanel } from "@/features/workflows/run-outcom
 import { Breadcrumbs } from "@/layouts/breadcrumbs"
 import { PageHeader } from "@/layouts/page-header"
 import { UnknownRoute } from "@/layouts/unknown-route"
+import { DetailTitleText, runTitle } from "@/lib/detail-title"
 import { formatTimestamp } from "@/lib/format"
 import { routeQuestion } from "@/lib/routes"
 
@@ -176,6 +187,9 @@ function Arrival({ findingId }: { findingId: string }) {
  * There is no Outcome row here on purpose. The outcome is the narrative's closing entry, where it
  * carries its reason and its position; a word for it in the rail as well would be the same fact at
  * two weights, which is the defect the Fleet port's ruling 2 named.
+ *
+ * Both identifiers are `<code>` at the meta step. They are values a reader copies rather than reads,
+ * which is the register they belong in and the reason M7-W193 took the finding id out of the title.
  */
 function runFacts(data: WorkflowState | undefined, failure: ReactNode | null, findingId: string): Fact[] {
   function fact(width: string, render: (state: WorkflowState) => ReactNode): ReactNode {
@@ -190,16 +204,16 @@ function runFacts(data: WorkflowState | undefined, failure: ReactNode | null, fi
       value: (
         <Link
           to={`/findings/${encodeURIComponent(findingId)}`}
-          className="font-mono break-words underline underline-offset-2"
+          className="underline underline-offset-2"
         >
-          {findingId}
+          <code className="font-mono text-meta break-all select-all">{findingId}</code>
         </Link>
       ),
     },
     {
       label: "Run",
       value: fact("w-40", (state) => (
-        <span className="font-mono break-words">{state.thread_id}</span>
+        <code className="font-mono text-meta break-all select-all">{state.thread_id}</code>
       )),
     },
     {
@@ -238,9 +252,18 @@ function Workflow({ findingId }: { findingId: string }) {
     )
   ) : null
 
+  const title =
+    data !== undefined ? (
+      <DetailTitleText title={runTitle(data.generation_count)} />
+    ) : failure !== null ? (
+      failure
+    ) : (
+      <Skeleton width="w-40" />
+    )
+
   return (
     <div className="grid items-start gap-8 lg:grid-cols-[minmax(0,22.5rem)_minmax(0,1fr)]">
-      <div className="flex min-w-0 flex-col gap-section">
+      <div className="min-w-0 lg:col-span-2">
         <PageHeader
           trail={
             <Breadcrumbs
@@ -251,9 +274,12 @@ function Workflow({ findingId }: { findingId: string }) {
               ]}
             />
           }
-          title={<span className="font-mono">{findingId}</span>}
+          title={title}
           question={routeQuestion(ROUTE_PATH)}
         />
+      </div>
+
+      <div className="flex min-w-0 flex-col gap-section">
         <FactList facts={runFacts(data, failure, findingId)} />
 
         {data !== undefined && (

@@ -35,6 +35,14 @@
  * repository is B125: the checkpoint carries `repo` on every run and `workflow_state` forwards
  * eleven other channel values and not that one — cutting a repository name out of the pull request's
  * URL would be pattern-matching a forge address the payload never labelled.
+ *
+ * ## The header spans both columns, and the title is the bundle's own name, by M7-W193
+ *
+ * It was inside the 360px rail with the finding's 32-character identifier at the display step. The
+ * title is now `#number · branch`, from the two facts `bundle-facts.ts` already lifts, and it states
+ * the absence — in that module's own outcome-keyed words — when a run pushed nothing or opened
+ * nothing. The rail keeps both rows: the title names the subject, and the rows say which nothing
+ * each part is, which is a longer answer than a title can carry.
  */
 
 import type { ReactNode } from "react"
@@ -59,6 +67,7 @@ import { RunOutcome, type BelowThisPanel } from "@/features/workflows/run-outcom
 import { Breadcrumbs } from "@/layouts/breadcrumbs"
 import { PageHeader } from "@/layouts/page-header"
 import { UnknownRoute } from "@/layouts/unknown-route"
+import { DetailTitleText, pullRequestTitle } from "@/lib/detail-title"
 import { routeQuestion } from "@/lib/routes"
 
 /** This screen's own entry in the registry, so `PageHeader` renders the registry's sentence. */
@@ -120,9 +129,9 @@ function railFacts(
       value: (
         <Link
           to={`/findings/${encodeURIComponent(findingId)}`}
-          className="font-mono break-words underline underline-offset-2"
+          className="underline underline-offset-2"
         >
-          {findingId}
+          <code className="font-mono text-meta break-all select-all">{findingId}</code>
         </Link>
       ),
     },
@@ -149,7 +158,7 @@ function railFacts(
     {
       label: "Run",
       value: fact("w-40", (state) => (
-        <span className="font-mono break-words">{state.thread_id}</span>
+        <code className="font-mono text-meta break-all select-all">{state.thread_id}</code>
       )),
     },
     {
@@ -199,14 +208,33 @@ function PullRequest({ findingId }: { findingId: string }) {
     { label: "Pull request" },
   ]
 
+  const title =
+    data !== undefined ? (
+      <DetailTitleText
+        title={pullRequestTitle(
+          facts.prNumber,
+          facts.branch,
+          noPullRequestPhrase(data.outcome),
+          noBranchPhrase(data.outcome),
+        )}
+      />
+    ) : failure !== null ? (
+      failure
+    ) : (
+      <Skeleton width="w-72" />
+    )
+
   return (
     <div className="grid items-start gap-8 lg:grid-cols-[minmax(0,22.5rem)_minmax(0,1fr)]">
-      <div className="flex min-w-0 flex-col gap-section">
+      <div className="min-w-0 lg:col-span-2">
         <PageHeader
           trail={<Breadcrumbs trail={trail} />}
-          title={<span className="font-mono">{findingId}</span>}
+          title={title}
           question={routeQuestion(ROUTE_PATH)}
         />
+      </div>
+
+      <div className="flex min-w-0 flex-col gap-section">
         <FactList facts={railFacts(data, facts, failure, findingId)} />
 
         <p className="text-body text-muted-foreground">

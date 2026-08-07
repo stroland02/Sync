@@ -18,9 +18,13 @@
  * Vendor, API Services and the Binding surface spell `lg:grid-cols-[minmax(0,1fr)_minmax(0,22rem)]`
  * — content left, facts right, tables full width beneath — because each of them is a list and a
  * table wants the frame. A detail has one subject, so the grid inverts: a 360px rail carrying the
- * page header, the facts and the links down, and the content column beside it from the top of the
- * page rather than under a header band. Below `lg` it stacks, because a definition list reads the
- * same at either width.
+ * facts and the links down, and the content column beside it. Below `lg` it stacks, because a
+ * definition list reads the same at either width.
+ *
+ * **The header spans both columns, as of M7-W193.** It was inside the 360px rail, which is what made
+ * the title wrap; it is now the grid's first row across rail and content, so the name has the page's
+ * width. `lib/detail-title.tsx` carries what the title is now made of and why it is no longer the
+ * identifier.
  *
  * **Four of the seven facts a rail would want are not in this payload, and none is invented.**
  * `sync.api.app.finding_detail` reads a risk row and forwards two of its fields, so this level
@@ -61,6 +65,7 @@ import {
   type RemediationStanding,
   type RemediationState,
 } from "@/features/findings/remediation"
+import { DetailTitleText, findingTitle } from "@/lib/detail-title"
 import { orAbsent } from "@/lib/format"
 import { Breadcrumbs } from "@/layouts/breadcrumbs"
 import { PageHeader } from "@/layouts/page-header"
@@ -159,8 +164,14 @@ function standingWord(standing: RemediationStanding, outcome: string | null): Re
  * and only one of them is silence. A 404 here is the API answering that the graph holds no open
  * finding, and rendering "the API did not answer" over that would be a false report of the failure
  * the reader is looking at.
+ *
+ * The identifier is the first row and wears neither of those three states: it comes from the URL, so
+ * it is on screen before any request is made and stays there when one fails. It is a `<code>` at the
+ * meta step rather than the page's title, because a 32-character hex string is a value a reader
+ * copies rather than reads — `lib/detail-title.tsx` carries what it cost to have it at 46px instead.
  */
 function findingFacts(
+  findingId: string,
   data: FindingDetail | null,
   failure: ReactNode | null,
   remediation: RemediationState,
@@ -172,6 +183,12 @@ function findingFacts(
   }
 
   return [
+    {
+      label: "Identifier",
+      value: (
+        <code className="font-mono text-meta break-all select-all">{findingId}</code>
+      ),
+    },
     {
       label: "Vendor",
       value: fact("w-32", (found) => (
@@ -255,16 +272,27 @@ function FindingDetailPage({ findingId }: { findingId: string }) {
     { label: findingId },
   ]
 
+  const title = query.isSuccess ? (
+    <DetailTitleText title={findingTitle(query.data.vendor, query.data.operation)} />
+  ) : failure !== null ? (
+    failure
+  ) : (
+    <Skeleton width="w-96" />
+  )
+
   return (
     <div className="grid items-start gap-8 lg:grid-cols-[minmax(0,22.5rem)_minmax(0,1fr)]">
-      <div className="flex min-w-0 flex-col gap-section">
+      <div className="min-w-0 lg:col-span-2">
         <PageHeader
           trail={<Breadcrumbs trail={trail} />}
-          title={<span className="font-mono">{findingId}</span>}
+          title={title}
           question={routeQuestion(ROUTE_PATH)}
         />
+      </div>
+
+      <div className="flex min-w-0 flex-col gap-section">
         <FactList
-          facts={findingFacts(query.isSuccess ? query.data : null, failure, remediation)}
+          facts={findingFacts(findingId, query.isSuccess ? query.data : null, failure, remediation)}
         />
         <p className="text-body text-ink-muted">
           What this call site calls, and how the system knows it does.
