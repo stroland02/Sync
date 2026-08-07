@@ -316,9 +316,15 @@ function ContextualSidebar({ area, pathname }: { area: AreaEntry; pathname: stri
 
 export function AppFrame() {
   const { pathname } = useLocation()
-  // A pick is scoped to the address it was made at, so any navigation drops it without an effect
-  // watching the location. An area the address is inside always wins over one somebody browsed to.
+  // A pick lasts exactly as long as the address it was made at, and it is **cleared** here rather
+  // than merely ignored while the address differs. Ignoring it is not the same thing: the pick then
+  // survives out of sight and revives the moment its own address comes back, so Back onto that
+  // address would leave the rail marking one area while another area's screen renders beneath it.
+  // Cleared during render rather than from an effect, which is React's own shape for resetting
+  // state that a changing input has invalidated — no second commit, and nothing renders in between.
   const [picked, setPicked] = useState<{ id: Area; at: string } | null>(null)
+  if (picked !== null && picked.at !== pathname) setPicked(null)
+
   const activeId = picked !== null && picked.at === pathname ? picked.id : areaForPathname(pathname)
   const area = AREAS.find((entry) => entry.id === activeId) ?? AREAS[0]
 

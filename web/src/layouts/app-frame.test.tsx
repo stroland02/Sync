@@ -20,7 +20,7 @@
  */
 
 import { cleanup, fireEvent, render, screen, within } from "@testing-library/react"
-import { MemoryRouter } from "react-router"
+import { MemoryRouter, useNavigate } from "react-router"
 import { afterEach, describe, expect, it } from "vitest"
 
 import { AppFrame } from "@/layouts/app-frame"
@@ -57,6 +57,29 @@ function destinations(): HTMLElement {
 function railNames(): string[] {
   return [...rail().querySelectorAll("[aria-label]")].map(
     (el) => el.getAttribute("aria-label") ?? ""
+  )
+}
+
+/** The rail item the chassis is marking as the one being looked at. */
+function railCurrent(): (string | null)[] {
+  return [...rail().querySelectorAll('[aria-current="true"]')].map((el) =>
+    el.getAttribute("aria-label")
+  )
+}
+
+/**
+ * A real Back, rather than a second click forward onto the same address.
+ *
+ * The two are not the same assertion. A forward click would prove the rail agrees with the address
+ * it arrives at; Back proves it does not resurrect a state it left behind, which is where a pick
+ * that is masked rather than dropped goes wrong.
+ */
+function BackButton() {
+  const navigate = useNavigate()
+  return (
+    <button type="button" onClick={() => navigate(-1)}>
+      go back
+    </button>
   )
 }
 
@@ -131,14 +154,38 @@ describe("the rail carries the product's areas", () => {
       for (const route of routesOf(area)) {
         renderAt(concrete(route.path))
 
-        const current = [...rail().querySelectorAll('[aria-current="true"]')].map((el) =>
-          el.getAttribute("aria-label")
-        )
-        expect(current).toEqual([area.label])
+        expect(railCurrent()).toEqual([area.label])
 
         cleanup()
       }
     }
+  })
+
+  it("drops a pick when the address changes, and does not revive it on Back", () => {
+    // Picking an area with no landing route is a browse, not a navigation, so it has to be dropped
+    // the moment the address moves rather than suspended while the address differs. Suspended, it
+    // comes back the instant its own address does — and then the rail marks one area while another
+    // area's screen renders underneath it, which is the one disagreement this shell must not have.
+    render(
+      <MemoryRouter initialEntries={["/"]}>
+        <AppFrame />
+        <BackButton />
+      </MemoryRouter>
+    )
+    expect(railCurrent()).toEqual(["Fleet"])
+
+    fireEvent.click(within(rail()).getByLabelText("Codebase"))
+    expect(railCurrent()).toEqual(["Codebase"])
+
+    // A link, so this is a real navigation away from the address the pick was made at.
+    fireEvent.click(within(rail()).getByLabelText("Observe"))
+    expect(railCurrent()).toEqual(["Observe"])
+
+    fireEvent.click(screen.getByRole("button", { name: "go back" }))
+
+    // Back at `/`, where the Fleet screen renders. The rail says Fleet, not the area browsed here
+    // three clicks ago.
+    expect(railCurrent()).toEqual(["Fleet"])
   })
 })
 
