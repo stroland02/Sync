@@ -218,9 +218,15 @@ _KEYFRAME_OR_ANIMATION = re.compile(
 )
 
 
-def _keyframe_violations(root: Path) -> list[str]:
+def _keyframe_violations(root: Path, exclude_prefix: str | None = None) -> list[str]:
     violations = []
     for path in _iter_source_files(root):
+        # `exclude_prefix` is relative to `root`, not to `_WEB_SRC` -- a caller scanning one
+        # subdirectory (the keyframe guard below, one root at a time) and a caller scanning all
+        # of `_WEB_SRC` (the geometry and text-size guards) both pass a prefix meaningful against
+        # the `root` they themselves passed in.
+        if exclude_prefix is not None and path.relative_to(root).as_posix().startswith(exclude_prefix):
+            continue
         text = _read_stripped(path)
         for match in _KEYFRAME_OR_ANIMATION.finditer(text):
             violations.append(f"{path}:{_line_at(text, match.start())}: {match.group(0)!r}")
@@ -230,6 +236,9 @@ def _keyframe_violations(root: Path) -> list[str]:
 # `components/ui/` is where a sanctioned spinner would live -- it is the shadcn catalog, and the
 # references' one permitted keyframe is a loading indicator. Everything above it is ours.
 _ANIMATION_FREE_ROOTS = ("features", "layouts", "components", "api", "lib")
+# Only `components/` has a vendored subdirectory to exclude; the prefix is relative to that
+# root's own `_WEB_SRC / name`, so it reads "ui/" here rather than "components/ui/".
+_ANIMATION_EXCLUDE_PREFIX = {"components": "ui/"}
 
 
 def test_no_keyframes_or_animation_shorthand_outside_the_component_catalog():
@@ -241,16 +250,11 @@ def test_no_keyframes_or_animation_shorthand_outside_the_component_catalog():
     for name in _ANIMATION_FREE_ROOTS:
         root = _WEB_SRC / name
         _require_examined(_iter_source_files(root), root)
-        for path in _iter_source_files(root):
-            # `components/ui/` is the catalog and is vendored; it is excluded by path rather than
-            # by leaving `components/` unscanned, which is what let `components/` go unchecked
-            # until M4.5-W143 -- the two framer-motion call sites the motion audit ruled on both
-            # live there, one directory above the exclusion.
-            if path.relative_to(_WEB_SRC).as_posix().startswith("components/ui/"):
-                continue
-            text = _read_stripped(path)
-            for match in _KEYFRAME_OR_ANIMATION.finditer(text):
-                violations.append(f"{path}:{_line_at(text, match.start())}: {match.group(0)!r}")
+        # `components/ui/` is the catalog and is vendored; it is excluded by path rather than
+        # by leaving `components/` unscanned, which is what let `components/` go unchecked
+        # until M4.5-W143 -- the two framer-motion call sites the motion audit ruled on both
+        # live there, one directory above the exclusion.
+        violations += _keyframe_violations(root, exclude_prefix=_ANIMATION_EXCLUDE_PREFIX.get(name))
     assert not violations, (
         "every keyframe measured across four references is an overlay entering or leaving, or "
         "something loading -- a loading indicator belongs in components/ui/, never in a feature "
@@ -312,9 +316,11 @@ _GEOMETRY_TRANSITION = re.compile(
 )
 
 
-def _geometry_transition_violations(root: Path) -> list[str]:
+def _geometry_transition_violations(root: Path, exclude_prefix: str | None = None) -> list[str]:
     violations = []
     for path in _iter_source_files(root):
+        if exclude_prefix is not None and path.relative_to(root).as_posix().startswith(exclude_prefix):
+            continue
         text = _read_stripped(path)
         for match in _GEOMETRY_TRANSITION.finditer(text):
             violations.append(f"{path}:{_line_at(text, match.start())}: {match.group(0)!r}")
@@ -324,17 +330,11 @@ def _geometry_transition_violations(root: Path) -> list[str]:
 def test_nothing_transitions_geometry_anywhere():
     _require_web_src()
     _require_examined(_iter_source_files(_WEB_SRC), _WEB_SRC)
-    violations = []
-    for path in _iter_source_files(_WEB_SRC):
-        # `vendor/supabase/` is vendored nearly verbatim under the Supabase carve-out
-        # (.claude/rules/interface-originality.md) -- excluded by path for the same reason
-        # `components/ui/` is excluded from the keyframe guard above. Restyling a vendored file
-        # is out of scope for the task that copies it in; that happens outside this directory.
-        if path.relative_to(_WEB_SRC).as_posix().startswith("vendor/supabase/"):
-            continue
-        text = _read_stripped(path)
-        for match in _GEOMETRY_TRANSITION.finditer(text):
-            violations.append(f"{path}:{_line_at(text, match.start())}: {match.group(0)!r}")
+    # `vendor/supabase/` is vendored nearly verbatim under the Supabase carve-out
+    # (.claude/rules/interface-originality.md) -- excluded by path for the same reason
+    # `components/ui/` is excluded from the keyframe guard above. Restyling a vendored file
+    # is out of scope for the task that copies it in; that happens outside this directory.
+    violations = _geometry_transition_violations(_WEB_SRC, exclude_prefix="vendor/supabase/")
     assert not violations, (
         "a sanctioned fade is not a geometry change, so opacity is not banned here -- transform, "
         "translate, scale and box-shadow are what a claim about motion is made of, and "
@@ -588,9 +588,13 @@ def _text_size_floor_px() -> float:
 _ARBITRARY_TEXT_SIZE = re.compile(r"(?<![\w-])text-\[(\d*\.?\d+)(px|rem)\]")
 
 
-def _undersized_text_violations(root: Path, floor_px: float) -> list[str]:
+def _undersized_text_violations(
+    root: Path, floor_px: float, exclude_prefix: str | None = None
+) -> list[str]:
     violations = []
     for path in _iter_source_files(root, suffixes=(".ts", ".tsx", ".css")):
+        if exclude_prefix is not None and path.relative_to(root).as_posix().startswith(exclude_prefix):
+            continue
         text = _read_stripped(path)
         for match in _ARBITRARY_TEXT_SIZE.finditer(text):
             px = float(match.group(1)) * (16 if match.group(2) == "rem" else 1)
@@ -606,22 +610,11 @@ def _undersized_text_violations(root: Path, floor_px: float) -> list[str]:
 def test_nothing_renders_beneath_the_text_size_floor():
     _require_web_src()
     _require_examined(_iter_source_files(_WEB_SRC, suffixes=(".ts", ".tsx", ".css")), _WEB_SRC)
-    floor_px = _text_size_floor_px()
-    violations = []
-    for path in _iter_source_files(_WEB_SRC, suffixes=(".ts", ".tsx", ".css")):
-        # See the identical exclusion in test_nothing_transitions_geometry_anywhere: vendored,
-        # not restyled here.
-        if path.relative_to(_WEB_SRC).as_posix().startswith("vendor/supabase/"):
-            continue
-        text = _read_stripped(path)
-        for match in _ARBITRARY_TEXT_SIZE.finditer(text):
-            px = float(match.group(1)) * (16 if match.group(2) == "rem" else 1)
-            if px >= floor_px:
-                continue
-            violations.append(
-                f"{path}:{_line_at(text, match.start())} renders {px:g}px as "
-                f"`{match.group(0)}`, beneath DESIGN.md's {floor_px:g}px floor"
-            )
+    # See the identical exclusion in test_nothing_transitions_geometry_anywhere: vendored,
+    # not restyled here.
+    violations = _undersized_text_violations(
+        _WEB_SRC, _text_size_floor_px(), exclude_prefix="vendor/supabase/"
+    )
     assert not violations, (
         "12px is a floor, not the small end of a range, and being on DESIGN.md's ramp does not "
         "exempt a value from it -- a table that has run out of width takes fewer columns or a "
