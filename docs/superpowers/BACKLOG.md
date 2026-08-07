@@ -2266,3 +2266,36 @@ tile's own note already say.
 shortening a protected sentence. The likely route is progressive disclosure on the panel descriptions,
 which is Task 7 of `plans/2026-08-05-sync-console-architecture.md` and unstarted - so this entry is a
 caller for that task rather than a new piece of work.
+
+### B122 - The Finding level cannot name its own severity, repository or call site, because the route drops them
+
+`GET /api/findings/{finding_id}` reads a `_risk_row` through `GraphSurface.finding_by_id` and forwards
+exactly two of its fields - `finding_id` and `binding_source` - merged onto `explain_call_site`'s
+payload. The row it read also carries `severity`, `file` and `line`, and `sync.api.app.finding_detail`
+discards all three.
+
+The consequence is that the console's Finding level, whose own transport docstring calls it "one
+binding in full", cannot say where the binding is. M7-W178 built the level's fact rail against the
+direction's list - severity, status, vendor, operation, repository, first/last seen, rung - and could
+honestly fill four of the seven from the payload. The rest are refused rather than approximated, and
+`briefs/2026-08-07-substrate-finding.md`'s ruling 3 records why each substitute is wrong: a vendor
+change's severity is not the finding's severity, and `indexed_at` is when the index last read the call
+site rather than when anything was first seen.
+
+Three separate things are missing and they are not one fix:
+
+- **Severity and the call site (`file`, `line`) are already in hand.** The route reads them and throws
+  them away, so this half is three keys on a `JSONResponse` plus the fields on `FindingDetail` in
+  `web/src/api/types.ts`.
+- **The repository is not on `_risk_row` at all.** `CallSite.repo_id` exists on the graph, and
+  `binding_surface` already returns it per call site, so the join exists; the finding read does not
+  make it.
+- **First and last seen have no column.** A finding has no `first_seen`, and inventing one from
+  `indexed_at` would be the exact conflation the level refused. This part is a schema question with a
+  grain to declare, not a payload change.
+
+**Closes when:** the first two land - the Finding level renders the finding's own severity, its
+repository and its call site path and line, read from the payload rather than derived - and ruling 3 of
+that brief is amended to record which of its three refusals expired. The third stays open behind a
+declared grain for a first-detection timestamp, or is retired with an argument for why the level does
+not need one.
