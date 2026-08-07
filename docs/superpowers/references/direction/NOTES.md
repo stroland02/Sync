@@ -403,3 +403,48 @@ full-width, and the screen still looks empty because `max-w-prose` caps every pa
 beside a table spending 1290px on a vendor name, in a single column that is never placed beside
 anything. **The composition finding is unaffected; the windowing was an artefact of how it was being
 observed.** `.claude/rules/console-dev-loop.md` now carries the rule that prevents it.
+
+---
+
+## Filed images (2026-08-07)
+
+Entries 1 through 6 above were written against screenshots the owner pasted into chat, which until
+now survived only as temporary files. They are filed here under durable names. The set is larger
+than those entries described: entry 5 named seven Supabase screens and the owner supplied
+twenty-four, including the observability reports, the logs explorer and a second drawer example
+that entry 5 did not see.
+
+Two files were byte-identical and only one was kept. Five captures of Sync's own console and one of
+the Orca window were in the same paste directory and are not filed here — this directory holds
+references, not our own output.
+
+| File | What it shows |
+|---|---|
+| `superlog-01-incident-detail.png` | The whole incident screen — expanded sidebar, breadcrumb top bar, trail row, 360px fact rail against the activity column, composer pinned at the bottom. The subject of entry 1. |
+| `superlog-02-incident-findings-tab.png` | The Findings tab's content: Summary, Estimated impact, Root cause, each with a `confidence 9/10` chip — the scalar entry 2 refuses. |
+| `superlog-03-sidebar-expanded.png` | The sidebar at its full width: wordmark, collapse toggle, `Workspace` and `Observe` group headings, icon-plus-label rows, filled active row. |
+| `superlog-04-sidebar-collapsed.png` | The same sidebar collapsed to icons, with every icon at the identical vertical position. The pair is entry 6's evidence. |
+| `supabase-01-project-overview-empty.png` | Project overview before data: scope-switcher breadcrumb with `FREE` and `PRODUCTION` chips, expanded sidebar, the `Go to Project Overview  G then H` hint strip, six fact tiles, a skeleton bar under `LAST MIGRATION`, dotted infrastructure canvas, metrics strip with a time-range control. |
+| `supabase-02-project-overview-populated.png` | The same screen with data and the sidebar collapsed to its icon rail; the canvas is a dimmed world map with one bright dot. |
+| `supabase-03-table-editor.png` | The data grid: schema selector, table list sidebar, a filter bar, typed column headers (`id uuid`, `metadata jsonb`), row checkboxes, and a footer bar carrying pager, page size, `4 records`, and a Data/Definition toggle. |
+| `supabase-04-sql-editor.png` | Editor scaffold, and three empty sections in the sidebar that each explain what would fill them (`No shared queries — share queries with your team by right-clicking on the query`). |
+| `supabase-05-schema-visualizer.png` | The node-link diagram: table cards whose rows are columns, orthogonal foreign-key connectors, minimap, `Auto layout`, `Copy as SQL`. Also shows the keyboard hint overlaying the sidebar. |
+| `supabase-06-database-functions.png` | A list page with the contextual sidebar's four group labels visible, a control bar (schema, search, two filters, one green primary), and a table whose name column is a link with a `⋮` at the row end. |
+| `supabase-07-database-extensions.png` | Two-line page header (`Database Extensions` / `Manage what extensions are installed in your database`), a six-column table with a description column and an inline toggle in the last column. |
+| `supabase-08-database-indexes-drawer.png` | The detail-in-a-drawer pattern: the list dims behind a right panel holding the index's `CREATE UNIQUE INDEX …` as syntax-highlighted SQL, with `Cancel` at the panel's foot. |
+| `supabase-09-database-settings.png` | Settings as one card per setting — title, prose explanation of what it does and what it costs, control at the right, the card's own Cancel/Save. |
+| `supabase-10-auth-users-empty.png` | An empty table: headers stay, and the empty state sits in the body with an icon, a heading and a sentence. |
+| `supabase-11-auth-oauth-apps-empty.png` | A notice card above the control bar, plus a one-row empty table (`No OAuth apps found`) with sortable header carets. |
+| `supabase-12-edge-functions-empty.png` | The richest empty state: a three-column card of routes in (`Via Editor`, `AI Assistant`, `Via CLI`), each with its own action, then a template list. |
+| `supabase-13-edge-function-secrets.png` | Chips used for identifier values in a table, a small-caps card header strip, and a second empty state that names what is absent (`No custom secrets created`). |
+| `supabase-14-security-advisor.png` | Tabs that carry their own counts (`Errors 0 errors`, `Warnings 8 warnings`) above a table, with a centered empty state in the body. |
+| `supabase-15-observability-database-connections.png` | A six-tile stat grid over a filtered table, with a sidebar card explaining a feature that has no data yet. |
+| `supabase-16-report-api-gateway.png` | The metric-panel anatomy: a headline value directly above its own evidence table, each row expandable, with the window's start and end labelled beneath the sparkline. |
+| `supabase-17-query-performance.png` | The densest list page: a headline stat triple, a filter bar, twelve sortable columns, horizontal scroll, and a footer strip of prose explaining how the report is generated. |
+| `supabase-18-query-performance-drawer.png` | The same page with a row selected and a right panel open — the query pattern as code above a nine-row definition list of its metadata. The clearest drawer example in the set. |
+| `supabase-19-report-database-charts.png` | Stacked chart panels, each with its title, its current value, an axis, and a legend where every colour ships with a word. |
+| `supabase-20-report-data-api.png` | The metric panel with a row expanded in place (`No query parameters in this request`). |
+| `supabase-21-report-auth-empty-charts.png` | Charts with no data: a dashed-border region, an icon, and two sentences that say why it is empty and when it might not be. |
+| `supabase-22-report-edge-functions-empty.png` | The same empty-chart treatment across a whole page, with the value still rendered (`0`, `0ms`) above each. |
+| `supabase-23-logs-explorer.png` | A faceted filter sidebar whose every facet carries its own count, a histogram strip keyed to the table beneath it, and the densest table in the set. |
+| `supabase-24-integrations.png` | A card grid with status chips (`INSTALLED`, `OFFICIAL`, `BETA`, `COMMUNITY`, `PARTNER`) and a grid/list view toggle. |
