@@ -26,6 +26,35 @@ by content, because items were never tagged with a milestone as they landed.
 | **M4** | Hosted control plane (**the front end**) | **0%** | Not started, and has no plan file yet |
 | **M5** | Integration layer | **~35%** | Sentry feeds counts in now; still nothing correlates anything |
 | **M6** | Show it, rather than describe it | **0%** | Needs a UI to film |
+| **M8–M11** | The resolution loop | **0%** | Proposed 2026-08-06, nothing scheduled; Sync opens a pull request and stops watching it |
+
+### M8–M11 — The resolution loop · 0%
+
+**Proposed, not scheduled.** Plan:
+[`plans/2026-08-06-sync-m8-m11-resolution-loop.md`](plans/2026-08-06-sync-m8-m11-resolution-loop.md).
+Numbered from M8 because M7 is the console.
+
+Four milestones, ordered by what unblocks the most. **M8** puts the model call behind a protocol
+so the remediation pipeline can be tested without a key. **M9** gives a run more outcomes than
+"diff" and "abandoned" — an external cause and a question for a human are both real answers today
+that have to be spelled as failures. **M10** parks a run instead of ending it, so a pull request
+that CI rejects is Sync's problem rather than nobody's. **M11** groups findings that share a
+vendor change into one remediation, instead of eight findings producing eight pull requests
+against one repository.
+
+M8 → M9 → M10 is a dependency chain; M11 needs M9 and is otherwise independent.
+
+Derived from a source-level study of Superlog's investigation pipeline on 2026-08-06. Worth
+recording what that study could not reach: their agent runner is not open source —
+`infra/agent-runner/backend.ts` loads it through `AGENT_RUNNER_ANTHROPIC_MODULE`, an external
+module — and only a static, model-free `community` runner ships. The orchestration around it is
+fully open, which is the half worth copying: an implementation is one way to satisfy a contract,
+and the contract is the part that transfers.
+
+**Sequenced behind M7.** All four are pipeline work and none of it is visible in the console. M8
+is the exception worth taking opportunistically: it is a refactor that makes the existing
+remediation suite key-free and faster, and it pays for itself before anything below it is
+scheduled.
 
 ### M0 — Walking skeleton, one real pull request · ~90%
 
