@@ -27,6 +27,13 @@ open, which is why briefs are allowed to point at it.
 | `superlog-01`, `superlog-02` | An incident detail and its findings tab | The workflow-as-narrative screen (`M7-W179`), and the source study merged as PR #2 |
 | `superlog-03`, `superlog-04` | A sidebar expanded and collapsed | Direction note 6 — the sidebar correction — and then its reversal |
 
+## What the console actually looks like
+
+[`screens/2026-08-07/`](screens/2026-08-07/) holds seven of the nine levels captured from the
+running console at this commit, at 1920 with no viewport override, so the substrate rebuild can be
+compared against the reference material rather than argued about from memory. Its README carries the
+capture conditions and two composition gaps the full-page views make visible.
+
 ## Two passes at the same milestone, and why there were two
 
 M7 exists because the console cleared eight of fourteen measured invariants and was still flat.
