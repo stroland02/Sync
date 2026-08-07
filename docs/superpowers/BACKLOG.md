@@ -2360,3 +2360,35 @@ same threads.
 **Closes when:** the Solution Workflow renders each superseded generation as its own entry, with its
 `abandon_reason` where the run stopped - which is the direction's collapsed-generation slot, and the
 one the level currently has nothing true to put in.
+
+### B125 - The Pull Request level cannot name the repository its pull request was opened against
+
+`sync.remediate.state.RemediationState` carries `repo: RepoRef` on every run, so the checkpoint the
+console reads already holds the answer. `sync.dashboard.queries.workflow_state` forwards eleven
+other channel values out of that same dict and not this one, so the one screen in the console whose
+subject is a pull request against a customer's repository cannot say which repository that is.
+
+The direction's rail for this level is *"number, branch, state, opened at, repository, and the
+finding it answers"*. Number and branch are lifted out of node evidence, state is the outcome panel,
+opened-at is B123 - the repository is the only ask with no route to it at all.
+
+The substitute is available and is refused in `briefs/2026-08-07-substrate-pull-request.md`, ruling
+7: `pr_url` reads `https://github.com/example/repo/pull/101` on the seed, and a repository name can
+be cut out of it with two `split` calls. A forge URL is an address rather than a schema. The path
+shape differs between forges, an enterprise host puts the owner elsewhere, and the console would be
+manufacturing a field by pattern-matching a string the payload never labelled - right on GitHub and
+silently wrong anywhere else, which is worse than an absent row because an absent row is a question
+and a wrong one is an answer.
+
+**Carried on the same entry, because the same file open fixes both:** `asHttpUrl` in
+`features/workflows/evidence.tsx` and the boundary check inside
+`features/pullrequests/bundle-facts.ts` are two copies of one rule - anything that is not `http:` or
+`https:` renders as text rather than as an anchor, because a `javascript:` href is a script the
+console would run on a forge's say-so. The second copy exists because the first is not exported and
+M7-W180 did not open another level's directory to export it. Two copies of a security boundary is
+the defect `CLAUDE.md` names as the most expensive kind: one of them will be fixed and the other
+will not.
+
+**Closes when:** `workflow_state` returns the run's repository alongside `thread_id`, the Pull
+Request level renders it as a rail row linking to that repository's Codebase screen, and the URL
+boundary check is one function in `lib/` that both features import.
