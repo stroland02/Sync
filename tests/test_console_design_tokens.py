@@ -324,7 +324,17 @@ def _geometry_transition_violations(root: Path) -> list[str]:
 def test_nothing_transitions_geometry_anywhere():
     _require_web_src()
     _require_examined(_iter_source_files(_WEB_SRC), _WEB_SRC)
-    violations = _geometry_transition_violations(_WEB_SRC)
+    violations = []
+    for path in _iter_source_files(_WEB_SRC):
+        # `vendor/supabase/` is vendored nearly verbatim under the Supabase carve-out
+        # (.claude/rules/interface-originality.md) -- excluded by path for the same reason
+        # `components/ui/` is excluded from the keyframe guard above. Restyling a vendored file
+        # is out of scope for the task that copies it in; that happens outside this directory.
+        if path.relative_to(_WEB_SRC).as_posix().startswith("vendor/supabase/"):
+            continue
+        text = _read_stripped(path)
+        for match in _GEOMETRY_TRANSITION.finditer(text):
+            violations.append(f"{path}:{_line_at(text, match.start())}: {match.group(0)!r}")
     assert not violations, (
         "a sanctioned fade is not a geometry change, so opacity is not banned here -- transform, "
         "translate, scale and box-shadow are what a claim about motion is made of, and "
@@ -596,7 +606,22 @@ def _undersized_text_violations(root: Path, floor_px: float) -> list[str]:
 def test_nothing_renders_beneath_the_text_size_floor():
     _require_web_src()
     _require_examined(_iter_source_files(_WEB_SRC, suffixes=(".ts", ".tsx", ".css")), _WEB_SRC)
-    violations = _undersized_text_violations(_WEB_SRC, _text_size_floor_px())
+    floor_px = _text_size_floor_px()
+    violations = []
+    for path in _iter_source_files(_WEB_SRC, suffixes=(".ts", ".tsx", ".css")):
+        # See the identical exclusion in test_nothing_transitions_geometry_anywhere: vendored,
+        # not restyled here.
+        if path.relative_to(_WEB_SRC).as_posix().startswith("vendor/supabase/"):
+            continue
+        text = _read_stripped(path)
+        for match in _ARBITRARY_TEXT_SIZE.finditer(text):
+            px = float(match.group(1)) * (16 if match.group(2) == "rem" else 1)
+            if px >= floor_px:
+                continue
+            violations.append(
+                f"{path}:{_line_at(text, match.start())} renders {px:g}px as "
+                f"`{match.group(0)}`, beneath DESIGN.md's {floor_px:g}px floor"
+            )
     assert not violations, (
         "12px is a floor, not the small end of a range, and being on DESIGN.md's ramp does not "
         "exempt a value from it -- a table that has run out of width takes fewer columns or a "

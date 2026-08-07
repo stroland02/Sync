@@ -1,0 +1,4 @@
+/* Vendored from supabase/supabase (Apache-2.0), packages/ui, commit 6ac0316. See web/NOTICE. */
+.popover-trigger-width {
+  width: var(--radix-popover-trigger-width);
+}
