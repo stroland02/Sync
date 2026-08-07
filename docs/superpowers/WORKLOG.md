@@ -120,7 +120,7 @@ write path, are unbuilt; Phase 6 needs auth and tenancy and belongs to M4's host
 | M7-W184 | The two registers say what is true: M7 added to the milestone table, M4.5's five items corrected to landed, and In flight rewritten against measurement. **Its commit `bf19a2b` carries `M7-W183` in the subject** — the number was taken concurrently by the console session and the row above merged first, so this row holds the correction rather than the history being rewritten | landed | `bf19a2b` |
 | M7-W185 | The 28 direction screenshots committed, one record of what M7 built and what drove it, and seven of our own screens beside them. **Its commits `25a4a10` and `d67c5c5` carry `M7-W181` in their subjects** — `7d8901b` had already taken that number and merged first, so it keeps it and this row holds the correction | landed | `reports/2026-08-07-m7-what-was-built-and-what-drove-it.md`, `reports/screens/2026-08-07/` |
 | M4-W166 | B117: `GraphStore` reconnects a closed connection, instead of handing the dead one back forever | dispatched | `briefs/2026-08-07-b117-graphstore-reconnect.md` |
-| CI-W167 | B111: the suite runs three times per pull request, and what moving two of them costs | dispatched | `briefs/2026-08-07-b111-ci-critical-path.md` |
+| CI-W167 | B111: the suite runs three times per pull request, and what moving two of them costs | landed | `.github/workflows/ci.yml`, `reports/ci-profile-2026-08-07.md`, B111 closed |
 
 **M7-W160's navigation was rebuilt once, on the owner's ruling of 2026-08-06.** The first pass built a
 56px icon rail of four product areas beside a 240px contextual panel, and collapsing removed the
