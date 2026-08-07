@@ -49,12 +49,14 @@ export function ScreenLimitsCard() {
         </p>
       }
     >
-      {/* Each headline is lifted to `text-emphasis` -- the same weight the figure cards
-          beside this one use for their own headline -- so a standing limit reads at the
-          same tier as the thing it limits rather than as a footnote underneath it.
-          `tracking-normal` cancels the heading tracking `text-emphasis` otherwise carries:
-          DESIGN.md ties that tracking to the panel-title role, and each `dt` here is
-          in-row emphasis repeated four times, not a panel title. */}
+      {/* Each headline sits at `text-emphasis`, which is heavier than the furniture register
+          the panel name above it takes, and that inversion is deliberate rather than a leftover.
+          A panel name is scanned and a standing limit is read, which DESIGN.md assigns as two
+          roles rather than two weights on one scale -- `metric-panel.tsx` states the rule. The
+          failure this guards against is the older one: a limit rendered smaller than the figures
+          it limits reads as a footnote, and a limit nobody reads limits nothing.
+          `tracking-normal` cancels the heading tracking `text-emphasis` carries from the ramp,
+          because four `dt`s in a column are in-row emphasis repeated, not four headings. */}
       {/* One column, not two. M7-W163 moved this panel beside the figures it qualifies rather
           than under them, which is what this file's own docstring always claimed — and at a third
           of the content width `sm:grid-cols-2` put four paragraphs into two 190px columns.

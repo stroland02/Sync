@@ -362,6 +362,29 @@
     --card-padding-x: var(--spacing-section);
   }
 
+  /* Tailwind v4's preflight resets every element to `border: 0 solid`, which leaves
+     `border-color` at `currentColor`. A `border` or `border-b` utility that names no colour
+     therefore draws the *text* colour, and on a dark theme that is the primary ink at full
+     strength rather than a hairline. Every class in `src/` outside `vendor/` names its colour, so
+     nothing here hit it until the vendored components arrived: `vendor/supabase/ui/card.tsx`
+     spells bare `border` and `border-b`, because upstream ships exactly this rule in its own
+     globals and we vendored the components without them.
+
+     Measured at 1920x889 on the Fleet screen before this rule: every panel outline and every
+     header rule computed `oklch(0.95 0.00275 159)` -- identical to the element's own `color` --
+     against the `oklch(0.95 0.001485 159 / 7.5125%)` DESIGN.md declares. The icon rail beside
+     them, which spells `border-line`, was correct, which is what made the two comparable.
+
+     This sets the default only. Any utility naming a colour still wins, so it changes no
+     declaration this tree already makes. */
+  *,
+  ::after,
+  ::before,
+  ::backdrop,
+  ::file-selector-button {
+    border-color: var(--color-border);
+  }
+
   body {
     background-color: var(--color-background);
     color: var(--color-foreground);

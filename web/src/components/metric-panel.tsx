@@ -23,12 +23,21 @@
  * "Repair record" with a bare `3` under it is a number claiming to be whatever the reader guesses;
  * the same panel reading `3 findings with a repair attempt` cannot be misread. This is the same
  * rule the absence vocabulary follows — a glyph is never the only channel — applied to a figure.
+ *
+ * **The title is an `h2`, written here rather than taken from the vendored `CardTitle`.** That
+ * component renders an `h3` and accepts no `asChild`, and a panel is the level directly under the
+ * page: `PageHeader`'s `h1`, then a panel, then whatever a panel's own body headings are —
+ * `corpus-summary.tsx`'s three tally headings are `h3` and are contained by their panel, so a
+ * panel at `h3` would put a container and its contents on one outline level and leave the document
+ * with no `h2` at all. The register is unaffected: a panel name is scanned rather than read, so it
+ * takes the furniture treatment whatever element carries it. Screen-reader outline and visual
+ * weight are two different decisions and this is the file where they stop being confused.
  */
 
 import type { ReactNode } from "react"
 
 import { cn } from "@/lib/utils"
-import { Card, CardContent, CardHeader, CardTitle } from "@/vendor/supabase/ui/card"
+import { Card, CardContent, CardHeader } from "@/vendor/supabase/ui/card"
 
 type Metric =
   | { value: ReactNode; unit: string }
@@ -58,7 +67,7 @@ export function MetricPanel({
   return (
     <Card className={cn("flex min-w-0 flex-col", className)}>
       <CardHeader>
-        <CardTitle className="furniture font-sans text-meta text-ink-muted">{label}</CardTitle>
+        <h2 className="furniture text-meta text-ink-muted">{label}</h2>
         {metric !== undefined && (
           <p className="flex flex-wrap items-baseline gap-row">
             <span className="text-figure text-foreground">{metric.value}</span>

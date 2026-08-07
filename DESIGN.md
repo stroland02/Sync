@@ -783,6 +783,27 @@ document already stamps.
 Every value is a literal, not a `var()` reference: `echart.tsx` reads seven of them through
 `getComputedStyle`, which returns declared text rather than a resolved colour.
 
+**One base rule sits alongside the tokens, and it is what makes the hairline above reach the
+vendored components at all.** Tailwind v4's preflight resets every element to `border: 0 solid`,
+leaving `border-color` at `currentColor`; a `border` utility that names no colour therefore draws
+the *text* colour, which on this theme is the primary ink at full strength. Nothing in `src/`
+outside `vendor/` hit that, because every class here names its colour — but the vendored catalog
+spells bare `border` and `border-b`, since upstream ships this compat rule in the globals we did
+not vendor. `index.css` declares it in `@layer base`:
+
+```css
+*, ::after, ::before, ::backdrop, ::file-selector-button {
+  border-color: var(--color-border);
+}
+```
+
+Measured on the Fleet screen at 1920×889 before it existed: every panel outline and every card
+header rule computed `oklch(0.95 0.00275 159)` — identical to the element's own `color` — against
+the `oklch(0.95 0.001485 159 / 7.5125%)` the Boundaries table declares. The icon rail beside them,
+which spells `border-line` explicitly, was already correct, which is what made the two comparable.
+**It is a default, not a token**: it declares no value of its own, `theme-contrast.mjs` does not
+produce it, and any utility naming a colour still wins.
+
 The three-state theme control (`light` / `dark` / `system`), `web/src/lib/theme.ts`,
 `theme-toggle.tsx`, the `sync-theme` `localStorage` key, and the `prefers-color-scheme` listener
 that resolved a `"system"` preference are all removed, not merely unused.

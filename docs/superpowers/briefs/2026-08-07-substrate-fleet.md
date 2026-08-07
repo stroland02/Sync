@@ -132,7 +132,7 @@ would change nothing on screen.
 
 ## The rulings
 
-Nine fields or components had no obvious slot. Each is resolved here rather than in a commit
+Eleven fields or components had no obvious slot. Each is resolved here rather than in a commit
 message, because the next eight levels will meet the same questions.
 
 **1. The metric panel's value takes the figure step, not the display step.** The brief for this
@@ -202,6 +202,46 @@ were not vendored. Undeclared, every card renders with no horizontal padding at 
 square. It is not a new design token: it names no new value, it sits outside the eight theme
 families `DESIGN.md`'s contract governs, and it exists to connect a vendored component to a
 spacing token that was already argued.
+
+**10. The `variant="grouping"` distinction collapses, and every panel now carries a hairline.**
+`components/ui/card.tsx` declares two variants and argues the difference: `plain` draws no ring,
+because a panel's own surface step already tells it apart from the page, and `grouping` draws the
+hairline for the one case a step alone cannot cover — a card beside another card at the same depth
+with nothing between them. `RepositoriesCard` and `DetectorsSummaryCard` were the two callers on
+this screen. The vendored `Card` has no variants and draws `border` unconditionally, so on the
+substrate every panel is ringed and the distinction has nothing left to express.
+
+Accepted, as a consequence of the substrate rather than a decision taken on its merits. Studio's
+own panels are ringed on every surface, the ring is the 7.5%-alpha hairline rather than a visible
+frame, and the M7-W170 ruling is that the substrate's values win where they disagree with an
+earlier local argument. What the older argument was protecting — that depth should carry the
+grouping claim rather than an outline — is not lost so much as no longer expressible, because the
+substrate does not offer an unringed panel.
+
+Reversing it is small and local: give `MetricPanel` a `grouping` prop that adds `border-0` to the
+vendored `Card` for the default case, and pass it everywhere except the two paired panels. Nothing
+in `vendor/` needs editing either way. What it would cost is a console whose panel outlines differ
+by position, which is the thing the substrate decided against.
+
+**11. A panel title moves from `text-emphasis` to the furniture register.** The mapping table's
+rows say "panel title" and imply the register came along unchanged; it did not. Every panel name
+on Fleet is now uppercase, open-tracked `--text-meta` at the second ink level — Studio's card-title
+treatment, and the same register `fact-tile.tsx` uses for a label. `--text-emphasis` was the old
+panel-title role and no panel spends it any more.
+
+The consequence to know before porting a level: **a panel name is now visually lighter than
+emphasis text inside the panel it contains**, and that is the arrangement rather than a defect.
+`DESIGN.md` assigns type by role, not by size — a panel name is scanned and a sentence inside it is
+read — so the two are not two points on one weight scale. `screen-limits.tsx` is where this is most
+visible, because its four `dt` headlines sit at `text-emphasis` under a furniture-register panel
+name, and its comment states the constraint.
+
+**The heading level does not follow the register.** `metric-panel.tsx` writes its own `h2` rather
+than taking the vendored `CardTitle`, which is an `h3` and accepts no `asChild`. A panel is the
+level directly under `PageHeader`'s `h1`, and `corpus-summary.tsx`'s tally headings are `h3` inside
+a panel — a panel at `h3` would put a container and its contents on one outline level and leave the
+document with no `h2` at all. Outline and visual weight are two decisions and the substrate only
+settles the second.
 
 One consequence worth stating rather than discovering: `VendorFindingsTable` is exported from
 `features/fleet/vendor-distribution.tsx` and imported by `features/repositories/open-findings-card.tsx`.
