@@ -18,7 +18,6 @@ import { Link } from "react-router"
 
 import { DEFAULT_LIMIT } from "@/api/client"
 import { useVendorChanges } from "@/api/queries"
-import { PageControls } from "@/components/page-controls"
 import { ProvenanceStrip } from "@/components/provenance"
 import { EmptyState, ErrorState, LoadingState } from "@/components/states"
 import { Formatted } from "@/components/status"
@@ -30,6 +29,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
+import { FooterBar } from "@/layouts/footer-bar"
 import { formatTimestamp, orAbsent } from "@/lib/format"
 import { useOffsetParam } from "@/lib/use-offset-param"
 
@@ -114,7 +114,7 @@ export function VendorChangesTable({
               ))}
             </TableBody>
           </Table>
-          <PageControls
+          <FooterBar
             offset={offset}
             limit={DEFAULT_LIMIT}
             shown={page.items.length}

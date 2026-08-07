@@ -76,11 +76,7 @@ import { RunsCard } from "@/features/fleet/runs-table"
 import { ScreenLimitsCard } from "@/features/fleet/screen-limits"
 import { VendorDistributionCard } from "@/features/fleet/vendor-distribution"
 import { Breadcrumbs } from "@/layouts/breadcrumbs"
-// Two components in this repository are named `ControlBar` — this one, and the older one in
-// `components/filters.tsx` that the bindings and vendors screens import. Aliased on import rather
-// than renamed at the source, because both of that one's callers belong to another worker's branch
-// and a rename here would collide with theirs. B119 records the collision and which should survive.
-import { ControlBar as PageControlBar } from "@/layouts/control-bar"
+import { ControlBar } from "@/layouts/control-bar"
 import { PageHeader } from "@/layouts/page-header"
 import { ROUTES } from "@/lib/routes"
 
@@ -151,7 +147,7 @@ function PageHeaderRegion() {
         question={question}
         trail={<Breadcrumbs trail={[{ label: "Fleet" }]} />}
       />
-      <PageControlBar
+      <ControlBar
         action={
           <Link
             to="/detectors"
@@ -169,7 +165,7 @@ function PageHeaderRegion() {
           <span className="furniture text-meta text-ink-muted">Scope</span>
           <span className="text-body">Every repository the index has seen.</span>
         </div>
-      </PageControlBar>
+      </ControlBar>
     </div>
   )
 }

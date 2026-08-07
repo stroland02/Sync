@@ -233,3 +233,25 @@ export const ROUTES: readonly RouteEntry[] = [
     element: PullRequestPage,
   },
 ] as const
+
+/**
+ * The sentence `layouts/page-header.tsx` renders for a route, read out of the registry.
+ *
+ * `PageHeader` takes the question as a prop rather than looking it up — its own docstring carries
+ * why, and it is so a header rendered outside the router still has one. This is how a screen
+ * supplies it without writing a second copy: the registry's sentence is what the sidebar's tooltip
+ * and the command palette already show, and a screen that restated it would eventually disagree
+ * with both.
+ *
+ * It throws rather than falling back to an empty string. A path this does not know is a typo in a
+ * screen, and a header quietly rendering nothing at the display step is precisely the flatness the
+ * step was added to fix — it would look like a styling problem for as long as it took somebody to
+ * open the registry.
+ */
+export function routeQuestion(path: string): string {
+  const entry = ROUTES.find((route) => route.path === path)
+  if (entry === undefined) {
+    throw new Error(`no route is declared at ${path}, so it has no question to render`)
+  }
+  return entry.question
+}

@@ -18,6 +18,23 @@
  * repeated-call finding rests on (`sync.signals.reachability`). All three are now columns
  * below. `ObservedCallRow.server_address` and `.url_template` are the same class of gap one
  * level over, in `features/telemetry`, which this feature does not own.
+ *
+ * ---
+ *
+ * **M7-W164 moved this screen onto the chassis, and two of its decisions are about density
+ * rather than composition, because this is the console's densest screen.**
+ *
+ * *No stat tiles.* `FactList` sits beside the header, where it costs nothing above the fold; a
+ * row of `FactTile`s under it would cost about a hundred vertical pixels on a screen whose
+ * scarce resource is rows above the fold on a 2,500-row table. Every count a tile row would
+ * have carried is already on screen — the repository facet counts them per repository, and the
+ * footer bar counts the page against the total.
+ *
+ * *No card around either table.* A `Card` costs 32px of horizontal room, and this table is the
+ * one place in the console where 32px changes a row's height. B115 records that the row falls
+ * from 77px to 57px at 1,170px of table width; the card was inside that budget. The two regions
+ * are told apart by their headings and by the rule each footer bar draws under itself, which is
+ * what separates them on a screen that is one subject rather than two.
  */
 
 import { useParams, useSearchParams } from "react-router"
@@ -25,12 +42,12 @@ import { useParams, useSearchParams } from "react-router"
 import { DEFAULT_LIMIT } from "@/api/client"
 import { useBindingSurface } from "@/api/queries"
 import type { BindingSurfaceResponse } from "@/api/types"
-import { ActiveFilters, FacetChips, ControlBar, PrefixFilter } from "@/components/filters"
-import { PageControls } from "@/components/page-controls"
+import { type Fact, FactList } from "@/components/fact-list"
+import { ActiveFilters, FacetChips, PrefixFilter } from "@/components/filters"
 import { RungBadge } from "@/components/provenance"
+import { Skeleton } from "@/components/skeleton"
 import { EmptyState, ErrorState, LoadingState } from "@/components/states"
-import { Formatted } from "@/components/status"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Absent, Formatted } from "@/components/status"
 import {
   Table,
   TableBody,
@@ -41,12 +58,19 @@ import {
 } from "@/components/ui/table"
 import { formatTimestamp, orAbsent, pathAfter } from "@/lib/format"
 import { Breadcrumbs } from "@/layouts/breadcrumbs"
+import { ControlBar } from "@/layouts/control-bar"
+import { FooterBar } from "@/layouts/footer-bar"
+import { PageHeader } from "@/layouts/page-header"
 import { UnknownRoute } from "@/layouts/unknown-route"
+import { routeQuestion } from "@/lib/routes"
 import { useClearFilters, useFilterParam } from "@/lib/use-filter-param"
 import { useOffsetParam } from "@/lib/use-offset-param"
 
 const CALL_SITES_OFFSET_KEY = "call_sites_offset"
 const PATH_PREFIX_KEY = "path_prefix"
+
+/** This screen's own entry in the registry, so `PageHeader` renders the registry's sentence. */
+const ROUTE_PATH = "/bindings/vendors/:vendorId/operations/:operationId"
 
 /**
  * The repository scope, which arrives as a link parameter and is now also a control.
@@ -67,10 +91,80 @@ function joinOrAbsent(values: string[]): string | null {
   return values.length === 0 ? null : values.join(", ")
 }
 
-function describeScope(vendorId: string, operationId: string, repoId: string | null): string {
-  return repoId === null
-    ? `${vendorId}/${operationId}, every repository the index has seen`
-    : `${vendorId}/${operationId}, scoped to ${repoId}`
+/**
+ * Call sites bound to this operation across every repository, before any filter on this page.
+ *
+ * `repositories` is the facet's own scope rather than the table's: it is the option list the
+ * repository chips are built from, so it stays the same whichever chip is selected. That makes it
+ * the right denominator for a stated fact about the operation and the wrong one for the table,
+ * which is why the number under the table is a different number and the sentence beside the facts
+ * says so.
+ */
+function boundCallSites(data: BindingSurfaceResponse): number {
+  return data.repositories.reduce((sum, repo) => sum + repo.call_site_count, 0)
+}
+
+/**
+ * The operation's own facts, label left and value right, beside the header rather than under it.
+ *
+ * Three states per counted fact and they are three different claims. A `Skeleton` says the query
+ * is in flight — `components/skeleton.tsx` carries why that is not one of `states.tsx`'s five
+ * sentences. `<Absent>` says the query failed, which is not the same as a count of zero, and the
+ * error state under it names what failed. A number says the number.
+ */
+function operationFacts(
+  vendorId: string,
+  operationId: string,
+  repoId: string | null,
+  data: BindingSurfaceResponse | null,
+  failed: boolean
+): Fact[] {
+  const counted = (value: number, width: string) => {
+    if (data !== null) return value.toLocaleString()
+    return failed ? <Absent>the API did not answer</Absent> : <Skeleton width={width} />
+  }
+
+  return [
+    { label: "Vendor", value: <span className="font-mono">{vendorId}</span> },
+    { label: "Operation", value: <span className="font-mono">{operationId}</span> },
+    {
+      label: "Repository scope",
+      value:
+        repoId === null ? (
+          "Every repository the index has seen"
+        ) : (
+          <span className="font-mono">{repoId}</span>
+        ),
+    },
+    { label: "Call sites bound", value: counted(data ? boundCallSites(data) : 0, "w-16") },
+    { label: "Repositories", value: counted(data ? data.repositories.length : 0, "w-10") },
+    { label: "Vendor changes", value: counted(data ? data.changes.total : 0, "w-10") },
+    // Hardcoded because the payload hardcodes it, and `RungNote` below carries the argument. A
+    // badge rather than the word so the page-level rung and the column read as the same claim.
+    { label: "Binding rung", value: <RungBadge rung="static" /> },
+  ]
+}
+
+/**
+ * What the counts beside the header are counted over, which is not what the table is counted over.
+ *
+ * The two disagree whenever a filter is on, and that is deliberate rather than a defect: an option
+ * list narrowed by the filter it sets collapses to whatever is already selected. So the screen says
+ * which number answers which question instead of leaving a reader to assume they agree.
+ */
+function ScopeNote({ repoId }: { repoId: string | null }) {
+  return (
+    <p className="max-w-prose text-body text-ink-muted">
+      {repoId === null ? null : (
+        <>
+          The call-site table below is scoped to <code className="font-mono">{repoId}</code>.{" "}
+        </>
+      )}
+      The counts beside this are taken across every repository the index has seen, whatever is
+      selected below — they are the choices available, not the rows on screen. The range under the
+      table is the number that moves when a filter is set.
+    </p>
+  )
 }
 
 /**
@@ -90,6 +184,10 @@ function describeScope(vendorId: string, operationId: string, repoId: string | n
  * Empty means the rows share no directory — two trees calling one operation — and then the column
  * carries the whole path and this says nothing. `pathAfter` is what makes that fallback one branch
  * rather than a slice that would render `ing/charges/create.ts` and read like a real file.
+ *
+ * **It stays above the table rather than moving into the footer bar's `left` slot**, which that
+ * component's docstring offers it. A reader meets this sentence to understand a column they are
+ * about to read; under the table it would arrive after the reading it exists to make possible.
  */
 function SharedDirectoryNote({ directory }: { directory: string }) {
   // Truthiness rather than `=== ""`, and it earned that during this item's own measurement: a dev
@@ -165,7 +263,7 @@ function CallSitesEmptyState({
   filters: { label: string; value: string }[]
   offset: number
 }) {
-  const bound = data.repositories.reduce((sum, repo) => sum + repo.call_site_count, 0)
+  const bound = boundCallSites(data)
 
   if (data.call_sites.total > 0) {
     return (
@@ -230,20 +328,41 @@ function BindingSurfaceDetail({
   ]
 
   return (
-    <section className="flex flex-col gap-8">
-      <Breadcrumbs
-        trail={[
-          { label: "Fleet", to: "/" },
-          { label: vendorId, to: `/vendors/${encodeURIComponent(vendorId)}` },
-          { label: operationId },
-        ]}
-      />
-      <h1 className="font-mono text-page">
-        {vendorId} / {operationId}
-      </h1>
-      <p className="max-w-prose text-body text-muted-foreground">
-        {describeScope(vendorId, operationId, repoId)}.
-      </p>
+    <>
+      {/* The one place on this screen where a region sits beside another. `lg:` rather than `xl:`
+          so both measured viewports get it, and `minmax(0,...)` on the facts column so a long
+          repository id shrinks the column instead of widening the grid past the frame. */}
+      <div className="grid items-start gap-8 lg:grid-cols-[minmax(0,1fr)_minmax(0,22rem)]">
+        <div className="flex min-w-0 flex-col gap-section">
+          <PageHeader
+            trail={
+              <Breadcrumbs
+                trail={[
+                  { label: "Fleet", to: "/" },
+                  { label: vendorId, to: `/vendors/${encodeURIComponent(vendorId)}` },
+                  { label: operationId },
+                ]}
+              />
+            }
+            title={
+              <span className="font-mono">
+                {vendorId} / {operationId}
+              </span>
+            }
+            question={routeQuestion(ROUTE_PATH)}
+          />
+          <ScopeNote repoId={repoId} />
+        </div>
+        <FactList
+          facts={operationFacts(
+            vendorId,
+            operationId,
+            repoId,
+            query.isSuccess ? query.data : null,
+            query.isError
+          )}
+        />
+      </div>
 
       {query.isPending && <LoadingState what={`bindings for ${vendorId}/${operationId}`} />}
       {query.isError && (
@@ -252,171 +371,167 @@ function BindingSurfaceDetail({
 
       {query.isSuccess && (
         <>
-          <Card>
-            <CardHeader>
-              <CardTitle>Call sites</CardTitle>
-              <CardDescription>
+          <section className="flex flex-col gap-section">
+            <div className="flex flex-col gap-field">
+              <h2 className="text-section">Call sites</h2>
+              <p className="max-w-prose text-body text-ink-muted">
                 What in the codebase calls this operation, and how the system knows it does.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="flex flex-col gap-section">
-              <ControlBar>
-                <FacetChips
-                  legend="Repository"
-                  options={query.data.repositories.map((repo) => ({
-                    value: repo.repo_id,
-                    count: repo.call_site_count,
-                  }))}
-                  selected={repoId}
-                  onSelect={setRepoId}
-                  allLabel="Every repository"
-                  countScope="Counted over every call site the index holds on this operation, not over the table below — these are the choices available, so they stay the same whichever one is selected and whatever the path filter is set to."
-                />
-                <PrefixFilter
-                  legend="Call site path"
-                  value={pathPrefix}
-                  onSubmit={setPathPrefix}
-                  placeholder="src/billing/"
-                  note="Matched as a prefix of the call site's path, never as a substring. It narrows the call sites only: a vendor change has no position in your codebase, so the table below it is untouched."
-                />
-              </ControlBar>
-              <ActiveFilters filters={activeFilters} onClear={clearCallSiteFilters} />
-              <SharedDirectoryNote directory={query.data.call_sites_common_directory} />
-              {query.data.call_sites.items.length === 0 ? (
-                <CallSitesEmptyState
-                  data={query.data}
-                  repoId={repoId}
-                  filters={activeFilters}
-                  offset={callSitesOffset}
-                />
-              ) : (
-                <>
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Repository</TableHead>
-                        <TableHead>Call site</TableHead>
-                        <TableHead>Symbol</TableHead>
-                        <TableHead>SDK version</TableHead>
-                        <TableHead>Argument keys</TableHead>
-                        <TableHead>Response fields read</TableHead>
-                        <TableHead>Loop depth</TableHead>
-                        <TableHead>Rung</TableHead>
-                        <TableHead>Indexed at</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {query.data.call_sites.items.map((site) => (
-                        <TableRow key={`${site.repo_id}-${site.path}-${site.line}-${site.col}`}>
-                          <TableCell className="font-mono">{site.repo_id}</TableCell>
-                          <TableCell className="font-mono">
-                            {pathAfter(query.data.call_sites_common_directory, site.path)}:
-                            {site.line}:{site.col}
-                          </TableCell>
-                          <TableCell className="font-mono">
-                            <Formatted value={orAbsent(site.symbol)} />
-                          </TableCell>
-                          <TableCell className="font-mono">
-                            <Formatted value={orAbsent(site.sdk_version)} />
-                          </TableCell>
-                          <TableCell className="font-mono">
-                            <Formatted value={joinOrAbsent(site.args_keys)} />
-                          </TableCell>
-                          <TableCell className="font-mono">
-                            <Formatted value={joinOrAbsent(site.response_fields_read)} />
-                          </TableCell>
-                          <TableCell className="font-mono">{site.loop_depth}</TableCell>
-                          <TableCell>
-                            <RungBadge rung={site.binding_rung} />
-                          </TableCell>
-                          <TableCell className="font-mono text-meta">
-                            <Formatted value={formatTimestamp(site.indexed_at)} />
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                  <PageControls
-                    offset={callSitesOffset}
-                    limit={DEFAULT_LIMIT}
-                    shown={query.data.call_sites.items.length}
-                    total={query.data.call_sites.total}
-                    nextOffset={query.data.call_sites.next_offset}
-                    busy={query.isFetching}
-                    onOffsetChange={setCallSitesOffset}
-                  />
-                </>
-              )}
-              <RungNote data={query.data} filtered={activeFilters.length > 0} />
-              <p className="max-w-prose text-body text-muted-foreground">
-                Either this operation has never had a call site here, or it had one that was
-                later retracted — this table cannot tell the two apart.
               </p>
-            </CardContent>
-          </Card>
+            </div>
+            <ControlBar>
+              <FacetChips
+                legend="Repository"
+                options={query.data.repositories.map((repo) => ({
+                  value: repo.repo_id,
+                  count: repo.call_site_count,
+                }))}
+                selected={repoId}
+                onSelect={setRepoId}
+                allLabel="Every repository"
+                countScope="Counted over every call site the index holds on this operation, not over the table below — these are the choices available, so they stay the same whichever one is selected and whatever the path filter is set to."
+              />
+              <PrefixFilter
+                legend="Call site path"
+                value={pathPrefix}
+                onSubmit={setPathPrefix}
+                placeholder="src/billing/"
+                note="Matched as a prefix of the call site's path, never as a substring. It narrows the call sites only: a vendor change has no position in your codebase, so the table below it is untouched."
+              />
+            </ControlBar>
+            <ActiveFilters filters={activeFilters} onClear={clearCallSiteFilters} />
+            <SharedDirectoryNote directory={query.data.call_sites_common_directory} />
+            {query.data.call_sites.items.length === 0 ? (
+              <CallSitesEmptyState
+                data={query.data}
+                repoId={repoId}
+                filters={activeFilters}
+                offset={callSitesOffset}
+              />
+            ) : (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Repository</TableHead>
+                    <TableHead>Call site</TableHead>
+                    <TableHead>Symbol</TableHead>
+                    <TableHead>SDK version</TableHead>
+                    <TableHead>Argument keys</TableHead>
+                    <TableHead>Response fields read</TableHead>
+                    <TableHead>Loop depth</TableHead>
+                    <TableHead>Rung</TableHead>
+                    <TableHead>Indexed at</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {query.data.call_sites.items.map((site) => (
+                    <TableRow key={`${site.repo_id}-${site.path}-${site.line}-${site.col}`}>
+                      <TableCell className="font-mono">{site.repo_id}</TableCell>
+                      <TableCell className="font-mono">
+                        {pathAfter(query.data.call_sites_common_directory, site.path)}:
+                        {site.line}:{site.col}
+                      </TableCell>
+                      <TableCell className="font-mono">
+                        <Formatted value={orAbsent(site.symbol)} />
+                      </TableCell>
+                      <TableCell className="font-mono">
+                        <Formatted value={orAbsent(site.sdk_version)} />
+                      </TableCell>
+                      <TableCell className="font-mono">
+                        <Formatted value={joinOrAbsent(site.args_keys)} />
+                      </TableCell>
+                      <TableCell className="font-mono">
+                        <Formatted value={joinOrAbsent(site.response_fields_read)} />
+                      </TableCell>
+                      <TableCell className="font-mono">{site.loop_depth}</TableCell>
+                      <TableCell>
+                        <RungBadge rung={site.binding_rung} />
+                      </TableCell>
+                      <TableCell className="font-mono text-meta">
+                        <Formatted value={formatTimestamp(site.indexed_at)} />
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            )}
+            <RungNote data={query.data} filtered={activeFilters.length > 0} />
+            <FooterBar
+              offset={callSitesOffset}
+              limit={DEFAULT_LIMIT}
+              shown={query.data.call_sites.items.length}
+              total={query.data.call_sites.total}
+              nextOffset={query.data.call_sites.next_offset}
+              busy={query.isFetching}
+              onOffsetChange={setCallSitesOffset}
+              left={
+                <p className="max-w-prose text-body text-muted-foreground">
+                  Either this operation has never had a call site here, or it had one that was
+                  later retracted — this table cannot tell the two apart.
+                </p>
+              }
+            />
+          </section>
 
-          <Card>
-            <CardHeader>
-              <CardTitle>Vendor changes</CardTitle>
-              <CardDescription className="max-w-prose">
-                What the vendor changed about this operation, whether or not a call site above
-                is affected. A vendor change is not a binding and carries no rung — it is
-                evidence about the vendor, not about the codebase.
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              {query.data.changes.total === 0 ? (
-                <EmptyState
-                  headline="The vendor has never changed this operation."
-                  detail="The API answered with an empty list. No ingested feed names a change against this operation — that is an answer, not a failure."
-                />
-              ) : (
-                <>
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Detected</TableHead>
-                        <TableHead>Kind</TableHead>
-                        <TableHead>Severity</TableHead>
-                        <TableHead>Path</TableHead>
-                        <TableHead>Versions</TableHead>
+          <section className="flex flex-col gap-section">
+            <div className="flex flex-col gap-field">
+              <h2 className="text-section">Vendor changes</h2>
+              <p className="max-w-prose text-body text-ink-muted">
+                What the vendor changed about this operation, whether or not a call site above is
+                affected. A vendor change is not a binding and carries no rung — it is evidence
+                about the vendor, not about the codebase.
+              </p>
+            </div>
+            {query.data.changes.total === 0 ? (
+              <EmptyState
+                headline="The vendor has never changed this operation."
+                detail="The API answered with an empty list. No ingested feed names a change against this operation — that is an answer, not a failure."
+              />
+            ) : (
+              <>
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Detected</TableHead>
+                      <TableHead>Kind</TableHead>
+                      <TableHead>Severity</TableHead>
+                      <TableHead>Path</TableHead>
+                      <TableHead>Versions</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {query.data.changes.items.map((change) => (
+                      <TableRow key={change.change_id}>
+                        <TableCell className="font-mono text-meta">
+                          <Formatted value={formatTimestamp(change.detected_at)} />
+                        </TableCell>
+                        <TableCell>{change.kind}</TableCell>
+                        <TableCell>{change.severity}</TableCell>
+                        <TableCell className="font-mono">
+                          <Formatted value={orAbsent(change.path_ptr)} />
+                        </TableCell>
+                        <TableCell className="font-mono">
+                          <Formatted value={orAbsent(change.from_version)} /> →{" "}
+                          <Formatted value={orAbsent(change.to_version)} />
+                        </TableCell>
                       </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {query.data.changes.items.map((change) => (
-                        <TableRow key={change.change_id}>
-                          <TableCell className="font-mono text-meta">
-                            <Formatted value={formatTimestamp(change.detected_at)} />
-                          </TableCell>
-                          <TableCell>{change.kind}</TableCell>
-                          <TableCell>{change.severity}</TableCell>
-                          <TableCell className="font-mono">
-                            <Formatted value={orAbsent(change.path_ptr)} />
-                          </TableCell>
-                          <TableCell className="font-mono">
-                            <Formatted value={orAbsent(change.from_version)} /> →{" "}
-                            <Formatted value={orAbsent(change.to_version)} />
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                  <PageControls
-                    offset={changesOffset}
-                    limit={DEFAULT_LIMIT}
-                    shown={query.data.changes.items.length}
-                    total={query.data.changes.total}
-                    nextOffset={query.data.changes.next_offset}
-                    busy={query.isFetching}
-                    onOffsetChange={setChangesOffset}
-                  />
-                </>
-              )}
-            </CardContent>
-          </Card>
+                    ))}
+                  </TableBody>
+                </Table>
+                <FooterBar
+                  offset={changesOffset}
+                  limit={DEFAULT_LIMIT}
+                  shown={query.data.changes.items.length}
+                  total={query.data.changes.total}
+                  nextOffset={query.data.changes.next_offset}
+                  busy={query.isFetching}
+                  onOffsetChange={setChangesOffset}
+                />
+              </>
+            )}
+          </section>
         </>
       )}
-    </section>
+    </>
   )
 }
 

@@ -725,6 +725,37 @@ ratio is what
 refusals that kept the console flat. It argues that **this entry is now on the critical path for the
 1280 case rather than an improvement to it.**
 
+**Amended 2026-08-06 by M7-W164, which took 1280 from 33px short to one pixel short and did not
+close it.** That item moved the binding surface onto the chassis and dropped the `Card` around both
+of its tables. A card spends 32px on `CardContent`'s horizontal padding, and this is the one table in
+the console where 32px changes a row's height.
+
+The important correction is what the threshold is a property of. Every figure above reads the content
+box inside the frame, which had the card's padding inside it — so "1170px of content" was really
+"1138px of table". With the card gone, content width and table width are the same number, and the
+threshold restates as **1,138px of table width**, re-measured by stepping the viewport in 1px
+increments with the sidebar collapsed. Measured at `--scale 10000` on the same operation:
+
+| | content | table | call site column | row |
+|---|---|---|---|---|
+| 1440, collapsed *(the default here)* | 1297px | 1297px | 292px *(was 281)* | **57px** |
+| 1440, expanded | 1137px | 1137px | 241px *(was 231)* | **77px** |
+| 1280, collapsed *(the default here)* | 1137px | 1137px | 241px *(was 231)* | **77px** |
+| 1280, expanded | 977px | 977px | 191px *(was 181)* | **77px** |
+| 1281, collapsed | 1138px | 1138px | 242px | **57px** |
+
+**1280 is short by one pixel.** 1281 is not. That is measured rather than derived, and it is the most
+this entry can say: a threshold cleared by a single pixel against one fixture is a coincidence, not a
+property, which is exactly what the closing condition below already refuses to accept. **The
+condition is unchanged and this entry stays open** — a second fixture with visibly longer repository
+ids and argument-key lists is still what would settle it, and against that fixture a one-pixel margin
+would evaporate.
+
+The 1473px auto-collapse threshold above is now conservative rather than wrong: it was derived from
+1170px of content, and 1138px of content is enough, which puts the true figure at 1441px. It is left
+where it is deliberately. Moving it would expand the sidebar at 1441 on a one-pixel margin, and the
+20px per row it costs when the margin is missed is worse than the label it buys.
+
 ### B105 — Four statements in `DESIGN.md`'s rendered-pixel section are contradicted by the rendered pixels
 
 **Closed 2026-08-06 (M4-W149).** The ring renders at full strength — `focus-visible:ring-ring` on
@@ -911,6 +942,11 @@ and writing it earlier would mean either nine skips or a guard nobody can keep g
 
 **Closes when:** every route renders something at the display tier, measured, and the type range
 clears 3.4:1 on each of the nine — with the presence guard landing in the same commit.
+
+**Two of the nine landed 2026-08-06 under M7-W164:** the Binding surface and the Vendor level, both
+measured at 1440x900 and 1280x800 at **4.00:1**, with regions placed beside another going from one
+to two on each. The presence guard still cannot land — it goes red on whatever remains — and the
+count of routes it would fail is the only thing this entry needs updating for.
 
 ## In flight
 
@@ -2128,7 +2164,7 @@ by a zombie from eight hours earlier.
 `SYNC_API_ORIGIN` (M4-W151) is what makes this recoverable without a reboot: the API moves to a free
 port and the console's proxy follows it.
 
-### B119 - Two components are named `ControlBar`, and both are imported as `ControlBar`
+### B119 - Two components are named `ControlBar`, and both are imported as `ControlBar` - CLOSED
 
 `components/filters.tsx` has exported one since the filter module was written; `layouts/control-bar.tsx`
 is the chassis's, added by M7-W160. They are not variants of one component. The filter one takes
@@ -2150,6 +2186,14 @@ for what it holds - `FilterGroup` - and have all three callers use one `ControlB
 **Closes when:** one `ControlBar` exists in the tree, no file aliases it on import, and the three
 callers are on the layout one. Cheap, and it must happen while only three callers exist - `CLAUDE.md`'s
 debt section is explicit that a fact written twice will disagree with itself, and a name is a fact.
+
+**Closed 2026-08-07 by M7-W164, and the entry is kept because how it closed is the useful part.** The
+filter one was deleted rather than renamed: it carried no narrowing behaviour of its own - that lives in
+`FacetChips` and `PrefixFilter`, which stay - so there was nothing for a `FilterGroup` to be. One
+`ControlBar` exists, no file aliases it, and all three callers are on the layout one. **M7-W164 never saw
+this entry**: it branched before M7-W163 pushed, so it reported there was no backlog item to close and was
+right about its own tree. Two workers in parallel on one collision found the same answer independently,
+which is the outcome the disjoint-directory rule is supposed to produce.
 
 ### B120 - A feature page cannot read `lib/routes.ts`, because `routes.ts` imports every feature page
 
