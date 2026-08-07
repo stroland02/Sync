@@ -7,8 +7,6 @@
  * making more than one kind of claim under a single name.
  */
 
-import { Link } from "react-router"
-
 import { useDetectors } from "@/api/queries"
 import type { DetectorRow, Tally } from "@/api/types"
 import { EmptyState, ErrorState, LoadingState } from "@/components/states"
@@ -52,13 +50,13 @@ export function DetectorsSummaryCard() {
               {query.data.detectors.length === 1 ? "detector" : "detectors"} with open findings
             </CardTitle>
             <CardDescription className="max-w-prose text-body">
+              {/* The link to the Detectors level was here, mid-sentence. M7-W163 moved it to the
+                  screen's control bar, which is where a control plane keeps a primary action —
+                  a destination reached by reading to the end of a paragraph is a destination
+                  most readers do not reach. */}
               Every open finding, aggregated by the detector that raised it — scoped to open
               findings, the only findings read the graph offers today. A closed finding is
-              invisible here exactly as it is invisible everywhere else in the console.{" "}
-              <Link to="/detectors" className="underline underline-offset-2">
-                Full detail
-              </Link>
-              .
+              invisible here exactly as it is invisible everywhere else in the console.
             </CardDescription>
           </CardHeader>
           <CardContent className="flex flex-col gap-section">

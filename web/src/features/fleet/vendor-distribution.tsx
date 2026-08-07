@@ -32,7 +32,6 @@ import {
 import {
   boundedTotalCaveat,
   CardinalityStatement,
-  describeBoundedTotal,
   describeCardinality,
   sliceForDisplay,
 } from "@/features/fleet/cardinality"
@@ -99,18 +98,14 @@ export function VendorDistributionCard() {
       {query.isSuccess && (
         <Card>
           <CardHeader>
-            <CardTitle className="flex flex-wrap items-baseline gap-field">
-              <span className="text-figure">
-                {describeBoundedTotal(
-                  query.data.total_findings,
-                  query.data.total_findings_bound_reached,
-                )}
-              </span>
-              <span>
-                open {query.data.total_findings === 1 ? "finding" : "findings"} across{" "}
-                {query.data.vendors.length}{" "}
-                {query.data.vendors.length === 1 ? "vendor" : "vendors"}
-              </span>
+            {/* The figure was here at `text-figure`, and M7-W163 put the same number in the fact
+                rail at the top of the screen. Two renderings of one count is a fact written twice,
+                and the one that stays is the one an operator reaches first. The vendor count stays
+                because it is this panel's own grain rather than a headline figure. */}
+            <CardTitle className="text-emphasis">
+              Open findings by vendor, across{" "}
+              {query.data.vendors.length}{" "}
+              {query.data.vendors.length === 1 ? "vendor" : "vendors"}
             </CardTitle>
             <CardDescription className="max-w-prose text-body">
               Every open finding the graph holds, grouped by the vendor whose API the call

@@ -12,10 +12,10 @@ import { Link } from "react-router"
 import { DEFAULT_LIMIT } from "@/api/client"
 import { useRuns } from "@/api/queries"
 import type { RunDisposition, RunRow } from "@/api/types"
-import { PageControls } from "@/components/page-controls"
 import { EmptyState, ErrorState, LoadingState } from "@/components/states"
 import { Formatted } from "@/components/status"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { FooterBar } from "@/layouts/footer-bar"
 import {
   Table,
   TableBody,
@@ -63,10 +63,10 @@ export function RunsCard() {
       {query.isSuccess && (
         <Card>
           <CardHeader>
-            <CardTitle className="flex flex-wrap items-baseline gap-field">
-              <span className="text-figure">{query.data.total.toLocaleString()}</span>
-              <span>{query.data.total === 1 ? "run" : "runs"}</span>
-            </CardTitle>
+            {/* Same as the vendor panel: the total is in the fact rail now, and the cardinality
+                sentence in the footer states it again with the ordering and the slice. Three
+                copies of one number was two too many. */}
+            <CardTitle className="text-emphasis">Runs</CardTitle>
             <CardDescription className="max-w-prose text-body">
               One row per checkpoint thread, not one per finding — a finding retried across
               generations writes a new thread each generation, and each generation is its
@@ -96,15 +96,21 @@ export function RunsCard() {
                     fleet — the fleet's true disposition mix is not in this payload.
                   </p>
                 </div>
-                <CardinalityStatement
-                  text={describeCardinality(
-                    query.data.total,
-                    "run",
-                    "runs",
-                    "newest checkpoint first",
-                    query.data.items.length,
-                  )}
-                />
+                {/* Below the threshold the cardinality sentence stands alone: `FooterBar` would
+                    render page controls for a set that fits on one page, which is a choice nobody
+                    has. Above it, the sentence moves into the footer's `left` slot, which is what
+                    that slot is for — what the count is counted over. */}
+                {isCompleteListing(query.data.total) && (
+                  <CardinalityStatement
+                    text={describeCardinality(
+                      query.data.total,
+                      "run",
+                      "runs",
+                      "newest checkpoint first",
+                      query.data.items.length,
+                    )}
+                  />
+                )}
                 <Table>
                   <TableHeader>
                     <TableRow>
@@ -144,7 +150,7 @@ export function RunsCard() {
                   </TableBody>
                 </Table>
                 {!isCompleteListing(query.data.total) && (
-                  <PageControls
+                  <FooterBar
                     offset={offset}
                     limit={DEFAULT_LIMIT}
                     shown={query.data.items.length}
@@ -152,6 +158,17 @@ export function RunsCard() {
                     nextOffset={query.data.next_offset}
                     busy={query.isFetching}
                     onOffsetChange={setOffset}
+                    left={
+                      <CardinalityStatement
+                        text={describeCardinality(
+                          query.data.total,
+                          "run",
+                          "runs",
+                          "newest checkpoint first",
+                          query.data.items.length,
+                        )}
+                      />
+                    }
                   />
                 )}
               </>

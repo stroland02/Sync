@@ -2127,3 +2127,85 @@ by a zombie from eight hours earlier.
 
 `SYNC_API_ORIGIN` (M4-W151) is what makes this recoverable without a reboot: the API moves to a free
 port and the console's proxy follows it.
+
+### B119 - Two components are named `ControlBar`, and both are imported as `ControlBar`
+
+`components/filters.tsx` has exported one since the filter module was written; `layouts/control-bar.tsx`
+is the chassis's, added by M7-W160. They are not variants of one component. The filter one takes
+`children` only and exists to group narrowing controls; the layout one adds the single `action` slot on
+the right and is the page-level bar the chassis grammar names. Three files import a `ControlBar` today
+and the name tells a reader nothing about which they got.
+
+Found while composing the Fleet screen (M7-W163), which needs the layout one. `features/fleet/fleet-page.tsx`
+imports it as `ControlBar as PageControlBar` rather than renaming anything, because both of the filter
+one's callers - `features/bindings/binding-surface-page.tsx` and `features/vendors/vendor-findings-table.tsx` -
+belonged to a second worker's branch running in parallel, and a rename would have collided.
+
+**The one that should survive is `layouts/control-bar.tsx`**, and the argument is in that file's own
+docstring: it is the same component with the slot the other never had, and its reason for not being
+called `FilterBar` ("an ordering narrows nothing and a filter does") applies to both. So the filter
+one's remaining job is the *contents* of a bar rather than the bar, which means the fix is to rename it
+for what it holds - `FilterGroup` - and have all three callers use one `ControlBar`.
+
+**Closes when:** one `ControlBar` exists in the tree, no file aliases it on import, and the three
+callers are on the layout one. Cheap, and it must happen while only three callers exist - `CLAUDE.md`'s
+debt section is explicit that a fact written twice will disagree with itself, and a name is a fact.
+
+### B120 - A feature page cannot read `lib/routes.ts`, because `routes.ts` imports every feature page
+
+`PageHeader` requires the route's `question`, and `lib/routes.ts` is where that sentence is written -
+deliberately, so a screen and the command palette cannot disagree about it. But `routes.ts` imports each
+page to build its `element`, so a page importing `ROUTES` closes a cycle: at module-initialisation time
+`ROUTES` is still `undefined`, and a top-level `ROUTES.find(...)` throws
+`Cannot read properties of undefined (reading 'find')`.
+
+Measured in M7-W163: **`npm run build` does not catch it.** The cycle is legal ESM and typechecks
+cleanly; it surfaced as three vitest suites failing to import - `app-frame.test.tsx`,
+`page-header.test.tsx` and `routes.test.tsx` - none of which is about the fleet screen. A repository
+without the frontend runner that landed in M4-W153 would have shipped this.
+
+The workaround in place is to dereference at render instead of at module scope, which is safe because
+both modules have finished initialising by then. It is a workaround: it leaves a cycle in the module
+graph, and the next Phase 4 page will meet the same edge and may not recognise it.
+
+**The fix belongs to whoever owns `App.tsx`**, which already maps over `ROUTES` to build its routes:
+pass `question={route.question}` into the screen. Then no page reaches back into the registry, the cycle
+is gone, and `page-header.tsx`'s own stated preference - "Passed rather than looked up, so a screen
+rendered outside the router cannot fail to have one" - holds for the question as well as the title.
+
+**Closes when:** no file under `features/` imports `ROUTES`, and a page rendered outside the router
+still gets its question. Worth a guard in `test_console_design_tokens.py` afterwards, since the failure
+is invisible to the compiler.
+
+### B121 - The Fleet screen's fact rail costs six table rows above the fold
+
+M7-W163 put a page header at the 48px display step, a control bar, and a four-tile fact rail at the top
+of the Fleet screen. Measured at `--scale 10000`, before and after, with the sidebar at its default for
+each viewport:
+
+| | first table starts | table rows above the fold |
+|---|---|---|
+| 1440x900, before | 578px | 7 |
+| 1440x900, after | 802px | 1 |
+| 1280x800, before | 578px | 5 |
+| 1280x800, after | 802px | 0 |
+
+The trade is deliberate and the type range and side-by-side numbers are what the item was judged on -
+2.67 to 4.00 and one placement to four. It is filed rather than accepted silently because **zero rows
+above the fold on the operator's landing screen is a real cost**, and the document is 90-130px *shorter*
+overall, so this is density moved to the top of the page rather than added to it.
+
+Two things already paid for part of it and are worth not repeating: the scope sentence in the control bar
+was cut to one line because its longer form was already in `VendorDistributionCard`, and the duplicated
+`text-figure` totals were removed from the vendor and runs card titles once the rail carried the same
+numbers.
+
+What is left is prose, and it is not this item's to cut: `VendorDistributionCard`'s description runs five
+lines and its bounded-total caveat four more, which is 224px of the 224px the first table moved down.
+Both are honest and both are on screen twice over - the caveat restates what the `1,000+` glyph and the
+tile's own note already say.
+
+**Closes when:** at 1440x900 the first table row is above the fold with the rail in place, without
+shortening a protected sentence. The likely route is progressive disclosure on the panel descriptions,
+which is Task 7 of `plans/2026-08-05-sync-console-architecture.md` and unstarted - so this entry is a
+caller for that task rather than a new piece of work.

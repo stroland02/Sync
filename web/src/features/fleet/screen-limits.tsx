@@ -55,7 +55,12 @@ export function ScreenLimitsCard() {
             `tracking-normal` cancels the heading tracking `text-emphasis` otherwise carries:
             DESIGN.md ties that tracking to the panel-title role, and each `dt` here is
             in-row emphasis repeated four times, not a panel title. */}
-        <dl className="grid gap-section sm:grid-cols-2">
+        {/* One column, not two. M7-W163 moved this panel beside the figures it qualifies rather
+            than under them, which is what this file's own docstring always claimed — and at a third
+            of the content width `sm:grid-cols-2` put four paragraphs into two 190px columns.
+            Measured at 1440x900: eleven lines of prose in a column narrower than the sentence it
+            carries. A limit nobody reads limits nothing. */}
+        <dl className="grid gap-section">
           {LIMITS.map((limit) => (
             <div key={limit.headline} className="flex flex-col gap-field">
               <dt className="text-emphasis tracking-normal text-foreground">{limit.headline}</dt>
