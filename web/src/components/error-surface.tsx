@@ -141,13 +141,13 @@ export function ErrorSurface() {
           </div>
           <ul className="max-h-64 overflow-auto bg-background">
             {kinds.slice(0, KINDS_SHOWN).map((kind) => (
-              <Kind key={kind.summary} kind={kind} onDismiss={() => dismissKind(kind.summary)} />
+              <Kind key={kind.key} kind={kind} onDismiss={() => dismissKind(kind.key)} />
             ))}
           </ul>
           {undrawn > 0 && (
             <p className="border-t border-border bg-background px-3 py-2 text-meta text-ink-muted">
-              {undrawn} further {undrawn === 1 ? "kind" : "kinds"} of failure are in the log and not
-              drawn here. Nothing was dropped; the newest {KINDS_SHOWN} kinds are shown.
+              {undrawn} further {undrawn === 1 ? "kind is" : "kinds are"} in the log and not drawn
+              here. Nothing was dropped; the newest {KINDS_SHOWN} kinds are shown.
             </p>
           )}
         </motion.div>

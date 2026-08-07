@@ -196,7 +196,9 @@ describe("a failure displaces the chassis rather than floating over it", () => {
 
   it("draws three kinds and says how many it is not drawing", () => {
     // The cap, where it is visible. `groupErrorsByKind` is tested on its own; this is the claim
-    // that the banner honours it and states the remainder rather than silently dropping it.
+    // that the banner honours it and states the remainder rather than silently dropping it. The
+    // singular is pinned because the sentence has to read as English at the boundary it is most
+    // often seen at — one kind over the cap.
     for (const summary of ["first", "second", "third", "fourth"]) {
       reportError({ summary, detail: summary })
     }
@@ -205,8 +207,17 @@ describe("a failure displaces the chassis rather than floating over it", () => {
     const alert = screen.getByRole("alert")
 
     expect(alert.querySelectorAll("li")).toHaveLength(KINDS_SHOWN)
-    expect(alert.textContent).toContain("1 further kind")
+    expect(alert.textContent).toContain("1 further kind is in the log")
     expect(alert.textContent).toContain("Nothing was dropped")
+  })
+
+  it("says it in the plural when more than one kind is undrawn", () => {
+    for (const summary of ["first", "second", "third", "fourth", "fifth"]) {
+      reportError({ summary, detail: summary })
+    }
+    renderAt("/")
+
+    expect(screen.getByRole("alert").textContent).toContain("2 further kinds are in the log")
   })
 })
 

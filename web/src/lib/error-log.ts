@@ -50,11 +50,15 @@ export function reportError(failure: FailureInput): void {
 /**
  * Every entry of one kind, dismissed together.
  *
- * The grain matches what the surface draws. Dismissing one of ninety-two identical entries removed
- * a row and left ninety-one, which is a control that appears not to work.
+ * The grain matches what the surface draws, and it has to be the same grain in both directions.
+ * Dismissing one of ninety-two identical entries removed a row and left ninety-one, which is a
+ * control that appears not to work; dismissing by summary alone cleared entries from endpoints the
+ * dismissed row had never named, which is a control that quietly does more than it says.
+ *
+ * `key` is `ErrorKind.key`, so the caller cannot pass a grain the grouping does not use.
  */
-export function dismissKind(summary: string): void {
-  entries = entries.filter((entry) => entry.summary !== summary)
+export function dismissKind(key: string): void {
+  entries = entries.filter((entry) => kindKey(entry) !== key)
   notify()
 }
 
@@ -65,11 +69,30 @@ export function clearErrors(): void {
 
 /** One kind of failure, however many times it has happened. */
 export interface ErrorKind {
-  /** The summary every entry in this group shares — the kind. */
+  /** What identifies this group: the summary and the endpoint together. `dismissKind` takes it. */
+  key: string
+  /** The summary every entry in this group shares. */
   summary: string
   count: number
   /** The most recent entry of this kind: the one whose detail and timestamp are worth drawing. */
   newest: ErrorEntry
+}
+
+/**
+ * What makes two failures the same kind: the summary **and** the endpoint.
+ *
+ * The summary alone is not enough, and this is the whole of it. `describe-failure.ts` writes the
+ * status into the summary and the endpoint into its own field, so *"The API answered with HTTP
+ * 502."* is what every failing route says during one outage. Keyed on the summary, five failures
+ * across three endpoints drew one row printing one path beside "5 times" — a count attributing four
+ * failures to a route that produced one of them, which is the console asserting something untrue
+ * about its own graph.
+ *
+ * A failure with no endpoint — a render crash — keys on the empty string, so it stays its own row
+ * rather than folding into whichever API failure happens to share its wording.
+ */
+function kindKey(entry: ErrorEntry): string {
+  return `${entry.summary} ${entry.path ?? ""}`
 }
 
 /**
@@ -94,9 +117,10 @@ export const KINDS_SHOWN = 3
 export function groupErrorsByKind(log: readonly ErrorEntry[]): ErrorKind[] {
   const kinds = new Map<string, ErrorKind>()
   for (const entry of log) {
-    const seen = kinds.get(entry.summary)
+    const key = kindKey(entry)
+    const seen = kinds.get(key)
     if (seen === undefined) {
-      kinds.set(entry.summary, { summary: entry.summary, count: 1, newest: entry })
+      kinds.set(key, { key, summary: entry.summary, count: 1, newest: entry })
     } else {
       seen.count += 1
     }
