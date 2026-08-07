@@ -8,14 +8,74 @@ The test of whether a decision belongs here: **if two agents building two differ
 reasonably choose differently, and the difference would be visible, it is a token.** If they could
 not, it is a class.
 
-**Dark-only as of 2026-08-05.** The owner's instruction was explicit: "remove light and dark mode,
-we only want dark mode." The light column that used to sit beside every value below is deleted, not
-hidden — every table here now carries the one column that survives. Where a fact in this document
-used to be argued from a light-mode measurement and that measurement has no dark-mode equivalent on
-record, this document says so rather than inventing a replacement number. `web/src/lib/theme.ts`,
-`theme-toggle.tsx`, the `sync-theme` `localStorage` key, and the `prefers-color-scheme` listener
-that resolved a `"system"` preference are removed with it — see *How the theme is wired* below for
-what replaced the mechanism.
+**The palette, the type ramp and the radii are Supabase's, as of 2026-08-06 (M7-W170).**
+`docs/superpowers/specs/2026-08-06-sync-console-supabase-substrate-design.md` §3 is the ruling and
+`.claude/rules/interface-originality.md` carries the carve-out that permits it. The source is
+`github.com/supabase/supabase` at `6ac0316`, Apache-2.0, with the per-file provenance in
+`web/NOTICE`. What that spec asks of this document is the whole of it: the values change, the
+discipline does not — every token still arrives with the arithmetic that produced it, and every
+text-bearing pairing is measured rather than assumed.
+
+**Dark-only as of 2026-08-05, and the substrate does not reopen it.** Supabase ships both themes;
+only the dark values are imported. `web/src/vendor/supabase/theme.css` carries the light block
+un-imported, which is where a future owner instruction would start rather than a rewrite.
+
+---
+
+## How the substrate is resolved, and why this file carries numbers
+
+Supabase's theme is generative. `theme.css` declares **eight parameters** for `.dark`, and upstream
+`packages/ui/build/css/source/semantic.css` derives every semantic colour from them in OKLCH:
+
+| Input | Value | What it drives |
+|---|---|---|
+| `--hue` | 159 | the neutral ramp and the brand, locked together |
+| `--chroma` | 0.005 | how far the neutrals sit off achromatic |
+| `--surface` | 0.19 | the lightness of the page plane |
+| `--elevation-step` | 0.025 | one level of depth, in lightness |
+| `--contrast` | 0.5 | the global knob borders and inks ramp against |
+| `--foreground-lightness` | 0.95 | the primary ink |
+| `--muted-foreground-level` | 0.8 | the second ink, as a fraction of the surface→foreground span |
+| `--tertiary-foreground-level` | 0.65 | the third ink, the same way |
+
+**This file records the resolved literals, not the chain, and `index.css` declares them the same
+way.** Two independent reasons, and both are load-bearing:
+
+- `getComputedStyle` on a custom property returns the *declared text*, not a resolved colour.
+  `components/charts/echart.tsx` reads seven tokens through it and round-trips each through a
+  canvas 2D context so zrender can parse it. A `var()` reference or a relative-colour
+  `oklch(from …)` comes back unresolved and the chart paints nothing.
+- A contrast figure is checkable only against a number. A generative chain would move this
+  document's arithmetic into a CSS file nobody measures.
+
+**`web/scripts/theme-contrast.mjs` is the resolver and the re-measurement tool.** It carries the
+eight inputs above and the derivations transcribed from upstream, and prints every value and every
+ratio published below. Change a parameter, run `node web/scripts/theme-contrast.mjs`, paste what it
+says. Nothing in the tables below was typed in by hand.
+
+Three derived quantities are used repeatedly and are worth naming here, because every alpha in the
+palette is one of them:
+
+```
+--tone-span            = 0.95 − 0.19                     = 0.76
+--surface-overlay-unit = 0.025 / 0.76                    = 3.2895%
+--contrast-border      = (0.05 + 0.95 × 0.5)²            = 0.275625
+```
+
+### What was taken, and what was not
+
+| Adopted whole | Not imported, and why |
+|---|---|
+| the neutral surface and ink ramp | the light theme — dark-only stands |
+| the border and overlay alphas | `--info` and `--info-foreground` — no consumer in this tree |
+| `--primary`, the brand scale, `--warning` and `--destructive` families | `--tertiary` (`bg-surface-400`) — no consumer |
+| the compat names the vendored catalog spells | the twelve-step Radix scales and the code-block colours — no consumer |
+| Studio's type ramp and `--font-weight-normal` | the two `sidebar-primary` entries — no consumer, and one of them upstream resolves to the warning colour |
+| Studio's sidebar aliasing (six of eight) | the faces — identity, and excluded by the carve-out |
+
+Four values are **deviations**, each named where it appears with both measurements: the control
+boundary, the focus ring, the `serious` status role, and the series palette. Nothing else departs
+from upstream.
 
 ---
 
@@ -35,12 +95,11 @@ routing learns which change kinds are not mechanically safe.
 
 **A status colour never travels alone.** It ships with a `lucide-react` icon and a word, always —
 colour alone is not a safe channel for a colour-blind reader, whatever its contrast measures. In
-the surviving dark palette all four marks in fact clear 3:1 against the card (good 5.34, warning
-9.77, serious 6.80, critical 3.73 — see *Non-text, against the 3:1 floor* below), so the pairing is
-not optional because of contrast arithmetic here; it is not optional because colour is never the
-only channel. (The retired light column had `--color-warning` and `--color-serious` below 3:1
-against the card, which is the historical reason this rule was first written down. That number's
-provenance is the deleted light column and is not restated.)
+the adopted palette all four marks clear 3:1 against the card (good 8.76, warning 6.56, serious
+5.27, critical 4.52 — see *Non-text, against the 3:1 floor*), so the pairing is not optional because
+of contrast arithmetic; it is not optional because colour is never the only channel. **The
+substrate makes this rule carry more weight than it did**, because the brand hue and the `good` hue
+are now one hue — see *The brand hue* below.
 
 **The provenance rung stays monochrome.** `static` / `resolved` / `observed` / `unresolved` /
 `unattributed` is an evidence-class scale, not a good-to-bad one. Colouring it smuggles back the
@@ -57,7 +116,11 @@ proportional-sans number column would need it.
 this ramp does not exempt a value from Impeccable's `undersized-ui-text`, whose own 11px floor
 covers `td`, `th`, and anything classed `meta`, `label` or `badge`, and whose docstring records a
 build that shipped its whole furniture layer at 8px and was waved through because 8px was on the
-project's ramp. No `text-[10px]`, ever, including the next time a table gets crowded.
+project's ramp. No `text-[10px]`, ever, including the next time a table gets crowded. **The
+vendored catalog is exempt by path, not by argument** — `badge.tsx` ships a 9px label upstream, and
+`tests/test_console_design_tokens.py` excludes `vendor/supabase/` from this guard for the same
+reason it excludes it from the others: restyling a vendored file happens in
+`web/src/components/`, never inside the vendor directory.
 
 **Whitespace is what is being spent, not what is being bought.** An operator reads this console all
 day and the screens are tables of evidence; every unit of vertical space is a row that fell off the
@@ -68,170 +131,202 @@ What grows is the *range* — the page title, the value-versus-label distinction
 
 ## Colour
 
-### The neutral ramp — nine steps
+### The neutral ramp — two depths, two states, three inks
 
-Achromatic on purpose. The brand hue is the only chromatic thing on a normal screen, and a tinted
-neutral would make that sentence false by degrees.
+Nearly achromatic. `--chroma` is 0.005 and the surfaces take half of it, so the neutrals carry a
+trace of the brand hue rather than none — enough that the ramp reads as one family, far too little
+to claim anything.
 
-The steps are ordered back to front: surface, then line, then ink. **A raised surface is lighter
-than the plane behind it**, which is why `--color-surface` is lighter than `--color-surface-sunken`.
+**The four depth steps are `--surface` plus `--elevation-step × ratio`**, and the ratios are
+upstream's: 1 for a card, 1.5 for a popover, 2 for the secondary fill. A raised surface is lighter
+than the plane behind it.
 
-| # | Token | Job | Value |
+| Job | Token | Value | Resolved |
 |---|---|---|---|
-| 1 | `--color-surface-sunken` | depth: the page plane, behind everything | `oklch(0.155 0 0)` `#0c0c0c` |
-| 2 | `--color-surface` | depth: a card, a panel, a chart's plotting area | `oklch(0.205 0 0)` `#171717` |
-| 3 | `--color-surface-subtle` | state: a row under the pointer; also a `<pre>` and a muted fill in the shadcn catalog — see *Surface ramp: depth and state* | `oklch(0.255 0 0)` `#232323` |
-| 4 | `--color-surface-emphasis` | state: a row that is selected — see *Surface ramp: depth and state* | `oklch(0.305 0 0)` `#2f2f2f` |
-| 5 | `--color-line` | the hairline: dividers, card rings, table rules | `oklch(0.345 0 0)` `#393939` |
-| 6 | `--color-line-strong` | the boundary of a control, which must clear 3:1 | `oklch(0.578 0 0)` `#7a7a7a` |
-| 7 | `--color-ink-muted` | metadata, `<dt>` labels, timestamps, the absence marker | `oklch(0.715 0 0)` `#a3a3a3` |
-| 8 | `--color-ink-secondary` | a chart's legend and axis text, inside a canvas — **not a DOM text step**; see below | `oklch(0.83 0 0)` `#c7c7c7` |
-| 9 | `--color-ink` | the primary ink | `oklch(0.955 0 0)` `#f0f0f0` |
+| depth: the page plane, behind everything | `--color-background`, `--color-surface-sunken` | `oklch(0.19 0.0025 159)` | `#131413` |
+| depth: a card, a panel, a chart's plotting area | `--color-card`, `--color-surface` | `oklch(0.215 0.0025 159)` | `#181a19` |
+| depth: something that occludes — a popover, a dialog | `--color-popover` | `oklch(0.2275 0.0025 159)` | `#1b1d1c` |
+| a filled control, and the vendored `bg-overlay` | `--color-secondary` | `oklch(0.24 0.0025 159)` | `#1e201f` |
 
-This ramp was **re-stepped against the dark surface**, not produced by inverting the light ramp the
-console shipped before 2026-08-05. An inverted ramp puts the wrong lightness against the wrong
-surface and the contrast arithmetic stops holding; the values above are the ones separately verified
-to hold, not a mirror of the retired light-mode values.
+**The two state steps are foreground overlays, not two more depth steps.** Their alpha is
+`--surface-overlay-unit × ratio`, tuned upstream so each matches the lightness delta of the same
+elevation ratio measured on the page plane.
 
-`ABSENT` — the console's one absence marker — wears `--color-ink-muted`. One glyph, one appearance.
+| Job | Token | Value |
+|---|---|---|
+| state: a row under the pointer | `--color-muted`, `--color-surface-subtle` | `oklch(0.95 0.00275 159 / 3.2895%)` |
+| state: a row that is selected | `--color-accent`, `--color-surface-emphasis` | `oklch(0.95 0.00275 159 / 4.9342%)` |
 
-**The two working text levels are `ink` and `ink-muted`, and step 8 is not a third one.** A headline
-value takes `ink`; everything recessive beside it — a `<dt>` label, a timestamp, a panel's
-explanatory prose, an absence marker — takes `ink-muted`. That is the pair the console actually
-renders, measured across all nine routes, and it is what makes "two ink levels plus one accent"
-true rather than aspirational.
+**This reverses the shape of the old surface ramp, and the reversal is the substrate's argument
+rather than ours.** The previous ramp gave state two opaque steps because an alpha spelled at a
+call site composites differently against whichever depth sits under it — one declaration meaning
+several colours. That defect is real and the ban on it stands: **no `bg-x/10`, no `text-y/70`,
+spelled inline in a component.** What the substrate supplies is the sanctioned alternative this
+document already carved out: *one* primitive owning the state, its fill an alpha of the foreground
+rather than an invented neutral, declared once and meaning one step toward the ink at any nesting
+depth. An opaque step cannot do that — the old `surface-subtle` was invisible on a card and correct
+only on the page. Both composites are measured below, against every depth they can land on.
 
-`--color-ink-secondary` sits between them and has exactly one consumer: `corpus-chart.tsx` spends
-it on a chart legend's `textStyle`, resolved through `getComputedStyle` in `echart.tsx`. That text
-is painted inside a canvas, so it is never a DOM ink level and never composes against DOM text on
-the same surface. **Reaching for it as a `text-` class is what a third grey looks like when it
-arrives**, and it arrived twice: `run-outcome.tsx` put it on the panel body of the two screens
-carrying the densest evidence, and `filters.tsx` put it on the active-filter *value* — where, at
-`oklch(0.83)` against an `ink-muted` label at `0.715`, it also made the value only slightly
-brighter than the word naming it. Both were corrected on 2026-08-06 (`M4.5-W142`), to `ink-muted`
-and `ink` respectively, and the ink census on those routes went from three neutral levels to two.
-The floor was never in tension: the panel prose measures **7.75:1** at `ink-muted` on
-`surface-sunken`, against a 5.05 floor.
+| Composite | over `background` | over `card` | over `popover` | over `secondary` |
+|---|---|---|---|---|
+| `surface-subtle` | `#1a1b1a` | `#1f2120` | `#222423` | `#252726` |
+| `surface-emphasis` | `#1e1f1e` | `#232524` | `#252726` | `#282a29` |
 
-`tests/test_console_design_tokens.py` holds the class ban rather than the token, so a chart
-resolving step 8 keeps working and a component cannot spend it on DOM text.
+A row *at rest* takes its panel's own depth step. There is no token for rest, because state should
+only spend contrast when the pointer or a selection asks for it.
 
-**Graphics is an allocation, not a tenth step.** Two ink levels hold for text — `ink` and
-`ink-muted` — but an icon rendered at either is optically louder than the prose it sits beside,
-because a filled glyph carries more area than a stroke pattern at the same lightness. `getsentry/sentry`
-keeps a separate `graphics` category for exactly this (`components/core/principles/tokens/tokens.mdx`,
-"Categories": `content` is "text and icons which need to stand out the most", `graphics` is "icons and
-other graphical elements which don't need to stand out as much"). `--color-graphics` names step 7 of
-the ramp above — the same value as `--color-ink-muted`, `oklch(0.715 0 0)` — under its own job so an
-icon reaches for it rather than for a text token. **Declared ahead of its first consumer**: no
-component in the tree reaches for it yet, because the console has shipped no icon for it to colour
-— the allocation exists so the first icon that ships reaches for `graphics` on day one rather than
-borrowing `ink-muted` and leaving a migration for later. No new lightness, and the contrast already published
-for `ink-muted` in *Contrast, computed* below applies unchanged: for an achromatic OKLCH colour,
-relative luminance is exactly `L^3`, so contrast against a surface of lightness `L_surface` is
-`(0.715³ + 0.05) / (L_surface³ + 0.05)`. Worst case is `--color-surface-emphasis` (`L` 0.305): `(0.3655
-+ 0.05) / (0.02837 + 0.05) = 5.30`, above the 5.05 floor with room, and every step behind it in depth
-scores higher still (surface-subtle 6.24, surface 7.09, surface-sunken 7.73). A pairing below 5.05
-would be a bug in the ramp, not a trade — none is.
+**Three ink levels, at `--surface + --tone-span × level`.** Two of them are working DOM text steps;
+the third is the chart legend's.
 
-### Surface ramp: depth and state
+| # | Level | Token | Value | Resolved |
+|---|---|---|---|---|
+| 1 | 1.0 | `--color-foreground`, `--color-ink`, `--color-card-foreground`, `--color-popover-foreground`, `--color-secondary-foreground`, `--color-accent-foreground` | `oklch(0.95 0.00275 159)` | `#edefee` |
+| 2 | 0.8 | `--color-foreground-light`, `--color-muted-foreground`, `--color-ink-muted`, `--color-graphics` | `oklch(0.798 0.00275 159)` | `#bcbdbc` |
+| 3 | 0.65 | `--color-foreground-lighter`, `--color-foreground-muted`, `--color-ink-secondary` | `oklch(0.684 0.00275 159)` | `#989a99` |
 
-The four surface steps carry two different jobs, and no step does both.
+**The two working text levels are `ink` and `ink-muted`, and level 3 is not a third one.** A
+headline value takes `ink`; everything recessive beside it — a `<dt>` label, a timestamp, a panel's
+explanatory prose, an absence marker — takes `ink-muted`. That is the pair the console renders, and
+it is what makes "two ink levels plus one accent" true rather than aspirational. `ABSENT` — the
+console's one absence marker — wears `--color-ink-muted`. One glyph, one appearance.
 
-**Two steps carry depth, and a console needs no more than two.** `surface-sunken` is the page
-plane; `surface` is a panel resting on it. Elevation above that is a separate mechanism — see
-*Elevation* below — and it stops at two levels for the same reason.
+**`--color-ink-secondary` changed direction under the substrate, and the ban on it did not.** It
+used to sit *between* the two working levels at `oklch(0.83)`; it is now the dimmest of the three,
+because the substrate's three neutral inks descend and our three names map onto them in order of
+role prominence. Its one consumer is unchanged: `corpus-chart.tsx` spends it on a chart legend's
+`textStyle`, resolved through `getComputedStyle` in `echart.tsx`, painted inside a canvas, never
+composing against DOM text on the same surface. **Reaching for it as a `text-` class is what a third
+grey looks like when it arrives**, and it arrived twice — `run-outcome.tsx` on the two screens
+carrying the densest evidence, and `filters.tsx` on the active-filter *value*, where at the old
+value it also made the value barely brighter than the word naming it. Both were corrected on
+2026-08-06 (`M4.5-W142`). `tests/test_console_design_tokens.py` holds the class ban rather than the
+token, so a chart resolving level 3 keeps working and a component cannot spend it on DOM text.
 
-**Two steps carry interaction state, not a third and fourth level of nesting.** `surface-subtle`
-is a row under the pointer; `surface-emphasis` is a row that is selected. A row *at rest* takes its
-panel's own depth step — there is no separate token for rest, because state should only spend
-contrast when the pointer or a selection asks for it.
+**Graphics is an allocation, not a fourth level.** An icon rendered at a text ink is optically
+louder than the prose it sits beside, because a filled glyph carries more area than a stroke
+pattern at the same lightness. `getsentry/sentry` keeps a separate `graphics` category for exactly
+this (`components/core/principles/tokens/tokens.mdx`). `--color-graphics` names level 2 under its
+own job so an icon reaches for it rather than for a text token. **Declared ahead of its first
+consumer**, deliberately: the console has shipped no icon for it to colour, and the allocation
+exists so the first one reaches for `graphics` on day one instead of borrowing `ink-muted` and
+leaving a second migration to do later. The retiring condition is that first icon.
 
-**The ban is on an ad-hoc alpha spelled at a call site, not on the alpha mechanism itself.** This
-rule originally forbade an alpha overlay outright; that was broader than the evidence supports and
-is narrowed here. The defect it was written against was never "alpha" as a technique — it was a
-colour composited without a name, invented fresh at whichever call site needed one, so the same
-declaration (`bg-foreground/10`) meant a different rendered colour depending on which depth step it
-landed on, and eight feature screens held exactly one authored row interaction between them because
-the ramp gave an agent no named step to reach for instead. That failure is what stays banned: no
-`bg-x/10`, no `text-y/70`, spelled inline in a component.
+### Boundaries
 
-What is not banned is a single primitive that owns every interaction state together and composites
-through `currentcolor` rather than a fixed grey — `getsentry/sentry`'s `InteractionStateLayer`
-(`components/core/interactionStateLayer/interactionStateLayer.tsx`) is the worked example: one
-absolutely-positioned overlay, rest at `opacity: 0`, hover at 0.06, pressed at 0.09, inheriting
-`border-radius` and `border` from whatever it sits inside. Because its fill is `currentcolor`, it is
-always an alpha of *the ink already on the element*, not of an invented neutral — a step toward the
-foreground on any surface, in any theme, at any nesting depth, one declaration with one meaning. A
-sanctioned overlay of that shape must satisfy three things: it is one primitive owning every state
-together, not one class per state scattered across call sites; its fill is `currentcolor`, never a
-literal or a fixed neutral; and it inherits the shape of whatever it sits inside rather than assuming
-a pill, a card corner or a square cell.
+| Job | Token | Value | Against the four depths |
+|---|---|---|---|
+| the hairline: dividers, card rings, table rules | `--color-border`, `--color-line` | `oklch(0.95 0.001485 159 / 7.5125%)` | 1.19 – 1.23 |
+| the boundary of a control | `--color-input`, `--color-line-strong`, `--color-border-control` | `oklch(0.578 0.00275 159)` `#787a79` | 3.79 – 4.27 |
+| the edge of an occluding surface | `--color-border-overlay` | `oklch(0.95 0.001375 159 / 13.3713%)` | 1.41 – 1.47 |
+| a boundary that must be seen against an overlay | `--color-border-stronger` | `oklch(0.95 0.001375 159 / 17.4031%)` | 1.62 – 1.67 |
+| the focus ring | `--color-ring` | `oklch(0.76 0.15 159)` | 8.10 – 9.12 |
 
-**This console keeps named surface steps for its own state anyway, and the reason survives the
-narrower rule.** After Task 12's reallocation there are exactly two depth steps for state to land
-on — few enough that a named step costs nothing extra, and a named value is greppable in a way an
-overlay is not. The composition ambiguity the original ban was written against is nearly absent at
-two steps. A future primitive built the `InteractionStateLayer` way remains a legitimate alternative
-construction; it is simply not the one this tree has chosen.
+A hairline divider carries no 3:1 obligation and never has — WCAG 1.4.11 covers what is *required
+to identify a component or its state*, and a rule between two table rows is neither. The previous
+palette's `--color-line` measured 1.55 against the card and this document never claimed otherwise.
 
-**A panel header takes the panel's own depth step, not a background of its own.** It separates from
-the body by weight and the hairline rule (`--color-line`) already kept for table rules — cheaper
-than a background, and a sticky header stays legible over a scrolled body at any depth without one.
-This is also what frees `surface-subtle` for state above.
+> **Deviation 1 — the control boundary.** Upstream derives `--input` as the foreground at
+> `3% + 38% × --contrast-border` = 13.47% alpha, which composites to **1.43 – 1.47** against the
+> four depth steps. This contract requires a control boundary to clear **3:1**, and that
+> requirement is the older of the two. The declared value keeps the substrate's neutral hue and
+> foreground chroma and takes the lightness that clears the floor: `oklch(0.578 0.00275 159)`,
+> measuring **4.27 / 4.05 / 3.92 / 3.79**. Reversing this means accepting a control whose edge a
+> low-vision reader cannot find, and it would be a change to the floor, not to a token.
 
-**The ring stops being the default.** `--shadow-flat` is kept for a surface that must be told apart
-from a neighbour drawn at the *same* depth step and nothing else separates them; it no longer
-decorates every surface that sits on the page. A step already tells a panel from the page and a row
-from its neighbours — see *Contrast, computed* below, none of these pairings are new.
-
-**The ring is a shadow, not a border, for one reason: it costs no layout.** A `border` changes an
-element's box, so a row that gains one shifts by a pixel relative to its neighbours above and
-below. A 1px inset box-shadow occupies no space, so a row can move between rest, hover and selected
-without ever nudging the rows around it.
+> **Deviation 2 — the focus ring.** Upstream declares `--ring` as `--primary` at 55% alpha, which
+> composites to **3.55 / 3.46 / 3.45 / 3.38**. That clears 3:1, and it is still refused. The ring is
+> frequently the *only* focus channel this console renders: `outline-style` is `none` on every
+> control, and on the `outline` button variant — the one pagination and filters use — the border
+> does not change under `:focus-visible`, because `focus-visible:border-ring` and
+> `dark:border-input` both resolve to specificity (0,2,0) and Tailwind emits `dark:` last. A ring
+> at partial strength is also a contrast figure nobody can read off a class name, which is the
+> argument the 2026-08-06 decision was recorded on when it removed `ring-ring/50` at 3.08. Declared
+> at full strength: **9.12 / 8.64 / 8.37 / 8.10**.
 
 ### The brand hue
 
-265 degrees. It sits there because the reserved status palette occupies the warm and green arc from
-about 30 to 145 degrees, and a brand hue inside that arc collides with a verdict. Under both
-protanopia and deuteranopia 265 stays separable from all four status colours; a teal or cyan brand
-would collapse toward *good* for a substantial share of readers, and the brand hue marks the
-current node, which is a position rather than a judgement.
+159 degrees — the substrate's green, and the console's most consequential inheritance.
 
-| Token | Job | Value |
-|---|---|---|
-| `--color-brand` | links, focus rings, the current node | `oklch(0.775 0.113 265)` `#92b4fe` |
-| `--color-brand-surface` | the tint behind a current or selected thing | `oklch(0.285 0.055 265)` `#1d2945` |
+| Token | Job | Value | Resolved |
+|---|---|---|---|
+| `--color-primary` | the derived accent: focus, the current node, a filled primary control | `oklch(0.76 0.15 159)` | `#45cd8e` |
+| `--color-primary-foreground` | reads on `primary` | `oklch(0.19 0.00225 159)` | `#131413` |
+| `--color-brand` | the brand's own literal, for a mark rather than a fill | `hsl(153.1 60.2% 52.7%)` | `#3ecf8e` |
+| `--color-brand-link` | a link | `hsl(155 100% 38.6%)` | `#00c573` |
+| `--color-brand-600` | the readable step | `hsl(154.9 59.5% 70%)` | `#85e0ba` |
+| `--color-brand-500` | | `hsl(154.9 100% 19.2%)` | `#006239` |
+| `--color-brand-400`, `--color-brand-surface` | the tint behind a current or selected thing | `hsl(155.5 100% 9.6%)` | `#00311d` |
+| `--color-brand-300` | | `hsl(155.1 100% 8%)` | `#002918` |
+| `--color-brand-200` | | `hsl(162 100% 2%)` | `#000a07` |
 
-Used sparingly is part of the decision, not a note on it. Links, focus, the current node. Nothing
-else on a normal screen is chromatic.
+**This retires a recorded rule, and the retirement is the important part.** The previous brand sat
+at 265 degrees on the explicit ground that *"the reserved status palette occupies the warm and green
+arc from about 30 to 145 degrees, and a brand hue inside that arc collides with a verdict."* The
+substrate's brand is green. The rule cannot survive the palette it described, and there are only two
+honest ways to close it: refuse the substrate's brand — which is refusing the substrate — or accept
+that the brand hue and the `good` hue are the same hue and say what still keeps them apart.
+
+They are the same hue here. `good` *is* the brand family (see below), because two greens fourteen
+degrees apart is strictly worse than one: a reader cannot tell them apart, and the pair would claim
+a distinction the screen cannot render. What keeps a brand mark from reading as a verdict is what
+always did, and it is now doing more work: **a status colour ships with an icon and a word, and the
+brand never does.** A navigation highlight, a focus ring and a link carry no glyph and no verdict
+noun; a status mark carries both. That is the whole of the separation, it is stated rather than
+assumed, and it is why *A status colour never travels alone* is no longer merely an accessibility
+rule in this console.
+
+Used sparingly remains part of the decision. Links, focus, the current node, one primary action per
+screen. Nothing else on a normal screen is chromatic.
 
 ### The status palette — reserved
 
 Four roles, and they mean what they say. Never a series colour. Never without an icon and a word.
 
-The **mark** carries one value regardless of surface — a status colour that shifted with the theme
-would be a different claim on a different screen, and the four marks were selected as a set that
-stays distinct from the series slots. The **ink** and the **surface** are selected against the
-surface they land on.
+Three of the four take a substrate family whole: the **ink** is the step a reader reads, the
+**surface** is the tint a panel takes, and the **mark** is the fill a chart segment or a filled dot
+takes.
 
-| Role | Mark | Ink | Surface |
-|---|---|---|---|
-| good | `#0ca30c` | `oklch(0.72 0.17 145)` `#54bf5c` | `oklch(0.29 0.05 145)` `#1a321b` |
-| warning | `#fab219` | `#fab219` | `oklch(0.3 0.05 78)` `#3c2a0d` |
-| serious | `#ec835a` | `#ec835a` | `oklch(0.298 0.05 42)` `#422419` |
-| critical | `#d03b3b` | `oklch(0.72 0.155 27.5)` `#f67a6d` | `oklch(0.29 0.055 27.5)` `#43201c` |
+| Role | Ink | Surface | Mark | ink on its own tint | mark on the card |
+|---|---|---|---|---|---|
+| good | `--color-good-ink` `#85e0ba` (`brand-600`) | `--color-good-surface` `#00311d` (`brand-400`) | `--color-good` `#3ecf8e` (`brand-default`) | 9.18 | 8.76 |
+| warning | `--color-warning-ink` `oklch(0.8 0.14 75)` `#f2af48` | `--color-warning-surface` `#4a2900` (`warning-400`) | `--color-warning-600` `#db8e00` | 6.84 | 6.56 |
+| serious | `--color-serious-ink` `oklch(0.77 0.14 45)` `#fd9565` | `--color-serious-surface` `oklch(0.26 0.055 45)` `#391a0b` | `--color-serious` `oklch(0.66 0.16 45)` `#df6c32` | 7.28 | 5.27 |
+| critical | `--color-critical-ink` `oklch(0.75 0.14 25)` `#fa8880` | `--color-critical-surface` `#541c15` (`destructive-400`) | `--color-critical` `#e54d2e` (`destructive-default`) | 5.73 | 4.52 |
 
-Tokens: `--color-good`, `--color-good-ink`, `--color-good-surface`, and the same three for
-`warning`, `serious` and `critical`.
+`--color-warning` holds the same value as `--color-warning-ink`, because that is upstream's own
+semantic `--warning` and three call sites spell the role bare. `--color-destructive` holds the same
+value as `--color-critical-ink`, as it did before; new code should say `critical`.
 
-**Which of the three to reach for.** Text and icons take the `-ink` step — it is the only one
-computed to clear 5.05:1. A panel's tint takes the `-surface` step. The bare mark is for a chart
-fill or a filled dot large enough that area carries it — never a hairline rule; a 1px rule in
-`--color-warning` reads as a rumour of colour, not a border, however it measures.
+Two ink steps exist for text sitting *on* a solid status fill, and both are upstream's flip
+construction — dark ink on a light fill, resolved from the fill's own lightness rather than chosen:
+`--color-warning-foreground` `oklch(0.12 0.0112 75)` measures **10.65** on the warning fill, and
+`--color-destructive-foreground` `oklch(0.12 0.0112 25)` measures **8.60** on the destructive fill.
 
-`--color-destructive` is kept for the shadcn catalog and holds the same value as
-`--color-critical-ink`. New code should say `critical`.
+**The two stepped scales the roles draw from are declared whole**, as per-theme literals from
+`theme.css`. The vendored catalog spells three of them directly (`text-brand-600`,
+`text-warning-600`, `border-warning-500`); the rest complete the families, so a later screen
+reaching for a tint takes a step rather than inventing one.
+
+| Step | Warning | Destructive |
+|---|---|---|
+| 600 | `--color-warning-600` `#db8e00` | `--color-destructive-600` `#f16a50` |
+| 500 | `--color-warning-500` `#693f05` | `--color-destructive-500` `#7f2315` |
+| 400 | `--color-warning-400` `#4a2900` | `--color-destructive-400` `#541c15` |
+| 300 | `--color-warning-300` `#341c00` | `--color-destructive-300` `#3b1813` |
+| 200 | `--color-warning-200` `#291900` | `--color-destructive-200` `#1d1412` |
+
+**Which of the three to reach for.** Text and icons take the `-ink` step. A panel's tint takes the
+`-surface` step. The bare mark is for a chart fill or a filled dot large enough that area carries it
+— never a hairline rule; a 1px rule in `--color-warning` reads as a rumour of colour, not a border,
+however it measures.
+
+> **Deviation 3 — `serious`.** The substrate has three expressive families (brand, warning,
+> destructive) and this console has four roles. `serious` is built on the substrate's *own*
+> expressive construction rather than invented beside it: a fixed lightness, the shared
+> `--expressive-chroma` of 0.14, and a hue of 45 — between warning's 75 and destructive's 25, and
+> inside neither's clamp, so it can never be mistaken for either by the same arithmetic that keeps
+> those two apart. Its tint takes the construction the other tints take on their own hues. If the
+> substrate ever ships a fourth expressive family, this is the entry to delete.
 
 ### The series palette — categorical, fixed order, never cycled
 
@@ -239,72 +334,68 @@ Charts only. Assigned in sequence: one series takes slot 1, four series take slo
 series is never a generated hue — it folds into "Other", or the chart becomes small multiples, or
 it becomes a table.
 
-| Slot | Hue | Value |
-|---|---|---|
-| 1 | aqua | `#199e70` |
-| 2 | orange | `#d95926` |
-| 3 | blue | `#3987e5` |
-| 4 | green | `#008300` |
-| 5 | magenta | `#d55181` |
-| 6 | yellow | `#c98500` |
-| 7 | violet | `#9085e9` |
-| 8 | red | `#e66767` |
+| Slot | Token | Hue | Value | On the plotting surface |
+|---|---|---|---|---|
+| 1 | `--color-series-1` | aqua | `#199e70` | 5.14 |
+| 2 | `--color-series-2` | orange | `#d95926` | 4.50 |
+| 3 | `--color-series-3` | blue | `#3987e5` | 4.81 |
+| 4 | `--color-series-4` | green | `#008300` | 3.54 |
+| 5 | `--color-series-5` | magenta | `#d55181` | 4.43 |
+| 6 | `--color-series-6` | yellow | `#c98500` | 5.70 |
+| 7 | `--color-series-7` | violet | `#9085e9` | 5.59 |
+| 8 | `--color-series-8` | red | `#e66767` | 5.41 |
 
-Tokens `--color-series-1` … `--color-series-8`.
+> **Deviation 4 — the series palette is not the substrate's.** Not a choice between two candidates:
+> **the substrate ships no categorical chart palette.** Its five code-block colours are a syntax
+> palette, scored against nothing and ordered by token type. There was nothing here to swap, so the
+> palette stands as enumerated and validated, and only the surface it is drawn on moved — from
+> `#171717` to the substrate's card, `#181a19`. Contrast against that surface was re-measured for
+> all eight slots (the column above): the minimum is 3.54 at slot 4, still clear of the 3:1 floor,
+> and the lightness, chroma and CVD-separation checks in *The validator's report* do not depend on
+> the surface at all.
 
 **The order is the colour-blindness mechanism, not a preference.** Adjacent slots touch in a stack,
 a bar group and a line chart, so adjacent pairs are what the gate measures. All eight orderings of
-these hues were enumerated and scored with the `dataviz` skill's validator in both modes, before
-this slice retired one of them; 36 clear every hard gate with the brand constraint applied. This one
-was chosen among the passing orders by the skill's own tie-break — maximise the minimum adjacent CVD
-ΔE — and then, among the orders tied at that maximum, by two constraints this console has and the
-skill does not:
+these hues were enumerated and scored with the `dataviz` skill's validator; 36 clear every hard
+gate. This one was chosen among the passing orders by the skill's own tie-break — maximise the
+minimum adjacent CVD ΔE — and then, among the orders tied at that maximum, by two constraints this
+console has and the skill does not:
 
-- **Slot 1 is neither blue nor violet.** Those are the two families nearest the brand hue, and slot
-  1 is the colour a single-series chart wears. Violet sits at slot 7, which the "more than about
-  seven meaningful classes is a table" rule makes effectively unreachable.
-- **Among the remaining candidates, slot 1 is the hue furthest from any status colour.** Aqua sits
-  9.8 ΔE from the nearest status colour; orange sits 5.8.
-
-**Known adjacencies, stated rather than hidden.** Series and status are different palettes measured
-against different gates, and cross-palette pairs can sit close enough to matter. The light column
-carried three such measurements, naming specific ΔE distances between light-mode series hues and
-the status marks. That column and those numbers are retired as of 2026-08-05, and they were never
-re-run against the dark series values above, so they are not restated here. The fix does not depend
-on the distance regardless: a status colour always arrives with an icon and a word, a series colour
-never does, and a chart carries direct labels and a legend.
+- **Slot 1 is neither blue nor violet.** Slot 1 is the colour a single-series chart wears, and
+  violet sits at slot 7, which the "more than about seven meaningful classes is a table" rule makes
+  effectively unreachable.
+- **Among the remaining candidates, slot 1 is the hue furthest from any status colour.** That
+  argument was made against the previous status palette and has not been re-run against this one;
+  what does not change is that a status colour always arrives with an icon and a word, a series
+  colour never does, and a chart carries direct labels and a legend.
 
 **The series cap for scatter, bubble, choropleth and small multiples is three.** In those forms any
 two marks can sit side by side, so the gate is all-pairs rather than adjacent, and it is strictly
-harder. The first three slots clear it (see *The validator's report* below). A four-slot run before
-this slice failed against the light hex values at ΔE 3.2 (protan); that run's inputs are retired
-with the light column, and the dark palette has not been separately re-run at four slots. The cap of
-three is kept regardless — adding a slot only makes the all-pairs gate harder, never easier, so the
-absence of a fresh failing run is not read as permission. Past three in an all-pairs form, cut
-series or facet. Do not change the palette.
+harder. The first three slots clear it. Past three in an all-pairs form, cut series or facet. Do
+not change the palette.
 
 ### Chart chrome
 
 | Token | Job | Value |
 |---|---|---|
-| `--color-chart-grid` | gridlines, recessive | `oklch(0.29 0 0)` `#2b2b2b` |
-| `--color-chart-axis` | the baseline and axis rule | `oklch(0.42 0 0)` `#4d4d4d` |
+| `--color-chart-grid` | gridlines, recessive | `oklch(0.29 0.0025 159)` |
+| `--color-chart-axis` | the baseline and axis rule | `oklch(0.42 0.0025 159)` |
 | `--color-chart-label-on-light` | the in-segment label ink `corpus-chart.tsx`'s `labelInkFor` picks per fill | `#000000` |
 
-The chart's plotting surface is `--color-surface`. Axis labels, legend entries and tooltip text wear
-the ink tokens, never the series colour; a coloured mark beside the text carries identity. One axis,
-never two. A legend whenever there are two or more series; direct labels at four or fewer.
+Both chrome steps moved onto the substrate's neutral hue and chroma, so a gridline belongs to the
+same family as everything behind it. The chart's plotting surface is `--color-surface`. Axis
+labels, legend entries and tooltip text wear the ink tokens, never the series colour; a coloured
+mark beside the text carries identity. One axis, never two. A legend whenever there are two or more
+series; direct labels at four or fewer.
 
 **One exception to "text wears the ink tokens": a value label set *inside* a stacked segment**
 (`corpus-chart.tsx`) reads against that segment's own fill, not against `--color-surface`, so it
-needs a colour chosen for that fill rather than for the neutral ramp — the ink tokens solve a
-different problem, and the series palette was never built to carry text.
+needs a colour chosen for that fill rather than for the neutral ramp.
 
 `--color-chart-label-on-light` is black, not white, and the arithmetic is why. Black's relative
-luminance is exactly 0 — an achromatic colour's relative luminance is `L³`, and black is `L = 0` —
-so contrast against a fill of sRGB relative luminance `Lf` is `(Lf + 0.05) / 0.05`. White's is
-`(1 + 0.05) / (Lf + 0.05)`. `Lf` below is the full sRGB relative-luminance computation on each
-series hex, not the OKLCH shortcut, because these eight are chromatic:
+luminance is exactly 0, so contrast against a fill of relative luminance `Lf` is `(Lf + 0.05) / 0.05`;
+white's is `(1 + 0.05) / (Lf + 0.05)`. `Lf` below is the full sRGB computation on each series hex,
+because these eight are chromatic:
 
 | Series slot | Hue | Value | `Lf` | vs. black | vs. white |
 |---|---|---|---|---|---|
@@ -317,127 +408,130 @@ series hex, not the OKLCH shortcut, because these eight are chromatic:
 | 7 | violet | `#9085e9` | 0.2859 | 6.72 | 3.13 |
 | 8 | red | `#e66767` | 0.2750 | 6.50 | 3.23 |
 
-Black clears the 5.05 floor against seven of the eight slots. White — this token's value before this
-slice — clears none of them; its worst case (slot 6, 3.07:1) was not a near miss. That is the whole
-argument for the literal above: not "black looks fine here" but "white fails everywhere and black
-mostly doesn't."
+Black clears the 5.05 floor against seven of the eight slots; white clears none of them, its worst
+case being 3.07. That is the argument for the literal: not "black looks fine here" but "white fails
+everywhere and black mostly doesn't."
 
-**Named exception: slot 4 (`--color-series-4`, `#008300`) cannot clear 5.05:1 against any ink,
-light or dark, and no different literal fixes it.** Its `Lf` (0.1623) sits inside the band
-`(0.158, 0.202)`: below 0.158, white clears 5.05; above 0.202, black does; a fill inside the band
-clears it with neither, because that is what solving both inequalities for the same floor produces,
-not a property of any one colour choice. The best available for this fill is white, at 4.95 — nearer
-the floor than black's 4.25, but still short. The consequence is bounded rather than silent:
-`corpus-chart.tsx`'s `INLINE_LABEL_SHARE_FLOOR` already withholds an inline label from a segment too
-thin to hold one, the legend beneath the chart restates every value, and the tooltip gives the exact
-count on hover — a reader who cannot resolve a label inside a thin slot-4 segment has two other
-routes to the same number on the same screen.
+**Named exception: slot 4 (`#008300`) cannot clear 5.05:1 against any ink, and no different literal
+fixes it.** Its `Lf` (0.1623) sits inside the band `(0.158, 0.202)`: below 0.158 white clears 5.05,
+above 0.202 black does, and a fill inside the band clears it with neither — that is what solving
+both inequalities for the same floor produces, not a property of any one colour. The best available
+is white at 4.95. The consequence is bounded rather than silent: `corpus-chart.tsx`'s
+`INLINE_LABEL_SHARE_FLOOR` withholds an inline label from a segment too thin to hold one, the legend
+restates every value, and the tooltip gives the exact count on hover.
 
-### The names the shadcn catalog consumes
+### The compat names the vendored catalog spells
 
-These are positions on the ramp above, kept under their existing names because renaming one breaks
-components across the tree. Prefer the ramp names in new code.
+Upstream keeps these in `compat.css` as aliases onto the semantic tokens above, and the vendored
+components still use them. They are positions on the ramp, not new colours.
 
-| shadcn name | Is | Value |
+| Utility a vendored file writes | Token declared | Is |
 |---|---|---|
-| `--color-background` | `surface-sunken` | `oklch(0.155 0 0)` |
-| `--color-foreground` | `ink` | `oklch(0.955 0 0)` |
-| `--color-card` | `surface` | `oklch(0.205 0 0)` |
-| `--color-card-foreground` | `ink` | `oklch(0.955 0 0)` |
-| `--color-muted` | `surface-subtle` | `oklch(0.255 0 0)` |
-| `--color-muted-foreground` | `ink-muted` | `oklch(0.715 0 0)` |
-| `--color-border` | `line` | `oklch(0.345 0 0)` |
-| `--color-input` | `line-strong` | `oklch(0.578 0 0)` |
-| `--color-ring` | `brand` | `oklch(0.775 0.113 265)` |
-| `--color-primary` | `brand` | `oklch(0.775 0.113 265)` |
-| `--color-primary-foreground` | reads on `brand` | `oklch(0.155 0 0)` |
-| `--color-secondary` | `surface-subtle` | `oklch(0.255 0 0)` |
-| `--color-secondary-foreground` | `ink` | `oklch(0.955 0 0)` |
-| `--color-destructive` | `critical-ink` | `oklch(0.72 0.155 27.5)` |
-| `--color-destructive-foreground` | reads on `destructive` | `oklch(0.155 0 0)` |
+| `bg-overlay` | `--background-color-overlay` | `secondary` |
+| `bg-overlay-hover`, `bg-selection` | `--background-color-overlay-hover`, `--background-color-selection` | `accent` |
+| `bg-alternative` | `--background-color-alternative` | `background` |
+| `bg-surface-100` | `--background-color-surface-100` | `card` |
+| `bg-surface-200` | `--background-color-surface-200` | `muted` |
+| `border-control`, `border-strong` | `--border-color-control`, `--border-color-strong` | `input` |
+| `border-stronger` | `--border-color-stronger` | the stronger overlay edge |
+| `border-overlay`, `bg-border-overlay` | `--border-color-overlay`, `--color-border-overlay` | the overlay edge |
+| `text-background-overlay` | `--color-background-overlay` | `secondary` |
+| `ring-border-control` | `--color-border-control` | `input` |
 
-Three of these are a visible design decision rather than a Tailwind default: `--color-background`
-sits off pure black so a card separates from the page; `--color-input` is bright enough to clear
-3:1 as a control boundary; `--color-primary` and `--color-ring` are the brand hue, which is what
-makes focus visible and makes the `link` button variant a link.
+A `--color-*` entry generates `bg-border-overlay` but not `border-overlay`, which is why upstream
+declares both namespaces and so does `index.css`.
+
+The sidebar family the vendored rail reads is Studio's own aliasing, and every entry is a step
+already argued above:
+
+| Token | Is |
+|---|---|
+| `--color-sidebar` | `background` |
+| `--color-sidebar-foreground`, `--color-sidebar-accent-foreground` | `foreground` |
+| `--color-sidebar-accent` | `accent` |
+| `--color-sidebar-border` | `border` |
+| `--color-sidebar-ring` | `ring` |
 
 ---
 
 ## Type
 
-Seven steps. The console previously lived at 12 / 12.8 / 14 / 16 / 18px, a measured range ratio of
-1.5:1 against a 2.0 threshold; the `page` step alone took it to 2.0.
+Seven steps, and the sizes are Studio's own ramp adopted whole. The console previously lived at
+12 / 14 / 16 / 18 / 24 / 32 / 48px.
 
-**`--text-display` was added 2026-08-06 (M7-W160), and this reverses a refusal recorded here.** The
-earlier argument was that a wider range costs vertical space and vertical space is rows. That is
-true of a step spent on a *table*, and it was applied to a step nothing renders in a table: measured
-across all nine routes at 1440x900, the range was **2.00 on five of them and 2.67 on four**, against
-a 3.4:1 bar, and the widest text on six routes was a stat-tile figure rather than anything naming the
-screen. So the console had no focal point on any route, and
-`docs/superpowers/reports/2026-08-06-why-the-console-came-out-flat.md` measures what that produced.
-
-The step is 48px, and the arithmetic is the reason for that number rather than 40 or 56: against the
-12px floor it gives a range of **4.00:1**, and against 14px body it is **3.43x**, so it clears both
-halves of the bar — at least 3.4:1 overall and a display step at least 3x body — with the smallest
-value that does. It costs no rows, because **exactly one element per route may take it**: the page
-title in `layouts/page-header.tsx`. A second one on a screen is two focal points, which is none.
+**The line box on each step is Tailwind's stock ratio for the step it takes, rounded up to the 4px
+grid.** That is a rule rather than seven choices, it is checkable from this table alone, and it
+lands `--text-body` on a 20px line box — the number *Row height* below derives `row-md` from.
 
 | Token | Size | Line height | Weight | Tracking | Job |
 |---|---|---|---|---|---|
 | `--text-meta` | 12px | 16px | inherit | normal | labels, timestamps, furniture. **The floor.** |
-| `--text-body` | 14px | 20px | inherit | normal | prose and table cells. 14 rather than 16 because rows per screen is the currency. |
-| `--text-emphasis` | 16px | 22px | 600 | −0.02em | card titles, panel headlines |
-| `--text-section` | 18px | 24px | 600 | −0.02em | a section heading inside a view |
-| `--text-page` | 24px | 30px | 600 | −0.04em | the `h1` on every view |
-| `--text-figure` | 32px | 36px | 600 | −0.04em | stat-tile values only; carries `tabular-nums` — see below |
-| `--text-display` | 48px | 52px | 600 | −0.045em | **the page title, once per route.** Nothing else, ever |
+| `--text-body` | 13px | 20px | inherit | normal | prose and table cells; rows per screen is the currency |
+| `--text-emphasis` | 15px | 24px | 600 | −0.02em | card titles, panel headlines |
+| `--text-section` | 18px | 28px | 600 | −0.02em | a section heading inside a view |
+| `--text-page` | 22px | 32px | 600 | −0.04em | the `h1` on every view |
+| `--text-figure` | 28px | 36px | 600 | −0.04em | stat-tile values only; carries `tabular-nums` |
+| `--text-display` | 46px | 48px | 600 | −0.045em | **the page title, once per route.** Nothing else, ever |
 
 Utilities: `text-meta`, `text-body`, `text-emphasis`, `text-section`, `text-page`, `text-figure`,
-`text-display`.
-Weight, line height and tracking travel with the step, so `text-page` is the whole decision rather
-than three of them. Override with `font-normal` or `leading-*` where a specific case needs it.
+`text-display`. Weight, line height and tracking travel with the step, so `text-page` is the whole
+decision rather than three of them. Override with `font-normal` or `leading-*` where a specific case
+needs it.
+
+**The range arithmetic, which is the reason a display step exists at all.** Measured across all nine
+routes at 1440x900 before M7-W160, the type range was **2.00 on five routes and 2.67 on four**,
+against a 3.4:1 bar, and the widest text on six of them was a stat-tile figure rather than anything
+naming the screen — so the console had no focal point on any route, which
+`docs/superpowers/reports/2026-08-06-why-the-console-came-out-flat.md` measures the consequences of.
+On this ramp the range is **46 / 12 = 3.83**, and the display step is **46 / 13 = 3.54×** body. Both
+halves of the bar clear — at least 3.4:1 overall and a display step at least 3× body — and the step
+costs no rows, because **exactly one element per route may take it**: the page title in
+`layouts/page-header.tsx`. A second one on a screen is two focal points, which is none.
+
+**The substrate's other steps stay reachable under their own names.** `--text-sm` through
+`--text-9xl` are declared with Studio's values, because the vendored catalog spells `text-xs`,
+`text-sm`, `text-base` and `text-lg` directly and nothing should resolve those against Tailwind's
+defaults while the components around them come from Supabase. `--text-xs` is left at Tailwind's
+0.75rem, which is what upstream does and what makes `--text-meta` and `text-xs` the same 12px floor.
+New code in `features/` and `components/` uses the seven role names.
 
 **Tracking is two-tiered, and it belongs to the heading role, not to size alone.**
-`--text-emphasis` and `--text-section` take −0.02em; `--text-page` and `--text-figure` take
-−0.04em, deepened from the −0.01em/−0.02em this console shipped with, to keep the direction
-consistent — larger heading, more negative tracking — across all four steps that carry it. **The
-condition:** tracking travels with these four steps because each names a heading role — a panel
-title, a section heading, a page title, a stat-tile figure. If `--text-emphasis` is ever reached
-for as in-row emphasis rather than a panel title, that use takes `tracking-normal` alongside it;
-the tracking belongs to the heading, not to the size.
+`--text-emphasis` and `--text-section` take −0.02em; `--text-page` and `--text-figure` take −0.04em;
+`--text-display` takes −0.045em. **The condition:** tracking travels with these five steps because
+each names a heading role. If `--text-emphasis` is ever reached for as in-row emphasis rather than a
+panel title, that use takes `tracking-normal` alongside it; the tracking belongs to the heading, not
+to the size.
+
+**`--font-weight-normal` is 450, not 400.** Upstream's own adjustment, adopted with the ramp it
+belongs to — its ramp was tuned against that weight, and taking the sizes without it would be taking
+half a decision. The heaviest step this console declares is still 600, and
+`tests/test_console_design_tokens.py` reads that ceiling out of the table above.
 
 **The furniture class.** `.furniture` (`web/src/index.css`, `@layer components`) is the uppercase,
-open-tracked treatment `site-nav.tsx:65` already renders by hand for its graph-level labels,
-defined once so nothing else in the tree hand-spells it again. It is a class, not a token — this
-document's own test says so: two agents rendering a graph-level label would both reach for
-uppercase and open tracking, so there is nothing for them to choose differently. It covers **one of
-`--text-meta`'s two jobs**: a scanned label — a graph-level name, a column header, a rung label —
-takes it; a read value — a timestamp, a count — does not. It sets `text-transform: uppercase` in
-CSS rather than in copy, because a screen reader spells out letters that are already capitalised in
-a string, and the transform is a rendering choice, not a fact about the data. It is deliberately
-outside the `text-*` namespace: `web/src/lib/utils.ts` teaches `tailwind-merge` exactly six
-font-size names under that prefix, and an unlisted `text-*` class merges as a text-*colour*
-conflict instead — the defect that file's docstring already records once, for `text-emphasis`
-against `text-critical-ink`.
+open-tracked treatment for graph-level labels, defined once so nothing in the tree hand-spells it
+again. It is a class, not a token — this document's own test says so: two agents rendering a
+graph-level label would both reach for uppercase and open tracking, so there is nothing for them to
+choose differently. It covers **one of `--text-meta`'s two jobs**: a scanned label — a graph-level
+name, a column header, a rung label — takes it; a read value — a timestamp, a count — does not. It
+sets `text-transform: uppercase` in CSS rather than in copy, because a screen reader spells out
+letters that are already capitalised in a string. It is deliberately outside the `text-*` namespace:
+`web/src/lib/utils.ts` teaches `tailwind-merge` exactly the seven font-size names above, and an
+unlisted `text-*` class merges as a text-*colour* conflict instead — the defect that file's
+docstring already records once, for `text-emphasis` against `text-critical-ink`.
 
 **Tabular figures.** `--text-figure` carries `font-variant-numeric: tabular-nums`, because every
 value on that step is a number an operator compares down a column or across a poll, and
 proportional digits make that comparison a guess. Mono numbers do not also take it: mono already
-aligns by construction — see *Mono means the system recorded this verbatim* above — and
-`tabular-nums` on a mono run would be decoration on a mechanism that already works. A sans numeric
-value outside `--text-figure` — a count rendered in prose rather than a stat tile — takes the same
-Tailwind utility directly; it costs nothing in the stack already shipped and does not touch the
-mono rule.
-
-Tailwind's stock steps (`text-xs`, `text-sm`, `text-lg`) still resolve — they are not removed,
-because removing them would break every component mid-migration. They are not the scale. New code
-uses the six above.
+aligns by construction, and `tabular-nums` on a mono run would be decoration on a mechanism that
+already works.
 
 **Faces.** `--font-sans` is `system-ui, -apple-system, "Segoe UI", sans-serif`; `--font-mono` is
-`ui-monospace, "Cascadia Code", "Segoe UI Mono", Menlo, Consolas, "Liberation Mono", monospace`. No
-webfont: a webfont buys a network request, a flash of unstyled text and a licence question, for a
-console nobody outside the project has opened. Large standalone numbers use the default
-proportional figures.
+`ui-monospace, "Cascadia Code", "Segoe UI Mono", Menlo, Consolas, "Liberation Mono", monospace`.
+**The substrate's faces are deliberately not taken.** Upstream's sans is a licensed brand typeface
+and Studio's is a webfont; both are identity rather than mechanism, and
+`.claude/rules/interface-originality.md`'s carve-out keeps identity excluded whatever else it
+permits. A webfont also buys a network request, a flash of unstyled text and a licence question for
+a console nobody outside this project has opened.
 
 ---
 
@@ -453,45 +547,41 @@ utilities all take them.
 | `--spacing-section` | 16px | between blocks inside a panel |
 | `--spacing-frame` | 40px | the page frame: content to the chassis. One consumer, `app-frame.tsx` |
 
-**Recorded decision: the 24px gap between top-level sections of a page is not a fourth token.** It
-is written `gap-6` or `space-y-6` on Tailwind's base 4px scale. It stays unnamed because it is a
-page-layout value used once per view, not a component value; a component reaching for it is
-misusing it. A genuinely new spacing value is a decision recorded here, not a token added quietly.
+**The substrate did not move these, and that is a measurement rather than a decision to skip the
+work.** Supabase's own spacing scale is `xs 4 / sm 8 / md 16 / lg 32 / xl 64`; the three inner
+tokens above are its first three values exactly, and the vendored components spell Tailwind's base
+4px scale throughout rather than any named spacing token. There was nothing to swap. The frame is
+ours and is argued below.
 
-**Recorded decision: these three tokens are the only spacing spellings permitted inside
-`features/`.** A raw Tailwind spacing utility in a feature screen (`gap-4`, `p-2`, …) duplicates
-one of these three numbers under a different name — measured on this tree at 19 token spellings
+**Recorded decision: the between-panel gap stays **32px** and stays unnamed.** It is written
+`gap-8` on Tailwind's base scale — the substrate's `lg`, as it happens — and it stays unnamed
+because it is a page-layout value used once per view, not a component value; a component reaching
+for it is misusing it. A genuinely new spacing value is a decision recorded here, not a token added
+quietly.
+
+**Recorded decision: these four tokens are the only spacing spellings permitted inside
+`features/`.** A raw Tailwind spacing utility in a feature screen (`gap-4`, `p-2`, `p-10`, …)
+duplicates one of these numbers under a different name — measured on this tree at 19 token spellings
 against 128 raw ones, two of them landing on the same pixel value under a different name (`gap-1`
 and `gap-field` both 4px; `p-4` and `p-section` both 16px). A raw value stays legitimate only for a
-page-layout number used once per view, on the grounds already argued above for the 24px section
-gap — never inside a component.
+page-layout number used once per view, on the grounds argued above for the 32px section gap — never
+inside a component.
 
 **Recorded decision: each spacing level is at least twice the one below it, and the requirement
-binds the three *inner* levels, not the page frame.** `--spacing-section` (16px) is already 2× of
-`--spacing-row` (8px), which is already 2× of `--spacing-field` (4px) — the token ramp holds this
-without a change. The level above them — the gap between panels on a page — does not: it is
-`gap-6` (24px) today, the same value as the page frame, which is the sharpest defect this slice
-measured: the page had one spacing level where it needed three. The between-panel gap moves to
-**32px** (`gap-8`, unnamed on the same grounds as the frame) so that `32 : 16 : 8 : 4` holds the 2×
-floor at every inner step.
+binds the three *inner* levels, not the page frame.** `32 : 16 : 8 : 4` holds the 2× floor at every
+inner step. Before M7-W160 the between-panel gap was 24px, the same value as the page frame, which
+was the sharpest defect that slice measured: the page had one spacing level where it needed three.
 
 **Reversed 2026-08-06 (M7-W160): the frame is 40px, and the argument that kept it at 24 rested on a
 component that did not exist.** The refusal read: *"A console's edge is held by the navigation rail
 and the header, not by the frame."* **There was no rail.** `layouts/site-nav.tsx` rendered a
 horizontal strip with a bottom border, and `app-shell.tsx` put the whole page in a 24px gutter under
 it — so the premise was false when it was written and stayed unexamined because it had been recorded
-as a ruling. M7-W160 builds the rail, which is what makes the sentence checkable, and the answer once
-it is checkable is the opposite of the recorded one: a rail holds the *left* edge and holds nothing
-about the space between the content and the frame's other three sides.
+as a ruling. Against the 8px in-component unit, 40px gives a ratio of **5.0**, inside the 4.7–7.2
+band three measured reference surfaces hold. It was **3.0 on all nine routes** before this.
 
-`--spacing-frame` is **40px** and is a token rather than a raw utility, which is the second half of
-the correction: the frame was `px-6`, spelled inline, so nothing could read it and no guard could
-check it. Against the 8px in-component unit that gives a ratio of **5.0**, inside the 4.7–7.2 band
-three measured reference surfaces hold. It was **3.0 on all nine routes** before this.
-
-**The frame is now larger than the gap it sits outside of — 40 : 32 — and that ordering is the
-point.** Four levels, each at least 1.25x the one below and the three inner ones at 2x:
-`40 : 32 : 16 : 8 : 4`.
+**The frame is larger than the gap it sits outside of — 40 : 32 — and that ordering is the point.**
+Four levels: `40 : 32 : 16 : 8 : 4`.
 
 ---
 
@@ -504,69 +594,81 @@ cell padding is *derived* from it, not the other way round.
 | Step | Value | Already rendered at | Governs |
 |---|---|---|---|
 | `row-sm` | 32px (`h-8`) | `Button`'s default size | a compact row — a dense table, a toolbar |
-| `row-md` | 36px (`h-9`) | `Button`'s `lg` size, and `--text-body` (14/20) plus `--spacing-row` (8px) top and bottom | the default table row |
+| `row-md` | 36px (`h-9`) | `Button`'s `lg` size, and `--text-body`'s 20px line box plus `--spacing-row` (8px) top and bottom | the default table row |
 | `row-lg` | 40px (`h-10`) | `TableHead` today | a header row, or a form field needing a larger target |
 
-None of these is a new value: each is a Tailwind stock height Sync's own components already
-render, named here so a future row is chosen from the scale rather than invented. A control
-dropped into a `row-md` cell (a default 32px button) clears the row by 2px on each side without
-changing the row's height — that is the property the scale exists to protect.
+None of these is a new value: each is a Tailwind stock height Sync's own components already render,
+named here so a future row is chosen from the scale rather than invented. A control dropped into a
+`row-md` cell (a default 32px button) clears the row by 2px on each side without changing the row's
+height — that is the property the scale exists to protect.
+
+**The substrate swap left these standing, and that is why `--text-body`'s line box is on the 4px
+grid rather than scaled with its size.** Tailwind's stock ratio for the step `--text-body` takes
+would give 18.57px, which makes a 34px row; the rounding rule stated in *Type* gives 20px and holds
+`row-md` at 36. Changing the row scale is a different decision from swapping a type ramp, and this
+work item did not make it.
 
 **Corrected 2026-08-06, and the correction is the useful part.** This section used to say `row-md`
-was "the existing arithmetic made explicit — `TableCell` already renders a 36px row from
-`text-body` and `p-row`; it was simply never named." It never rendered 36px. `table.tsx` spelled
-`py-2.5` — 10px, off the 4px base — and a comment in that file stated the opposite rule to this
-one: that the row height is a consequence of the padding rather than chosen before it. Measured in
-Chrome at 1440×900 across seven tables on the Fleet screen: a single-line body row was **40.5px**
-and a header row **36.5px** — the two heights this table assigns, in each other's slots. The
-classes now derive from the numbers above (`h-10 px-row py-row` on the header, `px-row py-row` on
-the cell) and measure **40.0px** and **36.0px**.
+was "the existing arithmetic made explicit". It never rendered 36px: `table.tsx` spelled `py-2.5` —
+10px, off the 4px base — and a comment in that file stated the opposite rule to this one. Measured
+in Chrome at 1440×900 across seven tables on the Fleet screen: a single-line body row was **40.5px**
+and a header row **36.5px**, the two heights this table assigns, in each other's slots. The classes
+now derive from the numbers above (`h-10 px-row py-row` on the header, `px-row py-row` on the cell)
+and measure **40.0px** and **36.0px**.
 
-Two things follow, and both are the point of writing this down rather than quietly editing the
-sentence. **A header cannot reach `row-lg` through padding**: 12px of `--text-meta` on a 16px line
-box plus `--spacing-row` twice is 32px, and the value that would make it 40 is a 12px padding this
-document deliberately does not name — which is why the header declares `h-10` and pads inside it,
-in the order this section already prescribed. And **the sentence was checkable the whole time**:
-`tests/test_console_design_tokens.py` now multiplies the classes `table.tsx` sets against the Type,
-Space and Row height tables here and asserts they equal these numbers, so this table and that file
-cannot disagree again without a test naming which one moved.
+Two things follow. **A header cannot reach `row-lg` through padding**: 12px of `--text-meta` on a
+16px line box plus `--spacing-row` twice is 32px, and the value that would make it 40 is a 12px
+padding this document deliberately does not name — which is why the header declares `h-10` and pads
+inside it. And **the sentence is checkable**: `tests/test_console_design_tokens.py` multiplies the
+classes `table.tsx` sets against the Type, Space and Row height tables here and asserts they equal
+these numbers, so this table and that file cannot disagree again without a test naming which one
+moved.
 
 ---
 
 ## Radius
 
-Two values. Everything resolves to one of them.
+Two values, and both are the substrate's — `rounded-md` on every control the vendored catalog
+ships, `rounded-lg` on every card and dialog.
 
 | Token | Value | Job |
 |---|---|---|
 | `--radius-control` | 6px | buttons, inputs, badges, chips |
-| `--radius-surface` | 10px | cards, panels, dialogs |
+| `--radius-surface` | 8px | cards, panels, dialogs |
 
-Tailwind's `--radius-md` (6px) is unchanged and still resolves, because `button.tsx` reads it
-through `var(--radius-md)` in an arbitrary value.
+The surface radius was 10px before the swap. Tailwind's `--radius-md` (6px) is unchanged and still
+resolves, because `button.tsx` reads it through `var(--radius-md)` in an arbitrary value.
 
 ---
 
 ## Elevation
 
-Two levels, and the mechanism at both is a ring. A console with no depth to communicate should not
-paint depth, and a surface with no neighbour to be told apart from should not draw a ring either.
+Two levels for surfaces this project draws, and the mechanism at both is a ring. A console with no
+depth to communicate should not paint depth, and a surface with no neighbour to be told apart from
+should not draw a ring either.
 
 | Token | Is | Use for |
 |---|---|---|
-| `--shadow-flat` | a hairline ring in `--color-line` | a surface that must be told apart from a neighbour at the same depth step — not applied by default; see *Surface ramp: depth and state* above |
+| `--shadow-flat` | a hairline ring in `--color-line` | a surface that must be told apart from a neighbour at the same depth step — not applied by default |
 | `--shadow-float` | the same ring, plus a soft drop shadow | only something that occludes content |
 
-There is no third level. Cards do not float above tables. Today exactly one thing in this console
-floats: `ErrorSurface`, which is `fixed` over the viewport.
+There is no third level *of ours*. Cards do not float above tables. Today exactly one thing this
+project draws floats: `ErrorSurface`, which is `fixed` over the viewport.
+
+**The vendored catalog carries Tailwind's stock `shadow-xs / sm / md / lg` instead, and that is the
+boundary rather than a fourth level.** A vendored dialog, popover and card arrive with the elevation
+their own system gave them; restyling them happens in `web/src/components/`, never inside
+`web/src/vendor/`. What this section governs is what the console's own surfaces reach for.
+
+**The ring is a shadow, not a border, for one reason: it costs no layout.** A `border` changes an
+element's box, so a row that gains one shifts by a pixel relative to its neighbours above and below.
+A 1px inset box-shadow occupies no space, so a row can move between rest, hover and selected without
+ever nudging the rows around it.
 
 **A shadow token must express its colour through a colour token, never as a literal.** Tailwind
 resolves a `shadow-*` theme value at build time and bakes it into the class, so a literal colour
 written into `--shadow-float` would be frozen forever, immune to any value `--color-shadow` is later
 given. `--color-shadow` (`oklch(0 0 0 / 0.72)`) exists for exactly this reason and has no other use.
-`ErrorSurface` reads `shadow-float`, and it is wired through this indirection correctly:
-`--shadow-float`'s own colour components stay `var()` references rather than literals, so each
-resolves against whichever value `--color-line` and `--color-shadow` are live on the element.
 
 ---
 
@@ -576,27 +678,22 @@ Two mechanisms, because two different kinds of motion need two different gates.
 
 **The gate a new transition is checked against is frequency, not duration.** A surface the operator
 crosses repeatedly takes no transition at all; a surface they meet only occasionally may take one.
-This console tried two other rules first and reversed both: "no motion anywhere," measured from three
-landing pages with near-zero authored interactions, and "150ms because a dense screen has many
+This console tried two other rules first and reversed both: "no motion anywhere," measured from
+three landing pages with near-zero authored interactions, and "150ms because a dense screen has many
 controls," reasoned from a component-count comparison. Neither is decidable by whoever is writing a
-component, and a landing page's near-zero transition count and a dense table's forty is the same rule
-producing opposite numbers at two different interaction densities — not a contradiction to arbitrate.
-`getsentry/sentry` writes the actual variable down directly: "frequent interactions… should avoid
-animation all together" (`components/core/principles/motion/motion.mdx:39`), while the same system
-publishes a 120–240ms token set and spends it on overlays, modals and toasts — interactions an
-operator meets occasionally, not on every pointer move. Its own row-hover primitive,
-`InteractionStateLayer`, declares no transition at all, which is why `TableRow`'s hover fill carries
-none either: a row hover is the most frequent interaction in this console, crossed on every pointer
-move over every table, all day. `ErrorSurface` arriving is the opposite case — rare, and where a
-transition earns its place. **When adding a transition, ask how often the operator crosses this
-surface, not how large the page is or how long feels right.**
+component. `getsentry/sentry` writes the actual variable down directly: "frequent interactions…
+should avoid animation all together" (`components/core/principles/motion/motion.mdx:39`), while the
+same system publishes a 120–240ms token set and spends it on overlays, modals and toasts. Its own
+row-hover primitive declares no transition at all, which is why `TableRow`'s hover fill carries none
+either: a row hover is the most frequent interaction in this console. `ErrorSurface` arriving is the
+opposite case. **When adding a transition, ask how often the operator crosses this surface, not how
+large the page is or how long feels right.**
 
 `web/src/lib/motion.ts` owns the framer-motion-driven usages, and **it is a registry rather than a
 list in prose**: `MOTION_USAGES` names every module permitted to import framer-motion, and
 `tests/test_console_design_tokens.py` asserts that array and the tree name the same modules in both
 directions. An unlisted importer fails; so does an entry that no longer imports anything, so a
-deletion cannot leave a permission behind. This paragraph said the same thing before M4.5-W143 and
-could not stop a fourth call site landing, which is why the sentence is now a test.
+deletion cannot leave a permission behind.
 
 Each usage reads `useReducedMotion()` from that file and, under reduced motion, substitutes a
 duration of `0` for its animated prop set rather than shortening it — a fade or a colour wash that
@@ -604,34 +701,24 @@ merely sped up would still be motion. This is code, not a token, because the bra
 there is no CSS value that expresses "skip this prop entirely."
 
 **Two usages, and the third was deleted on evidence rather than on taste.** `ErrorSurface` arriving
-and leaving is the occasional, occluding surface this section already licensed. The changed-under-poll
-wash tracks a checkpoint the checkpointer wrote at a moment, which is a time the graph holds, and
-`node-sequence.test.tsx` holds that it fires on a real status transition and on nothing else.
+and leaving is the occasional, occluding surface this section already licensed. The
+changed-under-poll wash tracks a checkpoint the checkpointer wrote at a moment, which is a time the
+graph holds. The third was "the paged table container settling into its new height", and it had
+never once run: every screen that paginates returns a loading state while `query.isPending`, so a
+page change unmounts the subtree a layout animation would need to persist across. Sampled every 40ms
+across a swap from 50 rows to 34: zero transforms, zero entries in `document.getAnimations()`.
 
-The third was "the paged table container settling into its new height", a `layout` prop on
-`PageControls`. Measured on 2026-08-06 at 1440×900 against `--scale 10000`: **it had never once
-run.** Every screen that paginates returns a loading state while `query.isPending`, and a page change
-is a new query key with no cached data, so the subtree unmounts and a fresh one mounts — a layout
-animation needs a node that persists across a layout change, and this node does not. Sampled every
-40ms across a swap that took the row count from 50 to 34: zero transforms, zero entries in
-`document.getAnimations()`, and the node captured before the click reported `isConnected: false`
-afterwards with a different element in its place. It would not have earned itself even had it worked,
-because an offset changing holds no time and paging is one of the most frequent interactions on a
-long table — the case this section's own frequency gate names.
-
-Everything else — every Tailwind `transition-*` and `animate-*` utility the shadcn catalog and
-the console's own components use — is gated by a `@media (prefers-reduced-motion: reduce)` block
-in `web/src/index.css`, sitting unlayered on purpose: `@theme` and every Tailwind utility compile
-into layers, and an unlayered rule beats every layered rule regardless of specificity, so the block
-wins against `transition-all` and `transition-colors` without needing `!important`. It zeroes
+Everything else — every Tailwind `transition-*` and `animate-*` utility the vendored catalog and the
+console's own components use — is gated by a `@media (prefers-reduced-motion: reduce)` block in
+`web/src/index.css`, sitting unlayered on purpose: `@theme` and every Tailwind utility compile into
+layers, and an unlayered rule beats every layered rule regardless of specificity. It zeroes
 `transition-duration`, `animation-duration` and `scroll-behavior` document-wide — zeroed, not
-shortened, matching the framer half's rule.
+shortened.
 
 `Button`'s `active:not-aria-[haspopup]:translate-y-px` is deliberately left alone. A `transform` is
-not a transition: it moves the element on `:active` whether or not a transition is running. With
-the transition gone under reduced motion, the 1px press lands in a single frame — an instant state
-change indistinguishable from any other instant style swap this query already makes (a colour, a
-border), not an animation. It stays.
+not a transition: it moves the element on `:active` whether or not a transition is running. With the
+transition gone under reduced motion, the 1px press lands in a single frame — an instant state
+change indistinguishable from any other instant style swap this query already makes.
 
 ---
 
@@ -643,46 +730,45 @@ markup, permanently, rather than resolving it at runtime: there is no preference
 flash-of-wrong-theme to beat before first paint.
 
 The class stays for a reason that has nothing to do with switching: the shadcn catalog's own
-components — `button.tsx`, `input.tsx`, `textarea.tsx`, `input-group.tsx`, none of them owned by
-this document — carry `dark:`-prefixed utility classes, and `@custom-variant dark (&:is(.dark *))`
-in `index.css` is what makes those classes match anything. Removing the class, or the variant,
-would silently drop those components' `dark:` rules rather than remove a toggle; keeping both is
-what leaves them coherent. `:is(.dark *)` matches every descendant of `<html>`, so the one class
-stamped once covers the whole document.
+components carry `dark:`-prefixed utility classes, and `@custom-variant dark (&:is(.dark *))` in
+`index.css` is what makes those classes match anything. Removing the class, or the variant, would
+silently drop those components' `dark:` rules rather than remove a toggle. `:is(.dark *)` matches
+every descendant of `<html>`, so the one class stamped once covers the whole document. **The
+vendored catalog keys off the same two selectors** — upstream's own theme block is
+`[data-theme='dark'], .dark`, so a component copied from it resolves against the class this
+document already stamps.
 
-Every value is a literal, not a `var()` reference: the chart wrapper in `echart.tsx` reads these
-through `getComputedStyle`, which returns declared text rather than a resolved colour, and a
-`var()` reference would come back unresolved.
-
-There used to be a `.dark` rule here, unlayered on purpose so it would beat `@theme`'s layered
-declarations regardless of specificity, overriding `:root`'s light values for every token above.
-That rule is deleted along with the light values it overrode: the values it held are now the only
-ones declared, at `:root`, and nothing overrides them.
+Every value is a literal, not a `var()` reference: `echart.tsx` reads seven of them through
+`getComputedStyle`, which returns declared text rather than a resolved colour.
 
 The three-state theme control (`light` / `dark` / `system`), `web/src/lib/theme.ts`,
 `theme-toggle.tsx`, the `sync-theme` `localStorage` key, and the `prefers-color-scheme` listener
-that resolved a `"system"` preference are all removed, not merely unused — a console that still
-branched on `prefers-color-scheme` anywhere would not have honoured the owner's instruction that
-the console has exactly one mode.
+that resolved a `"system"` preference are all removed, not merely unused.
 
 ---
 
 ## Changing a colour
 
-1. Change the value in `web/src/index.css`.
-2. Recompute every text-on-surface pairing. Nothing may fall below **5.05:1**, the console's
-   measured worst case before this slice. A pairing that regresses is a bug in the ramp, not an
-   acceptable trade.
-3. If a series slot moved, re-run the validator against the surfaces below and paste the new
-   report here.
-4. If you changed the slot *order*, re-run the enumeration: the order is a gate, not a preference.
+1. Change the value in `web/src/index.css`. If it is one of the substrate's, change the parameter in
+   `web/scripts/theme-contrast.mjs` instead and take what it prints — a hand-edited literal breaks
+   the derivation this document rests on.
+2. Run `node web/scripts/theme-contrast.mjs`. Nothing may fall below **5.05:1**. A pairing that
+   regresses is a bug in the ramp, not an acceptable trade.
+3. Paste the new tables into *Contrast, computed* below. A figure whose run is not reproducible is
+   the defect this section keeps having.
+4. If a series slot moved, re-run the validator against the plotting surface and paste the report.
+5. If you changed the slot *order*, re-run the enumeration: the order is a gate, not a preference.
 
 ---
 
 ## The validator's report
 
-From the `dataviz` skill, `scripts/validate_palette.js`. Surface `#171717` — the console's own
-`--color-surface`, which is what a chart renders on.
+From the `dataviz` skill, `scripts/validate_palette.js`. The run below was made against the
+console's previous plotting surface, `#171717`; the surface is now `#181a19` and the palette is
+unchanged, so four of its five checks are unaffected — lightness, chroma and both CVD separations
+are properties of the eight hues alone. **The fifth, contrast against the surface, was re-measured
+and is published in the series table above** (minimum 3.54, all eight clear of 3:1) rather than
+restated from this run.
 
 ```
 $ node <dataviz>/scripts/validate_palette.js \
@@ -697,14 +783,9 @@ Palette (dark, surface #171717, categorical): 8 slots
   [PASS] Contrast vs surface    all 8 >= 3:1
 
   → ALL CHECKS PASS  (CVD in the 6–8 floor band is legal ONLY with secondary encoding: direct labels, gaps, or texture)
-  scope: categorical palettes only. For a lone status/text color check WCAG text contrast; for a sequential ramp, lightness monotonicity.
 
 exit 0
 ```
-
-The retired light-hex run reported a contrast WARN — three slots below 3:1 against a white card,
-obligating a relief channel. That finding's provenance is the light column; against the dark card
-above, contrast vs surface is a clean PASS at all 8 slots and there is nothing to relieve.
 
 ### The all-pairs cap
 
@@ -717,9 +798,8 @@ $ node <dataviz>/scripts/validate_palette.js "#199e70,#d95926,#3987e5" --mode da
 
 ### The validator was shown to reject
 
-A validator that has never rejected a palette has not been shown to validate one. Slot 4 (green)
-was moved to slot 2, beside slot 1 (aqua), and the run was repeated against the dark hex values.
-The run failed and exited 1.
+A validator that has never rejected a palette has not been shown to validate one. Slot 4 (green) was
+moved to slot 2, beside slot 1 (aqua), and the run was repeated. It failed and exited 1.
 
 ```
 $ node <dataviz>/scripts/validate_palette.js \
@@ -738,140 +818,61 @@ The change was reverted.
 
 ## Contrast, computed
 
-WCAG ratios for every text-on-surface pairing, against the floor of **5.05:1** — the console's
-worst case before this slice, which must not regress. Ratios computed from the sRGB values above.
+Every figure below is printed by `node web/scripts/theme-contrast.mjs`. WCAG 2.x relative luminance
+over resolved sRGB bytes, against a floor of **5.05:1**. Alpha is composited in gamma-encoded sRGB
+rather than in linear light or in OKLCH, because that is what a browser does to `background-color`
+and the three disagree visibly; a ratio computed the other way would not describe the screen.
 
-| Ink | on sunken | on surface | on subtle | on emphasis | on subtle/50 over card | on subtle/50 over page |
-|---|---|---|---|---|---|---|
-| `ink` | 17.17 | 15.73 | 13.79 | 11.75 | 14.79 | 15.58 |
-| `ink-secondary` | 11.57 | 10.61 | 9.30 | 7.92 | 9.97 | 10.50 |
-| `ink-muted` | 7.75 | 7.11 | 6.23 | **5.31** | 6.68 | 7.04 |
-| `brand` | 9.48 | 8.69 | 7.62 | 6.49 | 8.17 | 8.61 |
+The four rightmost columns are composites, not declared tokens: a state overlay resolved over the
+depth step beneath it. **A composed figure is meaningless without the backdrop it was composed over,
+so every column names one.**
 
-| Status ink | on its own tint | on surface | on sunken | on a 10% wash of itself |
-|---|---|---|---|---|
-| `good-ink` | 5.93 | 7.67 | 8.37 | 6.54 |
-| `warning-ink` | 7.49 | 9.77 | 10.66 | 8.07 |
-| `serious-ink` | **5.31** | 6.80 | 7.42 | 5.88 |
-| `critical-ink` | 5.42 | 6.76 | 7.38 | 5.87 |
+| Ink | on `background` | on `card` | on `popover` | on `secondary` | subtle/bg | subtle/card | emphasis/bg | emphasis/card |
+|---|---|---|---|---|---|---|---|---|
+| `ink` | 15.99 | 15.14 | 14.67 | 14.19 | 14.96 | 14.02 | 14.32 | 13.35 |
+| `ink-muted` | 9.80 | 9.28 | 8.99 | 8.70 | 9.17 | 8.59 | 8.77 | 8.18 |
+| `ink-secondary` | 6.52 | 6.18 | 5.99 | 5.79 | 6.10 | 5.72 | 5.84 | **5.45** |
+| `primary` | 9.12 | 8.64 | 8.37 | 8.10 | 8.54 | 8.00 | 8.17 | 7.62 |
+| `brand-link` | 8.12 | 7.69 | 7.45 | 7.21 | 7.60 | 7.12 | 7.27 | 6.78 |
+| `good-ink` | 11.76 | 11.13 | 10.79 | 10.43 | 11.00 | 10.31 | 10.53 | 9.82 |
+| `warning-ink` | 9.67 | 9.16 | 8.88 | 8.58 | 9.05 | 8.48 | 8.66 | 8.08 |
+| `serious-ink` | 8.50 | 8.05 | 7.80 | 7.54 | 7.95 | 7.45 | 7.61 | 7.10 |
+| `critical-ink` | 7.82 | 7.41 | 7.18 | 6.94 | 7.32 | 6.86 | 7.01 | 6.54 |
 
-`ink` on each tint: good 12.16, warning 12.05, serious 12.30, critical 12.60, brand 12.66.
-`brand` on `brand-surface` 7.00. `primary-foreground` on `primary` 9.48.
+Status ink on its own tint: good 9.18, warning 6.84, serious 7.28, critical **5.73**. `ink` on each
+tint: good 12.48, warning 11.30, serious 13.71, critical 11.70. `brand` on `brand-surface` 7.22.
+`primary-foreground` on `primary` 9.12. `warning-foreground` on `warning` 10.65.
+`destructive-foreground` on `destructive` 8.60.
 
-**The two tables above enumerate declared tokens, not rendered pixels.** Most of the console
-composes exactly what they say — a solid ink on a solid surface — and for those the tables are the
-whole story. But a component that blends a token through an alpha modifier (`bg-x/10`, `text-y/70`)
-or inherits an ink through a wrapper renders a colour no token table contains, and only checking the
-class names would miss it. The pairings below were read from a running instance — `getComputedStyle`
-on the actual element, not the source — and the alpha ones were confirmed against sampled rendered
-pixels, because Chrome composites `background-color` alpha in gamma-encoded sRGB, not in linear
-light; blending the same two colours in linear light and gamma space gives visibly different
-answers, and only the gamma one matches what the screen shows.
+**Worst pairing anywhere: 5.45:1** — `ink-secondary` composed over `surface-emphasis` on a card,
+which is the chart legend's step under a selected row and is not a pairing the tree renders today.
+The worst pairing the tree *does* render is `ink-muted` at 8.18. Both are above the 5.05 floor, and
+the substrate improves the previous palette's worst case of **5.31**.
 
-**How the 2026-08-06 figures below were obtained, because a figure whose method is unstated is the
-defect this section keeps having.** Chrome at 1440×900 on a seeded instance. Every element's own
-values came from `getComputedStyle` on that element, under a real `Tab` keypress for anything
-measured under `:focus-visible` and a real pointer move for anything measured under `:hover` —
-`.focus()` does not match `:focus-visible`, so a programmatic focus measures the resting state and
-reports it as the focused one. Every composite was then blended in a `<canvas>` in that same page:
-each token painted as an opaque fill, the alpha colour painted over it with `color-mix(in srgb, …)`,
-and the result read back with `getImageData`, which is Chrome's own gamma-encoded sRGB compositor
-rather than arithmetic repeating whatever assumption produced the wrong numbers. Contrast is WCAG
-2.x relative luminance over those bytes. Screenshot sampling was attempted first and abandoned: the
-captures this harness produced were uniformly `rgb(12, 12, 12)`, so they measured nothing.
-
-### Composed pairings, rendered
-
-**A composed figure is meaningless without the backdrop it was composed over, so every row names
-one.** Two rows here used to omit it, and both were then read as card figures when they were plane
-figures — the correction below is the whole of B105's second and third findings.
-
-| Composition | Backdrop | Value |
-|---|---|---|
-| `foreground` on `input/30` (outline button, resting) | `card` — where every outline button in this console sits | 10.76 |
-| `foreground` on `input/30` (outline button, resting) | `background`/`surface-sunken` — the page plane | 12.08 |
-| `foreground` on `input/50` (outline button, hover) | `card` | 8.03 |
-| `foreground` on `input/50` (outline button, hover) | `background`/`surface-sunken` | 8.68 |
-| `primary-foreground` on `bg-primary` mixed 15% toward `foreground` (default button, hover) | opaque, no backdrop | 10.37 |
-| `secondary-foreground` on `bg-secondary` mixed 5% toward `foreground` (secondary button, hover) | opaque, no backdrop | 12.38 |
-| `critical-ink` on `bg-critical-surface` (destructive button, resting) | opaque, no backdrop | 5.44 |
-| `critical-ink` on `bg-critical-surface` mixed 25% toward the surface extreme (destructive button, hover) | opaque, no backdrop | 6.02 |
-
-Every rendered composition found still clears the 5.05 floor, and the lowest of them (5.44) sits
-above the declared-token worst case below — so "worst pairing anywhere" stays true once "anywhere"
-is checked against what actually renders, not assumed from it.
-
-**The row that used to sit at the top of this table described a hover fill nothing renders.** It
-read `ink` on `surface-subtle/50` over the card at 14.80, in the present tense, as "the measurement
-of what the tree renders today". That has not been true since `TableRow` was rebuilt: it now names
-`--color-surface-subtle` at full strength — the named step *Surface ramp: depth and state* asks for,
-not an alpha wash — and gates it behind `data-interactive="true"`, which no caller passes today. A
-real pointer held on a row leaves `background-color` at `rgba(0, 0, 0, 0)` with the row's own
-`transition-duration` at 0s. The figure is kept here as history and as the number a caller would
-inherit: `ink` on the full-strength step measures **13.79**, and the retired `/50` wash measured
-14.79 over the card.
-
-**Two of these rows document a fix, not a finding that stood.** `button.tsx`'s `default` variant
-hover was `hover:bg-primary/80` — a wash toward whatever sits behind the button — which measured
-**4.49:1 on a card and 4.61:1 on the page**, both below the floor, in a variant no screen used yet.
-`destructive` was worse: `bg-destructive/10` and its `/20` hover measured as low as **4.18–4.97**
-depending on mode and backdrop, back when there were two modes to measure. Both were rewritten to
-compose against a fixed reference — `color-mix(…, var(--color-foreground) 15%)` for `default`, and
-the already-verified `critical-surface`/`critical-ink` pair for `destructive` — so the result no
-longer depends on whatever the button happens to sit on. The rows above are what those variants
-render now.
-
-**Worst pairing anywhere: 5.31:1** — `ink-muted` on `surface-emphasis`, and separately `serious-ink`
-on its own tint, both land here. Above the 5.05 floor, and above WCAG AA for body text. Verified,
-not merely declared: the lowest composed pairing found by rendering the tree is 5.44, so 5.31
-remains the true minimum. (The light column's worst case, 5.21, is retired with it and is no longer
-the number this floor is checked against.)
+**Below the floor: none.** The four deviations named in this document exist so that this line reads
+that way; each one is a place where the substrate would have produced a figure this contract
+refuses, argued rather than accepted.
 
 ### Non-text, against the 3:1 floor
 
-`--color-line-strong` clears 3:1 against every surface a control sits on: 3.12–4.56 (4.18 against
-the card, 4.56 against the page plane).
+| | on `background` | on `card` | on `popover` | on `secondary` |
+|---|---|---|---|---|
+| `line-strong` / `input`, as declared | 4.27 | 4.05 | 3.92 | 3.79 |
+| `line-strong`, as upstream derives it | 1.43 | 1.46 | 1.46 | 1.47 |
+| `ring`, as declared | 9.12 | 8.64 | 8.37 | 8.10 |
+| `ring`, as upstream derives it (55%) | 3.55 | 3.46 | 3.45 | 3.38 |
+| `line` (a hairline, no 3:1 obligation) | 1.19 | 1.21 | 1.22 | 1.23 |
+| `border-overlay` (a hairline) | 1.41 | 1.44 | 1.46 | 1.47 |
+| `border-stronger` (a hairline) | 1.62 | 1.65 | 1.67 | 1.67 |
 
-**The focus ring is `--color-ring` at full strength, and that is a decision this section had to
-make rather than restate.** It measures **8.70** against the card and **9.50** against the page
-plane. Until 2026-08-06 this line published 8.69 and the console rendered `ring-ring/50` — the same
-hue at half alpha, compositing to `rgb(84, 101, 139)` and measuring **3.08** against the card and
-3.12 against the plane. That cleared the 3:1 non-text floor by 0.08.
+The status **marks** against the card: good 8.76, warning 6.56, serious 5.27, critical 4.52 — all
+four clear 3:1. The `brand` mark measures 8.76, the same value as `good`, which is the collision
+*The brand hue* names and the icon-and-word rule answers.
 
-0.08 is not a margin to ship a focus ring on, and the ring is frequently the *only* channel:
-`outline-style` is `none` on every control, and the border does not always change. So the alpha was
-removed rather than the figure rewritten — `focus-visible:ring-ring` on `button`, `input`,
-`textarea` and `input-group`. `tests/test_console_design_tokens.py` now fails on any focus ring
-carrying an alpha modifier, because that is a contrast figure nobody computed and nobody can read
-off a class name.
-
-Three facts about the second channel, all measured rather than inferred, because "the border also
-changes" is the argument that would otherwise excuse a weak ring:
-
-- **On an input, an input group, and every button variant that does not set its own border colour,
-  the border does turn `--color-ring` under `:focus-visible`** — measured `oklch(0.775 0.113 265)`,
-  **8.70** against the card. Two channels there.
-- **On the `outline` button variant it does not.** `focus-visible:border-ring` and
-  `dark:border-input` both resolve to specificity (0,2,0) — this project's dark variant is
-  `&:is(.dark *)`, and `:is()` carries its argument's specificity — so the tie is broken by source
-  order, and Tailwind emits `dark:` after `focus-visible:`. The border stays `--color-input`. That
-  variant is the one used for pagination and filters, so its focus signal is the ring alone, which
-  is why the ring alone has to be strong.
-- **A link takes the user agent's ring, not this one.** No console rule styles `a:focus-visible`;
-  Chrome renders `outline-style: auto`, its own two-tone ring, which is contrast-safe by
-  construction on either plane. Deliberately left alone — a ring the browser adapts is better than
-  one this contract would have to re-measure per surface.
-
-The `destructive` button variant used to override both channels — `ring-critical-ink/20` and
-`border-critical-ink/40`, which composite to **1.40** and **2.03** against that button's own
-surface, under the 3:1 floor. Both overrides are deleted rather than re-tinted: a focus ring is an
-affordance, not a judgement, and *Colour claims a judgement* argues against giving it a per-variant
-hue at all.
-
-The status **marks** against the card: good 5.34, warning 9.77, serious 6.80, critical 3.73 — all
-four clear 3:1 in the surviving palette. (The retired light column had warning at 1.83 and serious
-at 2.64, both below 3:1 by design, which is the origin of the icon-and-word-always rule above; the
-rule is kept for colour-blind readers regardless of what the surviving palette measures.)
+**A link takes the user agent's ring, not this one.** No console rule styles `a:focus-visible`;
+Chrome renders `outline-style: auto`, its own two-tone ring, contrast-safe by construction.
+Deliberately left alone — a ring the browser adapts is better than one this contract would have to
+re-measure per surface.
 
 ---
 
@@ -880,18 +881,19 @@ rule is kept for colour-blind readers regardless of what the surviving palette m
 - **A sequential ramp and a diverging pair.** No chart in the plan encodes continuous magnitude or
   polarity. Adding them before a chart needs them means guessing at steps nobody will check.
 - **A texture fill.** The accessibility channel for the CVD, print and `forced-colors` cases. Not
-  needed while every chart carries direct labels and a table beneath it; add it with the chart that
-  needs it.
-- **Motion tokens.** Durations and easings live in `web/src/lib/motion.ts`, not here — see
-  "Motion" above for how the reduced-motion gate splits between that file's code and a media
-  query in `index.css`.
+  needed while every chart carries direct labels and a table beneath it.
+- **Motion tokens.** Durations and easings live in `web/src/lib/motion.ts`, not here.
 - **A composite score, a health number, a traffic light, a liveness dot.** Rejected on the merits.
   A design system is exactly the moment somebody reaches for a coloured badge, which is why it is
   named here.
-- **A third elevation level, a fifth spacing value, an eighth type step.** Each is a decision to
-  be argued in this file, not a value to be added. The seventh type step and the fourth spacing
-  value were added on 2026-08-06 by M7-W160, argued in the Type and Space sections above.
-- **A light mode.** Retired 2026-08-05 on explicit instruction. Not a placeholder for a future
-  toggle — the theme resolver, its storage key and its `prefers-color-scheme` listener are deleted,
-  not disabled, and a component that branches on `prefers-color-scheme` again would be a regression
-  against this decision, not a new feature.
+- **A third elevation level of ours, a fifth spacing value, an eighth type step.** Each is a
+  decision to be argued in this file, not a value to be added.
+- **The substrate's `--info`, `--tertiary`, its twelve-step Radix scales, its code-block colours,
+  and its two `sidebar-primary` entries.** Every one of them is declared upstream and none has a
+  consumer in this tree. An abstraction added for an anticipated caller is debt with no asset behind
+  it; the day a component needs one, it arrives with the component.
+- **A light mode.** Retired 2026-08-05 on explicit instruction, and the substrate's light values are
+  vendored but un-imported rather than deleted, so reversing that instruction is an import rather
+  than a rewrite. Not a placeholder for a toggle — the theme resolver, its storage key and its
+  `prefers-color-scheme` listener are deleted, and a component that branches on
+  `prefers-color-scheme` again would be a regression against a recorded decision.

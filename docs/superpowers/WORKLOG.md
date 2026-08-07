@@ -86,6 +86,7 @@ repository wrote rather than mistakes anyone made.
 | M7-W165 | The Supabase-substrate spec: vendor `packages/ui` wholesale (owner ruling), two-tier navigation (owner reversal of direction note 6), theme contract swap, and the data-seam mapping that makes the ports safe | in progress | `specs/2026-08-06-sync-console-supabase-substrate-design.md` |
 | M7-W168 | Task 1 of the substrate plan: the interface-originality carve-out, direction note 6's reversal amendment, and the M7 plan pointer | landed | plans/2026-08-06-console-supabase-substrate.md |
 | M7-W169 | Task 2 of the substrate plan: `packages/ui` vendored at 6ac0316 under `web/src/vendor/supabase/`, theme.css captured, NOTICE guard proven RED then green | landed | `web/NOTICE` |
+| M7-W170 | Task 3 of the substrate plan: Supabase's dark palette, type ramp and radii become the declared token contract; DESIGN.md and its guard rewritten in one commit; contrast measured, deviations named | landed | `DESIGN.md` |
 | M4-W166 | B117: `GraphStore` reconnects a closed connection, instead of handing the dead one back forever | dispatched | `briefs/2026-08-07-b117-graphstore-reconnect.md` |
 | CI-W167 | B111: the suite runs three times per pull request, and what moving two of them costs | dispatched | `briefs/2026-08-07-b111-ci-critical-path.md` |
 

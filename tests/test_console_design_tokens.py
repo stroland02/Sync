@@ -103,13 +103,104 @@ def _sanctioned_spacing_exceptions() -> set[int]:
     different name, which is exactly what this guard is for. That is the second half of the
     correction M7-W160 made: the frame was `px-6` spelled inline, so nothing could read it and no
     guard could check the ratio the design contract was arguing about.
+
+    The sentence this reads moved with the M7-W170 substrate swap: it used to record the gap
+    *moving* to 32px and now records it *staying* there, because the substrate did not touch the
+    spacing scale. The pattern matches the standing form rather than the one-off announcement, so
+    the next slice that leaves the gap alone does not have to keep a sentence in the past tense to
+    keep this guard fed.
     """
     # Line-wrapped in the source file, so whitespace is normalised before matching rather than
     # anchoring to one physical line.
     flat = re.sub(r"\s+", " ", _design_md_text())
-    gap = re.search(r"gap moves to \*\*(\d+)px\*\*", flat)
+    gap = re.search(r"between-panel gap stays \*\*(\d+)px\*\*", flat)
     assert gap, "DESIGN.md no longer names the between-panel gap as a sanctioned raw value"
     return {int(gap.group(1))}
+
+
+# -- the contract and the declaration cannot disagree without a test naming which one moved -----
+#
+# `DESIGN.md` publishes a value and a contrast figure for every colour; `index.css` declares them.
+# Until M7-W170 nothing held the two vocabularies together, and the substrate swap is exactly the
+# shape of change that breaks that quietly: a token renamed in one file and not the other leaves a
+# published contrast figure describing a colour nothing resolves, or a colour on screen that no
+# document argued for. Both directions fail here, by name.
+#
+# Scoped to `--color-*`. The type, spacing, radius and row-height tables are already held by the
+# arithmetic guards further down, which read their numbers out of the same document and multiply
+# them against what `table.tsx` sets.
+
+_THEME_DECLARATION = re.compile(r"^\s*(--color-[\w-]+)\s*:", re.MULTILINE)
+_CONTRACT_TOKEN = re.compile(r"`(--color-[\w-]+)`")
+
+
+def _index_css_text() -> str:
+    path = _WEB_SRC / "index.css"
+    assert path.is_file(), f"{path} is gone -- the token declarations moved and this guard is blind"
+    return path.read_text(encoding="utf-8")
+
+
+def _declared_colour_tokens(text: str | None = None) -> set[str]:
+    """Every `--color-*` custom property `index.css` declares.
+
+    Anchored to the start of a line so a `var(--color-line)` sitting inside another token's value
+    is not counted as a declaration of it -- `--shadow-flat` and the `@layer base` block both
+    reference tokens they do not declare.
+    """
+    found = set(_THEME_DECLARATION.findall(_index_css_text() if text is None else text))
+    assert found, "no `--color-*` declaration found in index.css -- the parser or the file moved"
+    return found
+
+
+def _contracted_colour_tokens(text: str | None = None) -> set[str]:
+    """Every `--color-*` name DESIGN.md spells inside backticks."""
+    found = set(_CONTRACT_TOKEN.findall(_design_md_text() if text is None else text))
+    assert found, "DESIGN.md names no `--color-*` token -- the contract or the parser moved"
+    return found
+
+
+def test_every_colour_the_contract_names_is_declared():
+    _require_web_src()
+    missing = sorted(_contracted_colour_tokens() - _declared_colour_tokens())
+    assert not missing, (
+        "DESIGN.md publishes a value and a contrast figure for these tokens and index.css declares "
+        "none of them, so the figure describes a colour nothing on screen resolves. Declare the "
+        "token or stop naming it:\n" + "\n".join(missing)
+    )
+
+
+def test_every_colour_declared_is_named_in_the_contract():
+    _require_web_src()
+    undocumented = sorted(_declared_colour_tokens() - _contracted_colour_tokens())
+    assert not undocumented, (
+        "index.css declares these colours and DESIGN.md argues for none of them. A colour that no "
+        "document names is a value nobody chose and nobody measured -- give it a row in the table "
+        "its job belongs to, with the arithmetic:\n" + "\n".join(undocumented)
+    )
+
+
+def test_the_vocabulary_guard_sees_a_token_declared_but_never_argued(tmp_path: Path) -> None:
+    declared = _declared_colour_tokens("--color-ink: oklch(0.95 0 0);\n  --color-smuggled: #ff0000;\n")
+    contracted = _contracted_colour_tokens("The ink is `--color-ink`.\n")
+
+    assert sorted(declared - contracted) == ["--color-smuggled"]
+
+
+def test_the_vocabulary_guard_sees_a_token_argued_but_never_declared(tmp_path: Path) -> None:
+    declared = _declared_colour_tokens("--color-ink: oklch(0.95 0 0);\n")
+    contracted = _contracted_colour_tokens("`--color-ink` and `--color-imaginary` are steps.\n")
+
+    assert sorted(contracted - declared) == ["--color-imaginary"]
+
+
+def test_the_vocabulary_guard_ignores_a_reference_inside_another_tokens_value(tmp_path: Path) -> None:
+    # `--shadow-flat: 0 0 0 1px var(--color-line)` mentions a token it does not declare. Counting
+    # that as a declaration would make the guard pass on a file that declared nothing at all.
+    declared = _declared_colour_tokens(
+        "--color-line: oklch(0.95 0 0 / 7%);\n  --shadow-flat: 0 0 0 1px var(--color-nonexistent);\n"
+    )
+
+    assert declared == {"--color-line"}
 
 
 def _banned_spacing_pixel_values() -> dict[int, str]:
@@ -531,7 +622,7 @@ def test_the_colour_literal_guard_rejects_a_hardcoded_hex(tmp_path: Path) -> Non
 
 def test_the_colour_literal_guard_ignores_index_css_and_an_html_entity(tmp_path: Path) -> None:
     (tmp_path / "index.css").write_text(
-        "@theme static { --color-brand: oklch(0.775 0.113 265); }\n", encoding="utf-8"
+        "@theme static { --color-brand: oklch(0.76 0.15 159); }\n", encoding="utf-8"
     )
     (tmp_path / "codebase-page.tsx").write_text(
         "<code>GET /api/vendors/&#123;vendor_id&#125;</code>\n", encoding="utf-8"
@@ -582,8 +673,8 @@ def _text_size_floor_px() -> float:
     return float(match.group(1))
 
 
-# `text-[…]` is the only spelling that reaches a size off the ramp: the six named utilities and
-# Tailwind's stock steps all resolve to declared values. A bracket carrying anything but a length
+# `text-[…]` is the only spelling that reaches a size off the ramp: the seven named role steps and
+# the substrate's own `text-xs` … `text-9xl` all resolve to declared values. A bracket carrying anything but a length
 # is a different utility (`text-[color-mix(…)]`, `text-[--var]`) and is not this guard's business.
 _ARBITRARY_TEXT_SIZE = re.compile(r"(?<![\w-])text-\[(\d*\.?\d+)(px|rem)\]")
 
@@ -745,10 +836,15 @@ def test_the_weight_guard_permits_the_three_weights_the_console_spends(tmp_path:
 #
 # The focus ring is the only signal a keyboard user gets on a control whose variant sets its own
 # border colour, and an alpha modifier on it is invisible in the source and decisive on screen:
-# `ring-ring/50` composites the brand hue to `rgb(84, 101, 139)` over the card, which measures
-# 3.08:1 against 3:1 -- a floor cleared by 0.08 while `DESIGN.md` published 8.69. A ring colour is
+# `ring-ring/50` composited the previous brand hue to `rgb(84, 101, 139)` over the card, measuring
+# 3.08:1 against a 3:1 floor -- cleared by 0.08, while `DESIGN.md` published 8.69. A ring colour is
 # a token, not a wash: it is declared once, argued in that file, and rendered at the strength it
 # was argued at.
+#
+# The M7-W170 substrate swap made this guard matter more rather than less. Upstream declares
+# `--ring` as the brand at 55% alpha, so the wash this catches at a call site is the shape the
+# vendored catalog would otherwise have arrived carrying; `DESIGN.md` names the full-strength
+# declaration as a deviation and publishes both figures.
 #
 # Scoped to the focus ring rather than to every `ring-*/n`: the `aria-invalid:` rings on the same
 # elements are washed the same way and are the same class of defect, but they are also spelled
