@@ -1,8 +1,18 @@
+<div align="center">
+
 # Sync
 
-**Self-maintaining API integrations.** Sync watches the third-party APIs your code calls. When one
-of them breaks, drifts, or starts costing you money, it opens a pull request that fixes your
-code — already verified green by your own CI.
+### Self-maintaining API integrations
+
+**Sync watches the third-party APIs your code calls. When one breaks, drifts, or starts costing you money, it opens a pull request that fixes your code — already verified green by your own CI.**
+
+[![Python 3.12](https://img.shields.io/badge/python-3.12-3776AB?logo=python&logoColor=white)](https://www.python.org/)
+[![LangGraph](https://img.shields.io/badge/orchestration-LangGraph-1C3C3C)](https://github.com/langchain-ai/langgraph)
+[![Postgres 16](https://img.shields.io/badge/store-Postgres%2016-336791?logo=postgresql&logoColor=white)](https://www.postgresql.org/)
+[![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-blue)](LICENSE)
+[![Status: pre-alpha](https://img.shields.io/badge/status-pre--alpha-orange)](#status-pre-alpha-and-specific-about-it)
+
+</div>
 
 ```
 vendor ships a breaking change  →  Sync finds every call site that depends on it
@@ -20,12 +30,34 @@ endpoints are deprecated, defaults shift, cheaper endpoints ship quietly. The co
 out when production breaks — if at all. At AWS, more than 30% of one organisation's service
 downtime traced to external API and package changes that nobody noticed.
 
-The tooling that exists watches the wrong side of the wire. SmartBear, Treblle, Levo, Optic and
-Postman-Akita all detect drift on the API **you publish**, and they stop at an alert. Nothing
-watches the APIs you **consume**, across vendors, and repairs the calling code.
+The tooling that exists watches the wrong side of the wire.
 
-Dependabot solved exactly this shape for package versions and never extended to API semantics.
+| | Watches | Acts on | Verifies |
+|---|---|---|---|
+| SmartBear, Treblle, Levo, Optic, Postman-Akita | The API **you publish** | Raises an alert | — |
+| Dependabot / Renovate | Package **versions** | Opens a version-bump PR | Your CI |
+| Codemod tools (`ast-grep`, `jscodeshift`) | Nothing — you point them | Applies a transform you wrote | — |
+| **Sync** | The APIs **you consume**, across vendors | Patches the calling code | `tsc`, then **your own CI**, before the PR exists |
+
+Dependabot solved exactly this shape for package *versions* and never extended to API *semantics*.
 Sync closes that gap.
+
+### What actually makes it different
+
+Four things, and each is a design decision the rest of the system is built to protect:
+
+1. **It repairs the consuming side.** Everyone else watches the API you ship. The expensive failure
+   is the one in code you own, calling an API you don't.
+2. **One graph, many detectors, one pipeline.** A breaking change, a wasteful call pattern and a
+   production error are three queries against the same **API Dependency Graph**, and all three emit
+   the same `Finding` into the same remediation pipeline. Adding a detector adds no pipeline.
+3. **Nothing reaches a pull request unverified.** There is no path that skips the gate — see
+   [Two invariants](#two-invariants).
+4. **Every claim carries the class of evidence behind it.** Not a confidence score — a
+   **provenance rung**. See [The honesty discipline](#the-honesty-discipline), which is the part of
+   this project that is hardest to copy.
+
+---
 
 ## Status: pre-alpha, and specific about it
 
@@ -52,41 +84,61 @@ Three qualifications, because they change what the result means:
 
 What *is* measured is measured properly — see [Quality gates](#quality-gates).
 
-## Quick start
+---
 
-**Requirements:** Python 3.12, [uv](https://docs.astral.sh/uv/), Docker, Node (for `tsc` via
-`npx`), and the `gh` CLI authenticated if you want pull requests opened.
+## The operator console
 
-```bash
-git clone https://github.com/stroland02/sync.git
-cd sync
+Sync's position is that competing tools present a black box and a result, and ask a reviewer to
+trust it. The console exists to show the system's reasoning instead — nine levels, from the fleet
+down to a single pull request and its evidence.
 
-uv sync                       # install dependencies
-docker compose up -d          # Postgres 16, on port 5433
+<div align="center">
 
-uv run pytest                 # ~2550 tests, two to four minutes
-```
+<img src="docs/superpowers/reports/screens/2026-08-07/01-fleet.png" width="90%" alt="The fleet screen: open findings by vendor, runs by checkpoint thread, and the repair record" />
 
-Detect and remediate vendor changes against a checkout:
+*The fleet: every run across every repository, and whether one is stuck.*
 
-```bash
-uv run sync run \
-  --vendor stripe \
-  --from v2320 --to v2330 \
-  --repo /path/to/your/checkout
-```
+</div>
 
-Other entry points:
-
-| Command | What it does |
+| | |
 |---|---|
-| `sync run` | Detect and remediate vendor changes in a repository |
-| `sync intake` | Assess a repository's declared dependencies, ranked by call sites found |
-| `sync ingest` | Ingest OTLP client spans and correlate them to call sites |
-| `sync shapes` | Record observed response shapes for contract-drift detection |
-| `sync benchmark` | Score the pipeline against the frozen corpus |
-| `sync merge-outcome` | Record a merge outcome from a signed GitHub webhook |
-| `sync publish-feed` | Publish a signed public change feed |
+| <img src="docs/superpowers/reports/screens/2026-08-07/07-binding-surface.png" alt="The binding surface" /> | <img src="docs/superpowers/reports/screens/2026-08-07/06-workflow.png" alt="The solution workflow" /> |
+| **Binding surface** — every call site bound to one vendor operation, each carrying the rung it was bound on. | **Solution workflow** — the checkpointed node sequence, with the evidence at each step and the reason a run gave up. |
+| <img src="docs/superpowers/reports/screens/2026-08-07/03-codebase.png" alt="The codebase level" /> | <img src="docs/superpowers/reports/screens/2026-08-07/04-api-service.png" alt="The API service level" /> |
+| **Codebase** — index coverage and open findings for one repository. | **API service** — what a vendor changed, and which of your call sites it reaches. |
+
+More in [`docs/superpowers/reports/screens/`](docs/superpowers/reports/screens/), with the capture
+conditions recorded beside them — a screenshot without its viewport and commit is not evidence.
+
+### The honesty discipline
+
+The console renders the product position, so its interface rules are not taste. Four distinctions
+are drawn on screen rather than assumed, and twenty-four sentences carry them:
+
+- **Provenance at two levels.** Every binding carries the rung it came from — `static`, `resolved`
+  or `observed` — and so does every artifact derived from it. It is a **column, not a join**, and
+  the write refuses an unattributed finding. A false positive that cannot be attributed to a rung
+  cannot be fixed.
+- **Absence is not zero.** A repository configured but never indexed has no row, which is not the
+  same as one with nothing in it, and the screen says which it is looking at.
+- **Staleness is not liveness.** A checkpoint row is the only evidence a run exists. "Last
+  checkpoint" is staleness, and nothing here guesses which silence means death.
+- **Never-measured is not nothing-here.** Five distinguishable kinds of nothing, each with its own
+  sentence.
+
+**There is no composite health figure, traffic light, green dot or liveness pulse anywhere in this
+product, and that is a refusal rather than an omission.** A scalar averaging three gates collapses
+*"we could not check"* onto the same axis as *"we checked and it passed"* — which is precisely the
+failure this console exists to replace. A mature control plane ships all three patterns and
+documents a precondition for each; our data fails those published tests, so we say so instead of
+rendering the widget. The provenance rung is the honest version of a confidence score: it names the
+class of evidence a claim rests on, and it is attributable, where a `9` is neither.
+
+`tests/test_console_honesty_sentences.py` guards those sentences against a rewrite. It is
+deliberately **not file-pinned** — a sentence may move into a new composition; deleting or
+shortening one fails the build.
+
+---
 
 ## How it works
 
@@ -124,12 +176,74 @@ final word.
 **Nothing reaches a pull request unverified.** Every patch passes `tsc` and then the customer's own
 CI. There is no path that skips the gate.
 
+Two honest qualifications on that, both measured rather than theorised. `tsc` verifies **the tree a
+push would carry** — every untracked and ignored path is held out of the clone before it compiles,
+so the verdict describes the branch, not whatever the agent left behind. And *"we never execute
+customer code"* is the intent rather than the invariant: dependency installs pass `--ignore-scripts`
+and Sync never runs the customer's application, but it does run their toolchain.
+
 **`sync.core` imports nothing from any sibling package.** That is what makes this genuinely
 pluggable rather than pluggable-shaped: a third party writing a vendor adapter depends on
 `sync.core` alone and never inherits Postgres. `tests/test_import_boundary.py` and `lint-imports`
 enforce it.
 
-We never hold customer secrets.
+We never hold customer secrets. That one is unqualified.
+
+---
+
+## Architecture
+
+```
+                        ┌─────────────────────────────────────────┐
+   depends on nothing   │              sync.core                  │
+                        │  Finding · CallSite · VendorChange      │
+                        │  Patch · the plugin protocols           │
+                        └─────────────────────────────────────────┘
+                             ▲         ▲         ▲         ▲
+              ┌──────────────┘         │         │         └──────────────┐
+        ┌───────────┐            ┌──────────┐  ┌──────────┐         ┌───────────┐
+        │ sync.index│            │sync.graph│  │sync.forge│         │sync.signals│
+        │ TS · Py   │            │ Postgres │  │ git · gh │         │ vendor     │
+        │ adapters  │            │   ADG    │  │          │         │ adapters   │
+        └───────────┘            └──────────┘  └──────────┘         └───────────┘
+                                      ▲              ▲
+                        ┌─────────────┴───┐   ┌──────┴────────┐
+                        │  sync.detect    │   │ sync.remediate│
+                        │  detectors      │──►│ LangGraph     │
+                        └─────────────────┘   └───────────────┘
+                                      │              │
+                              ┌───────┴──────────────┴────────┐
+                              │ sync.dashboard · sync.api     │
+                              │   the operator console        │
+                              └───────────────────────────────┘
+```
+
+| Package | Responsibility | Depends on |
+|---|---|---|
+| `sync.core` | Contracts only — `Finding`, `CallSite`, `VendorChange`, `Patch`, and the plugin protocols | **nothing** |
+| `sync.graph` | ADG persistence and queries over Postgres | `core` |
+| `sync.index` | `LanguageAdapter` protocol; TypeScript and Python adapters | `core` |
+| `sync.signals` | `VendorAdapter` protocol; Stripe, Twilio, MCP and generated-SDK adapters | `core` |
+| `sync.detect` | `Detector` protocol and the detectors | `core`, `graph` |
+| `sync.remediate` | LangGraph graphs turning a `Finding` into a merge-ready pull request | `core`, `graph`, `forge` |
+| `sync.forge` | Git and GitHub App operations | `core` |
+| `sync.dashboard`, `sync.api` | Read-only aggregates and the console's HTTP surface | `core`, `graph` |
+| `sync.benchmark` | Scores the pipeline's own output quality | `core`, `graph` |
+
+### The engineering constraints that shape it
+
+These are enforced rather than encouraged, because each one failed silently at least once first:
+
+| Constraint | Why it is a rule |
+|---|---|
+| **Every stage is idempotent** | Re-running INDEX, SIGNAL or DETECT on the same input converges on the same rows. Every table has a natural key and an explicit conflict clause |
+| **A table's grain is declared before a column is added** | One `migration_outcome` row is one *attempt*, not one finding. A query that counts findings by counting rows is wrong, and wrong quietly |
+| **Every binding carries its rung** | A column, not a join. The write refuses an unattributed finding |
+| **Abandoned runs are data** | `abandon_reason` stays queryable — abandoned attempts are where routing learns which change kinds are not mechanically safe |
+| **Any state key written by parallel branches declares a reducer** | Without one, concurrent writes are dropped: no error, no warning, missing results |
+| **Every agent must shorten the critical path or improve a result** | An agent that does neither is latency and cost with extra steps |
+
+---
 
 ## Tech stack
 
@@ -144,19 +258,56 @@ We never hold customer secrets.
 | Storage | Postgres 16 | |
 | Contracts | Pydantic | |
 | Vendor surfaces | [MCP](https://modelcontextprotocol.io/) | An MCP server's tool schemas drift like any other contract |
+| Console | React 19, Vite, Tailwind v4, vitest | Read-only; no route mutates the graph |
 
-## Architecture
+---
 
-| Package | Responsibility | Depends on |
-|---|---|---|
-| `sync.core` | Contracts only — `Finding`, `CallSite`, `VendorChange`, `Patch`, and the plugin protocols | **nothing** |
-| `sync.graph` | ADG persistence and queries over Postgres | `core` |
-| `sync.index` | `LanguageAdapter` protocol; TypeScript and Python adapters | `core` |
-| `sync.signals` | `VendorAdapter` protocol; Stripe, Twilio, MCP and generated-SDK adapters | `core` |
-| `sync.detect` | `Detector` protocol and the detectors | `core`, `graph` |
-| `sync.remediate` | LangGraph graphs turning a `Finding` into a merge-ready pull request | `core`, `graph`, `forge` |
-| `sync.forge` | Git and GitHub App operations | `core` |
-| `sync.benchmark` | Scores the pipeline's own output quality | `core`, `graph` |
+## Quick start
+
+**Requirements:** Python 3.12, [uv](https://docs.astral.sh/uv/), Docker, Node (for `tsc` via
+`npx`), and the `gh` CLI authenticated if you want pull requests opened.
+
+```bash
+git clone https://github.com/stroland02/sync.git
+cd sync
+
+uv sync                       # install dependencies
+docker compose up -d          # Postgres 16, on port 5433
+bash scripts/bootstrap_tools.sh   # the pinned oasdiff; once per checkout
+
+uv run pytest                 # ~3400 tests, four to eleven minutes
+```
+
+Detect and remediate vendor changes against a checkout:
+
+```bash
+uv run sync run \
+  --vendor stripe \
+  --from v2320 --to v2330 \
+  --repo /path/to/your/checkout
+```
+
+Run the operator console:
+
+```bash
+SYNC_API_RELOAD=true uv run python -m sync.api    # :8787
+uv run python scripts/seed_console.py             # a fixture to look at
+cd web && npm run dev                             # :5173
+```
+
+Other entry points:
+
+| Command | What it does |
+|---|---|
+| `sync run` | Detect and remediate vendor changes in a repository |
+| `sync intake` | Assess a repository's declared dependencies, ranked by call sites found |
+| `sync ingest` | Ingest OTLP client spans and correlate them to call sites |
+| `sync shapes` | Record observed response shapes for contract-drift detection |
+| `sync benchmark` | Score the pipeline against the frozen corpus |
+| `sync merge-outcome` | Record a merge outcome from a signed GitHub webhook |
+| `sync publish-feed` | Publish a signed public change feed |
+
+---
 
 ## Quality gates
 
@@ -184,6 +335,20 @@ Everything else is **recorded, not gated**. No threshold in this repository was 
 at a made-up number either fires constantly and gets disabled, or never fires and provides false
 assurance.
 
+### How the work is done
+
+- **Test first, in both languages.** Write the failing test, run it, watch it fail *for the reason
+  you expect*, then implement. A test that has never failed has never been shown to test anything.
+- **A test that cannot fail is worse than no test.** The import-boundary test's original form
+  exited 0 without parsing its own argument. When a test asserts on a subprocess or an external
+  tool, it is broken deliberately and watched go red before it is trusted.
+- **Anything about rendered pixels is measured in Chrome**, through `getComputedStyle`, before and
+  after — never asserted from a snapshot, which in a console under active design fails on every
+  correct change and gets deleted by whoever it blocks.
+- **A workaround ships with a backlog entry naming what retires it, or it does not ship.**
+
+---
+
 ## Contributing
 
 The most valuable contribution is **a vendor adapter**, and it is deliberately the easiest thing to
@@ -210,6 +375,8 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for the working agreement, and
 [`docs/superpowers/specs/`](docs/superpowers/specs/) for the reasoning behind every decision — each
 specification states what it measured rather than what it assumed.
 
+---
+
 ## Documentation
 
 | Document | What it settles |
@@ -221,6 +388,10 @@ specification states what it measured rather than what it assumed.
 | [Verification regime](docs/superpowers/specs/2026-07-29-sync-verification-regime.md) | How much of the measurement actually runs today |
 | [Adaptive vendor substrate](docs/superpowers/specs/2026-07-29-sync-adaptive-vendor-substrate.md) | How coverage scales by artifact tier rather than by vendor |
 | [Threat model](docs/superpowers/specs/2026-07-25-sync-threat-model.md) | What a malicious vendor feed can and cannot do |
+| [Console architecture](docs/superpowers/plans/2026-08-05-sync-console-architecture.md) | The nine levels, and the twenty-four sentences that carry the honesty discipline |
+| [Backlog](docs/superpowers/BACKLOG.md) · [Work log](docs/superpowers/WORKLOG.md) | Every milestone's real state, and every work item with the commit that landed it |
+
+---
 
 ## License
 
