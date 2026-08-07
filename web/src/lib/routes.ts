@@ -34,7 +34,7 @@
  * bundle a reviewer can now open at its own address, bounded by what `sync.dashboard.queries`
  * exposes rather than by what the design document's evidence bundle describes —
  * `features/pullrequests/pull-request-page.tsx` names the gap. A level with no route at all would
- * still belong in `GRAPH_LEVELS` regardless — `SiteNav` and `CommandPalette` already drop a level
+ * still belong in `GRAPH_LEVELS` regardless — `AppFrame` and `CommandPalette` already drop a level
  * group with nothing under it, so an unbuilt level costs nothing here.
  */
 
@@ -69,6 +69,63 @@ export const GRAPH_LEVELS = [
 
 export type GraphLevel = (typeof GRAPH_LEVELS)[number]
 
+/**
+ * The rail's items, each holding a contiguous run of `GRAPH_LEVELS`.
+ *
+ * **An area is a navigation grouping, not a graph level, and the distinction is load-bearing.**
+ * `.claude/rules/console-hierarchy.md` binds `GRAPH_LEVELS` to the specification: a level with no
+ * line in the design document does not go in that array. It says nothing about how a rail groups
+ * them, and it must not be read as licence to invent one either — so every area below is a *run of
+ * consecutive levels in the specification's own order*, which is why the `levels` arrays are
+ * contiguous slices and not curated sets. Nine levels in one rail is the graph rendered as a
+ * to-do list; four runs is the graph rendered as somewhere to stand.
+ *
+ * `landing` is the route the rail item links to, and `null` means every route inside this area needs
+ * a subject the registry does not hold. That is not a gap to paper over: a Solution Workflow exists
+ * for a finding, so it is reached from one, and the rail says so instead of offering a link that
+ * would resolve to `/findings//workflow`. An area with no landing selects its sidebar without
+ * navigating, which is what makes its levels discoverable before an operator has picked a subject.
+ */
+export interface AreaEntry {
+  id: string
+  label: string
+  /** What this area is for, one line, in the sidebar under its heading. */
+  purpose: string
+  levels: readonly GraphLevel[]
+  landing: string | null
+}
+
+export const AREAS: readonly AreaEntry[] = [
+  {
+    id: "fleet",
+    label: "Fleet",
+    purpose: "Every run across every repository, and whether one is stuck.",
+    levels: ["Fleet"],
+    landing: "/",
+  },
+  {
+    id: "graph",
+    label: "Graph",
+    purpose: "What the index found in a codebase, and what it binds to at the vendor.",
+    levels: ["Codebase", "API Services", "Signals", "Binding surface"],
+    landing: null,
+  },
+  {
+    id: "findings",
+    label: "Findings",
+    purpose: "What broke or drifted, which detector said so, and on which rung.",
+    levels: ["Errors & Incidents", "Finding"],
+    landing: "/detectors",
+  },
+  {
+    id: "remediation",
+    label: "Remediation",
+    purpose: "What Sync did about a finding, node by node, including what it abandoned.",
+    levels: ["Solution Workflow", "Pull Request"],
+    landing: null,
+  },
+] as const
+
 export interface RouteEntry {
   /** Absolute path. Dynamic segments use react-router's `:name` syntax. */
   path: string
@@ -76,6 +133,12 @@ export interface RouteEntry {
   level: GraphLevel
   /** What an operator opens this screen to find out, in one sentence. */
   question: string
+  /**
+   * Which subject supplies this route's parameters, in the operator's words — `null` on a route
+   * that needs none. The sidebar renders it beside an unlinkable destination so a reader learns
+   * where to go instead of meeting a dead label. Seven of nine routes need a subject.
+   */
+  reachedFrom: string | null
   /**
    * Names of the dynamic segments in `path`, in order. A non-empty list means this
    * destination needs a subject the registry does not hold — the navigation and the palette
@@ -89,6 +152,7 @@ export interface RouteEntry {
 export const ROUTES: readonly RouteEntry[] = [
   {
     path: "/",
+    reachedFrom: null,
     label: "Fleet",
     level: "Fleet",
     question: "What has Sync been doing across every run, and is one stuck right now?",
@@ -97,6 +161,7 @@ export const ROUTES: readonly RouteEntry[] = [
   },
   {
     path: "/repositories/:repoId",
+    reachedFrom: "a repository on the fleet screen",
     label: "Codebase",
     level: "Codebase",
     question: "Is this repository actually covered, and what does Sync not see in it?",
@@ -105,6 +170,7 @@ export const ROUTES: readonly RouteEntry[] = [
   },
   {
     path: "/vendors/:vendorId",
+    reachedFrom: "a vendor on the fleet screen",
     label: "Vendor",
     level: "API Services",
     question: "What is at risk from this vendor, and what did it change?",
@@ -113,6 +179,7 @@ export const ROUTES: readonly RouteEntry[] = [
   },
   {
     path: "/repositories/:repoId/observed",
+    reachedFrom: "a repository on the fleet screen",
     label: "Signals",
     level: "Signals",
     question:
@@ -122,6 +189,7 @@ export const ROUTES: readonly RouteEntry[] = [
   },
   {
     path: "/bindings/vendors/:vendorId/operations/:operationId",
+    reachedFrom: "an operation on a vendor's findings table",
     label: "Binding surface",
     level: "Binding surface",
     question: "A vendor shipped a breaking change — what call sites does it hit?",
@@ -130,6 +198,7 @@ export const ROUTES: readonly RouteEntry[] = [
   },
   {
     path: "/detectors",
+    reachedFrom: null,
     label: "Detectors",
     level: "Errors & Incidents",
     question: "Which detector is producing my false positives?",
@@ -138,6 +207,7 @@ export const ROUTES: readonly RouteEntry[] = [
   },
   {
     path: "/findings/:findingId",
+    reachedFrom: "a call site on a vendor or binding surface",
     label: "Finding",
     level: "Finding",
     question: "What is this finding, and what binding does it rest on?",
@@ -146,6 +216,7 @@ export const ROUTES: readonly RouteEntry[] = [
   },
   {
     path: "/findings/:findingId/workflow",
+    reachedFrom: "the finding it remediates",
     label: "Solution workflow",
     level: "Solution Workflow",
     question: "What did Sync's remediation graph do about this finding, node by node?",
@@ -154,6 +225,7 @@ export const ROUTES: readonly RouteEntry[] = [
   },
   {
     path: "/findings/:findingId/workflow/pull-request",
+    reachedFrom: "the solution workflow that opened it",
     label: "Pull request",
     level: "Pull Request",
     question: "Did Sync open a pull request for this finding, and what proof backs it?",
