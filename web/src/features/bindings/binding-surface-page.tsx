@@ -35,6 +35,32 @@
  * from 77px to 57px at 1,170px of table width; the card was inside that budget. The two regions
  * are told apart by their headings and by the rule each footer bar draws under itself, which is
  * what separates them on a screen that is one subject rather than two.
+ *
+ * ## Ported onto the vendored substrate by M7-W176
+ *
+ * `docs/superpowers/briefs/2026-08-07-substrate-binding-surface.md` is the mapping table this port
+ * was gated on. Read that before porting a level, not this docstring.
+ *
+ * **This is the level where the substrate is refused on a number.** Every level before it put its
+ * regions inside the vendored `Card`, which costs its contents 32px of horizontal room. Measured at
+ * 1440x900 against the 2,500-row scale fixture, the call-site table's rows stand at 56px with
+ * 1097px to draw in and at 76px with 1081px — so a card does not merely cost twenty pixels a row,
+ * it clears a cliff sixteen pixels wide with nothing to spare. B115 recorded the same effect before
+ * the substrate existed and the two paragraphs above are what it left behind; this port re-measured
+ * it on the ported anatomy and kept the arrangement. The changes table would fit in a card and does
+ * not get one either, because one ringed panel beside one bare table on a screen that is one
+ * subject draws a grouping claim across a boundary that is not there.
+ *
+ * What the substrate does land on this level: both tables take the Studio anatomy through
+ * `components/data-table`, and the vendored `Card` composes the drawer, where 32px buys something
+ * and costs no row anything.
+ *
+ * **The rung moves to the first column.** It was eighth of nine — the last table in the console
+ * still ordering it that way, and the widest. `vendor-findings-table.tsx` carries the argument in
+ * the comment this repository's honesty guard pins by its "sideways scroll" fragment: the call site
+ * is the widest cell, and a rung column that is safe only because no fixture has yet been long
+ * enough is protected by the fixture rather than by the layout. The identifying column is therefore
+ * second, which departs from Studio's anatomy on the console's own rule.
  */
 
 import { useParams, useSearchParams } from "react-router"
@@ -42,12 +68,6 @@ import { useParams, useSearchParams } from "react-router"
 import { DEFAULT_LIMIT } from "@/api/client"
 import { useBindingSurface } from "@/api/queries"
 import type { BindingSurfaceResponse } from "@/api/types"
-import { type Fact, FactList } from "@/components/fact-list"
-import { ActiveFilters, FacetChips, PrefixFilter } from "@/components/filters"
-import { RungBadge } from "@/components/provenance"
-import { Skeleton } from "@/components/skeleton"
-import { EmptyState, ErrorState, LoadingState } from "@/components/states"
-import { Absent, Formatted } from "@/components/status"
 import {
   Table,
   TableBody,
@@ -55,7 +75,20 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-} from "@/components/ui/table"
+} from "@/components/data-table"
+import { type Fact, FactList } from "@/components/fact-list"
+import { ActiveFilters, FacetChips, PrefixFilter } from "@/components/filters"
+import { RungBadge } from "@/components/provenance"
+import { Skeleton } from "@/components/skeleton"
+import { EmptyState, ErrorState, LoadingState } from "@/components/states"
+import { Absent, Formatted } from "@/components/status"
+import { BindingDrawer } from "@/features/bindings/binding-drawer"
+import {
+  BINDING_KEY,
+  bindingKey,
+  selectBinding,
+} from "@/features/bindings/binding-selection"
+import { joinOrAbsent } from "@/features/bindings/call-site-fields"
 import { formatTimestamp, orAbsent, pathAfter } from "@/lib/format"
 import { Breadcrumbs } from "@/layouts/breadcrumbs"
 import { ControlBar } from "@/layouts/control-bar"
@@ -85,11 +118,6 @@ const REPO_KEY = "repo_id"
 /** Both call-site filters clear the call-site page position and leave the changes page alone:
  * the two sets page independently, and narrowing one says nothing about where the other is. */
 const CALL_SITE_RESETS = [CALL_SITES_OFFSET_KEY]
-
-/** A string list joined for a table cell, or null when the site recorded none. */
-function joinOrAbsent(values: string[]): string | null {
-  return values.length === 0 ? null : values.join(", ")
-}
 
 /**
  * Call sites bound to this operation across every repository, before any filter on this page.
@@ -312,6 +340,9 @@ function BindingSurfaceDetail({
   const [changesOffset, setChangesOffset] = useOffsetParam("changes_offset")
   const [pathPrefix, setPathPrefix] = useFilterParam(PATH_PREFIX_KEY, CALL_SITE_RESETS)
   const setRepoId = useFilterParam(REPO_KEY, CALL_SITE_RESETS)[1]
+  // No `resets`, unlike every other parameter on this screen. Opening a detail does not change
+  // which rows exist, so the page position measured against them is still the right one.
+  const [openBinding, setBinding] = useFilterParam(BINDING_KEY)
   const clearCallSiteFilters = useClearFilters([REPO_KEY, PATH_PREFIX_KEY], CALL_SITE_RESETS)
   const query = useBindingSurface(vendorId, operationId, {
     repoId: repoId ?? undefined,
@@ -411,6 +442,10 @@ function BindingSurfaceDetail({
               <Table>
                 <TableHeader>
                   <TableRow>
+                    {/* Rung first, on `vendor-findings-table.tsx`'s argument: the call site is the
+                        widest cell in this table and no fixture here is long enough to prove it, so
+                        a rung column further right is a column the layout does not protect. */}
+                    <TableHead>Rung</TableHead>
                     <TableHead>Repository</TableHead>
                     <TableHead>Call site</TableHead>
                     <TableHead>Symbol</TableHead>
@@ -418,17 +453,31 @@ function BindingSurfaceDetail({
                     <TableHead>Argument keys</TableHead>
                     <TableHead>Response fields read</TableHead>
                     <TableHead>Loop depth</TableHead>
-                    <TableHead>Rung</TableHead>
                     <TableHead>Indexed at</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {query.data.call_sites.items.map((site) => (
-                    <TableRow key={`${site.repo_id}-${site.path}-${site.line}-${site.col}`}>
+                    <TableRow key={bindingKey(site)}>
+                      <TableCell>
+                        <RungBadge rung={site.binding_rung} />
+                      </TableCell>
                       <TableCell className="font-mono">{site.repo_id}</TableCell>
                       <TableCell className="font-mono">
-                        {pathAfter(query.data.call_sites_common_directory, site.path)}:
-                        {site.line}:{site.col}
+                        {/* A button rather than a `Link`: the drawer is a search parameter on this
+                            same address, so a right-click "open in new tab" would land on a screen
+                            with no page position and no filters — which is not where the reader is
+                            looking. `useFilterParam` still pushes the history entry, so Back
+                            closes it. */}
+                        <button
+                          type="button"
+                          onClick={() => setBinding(bindingKey(site))}
+                          className="text-left underline underline-offset-2 break-words"
+                          aria-label={`Binding at ${site.path} line ${site.line} in ${site.repo_id}`}
+                        >
+                          {pathAfter(query.data.call_sites_common_directory, site.path)}:
+                          {site.line}:{site.col}
+                        </button>
                       </TableCell>
                       <TableCell className="font-mono">
                         <Formatted value={orAbsent(site.symbol)} />
@@ -443,9 +492,6 @@ function BindingSurfaceDetail({
                         <Formatted value={joinOrAbsent(site.response_fields_read)} />
                       </TableCell>
                       <TableCell className="font-mono">{site.loop_depth}</TableCell>
-                      <TableCell>
-                        <RungBadge rung={site.binding_rung} />
-                      </TableCell>
                       <TableCell className="font-mono text-meta">
                         <Formatted value={formatTimestamp(site.indexed_at)} />
                       </TableCell>
@@ -529,6 +575,15 @@ function BindingSurfaceDetail({
               </>
             )}
           </section>
+
+          {/* Mounted beside the list rather than inside the table, so the drawer's contents are
+              not remounted by a row re-render and so a URL that names a call site this page does
+              not hold still opens something that says so. */}
+          <BindingDrawer
+            selection={selectBinding(openBinding, query.data.call_sites.items)}
+            data={query.data}
+            onClose={() => setBinding(null)}
+          />
         </>
       )}
     </>

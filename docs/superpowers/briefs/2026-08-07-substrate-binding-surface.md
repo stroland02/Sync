@@ -346,3 +346,120 @@ docstring names the case — several facts about one subject, label left, value 
 without reading — and its widest label was sized for *this* level's "Response fields read". A card
 holding a `<dl>` is the arrangement it was built for, and building a second one for the drawer would
 be the fact-written-twice defect in component form.
+
+## What it measured
+
+Chrome, `/bindings/vendors/seed-console-stripe/operations/PostCharges` — the route that renders
+richest on this level, and the only seeded operation with more than one call site: two
+repositories in the facet, two call sites, and one vendor change against the operation. The old
+screen was served from a scratch worktree at `d6f849d` on port 5192 and the new one on 5193, both
+proxied to the same API on 8787, so the two readings are of one seed.
+
+| | 1440x900 before | 1440x900 after | 1280x800 before | 1280x800 after |
+|---|---|---|---|---|
+| type range | 3.83:1 | 3.83:1 | 3.83:1 | 3.83:1 |
+| type steps | 12 / 13 / 18 / 46 | unchanged | unchanged | unchanged |
+| side-by-side placements | 2 | 2 | 2 | 2 |
+| column heading, call sites | sentence-case, 48.5px | uppercase, **40.0px** | sentence-case, 48.5px | uppercase, 48.5px |
+| column heading, changes | sentence-case, 40.0px | uppercase, 40.0px | sentence-case, 40.0px | uppercase, 40.0px |
+| body row, call sites | 56.5px | 57.0px | 76.5px | 77.0px |
+| table against its container | 1097 of 1097 | 1097 of 1097 | 937 of 937 | 937 of 937 |
+| document height | 1293px | 1285px | 1333px | 1334px |
+
+And on `/bindings/vendors/seed-console-scale-stripe/operations/PostCharges`, the 2,500-row fixture,
+which is the case the density argument is about:
+
+| | 1440 before | 1440 after | 1280 before | 1280 after |
+|---|---|---|---|---|
+| column heading | 48.5px | **40.0px** | 48.5px | 48.5px |
+| body row | 56.0px | 57.0px | 76.0px | 77.0px |
+| clipped by a sideways scroll | 0px | 0px | 0px | 0px |
+| document height | 3966px | 4007px | 4966px | 5015px |
+
+**Nothing moved on type range or placements, and that is the expected reading rather than a
+failure.** M7-W164 put this level on the chassis three work items ago, so the display step, the
+header band and the fact list were already here — the four levels before this one gained their
+range because they were gaining `PageHeader` at the same time. What this port had to give was the
+table anatomy and the drawer, and the one number that moved for the better is the column heading:
+8.5px shorter at 1440, because `--text-meta` at the furniture register fits on one line where
+`--text-body` in sentence case wrapped to two.
+
+The row grew by one pixel at both widths. That is the rule the vendored `TableRow` draws under
+itself, the same +1 the three levels before this one measured, and not a wrap.
+
+**Ruling 1's cliff, re-measured on the ported anatomy** at 1440x900 against the scale fixture, by
+narrowing the table's container by hand and re-reading the rows:
+
+| Table width | Body row |
+|---|---|
+| 1097px (today) | **57px** |
+| 1089px (−8) | 57px |
+| 1081px (−16) | 57px and 77px, mixed |
+| 1073px (−24) | 77px |
+| 1065px (−32, what a card costs) | 77px |
+
+So the margin is between eight and twenty-four pixels, and a card spends thirty-two of them. The
+refusal stands on the post-port anatomy exactly as it did on the pre-port one.
+
+## The completeness walk
+
+Every field the old screen asserted, asserted by the new one, read off both screens against the
+same seed rather than off the diff. Three states were walked: the unfiltered route above, the same
+route under `?repo_id=seed-console-repo-a&path_prefix=zzz/` (the filter that matches nothing), and
+`/bindings/vendors/seed-console-stripe/operations/PostRefunds` (an operation the vendor has never
+changed).
+
+Carried unchanged, string for string: the breadcrumb trail; the `h1`; the route's question; the
+scope paragraph; all seven facts and their values, including the hardcoded `STATIC` rung badge; the
+"Call sites" and "Vendor changes" headings and both captions; the repository facet with its
+per-option counts and its `countScope` sentence; the path filter with its legend, placeholder and
+note; `ActiveFilters` and its clear control; the shared-directory sentence; every column and every
+cell of both tables, with the same formatters and the same absence markers; the standing rung
+sentence and the filtered-and-empty variant of it; the filter-matched-nothing empty state in full,
+including its bound count and its repository count; the never-had-one-versus-retracted sentence
+under the call-site table; both pagination ranges and their controls, including the `none` range.
+
+Changed in rendering and not in content: the nine call-site headings and the five change headings
+are now uppercase and open-tracked, and the rung column is first rather than eighth.
+
+Gained: a detail drawer per call site, addressable by URL, drawing that one binding as three cards
+with the rung stated on the edge that has one and the absence stated on the edge that does not.
+
+Lost: nothing.
+
+Verified separately, because each is a branch a reader can reach and none is exercised by the
+unfiltered route:
+
+- **Back closes the drawer.** Clicked a call site, confirmed `?binding=…` on the address and the
+  sheet open, pressed Back, confirmed the address is the list URL again and no dialog is in the
+  document.
+- **The close control returns to the list URL** rather than leaving a stale parameter: same two
+  assertions, driven from the sheet's own X.
+- **A URL opens the drawer directly**, with no click anywhere: the sheet renders the binding and
+  the list is dimmed behind it.
+- **A URL naming a call site this page does not hold** (`…?binding=seed-console-repo-z:src/nowhere.ts:1:1`)
+  opens the drawer on the unresolved panel, names the key it was given, and says which three things
+  it cannot tell apart.
+- **An operation with no vendor change** draws two nodes and says why there is no third, rather than
+  drawing an empty one.
+- **A call site with list-valued fields** (`PostSubscriptions`, whose fixture carries three argument
+  keys and three response fields) renders both, and a call site without them renders the absence
+  marker rather than an empty row.
+
+## The protected sentences
+
+One of the seventeen fragments `tests/test_console_honesty_sentences.py` holds lives in the file
+this port opened. It was checked before the port and after.
+
+| Fragment | Before | After |
+|---|---|---|
+| `cannot tell the two apart` | `features/bindings/binding-surface-page.tsx` (both `CallSitesEmptyState` branches), `features/repositories/codebase-page.tsx` | same sites, unchanged |
+
+The `sideways scroll` fragment was checked because ruling 4 turns on it and it was reasonable to
+expect it here. It is not: it lives in `components/data-table.tsx` and
+`features/vendors/vendor-findings-table.tsx`, and this port adds a third holder — the docstring
+paragraph recording why the rung moved — without touching either of the first two.
+
+The other fifteen sit outside this feature and were not touched. The whole file, 17 parametrised
+cases, is green; so are `tests/test_console_hierarchy.py` and `tests/test_console_design_tokens.py`,
+which between them hold the route registry and the token contract this port did not change.
