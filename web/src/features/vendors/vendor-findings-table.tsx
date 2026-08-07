@@ -46,7 +46,6 @@ import { useVendorFindings } from "@/api/queries"
 import type { FindingOrder, VendorFindingsPage } from "@/api/types"
 import { ActiveFilters, FacetChips, PrefixFilter, type FacetOption } from "@/components/filters"
 import { OrderChoice } from "@/components/ordering"
-import { PageControls } from "@/components/page-controls"
 import { ProvenanceStrip, RungBadge } from "@/components/provenance"
 import { EmptyState, ErrorState, LoadingState } from "@/components/states"
 import { Formatted } from "@/components/status"
@@ -59,6 +58,7 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import { ControlBar } from "@/layouts/control-bar"
+import { FooterBar } from "@/layouts/footer-bar"
 import { orAbsent } from "@/lib/format"
 import { useClearFilters, useFilterParam } from "@/lib/use-filter-param"
 import { useOffsetParam } from "@/lib/use-offset-param"
@@ -288,7 +288,10 @@ export function VendorFindingsTable({
             this table shows the path instead, because an opaque 32-character hash cost three
             wrapped lines in every row and told a reader nothing they could read.
           </p>
-          <PageControls
+          {/* The filtered-total caveat is what the footer bar's `left` slot exists for: it says
+              what the count beside it is counted over, which is the one thing a range under a
+              narrowed table cannot say for itself. */}
+          <FooterBar
             offset={offset}
             limit={DEFAULT_LIMIT}
             shown={page.items.length}
@@ -296,15 +299,17 @@ export function VendorFindingsTable({
             nextOffset={page.next_offset}
             busy={query.isFetching}
             onOffsetChange={setOffset}
+            left={
+              activeFilters.length > 0 ? (
+                <p className="max-w-prose text-body text-muted-foreground">
+                  That range counts the findings this filter matched, not every finding{" "}
+                  {vendorId} has in{" "}
+                  {repoId === null ? "any repository the index has seen" : repoId}:{" "}
+                  {page.severity_total.toLocaleString()} are open there in total.
+                </p>
+              ) : undefined
+            }
           />
-          {activeFilters.length > 0 && (
-            <p className="max-w-prose text-body text-muted-foreground">
-              That range counts the findings this filter matched, not every finding{" "}
-              {vendorId} has in{" "}
-              {repoId === null ? "any repository the index has seen" : repoId}:{" "}
-              {page.severity_total.toLocaleString()} are open there in total.
-            </p>
-          )}
         </>
       )}
       <ProvenanceStrip
