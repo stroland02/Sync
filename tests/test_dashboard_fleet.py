@@ -13,7 +13,7 @@ import psycopg
 import pytest
 
 from sync.core import CallSite, Finding, MigrationOutcome
-from sync.dashboard.fleet import corpus_summary, repositories, runs
+from sync.dashboard.fleet import abandonment_by_change_kind, corpus_summary, repositories, runs
 from sync.dashboard.queries import _FINISHED
 from sync.graph.store import GraphStore
 
@@ -418,6 +418,107 @@ def test_corpus_summary_of_an_empty_corpus_is_empty_not_an_error(store):
     assert summary["by_terminal_status"] == {}
     assert summary["by_strategy"] == {}
     assert summary["by_tier"] == {}
+
+
+# --- abandonment by change kind and tier ------------------------------------
+#
+# M12-W196: which change kinds are not mechanically safe, and at which tier. Same grain rule
+# as `corpus_summary` -- `migration_outcome` is one row per attempt -- applied per (change_kind,
+# tier) group instead of over the whole corpus.
+
+
+def test_abandonment_by_change_kind_separates_attempts_from_distinct_findings(store):
+    # One finding, retried three times, two of the attempts abandoned. The grain defect
+    # `CLAUDE.md` names would report two abandoned findings; there is one.
+    store.record_migration_outcome(_outcome(attempt_index=0, terminal_status="abandoned"))
+    store.record_migration_outcome(_outcome(attempt_index=1, terminal_status="abandoned"))
+    store.record_migration_outcome(_outcome(attempt_index=2, terminal_status="opened"))
+
+    result = abandonment_by_change_kind(store)
+
+    assert len(result["groups"]) == 1
+    group = result["groups"][0]
+    assert group["attempt_count"] == 3
+    assert group["distinct_finding_count"] == 1
+    assert group["abandoned_attempt_count"] == 2
+    assert group["abandoned_distinct_finding_count"] == 1
+
+
+def test_abandonment_by_change_kind_groups_by_change_kind_and_tier(store):
+    store.record_migration_outcome(
+        _outcome(change_kind="request-parameter-removed", tier=1, terminal_status="abandoned")
+    )
+    store.record_migration_outcome(
+        _outcome(
+            finding_id="g" * 32, change_kind="response-property-removed", tier=2,
+            terminal_status="opened",
+        )
+    )
+
+    result = abandonment_by_change_kind(store)
+
+    groups = {(g["change_kind"], g["tier"]): g for g in result["groups"]}
+    assert set(groups) == {("request-parameter-removed", 1), ("response-property-removed", 2)}
+    assert groups[("request-parameter-removed", 1)]["attempt_count"] == 1
+    assert groups[("request-parameter-removed", 1)]["abandoned_attempt_count"] == 1
+    assert groups[("response-property-removed", 2)]["attempt_count"] == 1
+    assert groups[("response-property-removed", 2)]["abandoned_attempt_count"] == 0
+
+
+def test_abandonment_by_change_kind_reports_abandon_reasons_with_counts(store):
+    store.record_migration_outcome(
+        _outcome(attempt_index=0, terminal_status="abandoned", abandon_reason="compile error")
+    )
+    store.record_migration_outcome(
+        _outcome(
+            finding_id="g" * 32, attempt_index=0,
+            terminal_status="abandoned", abandon_reason="compile error",
+        )
+    )
+    store.record_migration_outcome(
+        _outcome(
+            finding_id="h" * 32, attempt_index=0,
+            terminal_status="abandoned", abandon_reason="verify timeout",
+        )
+    )
+
+    result = abandonment_by_change_kind(store)
+
+    group = result["groups"][0]
+    assert group["abandon_reasons"] == {"compile error": 2, "verify timeout": 1}
+
+
+def test_abandonment_by_change_kind_a_group_never_abandoned_has_zero_not_absence(store):
+    # Seen and never abandoned is a real zero -- distinct from a (change_kind, tier) never
+    # attempted at all, which has no group.
+    store.record_migration_outcome(_outcome(terminal_status="opened"))
+
+    result = abandonment_by_change_kind(store)
+
+    group = result["groups"][0]
+    assert group["abandoned_attempt_count"] == 0
+    assert group["abandoned_distinct_finding_count"] == 0
+    assert group["abandon_reasons"] == {}
+
+
+def test_abandonment_by_change_kind_absence_is_not_zero(store):
+    # Only "request-parameter-removed" at tier 1 was ever attempted. A change kind never seen
+    # must have no row, not a row reading zero -- CLAUDE.md's "absence is not zero" rule.
+    store.record_migration_outcome(
+        _outcome(change_kind="request-parameter-removed", tier=1, terminal_status="opened")
+    )
+
+    result = abandonment_by_change_kind(store)
+
+    seen = {(g["change_kind"], g["tier"]) for g in result["groups"]}
+    assert ("response-property-removed", 1) not in seen
+    assert ("request-parameter-removed", 2) not in seen
+
+
+def test_abandonment_by_change_kind_of_an_empty_corpus_is_empty_not_an_error(store):
+    result = abandonment_by_change_kind(store)
+
+    assert result["groups"] == []
 
 
 # --- repositories -----------------------------------------------------------

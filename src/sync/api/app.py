@@ -2,7 +2,8 @@
 
 The transport holds no logic. Per-finding routes are a thin call into `GraphSurface`, which
 answers questions about one repository an agent is already pointed
-at. Fleet-wide routes -- `/api/runs`, `/api/corpus`, `/api/repositories` -- answer a
+at. Fleet-wide routes -- `/api/runs`, `/api/corpus`, `/api/corpus/abandonment`,
+`/api/repositories` -- answer a
 different grain, every run or every attempt across repositories, which the frozen surface
 answers no question about; those go through reader callables backed by `sync.dashboard`
 instead. The graph-rendering routes below -- bindings, per-repository coverage and observed
@@ -48,6 +49,12 @@ WorkflowReader = Callable[[str], Optional[dict[str, Any]]]
 RunsReader = Callable[..., dict[str, Any]]
 CorpusReader = Callable[[], dict[str, Any]]
 RepositoriesReader = Callable[[], dict[str, Any]]
+
+# `abandonment_by_change_kind`'s reader -- which change kinds are not mechanically safe, and at
+# which tier. Outside `GraphSurface` for the same reason `CorpusReader` is: a per-`(change_kind,
+# tier)` breakdown of `migration_outcome` is not a per-finding question the frozen surface
+# answers.
+AbandonmentReader = Callable[[], dict[str, Any]]
 
 # The graph-rendering readers back `sync.dashboard.graph_views`, outside `GraphSurface` for the
 # same reason the fleet readers above are: a binding surface, a per-repo coverage count and a
@@ -144,6 +151,7 @@ def create_app(
     runs_reader: RunsReader,
     corpus_reader: CorpusReader,
     repositories_reader: RepositoriesReader,
+    abandonment_reader: AbandonmentReader,
     binding_reader: BindingReader,
     coverage_reader: CoverageReader,
     observed_reader: ObservedReader,
@@ -275,6 +283,9 @@ def create_app(
     async def repositories(request: Request) -> JSONResponse:
         return JSONResponse(repositories_reader())
 
+    async def abandonment(request: Request) -> JSONResponse:
+        return JSONResponse(abandonment_reader())
+
     async def binding(request: Request) -> JSONResponse:
         vendor_id = request.path_params["vendor_id"]
         operation_id = request.path_params["operation_id"]
@@ -322,6 +333,7 @@ def create_app(
         Route("/api/workflows/{finding_id}", workflow, methods=["GET"]),
         Route("/api/runs", runs, methods=["GET"]),
         Route("/api/corpus", corpus, methods=["GET"]),
+        Route("/api/corpus/abandonment", abandonment, methods=["GET"]),
         Route("/api/repositories", repositories, methods=["GET"]),
         Route(
             "/api/vendors/{vendor_id}/operations/{operation_id}/bindings",

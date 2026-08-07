@@ -141,6 +141,56 @@ def corpus_summary(store: GraphStore) -> dict:
     }
 
 
+def abandonment_by_change_kind(store: GraphStore) -> dict:
+    """Which change kinds are not mechanically safe, and at which tier -- M12's first aggregate.
+
+    `docs/superpowers/specs/2026-07-27-sync-pipeline-discipline.md` argues abandoned attempts are
+    where routing learns this; nothing read them back before this. The decision it changes is
+    concrete: a `(change_kind, tier)` that abandons repeatedly is a routing-table row to correct
+    or a codemod to write.
+
+    One entry per `(change_kind, tier)` **actually attempted** --
+    `store.migration_outcome_rollup_by_kind`'s own contract: a pair with no attempt has no entry.
+    Reading `groups` for a pair therefore answers "never seen"; reading a present entry with
+    `abandoned_attempt_count == 0` answers "seen, never abandoned". Collapsing the two into a
+    zero would be the exact defect `CLAUDE.md` forbids under "absence is not zero".
+
+    Each entry states two grains side by side, same rule `corpus_summary` already carries: a
+    finding retried three times is three rows and one finding, so `attempt_count` and
+    `distinct_finding_count` are separate keys, never a bare `count` -- and the same split holds
+    for the abandoned subset (`abandoned_attempt_count`, `abandoned_distinct_finding_count`).
+
+    No ratio is computed here. A change kind abandoning 3 of 4 attempts is reported as
+    `attempt_count: 4, abandoned_attempt_count: 3` -- the reader can divide; this function does
+    not hand back a percentage that reads as a health score, which `CLAUDE.md` and this
+    milestone's plan both refuse outright.
+
+    `abandon_reasons` is `abandon_reason` tallied within the group, over abandoned attempts only
+    -- the free-text diagnostic each abandoning run wrote, not a coded vocabulary. A group with
+    no abandonment has `{}`.
+    """
+    reasons: dict[tuple[str, int], dict] = {}
+    for row in store.migration_outcome_abandon_reasons_by_kind():
+        key = (row["change_kind"], row["tier"])
+        reasons.setdefault(key, {})[row["abandon_reason"]] = row["n"]
+
+    groups = []
+    for row in store.migration_outcome_rollup_by_kind():
+        key = (row["change_kind"], row["tier"])
+        groups.append(
+            {
+                "change_kind": row["change_kind"],
+                "tier": row["tier"],
+                "attempt_count": row["attempt_count"],
+                "distinct_finding_count": row["distinct_finding_count"],
+                "abandoned_attempt_count": row["abandoned_attempt_count"],
+                "abandoned_distinct_finding_count": row["abandoned_distinct_finding_count"],
+                "abandon_reasons": reasons.get(key, {}),
+            }
+        )
+    return {"groups": groups}
+
+
 def repositories(store: GraphStore) -> dict:
     """The repo_id roll-up from the index. `store.repo_ids`'s docstring carries the limit:
     a repository configured but never indexed has no row here.

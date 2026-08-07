@@ -90,6 +90,9 @@ def app_factory() -> Starlette:
     def repositories_reader():
         return fleet.repositories(store)
 
+    def abandonment_reader():
+        return fleet.abandonment_by_change_kind(store)
+
     def binding_reader(
         vendor_id: str,
         operation_id: str,
@@ -160,6 +163,7 @@ def app_factory() -> Starlette:
         runs_reader=runs_reader,
         corpus_reader=corpus_reader,
         repositories_reader=repositories_reader,
+        abandonment_reader=abandonment_reader,
         binding_reader=binding_reader,
         coverage_reader=coverage_reader,
         observed_reader=observed_reader,

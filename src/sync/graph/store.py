@@ -1169,6 +1169,57 @@ class GraphStore:
         ).fetchall()
         return [MigrationOutcome(**row) for row in rows]
 
+    def migration_outcome_rollup_by_kind(self) -> list[dict]:
+        """One row per (`change_kind`, `tier`) actually attempted -- a real SQL `GROUP BY` over
+        `migration_outcome_kind_idx`, not a Python `Counter` over every row.
+
+        **A (`change_kind`, `tier`) pair with no attempt has no row here.** That is what makes
+        this the answer to "which change kinds are not mechanically safe": absence and a
+        zero-abandonment group are two different facts, and only the group's presence tells
+        them apart. `sync.dashboard.fleet.abandonment_by_change_kind` is what a caller reads.
+
+        `attempt_count` and `distinct_finding_count` are the corpus grain rule
+        (`migration_outcome` is one row per attempt) applied per group, same as
+        `corpus_summary`'s fleet-wide `attempts`/`distinct_findings`. The `abandoned_*` pair is
+        the same distinction scoped to `terminal_status = 'abandoned'`.
+        """
+        rows = self._connect().execute(
+            """
+            SELECT change_kind, tier,
+                   count(*) AS attempt_count,
+                   count(DISTINCT finding_id) AS distinct_finding_count,
+                   count(*) FILTER (WHERE terminal_status = 'abandoned')
+                       AS abandoned_attempt_count,
+                   count(DISTINCT finding_id) FILTER (WHERE terminal_status = 'abandoned')
+                       AS abandoned_distinct_finding_count
+              FROM migration_outcome
+             GROUP BY change_kind, tier
+             ORDER BY change_kind, tier
+            """
+        ).fetchall()
+        return [dict(row) for row in rows]
+
+    def migration_outcome_abandon_reasons_by_kind(self) -> list[dict]:
+        """`abandon_reason`, tallied per (`change_kind`, `tier`), over abandoned attempts only.
+
+        `abandon_reason` is free text written by the abandoning node (`state.get("diagnostics")`
+        or exception text) rather than a coded vocabulary, so this reports whatever distinct
+        strings actually occurred -- a closed set *of what was observed*, not a promise the
+        column itself is bounded. `remediate-stage.md` requires `abandon_reason` non-null on an
+        abandoned run; a null here is a defect in the writer, not an expected case, and is
+        reported as `None` rather than silently folded into another bucket.
+        """
+        rows = self._connect().execute(
+            """
+            SELECT change_kind, tier, abandon_reason, count(*) AS n
+              FROM migration_outcome
+             WHERE terminal_status = 'abandoned'
+             GROUP BY change_kind, tier, abandon_reason
+             ORDER BY change_kind, tier
+            """
+        ).fetchall()
+        return [dict(row) for row in rows]
+
     def set_merge_outcome(
         self,
         finding_id: str,
