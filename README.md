@@ -230,6 +230,10 @@ We never hold customer secrets. That one is unqualified.
 | `sync.dashboard`, `sync.api` | Read-only aggregates and the console's HTTP surface | `core`, `graph` |
 | `sync.benchmark` | Scores the pipeline's own output quality | `core`, `graph` |
 
+**[`ARCHITECTURE.md`](ARCHITECTURE.md) is the engineering document** — the remediation state
+machine node by node, the tier cascade, how the agent is contained, and every term this
+repository uses.
+
 ### The engineering constraints that shape it
 
 These are enforced rather than encouraged, because each one failed silently at least once first:
@@ -388,6 +392,7 @@ specification states what it measured rather than what it assumed.
 | [Verification regime](docs/superpowers/specs/2026-07-29-sync-verification-regime.md) | How much of the measurement actually runs today |
 | [Adaptive vendor substrate](docs/superpowers/specs/2026-07-29-sync-adaptive-vendor-substrate.md) | How coverage scales by artifact tier rather than by vendor |
 | [Threat model](docs/superpowers/specs/2026-07-25-sync-threat-model.md) | What a malicious vendor feed can and cannot do |
+| **[Architecture](ARCHITECTURE.md)** | **How the system works: the state machine, the tier cascade, provenance rungs, durable execution, and the three mechanisms that contain the agent** |
 | [Console architecture](docs/superpowers/plans/2026-08-05-sync-console-architecture.md) | The nine levels, and the twenty-four sentences that carry the honesty discipline |
 | [Backlog](docs/superpowers/BACKLOG.md) · [Work log](docs/superpowers/WORKLOG.md) | Every milestone's real state, and every work item with the commit that landed it |
 
