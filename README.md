@@ -14,6 +14,18 @@
 
 </div>
 
+<div align="center">
+
+<img src="docs/console-mock/demo.gif" width="92%" alt="A tour of the Sync operator console: the fleet, a call-site drawer, the command palette, detector attribution, codebase, API service, signals, the binding surface, a finding, the solution workflow, a pull request and the adapter settings" />
+
+**The operator console — every screen in one pass.** Fleet → drawer → palette → detectors →
+codebase → vendor → signals → binding surface → finding → workflow → pull request → settings.
+
+*This is the design mock, not shipped code.* [What is built today](#the-operator-console) ·
+[the mock](docs/console-mock/) · [the plan that builds it](docs/superpowers/plans/2026-08-08-console-mock-to-build.md)
+
+</div>
+
 ```
 vendor ships a breaking change  →  Sync finds every call site that depends on it
                                 →  patches them
@@ -92,6 +104,41 @@ Sync's position is that competing tools present a black box and a result, and as
 trust it. The console exists to show the system's reasoning instead — nine levels, from the fleet
 down to a single pull request and its evidence.
 
+### Where it is going — the design mock
+
+A ten-screen mock, drawn in HTML/CSS/JS and committed so the build has a target it can be measured
+against rather than argued about from memory. **None of it is built yet.** The tour at the top of
+this page is this mock; the four screens below are stills from it.
+
+| | |
+|---|---|
+| <img src="docs/console-mock/screens/05-binding-surface.png" alt="The binding surface in the mock" /> | <img src="docs/console-mock/screens/07-workflow.png" alt="The solution workflow in the mock" /> |
+| **Binding surface** — every call site under one operation, each row carrying its own rung, over a shared directory prefix. | **Solution workflow** — eight nodes beside an activity timeline assembled at read time from four sources. |
+| <img src="docs/console-mock/screens/09-detectors.png" alt="Detector attribution in the mock" /> | <img src="docs/console-mock/screens/08-pull-request.png" alt="The pull request level in the mock" /> |
+| **Detector attribution** — every detector's open findings broken down by the rung behind them, with no colour assigned to any rung. | **Pull request** — the patch beside the evidence bundle, and a panel naming what the bundle does *not* contain. |
+
+| | |
+|---|---|
+| **Watch it** | [`docs/console-mock/demo.mp4`](docs/console-mock/demo.mp4) — 40s, 1440×900, no audio |
+| **Click it** | [the live mock](https://claude.ai/code/artifact/f321ac84-32d5-4181-a680-8bf2df671247) |
+| **Read it** | [`docs/console-mock/`](docs/console-mock/) — the source, twelve stills, and which of its facts are fixtures |
+| **Build it** | [`plans/2026-08-08-console-mock-to-build.md`](docs/superpowers/plans/2026-08-08-console-mock-to-build.md) — six tasks across M7, M12 and M4 |
+
+Two things make it worth committing rather than linking. It is drawn on **our own token contract** —
+its literal OKLCH values are the ones `web/src/index.css` already declares, so a colour in it that
+is *new* is conspicuous rather than invisible. And it applies the honesty discipline rather than
+decorating it: no composite score, no health figure, no green dot, no liveness pulse, and every
+status colour ships with a glyph and a word so the colour is never load-bearing.
+
+It is still the lowest authority in the room. Where it disagrees with the specification's hierarchy,
+with `DESIGN.md`, or with a protected sentence, the mock loses — and the plan says so in as many
+words.
+
+### What is running today
+
+Not the above. These are captures of the console as it actually is, at commit `25a4a10`, 1920×889,
+against `scripts/seed_console.py`'s fixture.
+
 <div align="center">
 
 <img src="docs/superpowers/reports/screens/2026-08-07/01-fleet.png" width="90%" alt="The fleet screen: open findings by vendor, runs by checkpoint thread, and the repair record" />
@@ -109,38 +156,6 @@ down to a single pull request and its evidence.
 
 More in [`docs/superpowers/reports/screens/`](docs/superpowers/reports/screens/), with the capture
 conditions recorded beside them — a screenshot without its viewport and commit is not evidence.
-
-### The design mock ahead of the build
-
-Everything above is running code. **Everything below is not yet** — a ten-screen mock of where the
-console is going, drawn in HTML/CSS/JS and committed so the build has a target it can be measured
-against rather than argued about from memory.
-
-<div align="center">
-
-<img src="docs/console-mock/demo.gif" width="90%" alt="A tour of the console mock: the fleet, a call-site drawer, the command palette, detector attribution, codebase, API service, signals, the binding surface, a finding, the solution workflow, a pull request and the adapter settings" />
-
-*Every screen in one pass — fleet → drawer → palette → detectors → codebase → vendor → signals →
-binding surface → finding → workflow → pull request → settings.*
-
-</div>
-
-| | |
-|---|---|
-| **Watch it** | [`docs/console-mock/demo.mp4`](docs/console-mock/demo.mp4) — 40s, 1440×900, no audio |
-| **Click it** | [the live mock](https://claude.ai/code/artifact/f321ac84-32d5-4181-a680-8bf2df671247) |
-| **Read it** | [`docs/console-mock/`](docs/console-mock/) — the source, twelve stills, and which of its facts are fixtures |
-| **Build it** | [`plans/2026-08-08-console-mock-to-build.md`](docs/superpowers/plans/2026-08-08-console-mock-to-build.md) — six tasks across M7, M12 and M4 |
-
-Two things make it worth committing rather than linking. It is drawn on **our own token contract** —
-its literal OKLCH values are the ones `web/src/index.css` already declares, so a colour in it that
-is *new* is conspicuous rather than invisible. And it applies the honesty discipline rather than
-decorating it: no composite score, no health figure, no green dot, no liveness pulse, and every
-status colour ships with a glyph and a word so the colour is never load-bearing.
-
-It is still the lowest authority in the room. Where it disagrees with the specification's hierarchy,
-with `DESIGN.md`, or with a protected sentence, the mock loses — and the plan above says so in as
-many words.
 
 ### The honesty discipline
 
