@@ -110,6 +110,38 @@ down to a single pull request and its evidence.
 More in [`docs/superpowers/reports/screens/`](docs/superpowers/reports/screens/), with the capture
 conditions recorded beside them — a screenshot without its viewport and commit is not evidence.
 
+### The design mock ahead of the build
+
+Everything above is running code. **Everything below is not yet** — a ten-screen mock of where the
+console is going, drawn in HTML/CSS/JS and committed so the build has a target it can be measured
+against rather than argued about from memory.
+
+<div align="center">
+
+<img src="docs/console-mock/demo.gif" width="90%" alt="A tour of the console mock: the fleet, a call-site drawer, the command palette, detector attribution, codebase, API service, signals, the binding surface, a finding, the solution workflow, a pull request and the adapter settings" />
+
+*Every screen in one pass — fleet → drawer → palette → detectors → codebase → vendor → signals →
+binding surface → finding → workflow → pull request → settings.*
+
+</div>
+
+| | |
+|---|---|
+| **Watch it** | [`docs/console-mock/demo.mp4`](docs/console-mock/demo.mp4) — 40s, 1440×900, no audio |
+| **Click it** | [the live mock](https://claude.ai/code/artifact/f321ac84-32d5-4181-a680-8bf2df671247) |
+| **Read it** | [`docs/console-mock/`](docs/console-mock/) — the source, twelve stills, and which of its facts are fixtures |
+| **Build it** | [`plans/2026-08-08-console-mock-to-build.md`](docs/superpowers/plans/2026-08-08-console-mock-to-build.md) — six tasks across M7, M12 and M4 |
+
+Two things make it worth committing rather than linking. It is drawn on **our own token contract** —
+its literal OKLCH values are the ones `web/src/index.css` already declares, so a colour in it that
+is *new* is conspicuous rather than invisible. And it applies the honesty discipline rather than
+decorating it: no composite score, no health figure, no green dot, no liveness pulse, and every
+status colour ships with a glyph and a word so the colour is never load-bearing.
+
+It is still the lowest authority in the room. Where it disagrees with the specification's hierarchy,
+with `DESIGN.md`, or with a protected sentence, the mock loses — and the plan above says so in as
+many words.
+
 ### The honesty discipline
 
 The console renders the product position, so its interface rules are not taste. Four distinctions
