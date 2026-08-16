@@ -165,8 +165,21 @@ CREATE TABLE IF NOT EXISTS finding (
 
 CREATE INDEX IF NOT EXISTS finding_status_idx ON finding (status);
 
--- Grain: one row per repair ATTEMPT, not per finding. A finding retried three times writes
--- three rows and attempt_index says which. Counting findings by counting rows is wrong.
+-- Grain: one row per repair ATTEMPT, per run kind, not per finding. A finding retried three
+-- times writes three rows and attempt_index says which. Counting findings by counting rows is
+-- wrong.
+--
+-- A run has identity too: `is_rehearsal` is `true` for a zero-remote `sync rehearse` run against
+-- a fixture repository and `false` for a real pipeline run, and it is in the natural key rather
+-- than a filter bolted onto every reader. Before it existed the key was `(finding_id,
+-- attempt_index)` alone, so a rehearsal and a production run that happened to process the same
+-- finding at the same attempt index against one shared database collided -- and since
+-- `sync rehearse --dsn` defaults to the exact DSN `sync run` does, that is not a hypothetical.
+-- `ON CONFLICT DO NOTHING` kept whichever wrote first and silently dropped the other; when the
+-- other was the production row, the pull request it opened never reached `merge_rate` or
+-- `counts.pull_requests_opened` (B79). `GraphStore.migration_outcomes` and every reader built on
+-- it filter `is_rehearsal` back out, because a rehearsal row belongs in this table -- it still
+-- costs a repair attempt worth recording -- and nowhere a corpus-wide rate is computed.
 --
 -- Nothing here identifies a customer: the symbol is a shape, argument keys are salted digests,
 -- and neither the diff nor the file path is stored. That is what makes the table safe to
@@ -226,12 +239,20 @@ CREATE TABLE IF NOT EXISTS migration_outcome (
     pr_merged_at                  TIMESTAMPTZ,
     human_edits_before_merge      INTEGER,
 
+    -- See the table's grain comment. `NOT NULL DEFAULT false` is what lets this land on a
+    -- database that already has rows: every one of them predates `sync rehearse` and so was a
+    -- production run, which is the only value history can honestly be given.
+    is_rehearsal                  BOOLEAN NOT NULL DEFAULT false,
+
     created_at                    TIMESTAMPTZ NOT NULL DEFAULT now(),
 
     -- The natural key. A restarted run re-recording an attempt must converge rather than
     -- inflate the corpus, and an inflated corpus silently overstates every rate computed
-    -- from it.
-    UNIQUE (finding_id, attempt_index)
+    -- from it. `is_rehearsal` joined it in B79, so a rehearsal and a production run at the same
+    -- finding and attempt index no longer collide -- widening this constraint is not something
+    -- `GraphStore.apply_schema` can carry to a database that already has the old one; see its
+    -- docstring's "What this does not express."
+    UNIQUE (finding_id, attempt_index, is_rehearsal)
 );
 
 CREATE INDEX IF NOT EXISTS migration_outcome_kind_idx

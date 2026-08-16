@@ -29,11 +29,17 @@ from sync.remediate.state import RunState
 _NO_FORGE = "this run was configured without a forge, so it cannot reach a remote"
 
 
-def build_graph(store, adapter, remediator, forge, checkpointer, catalogue=None):
+def build_graph(store, adapter, remediator, forge, checkpointer, catalogue=None, *, is_rehearsal=False):
     # Built from the store this already receives, so no caller learns a new argument and no
     # run can be configured with the corpus recording silently switched off. Every node that
     # takes it is a place an attempt ends -- three of them with no forge, one more with one.
-    record = make_recorder(store)
+    #
+    # `is_rehearsal` is a separate parameter rather than `forge is None`, deliberately: this
+    # file's own test suite calls this with `forge=None` for reasons that have nothing to do
+    # with `sync rehearse`, so a rehearsal row and one of those runs would be indistinguishable
+    # in the corpus if the two were folded together (B79). Only `sync.rehearse.driver` passes
+    # `True`.
+    record = make_recorder(store, is_rehearsal=is_rehearsal)
 
     remote = forge is not None
 
