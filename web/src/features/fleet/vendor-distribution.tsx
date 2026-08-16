@@ -41,6 +41,7 @@ import {
   describeCardinality,
   sliceForDisplay,
 } from "@/features/fleet/cardinality"
+import { FooterBar } from "@/layouts/footer-bar"
 
 /**
  * The vendor rows, unpaginated.
@@ -131,18 +132,24 @@ export function VendorDistributionCard() {
             />
           ) : (
             <>
-              <CardinalityStatement
-                text={describeCardinality(
-                  query.data.vendors.length,
-                  "vendor",
-                  "vendors",
-                  "open finding count, descending",
-                )}
-              />
               <VendorFindingsTable
                 vendors={sliceForDisplay(
                   [...query.data.vendors].sort(byOpenFindingCountDescending),
                 )}
+              />
+              {/* No pager: `/api/overview` returns the vendor roll-up whole, so the slice above is
+                  a display decision rather than a page, and the sentence says which. */}
+              <FooterBar
+                left={
+                  <CardinalityStatement
+                    text={describeCardinality(
+                      query.data.vendors.length,
+                      "vendor",
+                      "vendors",
+                      "open finding count, descending",
+                    )}
+                  />
+                }
               />
             </>
           )}

@@ -117,13 +117,32 @@ page's own to state.
 | `/repositories/:repoId/observed` | Fleet → *repo* → "Signals" | the first two | "Signals" |
 | `/bindings/vendors/:vendorId/operations/:operationId` | Fleet → *vendor* → *operation* | the first two | the operation id |
 
-Nothing else is trimmed, and the three surviving single-crumb trails are deliberate. On the Signals
-and binding-surface routes the remaining crumb is not the page's title — those titles are the
-repository id and `vendor / operation` — so the crumb is the level name and the bar does not reach
-it. On `/detectors` the surviving crumb does repeat the `h1`, at 12px muted against 46px; that is
-recorded here as an observation for the whole-branch review rather than trimmed, because trimming it
-would be removing a segment the bar does not own, which is a wider change than the finding asked
-for.
+Nothing else is trimmed, and the three surviving single-crumb trails are deliberate — but they are
+deliberate for two different reasons, and the difference is worth stating because a later reader
+will otherwise apply the wrong one.
+
+**On Signals the crumb carries something the title does not.** That page's `h1` is the repository
+id, so `Signals` is the only place the level is named.
+
+**On `/detectors` and the binding surface the crumb does repeat the title**, and is kept anyway.
+`Detectors` is the `h1` verbatim; the binding surface's `PostCharges` is the second half of an `h1`
+reading `seed-console-stripe / PostCharges`. Both are 12px muted against 46px, so the repetition is
+mild — and trimming either would be removing a segment the top bar does not own, which is a wider
+change than Task 1's finding asked for. Both are recorded here as observations for the whole-branch
+review rather than acted on.
+
+**Four routes still render a `Fleet` crumb the top bar already draws, and all four are deliberately
+out of this work item's scope**, which was the five list routes the finding named:
+
+| File | Line | Why it was left |
+|---|---|---|
+| `features/fleet/fleet-page.tsx` | 169 | Not one of the five named routes |
+| `features/findings/finding-page.tsx` | 263 | Not one of the five; **only the `Fleet` segment duplicates.** Its vendor crumb is legitimately the page's own — the vendor is in the payload rather than in the address, so the bar cannot reach it |
+| `features/workflows/workflow-page.tsx` | 271 | Not one of the five; same vendor argument |
+| `features/pullrequests/pull-request-page.tsx` | 205 | Not one of the five |
+
+They are named here rather than counted, so the whole-branch review inherits a list rather than a
+number somebody has to re-derive.
 
 `layouts/scope-switchers.tsx`'s docstring claimed that `layouts/breadcrumbs.tsx` *"keeps the full
 in-page path, including its own root"*. That stops being true here, so the paragraph is corrected in

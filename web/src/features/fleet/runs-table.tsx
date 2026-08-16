@@ -14,7 +14,7 @@ import { Link } from "react-router"
 
 import { DEFAULT_LIMIT } from "@/api/client"
 import { useRuns } from "@/api/queries"
-import type { RunDisposition, RunRow } from "@/api/types"
+import type { RunDisposition, RunRow, RunsPage } from "@/api/types"
 import {
   Table,
   TableBody,
@@ -52,6 +52,25 @@ function tallyDispositionsOnThisPage(items: readonly RunRow[]): Record<string, n
     counts[key] = (counts[key] ?? 0) + 1
   }
   return counts
+}
+
+/**
+ * The record count, written once so the paged and the complete branch cannot word it differently.
+ * `shown` is the page's real size rather than the threshold, so the sentence never claims a slice
+ * the table beneath it does not have.
+ */
+function RunsCount({ data }: { data: RunsPage }) {
+  return (
+    <CardinalityStatement
+      text={describeCardinality(
+        data.total,
+        "run",
+        "runs",
+        "newest checkpoint first",
+        data.items.length,
+      )}
+    />
+  )
 }
 
 export function RunsCard() {
@@ -96,21 +115,6 @@ export function RunsCard() {
                   fleet — the fleet's true disposition mix is not in this payload.
                 </p>
               </div>
-              {/* Below the threshold the cardinality sentence stands alone: `FooterBar` would
-                  render page controls for a set that fits on one page, which is a choice nobody
-                  has. Above it, the sentence moves into the footer's `left` slot, which is what
-                  that slot is for — what the count is counted over. */}
-              {isCompleteListing(query.data.total) && (
-                <CardinalityStatement
-                  text={describeCardinality(
-                    query.data.total,
-                    "run",
-                    "runs",
-                    "newest checkpoint first",
-                    query.data.items.length,
-                  )}
-                />
-              )}
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -149,7 +153,13 @@ export function RunsCard() {
                   ))}
                 </TableBody>
               </Table>
-              {!isCompleteListing(query.data.total) && (
+              {/* One footer on both branches. The pager is what the branch decides, not the
+                  footer: a set that fits on one page has no page to move to, and page controls
+                  over it are a choice nobody has. The cardinality sentence is the record count
+                  either way, and it now has somewhere to sit when the set is complete. */}
+              {isCompleteListing(query.data.total) ? (
+                <FooterBar left={<RunsCount data={query.data} />} />
+              ) : (
                 <FooterBar
                   offset={offset}
                   limit={DEFAULT_LIMIT}
@@ -158,17 +168,7 @@ export function RunsCard() {
                   nextOffset={query.data.next_offset}
                   busy={query.isFetching}
                   onOffsetChange={setOffset}
-                  left={
-                    <CardinalityStatement
-                      text={describeCardinality(
-                        query.data.total,
-                        "run",
-                        "runs",
-                        "newest checkpoint first",
-                        query.data.items.length,
-                      )}
-                    />
-                  }
+                  left={<RunsCount data={query.data} />}
                 />
               )}
             </>

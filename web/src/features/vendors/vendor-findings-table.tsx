@@ -45,6 +45,13 @@
  * moved every time a chip was clicked would be the panel restating the footer rather than naming
  * its own grain. `docs/superpowers/briefs/2026-08-07-substrate-api-services.md` carries the mapping
  * this port was gated on, and it is what to read before porting a level, not this docstring.
+ *
+ * **M7-W195 moved the three controls out of this panel and into the page's own control bar.** Every
+ * paragraph above still holds — what each narrows, what the chips are counted over, why they
+ * disagree with the range under the table. Only their position changed, and the gap report measured
+ * why: they sat inside a card body under a heading, a figure and a caption, on a screen whose
+ * control bar did not exist. `VendorFindingsControls` below carries why the filter state is one
+ * shared hook rather than two derivations.
  */
 
 import { Link } from "react-router"
@@ -86,6 +93,40 @@ const ORDER_KEY = "order"
  * ordering is fifty different findings in the other, so holding the position across a re-order
  * would move the window under the reader while the count under it stayed still. */
 const RESETS = [OFFSET_KEY]
+
+/**
+ * The three narrowings this level offers, read from the URL, with what is currently on.
+ *
+ * **One definition, two consumers, and that is why it exists.** M7-W195 moved the controls out of
+ * this panel's body and into the page's own control bar, which put the bar that *sets* these
+ * parameters and the empty state that has to *explain* them in two components. Deriving
+ * `activeFilters` twice would be one fact written twice — the two lists would agree today and
+ * silently disagree the first time a fourth narrowing is added to one of them.
+ *
+ * The query is not held here. `useVendorFindings` is keyed on the vendor, the scope and all four
+ * narrowings, so the bar and the table asking the same question share one fetch rather than
+ * issuing two.
+ */
+function useVendorFindingFilters() {
+  const [severity, setSeverity] = useFilterParam(SEVERITY_KEY, RESETS)
+  const [pathPrefix, setPathPrefix] = useFilterParam(PATH_KEY, RESETS)
+  // Sent as whatever the URL holds, including a value the API does not have. The API resolves it
+  // and echoes the ordering it applied, and the control renders *that* — so a hand-edited URL
+  // cannot leave the screen naming an arrangement the rows are not in.
+  const [order, setOrder] = useFilterParam(ORDER_KEY, RESETS)
+
+  // `repo_id` is deliberately not among the keys this clears. It is the scope the level above
+  // selected, not a filter this table offers, and a control labelled "clear all filters" that
+  // silently widened the page to the fleet would undo a choice made on another screen.
+  const clearAll = useClearFilters([SEVERITY_KEY, PATH_KEY], RESETS)
+
+  const activeFilters = [
+    ...(severity === null ? [] : [{ label: "severity", value: severity }]),
+    ...(pathPrefix === null ? [] : [{ label: "path", value: pathPrefix }]),
+  ]
+
+  return { severity, setSeverity, pathPrefix, setPathPrefix, order, setOrder, activeFilters, clearAll }
+}
 
 function bindingSurfaceHref(vendorId: string, operation: string, repoId: string | null): string {
   const path = `/bindings/vendors/${encodeURIComponent(vendorId)}/operations/${encodeURIComponent(operation)}`
@@ -160,6 +201,96 @@ function FindingsEmptyState({
   )
 }
 
+/**
+ * The one question the bar and the table both ask, so they cannot ask two.
+ *
+ * Every narrowing is in the query key, which is what makes calling this in two components one
+ * fetch rather than two.
+ */
+function useFindingsPage(
+  vendorId: string,
+  repoId: string | null,
+  filters: ReturnType<typeof useVendorFindingFilters>,
+  offset: number,
+) {
+  return useVendorFindings(vendorId, {
+    limit: DEFAULT_LIMIT,
+    offset,
+    repoId: repoId ?? undefined,
+    severity: filters.severity ?? undefined,
+    path: filters.pathPrefix ?? undefined,
+    order: (filters.order ?? undefined) as FindingOrder | undefined,
+  })
+}
+
+/**
+ * The three narrowings, in the page's own control bar rather than in a card body.
+ *
+ * `reports/2026-08-07-console-fidelity-gaps.md` Surface 3 row 3 measured where these used to sit:
+ * inside `VendorFindingsCard`'s body at `y=469-585`, under a panel heading, a figure and a caption,
+ * on a screen whose control bar did not exist. They set `?severity`, `?path` and `?order`, all
+ * three of which reach `GET /api/vendors/{id}` and narrow the query rather than the rows already
+ * fetched.
+ *
+ * **Nothing renders until the payload lands, and that is not a loading state.** The severity chips
+ * are built from `severity_counts` and the ordering control renders the ordering the API says it
+ * applied, so a bar drawn before the answer arrives would either be empty or be guessing. The panel
+ * below carries `LoadingState`, which is the sentence that says a query is in flight; a second
+ * marker here would be the same fact twice.
+ */
+export function VendorFindingsControls({
+  vendorId,
+  repoId = null,
+}: {
+  vendorId: string
+  repoId?: string | null
+}) {
+  const [offset] = useOffsetParam(OFFSET_KEY)
+  const filters = useVendorFindingFilters()
+  const query = useFindingsPage(vendorId, repoId, filters, offset)
+
+  if (!query.isSuccess) return null
+  const page = query.data
+
+  return (
+    <div className="flex flex-col gap-section">
+      <ControlBar>
+        <FacetChips
+          legend="Severity"
+          options={severityOptions(page)}
+          selected={filters.severity}
+          onSelect={filters.setSeverity}
+          allLabel="Every severity"
+          countScope={`Counted across all ${page.severity_total.toLocaleString()} open findings for ${vendorId} in ${repoId === null ? "any repository the index has seen" : repoId}, not across the page below — these are the choices available, so they stay the same whichever one is selected.`}
+        />
+        <PrefixFilter
+          legend="Call site path"
+          value={filters.pathPrefix}
+          onSubmit={filters.setPathPrefix}
+          placeholder="src/billing/"
+          note="Matched as a prefix of the call site's path, never as a substring: src/billing reaches src/billing/charge.ts and not lib/src/billing.ts."
+        />
+        <OrderChoice
+          legend="Order"
+          applied={page.order}
+          severityOrder={page.severity_order}
+          onSelect={filters.setOrder}
+        />
+      </ControlBar>
+      <ActiveFilters filters={filters.activeFilters} onClear={filters.clearAll} />
+      {/* What these narrow, said where they are set. This screen carries two tables and these
+          three reach one of them: `whats_changed` takes none of these parameters, because what a
+          vendor published is a fact about the vendor and has no severity in your codebase and no
+          path in it either. A bar above two panels that did not say which one it moves would be
+          claiming the wider scope by position. */}
+      <p className="max-w-prose text-meta text-muted-foreground">
+        All three narrow the errors and incidents table alone. The vendor changes below it are not
+        narrowed by any of them.
+      </p>
+    </div>
+  )
+}
+
 export function VendorFindingsCard({
   vendorId,
   repoId = null,
@@ -168,30 +299,9 @@ export function VendorFindingsCard({
   repoId?: string | null
 }) {
   const [offset, setOffset] = useOffsetParam(OFFSET_KEY)
-  const [severity, setSeverity] = useFilterParam(SEVERITY_KEY, RESETS)
-  const [pathPrefix, setPathPrefix] = useFilterParam(PATH_KEY, RESETS)
-  // Sent as whatever the URL holds, including a value the API does not have. The API resolves it
-  // and echoes the ordering it applied, and the control renders *that* — so a hand-edited URL
-  // cannot leave the screen naming an arrangement the rows are not in.
-  const [order, setOrder] = useFilterParam(ORDER_KEY, RESETS)
-  const query = useVendorFindings(vendorId, {
-    limit: DEFAULT_LIMIT,
-    offset,
-    repoId: repoId ?? undefined,
-    severity: severity ?? undefined,
-    path: pathPrefix ?? undefined,
-    order: (order ?? undefined) as FindingOrder | undefined,
-  })
-
-  // `repo_id` is deliberately not among the keys this clears. It is the scope the level above
-  // selected, not a filter this table offers, and a control labelled "clear all filters" that
-  // silently widened the page to the fleet would undo a choice made on another screen.
-  const clearAll = useClearFilters([SEVERITY_KEY, PATH_KEY], RESETS)
-
-  const activeFilters = [
-    ...(severity === null ? [] : [{ label: "severity", value: severity }]),
-    ...(pathPrefix === null ? [] : [{ label: "path", value: pathPrefix }]),
-  ]
+  const filters = useVendorFindingFilters()
+  const query = useFindingsPage(vendorId, repoId, filters, offset)
+  const activeFilters = filters.activeFilters
 
   if (query.isPending) return <LoadingState what={`open findings for ${vendorId}`} />
   if (query.isError) {
@@ -227,33 +337,6 @@ export function VendorFindingsCard({
         </p>
       }
     >
-      <div className="flex flex-col gap-section">
-        <ControlBar>
-          <FacetChips
-            legend="Severity"
-            options={severityOptions(page)}
-            selected={severity}
-            onSelect={setSeverity}
-            allLabel="Every severity"
-            countScope={`Counted across all ${page.severity_total.toLocaleString()} open findings for ${vendorId} in ${repoId === null ? "any repository the index has seen" : repoId}, not across the page below — these are the choices available, so they stay the same whichever one is selected.`}
-          />
-          <PrefixFilter
-            legend="Call site path"
-            value={pathPrefix}
-            onSubmit={setPathPrefix}
-            placeholder="src/billing/"
-            note="Matched as a prefix of the call site's path, never as a substring: src/billing reaches src/billing/charge.ts and not lib/src/billing.ts."
-          />
-          <OrderChoice
-            legend="Order"
-            applied={page.order}
-            severityOrder={page.severity_order}
-            onSelect={setOrder}
-          />
-        </ControlBar>
-        <ActiveFilters filters={activeFilters} onClear={clearAll} />
-      </div>
-
       {page.items.length === 0 ? (
         <FindingsEmptyState
           vendorId={vendorId}

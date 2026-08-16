@@ -1739,6 +1739,18 @@ def test_the_consoles_fetched_paths_match_the_apps_declared_routes():
         f"{sorted(stale_exemptions)} -- remove the stale entry"
     )
 
+    # The other direction, and the one an exemption set actually rots in. The check above catches an
+    # entry whose route was deleted; nothing caught an entry whose *panel landed*, which is the case
+    # the comment on the set promises ("remove it the day its panel lands"). A promise no test holds
+    # is how an exemption becomes permanent -- the route is fetched, the guard is satisfied by the
+    # exemption rather than by the fetch, and the set stops meaning "not wired yet".
+    fetched_but_still_exempt = _NOT_YET_FETCHED_BY_CONSOLE & console_paths
+    assert not fetched_but_still_exempt, (
+        f"client.ts now fetches {sorted(fetched_but_still_exempt)}, so the exemption has done its "
+        "job -- delete it from _NOT_YET_FETCHED_BY_CONSOLE and let the drift guard hold the route "
+        "the ordinary way"
+    )
+
     missing_from_console = app_paths - console_paths - _NOT_YET_FETCHED_BY_CONSOLE
     missing_from_app = console_paths - app_paths
     assert not missing_from_console and not missing_from_app, (

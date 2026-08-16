@@ -35,22 +35,44 @@
  * own findings, and it travels with a qualification a button cannot carry: no route filters
  * findings by detector yet, so that link is the nearest thing rather than the next step. It is a
  * sentence, above the cards, in `detector-accountability.tsx`.
+ *
+ * ## The bar gains its one control in M7-W195
+ *
+ * `docs/superpowers/briefs/2026-08-07-substrate-fidelity-task-4.md` is the inventory this came from.
+ * The gap report measured zero controls in this bar, and the honest count of what this level can
+ * narrow is one: `?repo_id`, which is the only parameter `GET /api/detectors` takes.
+ *
+ * **Half of that control is already one bar above and the other half was nowhere.** The top bar's
+ * repository switcher writes `?repo_id` in place on this route — `/detectors` is in
+ * `REPO_SCOPED_PATHS` — so a second picker here would be the same control drawn twice. What the
+ * switcher has no entry for is leaving the scope: its list is repositories, and the fleet is not
+ * one of them, so a scoped screen's only way back to the fleet-wide answer was the browser's Back
+ * button. That is the control the bar carries, and only while a scope is set. Unscoped, the bar
+ * carries its sentence, because the scope is already at its widest.
  */
 
 import { useSearchParams } from "react-router"
 
+import { Button } from "@/components/ui/button"
 import { DetectorAccountability } from "@/features/detectors/detector-accountability"
 import { Breadcrumbs } from "@/layouts/breadcrumbs"
 import { ControlBar } from "@/layouts/control-bar"
 import { PageHeader } from "@/layouts/page-header"
 import { routeQuestion } from "@/lib/routes"
+import { useClearFilters } from "@/lib/use-filter-param"
 
 /** This screen's own entry in the registry, so `PageHeader` renders the registry's sentence. */
 const ROUTE_PATH = "/detectors"
 
+/** The scope key, the only parameter `GET /api/detectors` takes. */
+const REPO_KEY = "repo_id"
+
 export function DetectorsPage() {
   const [searchParams] = useSearchParams()
-  const repoId = searchParams.get("repo_id")
+  const repoId = searchParams.get(REPO_KEY)
+  // No offsets to reset: this route paginates nothing, so widening the scope changes which rows
+  // exist without moving any window over them.
+  const widen = useClearFilters([REPO_KEY])
 
   return (
     <section className="flex flex-col gap-8">
@@ -58,19 +80,10 @@ export function DetectorsPage() {
         <PageHeader
           title="Detectors"
           question={routeQuestion(ROUTE_PATH)}
-          trail={
-            <Breadcrumbs
-              trail={
-                repoId === null
-                  ? [{ label: "Fleet", to: "/" }, { label: "Detectors" }]
-                  : [
-                      { label: "Fleet", to: "/" },
-                      { label: repoId, to: `/repositories/${encodeURIComponent(repoId)}` },
-                      { label: "Detectors" },
-                    ]
-              }
-            />
-          }
+          // Fleet and the repository are the top bar's, derived from this same address. What is
+          // left is the level this screen is, which the bar does not reach — its trail stops at
+          // the vendor. M7-W195.
+          trail={<Breadcrumbs trail={[{ label: "Detectors" }]} />}
         />
         <ControlBar>
           <div className="flex min-w-0 flex-col gap-field">
@@ -78,7 +91,12 @@ export function DetectorsPage() {
             {repoId === null ? (
               <span className="text-body">Every repository the index has seen.</span>
             ) : (
-              <span className="font-mono text-body break-words">{repoId}</span>
+              <div className="flex flex-wrap items-center gap-row">
+                <span className="font-mono text-body break-words">{repoId}</span>
+                <Button type="button" size="sm" variant="outline" onClick={widen}>
+                  Widen to every repository
+                </Button>
+              </div>
             )}
           </div>
         </ControlBar>

@@ -366,15 +366,10 @@ function BindingSurfaceDetail({
       <div className="grid items-start gap-8 lg:grid-cols-[minmax(0,1fr)_minmax(0,22rem)]">
         <div className="flex min-w-0 flex-col gap-section">
           <PageHeader
-            trail={
-              <Breadcrumbs
-                trail={[
-                  { label: "Fleet", to: "/" },
-                  { label: vendorId, to: `/vendors/${encodeURIComponent(vendorId)}` },
-                  { label: operationId },
-                ]}
-              />
-            }
+            // Fleet and the vendor are the top bar's, derived from this same address. The
+            // operation stays: it is deeper than the vendor, which is where that trail stops.
+            // M7-W195.
+            trail={<Breadcrumbs trail={[{ label: operationId }]} />}
             title={
               <span className="font-mono">
                 {vendorId} / {operationId}

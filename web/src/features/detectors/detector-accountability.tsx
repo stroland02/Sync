@@ -53,9 +53,14 @@ import { MetricPanel } from "@/components/metric-panel"
 import { EmptyState, ErrorState, LoadingState } from "@/components/states"
 import { Formatted } from "@/components/status"
 import {
+  CardinalityStatement,
+  describeCardinality,
+} from "@/features/fleet/cardinality"
+import {
   rungComposition,
   type RungComposition as Composition,
 } from "@/features/detectors/rung-series"
+import { FooterBar } from "@/layouts/footer-bar"
 import { describeRung, orAbsent } from "@/lib/format"
 import { Card, CardContent, CardHeader } from "@/vendor/supabase/ui/card"
 
@@ -340,6 +345,25 @@ function DetectorCatalogue({ rows, repoId }: { rows: DetectorRow[]; repoId: stri
           <DetectorCard key={row.detector} row={row} />
         ))}
       </div>
+      {/* The record count, under the rows it counts rather than in a heading, and with the
+          ordering said out loud. Both facts were argued in this file's docstring and rendered
+          nowhere: that order is alphabetical and that nothing re-sorts by total, because sorting
+          by count is what turns a roll-up into a leaderboard. `shown` is every row, since this
+          catalogue slices nothing — the default would claim a page the screen does not have.
+          No pager: `GET /api/detectors` returns the whole roll-up and takes no offset. */}
+      <FooterBar
+        left={
+          <CardinalityStatement
+            text={describeCardinality(
+              rows.length,
+              "detector",
+              "detectors",
+              "detector name, alphabetically — never by count, which would read as a ranking",
+              rows.length,
+            )}
+          />
+        }
+      />
     </section>
   )
 }
