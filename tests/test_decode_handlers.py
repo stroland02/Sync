@@ -1013,6 +1013,7 @@ _WHOLE_STAGE_CATCH_ALL = (
 # A read sits under these two, so they are the blind spot rather than an instance of it being
 # harmless. Both say so where they sit. The docstring above carries what is known about each.
 _GUARDS_A_READ = (
+    "sync/api/app.py::create_app.set_repo_context::ValueError",
     "sync/cli.py::benchmark::KeyError+LookupError+ValueError",
     "sync/index/python_lang.py::PythonAdapter._syntax_errors::ValueError",
 )
