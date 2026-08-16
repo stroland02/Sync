@@ -135,14 +135,25 @@ export function RunOutcome({
   }
 
   if (outcome === "reported") {
+    const isRehearsal = reportReason?.includes("rehearsal") ?? false
     return (
-      <Panel headline="This run reported rather than patched." frame={frame}>
+      <Panel
+        headline={
+          isRehearsal
+            ? "This run was a rehearsal and halted before the remote."
+            : "This run reported rather than patched."
+        }
+        frame={frame}
+      >
         <p>
-          Routing found no patch was warranted, so nothing was attempted. That is not an
-          abandonment: the finding stays open and unremediated, which is the honest state.
+          {isRehearsal
+            ? "Rehearsals verify the pipeline locally against fixtures without accessing remotes or customer credentials."
+            : "Routing found no patch was warranted, so nothing was attempted. That is not an abandonment: the finding stays open and unremediated, which is the honest state."}
         </p>
         <div>
-          <p className="furniture text-meta text-ink-muted">Reason it reported</p>
+          <p className="furniture text-meta text-ink-muted">
+            {isRehearsal ? "Halt reason" : "Reason it reported"}
+          </p>
           <p className="mt-field font-mono text-body whitespace-pre-wrap text-foreground">
             {reportReason === null || reportReason === "" ? (
               <Absent>the run reported without recording why</Absent>

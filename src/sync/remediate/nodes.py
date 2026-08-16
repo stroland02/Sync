@@ -6,10 +6,9 @@ them unit-testable and keeps `graph.py` to assembly only.
 
 from __future__ import annotations
 
-from typing import Protocol, runtime_checkable
+from typing import Any, Protocol, runtime_checkable
 
 from sync.core import CallSite, Evidence, Patch, RepoRef, VendorChange
-from sync.forge.github import PullRequest
 from sync.remediate import corpus
 from sync.remediate.state import MAX_CI_ATTEMPTS, MAX_STATIC_ATTEMPTS, RunState
 from sync.remediate.tiered import routing_facts
@@ -24,8 +23,8 @@ class Forge(Protocol):
     # webhook joins a delivery to a corpus row by, and it is the forge's to answer: deriving
     # it from the URL here would be a second implementation of knowledge this call already has.
     def open_pull_request(
-        self, repo: RepoRef, branch: str, evidence: Evidence
-    ) -> PullRequest: ...
+        self, repo: RepoRef, branch: str, title: str, body: str,
+    ) -> Any: ...
     def delete_branch(self, repo: RepoRef, branch: str) -> tuple[bool, str]: ...
 
 

@@ -28,21 +28,6 @@ from sync.detect.observed_drift import DeclaredField, ObservedDriftDetector
 from sync.detect.parameter_deprecation import LinkedDeprecation, ParameterDeprecationDetector
 from sync.detect.status_rate import StatusRateDetector
 from sync.detect.vendor_change import VendorChangeDetector
-from sync.forge.github import GitHubForge
-from sync.forge.webhook import (
-    SIGNATURE_HEADER,
-    WebhookFormatError,
-    WebhookSignatureError,
-    record_merge_outcome,
-)
-from sync.graph.store import GraphStore
-from sync.index.literals import index_operation_literals
-from sync.index.python_lang import PythonAdapter
-from sync.index.typescript import TypeScriptAdapter
-from sync.remediate.agent_patch import AgentRemediator
-from sync.remediate.corpus import corpus_salt
-from sync.remediate.graph import build_graph
-from sync.remediate.literal_swap import LiteralSwapRemediator
 from sync.remediate.parameters import ParameterOmitRemediator, ParameterRenameRemediator
 from sync.remediate.property_omit import PropertyOmitRemediator
 from sync.remediate.tiered import TerminalTier, TieredRemediator
@@ -1046,6 +1031,7 @@ def run(args: argparse.Namespace, today: date | None = None) -> int:
         with PostgresSaver.from_conn_string(args.dsn) as checkpointer:
             checkpointer.setup()
             catalogue = load_catalogue()
+            from sync.forge.github import GitHubForge
             graph = build_graph(
                 store=store, adapter=adapter, remediator=build_remediator(catalogue),
                 forge=GitHubForge(), checkpointer=checkpointer, catalogue=catalogue,
@@ -1568,6 +1554,12 @@ def merge_outcome(args: argparse.Namespace) -> int:
     store.apply_schema()
 
     try:
+        from sync.forge.webhook import (
+            WebhookFormatError,
+            WebhookSignatureError,
+            record_merge_outcome,
+        )
+
         written = record_merge_outcome(body, args.signature, secret, store, commits)
     except WebhookSignatureError:
         # The message says nothing about the secret or the digest. An operator pastes this
@@ -2028,6 +2020,12 @@ def intake(args: argparse.Namespace) -> int:
     return 0
 
 
+def rehearse_entry(args: argparse.Namespace) -> int:
+    from sync.rehearse.driver import run_rehearsal
+
+    return run_rehearsal(args)
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(prog="sync")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -2093,6 +2091,8 @@ def main() -> int:
     sentry_errors_parser.add_argument("--cache", default=".cache/specs",
                                       help="where a previous `sync run` left symbols.json")
     sentry_errors_parser.set_defaults(func=sentry_errors)
+
+    from sync.forge.webhook import SIGNATURE_HEADER
 
     merge_parser = sub.add_parser(
         "merge-outcome",
@@ -2187,6 +2187,29 @@ def main() -> int:
              "name the database --dsn reads the corpus from",
     )
     benchmark_parser.set_defaults(func=benchmark)
+
+    rehearse_parser = sub.add_parser(
+        "rehearse",
+        help="execute the pipeline against a local zero-remote fixture repository",
+    )
+    rehearse_parser.add_argument(
+        "--depth",
+        choices=["prepare", "full"],
+        default="prepare",
+        help="how far routing proceeds: prepare halts before remediation, full reaches replay",
+    )
+    rehearse_parser.add_argument(
+        "--limit", type=int, default=1,
+        help="maximum findings to remediate (0 for all)",
+    )
+    rehearse_parser.add_argument("--vendor", default="stripe", help="vendor adapter to stage and scan")
+    rehearse_parser.add_argument("--from-version", default="v2320", help="vendor specification starting version")
+    rehearse_parser.add_argument("--to-version", default="v2330", help="vendor specification target version")
+    rehearse_parser.add_argument("--fixture", default="furever", help="corpus fixture repository to materialise")
+    rehearse_parser.add_argument("--cache", default=".cache/rehearse", help="working directory for fixture materialisation")
+    rehearse_parser.add_argument("--run-id", default=None, help="custom run identifier segment for checkpoint thread IDs")
+    rehearse_parser.add_argument("--dsn", default=DEFAULT_DSN, help="Postgres DSN for graph and checkpoints")
+    rehearse_parser.set_defaults(func=rehearse_entry)
 
     args = parser.parse_args()
     return args.func(args)

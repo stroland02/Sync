@@ -31,9 +31,13 @@ def _run_row(thread_id: str, checkpoint: dict) -> dict:
     seen = checkpoint.get("versions_seen") or {}
 
     outcome = values.get("outcome") if values.get("outcome") in _FINISHED else None
+    parts = thread_id.split(":")
+    finding_id = parts[0]
+    run_id = parts[1] if len(parts) > 1 else None
     return {
         "thread_id": thread_id,
-        "finding_id": thread_id.split(":", 1)[0],
+        "finding_id": finding_id,
+        "run_id": run_id,
         "current_node": None if outcome is not None else _pending_node(versions, seen),
         "outcome": outcome,
         "abandon_reason": values.get("abandon_reason"),
