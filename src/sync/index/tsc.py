@@ -12,13 +12,22 @@ import os
 import re
 import shutil
 import subprocess
+import tempfile
 from collections import Counter
 from dataclasses import dataclass
 from pathlib import Path
 
 from sync.core import VerifyResult
+from sync.index.npx_lock import LockTimeout, resolve_lock
 
 _TSC_TIMEOUT_SECONDS = 300
+
+# Fixed rather than per-run: the race this guards is host-wide -- any two
+# `sync` processes resolving TypeScript through npx at once, not just two
+# calls within one process -- so every caller on this host has to agree on
+# the same lock path. `tempfile.gettempdir()` is per-user on every platform
+# this runs on, matching the scope of the npx cache it protects.
+_NPX_RESOLVE_LOCK_PATH = Path(tempfile.gettempdir()) / "sync-npx-typescript-resolve.lock"
 
 # `path(line,col): error TSxxxx: message`, the format `tsc` writes when its
 # output is not a terminal. The position group is optional because a handful of
@@ -127,31 +136,39 @@ def run_tsc(repo_path: Path, timeout: float = _TSC_TIMEOUT_SECONDS) -> VerifyRes
     `timeout` defaults to `_TSC_TIMEOUT_SECONDS` and is a parameter only so a
     test can force a real `subprocess.TimeoutExpired` without waiting five
     minutes; callers verifying a patch should not override it.
+
+    B101: two callers reaching the npx fallback at once against a cold,
+    shared cache race on it -- one still writing the package while the other
+    reads it. `_ensure_typescript_resolved` closes that under
+    `npx_lock.resolve_lock` before the real compile command below ever runs,
+    so by the time this function's own `subprocess.run` executes, the cache
+    this call reads from is guaranteed warm.
     """
     repo_path = Path(repo_path)
     local_tsc = repo_path / "node_modules" / ".bin" / ("tsc.cmd" if _on_windows() else "tsc")
 
-    if local_tsc.exists():
-        # `--pretty false` is not cosmetic. `parse_diagnostics` matches tsc's plain form,
-        # `file(line,column): error TSxxxx:`, and left to itself tsc prints the pretty form
-        # wrapped in ANSI colour, which matches nothing. `typescript.py` reads a non-zero
-        # exit that parses to zero diagnostics as a compiler that could not run, so ordinary
-        # type errors surfaced as a broken toolchain and raised.
-        command = [str(local_tsc), "--noEmit", "--pretty", "false"]
-    else:
-        npx = shutil.which("npx")
-        if npx is None:
-            raise FileNotFoundError("npx not found on PATH")
-        # `--package=` (not a positional `typescript@latest`) is required here:
-        # this npm's npx resolves a positional package followed by a same-named
-        # bin by re-appending the bin name as an argument, which turns into a
-        # stray `tsc` positional file argument and makes tsc ignore tsconfig.json.
-        command = [
-            npx, "--yes", "--silent", "--package=typescript@latest",
-            "tsc", "--noEmit", "--pretty", "false",
-        ]
-
     try:
+        if local_tsc.exists():
+            # `--pretty false` is not cosmetic. `parse_diagnostics` matches tsc's plain form,
+            # `file(line,column): error TSxxxx:`, and left to itself tsc prints the pretty form
+            # wrapped in ANSI colour, which matches nothing. `typescript.py` reads a non-zero
+            # exit that parses to zero diagnostics as a compiler that could not run, so ordinary
+            # type errors surfaced as a broken toolchain and raised.
+            command = [str(local_tsc), "--noEmit", "--pretty", "false"]
+        else:
+            npx = shutil.which("npx")
+            if npx is None:
+                raise FileNotFoundError("npx not found on PATH")
+            _ensure_typescript_resolved(npx, timeout=timeout)
+            # `--package=` (not a positional `typescript@latest`) is required here:
+            # this npm's npx resolves a positional package followed by a same-named
+            # bin by re-appending the bin name as an argument, which turns into a
+            # stray `tsc` positional file argument and makes tsc ignore tsconfig.json.
+            command = [
+                npx, "--yes", "--silent", "--package=typescript@latest",
+                "tsc", "--noEmit", "--pretty", "false",
+            ]
+
         # `errors="replace"` because this output is a diagnostic, and because the compiler that
         # produces it is the customer's own -- whatever version their lockfile resolved, from
         # whatever registry their `.npmrc` names. Task 6 shipped this call without it and one
@@ -169,11 +186,40 @@ def run_tsc(repo_path: Path, timeout: float = _TSC_TIMEOUT_SECONDS) -> VerifyRes
             errors="replace",
             timeout=timeout,
         )
-    except subprocess.TimeoutExpired:
+    except (subprocess.TimeoutExpired, LockTimeout):
         return VerifyResult(ok=False, diagnostics=f"typecheck timed out after {timeout}s")
     if result.returncode == 0:
         return VerifyResult(ok=True)
     return VerifyResult(ok=False, diagnostics=(result.stdout + result.stderr).strip())
+
+
+def _ensure_typescript_resolved(npx: str, timeout: float) -> None:
+    """Force `npx --package=typescript@latest` to exist in the shared cache,
+    under a lock, before any caller execs the compiler out of it. This is
+    B101.
+
+    `resolve_lock` makes at most one process on this host resolve the
+    package at a time. The command run under it is a bare `tsc --version`,
+    not the real `--noEmit` invocation -- forcing the resolve is all this
+    step is for, and it costs about a second once the cache is warm.
+    Everything after this call runs unlocked: a warm cache only checks that
+    the package is there and execs it, which is safe from any number of
+    processes at once.
+
+    Its own outcome is not checked. If the resolve genuinely fails -- a real
+    network problem, not a race -- the real compile command right after this
+    call hits the same failure and reports it through the ordinary
+    non-zero-exit path below; checking twice would only duplicate that.
+    """
+    with resolve_lock(_NPX_RESOLVE_LOCK_PATH, timeout=timeout):
+        subprocess.run(
+            [npx, "--yes", "--silent", "--package=typescript@latest", "tsc", "--version"],
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=timeout,
+        )
 
 
 def _on_windows() -> bool:
