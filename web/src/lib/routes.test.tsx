@@ -18,10 +18,24 @@ import { MemoryRouter } from "react-router"
 import { afterEach, describe, expect, it } from "vitest"
 
 import App from "@/App"
-import { AREAS, GRAPH_LEVELS, ROUTES, isActiveMenuItem } from "@/lib/routes"
+import {
+  AREAS,
+  GRAPH_LEVELS,
+  ROUTES,
+  boundParams,
+  destinationHref,
+  isActiveMenuItem,
+} from "@/lib/routes"
 import { AppFrame } from "@/layouts/app-frame"
 
 afterEach(cleanup)
+
+/** The registry entry at a path, so a derivation test names a route rather than an index. */
+function routeAt(path: string) {
+  const entry = ROUTES.find((route) => route.path === path)
+  if (entry === undefined) throw new Error(`no route is declared at ${path}`)
+  return entry
+}
 
 /**
  * The rail's vocabulary, written out rather than imported.
@@ -160,6 +174,59 @@ describe("a menu item can own more than one route", () => {
         "/findings/42/workflow/pull-request"
       )
     ).toBe(false)
+  })
+})
+
+describe("a destination is linkable when the address supplies its subject", () => {
+  // The registry holds no vendor id and no finding id, which is why seven of nine destinations
+  // render as text. The *address* holds them, and on a detail route it holds exactly the ones its
+  // siblings need — `/findings/f-1/workflow` binds `findingId`, and all three Remediation
+  // destinations declare that one parameter and nothing else.
+
+  it("reads a subject out of the address that matches a declared route", () => {
+    expect(boundParams("/findings/f-1/workflow")).toEqual({ findingId: "f-1" })
+    expect(boundParams("/bindings/vendors/stripe/operations/PostCharges")).toEqual({
+      vendorId: "stripe",
+      operationId: "PostCharges",
+    })
+  })
+
+  it("binds nothing from an address no route declares", () => {
+    expect(boundParams("/detectors")).toEqual({})
+    expect(boundParams("/a-screen-nobody-declared")).toEqual({})
+  })
+
+  it("decodes a segment, so a subject with a slash in it survives the round trip", () => {
+    // `matchPath` decodes what it captures, so re-encoding on the way back out is what keeps an
+    // href pointing at the same subject rather than at a truncated one.
+    const bound = boundParams("/vendors/acme%2Fpayments")
+
+    expect(bound).toEqual({ vendorId: "acme/payments" })
+    expect(destinationHref(routeAt("/vendors/:vendorId"), bound)).toBe("/vendors/acme%2Fpayments")
+  })
+
+  it("gives a parameterless route its own path whatever the address is", () => {
+    expect(destinationHref(routeAt("/detectors"), {})).toBe("/detectors")
+  })
+
+  it("refuses a route one of whose parameters is unbound", () => {
+    // The binding surface standing on `/detectors`. Half a subject is not a destination: a
+    // generated href would read `/bindings/vendors/stripe/operations/`.
+    expect(
+      destinationHref(routeAt("/bindings/vendors/:vendorId/operations/:operationId"), {
+        vendorId: "stripe",
+      })
+    ).toBeNull()
+    expect(destinationHref(routeAt("/findings/:findingId"), {})).toBeNull()
+  })
+
+  it("generates the sibling's address from the subject the current one carries", () => {
+    const bound = boundParams("/findings/f-1/workflow")
+
+    expect(destinationHref(routeAt("/findings/:findingId"), bound)).toBe("/findings/f-1")
+    expect(destinationHref(routeAt("/findings/:findingId/workflow/pull-request"), bound)).toBe(
+      "/findings/f-1/workflow/pull-request"
+    )
   })
 })
 

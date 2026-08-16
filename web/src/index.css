@@ -51,6 +51,11 @@
   --color-accent: oklch(0.95 0.00275 159 / 4.9342%);
   --color-surface-subtle: oklch(0.95 0.00275 159 / 3.2895%);
   --color-surface-emphasis: oklch(0.95 0.00275 159 / 4.9342%);
+  /* Ratio 2 of the same unit, and the third state step rather than a fourth depth one. It
+     marks the scope an address is inside — the rail's current area — which is a coarser
+     claim than the selected row beneath it and has to survive a 48px column with no label
+     in it. One consumer: `layouts/app-frame.tsx`. */
+  --color-surface-scope: oklch(0.95 0.00275 159 / 6.579%);
 
   /* -- ink: three neutral levels, `--surface + --tone-span * level` -------------------
      Levels 1, 0.8 and 0.65 upstream. Two of them are working DOM text steps; the third

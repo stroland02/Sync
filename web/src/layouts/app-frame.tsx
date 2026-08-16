@@ -29,6 +29,25 @@
  * `Settings` is on the rail and is not an area. No route declares it and the specification declares
  * no level for it; it renders `aria-disabled` with the sentence naming what it is waiting for, which
  * is cheaper than a level invented to give it somewhere to point.
+ *
+ * **The rail shows its labels while a pointer or the keyboard is on it (M7-W199).** It was 48px and
+ * fixed, so six areas were six permanently unlabelled glyphs. The state machine underneath is the
+ * vendored primitive's — `SidebarProvider`'s open state, `--sidebar-width` and
+ * `--sidebar-width-icon`, `data-state` and `data-collapsible`, and `SidebarMenuButton`'s collapsed
+ * geometry — and what this file adds is the pointer that drives it, which is exactly the layer
+ * Studio adds it at. **No vendored file changes.** Three consequences are decisions rather than
+ * details, and `docs/superpowers/briefs/2026-08-07-substrate-fidelity-task-5.md` argues each:
+ *
+ * - **The rail keeps its own positioned box** instead of rendering `<Sidebar collapsible="icon">`.
+ *   That branch of the primitive positions its panel against a spacer that takes its height from a
+ *   stretched flex parent; this chassis row is `items-start` with both tiers `sticky` at a
+ *   viewport-derived height, where the same branch resolves to zero height. The contextual sidebar
+ *   already takes `collapsible="none"` and supplies its own box for the same reason.
+ * - **The expanded rail overlays what is beside it and never displaces it.** Growing in flow would
+ *   push the sidebar and the whole content column 160px sideways every time a pointer crossed the
+ *   rail.
+ * - **The width is not animated.** `tests/test_console_design_tokens.py` bans geometry transitions,
+ *   and `transition-[width]` would slip past its pattern while being the thing it exists to stop.
  */
 
 import { useState } from "react"
@@ -54,6 +73,8 @@ import {
   AREAS,
   ROUTES,
   areaForPathname,
+  boundParams,
+  destinationHref,
   isActiveMenuItem,
   type Area,
   type AreaEntry,
@@ -72,6 +93,7 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
   SidebarProvider,
+  useSidebar,
 } from "@/vendor/supabase/ui/sidebar"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/vendor/supabase/ui/tooltip"
 
@@ -178,9 +200,21 @@ function AreaRail({
   activeId: Area
   onSelect: (id: Area) => void
 }) {
+  // The rail's own hover/focus state, read off the vendored primitive rather than invented here —
+  // `SidebarProvider`'s `open`/`data-state` is exactly the mechanism `SidebarMenuButton`'s collapsed
+  // geometry already reads, and the contextual sidebar never sees it because it renders
+  // `collapsible="none"`, which ignores `state` entirely. What this component adds is the pointer
+  // and keyboard events that drive it.
+  const { state, setOpen } = useSidebar()
+
   return (
     <nav
       aria-label="Areas"
+      data-state={state}
+      onMouseEnter={() => setOpen(true)}
+      onMouseLeave={() => setOpen(false)}
+      onFocus={() => setOpen(true)}
+      onBlur={() => setOpen(false)}
       // `sticky` and one viewport tall, not a full-height static column. Every level here scrolls
       // well past one viewport, and a static rail is as tall as the document — a persistent
       // navigation that leaves the screen after one scroll is not persistent. The height is the
@@ -219,13 +253,26 @@ function AreaRail({
   )
 }
 
-function DestinationRow({ route, pathname }: { route: RouteEntry; pathname: string }) {
+function DestinationRow({
+  route,
+  pathname,
+  bound,
+}: {
+  route: RouteEntry
+  pathname: string
+  bound: Record<string, string>
+}) {
   const Icon = DESTINATION_ICON[route.path] ?? Layers
-  const needsSubject = route.params.length > 0
+  const href = destinationHref(route, bound)
   const current = isActiveMenuItem(route, pathname)
-  const described = needsSubject
-    ? `${route.label} — reached from ${route.reachedFrom}`
-    : route.label
+  // The qualifier tells a reader where to go find a subject they cannot click through to. Once the
+  // address already supplies that subject and the row is a real link, the sentence would be sending
+  // a reader to go find something they are already standing on — so it renders only on the row that
+  // is still text.
+  const described =
+    href === null && route.reachedFrom !== null
+      ? `${route.label} — reached from ${route.reachedFrom}`
+      : route.label
   const body = (
     <>
       <Icon aria-hidden="true" />
@@ -233,7 +280,7 @@ function DestinationRow({ route, pathname }: { route: RouteEntry; pathname: stri
     </>
   )
 
-  if (needsSubject) {
+  if (href === null) {
     // Not a link, and deliberately not a disabled control either: there is nothing to activate, so
     // the row is text that says what it is. `reachedFrom` is how a reader learns where to go.
     // It still carries the current state, because seven of the nine destinations are this shape and
@@ -262,7 +309,7 @@ function DestinationRow({ route, pathname }: { route: RouteEntry; pathname: stri
     <SidebarMenuItem>
       <SidebarMenuButton asChild isActive={current}>
         <Link
-          to={route.path}
+          to={href}
           data-destination={route.path}
           title={described}
           aria-label={described}
@@ -275,7 +322,15 @@ function DestinationRow({ route, pathname }: { route: RouteEntry; pathname: stri
   )
 }
 
-function LevelGroup({ level, pathname }: { level: GraphLevel; pathname: string }) {
+function LevelGroup({
+  level,
+  pathname,
+  bound,
+}: {
+  level: GraphLevel
+  pathname: string
+  bound: Record<string, string>
+}) {
   const routes = ROUTES.filter((route) => route.level === level)
   if (routes.length === 0) return null
 
@@ -287,7 +342,7 @@ function LevelGroup({ level, pathname }: { level: GraphLevel; pathname: string }
       <SidebarGroupContent>
         <SidebarMenu>
           {routes.map((route) => (
-            <DestinationRow key={route.path} route={route} pathname={pathname} />
+            <DestinationRow key={route.path} route={route} pathname={pathname} bound={bound} />
           ))}
         </SidebarMenu>
       </SidebarGroupContent>
@@ -296,6 +351,10 @@ function LevelGroup({ level, pathname }: { level: GraphLevel; pathname: string }
 }
 
 function ContextualSidebar({ area, pathname }: { area: AreaEntry; pathname: string }) {
+  // The subjects the current address binds, read once per render rather than once per row: every
+  // row inside one sidebar reads the same address.
+  const bound = boundParams(pathname)
+
   return (
     <Sidebar
       collapsible="none"
@@ -308,7 +367,7 @@ function ContextualSidebar({ area, pathname }: { area: AreaEntry; pathname: stri
         </SidebarHeader>
         <SidebarContent>
           {area.levels.map((level) => (
-            <LevelGroup key={level} level={level} pathname={pathname} />
+            <LevelGroup key={level} level={level} pathname={pathname} bound={bound} />
           ))}
         </SidebarContent>
       </nav>
@@ -351,7 +410,10 @@ export function AppFrame() {
           <CommandPaletteTrigger />
         </header>
 
-        <SidebarProvider className="min-h-0 flex-1 items-start">
+        {/* Collapsed by default: the rail is icon-only until a pointer or the keyboard is on it,
+            per M7-W199. The contextual sidebar shares this provider but ignores its `open` state —
+            it renders `collapsible="none"`, which ignores `state` entirely. */}
+        <SidebarProvider defaultOpen={false} className="min-h-0 flex-1 items-start">
           <AreaRail activeId={activeId} onSelect={(id) => setPicked({ id, at: pathname })} />
           <ContextualSidebar area={area} pathname={pathname} />
 
