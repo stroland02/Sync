@@ -25,6 +25,9 @@ import time, and collection imports them after this hook runs -- in the worker
 process, under xdist, which is why the per-worker name has to be decided here
 too. A session-scoped fixture would be too late, and none of those modules has
 to change.
+
+The three hooks at the bottom wire `red_run_capture`, which keeps a failing run's
+output where the next run cannot overwrite it. Its own module carries why.
 """
 
 from __future__ import annotations
@@ -42,6 +45,8 @@ import pytest
 import psycopg
 from psycopg import sql
 from psycopg.conninfo import conninfo_to_dict, make_conninfo
+
+import red_run_capture
 
 DEFAULT_DSN = "postgresql://sync:sync@localhost:5433/sync"
 ADMIN_DBNAME = "postgres"
@@ -342,8 +347,23 @@ def pytest_configure(config) -> None:
     os.environ["SYNC_DSN"] = dsn_for(dbname, template)
 
 
+@pytest.hookimpl(tryfirst=True)
+def pytest_sessionstart(session) -> None:
+    # First, so the header the terminal reporter writes from its own `pytest_sessionstart` is
+    # inside what gets kept.
+    red_run_capture.start(session.config)
+
+
+def pytest_sessionfinish(session, exitstatus) -> None:
+    red_run_capture.record(exitstatus)
+
+
 def pytest_unconfigure(config) -> None:
     global _created_dbname
+
+    # Before the database work and before its early return: this is the last hook of the run, and
+    # the counts line was written between `pytest_sessionfinish` and here.
+    red_run_capture.finish(config)
 
     if _created_dbname is None:
         return
