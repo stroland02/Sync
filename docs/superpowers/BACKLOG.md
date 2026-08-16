@@ -1109,14 +1109,16 @@ gap as affecting one worktree. Two of those are now wrong and the third is wrong
 
 ### Actually in flight
 
-- **B78, Tasks 3 and 4** — a Gemini session, live in `.claude/worktrees/gemini-worker` on branch
-  `gemini-b78-rehearse`. Tasks 1 and 3 landed there as `75e5f17`, Task 4 as `5e612b2`, neither
-  merged to `main` yet. Uncommitted and in progress as of 2026-08-16:
-  `src/sync/dashboard/fleet.py`, `tests/test_dashboard_fleet.py`,
-  `web/src/api/types.ts`, `web/src/features/fleet/runs-table.tsx`,
-  `web/src/features/fleet/runs-table.test.tsx` (untracked), `web/src/features/workflows/run-outcome.tsx`.
-  **Do not dispatch against B78 or edit any file in that list** until this session reports done or
-  the worktree goes quiet.
+- **B78 — done, and worth one line here as a warning.** Gemini's `gemini-b78-rehearse` landed
+  Tasks 1-6 (`75e5f17` through `eaa02a7`) via `428c953`, merging into `main`. That merge was not a
+  real three-way merge -- a re-merge from the correct merge-base produces zero conflicts, so
+  whatever produced `428c953` started from a stale `main` and silently reverted five things it
+  never touched on purpose: fifteen import lines in `cli.py`, a Forge protocol signature in
+  `nodes.py`, and a stale local import shadowing a monkeypatch in a test. None of it showed as a
+  conflict, because the other side never touched those regions. Caught by running the full suite
+  after landing (131 failed, 15 errors), fixed in `34a2b53`. **Anyone merging a branch that has
+  been open more than a few days: re-verify the merge-base is what you think it is, and gate the
+  result before trusting it, however clean the merge looked.**
 - **`M7-W182`, the fidelity pass** — six tasks against the measured gaps, held by the console
   session in this worktree. Its working tree has `DESIGN.md`, `app-frame.tsx`, `command-palette.tsx`,
   `error-surface.tsx`, `error-log.ts`, `motion.ts` and two test files open, plus an untracked
