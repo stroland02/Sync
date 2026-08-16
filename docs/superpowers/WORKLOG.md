@@ -138,6 +138,7 @@ write path, are unbuilt; Phase 6 needs auth and tenancy and belongs to M4's host
 | M4-W200 | B78 Tasks 1 & 3: Local zero-remote rehearsal fixture and 'sync rehearse' driver with verified digest and depth control | landed | `src/sync/rehearse/fixture.py`, `src/sync/rehearse/driver.py`, `src/sync/cli.py`, `tests/test_rehearse_fixture.py`, `tests/test_rehearse_driver.py` |
 | M4-W201 | B78 Task 4: Rehearsal boundary across 4 independent layers (importlinter contract, graph node inspection, signature guard, zero remotes) | landed | `pyproject.toml`, `tests/test_rehearse_boundary.py`, `.claude/rules/remediate-stage.md` |
 | M4-W202 | B78 Task 5: Rehearsals labelled in fleet runs table, outcome phrasing for local halts, tick verification updated to sync rehearse | landed | `web/src/features/fleet/runs-table.tsx`, `web/src/features/workflows/run-outcome.tsx`, `src/sync/dashboard/fleet.py`, `docs/superpowers/loops/console-improvement-tick.md` |
+| M4-W203 | B78 Task 6: Rehearsal smoke gate asserting checkpointer terminal outcomes wired into CI | landed | `scripts/rehearse_smoke.py`, `tests/test_rehearse_smoke.py`, `.github/workflows/ci.yml`, `BACKLOG.md` |
 
 **M7-W160's navigation was rebuilt once, on the owner's ruling of 2026-08-06.** The first pass built a
 56px icon rail of four product areas beside a 240px contextual panel, and collapsing removed the

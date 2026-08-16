@@ -173,6 +173,27 @@ jobs:
       - name: Binding floors over the frozen corpus (gated)
         run: uv run python scripts/gate_corpus.py --score corpus-score.json
 
+      # Rehearsal smoke gate: runs the zero-remote rehearsal against the fixture with --depth prepare
+      # and asserts that every selected finding reached a terminal checkpoint (B78 Task 6).
+      - name: Pipeline rehearsal smoke (gated)
+        run: |
+          uv run python -c "
+          import psycopg
+          from psycopg import sql
+          with psycopg.connect('postgresql://sync:sync@localhost:5432/postgres', autocommit=True) as c:
+              c.execute(sql.SQL('DROP DATABASE IF EXISTS {} WITH (FORCE)').format(sql.Identifier('sync_rehearse')))
+              c.execute(sql.SQL('CREATE DATABASE {}').format(sql.Identifier('sync_rehearse')))
+          "
+          uv run sync rehearse \
+            --depth prepare \
+            --vendor stripe \
+            --from-version v2320 \
+            --to-version v2330 \
+            --dsn postgresql://sync:sync@localhost:5432/sync_rehearse
+          uv run python scripts/rehearse_smoke.py \
+            --dsn postgresql://sync:sync@localhost:5432/sync_rehearse
+
+
   # The scheduler `addopts` never selects, run in the one configuration where it can fail.
   #
   # `-n0` is contracted here rather than a debugging convenience: `pyproject.toml` names it for a

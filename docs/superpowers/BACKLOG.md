@@ -642,7 +642,7 @@ is the same reason this repository does not accept a green it did not watch.
 run's output survive the next run — and the second is worth doing whether or not the first ever
 happens.
 
-### B78 — no way to run the pipeline end to end without opening a real pull request
+### B78 — no way to run the pipeline end to end without opening a real pull request (CLOSED)
 
 The console has no live data. `migration_outcome` holds three rows and none carries a `pr_number`,
 the checkpoint tables are empty, and every UI verification so far has been done by hand-inserting
@@ -665,26 +665,13 @@ This is not B7. B7 is the acceptance run against a real repository, it opens a r
 and it stays gated on the user. This is the opposite: everything except the two steps that talk to
 GitHub, against a fixture repo, writing real rows.
 
-**Closes when:** one command drives `locate` through `open_pr` against a fixture repository, writes
-real checkpoint and `migration_outcome` rows to the configured database, opens nothing, and is
-covered by a test that watches the rows arrive. Whether the fabricated pull-request number counts
-up across runs is a question for whoever consumes it.
+**Closed across all 6 tasks in the dogfooding plan (`docs/superpowers/plans/2026-08-05-sync-dogfooding-and-loop-testing.md`):**
+- **Task 2 (`cc35120`):** `build_graph` conditionally compiles `forge=None`, omitting push and PR nodes.
+- **Tasks 1 & 3 (`M4-W200`, commit `75e5f17`):** `sync.rehearse.fixture` creates zero-remote local repo with verified SHA-256 tree digest; `sync.rehearse.driver` and `sync rehearse` CLI entry point drive local rehearsal with `--depth prepare|full`.
+- **Task 4 (`M4-W201`, commit `5e612b2`):** Structural boundary across 4 independent layers (import-linter contract `sync.rehearse cannot import sync.forge`, driver signature, graph node check, zero-remote fixture check) with verified deliberate failure proofs.
+- **Task 5 (`M4-W202`, commit `ff1e32e`):** Fleet runs table labels rehearsal runs and local halts, view model carries `run_id`, improvement tick verification updated to `sync rehearse --depth prepare`.
+- **Task 6 (`M4-W203`):** `scripts/rehearse_smoke.py` smoke gate asserts all checkpointer threads reach terminal outcomes, wired into `.github/workflows/ci.yml`.
 
-**Task 2 of the dogfooding plan has landed** — the merge above `cc35120`. `build_graph` now accepts
-`forge=None` and omits `push_branch`, `await_ci` and `open_pr` from the compiled graph rather than
-guarding them at runtime, and a verified patch with nowhere to push routes `replay → report` and
-records `terminal_status="halted"`. Two facts that came out of it and are worth carrying:
-
-- **Before it, `forge=None` did not crash — it abandoned.** `None.push_branch(...)` raised inside
-  the node's own handler, which set `fatal` and routed to `abandon`. So anyone who ran forge-less
-  got a plausible-looking `abandoned` run with a Python traceback fragment in `abandon_reason`.
-- **`"halted"` is a fourth `terminal_status`**, alongside `retried`, `opened` and `abandoned`. The
-  column is plain `TEXT` with no `CHECK`, and `benchmark.axes` branches on `"abandoned"` alone, so a
-  halted row lands in `counts.attempts` and in `routing_accuracy` and is excluded from every merge
-  rate. Additive, no migration. It touches the run-state vocabulary spec, which the console session
-  owns.
-
-**Tasks 1 & 3 landed in `M4-W200`** — `prepare_fixture` materialises local zero-remote git repositories with verified tree digest, and `sync rehearse` (`src/sync/rehearse/driver.py`) drives the pipeline with depth control (`--depth prepare|full`) and structural safety (no Forge accepted or constructed).
 
 ### B79 — a rehearsal row and a production row collide on the corpus natural key
 
