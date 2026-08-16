@@ -251,6 +251,18 @@ def test_runs_recovers_finding_id_as_the_first_colon_segment(checkpointer_tables
     assert page["items"][0]["finding_id"] == FINDING_ID
 
 
+def test_runs_recovers_run_id_as_the_second_colon_segment(checkpointer_tables):
+    _insert_checkpoint(
+        f"{FINDING_ID}:rehearsal-2026-08-05:0",
+        "1f069000-0000-6000-8000-000000000001",
+        channel_values={"outcome": "reported"},
+    )
+
+    page = runs(DSN)
+
+    assert page["items"][0]["run_id"] == "rehearsal-2026-08-05"
+
+
 def test_runs_paginates_with_a_null_next_offset_on_the_last_page(checkpointer_tables):
     for i in range(3):
         _insert_checkpoint(

@@ -393,6 +393,7 @@ export type RunDisposition = "opened" | "abandoned" | "reported"
 export interface RunRow {
   thread_id: string
   finding_id: string
+  run_id?: string | null
   current_node: string | null
   outcome: RunDisposition | null
   abandon_reason: string | null

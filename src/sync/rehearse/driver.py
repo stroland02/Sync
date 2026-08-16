@@ -98,10 +98,101 @@ def build_remediator(catalogue: dict[str, dict] | None = None) -> TieredRemediat
     )
 
 
-def _declared_fields(spec_documents: Sequence[Any]) -> list[DeclaredField]:
-    declared: list[DeclaredField] = []
-    for doc in spec_documents:
-        declared.extend(getattr(doc, "declared_fields", ()))
+MAX_SCHEMA_DEPTH = 8
+
+
+def _resolve(schema: Any, schemas: dict) -> dict | None:
+    if not isinstance(schema, dict):
+        return None
+    reference = schema.get("$ref")
+    if not isinstance(reference, str):
+        return schema
+    name = reference.rsplit("/", 1)[-1]
+    if name not in schemas:
+        return None
+    return _resolve(schemas[name], schemas)
+
+
+def _json_types(schema: dict) -> frozenset[str]:
+    declared = schema.get("type")
+    names = declared if isinstance(declared, list) else [declared]
+    mapped = {
+        "number" if name == "integer" else name
+        for name in names
+        if isinstance(name, str) and name != "null"
+    }
+    return frozenset(mapped)
+
+
+def _nullable(schema: dict) -> bool:
+    declared = schema.get("type")
+    if isinstance(declared, list) and "null" in declared:
+        return True
+    return schema.get("nullable") is True
+
+
+def _walk_schema(schema: dict, schemas: dict, prefix: str, depth: int):
+    if depth >= MAX_SCHEMA_DEPTH:
+        return
+    required = set(schema.get("required") or [])
+    properties = schema.get("properties")
+    if not isinstance(properties, dict):
+        return
+
+    for name, child in properties.items():
+        resolved = _resolve(child, schemas)
+        if resolved is None:
+            continue
+        field_path = f"{prefix}/{name}"
+        yield DeclaredField(
+            field_path=field_path,
+            json_types=_json_types(resolved),
+            required=name in required,
+            nullable=_nullable(resolved),
+        )
+        yield from _walk_schema(resolved, schemas, field_path, depth + 1)
+
+
+def _declared_response_fields(document: dict) -> dict[str, list[DeclaredField]]:
+    schemas = (document.get("components") or {}).get("schemas") or {}
+    declared: dict[str, list[DeclaredField]] = {}
+
+    for methods in (document.get("paths") or {}).values():
+        if not isinstance(methods, dict):
+            continue
+        for operation in methods.values():
+            if not isinstance(operation, dict):
+                continue
+            operation_id = operation.get("operationId")
+            if not isinstance(operation_id, str):
+                continue
+
+            body = (
+                ((operation.get("responses") or {}).get("200") or {}).get("content") or {}
+            ).get("application/json") or {}
+            root = _resolve(body.get("schema"), schemas)
+            if root is None:
+                continue
+
+            fields = list(_walk_schema(root, schemas, "", 0))
+            if fields:
+                declared[operation_id] = fields
+
+    return declared
+
+
+def _declared_fields(documents: Sequence[dict]) -> dict[str, list[DeclaredField]]:
+    declared: dict[str, list[DeclaredField]] = {}
+    collided: set[str] = set()
+
+    for document in documents:
+        for operation_id, fields in _declared_response_fields(document).items():
+            if operation_id in declared or operation_id in collided:
+                collided.add(operation_id)
+                declared.pop(operation_id, None)
+                continue
+            declared[operation_id] = fields
+
     return declared
 
 
@@ -211,105 +302,107 @@ def run_rehearsal(args: argparse.Namespace, *, today: date | None = None) -> int
     prepared = prepare_vendor(args.vendor, context)
     adapter = select_language_adapter(repo, prepared.adapter)
 
-    with GraphStore(args.dsn) as store:
-        call_sites = list(adapter.index(repo))
-        store.replace_call_sites(repo.repo_id, call_sites)
+    store = GraphStore(args.dsn)
+    store.apply_schema()
 
-        unread = adapter.unread_paths(repo)
+    call_sites = list(adapter.index(repo))
+    store.replace_call_sites(repo.repo_id, call_sites)
 
-        for change in prepared.changes:
-            store.upsert_vendor_change(change)
+    unread = adapter.unread_paths(repo)
 
-        parameter_changes: list[tuple[Any, Any]] = []
-        for source in parameter_deprecation_sources():
-            spec_file = cache / f"{source.vendor_id}-deprecations.md"
-            if spec_file.exists():
-                deprecations = parse_parameter_deprecations(
-                    source.vendor_id, spec_file.read_text(encoding="utf-8")
-                )
-                parameter_changes.extend(parameters_to_vendor_changes(deprecations, today=today))
+    for change in prepared.adapter.fetch_changes(args.from_version, args.to_version):
+        store.upsert_vendor_change(change)
 
-        linked = [
-            LinkedDeprecation(
-                deprecation=deprecation,
-                vendor_change_id=store.upsert_vendor_change(change),
+    parameter_changes: list[tuple[Any, Any]] = []
+    for source in parameter_deprecation_sources():
+        spec_file = cache / f"{source.vendor_id}-deprecations.md"
+        if spec_file.exists():
+            deprecations = parse_parameter_deprecations(
+                source.vendor_id, spec_file.read_text(encoding="utf-8")
             )
-            for deprecation, change in parameter_changes
-        ]
+            parameter_changes.extend(parameters_to_vendor_changes(deprecations, today=today))
 
-        findings = _scan(
-            _detector_suite(
-                store,
-                spec_documents=prepared.documents,
-                call_sites=call_sites,
-                deprecations=linked,
-                vendor_id=args.vendor,
-                repo_id=repo.repo_id,
-                deprecation_vendors=[
-                    source.vendor_id for source in model_deprecation_sources()
-                ],
-            ),
+    linked = [
+        LinkedDeprecation(
+            deprecation=deprecation,
+            vendor_change_id=store.upsert_vendor_change(change),
+        )
+        for deprecation, change in parameter_changes
+    ]
+
+    findings = _scan(
+        _detector_suite(
             store,
+            spec_documents=prepared.documents,
+            call_sites=call_sites,
+            deprecations=linked,
+            vendor_id=args.vendor,
+            repo_id=repo.repo_id,
+            deprecation_vendors=[
+                source.vendor_id for source in model_deprecation_sources()
+            ],
+        ),
+        store,
+    )
+
+    for unread_path in unread:
+        print(f"coverage: unread {unread_path}")
+
+    print(f"{len(findings)} finding(s)")
+    if not findings:
+        return 0
+
+    selected = _select(findings, args.limit)
+    print(f"rehearsing {len(selected)} of {len(findings)}")
+
+    depth = getattr(args, "depth", "prepare")
+    if depth == "prepare":
+        graph_adapter: Any = _RehearsalPrepareAdapter(adapter)
+        catalogue = None
+        remediator = None
+    else:
+        graph_adapter = adapter
+        catalogue = load_catalogue()
+        remediator = build_remediator(catalogue)
+
+    run_id = args.run_id or f"rehearsal-{today.isoformat()}"
+
+    with PostgresSaver.from_conn_string(args.dsn) as checkpointer:
+        checkpointer.setup()
+        graph = build_graph(
+            store=store,
+            adapter=graph_adapter,
+            remediator=remediator,
+            forge=None,
+            checkpointer=checkpointer,
+            catalogue=catalogue,
         )
 
-        for unread_path in unread:
-            print(f"coverage: unread {unread_path}")
+        for finding in selected:
+            base = f"{finding.id}:{run_id}"
+            thread_id, resuming = _thread_to_invoke(graph, base)
+            config = {"configurable": {"thread_id": thread_id}}
 
-        print(f"{len(findings)} finding(s)")
-        if not findings:
-            return 0
+            if resuming:
+                branch = graph.get_state(config).values.get("branch")
+                if branch:
+                    _checkout_branch(repo, branch)
+                graph.update_state(config, {"repo": repo})
+            else:
+                _reset_clone(repo)
+                if adapter.discard_contaminated_dependencies(repo):
+                    print("discarded the previous finding's dependency tree")
 
-        selected = _select(findings, args.limit)
-        print(f"rehearsing {len(selected)} of {len(findings)}")
-
-        depth = getattr(args, "depth", "prepare")
-        if depth == "prepare":
-            graph_adapter: Any = _RehearsalPrepareAdapter(adapter)
-            catalogue = None
-            remediator = None
-        else:
-            graph_adapter = adapter
-            catalogue = load_catalogue()
-            remediator = build_remediator(catalogue)
-
-        run_id = args.run_id or f"rehearsal-{today.isoformat()}"
-
-        with PostgresSaver.from_conn_string(args.dsn) as checkpointer:
-            checkpointer.setup()
-            graph = build_graph(
-                store=store,
-                adapter=graph_adapter,
-                remediator=remediator,
-                forge=None,
-                checkpointer=checkpointer,
-                catalogue=catalogue,
+            state = graph.invoke(
+                None if resuming else {"finding": finding, "repo": repo},
+                config=config,
             )
 
-            for finding in selected:
-                base = f"{finding.id}:{run_id}"
-                thread_id, resuming = _thread_to_invoke(graph, base)
-                config = {"configurable": {"thread_id": thread_id}}
-
-                if resuming:
-                    branch = graph.get_state(config).values.get("branch")
-                    if branch:
-                        _checkout_branch(repo, branch)
-                    graph.update_state(config, {"repo": repo})
-                else:
-                    _reset_clone(repo)
-                    if adapter.discard_contaminated_dependencies(repo):
-                        print("discarded the previous finding's dependency tree")
-
-                state = graph.invoke(
-                    None if resuming else {"finding": finding, "repo": repo},
-                    config=config,
-                )
-
-                detail = (
-                    state.get("pr_url")
-                    or state.get("abandon_reason")
-                    or state.get("report_reason")
-                )
-                print(f"{state['outcome']}: {detail}")
+            detail = (
+                state.get("pr_url")
+                or state.get("abandon_reason")
+                or state.get("report_reason")
+            )
+            print(f"{state['outcome']}: {detail}")
 
     return 0

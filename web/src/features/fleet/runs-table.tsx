@@ -36,8 +36,18 @@ import { formatElapsed, orAbsent } from "@/lib/format"
 import { useOffsetParam } from "@/lib/use-offset-param"
 
 /** "in flight" for a run with no disposition yet — never "running", which never arrives here. */
-function describeOutcome(outcome: RunDisposition | null): string {
-  return outcome === null ? "in flight" : outcome
+function describeOutcome(outcome: RunDisposition | null, isRehearsal = false): string {
+  if (outcome === null) return "in flight"
+  if (outcome === "reported" && isRehearsal) return "halted before the remote"
+  return outcome
+}
+
+function isRehearsal(run: RunRow): boolean {
+  return (
+    run.run_id?.startsWith("rehearsal-") ??
+    run.thread_id.split(":")[1]?.startsWith("rehearsal-") ??
+    false
+  )
 }
 
 /**
@@ -48,7 +58,7 @@ function describeOutcome(outcome: RunDisposition | null): string {
 function tallyDispositionsOnThisPage(items: readonly RunRow[]): Record<string, number> {
   const counts: Record<string, number> = {}
   for (const run of items) {
-    const key = describeOutcome(run.outcome)
+    const key = describeOutcome(run.outcome, isRehearsal(run))
     counts[key] = (counts[key] ?? 0) + 1
   }
   return counts
@@ -80,7 +90,7 @@ export function RunsCard() {
   return (
     <div className="flex flex-col gap-section">
       {query.isPending && <LoadingState what="the fleet's runs" />}
-      {query.isError && <ErrorState error={query.error} what="the fleet's runs" />}
+      {query.error && <ErrorState error={query.error} what="the fleet's runs" />}
 
       {query.isSuccess && (
         <MetricPanel
@@ -119,6 +129,7 @@ export function RunsCard() {
                 <TableHeader>
                   <TableRow>
                     <TableHead>Finding</TableHead>
+                    <TableHead>Kind</TableHead>
                     <TableHead>Node the graph owes</TableHead>
                     <TableHead>Outcome</TableHead>
                     <TableHead>Last checkpoint</TableHead>
@@ -135,11 +146,14 @@ export function RunsCard() {
                           {run.finding_id}
                         </Link>
                       </TableCell>
+                      <TableCell className="font-mono text-meta">
+                        {isRehearsal(run) ? "rehearsal" : "live"}
+                      </TableCell>
                       <TableCell className="font-mono">
                         <Formatted value={orAbsent(run.current_node)} />
                       </TableCell>
                       <TableCell>
-                        {describeOutcome(run.outcome)}
+                        {describeOutcome(run.outcome, isRehearsal(run))}
                         {run.outcome === "abandoned" && (
                           <div className="mt-field font-mono text-meta text-muted-foreground">
                             <Formatted value={orAbsent(run.abandon_reason)} />

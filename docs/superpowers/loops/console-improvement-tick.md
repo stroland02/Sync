@@ -240,23 +240,18 @@ run the API and look:
 
 ```bash
 docker compose up -d
+uv run sync rehearse --depth prepare --vendor stripe --from-version v2320 --to-version v2330
 SYNC_GRAPH_DSN=postgresql://sync:sync@localhost:5433/sync SYNC_API_PORT=8787 uv run python -m sync.api
 cd web && npm run dev
 ```
 
-If the database this points at is empty, every screen renders an honest-but-useless empty state and
-nothing checked above is actually being verified. Four separate rounds hit exactly that, each one
-writing a throwaway script to insert some rows and deleting it afterward. That knowledge is now
-committed: `scripts/seed_console.py` writes at least two vendors, several call sites and vendor
-changes, open findings across more than one `binding_rung`, a finding retried across two
-checkpointer generations, a live run and a terminal run, and `migration_outcome` rows where
-`attempts` and `distinct_findings` differ — enough for every console screen to show something real.
-Every row it writes is tagged `seed-console`, so it removes exactly what it inserted and nothing
-else:
+`sync rehearse --depth prepare` runs the complete pipeline against local zero-remote fixtures before starting the console, so every tick observes real pipeline findings, checkpointer threads, and runs rather than an empty database or synthetic fixtures.
+
+For synthetic multi-vendor coverage tests, `scripts/seed_console.py` remains available:
 
 ```bash
-uv run python scripts/seed_console.py            # write the fixture (idempotent -- safe to re-run)
-uv run python scripts/seed_console.py --remove    # delete it again, leaving everything else alone
+uv run python scripts/seed_console.py            # write synthetic multi-vendor fixture
+uv run python scripts/seed_console.py --remove    # delete synthetic fixture
 ```
 
 Record what you saw, not that you looked.
