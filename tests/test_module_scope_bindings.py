@@ -12,26 +12,29 @@ its argument keys, and records the fields read off its result -- in both languag
 values. The response-side path is reachable at module scope; the statement was unexercised and
 not wrong.
 
-What the fallback costs is a scope wide enough to contain other scopes. `_response_fields`
-walks the whole subtree of whatever scope it is handed, so a module-scope call collects reads
-of its name from inside every function in the file, including functions that rebind the name to
-something the vendor never returned. `merged` shows that absorbing another indexed call's
-fields, which is the merge both docstrings say must not happen.
+What the fallback costs is a scope wide enough to contain other scopes, and until
+`docs/superpowers/reports/2026-08-03-the-rebinding-leak.md` that cost was paid.
+`_response_fields` walked the whole subtree of whatever scope it was handed, so a module-scope
+call collected reads of its name from inside every function in the file, including functions
+that rebound the name to something the vendor never returned. `shadowed`, `merged` and
+`nested_function` all pinned that leak here on purpose, and all three now assert the narrowed
+result instead: the walk no longer descends into a scope that gives the name a binding of its
+own. Why that is not a weakening is in §2 of the newer report -- the three assertions moved from
+naming a field the call never returned to naming only fields it did, and the fixtures kept
+their genuine reads so a fix that dropped everything would fail them rather than pass.
 
-`class_body` says the fallback answers for more inputs than its docstrings name: a class body is
-not a function either, so a call in one is scoped to the whole module rather than to the class.
+`class_body` and `script` did not move. A class body is not a function, so a call in one still
+reaches the fallback and is still scoped to the whole module rather than to the class -- which
+is wider than that fallback's own docstrings described, and is why the scope walk had to learn
+about class bodies as well as functions.
 
-`nested_function` is why that is not a defect in the fallback. It puts the same rebinding one
+`nested_function` is why the fault was never in the fallback. It puts the same rebinding one
 level inside a function, where `_enclosing_scope` returns the function and the fallback never
-runs, and the leak is identical. The walk is not shadow-aware at any scope; module scope is
-only its widest instance. Fixing it means teaching `_response_fields` which reads a rebinding
-shadows, which is a different change to a different method, and it trades a false field for a
-missed one in a direction nothing here has measured. It is recorded in
-`docs/superpowers/reports/2026-07-31-module-scope-bindings.md` as the next task rather than
-guessed at here.
+runs, and before the fix the leak was identical. The walk was not shadow-aware at any scope;
+module scope was only its widest instance, and `_enclosing_scope` is unchanged.
 
-So these tests pin behaviour rather than drive a fix, and every one of them is proven to fail
-against a mutation of the code it covers -- the table is in that report.
+So these tests still pin behaviour rather than drive a fix, and every one of them is proven to
+fail against a mutation of the code it covers -- the tables are in the two reports.
 """
 
 from __future__ import annotations
@@ -160,58 +163,62 @@ def test_the_two_languages_agree_on_every_module_scope_call(tmp_path) -> None:
     assert summarise(PYTHON) == summarise(TYPESCRIPT)
 
 
-# --- what the module as a scope costs ------------------------------------------------
+# --- what the module as a scope costs, and what it no longer does --------------------
 
 
 @pytest.mark.parametrize("language", BOTH)
-def test_the_scope_of_a_module_scope_call_is_the_whole_module(tmp_path, language) -> None:
-    """`total` is read off a function-local rebinding of `charge` that holds no vendor response
-    at all. It is credited to the module-scope call because the module is the scope, and the
-    scope walk descends into every function in it.
-
-    Pinned rather than fixed: the same leak reproduces where this fallback never runs, which
-    the control below establishes.
-    """
-    assert _fields(_sites(tmp_path, language), "shadowed") == ["status", "total"]
-
-
-@pytest.mark.parametrize("language", BOTH)
-def test_a_module_scope_call_absorbs_a_function_scope_call_and_not_the_reverse(
+def test_a_function_that_rebinds_the_name_donates_nothing_to_the_module(
     tmp_path, language
 ) -> None:
-    """The merge both docstrings forbid, and it runs one way only.
+    """`total` is read off a function-local rebinding of `charge` that holds no vendor response
+    at all. The module is still the scope and the walk still searches it, but it no longer
+    descends into `summarise`, which gives `charge` a binding of its own.
+
+    This assertion used to read `["status", "total"]`. It moved because `total` was a field the
+    module-scope call never returned, not because the walk got shy: `status` is the read that
+    belongs to it and the assertion still requires it.
+    """
+    assert _fields(_sites(tmp_path, language), "shadowed") == ["status"]
+
+
+@pytest.mark.parametrize("language", BOTH)
+def test_two_calls_sharing_a_name_in_different_scopes_no_longer_merge(
+    tmp_path, language
+) -> None:
+    """The merge both docstrings forbid, and it no longer happens in either direction.
 
     `merged` binds two indexed calls to the same generic name, one at module scope and one
-    inside a function. The module-scope `create` collects the function's `amount_refunded`,
-    because the function is inside the module; the function-scope `retrieve` collects nothing
-    of the module's, because the module is not inside the function. A detector reading the
-    first would report it against a change to a field it never touches.
+    inside a function. The module-scope `create` used to collect the function's
+    `amount_refunded`, because the function is inside the module; a detector reading that row
+    would have reported it against a change to a field it never touches. The function-scope
+    `retrieve` never collected anything of the module's, because the module is not inside the
+    function, and its expectation is unchanged -- which is what shows the fix narrowed the one
+    row that was wrong rather than both.
     """
     sites = {site.symbol: site for site in _in(_sites(tmp_path, language), "merged")}
 
-    assert sorted(sites["stripe.charges.create"].response_fields_read) == [
-        "amount_refunded",
-        "status",
-    ]
+    assert sorted(sites["stripe.charges.create"].response_fields_read) == ["status"]
     assert sorted(sites["stripe.charges.retrieve"].response_fields_read) == ["amount_refunded"]
 
 
 @pytest.mark.parametrize("language", BOTH)
-def test_the_same_leak_reproduces_where_the_module_fallback_never_runs(tmp_path, language) -> None:
-    """The control, and the whole argument for changing no production code here.
+def test_the_fix_reaches_the_scope_the_module_fallback_never_answers_for(
+    tmp_path, language
+) -> None:
+    """The control W120 wrote to place the fault, kept because it still places it.
 
     `nested_function` moves the rebinding one level down: the indexed call sits inside `outer`,
-    so `_enclosing_scope` returns `outer` and the fallback to the module is never reached. The
-    fields recorded are the same ones `shadowed` records at module scope.
+    so `_enclosing_scope` returns `outer` and the fallback to the module is never reached. Its
+    result tracked `shadowed` exactly while both leaked and tracks it exactly now that neither
+    does, which is what says the repair was made in `_response_fields` and not in the fallback.
 
-    That places the leak in `_response_fields` -- which walks a scope's whole subtree without
-    asking which nested scope rebinds the name -- and not in the fallback. Returning the module
-    for a module-level call is the right answer to the question `_enclosing_scope` is asked;
-    there is no smaller node, and the plain case above proves the answer is usable.
+    `_enclosing_scope` is unchanged. Returning the module for a module-level call is the right
+    answer to the question it is asked; there is no smaller node, and the plain case above
+    proves the answer is usable.
     """
     sites = _sites(tmp_path, language)
 
-    assert _fields(sites, "nested_function") == ["status", "total"]
+    assert _fields(sites, "nested_function") == ["status"]
     assert _fields(sites, "nested_function") == _fields(sites, "shadowed")
 
 

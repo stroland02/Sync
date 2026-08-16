@@ -55,6 +55,41 @@ _FUNCTION_TYPES = {
     "method_definition",
 }
 
+# Scopes that are not functions. `python_lang.py` has no counterpart to this set and says why:
+# Python binds a name for the whole function that assigns it, so an `if` or a `for` body is not
+# a scope there. `let` and `const` are block-scoped, so every one of these can hold a rebinding
+# that the code around it never sees -- and five of them can do it inside the same function as
+# the call, which is the case a fix ported across from Python unchanged would miss entirely.
+_BLOCK_TYPES = {
+    "statement_block",
+    "for_statement",
+    "for_in_statement",
+    "catch_clause",
+    "switch_body",
+}
+_SCOPE_TYPES = _FUNCTION_TYPES | _BLOCK_TYPES
+
+# Nodes whose name is bound in the scope that *holds* them rather than inside them. Both are
+# also scopes, so the walk that looks for a rebinding reads the name and then stops.
+_DECLARATION_FIELDS = {
+    "function_declaration": "name",
+    "generator_function_declaration": "name",
+    "class_declaration": "name",
+}
+
+# What a `for (const x of ...)` head carries and a `for (x of ...)` head does not. Without the
+# keyword the loop assigns a binding that already exists, which is a question about order
+# rather than about scope and is deliberately not answered here.
+_DECLARATION_KEYWORDS = {"const", "let", "var"}
+
+# Patterns a binding target may be spelled as, and every one of them may nest.
+_PATTERN_TYPES = {
+    "object_pattern",
+    "array_pattern",
+    "rest_pattern",
+    "formal_parameters",
+}
+
 
 def _parser() -> Parser:
     return Parser(_TS_LANGUAGE)
@@ -95,6 +130,140 @@ def _same(left: Node | None, right: Node | None) -> bool:
     if left is None or right is None:
         return False
     return left.start_byte == right.start_byte and left.end_byte == right.end_byte
+
+
+def _pattern_names(node: Node, source: bytes) -> Iterator[str]:
+    """Every name a binding target introduces, through whatever pattern spells it.
+
+    `{ charge }` and `{ paid: charge }` bind different sides of the pair, which is the mirror
+    of what `_destructured_fields` reads: there the key is the vendor's field, here the value
+    is the local name.
+    """
+    if node.type in ("identifier", "shorthand_property_identifier_pattern"):
+        yield _text(node, source)
+    elif node.type == "pair_pattern":
+        value = node.child_by_field_name("value")
+        if value is not None:
+            yield from _pattern_names(value, source)
+    elif node.type in ("required_parameter", "optional_parameter"):
+        # The type annotation is a sibling of the pattern rather than a field of it, so the
+        # field is taken -- `charge: Charge` would otherwise bind `Charge` as well.
+        pattern = node.child_by_field_name("pattern")
+        if pattern is not None:
+            yield from _pattern_names(pattern, source)
+    elif node.type in _PATTERN_TYPES:
+        for child in node.named_children:
+            yield from _pattern_names(child, source)
+
+
+def _holds_binding(node: Node, source: bytes, name: str) -> bool:
+    """Whether `node` declares `name` in the scope holding it, at any depth short of a new one.
+
+    A nested scope is read for the name it declares and then not entered: what it declares
+    inside itself is its own, which is the whole distinction this walk exists to make.
+
+    An `assignment_expression` is not a declaration. `charge = x` writes through whatever
+    binding is already in scope rather than introducing one, so it shadows nothing.
+    """
+    declared = _DECLARATION_FIELDS.get(node.type)
+    if declared is not None:
+        target = node.child_by_field_name(declared)
+        if target is not None and _text(target, source) == name:
+            return True
+    if node.type in _SCOPE_TYPES:
+        return False
+    if node.type == "variable_declarator":
+        target = node.child_by_field_name("name")
+        if target is not None and name in _pattern_names(target, source):
+            return True
+    return any(_holds_binding(child, source, name) for child in node.children)
+
+
+def _hoisted_var(node: Node, source: bytes, name: str) -> bool:
+    """Whether `node` holds a `var` binding of `name` belonging to the function around it.
+
+    `var` is the one declaration whose scope is the enclosing *function* rather than the block it
+    is written in, so it has to be looked for through the blocks `_holds_binding` deliberately
+    stops at. A nested function is still a wall: its own `var`s hoist to itself.
+
+    A read above such a declaration sees the hoisted binding holding `undefined`, never the outer
+    object, which is why finding one here shadows the whole function exactly as a parameter does.
+    """
+    if node.type in _FUNCTION_TYPES:
+        return False
+    if node.type == "variable_declaration":
+        for declarator in node.named_children:
+            target = declarator.child_by_field_name("name")
+            if target is not None and name in _pattern_names(target, source):
+                return True
+    if node.type == "for_in_statement" and any(child.type == "var" for child in node.children):
+        left = node.child_by_field_name("left")
+        if left is not None and name in _pattern_names(left, source):
+            return True
+    return any(_hoisted_var(child, source, name) for child in node.children)
+
+
+def _scope_body(scope: Node) -> Node:
+    """The node whose children are the scope's own statements.
+
+    A function's body block is not a scope apart from the function -- its parameters and its
+    `const`s share one -- so the block stands in for it. Everything else already is its own
+    statement list, and a loop or `catch` head is scanned where it sits.
+    """
+    if scope.type in _FUNCTION_TYPES:
+        body = scope.child_by_field_name("body")
+        if body is not None and body.type == "statement_block":
+            return body
+    return scope
+
+
+def _rebinds(scope: Node, source: bytes, name: str) -> bool:
+    """Whether `scope` gives `name` a binding of its own.
+
+    Its head first -- parameters, a `catch` parameter, a `for ... of` target -- then whatever
+    its body holds, and for a function also whatever `var` any block inside it declares.
+    """
+    for field in ("parameters", "parameter"):
+        header = scope.child_by_field_name(field)
+        if header is not None and name in _pattern_names(header, source):
+            return True
+    if scope.type == "for_in_statement" and any(
+        child.type in _DECLARATION_KEYWORDS for child in scope.children
+    ):
+        left = scope.child_by_field_name("left")
+        if left is not None and name in _pattern_names(left, source):
+            return True
+    body = _scope_body(scope)
+    if scope.type in _FUNCTION_TYPES and any(
+        _hoisted_var(child, source, name) for child in body.children
+    ):
+        return True
+    return any(_holds_binding(child, source, name) for child in body.children)
+
+
+def _unshadowed(scope: Node, source: bytes, name: str, call_node: Node) -> Iterator[Node]:
+    """`scope` and everything under it where `name` still means what `scope` bound it to.
+
+    A nested scope that rebinds the name is skipped whole rather than searched for the reads
+    above the rebinding. A `let` or `const` puts the rest of its block in a temporal dead zone,
+    so a read on the line above throws `ReferenceError` rather than reaching the outer object,
+    and recording it would be a false field on a read that cannot be of this call's result.
+
+    A scope containing the call is never skipped. Every function body is a block, so the block
+    the call's own `const` sits in is the first thing this walk would otherwise refuse to enter.
+    """
+    yield scope
+    for child in scope.children:
+        if (
+            child.type in _SCOPE_TYPES
+            and not (
+                child.start_byte <= call_node.start_byte
+                and call_node.end_byte <= child.end_byte
+            )
+            and _rebinds(child, source, name)
+        ):
+            continue
+        yield from _unshadowed(child, source, name, call_node)
 
 
 # Expressions a call's result passes through while still being what a name receives. Anything
@@ -485,7 +654,13 @@ class TypeScriptAdapter:
         """The nearest function, method, or arrow-function ancestor of `node`.
 
         Falls back to `root` for a module-level call, which has no such
-        ancestor.
+        ancestor -- and for any other call with no function above it, which a
+        class body would be if `_result_target` recognised a class field.
+
+        A block is not an answer here, though `_response_fields` treats one as
+        a scope. This returns the widest region a read of the name can still be
+        this call's, and the walk narrows it; returning the innermost block
+        instead would lose every read after it in the same function.
         """
         current = node.parent
         while current is not None:
@@ -533,10 +708,22 @@ class TypeScriptAdapter:
         Finds the variable — or destructuring pattern — the call's result is
         bound to, by declaration or by assignment. For a destructured result,
         the pattern itself names the fields read. For a plain variable,
-        collects every member chain rooted at it, searching only the call's
-        enclosing function: two unrelated calls that happen to share a generic
-        result name (`result`, `data`) in different functions must not merge
-        into one dependency set.
+        collects every member chain rooted at it, searching the call's
+        enclosing function minus every nested scope that declares the same name
+        -- two unrelated calls that happen to share a generic result name
+        (`result`, `data`) must not merge into one dependency set, and a block
+        is enough to separate them here where only a function is in Python.
+
+        A nested scope that only *reads* the name still contributes. That is
+        the closure it is, and the field it reads is genuinely this call's;
+        dropping it would trade a false field for a missed break, which is the
+        more expensive of the two and the silent one.
+
+        What no scope rule can reach is a rebinding in the scope the call is in
+        -- `charge = await create(...)` followed later by `charge = await
+        retrieve(...)` at the same level. Which read belongs to which call is a
+        question about order rather than about scope, and both calls still
+        collect both reads.
 
         The whole chain is recorded, not its first hop. `result.a.b` reads a
         path two deep, and a vendor change two deep can only be matched by a
@@ -560,7 +747,7 @@ class TypeScriptAdapter:
         scope = self._enclosing_scope(call_node, root)
 
         fields: set[str] = set()
-        for node in _walk(scope):
+        for node in _unshadowed(scope, source, result_name, call_node):
             if node.type != "member_expression":
                 continue
             chain = self._member_chain(node, source)

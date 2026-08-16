@@ -60,6 +60,57 @@ log = logging.getLogger(__name__)
 
 _PY_LANGUAGE = Language(tspython.language())
 _FUNCTION_TYPES = {"function_definition", "lambda"}
+
+# A comprehension is a scope for its `for` target and not for a walrus: PEP 572 binds an
+# assignment expression in the scope *containing* the comprehension, which makes it the one
+# Python binding that escapes the construct it is written in. `typescript.py` has exactly one of
+# those too -- `var`, which hoists out of its block to the enclosing function.
+_COMPREHENSION_TYPES = {
+    "list_comprehension",
+    "set_comprehension",
+    "dictionary_comprehension",
+    "generator_expression",
+}
+
+# Every node that opens a scope of its own, which is what a name can be rebound in without the
+# rebinding reaching the code around it. Python has no block scope, so an `if`, `for`, `while`,
+# `with` or `try` body is deliberately absent: a name bound in one of those belongs to the
+# enclosing function and shadows nothing. `typescript.py` carries a wider list for the opposite
+# reason.
+_SCOPE_TYPES = _FUNCTION_TYPES | {"class_definition"} | _COMPREHENSION_TYPES
+
+# Nodes that give a name a binding in the scope holding them, as the field carrying the target.
+# `augmented_assignment` belongs here and is not a read: `charge += 1` makes `charge` local to
+# the whole of the function containing it, so a read above the line raises `UnboundLocalError`.
+_REBINDING_FIELDS = {
+    "assignment": "left",
+    "augmented_assignment": "left",
+    "named_expression": "name",
+    "for_statement": "left",
+    "for_in_clause": "left",
+    "as_pattern": "alias",
+}
+
+# Nodes whose name is bound in the scope that *holds* them rather than inside them. Both are
+# also scopes, so the walk that looks for a rebinding reads the name and then stops.
+_DECLARATION_FIELDS = {
+    "function_definition": "name",
+    "class_definition": "name",
+}
+
+# Patterns a binding target may be spelled as, and every one of them may nest. An `attribute`
+# or `subscript` target is deliberately absent -- `self.charge = ...` and `rows["charge"] = ...`
+# name something other than a local, so neither shadows one.
+_PATTERN_TYPES = {
+    "pattern_list",
+    "tuple_pattern",
+    "list_pattern",
+    "list_splat_pattern",
+    "dictionary_splat_pattern",
+    "parameters",
+    "lambda_parameters",
+    "as_pattern_target",
+}
 # Where a project may declare that it depends on the SDK. Both are current practice, and reading
 # only one reports half the ecosystem as not using it.
 _MANIFESTS = ("pyproject.toml", "requirements.txt")
@@ -127,6 +178,120 @@ def _same(left: Node | None, right: Node | None) -> bool:
     if left is None or right is None:
         return False
     return left.start_byte == right.start_byte and left.end_byte == right.end_byte
+
+
+def _pattern_names(node: Node, source: bytes) -> Iterator[str]:
+    """Every name a binding target introduces, through whatever pattern spells it.
+
+    A parameter list, a tuple unpacking and a `*rest` all bind more than one name or bind one
+    at a depth, and a target that names an attribute or a subscript binds none.
+    """
+    if node.type == "identifier":
+        yield _text(node, source)
+    elif node.type in ("default_parameter", "typed_default_parameter"):
+        name = node.child_by_field_name("name")
+        if name is not None:
+            yield from _pattern_names(name, source)
+    elif node.type == "typed_parameter":
+        # The annotation is a sibling of the name rather than a field of it, so it has to be
+        # stepped over by type -- `charge: Charge` would otherwise bind `Charge` as well.
+        for child in node.named_children:
+            if child.type != "type":
+                yield from _pattern_names(child, source)
+    elif node.type in _PATTERN_TYPES:
+        for child in node.named_children:
+            yield from _pattern_names(child, source)
+
+
+def _escaping_walrus(node: Node, source: bytes, name: str) -> bool:
+    """Whether `node` holds a `:=` binding `name` in the scope around the comprehension.
+
+    `[(charge := row) for row in rows]` makes `charge` local to the function holding the
+    comprehension, exactly as a plain assignment there would, so a read above the line raises
+    `UnboundLocalError` and cannot be of an outer object. A `lambda` inside the comprehension is
+    still a wall -- a walrus written in one binds there -- and it is the only scope a
+    comprehension can contain, the rest being statements.
+    """
+    if node.type == "lambda":
+        return False
+    if node.type == "named_expression":
+        target = node.child_by_field_name("name")
+        if target is not None and _text(target, source) == name:
+            return True
+    return any(_escaping_walrus(child, source, name) for child in node.children)
+
+
+def _holds_binding(node: Node, source: bytes, name: str) -> bool:
+    """Whether `node` binds `name` in the scope holding it, at any depth short of a new scope.
+
+    A nested scope is read for the name it declares and then not entered: what it binds inside
+    itself is its own, which is the whole distinction this walk exists to make. A comprehension
+    is entered for one thing only, because one Python binding written inside it is not its own.
+    """
+    declared = _DECLARATION_FIELDS.get(node.type)
+    if declared is not None:
+        target = node.child_by_field_name(declared)
+        if target is not None and _text(target, source) == name:
+            return True
+    if node.type in _SCOPE_TYPES:
+        return node.type in _COMPREHENSION_TYPES and _escaping_walrus(node, source, name)
+    field = _REBINDING_FIELDS.get(node.type)
+    if field is not None:
+        target = node.child_by_field_name(field)
+        if target is not None and name in _pattern_names(target, source):
+            return True
+    return any(_holds_binding(child, source, name) for child in node.children)
+
+
+def _scope_body(scope: Node) -> Node:
+    """The node whose children are the scope's own statements.
+
+    A function and a class hold theirs in a `block`; a lambda and a comprehension hold theirs
+    directly, so the scope node stands in for itself.
+    """
+    body = scope.child_by_field_name("body")
+    return body if body is not None and body.type == "block" else scope
+
+
+def _rebinds(scope: Node, source: bytes, name: str) -> bool:
+    """Whether `scope` gives `name` a binding of its own.
+
+    Its parameters first, because a parameter is the one binding a scope carries outside its
+    body, then everything the body holds.
+    """
+    parameters = scope.child_by_field_name("parameters")
+    if parameters is not None and name in _pattern_names(parameters, source):
+        return True
+    return any(
+        _holds_binding(child, source, name) for child in _scope_body(scope).children
+    )
+
+
+def _unshadowed(scope: Node, source: bytes, name: str, call_node: Node) -> Iterator[Node]:
+    """`scope` and everything under it where `name` still means what `scope` bound it to.
+
+    A nested scope that rebinds the name is skipped whole rather than searched for the reads
+    above the rebinding. Python binds a name for the entire scope that assigns it anywhere, so
+    a read on the line above raises `UnboundLocalError` rather than reaching the outer object,
+    and recording it would be a false field on a read that cannot be of this call's result.
+
+    A scope containing the call is never skipped. The binding this walk follows is declared
+    inside one of them, and a class body is the case that shows it: an indexed call in a class
+    body is scoped to the module, so the class is nested inside the scope being walked and does
+    bind the name -- its own.
+    """
+    yield scope
+    for child in scope.children:
+        if (
+            child.type in _SCOPE_TYPES
+            and not (
+                child.start_byte <= call_node.start_byte
+                and call_node.end_byte <= child.end_byte
+            )
+            and _rebinds(child, source, name)
+        ):
+            continue
+        yield from _unshadowed(child, source, name, call_node)
 
 
 # Expressions a call's result passes through while still being what a name receives, and there
@@ -446,7 +611,7 @@ class PythonAdapter:
                     if module is None or _text(module, source).split(".")[0] != self._module:
                         continue
                     for child in node.named_children:
-                        if child is module:
+                        if _same(child, module):
                             continue
                         if child.type == "dotted_name":
                             imported.add(_text(child, source))
@@ -619,6 +784,11 @@ class PythonAdapter:
 
         Same reason as TypeScript: two unrelated calls sharing a generic result name in
         different functions must not merge into one dependency set.
+
+        The fallback answers for more than a module-level call. A class body holds no ancestor
+        in `_FUNCTION_TYPES` either, so a call in one is scoped to the whole module rather than
+        to the class -- which is why `_response_fields` has to know that a class body is a scope
+        a name can be rebound in, and not only that a function is.
         """
         current = node.parent
         while current is not None:
@@ -703,10 +873,20 @@ class PythonAdapter:
         """Field paths read off the call's result.
 
         Finds the name the call is assigned to, then collects every read rooted at it inside the
-        call's enclosing function. Prefixes land in the result on their own, because
-        `result["a"]["b"]` contains `result["a"]` as a node the walk reaches independently --
-        which is the same property `typescript.py` relies on and the same one the detector's
-        comparison assumes.
+        call's enclosing function -- minus every nested scope that gives the same name a binding
+        of its own, which reads something else through it. Prefixes land in the result on their
+        own, because `result["a"]["b"]` contains `result["a"]` as a node the walk reaches
+        independently -- which is the same property `typescript.py` relies on and the same one
+        the detector's comparison assumes.
+
+        A nested scope that only *reads* the name still contributes. That is the closure it is,
+        and the field it reads is genuinely this call's; dropping it would trade a false field
+        for a missed break, which is the more expensive of the two and the silent one.
+
+        What no scope rule can reach is a rebinding in the scope the call is in --
+        `charge = create(...)` followed later by `charge = retrieve(...)` at the same level.
+        Which read belongs to which call is a question about order rather than about scope, and
+        both calls still collect both reads.
 
         Tuple unpacking has no analogue to TypeScript's destructuring here: Python unpacks
         positionally, so it names no vendor field and there is nothing to record.
@@ -719,7 +899,7 @@ class PythonAdapter:
         scope = self._enclosing_scope(call_node, root)
 
         fields: set[str] = set()
-        for node in _walk(scope):
+        for node in _unshadowed(scope, source, result_name, call_node):
             if node.type not in ("attribute", "subscript"):
                 continue
             path = self._read_path(node, source, result_name)
