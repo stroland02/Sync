@@ -125,6 +125,16 @@ def _name_node(key):
     and `` { [`${p}_email`]: 1 } `` each name something only the running program knows, and
     reading one would be reasoning about the surrounding code rather than reading the call. A
     numeric computed key is `None` for the same reason it is not a name.
+
+    This is where the read/rewrite split from M3-W110 landed, and it is neither a parameter
+    on the old `_pair_part` nor two independently maintained functions: `_pair_part` read a
+    key or a value at a fixed grammar position and had no notion of a computed name, which is
+    what let one read as absent. One grammar reading lives here; the four call sites that
+    compare a name go through `_key_name`'s `.text()` of what this returns, and the one call
+    site that rewrites one -- `rename_parameter` -- replaces this node's span directly. A
+    shared text accessor could not serve both: unwrapping the brackets before handing back
+    text is correct for a comparison and wrong for a rewrite, which is exactly the defect this
+    task exists to close.
     """
     if key is None or key.kind() != "computed_property_name":
         return key
@@ -516,7 +526,7 @@ def omit_parameter(
 
         for container, pairs in _objects_naming(root, within_object_naming):
             for pair in pairs:
-                if _pair_part(pair, "key", 0) == parameter:
+                if _key_name(pair) == parameter:
                     span = _deletion_span(result, container, pair)
                     break
             if span is not None:
@@ -586,13 +596,17 @@ def omit_argument_at(
     - `source` unchanged, when the call and its object literal were found and the property
       simply is not among its keys -- the code already agrees with the vendor;
     - `None`, when nothing could be established: no call at that position, an argument
-      that is not an object literal, or an object carrying a spread.
+      that is not an object literal, an object carrying a spread, or one carrying a key
+      only the running program knows.
 
     That last distinction is the load-bearing one. "Already correct" and "cannot tell" are
     different answers, and a caller that collapses them either abandons a finding another
     tier could repair or claims a repair it never made. A spread is in the third group
     rather than the second because `...defaults` may itself supply the property, so
-    deleting the explicit pair would not establish that the request stops sending it.
+    deleting the explicit pair would not establish that the request stops sending it. A
+    key this cannot read -- `{ [k]: 'x' }` -- is the same unknown in a different shape:
+    `k` may itself hold `argument`, so a pass that only matches the pairs it can read would
+    report the property absent from an object that may well carry it.
 
     A shorthand property (`{ receipt_email }`) is not a `pair`, so it reads as absent
     rather than as a decline. That is a real shape this could remove and currently does
@@ -607,9 +621,11 @@ def omit_argument_at(
     children = list(container.children())
     if any(child.kind() == "spread_element" for child in children):
         return None
+    if _names_a_key_this_cannot_read(children):
+        return None
 
     for pair in (child for child in children if child.kind() == "pair"):
-        if _pair_part(pair, "key", 0) == argument:
+        if _key_name(pair) == argument:
             start, end = _deletion_span(source, container, pair)
             return source[:start] + source[end:]
     return source
@@ -645,7 +661,9 @@ def argument_is_literal_at(
     - `False` -- the pair is there and its value is not, or the pair is simply absent, which
       is equally not "passed as a literal";
     - `None`  -- nothing could be established: no call at that position, no object argument,
-      or a spread, which may supply the property itself and so settles nothing.
+      a spread, which may supply the property itself and so settles nothing, or a key only
+      the running program knows, which may itself be `argument` and so settles nothing
+      either.
 
     A shorthand property (`{ receipt_email }`) is not a `pair` and so answers `False`. That is
     right for the wrong reason and right anyway: the value is an identifier, and
@@ -660,9 +678,11 @@ def argument_is_literal_at(
     children = list(container.children())
     if any(child.kind() == "spread_element" for child in children):
         return None
+    if _names_a_key_this_cannot_read(children):
+        return None
 
     for pair in (child for child in children if child.kind() == "pair"):
-        if _pair_part(pair, "key", 0) != argument:
+        if _key_name(pair) != argument:
             continue
         value = pair.field("value")
         if value is None:
