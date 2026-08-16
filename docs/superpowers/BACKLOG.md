@@ -578,6 +578,46 @@ substitute for it.
 **Closes when:** a patch run cannot open a socket to a host Sync did not name, proven by a test
 that watches the attempt fail rather than by a configuration file asserting it.
 
+**A second bounded step landed 2026-08-16** (`bafd7e2` on `b97-patch-sandbox`, not yet merged):
+`src/sync/remediate/sandbox.py` — `ephemeral_container`, `disconnect_network`, `probe_connect`,
+`build_container_env` — and a Dockerfile under `docker/patch-sandbox/`. This is the container
+primitive the mitigation needs, proven in isolation: an environment allowlist built from nothing
+rather than filtered from a copy, a container that starts networked and can be cut off, and a
+probe that proves connectivity before and after the cut by actually attempting one from inside
+the container's own namespace. **Still not wired to `AgentRemediator._drive_agent`, which runs
+patch attempts on the host exactly as before** — this step builds the mechanism, not the
+integration.
+
+**Adversarially reviewed by three independent agents on 2026-08-16, one lens each: network
+bypass, credential leak, honesty of the claim.** Two returned `safe_to_land` for the mechanism as
+scoped. The third found a real, measured gap:
+
+**`disconnect_network` does not stop a connection that was already open.** `docker network
+disconnect` took 0.92–1.5s to return across repeated trials on this host — not a rare tail, the
+typical case — and a socket opened before the call kept delivering real application data for the
+whole window, confirmed with a live experiment (a container streaming timestamped messages to an
+attacker-controlled listener on the same bridge, cut mid-stream). The sender's `sendall()` never
+raised; traffic was silently blackholed only once the interface actually came down, seconds after
+the call returned. The realistic attacker here — malicious code executed during the dependency
+install, which this design deliberately leaves networked — needs no special timing to exploit
+this: open one socket before install finishes and it survives the cutover for free. The shipped
+test's docstring already flagged this as unmeasured; the experiment supplied the measurement.
+Two fixes proposed, neither a redesign: actively terminate existing connections during disconnect
+(`conntrack -F` / `ss -K` in the container's netns), or the more robust structural change — never
+let the install phase and the patch/verify phase share one networked container's lifetime; install
+in a throwaway networked container, copy only the resulting artifacts into a second container that
+is never attached to any network at all.
+
+The credential-leak review additionally flagged, as a note rather than a defect: `build_container_env`
+has no caller yet, so its allowlist is proven correct in isolation, not at the boundary
+(`docker create -e ...`) where it will eventually matter — re-review adversarially when that
+wiring lands. The honesty review flagged one non-blocking code-quality nit: `probe_connect`'s
+reachability check has a redundant substring test that currently does no work (correctness rests
+entirely on `returncode == 0`), worth tightening in a follow-up.
+
+**Still not closed.** The container mechanism exists and two of its three properties are proven;
+the third needs the fix above before this is safe to build on.
+
 ### B98 — Injection-pattern matching and further prompt hardening, deliberately deferred
 
 Layers two and three of the reference implementation's shape
