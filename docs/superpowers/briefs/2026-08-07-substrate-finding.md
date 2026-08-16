@@ -179,9 +179,11 @@ What `GET /api/findings/{finding_id}` actually returns is `symbol`, `operation`,
   `ProvenanceStrip`, where it already means "when the index last read this call site". It is not a
   first detection and must not be labelled as one.
 
-`api/types.ts` is the data seam and this task does not open it, so the fix is a payload change
-argued on its own. **B122** is the entry. What this port does instead is render the six facts the
-payload does hold and let the changes table carry the only severity there is.
+**Amended in `M7-W207` (B127):** The first two refusals expired. `sync.api.app.finding_detail` and
+`_risk_row` now forward `severity`, `file`, `line`, and `repo_id` inside `finding`, and the Finding
+level's rail renders the finding's severity, repository link, and call site (`file:line`). The third
+refusal (first/last seen) remains in force as an undeclared grain.
+
 
 **4. "Status" is answerable, and it costs this level one query it has never made.** `useWorkflow` is
 consumed here for the first time. Three things come out of it and each was otherwise unavailable:

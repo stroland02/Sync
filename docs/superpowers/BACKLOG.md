@@ -2447,7 +2447,7 @@ shortening a protected sentence. The likely route is progressive disclosure on t
 which is Task 7 of `plans/2026-08-05-sync-console-architecture.md` and unstarted - so this entry is a
 caller for that task rather than a new piece of work.
 
-### B127 - The Finding level cannot name its own severity, repository or call site, because the route drops them
+### B127 - The Finding level cannot name its own severity, repository or call site, because the route drops them - CLOSED
 
 **Renumbered from B122 on 2026-08-07.** Two sessions share this register and both took 122; the entry
 that merged first keeps the number, checked by reachability rather than recalled - `6f0d7a1` reached
@@ -2480,11 +2480,8 @@ Three separate things are missing and they are not one fix:
   `indexed_at` would be the exact conflation the level refused. This part is a schema question with a
   grain to declare, not a payload change.
 
-**Closes when:** the first two land - the Finding level renders the finding's own severity, its
-repository and its call site path and line, read from the payload rather than derived - and ruling 3 of
-that brief is amended to record which of its three refusals expired. The third stays open behind a
-declared grain for a first-detection timestamp, or is retired with an argument for why the level does
-not need one.
+**Closed in `M7-W207`**: `_risk_row` in `sync.mcp.tools` now includes `repo_id`, `sync.api.app.finding_detail` forwards `severity`, `file`, `line`, and `repo_id` inside `finding`, `FindingPage` renders `Severity`, `Repository` (linked to `/repositories/:repoId`), and `Call site` (`file:line`) on its fact rail, and ruling 3 of `briefs/2026-08-07-substrate-finding.md` is amended.
+
 
 ### B123 - The Solution Workflow has no clock, so no entry on it can say when or how long
 

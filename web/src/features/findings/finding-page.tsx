@@ -188,6 +188,37 @@ function findingFacts(
       ),
     },
     {
+      label: "Severity",
+      value: fact("w-20", (found) => (
+        <span className="font-mono">
+          <Formatted value={orAbsent(found.finding.severity)} />
+        </span>
+      )),
+    },
+    {
+      label: "Repository",
+      value: fact("w-32", (found) =>
+        found.finding.repo_id === null ? (
+          <Absent>unknown</Absent>
+        ) : (
+          <Link
+            to={`/repositories/${encodeURIComponent(found.finding.repo_id)}`}
+            className="font-mono underline underline-offset-2 break-all"
+          >
+            {found.finding.repo_id}
+          </Link>
+        ),
+      ),
+    },
+    {
+      label: "Call site",
+      value: fact("w-36", (found) => (
+        <code className="font-mono text-meta break-all">
+          {found.finding.file}:{found.finding.line}
+        </code>
+      )),
+    },
+    {
       label: "Vendor",
       value: fact("w-32", (found) => (
         <Link

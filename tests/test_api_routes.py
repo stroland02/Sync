@@ -594,8 +594,31 @@ def test_finding_route_carries_the_findings_own_rung_beside_the_pages():
 
     assert static["binding_source"] is None
     assert observed["binding_source"] is None
-    assert static["finding"] == {"finding_id": "f1", "binding_source": "static"}
-    assert observed["finding"] == {"finding_id": "f2", "binding_source": "observed"}
+    assert static["finding"]["finding_id"] == "f1"
+    assert static["finding"]["binding_source"] == "static"
+    assert observed["finding"]["finding_id"] == "f2"
+    assert observed["finding"]["binding_source"] == "observed"
+
+
+def test_finding_route_forwards_severity_call_site_and_repository():
+    site = _site("s1", path="src/billing.ts", line=42)
+    site.repo_id = "acme/corp-app"
+    change = _change("c1")
+    client = _client(
+        findings=[_finding("f1", "s1", "c1", severity="breaking", rung="static")],
+        sites=[site],
+        changes=[change],
+    )
+
+    body = client.get("/api/findings/f1").json()
+    assert body["finding"] == {
+        "finding_id": "f1",
+        "binding_source": "static",
+        "severity": "breaking",
+        "file": "src/billing.ts",
+        "line": 42,
+        "repo_id": "acme/corp-app",
+    }
 
 
 def test_finding_route_returns_404_json_for_unknown_finding():

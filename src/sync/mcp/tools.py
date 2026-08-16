@@ -354,6 +354,7 @@ class GraphSurface:
         return {
             "file": site.path,
             "line": site.line,
+            "repo_id": site.repo_id,
             "symbol": site.symbol,
             "operation": site.operation_id,
             "vendor": site.vendor_id,

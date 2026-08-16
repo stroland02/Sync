@@ -230,6 +230,10 @@ export interface KnownChange {
 export interface FindingIdentity {
   finding_id: string
   binding_source: BindingSource
+  severity: string | null
+  file: string
+  line: number
+  repo_id: string | null
 }
 
 /** `GET /api/findings/{finding_id}` — one binding in full. */
