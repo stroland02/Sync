@@ -94,6 +94,41 @@ function railCurrent(): (string | null)[] {
 }
 
 /**
+ * Whether the rail is showing its labels, read off the vendored primitive's own attribute.
+ *
+ * `data-state` is what `SidebarProvider` computes and what every `group-data-[collapsible=icon]`
+ * class in `vendor/supabase/ui/sidebar.tsx` reads. Asserting on it rather than on a width class
+ * keeps this a claim about the primitive's state machine, which is the thing being consumed.
+ */
+function railState(): string | null {
+  return rail().getAttribute("data-state")
+}
+
+/**
+ * The rail's flow skeleton: one entry per element inside it, in document order.
+ *
+ * This is the structural cause of NOTES entry 6's mechanical test — an icon must not move
+ * vertically across the collapse. jsdom has no layout, so the offsets themselves are measured in
+ * Chrome and recorded in `DESIGN.md`; what can be held here is the property that makes them come
+ * out equal. Every rail row is one fixed-height box in a column, so an icon can only travel
+ * vertically if an element above it enters or leaves the flow between the two states. A
+ * `SidebarGroupLabel` is exactly that shape — `h-8` expanded, `-mt-8 opacity-0` collapsed — and it
+ * is the defect this comparison catches.
+ *
+ * Read as tag plus accessible name rather than as markup, so restyling a row does not fail it.
+ */
+function railSkeleton(): string[] {
+  return [...rail().querySelectorAll("*")].map(
+    (el) => `${el.tagName}/${el.getAttribute("aria-label") ?? ""}`
+  )
+}
+
+/** Every second-tier row, in document order, as the element that actually renders it. */
+function destinationRows(): Element[] {
+  return [...destinations().querySelectorAll("[data-destination]")]
+}
+
+/**
  * A real Back, rather than a second click forward onto the same address.
  *
  * The two are not the same assertion. A forward click would prove the rail agrees with the address
@@ -290,6 +325,45 @@ describe("the rail carries the product's areas", () => {
     }
   })
 
+  it("shows its labels while a pointer is on it and hides them again after", () => {
+    // The measured gap: the rail was 40px and fixed, so six areas were six permanently unlabelled
+    // glyphs and `[data-collapsible]` counted zero. The mechanism is the vendored primitive's own
+    // open state; what this project supplies is the pointer that drives it.
+    renderAt("/")
+
+    expect(railState()).toBe("collapsed")
+
+    fireEvent.mouseEnter(rail())
+    expect(railState()).toBe("expanded")
+
+    fireEvent.mouseLeave(rail())
+    expect(railState()).toBe("collapsed")
+  })
+
+  it("shows them for a keyboard too, not only for a pointer", () => {
+    // A rail that only labels itself under a pointer is a rail nobody tabbing through it can read.
+    renderAt("/")
+
+    fireEvent.focusIn(within(rail()).getByLabelText("Codebase"))
+
+    expect(railState()).toBe("expanded")
+  })
+
+  it("moves nothing above an icon between the collapsed and expanded states", () => {
+    // NOTES entry 6, held where jsdom can see it. `railSkeleton`'s docstring carries why this is
+    // the structural cause rather than the pixels, and where the pixels are read instead.
+    renderAt("/")
+
+    const collapsed = railSkeleton()
+    fireEvent.mouseEnter(rail())
+    const expanded = railSkeleton()
+
+    expect(expanded).toEqual(collapsed)
+    // Guards the comparison itself: two empty lists are equal, and would report a rail that
+    // rendered nothing as one that moves nothing.
+    expect(collapsed.length).toBeGreaterThan(AREAS.length)
+  })
+
   it("drops a pick when the address changes, and does not revive it on Back", () => {
     // Picking an area with no landing route is a browse, not a navigation, so it has to be dropped
     // the moment the address moves rather than suspended while the address differs. Suspended, it
@@ -390,19 +464,68 @@ describe("the contextual sidebar carries the active area's destinations", () => 
     }
   })
 
-  it("carries where a subject comes from on the routes that need one", () => {
-    // A destination the registry cannot link is not a dead label: `reachedFrom` says which screen
-    // supplies the subject, at the row itself, which is how seven of eleven routes stopped being
-    // unreachable.
-    for (const route of ROUTES.filter((r) => r.params.length > 0)) {
-      renderAt(concrete(route.path))
+  /**
+   * Rewritten for M7-W199, and the rewrite is the point rather than an edit.
+   *
+   * The assertion this replaces read `href === null` for every route declaring a parameter,
+   * rendered at that route's own address — the gap report's Surface 2 defect stated as a
+   * guarantee. On the finding, workflow and pull-request routes it made three unreachable rows a
+   * tested property, exactly where the hierarchy is deepest. Extending it was not available; what
+   * survives is both halves of the original claim, split by the condition that actually governs.
+   */
+  it("links a row whose subject the address already supplies", () => {
+    // The three deepest destinations all need one parameter, and any of the three finding
+    // addresses binds it. This is the whole of Surface 2's fourth row.
+    for (const at of [
+      "/findings/f-1",
+      "/findings/f-1/workflow",
+      "/findings/f-1/workflow/pull-request",
+    ]) {
+      renderAt(at)
 
-      const row = destinations().querySelector(`[data-destination="${route.path}"]`)
-      expect(row?.getAttribute("aria-label")).toContain(route.reachedFrom ?? "")
-      expect(row?.getAttribute("href")).toBeNull()
+      const rows = destinationRows()
+      expect(rows.map((row) => row.tagName)).toEqual(["A", "A", "A"])
+      expect(rows.map((row) => row.getAttribute("href"))).toEqual([
+        "/findings/f-1",
+        "/findings/f-1/workflow",
+        "/findings/f-1/workflow/pull-request",
+      ])
 
       cleanup()
     }
+  })
+
+  it("says where to go instead, on a row the address supplies no subject for", () => {
+    // Standing on `/detectors`, the Observe sidebar holds two rows and only one of them can link:
+    // no vendor and no operation are in the address, and generating one anyway would produce
+    // `/bindings/vendors//operations/`. `reachedFrom` is what a reader gets instead.
+    renderAt("/detectors")
+
+    const rows = destinationRows()
+    const binding = rows.find(
+      (row) =>
+        row.getAttribute("data-destination") ===
+        "/bindings/vendors/:vendorId/operations/:operationId"
+    )
+
+    expect(binding?.tagName).toBe("SPAN")
+    expect(binding?.getAttribute("href")).toBeNull()
+    expect(binding?.getAttribute("aria-label")).toContain(
+      "an operation on a vendor's findings table"
+    )
+  })
+
+  it("drops the sentence about where to look once the row is a link", () => {
+    // `reached from the finding it remediates` beside a working link tells a reader to go and find
+    // something they are standing on. It renders on every row where it is still true, and nowhere
+    // else.
+    renderAt("/findings/f-1")
+
+    const workflow = destinationRows().find(
+      (row) => row.getAttribute("data-destination") === "/findings/:findingId/workflow"
+    )
+
+    expect(workflow?.getAttribute("aria-label")).toBe("Solution workflow")
   })
 })
 

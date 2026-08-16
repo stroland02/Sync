@@ -29,6 +29,25 @@
  * `Settings` is on the rail and is not an area. No route declares it and the specification declares
  * no level for it; it renders `aria-disabled` with the sentence naming what it is waiting for, which
  * is cheaper than a level invented to give it somewhere to point.
+ *
+ * **The rail shows its labels while a pointer or the keyboard is on it (M7-W199).** It was 48px and
+ * fixed, so six areas were six permanently unlabelled glyphs. The state machine underneath is the
+ * vendored primitive's — `SidebarProvider`'s open state, `--sidebar-width` and
+ * `--sidebar-width-icon`, `data-state` and `data-collapsible`, and `SidebarMenuButton`'s collapsed
+ * geometry — and what this file adds is the pointer that drives it, which is exactly the layer
+ * Studio adds it at. **No vendored file changes.** Three consequences are decisions rather than
+ * details, and `docs/superpowers/briefs/2026-08-07-substrate-fidelity-task-5.md` argues each:
+ *
+ * - **The rail keeps its own positioned box** instead of rendering `<Sidebar collapsible="icon">`.
+ *   That branch of the primitive positions its panel against a spacer that takes its height from a
+ *   stretched flex parent; this chassis row is `items-start` with both tiers `sticky` at a
+ *   viewport-derived height, where the same branch resolves to zero height. The contextual sidebar
+ *   already takes `collapsible="none"` and supplies its own box for the same reason.
+ * - **The expanded rail overlays what is beside it and never displaces it.** Growing in flow would
+ *   push the sidebar and the whole content column 160px sideways every time a pointer crossed the
+ *   rail.
+ * - **The width is not animated.** `tests/test_console_design_tokens.py` bans geometry transitions,
+ *   and `transition-[width]` would slip past its pattern while being the thing it exists to stop.
  */
 
 import { useState } from "react"

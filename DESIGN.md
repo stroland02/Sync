@@ -158,14 +158,31 @@ than the plane behind it.
 | depth: something that occludes — a popover, a dialog | `--color-popover` | `oklch(0.2275 0.0025 159)` | `#1b1d1c` |
 | a filled control, and the vendored `bg-overlay` | `--color-secondary` | `oklch(0.24 0.0025 159)` | `#1e201f` |
 
-**The two state steps are foreground overlays, not two more depth steps.** Their alpha is
+**The three state steps are foreground overlays, not three more depth steps.** Their alpha is
 `--surface-overlay-unit × ratio`, tuned upstream so each matches the lightness delta of the same
-elevation ratio measured on the page plane.
+elevation ratio measured on the page plane. The ratios are the depth ramp's own — 1, 1.5, 2.
 
 | Job | Token | Value |
 |---|---|---|
 | state: a row under the pointer | `--color-muted`, `--color-surface-subtle` | `oklch(0.95 0.00275 159 / 3.2895%)` |
 | state: a row that is selected | `--color-accent`, `--color-surface-emphasis` | `oklch(0.95 0.00275 159 / 4.9342%)` |
+| state: the scope an address is inside | `--color-surface-scope` | `oklch(0.95 0.00275 159 / 6.579%)` |
+
+**The third step was added on 2026-08-07 (M7-W199), and what it fixes is two tiers marked with one
+value.** The area rail and the contextual sidebar beside it both painted their current row at
+4.9342% — measured identical in the fidelity report's Surface 2 — so which of the two tiers a
+reader was looking at was carried by position alone. They do not mean the same thing: the rail
+marks the scope an address is *inside*, the sidebar marks the page the address *is*. A scope
+contains a page, so it is the outer and longer-lived mark, and it is the one that has to read from
+a 48px column with no label in it. Ratio 2 puts the ramp in the same order as the containment.
+
+It goes to the rail rather than to the sidebar for two further reasons. A current sidebar row
+already carries `aria-current="page"`, a weight step to 500 and full-strength ink beside its icon
+and its label; a collapsed rail item carries a fill and a glyph, so the extra contrast buys most
+where the other channels are absent. And every other selected row in the console — table rows, menu
+items, the palette — resolves `--color-accent` or `--color-surface-emphasis`; moving *that* would
+have restyled all of them to correct a defect in one column. `--color-surface-scope` has one
+consumer, `layouts/app-frame.tsx`, and says one thing.
 
 **This reverses the shape of the old surface ramp, and the reversal is the substrate's argument
 rather than ours.** The previous ramp gave state two opaque steps because an alpha spelled at a
@@ -175,12 +192,17 @@ spelled inline in a component.** What the substrate supplies is the sanctioned a
 document already carved out: *one* primitive owning the state, its fill an alpha of the foreground
 rather than an invented neutral, declared once and meaning one step toward the ink at any nesting
 depth. An opaque step cannot do that — the old `surface-subtle` was invisible on a card and correct
-only on the page. Both composites are measured below, against every depth they can land on.
+only on the page. All three composites are measured below, against every depth they can land on.
 
 | Composite | over `background` | over `card` | over `popover` | over `secondary` |
 |---|---|---|---|---|
 | `surface-subtle` | `#1a1b1a` | `#1f2120` | `#222423` | `#252726` |
 | `surface-emphasis` | `#1e1f1e` | `#232524` | `#252726` | `#282a29` |
+| `surface-scope` | `#212322` | `#262827` | `#292a2a` | `#2c2d2c` |
+
+`surface-scope` lands on `background` in practice — `--color-sidebar` resolves to the page plane —
+and only that cell is measured in Chrome. The other three are computed the same way the two rows
+above it were, and are published so a later consumer on a card is not guessing.
 
 A row *at rest* takes its panel's own depth step. There is no token for rest, because state should
 only spend contrast when the pointer or a selection asks for it.

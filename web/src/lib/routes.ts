@@ -320,6 +320,54 @@ export function isActiveMenuItem(
   )
 }
 
+/**
+ * The subjects the current address holds, keyed by the parameter name that captured them.
+ *
+ * The registry deliberately holds no vendor id and no finding id, which is why seven of the nine
+ * destinations used to render as text everywhere. The *address* holds them — and on a detail route
+ * it holds precisely the ones that route's siblings need, because an area is a run of consecutive
+ * levels over one subject. `/findings/f-1/workflow` binds `findingId`, and all three Remediation
+ * destinations declare that parameter and no other.
+ *
+ * The first matching route wins and the loop stops. `matchPath` anchors to the end of the path, so
+ * at most one entry can match: `/findings/:findingId` does not match `/findings/f-1/workflow`.
+ * An address no route declares binds nothing, which is the honest answer for `UnknownRoute`.
+ */
+export function boundParams(pathname: string): Record<string, string> {
+  for (const route of ROUTES) {
+    const match = matchPath(route.path, pathname)
+    if (match === null) continue
+    const bound: Record<string, string> = {}
+    for (const [name, value] of Object.entries(match.params)) {
+      if (typeof value === "string" && value.length > 0) bound[name] = value
+    }
+    return bound
+  }
+  return {}
+}
+
+/**
+ * Where a destination points from here, or `null` when this address cannot say.
+ *
+ * All-or-nothing by parameter, and that is the whole rule: a route with one of its two subjects
+ * bound is not a destination, because the href would read `/bindings/vendors/stripe/operations/`
+ * and resolve to a screen with half a subject. `null` is what makes the navigation render the row
+ * as text carrying `reachedFrom` instead.
+ *
+ * `matchPath` decodes what it captures, so the value is re-encoded on the way back out. Without
+ * that a subject containing a slash would generate an href pointing at a different, shorter path.
+ */
+export function destinationHref(
+  route: RouteEntry,
+  bound: Record<string, string>
+): string | null {
+  if (!route.params.every((name) => name in bound)) return null
+  return route.params.reduce(
+    (path, name) => path.replace(`:${name}`, encodeURIComponent(bound[name])),
+    route.path
+  )
+}
+
 /** Every destination inside an area, in the specification's order. */
 function routesInArea(area: Area): readonly RouteEntry[] {
   return ROUTES.filter((route) => route.area === area)
