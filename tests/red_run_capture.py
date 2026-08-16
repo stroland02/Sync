@@ -150,11 +150,20 @@ def write_capture(
     """One file per red run, named so that no other run can claim the name.
 
     The timestamp is UTC to microseconds and sorts as text, so the newest `keep` are the last
-    `keep` by name. The pid is a second run in the same microsecond, which is not expected and
-    costs nothing to rule out.
+    `keep` by name. The pid rules out a second run in the same microsecond; it does not rule out
+    a second *capture* in one run landing on the same microsecond, which happens on Windows more
+    often than the resolution suggests -- two back-to-back `datetime.now()` calls in one process
+    can read the same tick. `-1`, `-2`, ... is appended on an actual name collision so the second
+    write never overwrites the first; the two share a moment, so which of them sorts fractionally
+    earlier carries no meaning worth a more elaborate name for.
     """
     directory.mkdir(parents=True, exist_ok=True)
-    path = directory / f"{now:%Y%m%dT%H%M%S.%f}Z-{pid}.log"
+    base = f"{now:%Y%m%dT%H%M%S.%f}Z-{pid}"
+    path = directory / f"{base}.log"
+    collision = 0
+    while path.exists():
+        collision += 1
+        path = directory / f"{base}-{collision}.log"
     # `newline=""` so the file holds what the terminal received rather than a Windows translation
     # of it. `errors="replace"` because this is diagnostic output and the thing being recorded is a
     # failure: a capture that raised on the run it exists for would fail exactly when it is needed.

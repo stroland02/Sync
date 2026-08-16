@@ -250,6 +250,26 @@ def test_two_captures_taken_from_the_clock_do_not_land_on_one_name(tmp_path: Pat
     assert first.read_text(encoding="utf-8") == "first"
 
 
+def test_a_forced_clock_collision_still_writes_both_captures(tmp_path: Path):
+    """The deterministic case the test above can only reach by chance.
+
+    Two back-to-back `datetime.now()` calls landing on the same tick is real -- measured on
+    Windows -- but not guaranteed by any single run of the test above, so a fix here could regress
+    unnoticed between the runs that happen to reproduce it. Pinning `now` and `pid` identically
+    across both calls forces the collision every time, which is what actually pins the guard.
+    """
+    same_moment = datetime(2026, 8, 16, 12, 0, 0, 123456, tzinfo=timezone.utc)
+
+    first = red_run_capture.write_capture(tmp_path, "first", now=same_moment, pid=4242)
+    second = red_run_capture.write_capture(tmp_path, "second", now=same_moment, pid=4242)
+    third = red_run_capture.write_capture(tmp_path, "third", now=same_moment, pid=4242)
+
+    assert len({first, second, third}) == 3, "all three collided runs kept distinct names"
+    assert first.read_text(encoding="utf-8") == "first"
+    assert second.read_text(encoding="utf-8") == "second"
+    assert third.read_text(encoding="utf-8") == "third"
+
+
 def test_a_capture_python_cannot_encode_is_written_rather_than_raised(tmp_path: Path):
     """The worst outcome this could have: raising on the failure it exists to record.
 
