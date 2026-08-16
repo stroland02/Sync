@@ -492,3 +492,32 @@ the last run wrote. Until B79 lands, use a separate database for rehearsals.
 
 Whether the fabricated pull-request number should count up across runs, and whether the branch should
 be left in the fixture origin. Both are consumer decisions and the consumer is the console.
+
+---
+
+## 2026-08-08 — B78 completed and landed across 4 work items
+
+### B78 is closed: local zero-remote rehearsal fixture, driver, console labelling, and smoke gate
+
+Tasks 1–6 of the dogfooding plan (`docs/superpowers/plans/2026-08-05-sync-dogfooding-and-loop-testing.md`) are complete and verified across four landed work items:
+
+1. **`M4-W200` (`75e5f17`):**
+   - `src/sync/rehearse/fixture.py` materializes an isolated local zero-remote git repository with SHA-256 tree digest validation.
+   - `src/sync/rehearse/driver.py` and `sync rehearse` CLI subcommand (`--depth prepare|full`, `--vendor`, `--from-version`, `--to-version`, `--dsn`) drive end-to-end rehearsals without touching any remote.
+2. **`M4-W201` (`5e612b2`):**
+   - Structural boundary across 4 independent safety layers:
+     1. Import-linter contract in `pyproject.toml` (`sync.rehearse cannot import sync.forge`).
+     2. Graph inspection test (`test_forge_less_graph_has_no_push_nodes`).
+     3. Driver signature guard (`test_rehearsal_driver_signature_takes_no_forge`).
+     4. Zero-remote verification (`test_rehearsal_fixture_has_zero_remotes`).
+   - Every safety layer was proven to fail RED when broken before restoration to GREEN.
+3. **`M4-W202` (`ff1e32e`):**
+   - `src/sync/dashboard/fleet.py` includes `run_id` in `_run_row` dictionary.
+   - `web/src/features/fleet/runs-table.tsx` labels rehearsal runs (`run_id` starting with `rehearsal-`) as "rehearsal" vs "live", and renders outcome phrasing for local halts ("halted before the remote").
+   - `web/src/features/workflows/run-outcome.tsx` renders local rehearsal explanation for reported outcomes.
+   - `docs/superpowers/loops/console-improvement-tick.md` updated to use `sync rehearse --depth prepare`.
+4. **`M4-W203` (`eaa02a7`):**
+   - `scripts/rehearse_smoke.py` and `tests/test_rehearse_smoke.py` assert that every selected finding reached a terminal checkpoint (`abandoned`, `opened`, `reported`).
+   - Wired into `.github/workflows/ci.yml`.
+   - Broken and verified RED against unterminated thread, then verified GREEN.
+
