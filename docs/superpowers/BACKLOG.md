@@ -630,7 +630,13 @@ two Sync remediations running on one host hit the same race with no step in fron
 clone before the compile — with a test that starts two typechecks against a cold cache at once and
 watches the current form fail before the fix lands. A test that merely runs two sequentially proves
 nothing.
-### B77 — one unexplained red in a database-backed suite, and no capture of it
+### B77 — one unexplained red in a database-backed suite, and no capture of it (CLOSED)
+
+**Closed 2026-08-16 on the second clause.** `tests/red_run_capture.py`, `26b2a15`/`e0a454c`, keeps a
+red run's terminal output under `.cache/red-runs/` regardless of what the next run does — the
+harness change this entry's own close condition names as worth doing whether or not the original
+flake is ever explained. The original flake itself is not reproduced or explained; it remains
+unknown. The next one like it will have a capture to read.
 
 `tests/test_status_rate_detector.py` ended a full run `1 failed, 2897 passed, 4 skipped, 6 errors`,
 every failure and error in that one file, during B74. The immediate rerun was clean and the file
