@@ -22,6 +22,7 @@ from sync.benchmark.checkout import read_checkout
 from sync.benchmark.report import render_report
 from sync.benchmark.score import index_sources, materialise, score_change
 from sync.core import CallSite, Finding, LanguageAdapter, RepoRef, VendorChange
+from sync.core.models import CONTEXT_BODY_MAX, RepoContext
 from sync.core.protocols import RequestCorrelator
 from sync.detect.efficiency import EfficiencyDetector
 from sync.detect.observed_drift import DeclaredField, ObservedDriftDetector
@@ -2034,6 +2035,50 @@ def rehearse_entry(args: argparse.Namespace) -> int:
     return run_rehearsal(args)
 
 
+def context_show(args: argparse.Namespace) -> int:
+    """Print one repository's context body, or nothing when it has none.
+
+    Nothing rather than a message, and zero rather than an error. A repository with no context
+    is a normal repository, and a caller piping this into a file wants an empty file rather
+    than the word "none" in it.
+    """
+    store = GraphStore(args.dsn)
+    found = store.repo_context(args.repo_id)
+    if found is not None:
+        print(found.body)
+    return 0
+
+
+def context_set(args: argparse.Namespace) -> int:
+    """Write one repository's context from a file or from stdin.
+
+    `source` is `operator` and not a choice. The CLI is a human at a keyboard, and a flag that
+    let a caller write `seeded-file` would let Sync's own precedence rule be spoofed by the
+    party it protects the customer from.
+
+    Over the cap and empty both refuse, and neither writes. Truncating would hand an agent prose
+    cut mid-sentence, and writing an empty body would make absence and emptiness two states.
+    """
+    if args.body == "-":
+        raw = sys.stdin.read()
+    else:
+        raw = Path(args.body).read_text(encoding="utf-8")
+    body = raw.strip()
+    if not body:
+        print("context: refusing to write an empty body", file=sys.stderr)
+        return 1
+    if len(body) > CONTEXT_BODY_MAX:
+        print(
+            f"context: body is {len(body)} characters; the limit is {CONTEXT_BODY_MAX}",
+            file=sys.stderr,
+        )
+        return 1
+    GraphStore(args.dsn).upsert_repo_context(
+        RepoContext(repo_id=args.repo_id, body=body, source="operator")
+    )
+    return 0
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(prog="sync")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -2216,6 +2261,24 @@ def main() -> int:
     rehearse_parser.add_argument("--run-id", default=None, help="custom run identifier segment for checkpoint thread IDs")
     rehearse_parser.add_argument("--dsn", default=DEFAULT_DSN, help="Postgres DSN for graph and checkpoints")
     rehearse_parser.set_defaults(func=rehearse_entry)
+
+    context_parser = sub.add_parser(
+        "context", help="read or write what stays true of one repository"
+    )
+    context_sub = context_parser.add_subparsers(dest="context_command", required=True)
+
+    context_show_parser = context_sub.add_parser("show", help="print a repository's context")
+    context_show_parser.add_argument("--repo-id", dest="repo_id", required=True)
+    context_show_parser.add_argument("--dsn", default=DEFAULT_DSN)
+    context_show_parser.set_defaults(func=context_show)
+
+    context_set_parser = context_sub.add_parser("set", help="write a repository's context")
+    context_set_parser.add_argument("--repo-id", dest="repo_id", required=True)
+    context_set_parser.add_argument(
+        "--body", required=True, help="path to a file holding the context, or - for stdin"
+    )
+    context_set_parser.add_argument("--dsn", default=DEFAULT_DSN)
+    context_set_parser.set_defaults(func=context_set)
 
     args = parser.parse_args()
     return args.func(args)
