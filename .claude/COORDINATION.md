@@ -544,4 +544,11 @@ Tasks 1–6 of the dogfooding plan (`docs/superpowers/plans/2026-08-05-sync-dogf
 - `FindingPage` (`web/src/features/findings/finding-page.tsx`) renders `Severity`, `Repository` (linked to `/repositories/:repoId`), and `Call site` (`file:line`) on its fact rail.
 - Amended ruling 3 of `briefs/2026-08-07-substrate-finding.md` noting the expiration of severity and repository refusals.
 
+### B124 is closed (`M7-W208`, `a0d909c`)
+
+- `workflow_state` in `src/sync/dashboard/queries.py` queries distinct threads for the finding and returns `generations: GenerationSummary[]` with `{thread_id, generation, outcome, abandon_reason, report_reason}` for every attempt.
+- `WorkflowPage` (`web/src/features/workflows/workflow-page.tsx`) renders superseded attempts via `<SupersededGenerations />` above the active narrative sequence with run numbers, thread IDs, outcomes, and reasons.
+- Amended ruling 7 of `briefs/2026-08-07-substrate-workflow.md`.
+
+
 
