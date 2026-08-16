@@ -2028,6 +2028,12 @@ def intake(args: argparse.Namespace) -> int:
     return 0
 
 
+def rehearse_entry(args: argparse.Namespace) -> int:
+    from sync.rehearse.driver import run_rehearsal
+
+    return run_rehearsal(args)
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(prog="sync")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -2187,6 +2193,29 @@ def main() -> int:
              "name the database --dsn reads the corpus from",
     )
     benchmark_parser.set_defaults(func=benchmark)
+
+    rehearse_parser = sub.add_parser(
+        "rehearse",
+        help="execute the pipeline against a local zero-remote fixture repository",
+    )
+    rehearse_parser.add_argument(
+        "--depth",
+        choices=["prepare", "full"],
+        default="prepare",
+        help="how far routing proceeds: prepare halts before remediation, full reaches replay",
+    )
+    rehearse_parser.add_argument(
+        "--limit", type=int, default=1,
+        help="maximum findings to remediate (0 for all)",
+    )
+    rehearse_parser.add_argument("--vendor", default="stripe", help="vendor adapter to stage and scan")
+    rehearse_parser.add_argument("--from-version", default="v2320", help="vendor specification starting version")
+    rehearse_parser.add_argument("--to-version", default="v2330", help="vendor specification target version")
+    rehearse_parser.add_argument("--fixture", default="furever", help="corpus fixture repository to materialise")
+    rehearse_parser.add_argument("--cache", default=".cache/rehearse", help="working directory for fixture materialisation")
+    rehearse_parser.add_argument("--run-id", default=None, help="custom run identifier segment for checkpoint thread IDs")
+    rehearse_parser.add_argument("--dsn", default=DEFAULT_DSN, help="Postgres DSN for graph and checkpoints")
+    rehearse_parser.set_defaults(func=rehearse_entry)
 
     args = parser.parse_args()
     return args.func(args)

@@ -684,7 +684,7 @@ records `terminal_status="halted"`. Two facts that came out of it and are worth 
   rate. Additive, no migration. It touches the run-state vocabulary spec, which the console session
   owns.
 
-What remains for B78 is the entry point itself — Task 3 and the tasks below it.
+**Tasks 1 & 3 landed in `M4-W200`** — `prepare_fixture` materialises local zero-remote git repositories with verified tree digest, and `sync rehearse` (`src/sync/rehearse/driver.py`) drives the pipeline with depth control (`--depth prepare|full`) and structural safety (no Forge accepted or constructed).
 
 ### B79 — a rehearsal row and a production row collide on the corpus natural key
 
