@@ -26,11 +26,17 @@ import { UnknownRoute } from "@/layouts/unknown-route"
  * recovery, including between two findings, which react-router otherwise renders through the
  * same mounted element.
  */
-function RoutedScreen({ element: Screen }: { element: ComponentType }) {
+function RoutedScreen({
+  element: Screen,
+  question,
+}: {
+  element: ComponentType<{ question?: string }>
+  question?: string
+}) {
   const location = useLocation()
   return (
     <ErrorBoundary key={location.pathname}>
-      <Screen />
+      <Screen question={question} />
     </ErrorBoundary>
   )
 }
@@ -41,12 +47,16 @@ export default function App() {
       <Route element={<AppFrame />}>
         {ROUTES.map((route) =>
           route.path === "/" ? (
-            <Route key={route.path} index element={<RoutedScreen element={route.element} />} />
+            <Route
+              key={route.path}
+              index
+              element={<RoutedScreen element={route.element} question={route.question} />}
+            />
           ) : (
             <Route
               key={route.path}
               path={route.path.slice(1)}
-              element={<RoutedScreen element={route.element} />}
+              element={<RoutedScreen element={route.element} question={route.question} />}
             />
           )
         )}

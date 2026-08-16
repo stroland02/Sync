@@ -58,16 +58,18 @@ import { DetectorAccountability } from "@/features/detectors/detector-accountabi
 import { Breadcrumbs } from "@/layouts/breadcrumbs"
 import { ControlBar } from "@/layouts/control-bar"
 import { PageHeader } from "@/layouts/page-header"
-import { routeQuestion } from "@/lib/routes"
 import { useClearFilters } from "@/lib/use-filter-param"
 
-/** This screen's own entry in the registry, so `PageHeader` renders the registry's sentence. */
-const ROUTE_PATH = "/detectors"
+const DEFAULT_QUESTION = "Which detector is producing my false positives?"
 
 /** The scope key, the only parameter `GET /api/detectors` takes. */
 const REPO_KEY = "repo_id"
 
-export function DetectorsPage() {
+export interface DetectorsPageProps {
+  readonly question?: string
+}
+
+export function DetectorsPage({ question = DEFAULT_QUESTION }: DetectorsPageProps) {
   const [searchParams] = useSearchParams()
   const repoId = searchParams.get(REPO_KEY)
   // No offsets to reset: this route paginates nothing, so widening the scope changes which rows
@@ -79,7 +81,7 @@ export function DetectorsPage() {
       <div className="flex flex-col gap-section">
         <PageHeader
           title="Detectors"
-          question={routeQuestion(ROUTE_PATH)}
+          question={question}
           // Fleet and the repository are the top bar's, derived from this same address. What is
           // left is the level this screen is, which the bar does not reach — its trail stops at
           // the vendor. M7-W195.

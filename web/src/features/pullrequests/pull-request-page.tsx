@@ -68,16 +68,19 @@ import { Breadcrumbs } from "@/layouts/breadcrumbs"
 import { PageHeader } from "@/layouts/page-header"
 import { UnknownRoute } from "@/layouts/unknown-route"
 import { DetailTitleText, pullRequestTitle } from "@/lib/detail-title"
-import { routeQuestion } from "@/lib/routes"
 
-/** This screen's own entry in the registry, so `PageHeader` renders the registry's sentence. */
-const ROUTE_PATH = "/findings/:findingId/workflow/pull-request"
+const DEFAULT_QUESTION =
+  "Did Sync open a pull request for this finding, and what proof backs it?"
 
-export function PullRequestPage() {
+export interface PullRequestPageProps {
+  readonly question?: string
+}
+
+export function PullRequestPage({ question = DEFAULT_QUESTION }: PullRequestPageProps) {
   // The identifier comes out of the URL, so it is checked before a request is made for it.
   const { findingId } = useParams<{ findingId: string }>()
   if (findingId === undefined) return <UnknownRoute />
-  return <PullRequest findingId={findingId} />
+  return <PullRequest findingId={findingId} question={question} />
 }
 
 /**
@@ -183,7 +186,7 @@ function railFacts(
   ]
 }
 
-function PullRequest({ findingId }: { findingId: string }) {
+function PullRequest({ findingId, question }: { findingId: string; question: string }) {
   const query = useWorkflow(findingId)
   const data = query.data
   // One read of the evidence per render, shared by the rail and by the link out. `bundleFacts`
@@ -230,7 +233,7 @@ function PullRequest({ findingId }: { findingId: string }) {
         <PageHeader
           trail={<Breadcrumbs trail={trail} />}
           title={title}
-          question={routeQuestion(ROUTE_PATH)}
+          question={question}
         />
       </div>
 

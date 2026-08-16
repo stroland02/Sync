@@ -99,30 +99,18 @@ import { VendorDistributionCard } from "@/features/fleet/vendor-distribution"
 import { Breadcrumbs } from "@/layouts/breadcrumbs"
 import { ControlBar } from "@/layouts/control-bar"
 import { PageHeader } from "@/layouts/page-header"
-import { ROUTES } from "@/lib/routes"
 
-/**
- * The route's own question, read from the registry rather than written a second time here.
- *
- * **Resolved inside a component rather than at module scope, and that is not a style choice.**
- * `lib/routes.ts` imports this page to build its `element`, so a page that imports `ROUTES` closes
- * a cycle: at module-initialisation time `ROUTES` is still `undefined` and a top-level
- * `ROUTES.find(...)` throws `Cannot read properties of undefined`. `npm run build` does not catch
- * it — the cycle is legal ESM and typechecks — and it surfaced here as three vitest suites failing
- * to import. Dereferencing at render is safe because both modules have finished initialising by
- * then. B120 records the structural fix, which belongs to whoever owns `App.tsx`: pass the
- * question down from the route it came from, so no page reaches back into the registry at all.
- */
-function routeQuestion(path: string): string {
-  const entry = ROUTES.find((route) => route.path === path)
-  if (entry === undefined) throw new Error(`no route declares ${path}`)
-  return entry.question
+const DEFAULT_QUESTION =
+  "What has Sync been doing across every run, and is one stuck right now?"
+
+export interface FleetPageProps {
+  readonly question?: string
 }
 
-export function FleetPage() {
+export function FleetPage({ question = DEFAULT_QUESTION }: FleetPageProps) {
   return (
     <section className="flex flex-col gap-8">
-      <PageHeaderRegion />
+      <PageHeaderRegion question={question} />
       {/* The rail and the paragraph that qualifies it, beside one another rather than stacked.
           Measured at 1440x900: stacking them put the first table 640px down the page with no row
           of any table above the fold, against seven before this item. Prose in a column beside the
@@ -158,9 +146,7 @@ export function FleetPage() {
   )
 }
 
-function PageHeaderRegion() {
-  const question = routeQuestion("/")
-
+function PageHeaderRegion({ question }: { question: string }) {
   return (
     <div className="flex flex-col gap-section">
       <PageHeader

@@ -2375,7 +2375,7 @@ this entry**: it branched before M7-W163 pushed, so it reported there was no bac
 right about its own tree. Two workers in parallel on one collision found the same answer independently,
 which is the outcome the disjoint-directory rule is supposed to produce.
 
-### B120 - A feature page cannot read `lib/routes.ts`, because `routes.ts` imports every feature page
+### B120 - A feature page cannot read `lib/routes.ts`, because `routes.ts` imports every feature page - CLOSED
 
 `PageHeader` requires the route's `question`, and `lib/routes.ts` is where that sentence is written -
 deliberately, so a screen and the command palette cannot disagree about it. But `routes.ts` imports each
@@ -2388,18 +2388,10 @@ cleanly; it surfaced as three vitest suites failing to import - `app-frame.test.
 `page-header.test.tsx` and `routes.test.tsx` - none of which is about the fleet screen. A repository
 without the frontend runner that landed in M4-W153 would have shipped this.
 
-The workaround in place is to dereference at render instead of at module scope, which is safe because
-both modules have finished initialising by then. It is a workaround: it leaves a cycle in the module
-graph, and the next Phase 4 page will meet the same edge and may not recognise it.
+The workaround in place was to dereference at render instead of at module scope.
 
-**The fix belongs to whoever owns `App.tsx`**, which already maps over `ROUTES` to build its routes:
-pass `question={route.question}` into the screen. Then no page reaches back into the registry, the cycle
-is gone, and `page-header.tsx`'s own stated preference - "Passed rather than looked up, so a screen
-rendered outside the router cannot fail to have one" - holds for the question as well as the title.
+**Closed in `M7-W204`**: `App.tsx` now passes `question={route.question}` directly into each `<RoutedScreen>`, all nine feature pages receive `question` (defaulting to the screen's question when rendered in unit tests outside the router), and zero files under `web/src/features/` import from `@/lib/routes`. Guarded by `test_no_feature_page_imports_routes_registry` in `tests/test_console_design_tokens.py`.
 
-**Closes when:** no file under `features/` imports `ROUTES`, and a page rendered outside the router
-still gets its question. Worth a guard in `test_console_design_tokens.py` afterwards, since the failure
-is invisible to the compiler.
 
 ### B121 - The Fleet screen's fact rail costs six table rows above the fold
 
