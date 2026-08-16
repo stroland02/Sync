@@ -537,3 +537,11 @@ Tasks 1–6 of the dogfooding plan (`docs/superpowers/plans/2026-08-05-sync-dogf
 - `PullRequestPage` (`web/src/features/pullrequests/pull-request-page.tsx`) renders the `Repository` fact in its rail, linking to `/repositories/:repoId`.
 - Consolidated `asHttpUrl` into a single tested helper in `web/src/lib/url.ts` and `web/src/lib/url.test.ts`, removing duplicated boundary implementations from `features/pullrequests/bundle-facts.ts` and `features/workflows/evidence.tsx`.
 
+### B127 is closed (`M7-W207`, `657f63b`)
+
+- `_risk_row` in `src/sync/mcp/tools.py` now includes `"repo_id": site.repo_id`.
+- `GET /api/findings/{id}` (`src/sync/api/app.py:finding_detail`) forwards `severity`, `file`, `line`, and `repo_id` inside `finding`.
+- `FindingPage` (`web/src/features/findings/finding-page.tsx`) renders `Severity`, `Repository` (linked to `/repositories/:repoId`), and `Call site` (`file:line`) on its fact rail.
+- Amended ruling 3 of `briefs/2026-08-07-substrate-finding.md` noting the expiration of severity and repository refusals.
+
+
