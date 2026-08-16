@@ -727,7 +727,7 @@ mislabelled them. Only `sync.rehearse.driver.run_rehearsal` passes `True`. `Grap
 filter `is_rehearsal` out, and `set_merge_outcome` excludes it from its `WHERE`, so a rehearsal row
 is recorded — it still cost a repair attempt — but never reaches a corpus-wide rate.
 
-### B76 — three small truths about how this CLI reads files, left over from B73
+### B76 — three small truths about how this CLI reads files, left over from B73 (CLOSED)
 
 Recorded rather than folded into B73, because each is a decision and none is a typo.
 
@@ -752,6 +752,23 @@ specification.
 **Closes when:** each of the three is either fixed or carries a comment saying why the current
 answer is right, the two remaining reads refuse like their siblings, and the decode gate either
 sees `ValueError`-spelled chains or says in its own text that it cannot.
+
+**Closed the same evening this was recorded**, across five commits: `abb1e1e3` tells a
+whitespace-only `--secret-file` from a secret nobody supplied, naming the file rather than
+repeating the both-sources advice the operator had already taken. `3b2319f6` corrects
+`_signing_key`'s docstring to say what the code does — an unopenable file raises, only
+unparseable material answers `None` — and closes the read itself: `publish-feed` and
+`feed-public-key` now catch `OSError` around the call and refuse by name instead of
+tracebacking. `08abdf39` guards the `--score-pair` specification's own read inside
+`_score_corpus`, wrapping `OSError`, `UnicodeDecodeError` and `yaml.YAMLError` into one
+`ValueError` the caller already catches; `b5cf8264` does the same for `intake
+--registry-directory`. `e274d934` classifies `benchmark`'s `except (KeyError, LookupError,
+ValueError)` under `tests/test_decode_handlers.py`'s `_GUARDS_A_READ`, with a comment on both
+ends stating why: the specification's own decode failure is caught inside `_score_corpus` where
+the gate can see it, but `read_checkout` inside the same call reads arbitrary customer source
+files and a decode failure from there reaches this chain too, uncounted, because
+`UnicodeDecodeError` is a `ValueError` and the inventory reads exception names rather than the
+hierarchy.
 
 ### B115 — Four columns on the binding surface each miss a single line by a handful of pixels
 
