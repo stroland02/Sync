@@ -1,4 +1,4 @@
-"""`sync://feed/{vendor}`, the one resource, declared as data beside the four tools.
+"""`sync://feed/{vendor}` and `sync://context/{repo_id}`, declared as data beside the four tools.
 
 `2026-07-25-sync-graph-surface-design.md:79` specifies it as "the normalized change feed, served
 from the server's local cache", and it is the caller `FeedCache` was built for: the feed path
@@ -42,6 +42,7 @@ that takes bytes -- there is no "serve what we have anyway" to add a flag to.
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
@@ -51,6 +52,10 @@ from sync.signals.feed.publisher import FEED_FIELDS
 FEED_URI_PREFIX = "sync://feed/"
 FEED_URI_TEMPLATE = f"{FEED_URI_PREFIX}{{vendor}}"
 FEED_MIME_TYPE = "application/json"
+
+CONTEXT_URI_PREFIX = "sync://context/"
+CONTEXT_URI_TEMPLATE = f"{CONTEXT_URI_PREFIX}{{repo_id}}"
+CONTEXT_MIME_TYPE = "text/markdown"
 
 UNKNOWN_VENDOR = "unknown_vendor"
 NOT_FETCHED = "not_fetched"
@@ -90,6 +95,17 @@ RESOURCE_TEMPLATES: tuple[ResourceTemplateSpec, ...] = (
             "no telemetry, which stay in the customer's own graph."
         ),
         mime_type=FEED_MIME_TYPE,
+    ),
+    ResourceTemplateSpec(
+        uri_template=CONTEXT_URI_TEMPLATE,
+        name="repository-context",
+        description=(
+            "What stays true of one repository while its code changes underneath: "
+            "conventions, generated directories, the package manager its lockfile names. "
+            "Written by an operator or copied from a `.sync/context.md` the repository "
+            "itself carries. Never a call site, a finding or telemetry."
+        ),
+        mime_type=CONTEXT_MIME_TYPE,
     ),
 )
 
@@ -133,12 +149,25 @@ def resources_as_data(feed: FeedCache | None, known_vendors: tuple[str, ...]) ->
     ]
 
 
-def read(uri: str, feed: FeedCache | None, known_vendors: tuple[str, ...]) -> dict[str, Any]:
+def read(
+    uri: str,
+    feed: FeedCache | None,
+    known_vendors: tuple[str, ...],
+    context_reader: Callable[[str], str | None] | None = None,
+) -> dict[str, Any]:
     """One resource's contents, or `ResourceError` naming which of the three outcomes it is.
 
     `known_vendors` is supplied rather than read here, so this module holds no opinion about
     which vendors exist -- the registry answers that, and a second list would drift from it.
+
+    The context branch returns an already-framed `{"contents": [...]}` block, unlike the feed
+    branch below it, which returns the raw payload for `sync.mcp.server` to frame with
+    `FEED_MIME_TYPE`. The two resources carry different bodies -- JSON for one, plain markdown
+    text for the other -- so each frames its own rather than sharing one shape that fits neither.
     """
+    if uri.startswith(CONTEXT_URI_PREFIX):
+        return _read_context(uri, context_reader)
+
     if not uri.startswith(FEED_URI_PREFIX):
         raise ResourceError(f"unknown resource: {uri}", UNKNOWN_RESOURCE, uri=uri)
 
@@ -172,3 +201,27 @@ def read(uri: str, feed: FeedCache | None, known_vendors: tuple[str, ...]) -> di
         "digest": snapshot.digest,
         "feed_fetched_at": snapshot.fetched_at.isoformat(),
     }
+
+
+def _read_context(uri: str, context_reader: Callable[[str], str | None] | None) -> dict[str, Any]:
+    """One repository's context, or a `ResourceError` naming why there is none.
+
+    The repository id keeps every slash after the prefix. A `repo_id` is `host/owner/name`, so a
+    parser that split on the first one would look up "github.com" and find nothing, for every
+    repository that exists.
+
+    A repository with no context is an error rather than an empty string. A client that received
+    "" could not tell "nobody has described this repository" from "somebody described it as
+    nothing", and would report the second.
+    """
+    repo_id = uri[len(CONTEXT_URI_PREFIX):]
+    if context_reader is None:
+        raise ResourceError(
+            "this server serves no repository context", UNKNOWN_RESOURCE, uri=uri
+        )
+    body = context_reader(repo_id)
+    if body is None:
+        raise ResourceError(
+            f"no context is held for '{repo_id}'", UNKNOWN_RESOURCE, uri=uri
+        )
+    return {"contents": [{"uri": uri, "mimeType": CONTEXT_MIME_TYPE, "text": body}]}
