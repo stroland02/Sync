@@ -243,16 +243,17 @@ def create_app(
             # The row named the site, so the surface should hold it; a `None` here is a
             # race between pages, and the honest answer is still "not found".
             return _not_found("finding", finding_id)
-        # Two fields, two meanings, and merging them would lose one. The envelope's
-        # `binding_source` is the rung of the whole answer and goes null when the detectors
-        # naming this call site disagree; `finding.binding_source` is the column on the row
-        # the URL names, which is what a false positive has to be attributable to.
+        # Forward finding-level fields: the finding's own rung, its severity, call site, and repository.
         return JSONResponse(
             {
                 **payload,
                 "finding": {
                     "finding_id": finding_id,
                     "binding_source": row["binding_source"],
+                    "severity": row.get("severity"),
+                    "file": row["file"],
+                    "line": row["line"],
+                    "repo_id": row.get("repo_id"),
                 },
             }
         )
