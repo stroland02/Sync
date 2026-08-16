@@ -139,10 +139,33 @@ def workflow_state(checkpointer_dsn: str, finding_id: str) -> dict | None:
             (prefix,),
         ).fetchall()
 
+        active_thread_checkpoints = conn.execute(
+            """
+            SELECT checkpoint_id, checkpoint
+              FROM checkpoints
+             WHERE thread_id = %s AND checkpoint_ns = ''
+             ORDER BY checkpoint_id ASC
+            """,
+            (row["thread_id"],),
+        ).fetchall()
+
     checkpoint = row["checkpoint"]
     values = checkpoint.get("channel_values") or {}
     versions = checkpoint.get("channel_versions") or {}
     seen = checkpoint.get("versions_seen") or {}
+
+    node_first_seen: dict[str, str] = {}
+    node_last_seen: dict[str, str] = {}
+    for cp_row in active_thread_checkpoints:
+        cp = cp_row["checkpoint"] or {}
+        cp_ts = cp.get("ts")
+        cp_seen = cp.get("versions_seen") or {}
+        for n in WORKFLOW_NODES:
+            if n in cp_seen:
+                if n not in node_first_seen and cp_ts:
+                    node_first_seen[n] = cp_ts
+                if cp_ts:
+                    node_last_seen[n] = cp_ts
 
     # `sync.remediate.state.Outcome` also holds `running`, which `locate` writes on the
     # first hop of every run. Only a finished value is reported: `outcome` is the console's
@@ -166,6 +189,8 @@ def workflow_state(checkpointer_dsn: str, finding_id: str) -> dict | None:
             "status": status,
             "standing": _standing(status, bool(evidence), outcome is not None),
             "evidence": evidence,
+            "first_seen_at": node_first_seen.get(name),
+            "last_seen_at": node_last_seen.get(name),
         })
 
     generations = []

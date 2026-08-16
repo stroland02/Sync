@@ -52,11 +52,12 @@ def _insert_checkpoint(
     channel_versions: dict,
     versions_seen: dict,
     step: int,
+    ts: str = "2026-07-30T12:00:00.000000+00:00",
 ) -> None:
     checkpoint = {
         "v": 4,
         "id": checkpoint_id,
-        "ts": "2026-07-30T12:00:00.000000+00:00",
+        "ts": ts,
         "channel_values": channel_values,
         "channel_versions": channel_versions,
         "versions_seen": versions_seen,
@@ -554,6 +555,60 @@ def test_workflow_state_of_three_generations_names_the_newest_threads_outcome(
     ]
     evidence = {n["name"]: n["evidence"] for n in state["nodes"]}
     assert evidence["open_pr"]["pr_url"] == "https://github.com/x/y/pull/9"
+
+
+def test_workflow_state_nodes_carry_checkpointer_timestamps(checkpointer_tables):
+    thread_id = f"{FINDING_ID}:clock123abc456:0"
+    _insert_checkpoint(
+        thread_id,
+        "1f069300-0000-6000-8000-000000000001",
+        channel_values={"call_site_id": "cs-1"},
+        channel_versions={"call_site_id": _version(1)},
+        versions_seen={"locate": {"call_site_id": _version(1)}},
+        step=1,
+        ts="2026-08-08T10:00:00.000000+00:00",
+    )
+    _insert_checkpoint(
+        thread_id,
+        "1f069300-0000-6000-8000-000000000002",
+        channel_values={"call_site_id": "cs-1", "patch": "diff"},
+        channel_versions={"patch": _version(1)},
+        versions_seen={
+            "locate": {"call_site_id": _version(1)},
+            "patch": {"patch": _version(1)},
+        },
+        step=2,
+        ts="2026-08-08T10:01:30.000000+00:00",
+    )
+    _insert_checkpoint(
+        thread_id,
+        "1f069300-0000-6000-8000-000000000003",
+        channel_values={"outcome": "opened", "pr_url": "https://github.com/x/y/pull/1"},
+        channel_versions={"outcome": _version(1)},
+        versions_seen={
+            "locate": {"call_site_id": _version(1)},
+            "patch": {"patch": _version(1)},
+            "open_pr": {"outcome": _version(1)},
+        },
+        step=3,
+        ts="2026-08-08T10:03:00.000000+00:00",
+    )
+
+    state = workflow_state(DSN, FINDING_ID)
+    nodes_by_name = {n["name"]: n for n in state["nodes"]}
+
+    assert nodes_by_name["locate"]["first_seen_at"] == "2026-08-08T10:00:00.000000+00:00"
+    assert nodes_by_name["locate"]["last_seen_at"] == "2026-08-08T10:03:00.000000+00:00"
+
+    assert nodes_by_name["patch"]["first_seen_at"] == "2026-08-08T10:01:30.000000+00:00"
+    assert nodes_by_name["patch"]["last_seen_at"] == "2026-08-08T10:03:00.000000+00:00"
+
+    assert nodes_by_name["open_pr"]["first_seen_at"] == "2026-08-08T10:03:00.000000+00:00"
+    assert nodes_by_name["open_pr"]["last_seen_at"] == "2026-08-08T10:03:00.000000+00:00"
+
+    # Pending node was never seen in any checkpoint
+    assert nodes_by_name["await_ci"]["first_seen_at"] is None
+    assert nodes_by_name["await_ci"]["last_seen_at"] is None
 
 
 # --- what the console mirrors from this module -------------------------------

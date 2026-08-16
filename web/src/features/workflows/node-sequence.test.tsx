@@ -186,4 +186,44 @@ describe("the narrative's bracket entries", () => {
 
     expect(washCount(container)).toBe(1)
   })
+
+  it("renders the checkpoint timestamp when first_seen_at is present", () => {
+    const { container } = render(
+      <NodeSequence
+        nodes={[
+          node({
+            name: "locate",
+            status: "done",
+            standing: "ran",
+            first_seen_at: "2026-08-08T10:00:00.000000+00:00",
+            last_seen_at: "2026-08-08T10:03:00.000000+00:00",
+          }),
+        ]}
+      />
+    )
+
+    const timeEl = container.querySelector("time")
+    expect(timeEl).not.toBeNull()
+    expect(timeEl?.getAttribute("datetime")).toBe("2026-08-08T10:00:00.000000+00:00")
+    expect(timeEl?.getAttribute("title")).toContain("Checkpoint window:")
+  })
+
+  it("renders no time element when first_seen_at is absent", () => {
+    const { container } = render(
+      <NodeSequence
+        nodes={[
+          node({
+            name: "await_ci",
+            status: "pending",
+            standing: "never_reached",
+            first_seen_at: null,
+            last_seen_at: null,
+          }),
+        ]}
+      />
+    )
+
+    const timeEl = container.querySelector("time")
+    expect(timeEl).toBeNull()
+  })
 })

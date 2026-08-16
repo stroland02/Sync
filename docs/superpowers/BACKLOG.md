@@ -74,9 +74,33 @@ and a 48px display step, so the defect there was assignment rather than absence.
 | **M4.5** | The console is worth looking at | **~90%** | W141-W145 all landed and merged; the conformance gaps it existed to close are closed, and what remains of "worth looking at" moved into M7 |
 | **M5** | Integration layer | **~35%** | Sentry feeds counts in now; still nothing correlates anything |
 | **M6** | Show it, rather than describe it | **0%** | Needs a UI worth filming. That is M7's line now, not M4.5's, and M7 is close enough that this is becoming schedulable |
-| **M7** | The console becomes a product | **~88%** | All nine levels are on the vendored Supabase substrate. Fidelity Tasks 1-3 of 6 are done; Phase 5 (the workflow as narrative, one binding drawn) and Phase 6 (the write path, which belongs to M4's hosted half) are unbuilt |
+| **M7** | The console becomes a product | **~92%** | All nine levels are on the vendored Supabase substrate. Fidelity Tasks 1–6 of 6 landed; Mock-to-Build Phase 1 & B123 checkpointer timestamps landed |
 | **M8–M11** | The resolution loop | **0%** | Proposed 2026-08-06, nothing scheduled; Sync opens a pull request and stops watching it |
 | **M12** | Dashboards that earn their screen | **0%** | Proposed 2026-08-07 from the owner's review of our screens against the references; full-stack, because the useful panels need aggregates `sync.dashboard` does not compute |
+
+### Implementation Plans Ledger (`docs/superpowers/plans/`)
+
+Every plan in the repository mapped to its governing milestone, scope, and current status:
+
+| Plan File | Milestone / Scope | Status | Summary |
+|---|---|---|---|
+| [`2026-07-25-sync-m0-vendor-change.md`](plans/2026-07-25-sync-m0-vendor-change.md) | **M0: Core Remediation** | Landed | Open/closed migration corpus, OAS diff detection, patch strategy routing |
+| [`2026-07-25-sync-mcp-graph-surface.md`](plans/2026-07-25-sync-mcp-graph-surface.md) | **M3: MCP Graph Surface** | Landed | MCP tools (`_risk_row`, `finding_by_id`, `whats_at_risk`, `explain_call_site`) |
+| [`2026-07-30-sync-m4-dashboard.md`](plans/2026-07-30-sync-m4-dashboard.md) | **M4: Dashboard Initial** | Landed | Initial React console scaffold, routing and query client |
+| [`2026-08-04-sync-m4-slice-2.md`](plans/2026-08-04-sync-m4-slice-2.md) | **M4: Backend API Slice 2** | Landed | Starlette API routes (`/api/overview`, `/api/findings/{id}`, `/api/workflows/{id}`) |
+| [`2026-08-05-sync-console-architecture.md`](plans/2026-08-05-sync-console-architecture.md) | **M4/M7: Console Master Architecture** | Active Foundation | 9-level route registry, data flow models, and screen specifications |
+| [`2026-08-05-sync-console-design-system.md`](plans/2026-08-05-sync-console-design-system.md) | **M4.5/M7: Design System** | Active Foundation | Color tokens, typography hierarchy, and spacing ramp |
+| [`2026-08-05-sync-dogfooding-and-loop-testing.md`](plans/2026-08-05-sync-dogfooding-and-loop-testing.md) | **M4: B78 Rehearsal & Dogfooding** | Landed (`M4-W200`–`W203`) | Zero-remote rehearsal fixture, `sync rehearse` driver, 4 safety boundaries |
+| [`2026-08-06-ci-optimization.md`](plans/2026-08-06-ci-optimization.md) | **CI: Pipeline Hardening** | Landed | CI caching, parallel pytest execution, flake elimination |
+| [`2026-08-06-console-supabase-substrate.md`](plans/2026-08-06-console-supabase-substrate.md) | **M7: Supabase Substrate Port** | Landed (`M7-W168`–`W180`) | Vendored Supabase UI components, two-tier navigation chassis, dark theme |
+| [`2026-08-06-m45-console-quality.md`](plans/2026-08-06-m45-console-quality.md) | **M4.5: Quality Invariants** | Landed (`M4.5-W141`–`W145`) | Design token guards, contrast floor (5.05:1), 12px text floor, absence vs zero |
+| [`2026-08-06-m7-console-as-product.md`](plans/2026-08-06-m7-console-as-product.md) | **M7: Console as Product** | Landed | 9-level console hierarchy, read-only boundary, 24 protected honesty sentences |
+| [`2026-08-06-sync-console-expansion.md`](plans/2026-08-06-sync-console-expansion.md) | **M7: Route Expansion** | Landed | URL-addressable drawers, detail fact rails, filter preservation |
+| [`2026-08-06-sync-m8-m11-resolution-loop.md`](plans/2026-08-06-sync-m8-m11-resolution-loop.md) | **M8–M11: Resolution Loop** | Proposed | Multi-attempt repair state machine, codemod tier cascade, replay sandboxing |
+| [`2026-08-06-sync-repo-context.md`](plans/2026-08-06-sync-repo-context.md) | **M0/M3: Repo Context & AST** | Landed | Multi-language tree-sitter AST extraction, call site binding, symbol maps |
+| [`2026-08-07-console-fidelity-pass.md`](plans/2026-08-07-console-fidelity-pass.md) | **M7: Fidelity Pass (Tasks 1–6)** | Landed (`M7-W183`–`W209`) | 48px top bar, type ramp middle, spanning headers, fed bars, rail hover, table anatomy |
+| [`2026-08-07-m12-dashboards-that-earn-their-screen.md`](plans/2026-08-07-m12-dashboards-that-earn-their-screen.md) | **M12: Dashboards That Earn Their Screen** | Proposed | Aggregation queries, multi-column card grids, time-at-node analytics |
+| [`2026-08-08-console-mock-to-build.md`](plans/2026-08-08-console-mock-to-build.md) | **M7: Console Mock-to-Build** | In Progress (Phase 1 & B123 landed) | Translating 28 direction screenshots into built features, fact rails, syntax headers |
 
 ### M0 — Walking skeleton, one real pull request · ~90%
 
@@ -2540,7 +2564,7 @@ Three separate things are missing and they are not one fix:
 **Closed in `M7-W207`**: `_risk_row` in `sync.mcp.tools` now includes `repo_id`, `sync.api.app.finding_detail` forwards `severity`, `file`, `line`, and `repo_id` inside `finding`, `FindingPage` renders `Severity`, `Repository` (linked to `/repositories/:repoId`), and `Call site` (`file:line`) on its fact rail, and ruling 3 of `briefs/2026-08-07-substrate-finding.md` is amended.
 
 
-### B123 - The Solution Workflow has no clock, so no entry on it can say when or how long
+### B123 - The Solution Workflow has no clock, so no entry on it can say when or how long - CLOSED
 
 `WorkflowNode` is `{name, status, standing, evidence}` and `WorkflowState` carries no timestamp
 either. `sync.dashboard.queries.workflow_state` reads the newest checkpoint row of the newest thread
@@ -2569,9 +2593,7 @@ passing:
 - **A node with one checkpoint has no duration at all**, and rendering a zero would be the absence
   collapsed onto a measurement.
 
-**Closes when:** each node entry on the Solution Workflow carries a timestamp read from the
-checkpointer, labelled as what it is, with the no-clock sentence in the level's opening entry removed
-in the same commit.
+**Closed in `M7-W210`**: `workflow_state` in `src/sync/dashboard/queries.py` queries all checkpoints for the active thread and extracts `first_seen_at` and `last_seen_at` per node; `WorkflowNode` in `web/src/api/types.ts` carries `first_seen_at` and `last_seen_at`; `StepBody` in `web/src/features/workflows/node-sequence.tsx` renders the checkpointer timestamp on each node; and the no-clock sentence was removed from `Arrival` in `web/src/features/workflows/workflow-page.tsx`.
 
 ### B124 - A superseded remediation generation is not reachable from the run that superseded it - CLOSED
 

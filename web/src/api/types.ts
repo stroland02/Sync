@@ -313,6 +313,8 @@ export interface WorkflowNode {
   status: WorkflowNodeStatus
   standing: NodeStanding
   evidence: Record<string, unknown>
+  first_seen_at?: string | null
+  last_seen_at?: string | null
 }
 
 /**

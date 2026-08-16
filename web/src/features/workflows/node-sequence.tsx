@@ -33,6 +33,7 @@ import type {
 } from "@/api/types"
 import { NodeEvidence } from "@/features/workflows/evidence"
 import { closingEntryIndex } from "@/features/workflows/narrative-order"
+import { formatTimestamp } from "@/lib/format"
 import { STANDING_LABEL, STANDING_SENTENCE } from "@/features/workflows/node-standing"
 import { CHANGE_WASH_DURATION, EASE_STANDARD, useReducedMotion } from "@/lib/motion"
 
@@ -99,7 +100,7 @@ function appearanceOf(standing: NodeStanding): Appearance {
     case "not_reached_yet":
     case "never_reached":
       return {
-        glyph: "○",
+        glyph: "·",
         markerClass: "border-border text-muted-foreground",
         nameClass: "text-muted-foreground",
       }
@@ -208,6 +209,19 @@ function StepBody({ node }: { node: WorkflowNode }) {
       <div className="flex flex-wrap items-baseline gap-x-row gap-y-field">
         <h3 className={`font-mono text-body ${look.nameClass}`}>{node.name}</h3>
         <p className="text-meta text-muted-foreground">{STANDING_LABEL[node.standing]}</p>
+        {node.first_seen_at && (
+          <time
+            dateTime={node.first_seen_at}
+            className="font-mono text-meta text-muted-foreground"
+            title={
+              node.last_seen_at && node.last_seen_at !== node.first_seen_at
+                ? `Checkpoint window: ${node.first_seen_at} to ${node.last_seen_at}`
+                : `Checkpoint written at ${node.first_seen_at}`
+            }
+          >
+            {formatTimestamp(node.first_seen_at)}
+          </time>
+        )}
       </div>
       <p className="mt-field max-w-prose text-body text-muted-foreground">
         {purposeFor(node.name)}

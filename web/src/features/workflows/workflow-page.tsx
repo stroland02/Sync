@@ -168,10 +168,6 @@ function Arrival({ findingId }: { findingId: string }) {
           carries both.
         </p>
         <p>
-          It carries no clock either: the checkpoints hold a timestamp and this route does not read
-          it, so no entry below says when it ran or how long it took.
-        </p>
-        <p>
           The entries below are the remediation graph's own order, with the evidence each node
           produced. A node marked due after it has already run is a retry the graph owes another
           visit, not a finished step — the loop is real and this view does not hide it.
