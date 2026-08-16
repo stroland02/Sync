@@ -6,13 +6,27 @@ them unit-testable and keeps `graph.py` to assembly only.
 
 from __future__ import annotations
 
-from typing import Any, Protocol, runtime_checkable
+from typing import Protocol, runtime_checkable
 
 from sync.core import CallSite, Evidence, Patch, RepoRef, VendorChange
 from sync.remediate import corpus
 from sync.remediate.state import MAX_CI_ATTEMPTS, MAX_STATIC_ATTEMPTS, RunState
 from sync.remediate.tiered import routing_facts
 from sync.route.matrix import NO_PATCH, route
+
+
+class _OpenedPullRequest(Protocol):
+    """What `open_pull_request` returns, without importing the forge that returns it.
+
+    `sync.forge.github.PullRequest` is the concrete shape -- `number` and `url`, nothing else --
+    but naming that class here would give `sync.remediate.nodes` a real import of `sync.forge`,
+    which `sync.rehearse` (importing this module through `build_graph`) is not allowed to carry.
+    This Protocol states the two fields this module actually reads and nothing about who
+    produced them.
+    """
+
+    number: int
+    url: str
 
 
 @runtime_checkable
@@ -23,8 +37,8 @@ class Forge(Protocol):
     # webhook joins a delivery to a corpus row by, and it is the forge's to answer: deriving
     # it from the URL here would be a second implementation of knowledge this call already has.
     def open_pull_request(
-        self, repo: RepoRef, branch: str, title: str, body: str,
-    ) -> Any: ...
+        self, repo: RepoRef, branch: str, evidence: Evidence
+    ) -> _OpenedPullRequest: ...
     def delete_branch(self, repo: RepoRef, branch: str) -> tuple[bool, str]: ...
 
 

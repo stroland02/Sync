@@ -31,6 +31,12 @@ def _git(args: list[str], cwd: Path) -> str:
         capture_output=True,
         text=True,
         encoding="utf-8",
+        # `env=_subprocess_env()` already sets PYTHONIOENCODING, but the encoding census in
+        # tests/test_subprocess_encoding.py only recognises it as a literal string inside this
+        # call's own env= expression, not through a helper. `errors="replace"` is the second,
+        # scanner-visible defence route -- belt and suspenders, since git's own output here
+        # (SHAs, branch names) is effectively always ASCII.
+        errors="replace",
         env=_subprocess_env(),
     )
     if result.returncode != 0:
