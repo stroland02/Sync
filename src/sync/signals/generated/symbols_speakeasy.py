@@ -63,21 +63,28 @@ request modules the classes delegate to are not in the checkout. That third case
 roots cleanly and yields an empty map, which is the partial-map failure with a coverage number
 attached to make it look like a measurement.
 
-What the three flavours share, and was deliberately not extracted
-------------------------------------------------------------------
+What the flavours share, and what stays duplicated
+---------------------------------------------------
 `ExtractedOperation`, `ExtractionReport`, `UnrecognisedSdkShape`, `_route` and
 `read_spec_operations` are imported rather than copied, exactly as the TypeScript flavour imports
 them -- that is reusing a decision already proven, not inventing an abstraction.
 
-Three things are now visibly common across all three rules and are still **not** extracted. The
-breadth-first walk from a root composing a chain; the shape of `_source_files`; and, between this
-module and `symbols_typescript.py`, the tree-sitter plumbing -- `_walk`, `_text`, `_module_key`
-and relative-specifier resolution. Two of those tempted a helper module and both were left
-standing, because what differs underneath them is the whole content of each rule: what a class is,
-what a mount is, how a class is identified, and now whether an operation is even readable from one
-file. A shared walker parameterised over four such differences is a framework for a population of
-three, written when the third is newest. The duplication is the signal, and the day a fourth
-generator agrees with two of these on all four points is the day it means something.
+**The tree-sitter plumbing is now `typescript_grammar`, and that is a correction rather than a
+second thought.** This module's original argument for copying it priced the four differences that
+make this a third rule -- what a class is, what a mount is, how a class is identified, and whether
+an operation is readable from one file -- and every one of those is a fact about a generator. What
+tree-sitter does with an escape is not, and the copy is how one reader got that fixed and the other
+did not: `_string_literal` arrived here as a verbatim copy of the pre-fix `_plain_route`, false
+docstring sentence included, and the fix landed on the original nine hours later. So the split
+holds where it was argued for and does not hold over the parser.
+
+What is still **not** extracted, and for the original reason: the breadth-first walk from a root
+composing a chain, and -- between this module and `symbols_typescript.py` -- `_module_key`,
+`_specifier_target` and `_source_files`, which state where a checkout keeps its files rather than
+what the parser makes of one. A shared walker parameterised over four generator differences is a
+framework for a population of three, written when the third is newest. That duplication is still
+the signal, and the day a fourth generator agrees with two of these on all four points is the day
+it means something.
 """
 
 from __future__ import annotations
@@ -89,6 +96,7 @@ from pathlib import Path
 import tree_sitter_typescript as tsts
 from tree_sitter import Language, Node, Parser
 
+from sync.signals.generated import typescript_grammar as grammar
 from sync.signals.generated.symbols import (
     GENERATOR as _PYTHON_GENERATOR,
 )
@@ -175,21 +183,6 @@ def _comparable(http_method: str, path: str) -> tuple[str, str]:
     return method, _PARAMETER.sub("{}", route)
 
 
-def _text(node: Node, source: bytes) -> str:
-    """A node's own bytes as text, decoded strictly.
-
-    A real SDK carries identifiers and comments in any language, and a lenient decode would turn
-    one of them into a route or a class name that silently differs from what the file says.
-    """
-    return source[node.start_byte : node.end_byte].decode("utf-8")
-
-
-def _walk(node: Node):
-    yield node
-    for child in node.children:
-        yield from _walk(child)
-
-
 def _module_key(path: Path, root: Path) -> str:
     """A file's identity, as a path relative to the checkout root without its extension."""
     return path.relative_to(root).with_suffix("").as_posix()
@@ -206,7 +199,7 @@ def _specifier_target(node: Node, source: bytes, path: Path, root: Path) -> str 
     source_node = node.child_by_field_name("source")
     if source_node is None:
         return None
-    specifier = _text(source_node, source).strip("'\"")
+    specifier = grammar.node_text(source_node, source).strip("'\"")
     if not _RELATIVE.match(specifier):
         return None
     try:
@@ -253,46 +246,6 @@ class _Class:
     is_candidate: bool = False
 
 
-def _extends(node: Node, source: bytes) -> set[str]:
-    """The classes a declaration extends.
-
-    The `extends` clause only. An `implements` clause names an interface, which cannot be the
-    base this rule anchors on, and reading the whole heritage would let one be mistaken for it.
-    """
-    names: set[str] = set()
-    for child in node.children:
-        if child.type != "class_heritage":
-            continue
-        for inner in _walk(child):
-            if inner.type != "extends_clause":
-                continue
-            for named in _walk(inner):
-                if named.type in ("identifier", "property_identifier", "type_identifier"):
-                    names.add(_text(named, source))
-    return names
-
-
-def _string_literal(node: Node, source: bytes) -> str | None:
-    """The text of a plain string literal.
-
-    The fragment rather than the quoted text, so an empty string reads as absent rather than as a
-    value. A literal carrying an escape is declined whole, for the reason
-    `symbols_typescript.py:_plain_route` states against the same grammar: it splits a string at
-    every escape, so the first fragment is a prefix of what the source says. `"/v4/aliases\\/{id}"`
-    reads as `/v4/aliases`, which is a route this SDK sends from a different method -- so the
-    truncation does not lose a binding, it makes a second one to a declared operation, and the
-    cross-check cannot contradict a route the specification declares.
-    """
-    if node.type != "string":
-        return None
-    if any(child.type == "escape_sequence" for child in node.children):
-        return None
-    for child in node.children:
-        if child.type == "string_fragment":
-            return _text(child, source)
-    return None
-
-
 def _helper_path(root: Node, source: bytes) -> str | None:
     """The route this module names, from the first `pathToFunc` call it makes.
 
@@ -300,16 +253,16 @@ def _helper_path(root: Node, source: bytes) -> str | None:
     reading base URLs, header values and operation ids as though they were paths, and a wrong
     route resolves a call site to an operation the customer never calls.
     """
-    for node in _walk(root):
+    for node in grammar.walk(root):
         if node.type != "call_expression":
             continue
         function = node.child_by_field_name("function")
         arguments = node.child_by_field_name("arguments")
         if function is None or arguments is None:
             continue
-        if _text(function, source) != _PATH_HELPER or not arguments.named_children:
+        if grammar.node_text(function, source) != _PATH_HELPER or not arguments.named_children:
             continue
-        found = _string_literal(arguments.named_children[0], source)
+        found = grammar.string_literal(arguments.named_children[0], source)
         if found:
             return found
     return None
@@ -322,7 +275,7 @@ def _builder_verb(root: Node, source: bytes) -> str | None:
     `method` as a property of several unrelated objects, and reading whichever came first would
     make the verb depend on statement order.
     """
-    for node in _walk(root):
+    for node in grammar.walk(root):
         if node.type != "call_expression":
             continue
         callee = node.child_by_field_name("function")
@@ -330,7 +283,7 @@ def _builder_verb(root: Node, source: bytes) -> str | None:
         if callee is None or arguments is None or callee.type != "member_expression":
             continue
         property_node = callee.child_by_field_name("property")
-        if property_node is None or _text(property_node, source) != _REQUEST_BUILDER:
+        if property_node is None or grammar.node_text(property_node, source) != _REQUEST_BUILDER:
             continue
         for argument in arguments.named_children:
             if argument.type != "object":
@@ -342,9 +295,9 @@ def _builder_verb(root: Node, source: bytes) -> str | None:
                 value = pair.child_by_field_name("value")
                 if key is None or value is None:
                     continue
-                if _text(key, source).strip("'\"") != _METHOD_PROPERTY:
+                if grammar.node_text(key, source).strip("'\"") != _METHOD_PROPERTY:
                     continue
-                verb = _string_literal(value, source)
+                verb = grammar.string_literal(value, source)
                 if verb:
                     return verb
     return None
@@ -356,12 +309,12 @@ def _mounted_class(getter: Node, source: bytes) -> str | None:
     `return (this._aliases ??= new Aliases(this._options))` -- the `new` expression is what names
     the class, and the backing field is not read. A getter returning anything else is not a mount.
     """
-    for node in _walk(getter):
+    for node in grammar.walk(getter):
         if node.type != "new_expression":
             continue
         constructor = node.child_by_field_name("constructor")
         if constructor is not None and constructor.type == "identifier":
-            return _text(constructor, source)
+            return grammar.node_text(constructor, source)
     return None
 
 
@@ -375,17 +328,17 @@ def _delegated_calls(method: Node, source: bytes) -> tuple[str, ...]:
     that does. A call on an object is a method call rather than a delegation and is not read.
     """
     called: list[str] = []
-    for node in _walk(method):
+    for node in grammar.walk(method):
         if node.type != "call_expression":
             continue
         function = node.child_by_field_name("function")
         if function is not None and function.type == "identifier":
-            called.append(_text(function, source))
+            called.append(grammar.node_text(function, source))
     return tuple(called)
 
 
 def _read_class(node: Node, source: bytes) -> _Class:
-    read = _Class(is_candidate=_CLIENT_BASE in _extends(node, source))
+    read = _Class(is_candidate=_CLIENT_BASE in grammar.extends_names(node, source))
 
     body = node.child_by_field_name("body")
     if body is None:
@@ -397,7 +350,7 @@ def _read_class(node: Node, source: bytes) -> _Class:
         name_node = member.child_by_field_name("name")
         if name_node is None:
             continue
-        name = _text(name_node, source)
+        name = grammar.node_text(name_node, source)
         if any(child.type == "get" for child in member.children):
             mounted = _mounted_class(member, source)
             if mounted is not None:
@@ -413,22 +366,22 @@ def _read_class(node: Node, source: bytes) -> _Class:
 def _read_module(tree_root: Node, source: bytes, path: Path, root: Path) -> _Module:
     read = _Module()
 
-    for node in _walk(tree_root):
+    for node in grammar.walk(tree_root):
         if node.type == "import_statement":
             target = _specifier_target(node, source, path, root)
             if target is None:
                 continue
-            for child in _walk(node):
+            for child in grammar.walk(node):
                 if child.type != "import_specifier":
                     continue
                 alias = child.child_by_field_name("alias")
                 name = child.child_by_field_name("name")
                 if name is not None:
-                    read.imports[_text(alias or name, source)] = target
+                    read.imports[grammar.node_text(alias or name, source)] = target
         elif node.type == "class_declaration":
             name_node = node.child_by_field_name("name")
             if name_node is not None:
-                read.classes[_text(name_node, source)] = _read_class(node, source)
+                read.classes[grammar.node_text(name_node, source)] = _read_class(node, source)
 
     verb = _builder_verb(tree_root, source)
     route = _helper_path(tree_root, source)
