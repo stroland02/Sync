@@ -599,6 +599,68 @@ holds the secrets while the process still has a network stack. The close conditi
 unchanged, and the gate should be read as the cheap layer above the sandbox rather than as a
 substitute for it.
 
+**A second bounded step landed on 2026-08-16, and the close condition still stands.**
+`src/sync/remediate/sandbox.py` is the container-level primitive mitigation 1 needs, proven rather
+than assumed: `ephemeral_container` and `disconnect_network` are exercised against a real, running
+container on this host's actual Docker Desktop (4.81.0, Linux containers over the WSL2 backend —
+checked with `docker version` before anything else, per this entry's own open question about
+whether that backend was even reachable). `tests/test_patch_sandbox.py::
+test_container_network_cutoff_blocks_arbitrary_egress` proves, with a positive control so the test
+cannot pass by accident, that a container loses its route to an arbitrary host the moment `docker
+network disconnect` returns — the specific unknown item 3 depends on and that the earlier draft of
+this entry flagged as unmeasured. `build_container_env` gives the same module a passlist-from-empty
+environment constructor for whatever runs inside a sandboxed container, mirroring the direction
+`sync.verify.replay._environment` already established.
+
+**One verified finding changes how item 1 has to be built.** `ClaudeAgentOptions.env` cannot supply
+the credential-free environment mitigation 1 asks for: `claude_agent_sdk/_internal/transport/
+subprocess_cli.py:689-695` merges `options.env` on top of a full `dict(os.environ)` rather than
+substituting it, so a variable not named in `env=` still reaches the CLI subprocess if the parent
+process holds it. `SYNC_GRAPH_DSN` and friends cannot be excluded from the patch agent's process by
+any `ClaudeAgentOptions` argument — only a boundary that starts a process with no inherited
+environment at all does that, which is what makes the container load-bearing here rather than a
+nicer way to do something `ClaudeAgentOptions` could already do.
+
+**A third bounded step landed on 2026-08-16, and the close condition still stands.** An adversarial
+review measured the question `disconnect_network`'s own docstring had left open — whether a socket
+already open before that call can still deliver — and found it delivers real, sustained data for
+0.92-1.5s after the call is made, not "a few buffered bytes." Two in-place fixes were tried against
+this host's actual Docker Desktop/WSL2 kernel before choosing a third: `ss -K` fails outright
+(`RTNETLINK answers: Invalid argument` on every attempt, `--cap-add=NET_ADMIN` or not — this
+kernel build does not support the `sock_diag` destroy operation it needs), and `conntrack -F`
+succeeds but has no effect on an already-established connection over a user-defined bridge network
+(flushing conntrack clears NAT/tracking state, not the socket). What does close the window, measured
+the same way: destroying the container outright. `copy_between_containers` is the new primitive that
+makes this practical — the risky (networked) phase's container hands its output to a second
+container created with `network="none"` from the start, and is then destroyed rather than
+disconnected, so no process capable of calling `sendall()` again outlives the boundary.
+`tests/test_patch_sandbox.py::test_never_networked_container_receives_nothing_after_install_container_is_torn_down`
+proves it end to end against real containers and a real listener; `test_disconnect_network_does_not_stop_an_already_open_socket`
+stays green permanently as the characterization of the gap the new primitive exists to route around,
+not a RED test awaiting a fix inside `disconnect_network` itself. `probe_connect`'s reachability
+check was also tightened in the same commit: `"REACHABLE" in stdout` was true on both the success
+and failure lines (`"UNREACHABLE"` contains it), doing no real work — correctness rested entirely on
+`returncode` by coincidence. It now requires an exact match, with a regression test that reproduces
+the old check's blind spot directly.
+
+**What did not land, stated as plainly as the first bounded step stated its own gap.**
+`AgentRemediator._drive_agent` still runs on the host, exactly as before — nothing routes a real
+patch attempt through `sandbox.py` yet. `docker/patch-sandbox/Dockerfile` is authored against the
+image mitigation 1 specifies (Node LTS, git, pnpm/yarn via `corepack enable`, Python 3.12 + `uv`,
+TypeScript pinned per item 4), and it was built and probed on this host: `docker build` succeeds,
+runs as the non-root `sandbox` user, and carries Node v22.23.2, npm 10.9.8, `tsc` 5.9.3 (the pinned
+version, not `npx`-resolved), `uv` 0.12.5, and corepack shims that resolve pnpm 11.22.0 and yarn
+1.22.22 on first invocation rather than at image-build time — `corepack enable` installs the shim,
+not the package manager, so that fetch still needs the install phase's network. The image is not
+tagged, pushed, or pre-warmed anywhere a deployment would find it, and nothing in `src/` builds or
+references it — that wiring, and the pre-warming this entry's own precomputation argument depends
+on, is still unbuilt. The Anthropic-only forward proxy that item 3's literal "no network egress"
+needs for a *live* agent
+turn (the model traffic problem: the CLI has to keep talking to Anthropic's API for the whole run,
+from inside the same network namespace the mitigation wants cut off) is unbuilt and undesigned
+beyond the shape this entry's original text already sketched. A patch run today has exactly the
+network exposure it had on 2026-08-06.
+
 **Closes when:** a patch run cannot open a socket to a host Sync did not name, proven by a test
 that watches the attempt fail rather than by a configuration file asserting it.
 
