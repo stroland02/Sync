@@ -1122,6 +1122,14 @@ gap as affecting one worktree. Two of those are now wrong and the third is wrong
 
 ### Actually in flight
 
+- **B78, Tasks 3 and 4** — a Gemini session, live in `.claude/worktrees/gemini-worker` on branch
+  `gemini-b78-rehearse`. Tasks 1 and 3 landed there as `75e5f17`, Task 4 as `5e612b2`, neither
+  merged to `main` yet. Uncommitted and in progress as of 2026-08-16:
+  `src/sync/dashboard/fleet.py`, `tests/test_dashboard_fleet.py`,
+  `web/src/api/types.ts`, `web/src/features/fleet/runs-table.tsx`,
+  `web/src/features/fleet/runs-table.test.tsx` (untracked), `web/src/features/workflows/run-outcome.tsx`.
+  **Do not dispatch against B78 or edit any file in that list** until this session reports done or
+  the worktree goes quiet.
 - **`M7-W182`, the fidelity pass** — six tasks against the measured gaps, held by the console
   session in this worktree. Its working tree has `DESIGN.md`, `app-frame.tsx`, `command-palette.tsx`,
   `error-surface.tsx`, `error-log.ts`, `motion.ts` and two test files open, plus an untracked
@@ -2571,7 +2579,12 @@ will not.
 Request level renders it as a rail row linking to that repository's Codebase screen, and the URL
 boundary check is one function in `lib/` that both features import.
 
-### B126 - `abandon_reason` is free text, so the claim that abandonment is queryable is weaker than it reads
+### B128 - `abandon_reason` is free text, so the claim that abandonment is queryable is weaker than it reads
+
+**Renumbered from B126 on 2026-08-16, landing the console line.** Filed independently of and
+moments after this session's own B126 (the repo-context item, above) — the collision this file's
+own new cross-branch-grep instruction exists to catch. B128 is the next number free across every
+branch, not only `main`'s copy of this file.
 
 `docs/superpowers/specs/2026-07-27-sync-pipeline-discipline.md` states that abandoned runs are data
 and that `abandon_reason` stays queryable, because *"abandoned attempts are where routing learns
