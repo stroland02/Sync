@@ -22,6 +22,22 @@ branch the copy is not descended from. A route written `"/v4/aliases\\/{idOrAlia
 not lose a binding, it made a second one to an operation the specification declares, where the
 cross-check cannot contradict it.
 
+One more helper was checked against the same question and left out on purpose: `_comparable` is
+byte-identical in both readers today -- `_route(http_method, path)` followed by the same
+`_PARAMETER.sub("{}", route)` -- which makes it look like exactly the kind of copy this module
+exists to end. It stays local anyway, for two reasons neither of which is "it happens to differ
+right now". First, it takes no `Node`; it reduces a method and a path that have already left the
+tree, so it is not a fact about what tree-sitter parsed, and the rule this module holds to -- stated
+once, below -- is a rule about `Node` facts. Second, the two readers do not agree on what the
+identical code is *for*, and each says so in its own docstring rather than here: one needs the
+reduction to compare at all, the other keeps it measured inert and documents the case that would
+make it load-bearing too. A change to one reader's reason is not a change to the other's, so
+coupling the implementation would be coupling two answers that are only accidentally the same
+sentence today. The duplication is made visible instead of extracted:
+`tests/test_parameter_reduction.py::test_both_flavours_reduce_a_parameter_the_same_way` asserts the
+two patterns and the two behaviours agree, and goes red the day a copy drifts without an extraction
+being taken.
+
 The escape split is the fact the rest rests on
 ----------------------------------------------
 This grammar ends a `string_fragment` at every `escape_sequence`, in a plain string and in a
