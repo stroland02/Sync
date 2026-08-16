@@ -2,7 +2,7 @@ import type { GenerationSummary } from "@/api/types"
 import { Absent } from "@/components/status"
 
 export interface SupersededGenerationsProps {
-  readonly generations: readonly GenerationSummary[]
+  readonly generations?: readonly GenerationSummary[]
   readonly currentThreadId: string
 }
 
@@ -13,10 +13,11 @@ export interface SupersededGenerationsProps {
  * and abandon/report reason where the attempt stopped.
  */
 export function SupersededGenerations({
-  generations,
+  generations = [],
   currentThreadId,
 }: SupersededGenerationsProps) {
-  const superseded = generations.filter((g) => g.thread_id !== currentThreadId)
+  const list = generations ?? []
+  const superseded = list.filter((g) => g.thread_id !== currentThreadId)
   if (superseded.length === 0) return null
 
   return (
