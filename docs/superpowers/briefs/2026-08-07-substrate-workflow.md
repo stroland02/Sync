@@ -296,16 +296,11 @@ refused on three grounds, each sufficient on its own:
 `COUNT(DISTINCT thread_id)` subquery is over exactly those rows. That turns the rail's count into
 a list and gives the collapse something true to hold.
 
-What ships instead is the count and the pointer, both of which were already here and are kept
-verbatim: *"the most recent of N runs the checkpointer holds for this finding"*, with the fleet
-screen linked as where the others are. The Finding level's ruling 5 reached the same place from the
-other side, and the two now agree.
+**Amended in `M7-W208` (B124):** `workflow_state` in `src/sync/dashboard/queries.py` now queries all
+distinct threads for the finding and returns `generations: GenerationSummary[]`. The Solution Workflow
+renders each superseded generation in `SupersededGenerations` above the active sequence, showing its
+run number, thread ID, outcome, and `abandon_reason` / `report_reason`.
 
-**The consequence for the direction's collapse clause is that nothing on this level collapses.**
-The current generation is never collapsed, and it is the only generation this route can see — so no
-disclosure is added, no expansion state exists, and no search parameter is written. The URL stays
-the address of the run and nothing else. The drawer's search-param precedent is not followed
-because there is nothing to follow it with.
 
 **8. `StaleBanner` stays where it is and keeps every word.** It is the honesty sentence pair this
 level owns — that a failed refresh is the console's failure and not the run's, and that a terminal

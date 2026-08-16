@@ -2516,7 +2516,7 @@ passing:
 checkpointer, labelled as what it is, with the no-clock sentence in the level's opening entry removed
 in the same commit.
 
-### B124 - A superseded remediation generation is not reachable from the run that superseded it
+### B124 - A superseded remediation generation is not reachable from the run that superseded it - CLOSED
 
 `GET /api/workflows/{finding_id}` answers with the newest thread only, which its own type docstring
 states. A finding retried across generations therefore has `generation_count` threads on screen as a
@@ -2540,9 +2540,8 @@ The fix is small and sits in the query that already runs. `workflow_state`'s
 of `{thread_id, generation, outcome, abandon_reason}` alongside the count costs one more scan of the
 same threads.
 
-**Closes when:** the Solution Workflow renders each superseded generation as its own entry, with its
-`abandon_reason` where the run stopped - which is the direction's collapsed-generation slot, and the
-one the level currently has nothing true to put in.
+**Closed in `M7-W208`**: `sync.dashboard.queries.workflow_state` queries distinct threads for the finding and returns `generations` array of `{thread_id, generation, outcome, abandon_reason, report_reason}`, `WorkflowPage` renders superseded generations in `SupersededGenerations` with their run number, thread ID, outcome, and `abandon_reason`, and ruling 7 of `briefs/2026-08-07-substrate-workflow.md` is amended.
+
 
 ### B125 - The Pull Request level cannot name the repository its pull request was opened against - CLOSED
 

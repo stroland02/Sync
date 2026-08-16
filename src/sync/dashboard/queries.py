@@ -125,8 +125,19 @@ def workflow_state(checkpointer_dsn: str, finding_id: str) -> dict | None:
             """,
             (prefix, prefix),
         ).fetchone()
-    if row is None:
-        return None
+        if row is None:
+            return None
+
+        thread_rows = conn.execute(
+            """
+            SELECT DISTINCT ON (thread_id)
+                   thread_id, checkpoint_id, checkpoint
+              FROM checkpoints
+             WHERE thread_id LIKE %s AND checkpoint_ns = ''
+             ORDER BY thread_id, checkpoint_id DESC
+            """,
+            (prefix,),
+        ).fetchall()
 
     checkpoint = row["checkpoint"]
     values = checkpoint.get("channel_values") or {}
@@ -157,6 +168,20 @@ def workflow_state(checkpointer_dsn: str, finding_id: str) -> dict | None:
             "evidence": evidence,
         })
 
+    generations = []
+    for trow in thread_rows:
+        t_checkpoint = trow["checkpoint"] or {}
+        t_values = t_checkpoint.get("channel_values") or {}
+        t_outcome = t_values.get("outcome") if t_values.get("outcome") in _FINISHED else None
+        generations.append({
+            "thread_id": trow["thread_id"],
+            "generation": _parse_generation(trow["thread_id"]),
+            "outcome": t_outcome,
+            "abandon_reason": t_values.get("abandon_reason"),
+            "report_reason": t_values.get("report_reason"),
+        })
+    generations.sort(key=lambda g: g["generation"])
+
     return {
         "nodes": nodes,
         "outcome": outcome,
@@ -165,7 +190,15 @@ def workflow_state(checkpointer_dsn: str, finding_id: str) -> dict | None:
         "thread_id": row["thread_id"],
         "generation_count": row["generation_count"],
         "repo_id": _extract_repo_id(values),
+        "generations": generations,
     }
+
+
+def _parse_generation(thread_id: str) -> int:
+    parts = thread_id.rsplit(":", 1)
+    if len(parts) == 2 and parts[1].isdigit():
+        return int(parts[1])
+    return 0
 
 
 def _extract_repo_id(values: dict) -> str | None:

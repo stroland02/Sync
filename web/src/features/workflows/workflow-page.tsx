@@ -53,6 +53,7 @@ import { Absent, Formatted } from "@/components/status"
 import { Button } from "@/components/ui/button"
 import { NodeSequence } from "@/features/workflows/node-sequence"
 import { RunOutcome, type BelowThisPanel } from "@/features/workflows/run-outcome"
+import { SupersededGenerations } from "@/features/workflows/superseded-generations"
 import { Breadcrumbs } from "@/layouts/breadcrumbs"
 import { PageHeader } from "@/layouts/page-header"
 import { UnknownRoute } from "@/layouts/unknown-route"
@@ -339,6 +340,11 @@ function Workflow({ findingId, question }: { findingId: string; question: string
                 onRetry={() => void query.refetch()}
               />
             )}
+
+            <SupersededGenerations
+              generations={data.generations}
+              currentThreadId={data.thread_id}
+            />
 
             <NodeSequence
               nodes={data.nodes}
