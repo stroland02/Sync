@@ -1,16 +1,17 @@
-"""Why the replay tier builds `source='replay'` rows and does not write them to the store.
+"""Why the replay tier builds `source='replay'` rows, does not write them, and will not.
 
-`docs/superpowers/specs/2026-07-26-sync-observed-contract-drift.md` says "every replay run is
+`docs/superpowers/specs/2026-07-26-sync-observed-contract-drift.md` said "every replay run is
 also a shape-store writer (`source = 'replay'`), which is how the baseline begins accumulating
-before any customer installs anything". `replay_shapes` builds the rows and `make_replay`
-carries them out on `RunState`; nothing calls `record_observed_shape` with them.
+before any customer installs anything". **That claim is retired rather than deferred**, and the
+specification now says so in its own words. `replay_shapes` builds the rows and `make_replay`
+carries them out on `RunState`; nothing calls `record_observed_shape` with them, and nothing
+should.
 
 These tests pin that gap deliberately rather than closing it. The same document's borrowed
 insight is that the baseline is "the responses the customer's code actually received" -- and a
 replay row is not one. The mock is synthesized from the vendor's published specification
-(`synthesize_mock_response`), so a replay row is the specification restated through the
-customer's code, not traffic. Writing it into a table two consumers read as traffic had three
-measured consequences:
+(`synthesize_mock_response`), so a replay row is the specification restated, not traffic.
+Writing it into a table two consumers read as traffic had three measured consequences:
 
 - The mock builder took the store's rows with no `source` filter, and an observation at the
   floor outranks the specification, so replay rows would be fed back into the mock the next
@@ -68,6 +69,8 @@ from sync.detect.observed_drift import MIN_SAMPLES
 from sync.graph.store import GraphStore
 from sync.remediate.nodes import make_replay
 from sync.remediate.state import MAX_STATIC_ATTEMPTS
+from sync.verify.mock_response import synthesize_mock_response
+from sync.verify.replay import replay_shapes
 
 DSN = os.environ.get("SYNC_DSN", "postgresql://sync:sync@localhost:5433/sync")
 
@@ -83,6 +86,37 @@ SCHEMA = {
         "status": {"type": "string", "nullable": True},
     },
 }
+
+# Every construct the synthesizer treats differently, so "the rows add nothing" is measured
+# over the whole vocabulary rather than over two strings: an enum, a nullable object with a
+# child under it, an array of objects, and each scalar type.
+RICH_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "id": {"type": "string"},
+        "status": {"type": "string", "enum": ["succeeded", "failed"]},
+        "amount": {"type": "integer"},
+        "live": {"type": "boolean"},
+        "data": {
+            "type": "object",
+            "nullable": True,
+            "properties": {"inner": {"type": "string"}},
+        },
+        "refunds": {
+            "type": "array",
+            "items": {"type": "object", "properties": {"rid": {"type": "string"}}},
+        },
+    },
+}
+
+# Every pointer `RICH_SCHEMA` declares a field at, the root excluded because the root is the
+# response rather than a field in it. Written out rather than walked out of the schema: a
+# derivation would reproduce the walk the test compares against, and agree with it however
+# wrong both were.
+RICH_DECLARED = frozenset({
+    "/id", "/status", "/amount", "/live", "/data", "/data/inner",
+    "/refunds", "/refunds/-", "/refunds/-/rid",
+})
 
 SITE = CallSite(
     repo_id="r1", path=TARGET, line=9, col=23, vendor_id="stripe",
@@ -143,6 +177,19 @@ def _shape(**over) -> ObservedShape:
 def _writes_nothing(store) -> bool:
     """No row of any source, which is the only read that can see a replay writer return."""
     return store.observed_shapes("stripe", "PostCharges", traffic_only=False) == []
+
+
+def _rows(carried) -> frozenset:
+    """The rows a run offered, in a form two runs can be compared on.
+
+    Every column except the timestamps, which are set when the row is built and so differ
+    between two runs that agree about everything a row means.
+    """
+    return frozenset(
+        (row["field_path"], row["json_type"], row["nullable_seen"],
+         tuple(row["spec_enum_values"]), row["source"], row["sample_count"])
+        for row in carried
+    )
 
 
 def test_a_successful_replay_builds_shape_rows_and_writes_none_of_them(store, clone):
@@ -282,3 +329,97 @@ def test_no_number_of_replays_lifts_a_synthesized_shape_over_the_sample_floor(st
 
     rows = store.observed_shapes("stripe", "PostCharges", traffic_only=False)
     assert max(row.sample_count for row in rows) < MIN_SAMPLES
+
+
+# --- what a replay row is evidence of, which is what retires the claim ------------
+#
+# The three tests above say the write is safe now. These say it would still be pointless,
+# which is a different claim and the one the specification's withdrawn sentence rested on.
+# They are deliberately not read through the store: every one of them has to hold with the
+# traffic filter and the sample floor both removed, because a test that let either guard
+# supply the answer would pass just as well over rows that carried real evidence.
+
+
+def test_the_rows_a_replay_builds_do_not_depend_on_the_customer_code_it_ran(store, clone):
+    """Three runs, three verdicts, one set of rows.
+
+    `replay_call_path` computes the rows from the mock before the child process starts, so
+    nothing the customer's code does can reach them -- not the outcome, not which fields were
+    read, not whether the call happened at all. `exits_before_the_call` is the sharp case: it
+    ends the process while the module is still loading, so the vendor call is never made, and
+    it still offers the same rows as a run that passed.
+
+    This is stronger than the description W116 gave these rows. "The published specification
+    restated through the customer's code" grants the customer's code a contribution it does
+    not make; the rows are the specification restated, and the run is not one of their inputs.
+    A row that is identical across a pass, a throw and a run that never happened cannot be an
+    observation of anything that happened.
+    """
+    runs = {
+        fixture: make_replay(store)({
+            "site": SITE, "repo": clone(fixture), "replay_plan": PLAN,
+        })
+        for fixture in ("handles", "mishandles", "exits_before_the_call")
+    }
+
+    assert [runs[name]["replay_outcome"] for name in ("handles", "mishandles",
+                                                      "exits_before_the_call")] == [
+        "passed", "threw", "declined",
+    ]
+    offered = {name: _rows(run["replay_shapes"]) for name, run in runs.items()}
+    assert all(rows for rows in offered.values()), "a run offered no rows to compare"
+    assert len(set(offered.values())) == 1, offered
+
+
+def test_reading_a_replay_runs_own_rows_back_leaves_the_mock_unchanged():
+    """The measurement the withdrawn claim needed and does not survive.
+
+    "The baseline begins accumulating" is worth saying only if what accumulates changes an
+    answer. Here is the answer it was supposed to change: the mock the *next* replay is
+    verified against. Feed a run's own rows back at the sample floor and the mock is
+    byte-identical to the one built from the specification alone -- for a two-field schema and
+    for one carrying an enum, a nullable object, an array and four scalar types.
+
+    A replay row is therefore evidence of nothing. `synthesize_mock_response` is pure and
+    deterministic in the schema and the baseline, `replay_shapes` reduces its output, and a
+    reduction of a function's output is not a second input to it.
+
+    **Every guard is removed on purpose and this test must stay that way.** The rows are lifted
+    to `MIN_SAMPLES` by hand and handed straight to the synthesizer, so neither the traffic
+    filter nor the floor can supply the result. Routed through the store instead, the rows
+    would be excluded twice over and the mock would be unchanged for reasons that say nothing
+    about what the rows contain -- which is the version of this test that passes over rows
+    carrying anything at all.
+    """
+    for schema in (SCHEMA, RICH_SCHEMA):
+        from_specification = synthesize_mock_response(schema, ())
+        offered = replay_shapes("stripe", "PostCharges", from_specification)
+        at_the_floor = tuple(
+            shape.model_copy(update={"sample_count": MIN_SAMPLES}) for shape in offered
+        )
+
+        assert at_the_floor, "the schema produced no rows to read back"
+        assert synthesize_mock_response(schema, at_the_floor) == from_specification
+
+
+def test_a_replay_row_carries_no_field_and_no_member_the_specification_did_not():
+    """The reduction is lossy in one direction and never additive in the other.
+
+    Every path the rows carry is a path the schema declares, and one the schema declares is
+    missing: `/data/inner` sits under a nullable parent, so the mock stops at the null and the
+    walk never reaches the child. No enum member survives either -- `replay_shapes` retains
+    none, by its own docstring, because retaining one needs the published specification and it
+    holds only a body.
+
+    This is what makes the retirement permanent rather than a verdict on today's code. The
+    claim becomes worth reopening if these rows ever carry something the specification did not
+    already say, and this test is what fails on the day they do.
+    """
+    offered = replay_shapes(
+        "stripe", "PostCharges", synthesize_mock_response(RICH_SCHEMA, ())
+    )
+    carried = {shape.field_path for shape in offered}
+
+    assert carried < RICH_DECLARED
+    assert RICH_DECLARED - carried == {"/data/inner"}
+    assert not {member for shape in offered for member in shape.spec_enum_values}
