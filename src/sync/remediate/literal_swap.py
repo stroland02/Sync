@@ -9,9 +9,16 @@ the patch" costs nothing per finding.
 tier so the claim that mechanical changes land more often than agent-written ones can be
 checked rather than asserted.
 
-The remediator declines rather than guesses. No replacement, a change that is not a
-deprecation, an unreadable file, an unsupported language -- all of them return work to the
-agent or produce nothing, because a confident wrong patch costs more than a missing one.
+The remediator declines rather than guesses. No replacement, no id to replace, a change that
+is not a deprecation, an unreadable file, an unsupported language -- all of them return work
+to the agent or produce nothing, because a confident wrong patch costs more than a missing one.
+
+The first two are decided by `can_handle` rather than inside `propose`, and that placement is
+the point. A codemod that accepts a change and then finds nothing to build has already spent
+the attempt: the cascade returns its empty `Patch` and never reaches the next tier. Declining
+at the predicate keeps the fall-through inside the same attempt, and it is the decline
+`TieredRemediator._eligible` can measure -- a `CannotPatch` raised under a tier-0 route leaves
+the narrowed candidate list non-empty and strands the finding at `NoTierApplies`.
 """
 
 from __future__ import annotations
@@ -43,8 +50,16 @@ def _language_for(path: str) -> str | None:
     return _LANGUAGES.get(Path(path).suffix.lower())
 
 
-def _replacement(change: VendorChange) -> str | None:
-    value = change.raw.get("replacement")
+# The keys `model_literal_swap` requires, in the form it requires them: a non-empty string.
+# `can_handle` tests exactly this set and nothing narrower. A record the predicate claims and
+# the builder refuses yields no rule, and `apply_rules` with no rules returns the source
+# unchanged -- which is the same answer as an already-migrated file by the time `make_patch`
+# reads it, so the run reports no change rather than reporting that no rule could be built.
+_REQUIRED = ("model_id", "replacement")
+
+
+def _named(change: VendorChange, key: str) -> str | None:
+    value = change.raw.get(key)
     return value if isinstance(value, str) and value else None
 
 
@@ -54,7 +69,9 @@ class LiteralSwapRemediator:
     strategy = "codemod"
 
     def can_handle(self, finding: Finding, change: VendorChange) -> bool:
-        return change.kind.startswith(_DEPRECATION_PREFIX) and _replacement(change) is not None
+        return change.kind.startswith(_DEPRECATION_PREFIX) and all(
+            _named(change, key) is not None for key in _REQUIRED
+        )
 
     def propose(
         self,
@@ -117,7 +134,7 @@ class LiteralSwapRemediator:
         """
         state = change.raw.get("state", "deprecated")
         old = change.raw.get("model_id", change.operation_id)
-        new = _replacement(change)
+        new = _named(change, "replacement")
         retirement = change.raw.get("retirement_date")
 
         when = f" Retirement date: {retirement}." if retirement else ""
