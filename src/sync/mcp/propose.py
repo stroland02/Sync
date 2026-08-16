@@ -22,7 +22,7 @@ stopping is returned to the caller instead.
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Literal
 
 from sync.core import Finding, RepoRef
 from sync.remediate.nodes import (
@@ -48,6 +48,20 @@ NO_PATCH_WARRANTED = "no_patch_warranted"
 # and could not finish: nothing was attempted here, and an agent should stop asking.
 UNAVAILABLE = "unavailable"
 
+PreviewOutcome = Literal["proposed", "unverified", "blocked", "no_patch_warranted", "unavailable"]
+
+
+class PreviewState(RunState, total=False):
+    """A truncated run, and the word that says where it stopped.
+
+    Its own key rather than `RunState["outcome"]`, whose type is the pipeline's four words and
+    holds none of these. The pipeline's state type does not learn this server's vocabulary
+    either, which is why both live here. `tests/test_run_state_vocabulary.py` holds the two
+    apart, since no typechecker runs in this repository.
+    """
+
+    preview_outcome: PreviewOutcome
+
 
 def run_to_static_verify(
     finding: Finding,
@@ -57,8 +71,14 @@ def run_to_static_verify(
     adapter: Any,
     remediator: Any,
     catalogue: Any = None,
-) -> RunState:
+) -> PreviewState:
     """Drive `locate -> prepare -> patch -> static_verify` under the pipeline's own routing.
+
+    `catalogue` and `remediator` are independent arguments and the caller has to match them:
+    the catalogue reaches `locate` alone, so a `TieredRemediator` holding the table while this
+    is `None` leaves `route_after_prepare` no tier to read, and a tier -1 change runs `patch`,
+    lands `NoPatchWarranted` in `diagnostics` and returns `'unverified'` where the matched
+    configuration returns `'no_patch_warranted'`.
 
     The retry loop between `patch` and `static_verify` is the pipeline's, including its
     attempt budget: a failed typecheck feeds its diagnostics back into the next patch, which
@@ -73,7 +93,7 @@ def run_to_static_verify(
     patch = make_patch(remediator)
     static_verify = make_static_verify(adapter)
 
-    state: RunState = {"finding": finding, "repo": repo}
+    state: PreviewState = {"finding": finding, "repo": repo}
 
     state.update(locate(state))
     if route_after_locate(state) == "abandon":
@@ -106,6 +126,6 @@ def run_to_static_verify(
             return _finish(state, PROPOSED)
 
 
-def _finish(state: RunState, outcome: str) -> RunState:
-    state["outcome"] = outcome
+def _finish(state: PreviewState, outcome: PreviewOutcome) -> PreviewState:
+    state["preview_outcome"] = outcome
     return state
