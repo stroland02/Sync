@@ -557,13 +557,19 @@ Tasks 1–6 of the dogfooding plan (`docs/superpowers/plans/2026-08-05-sync-dogf
 - `web/src/features/bindings/binding-surface-page.tsx`: table rows highlight with `data-state="selected"` when their detail drawer is open.
 - Created `docs/superpowers/plans/2026-08-08-console-mock-to-build.md` detailing the transition from demo mockups (`docs/superpowers/references/direction/`) to built console features.
 
-### B123 is closed (`M7-W210`)
+### B123 is closed (`M7-W210`, `a8946fe`)
 
 - `workflow_state` in `src/sync/dashboard/queries.py` queries all checkpoints for the active thread and extracts `first_seen_at` and `last_seen_at` per node from LangGraph checkpointer `ts` fields.
 - `WorkflowNode` in `web/src/api/types.ts` carries `first_seen_at` and `last_seen_at`.
 - `StepBody` in `web/src/features/workflows/node-sequence.tsx` renders the checkpointer timestamp on each node with checkpoint window tooltips.
 - The no-clock sentence was removed from `Arrival` in `web/src/features/workflows/workflow-page.tsx`.
 - All 17 implementation plans in `docs/superpowers/plans/` are indexed in the `BACKLOG.md` Implementation Plans Ledger.
+
+### Mock-to-Build Execution & Evidence Code Headers Landed (`M7-W211`)
+
+- `web/src/features/workflows/evidence.tsx`: Added titled language headers (`DIAGNOSTICS`, `DIFF`, `JSON`, `OUTPUT`) on all multi-line evidence block cards across the Solution Workflow and Pull Request evidence bundles.
+- `docs/superpowers/plans/2026-08-08-console-mock-to-build.md`: All tasks across Phases 1, 2, 3, and 4 verified and tracked.
+
 
 
 

@@ -229,6 +229,20 @@ function Block({ value }: { value: unknown }) {
   )
 }
 
+function languageLabel(key: string): string {
+  switch (key) {
+    case "diagnostics":
+      return "DIAGNOSTICS"
+    case "diff":
+    case "patch":
+      return "DIFF"
+    case "replay_evidence":
+      return "JSON"
+    default:
+      return "OUTPUT"
+  }
+}
+
 /**
  * A block with a label strip, which is what a reader recognises before reading a character of it.
  *
@@ -241,10 +255,13 @@ function BlockField({ field, value }: { field: Field; value: unknown }) {
   return (
     <div className="flex min-w-0 flex-col gap-field">
       <Card>
-        <CardHeader>
-          <h4 className="furniture text-meta text-ink-muted">{field.label}</h4>
+        <CardHeader className="flex flex-row items-center justify-between border-b border-border bg-surface-subtle px-4 py-2">
+          <h4 className="furniture text-meta text-muted-foreground">{field.label}</h4>
+          <span className="font-mono text-meta text-muted-foreground uppercase">
+            {languageLabel(field.key)}
+          </span>
         </CardHeader>
-        <CardContent>
+        <CardContent className="p-4">
           <Block value={value} />
         </CardContent>
       </Card>
