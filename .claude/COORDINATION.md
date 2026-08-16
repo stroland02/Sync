@@ -521,3 +521,19 @@ Tasks 1–6 of the dogfooding plan (`docs/superpowers/plans/2026-08-05-sync-dogf
    - Wired into `.github/workflows/ci.yml`.
    - Broken and verified RED against unterminated thread, then verified GREEN.
 
+---
+
+## 2026-08-09 — B120 (Routes ESM Cycle) and B125 (PR Repository Name & URL Boundary) Landed
+
+### B120 is closed (`M7-W205`, `cbc06fe`)
+
+- `App.tsx` now passes `question={route.question}` directly into each `<RoutedScreen>`, breaking the initialization cycle between `routes.ts` and feature pages.
+- Removed all `@/lib/routes` imports from all 9 feature pages under `web/src/features/`.
+- Added structural test guard `test_no_feature_page_imports_routes_registry` in `tests/test_console_design_tokens.py` (proven RED before GREEN).
+
+### B125 is closed (`M7-W206`, `5660ea1`)
+
+- `workflow_state` in `src/sync/dashboard/queries.py` now extracts `repo_id` from the checkpoint's `repo` channel (`_extract_repo_id`) and returns it alongside `thread_id` and `generation_count`.
+- `PullRequestPage` (`web/src/features/pullrequests/pull-request-page.tsx`) renders the `Repository` fact in its rail, linking to `/repositories/:repoId`.
+- Consolidated `asHttpUrl` into a single tested helper in `web/src/lib/url.ts` and `web/src/lib/url.test.ts`, removing duplicated boundary implementations from `features/pullrequests/bundle-facts.ts` and `features/workflows/evidence.tsx`.
+
