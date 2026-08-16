@@ -337,6 +337,7 @@ export interface WorkflowState {
   report_reason: string | null
   thread_id: string
   generation_count: number
+  repo_id: string | null
 }
 
 /**

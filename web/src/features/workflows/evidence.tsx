@@ -27,6 +27,7 @@ import type { ReactNode } from "react"
 
 import { Absent, Formatted } from "@/components/status"
 import { orAbsent } from "@/lib/format"
+import { asHttpUrl } from "@/lib/url"
 import { Card, CardContent, CardHeader } from "@/vendor/supabase/ui/card"
 
 type FieldKind = "text" | "flag" | "url" | "block"
@@ -143,25 +144,6 @@ const FIELDS: Record<string, Field[]> = {
     { key: "pr_url", label: "Pull request", kind: "url" },
     { key: "pr_number", label: "Number", kind: "text" },
   ],
-}
-
-/**
- * A URL the payload gave, or null.
- *
- * The value originates in the customer's repository by way of the forge, which makes it
- * untrusted input arriving at a boundary. Anything that is not http or https renders as
- * text: a `javascript:` href in an anchor is a script the console would be running on
- * someone else's say-so. Nothing here constructs a URL the payload did not send.
- */
-function asHttpUrl(value: unknown): string | null {
-  if (typeof value !== "string" || value === "") return null
-  let parsed: URL
-  try {
-    parsed = new URL(value)
-  } catch {
-    return null
-  }
-  return parsed.protocol === "http:" || parsed.protocol === "https:" ? value : null
 }
 
 /** A scalar as a string. Objects and arrays are not scalars and return null. */

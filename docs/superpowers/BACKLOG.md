@@ -2547,7 +2547,7 @@ same threads.
 `abandon_reason` where the run stopped - which is the direction's collapsed-generation slot, and the
 one the level currently has nothing true to put in.
 
-### B125 - The Pull Request level cannot name the repository its pull request was opened against
+### B125 - The Pull Request level cannot name the repository its pull request was opened against - CLOSED
 
 `sync.remediate.state.RemediationState` carries `repo: RepoRef` on every run, so the checkpoint the
 console reads already holds the answer. `sync.dashboard.queries.workflow_state` forwards eleven
@@ -2575,9 +2575,8 @@ M7-W180 did not open another level's directory to export it. Two copies of a sec
 the defect `CLAUDE.md` names as the most expensive kind: one of them will be fixed and the other
 will not.
 
-**Closes when:** `workflow_state` returns the run's repository alongside `thread_id`, the Pull
-Request level renders it as a rail row linking to that repository's Codebase screen, and the URL
-boundary check is one function in `lib/` that both features import.
+**Closed in `M7-W206`**: `workflow_state` in `sync.dashboard.queries` now extracts `repo_id` from checkpoint `repo` channels and includes it in the response, `PullRequestPage` renders the `Repository` fact in its rail linking to `/repositories/:repoId`, and `asHttpUrl` is consolidated into a single tested helper in `web/src/lib/url.ts`.
+
 
 ### B128 - `abandon_reason` is free text, so the claim that abandonment is queryable is weaker than it reads
 

@@ -164,7 +164,22 @@ def workflow_state(checkpointer_dsn: str, finding_id: str) -> dict | None:
         "report_reason": values.get("report_reason"),
         "thread_id": row["thread_id"],
         "generation_count": row["generation_count"],
+        "repo_id": _extract_repo_id(values),
     }
+
+
+def _extract_repo_id(values: dict) -> str | None:
+    repo = values.get("repo")
+    if repo is None:
+        return None
+    if isinstance(repo, dict):
+        return repo.get("repo_id")
+    if hasattr(repo, "repo_id"):
+        return repo.repo_id
+    if isinstance(repo, str):
+        return repo
+    return None
+
 
 
 def _pending_node(versions: dict, seen: dict) -> str | None:

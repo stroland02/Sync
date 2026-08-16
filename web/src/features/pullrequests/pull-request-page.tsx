@@ -139,6 +139,21 @@ function railFacts(
       ),
     },
     {
+      label: "Repository",
+      value: fact("w-32", (state) =>
+        state.repo_id === null ? (
+          <Absent>unknown</Absent>
+        ) : (
+          <Link
+            to={`/repositories/${encodeURIComponent(state.repo_id)}`}
+            className="underline underline-offset-2"
+          >
+            <code className="font-mono text-meta break-all">{state.repo_id}</code>
+          </Link>
+        ),
+      ),
+    },
+    {
       label: "Pull request",
       value: fact("w-16", (state) =>
         facts.prNumber === null ? (

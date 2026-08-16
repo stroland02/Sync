@@ -17,6 +17,7 @@
  */
 
 import type { WorkflowNode, WorkflowOutcome } from "@/api/types"
+import { asHttpUrl } from "@/lib/url"
 
 export interface BundleFacts {
   /** `open_pr`'s `pr_number`, as a string. */
@@ -32,29 +33,6 @@ function asScalarText(value: unknown): string | null {
   if (typeof value === "string") return value === "" ? null : value
   if (typeof value === "number" || typeof value === "boolean") return String(value)
   return null
-}
-
-/**
- * A URL the payload gave, or null.
- *
- * The value originates in the customer's repository by way of the forge, which makes it untrusted
- * input arriving at a boundary. Anything that is not http or https is not rendered as an anchor: a
- * `javascript:` href is a script the console would run on somebody else's say-so. Nothing here
- * constructs a URL the payload did not send.
- *
- * This is the same rule `features/workflows/evidence.tsx` applies to the same value, and the two
- * copies are B125's second half — that file's `asHttpUrl` is not exported and M7-W180 did not open
- * another level's directory to export it.
- */
-function asHttpUrl(value: unknown): string | null {
-  if (typeof value !== "string" || value === "") return null
-  let parsed: URL
-  try {
-    parsed = new URL(value)
-  } catch {
-    return null
-  }
-  return parsed.protocol === "http:" || parsed.protocol === "https:" ? value : null
 }
 
 function evidenceOf(nodes: WorkflowNode[], name: string): Record<string, unknown> {

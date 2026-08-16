@@ -599,3 +599,42 @@ def test_the_consoles_evidence_fields_match_this_modules_keys():
     rendered = re.findall(r'key:\s*"([^"]+)"', fields)
     assert len(rendered) == len(set(rendered)), "the console names an evidence key twice"
     assert set(rendered) == {key for keys in _EVIDENCE_KEYS.values() for key in keys}
+
+
+def test_workflow_state_forwards_repo_id(checkpointer_tables):
+    _insert_checkpoint(
+        f"{FINDING_ID}:abc123def456:0",
+        "1f069000-0000-6000-8000-000000000001",
+        channel_values={
+            "outcome": "opened",
+            "repo": {
+                "repo_id": "example-owner/repo-name",
+                "url": "https://github.com/example-owner/repo-name",
+                "local_path": "/tmp/repo",
+                "head_sha": "abc123def456",
+            },
+        },
+        channel_versions={},
+        versions_seen={"__input__": {}},
+        step=1,
+    )
+
+    state = workflow_state(DSN, FINDING_ID)
+    assert state is not None
+    assert state["repo_id"] == "example-owner/repo-name"
+
+
+def test_workflow_state_repo_id_is_none_when_unspecified(checkpointer_tables):
+    _insert_checkpoint(
+        f"{FINDING_ID}:abc123def456:0",
+        "1f069000-0000-6000-8000-000000000001",
+        channel_values={"outcome": "opened"},
+        channel_versions={},
+        versions_seen={"__input__": {}},
+        step=1,
+    )
+
+    state = workflow_state(DSN, FINDING_ID)
+    assert state is not None
+    assert state["repo_id"] is None
+
