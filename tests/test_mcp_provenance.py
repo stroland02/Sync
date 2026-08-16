@@ -47,7 +47,7 @@ ENVELOPE_KEYS = {"indexed_at", "feed_fetched_at", "binding_source", "context_sav
 PAGE_KEYS = ENVELOPE_KEYS | {"items", "total", "next_offset"}
 RISK_ROW_KEYS = {
     "file", "line", "symbol", "operation", "vendor", "change_kind", "severity", "finding_id",
-    "binding_source",
+    "binding_source", "repo_id",
 }
 EXPLAIN_KEYS = ENVELOPE_KEYS | {
     "symbol", "operation", "vendor", "args_keys", "response_fields_read", "sdk_version",
