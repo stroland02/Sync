@@ -1135,7 +1135,7 @@ class GraphStore:
         self._connect().execute("UPDATE finding SET status = %s WHERE id = %s", (status, finding_id))
 
     _OUTCOME_COLUMNS = (
-        "finding_id", "attempt_index", "vendor_id", "from_version", "to_version",
+        "finding_id", "attempt_index", "is_rehearsal", "vendor_id", "from_version", "to_version",
         "change_kind", "change_severity", "operation_id", "path_ptr", "language",
         "sdk_version", "symbol_shape", "arg_arity", "arg_key_hashes",
         "response_fields_touched_count", "strategy", "tier", "routing_row", "input_tokens",
@@ -1147,10 +1147,10 @@ class GraphStore:
     def record_migration_outcome(self, outcome: MigrationOutcome) -> None:
         """Append one attempt to the corpus.
 
-        `ON CONFLICT DO NOTHING` on `(finding_id, attempt_index)` because the remediation graph
-        retries and a restarted run must converge rather than inflate the corpus. An inflated
-        corpus silently overstates every rate computed from it, which is worse than a missing
-        row because nothing looks wrong.
+        `ON CONFLICT DO NOTHING` on `(finding_id, attempt_index, is_rehearsal)` because the
+        remediation graph retries and a restarted run must converge rather than inflate the
+        corpus. An inflated corpus silently overstates every rate computed from it, which is
+        worse than a missing row because nothing looks wrong.
         """
         values = [getattr(outcome, name) for name in self._OUTCOME_COLUMNS]
         placeholders = ", ".join(["%s"] * len(self._OUTCOME_COLUMNS))
@@ -1158,14 +1158,21 @@ class GraphStore:
             f"""
             INSERT INTO migration_outcome ({", ".join(self._OUTCOME_COLUMNS)})
             VALUES ({placeholders})
-            ON CONFLICT (finding_id, attempt_index) DO NOTHING
+            ON CONFLICT (finding_id, attempt_index, is_rehearsal) DO NOTHING
             """,
             values,
         )
 
     def migration_outcomes(self) -> list[MigrationOutcome]:
+        """Every production attempt, in corpus order.
+
+        Filters `is_rehearsal` out rather than handing the dimension to every caller: a rehearsal
+        row belongs in the table -- it still cost a repair attempt worth recording -- but nowhere
+        a corpus-wide rate (`merge_rate`, `counts.pull_requests_opened`, ...) is computed. See the
+        table's grain comment.
+        """
         rows = self._connect().execute(
-            "SELECT * FROM migration_outcome ORDER BY finding_id, attempt_index"
+            "SELECT * FROM migration_outcome WHERE NOT is_rehearsal ORDER BY finding_id, attempt_index"
         ).fetchall()
         return [MigrationOutcome(**row) for row in rows]
 
@@ -1193,6 +1200,7 @@ class GraphStore:
                    count(DISTINCT finding_id) FILTER (WHERE terminal_status = 'abandoned')
                        AS abandoned_distinct_finding_count
               FROM migration_outcome
+             WHERE NOT is_rehearsal
              GROUP BY change_kind, tier
              ORDER BY change_kind, tier
             """
@@ -1213,7 +1221,7 @@ class GraphStore:
             """
             SELECT change_kind, tier, abandon_reason, count(*) AS n
               FROM migration_outcome
-             WHERE terminal_status = 'abandoned'
+             WHERE NOT is_rehearsal AND terminal_status = 'abandoned'
              GROUP BY change_kind, tier, abandon_reason
              ORDER BY change_kind, tier
             """
@@ -1233,6 +1241,11 @@ class GraphStore:
         Merge outcome is the one measurement that tests the product claim, and a column that
         silently stays null destroys it. The update path exists from the first row rather than
         being added once someone notices the column is empty.
+
+        `AND NOT is_rehearsal`: a real GitHub delivery describes a real pull request, which only
+        a production run can have opened. Without the filter this would also match a rehearsal
+        row sharing the same finding and attempt index, crediting a merge to an attempt that
+        never reached a forge.
         """
         self._connect().execute(
             """
@@ -1241,7 +1254,7 @@ class GraphStore:
                    pr_merged = COALESCE(%s, pr_merged),
                    pr_merged_at = CASE WHEN %s THEN now() ELSE pr_merged_at END,
                    human_edits_before_merge = COALESCE(%s, human_edits_before_merge)
-             WHERE finding_id = %s AND attempt_index = %s
+             WHERE finding_id = %s AND attempt_index = %s AND NOT is_rehearsal
             """,
             (pr_number, pr_merged, bool(pr_merged), human_edits_before_merge,
              finding_id, attempt_index),

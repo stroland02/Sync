@@ -262,6 +262,14 @@ class MigrationOutcome(BaseModel):
     id: int | None = None
     finding_id: str
     attempt_index: int
+    # Whether this attempt ran inside `sync rehearse`, a zero-remote local run against a fixture
+    # repository, rather than a real customer pipeline. Folded into the natural key below it so a
+    # rehearsal and a production run that land on the same finding at the same attempt index
+    # produce two distinguishable rows instead of one colliding with the other -- B79. Defaults
+    # to `False` because every existing fixture and test-harness call site already constructs a
+    # production-shaped row; `sync.remediate.graph.build_graph`'s `is_rehearsal` parameter is the
+    # one caller that sets it `True`, and it is the only caller that knows to.
+    is_rehearsal: bool = False
 
     # The vendor change. Public data; no privacy constraint applies to this block.
     vendor_id: str

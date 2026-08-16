@@ -376,6 +376,11 @@ def run_rehearsal(args: argparse.Namespace, *, today: date | None = None) -> int
             forge=None,
             checkpointer=checkpointer,
             catalogue=catalogue,
+            # The corpus's run identity (B79), not a restatement of `forge=None` above: that
+            # argument is the push-safety guarantee this module's docstring names, and
+            # `build_graph`'s own test suite reuses `forge=None` for unrelated forge-less runs
+            # that must not be mislabelled as rehearsals.
+            is_rehearsal=True,
         )
 
         for finding in selected:

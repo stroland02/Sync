@@ -687,7 +687,7 @@ GitHub, against a fixture repo, writing real rows.
 - **Task 6 (`M4-W203`):** `scripts/rehearse_smoke.py` smoke gate asserts all checkpointer threads reach terminal outcomes, wired into `.github/workflows/ci.yml`.
 
 
-### B79 — a rehearsal row and a production row collide on the corpus natural key
+### B79 — a rehearsal row and a production row collide on the corpus natural key - CLOSED
 
 `migration_outcome` is upserted on `(finding_id, attempt_index)` with `ON CONFLICT DO NOTHING`
 (`store.py:546`). That clause is the idempotence guarantee the pipeline discipline requires and is
@@ -707,6 +707,19 @@ share a database and a finding id.
 the corpus declares, or `schema.sql` states as a comment why sharing a database between the two is
 not supported and something refuses it. Deciding which is the work; do not change the conflict
 clause.
+
+Closed by M4-W204, the first shape: `sync rehearse --dsn` defaults to the exact DSN `sync run`
+does (`cli.py`'s `rehearse` and `run` subparsers share `DEFAULT_DSN`), so there is no existing
+convention of the two pointing at separate databases to enforce — the second shape would have
+been refusing something this codebase already expects to work. `is_rehearsal BOOLEAN NOT NULL
+DEFAULT false` joined the natural key instead: `UNIQUE (finding_id, attempt_index, is_rehearsal)`.
+It is threaded explicitly through `build_graph`'s new `is_rehearsal` keyword rather than inferred
+from `forge is None` — this file's own test suite and `sync.mcp.propose` both build forge-less
+graphs for reasons that have nothing to do with `sync rehearse`, so that inference would have
+mislabelled them. Only `sync.rehearse.driver.run_rehearsal` passes `True`. `GraphStore
+.migration_outcomes`, `migration_outcome_rollup_by_kind` and `migration_outcome_abandon_reasons_by_kind`
+filter `is_rehearsal` out, and `set_merge_outcome` excludes it from its `WHERE`, so a rehearsal row
+is recorded — it still cost a repair attempt — but never reaches a corpus-wide rate.
 
 ### B76 — three small truths about how this CLI reads files, left over from B73
 

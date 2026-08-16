@@ -193,11 +193,18 @@ class CorpusWriter(Protocol):
     def record_migration_outcome(self, outcome: MigrationOutcome) -> None: ...
 
 
-def make_recorder(store: CorpusWriter):
+def make_recorder(store: CorpusWriter, *, is_rehearsal: bool = False):
     """A `record(state, terminal_status, ...)` bound to one store.
 
     Built in `build_graph` from the store it already receives, so no caller has to learn a
     new argument and no run can be configured with the recording silently absent.
+
+    `is_rehearsal` is not read off `store` or derived from whether a forge is present --
+    `sync.rehearse.driver` is the only caller of `build_graph` that means a rehearsal, and this
+    module's own test suite calls `build_graph(forge=None, ...)` for reasons that have nothing
+    to do with `sync rehearse`, so folding rehearsal-ness into forge presence would mislabel
+    every one of those runs in the corpus. It is threaded through explicitly instead, and
+    defaults to `False` because every existing caller means a production run.
 
     Raises `CorpusWriterMissing` if the store cannot write. Callability is checked rather than
     presence, because `hasattr` is satisfied by anything bound to that name -- a column, a
@@ -229,7 +236,10 @@ def make_recorder(store: CorpusWriter):
         numerator of the merge rate silently, which is worse than being wrong loudly.
         """
         try:
-            return _record(store, state, terminal_status, abandon_reason, pr_number)
+            return _record(
+                store, state, terminal_status, abandon_reason, pr_number,
+                is_rehearsal=is_rehearsal,
+            )
         except Exception:
             # Never propagates. The pull request is the product; the row is bookkeeping,
             # and bookkeeping that can fail a run is worse than bookkeeping that is missing.
@@ -246,7 +256,7 @@ def make_recorder(store: CorpusWriter):
 
 def _record(
     store, state, terminal_status: str, abandon_reason: str | None,
-    pr_number: int | None = None,
+    pr_number: int | None = None, *, is_rehearsal: bool = False,
 ) -> bool:
     # No lookup guard here: `make_recorder` established that this store can write before any
     # node ran. Re-checking per write would be a check that cannot be loud, since the caller
@@ -312,6 +322,7 @@ def _record(
             # The join a merge delivery arrives on. Null on every attempt but the one that
             # opened the pull request, which is the grain this table declares.
             pr_number=pr_number,
+            is_rehearsal=is_rehearsal,
         )
     )
     return True

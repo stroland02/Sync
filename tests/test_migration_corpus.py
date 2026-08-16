@@ -209,3 +209,69 @@ def test_the_merge_outcome_can_be_filled_in_later(store: GraphStore):
     assert row.pr_number == 42
     assert row.pr_merged is True
     assert row.human_edits_before_merge == 1
+
+
+# --- B79: a rehearsal row and a production row at the same natural key -------------
+
+
+def test_a_rehearsal_row_does_not_swallow_the_production_row_that_follows_it(store: GraphStore):
+    """A zero-remote `sync rehearse` run and a real pipeline run can process the same finding
+    at the same attempt index against one shared database -- `sync rehearse --dsn` defaults to
+    the exact DSN `sync run` does, so this is not a hypothetical.
+
+    `BACKLOG.md`'s own example: a rehearsal writes `(f, 1, halted, pr_number=NULL)`, then a
+    production run writes `(f, 1, opened, pr_number=1)` for the same finding and attempt. Before
+    a run has identity in the natural key, `ON CONFLICT (finding_id, attempt_index) DO NOTHING`
+    keeps whichever wrote first and drops the real pull request silently -- it never reaches
+    `merge_rate` or `counts.pull_requests_opened`.
+    """
+    store.record_migration_outcome(
+        _outcome(terminal_status="halted", pr_number=None, is_rehearsal=True)
+    )
+    store.record_migration_outcome(
+        _outcome(terminal_status="opened", pr_number=1)
+    )
+
+    rows = store.migration_outcomes()
+    assert len(rows) == 1
+    assert rows[0].terminal_status == "opened"
+    assert rows[0].pr_number == 1
+
+
+def test_rehearsal_rows_do_not_reach_corpus_aggregates(store: GraphStore):
+    """The other half of the fix: a rehearsal row must not silently enter a measurement just
+    because it no longer collides with a production one. `migration_outcomes` is what every
+    corpus-wide aggregate reads, so filtering there is what every one of them inherits."""
+    store.record_migration_outcome(_outcome(is_rehearsal=True))
+
+    assert store.migration_outcomes() == []
+
+
+def test_recording_the_same_rehearsal_attempt_twice_does_not_duplicate(store: GraphStore):
+    """Idempotence within the rehearsal lane, held to the same standard `CLAUDE.md` requires
+    for the production lane -- proven directly against the table, since the reader this suite
+    otherwise uses filters rehearsal rows out on purpose."""
+    store.record_migration_outcome(_outcome(is_rehearsal=True))
+    store.record_migration_outcome(_outcome(is_rehearsal=True))
+
+    row_count = store._connect().execute(
+        "SELECT count(*) AS n FROM migration_outcome WHERE is_rehearsal"
+    ).fetchone()["n"]
+    assert row_count == 1
+
+
+def test_a_merge_webhook_cannot_update_a_rehearsal_row(store: GraphStore):
+    """`set_merge_outcome` is reached only from a real GitHub delivery, so it must never touch
+    a rehearsal row that happens to share a finding and attempt index with the production row
+    the delivery actually describes."""
+    store.record_migration_outcome(
+        _outcome(terminal_status="halted", pr_number=None, is_rehearsal=True)
+    )
+    store.record_migration_outcome(_outcome(terminal_status="opened", pr_number=1))
+
+    store.set_merge_outcome("f-1", 0, pr_number=1, pr_merged=True, human_edits_before_merge=0)
+
+    rehearsal_row = store._connect().execute(
+        "SELECT pr_merged FROM migration_outcome WHERE is_rehearsal"
+    ).fetchone()
+    assert rehearsal_row["pr_merged"] is None
