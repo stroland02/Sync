@@ -43,7 +43,9 @@ describe("FindingPage", () => {
       sdk_version: "18.0.0",
       known_changes: [],
       indexed_at: "2026-08-01T00:00:00Z",
+      feed_fetched_at: null,
       context_savings: 100,
+      context_savings_bound_reached: false,
       binding_source: "static",
     }
 

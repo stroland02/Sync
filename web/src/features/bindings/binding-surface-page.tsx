@@ -454,7 +454,10 @@ function BindingSurfaceDetail({
                 </TableHeader>
                 <TableBody>
                   {query.data.call_sites.items.map((site) => (
-                    <TableRow key={bindingKey(site)}>
+                    <TableRow
+                      key={bindingKey(site)}
+                      data-state={openBinding === bindingKey(site) ? "selected" : undefined}
+                    >
                       <TableCell>
                         <RungBadge rung={site.binding_rung} />
                       </TableCell>

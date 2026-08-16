@@ -14,47 +14,105 @@
  * `TableHead` in nine levels. A feature that hand-spells them is a feature that will drift from
  * the other eight the first time somebody adjusts one of them.
  *
- * `Table`, `TableBody`, `TableHeader` and `TableRow` are re-exported untouched so a caller has one
- * import for a table rather than two, and so the identifying column, the row hover and the sticky
- * shadow all come from the vendored component unmodified.
+ * `Table` and `TableBody` are re-exported untouched so a caller has one import for a table.
  */
 
-import type { ComponentProps } from "react"
+import type { ComponentProps, ReactNode } from "react"
 
+import type { BindingSource } from "@/api/types"
 import { cn } from "@/lib/utils"
 import {
   Table,
   TableBody,
   TableCell as VendoredCell,
   TableHead as VendoredHead,
-  TableHeader,
-  TableRow,
+  TableHeader as VendoredHeader,
+  TableRow as VendoredRow,
 } from "@/vendor/supabase/ui/table"
 
-export { Table, TableBody, TableHeader, TableRow }
+export { Table, TableBody }
 
 /**
- * A column heading in the furniture register: uppercase, open-tracked, the second ink level.
+ * A table header row rendered on the substrate's subtle surface strip.
+ */
+export function TableHeader({ className, ...props }: ComponentProps<typeof VendoredHeader>) {
+  return (
+    <VendoredHeader
+      className={cn("[&_tr]:border-b [&_tr]:bg-surface-subtle", className)}
+      {...props}
+    />
+  )
+}
+
+/**
+ * A table row with distinct hover and selected states.
+ */
+export function TableRow({ className, ...props }: ComponentProps<typeof VendoredRow>) {
+  return (
+    <VendoredRow
+      className={cn(
+        "border-b transition-colors hover:bg-surface-subtle data-[state=selected]:bg-surface-emphasis",
+        className
+      )}
+      {...props}
+    />
+  )
+}
+
+/**
+ * A column heading in the furniture register: uppercase, open-tracked, font-medium, the second ink level.
  *
  * The height comes from the vendored component's own `h-10`, which is `DESIGN.md`'s `row-lg`.
+ * `font-medium` (500) overrides the UA-default `font-weight: 700`.
  *
  * `break-words` overrides the vendored `whitespace-nowrap`, and it is a correctness fix rather
  * than a preference. A heading that cannot wrap sets a floor under the table's width, and six
- * such headings inside a panel's padding is a table wider than the panel — measured at 1280x800
- * on `/vendors/:vendorId`, 974px of table in a 903px container, which put the rung column behind
- * a sideways scroll. `features/vendors/vendor-findings-table.tsx` orders its columns the way it
- * does specifically to keep that column visible at that width, so a nowrap heading defeats a
- * constraint the console already argued.
+ * such headings inside a panel's padding is a table wider than the panel.
  */
 export function TableHead({ className, ...props }: ComponentProps<typeof VendoredHead>) {
   return (
     <VendoredHead
       className={cn(
-        "furniture whitespace-normal break-words px-row text-meta text-ink-muted",
-        className,
+        "furniture whitespace-normal break-words px-row text-meta font-medium text-ink-muted",
+        className
       )}
       {...props}
     />
+  )
+}
+
+/**
+ * A column header title supporting an optional suffix, provenance rung badge, or bounded indicator.
+ */
+export function TableHeadTitle({
+  title,
+  suffix,
+  rung,
+  bounded,
+}: {
+  title: ReactNode
+  suffix?: ReactNode
+  rung?: BindingSource | null
+  bounded?: boolean
+}) {
+  return (
+    <span className="inline-flex items-center gap-1.5">
+      <span>{title}</span>
+      {suffix ? <span className="font-normal text-muted-foreground">{suffix}</span> : null}
+      {rung ? (
+        <span
+          className="rounded-control border border-line px-1 py-0 font-mono text-meta font-normal text-muted-foreground"
+          title={`Provenance: ${rung}`}
+        >
+          {rung}
+        </span>
+      ) : null}
+      {bounded !== undefined ? (
+        <span className="font-mono text-meta font-normal text-muted-foreground">
+          {bounded ? "(bounded)" : "(unbounded)"}
+        </span>
+      ) : null}
+    </span>
   )
 }
 
@@ -64,27 +122,33 @@ export function TableHead({ className, ...props }: ComponentProps<typeof Vendore
  * `px-row py-row text-body` is 20px of line box between two 8px paddings, which is the 36px
  * `DESIGN.md` assigns `row-md`. The header spells the same horizontal value, so a column's heading
  * sits over its values rather than beside them.
- *
- * Measured in Chrome at 1280x800 across all seven tables on Fleet: header 40.0, single-line body
- * row 37.0 — the contract's 36 plus the 1px rule the vendored `TableRow` draws under it.
- *
- * **The horizontal value is `--spacing-row`, not the vendored `px-4`, and M7-W174 is what settled
- * it.** Fleet's ruling 8 chose the vendored 16px to keep a heading over its values; the constraint
- * it was protecting is that the two agree, not that they agree on Studio's number. Sixteen costs a
- * six-column table 96px of minimum width, and a six-column table inside a panel is the first thing
- * this console has that cannot afford it: measured at 1280x800 on `/vendors/:vendorId`, 953px of
- * table in a 903px container, with the last column clipped behind a sideways scroll.
- * `components/ui/table.tsx` — the anatomy `DESIGN.md`'s arithmetic is written against — has always
- * spelled `px-row`, so this is the substrate coming back to the contract rather than departing
- * from it.
- *
- * `break-words` is carried over from that same file, whose own comment states the trade: a row that
- * grows taller costs less than a table the viewport has to scroll to read. `break-words` rather
- * than `break-all`, so a token only splits when it would not otherwise fit and a short mono value
- * still reads as one run.
  */
 export function TableCell({ className, ...props }: ComponentProps<typeof VendoredCell>) {
   return (
     <VendoredCell className={cn("px-row py-row text-body break-words", className)} {...props} />
+  )
+}
+
+/**
+ * An empty table row spanning all columns, keeping the header structure visible while displaying an empty state.
+ */
+export function TableEmptyRow({
+  colSpan,
+  children,
+  className,
+}: {
+  colSpan: number
+  children: ReactNode
+  className?: string
+}) {
+  return (
+    <TableRow>
+      <TableCell
+        colSpan={colSpan}
+        className={cn("p-card text-center text-muted-foreground", className)}
+      >
+        {children}
+      </TableCell>
+    </TableRow>
   )
 }

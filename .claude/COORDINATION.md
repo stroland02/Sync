@@ -550,5 +550,13 @@ Tasks 1–6 of the dogfooding plan (`docs/superpowers/plans/2026-08-05-sync-dogf
 - `WorkflowPage` (`web/src/features/workflows/workflow-page.tsx`) renders superseded attempts via `<SupersededGenerations />` above the active narrative sequence with run numbers, thread IDs, outcomes, and reasons.
 - Amended ruling 7 of `briefs/2026-08-07-substrate-workflow.md`.
 
+### Fidelity Task 6 & Mock-to-Build Plan Landed (`M7-W209`)
+
+- `web/src/components/data-table.tsx`: `TableHeader` applies subtle background strip (`bg-surface-subtle`), `TableHead` uses `font-medium` (500) over UA 700 default, `TableRow` applies distinct `data-[state=selected]:bg-surface-emphasis` (diverging from hover collapse), `TableHeadTitle` supports optional suffix/provenance rung badge/bounded flag, and `<TableEmptyRow>` provides structure-preserving empty states.
+- `web/src/components/states.tsx`: `Panel` upgraded to 8px radius (`rounded-surface`).
+- `web/src/features/bindings/binding-surface-page.tsx`: table rows highlight with `data-state="selected"` when their detail drawer is open.
+- Created `docs/superpowers/plans/2026-08-08-console-mock-to-build.md` detailing the transition from demo mockups (`docs/superpowers/references/direction/`) to built console features.
+
+
 
 

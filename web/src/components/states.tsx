@@ -37,8 +37,8 @@ function Panel({
       role={status ? "alert" : undefined}
       className={
         status
-          ? `max-w-prose rounded border p-4 ${statusSurfaceClass(status)}`
-          : "max-w-prose rounded border border-border p-4 text-muted-foreground"
+          ? `max-w-prose rounded-surface border p-4 ${statusSurfaceClass(status)}`
+          : "max-w-prose rounded-surface border border-border p-4 text-muted-foreground"
       }
     >
       {status ? (

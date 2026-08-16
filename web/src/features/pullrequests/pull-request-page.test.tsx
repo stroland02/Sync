@@ -50,6 +50,7 @@ describe("PullRequestPage", () => {
       thread_id: "finding-123:abc:0",
       generation_count: 1,
       repo_id: "org/my-service",
+      generations: [],
     }
 
     vi.spyOn(queries, "useWorkflow").mockReturnValue({

@@ -42,6 +42,8 @@ function state(overrides: Partial<WorkflowState> = {}): WorkflowState {
     report_reason: null,
     thread_id: "9f176dea:seed-console:1",
     generation_count: 1,
+    repo_id: null,
+    generations: [],
     ...overrides,
   }
 }

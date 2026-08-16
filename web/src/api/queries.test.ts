@@ -21,6 +21,8 @@ function workflow(outcome: WorkflowOutcome | null): WorkflowState {
     report_reason: null,
     thread_id: "f".repeat(32) + ":abc123def456:0",
     generation_count: 1,
+    repo_id: null,
+    generations: [],
   }
 }
 
