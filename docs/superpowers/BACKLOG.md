@@ -597,6 +597,28 @@ any `ClaudeAgentOptions` argument — only a boundary that starts a process with
 environment at all does that, which is what makes the container load-bearing here rather than a
 nicer way to do something `ClaudeAgentOptions` could already do.
 
+**A third bounded step landed on 2026-08-16, and the close condition still stands.** An adversarial
+review measured the question `disconnect_network`'s own docstring had left open — whether a socket
+already open before that call can still deliver — and found it delivers real, sustained data for
+0.92-1.5s after the call is made, not "a few buffered bytes." Two in-place fixes were tried against
+this host's actual Docker Desktop/WSL2 kernel before choosing a third: `ss -K` fails outright
+(`RTNETLINK answers: Invalid argument` on every attempt, `--cap-add=NET_ADMIN` or not — this
+kernel build does not support the `sock_diag` destroy operation it needs), and `conntrack -F`
+succeeds but has no effect on an already-established connection over a user-defined bridge network
+(flushing conntrack clears NAT/tracking state, not the socket). What does close the window, measured
+the same way: destroying the container outright. `copy_between_containers` is the new primitive that
+makes this practical — the risky (networked) phase's container hands its output to a second
+container created with `network="none"` from the start, and is then destroyed rather than
+disconnected, so no process capable of calling `sendall()` again outlives the boundary.
+`tests/test_patch_sandbox.py::test_never_networked_container_receives_nothing_after_install_container_is_torn_down`
+proves it end to end against real containers and a real listener; `test_disconnect_network_does_not_stop_an_already_open_socket`
+stays green permanently as the characterization of the gap the new primitive exists to route around,
+not a RED test awaiting a fix inside `disconnect_network` itself. `probe_connect`'s reachability
+check was also tightened in the same commit: `"REACHABLE" in stdout` was true on both the success
+and failure lines (`"UNREACHABLE"` contains it), doing no real work — correctness rested entirely on
+`returncode` by coincidence. It now requires an exact match, with a regression test that reproduces
+the old check's blind spot directly.
+
 **What did not land, stated as plainly as the first bounded step stated its own gap.**
 `AgentRemediator._drive_agent` still runs on the host, exactly as before — nothing routes a real
 patch attempt through `sandbox.py` yet. `docker/patch-sandbox/Dockerfile` is authored against the

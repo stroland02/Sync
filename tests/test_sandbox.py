@@ -4,8 +4,8 @@ The container-lifecycle primitives (`ephemeral_container`, `disconnect_network`,
 `probe_connect`) are proven against a real Docker Desktop in
 `tests/test_patch_sandbox.py`, marked `docker`. What belongs here is the part
 with no Docker dependency: `build_container_env`'s allowlist-from-empty
-construction, which is the one piece of this module a unit test can pin without
-a container running.
+construction, and `_parse_probe_output`'s parsing contract -- both pinnable
+without a container running.
 """
 
 from __future__ import annotations
@@ -56,3 +56,31 @@ def test_build_container_env_carries_the_auth_credential_the_caller_names(monkey
 
     assert env["ANTHROPIC_API_KEY"] == "sk-test-only"
     assert "SYNC_GRAPH_DSN" not in env
+
+
+def test_probe_output_is_reachable_on_the_exact_success_marker():
+    result = sandbox._parse_probe_output(returncode=0, stdout="REACHABLE\n", stderr="")
+
+    assert result.reachable is True
+
+
+def test_probe_output_rejects_unreachable_even_when_returncode_is_zero():
+    """Regression guard for the substring bug this parsing was split out to fix:
+    `"REACHABLE" in stdout` is true for `_PROBE_SCRIPT`'s failure line too,
+    because `"UNREACHABLE"` contains `"REACHABLE"` as a substring. This
+    constructs the exact adversarial input that check was blind to -- a zero
+    return code paired with the failure line -- to prove the parsing no longer
+    trusts the substring on its own. `_PROBE_SCRIPT` itself never produces this
+    combination (it always exits non-zero on its failure path), which is
+    exactly why the old check went untested by every real probe and still did
+    no work.
+    """
+    result = sandbox._parse_probe_output(returncode=0, stdout="UNREACHABLE: [Errno 111] refused\n", stderr="")
+
+    assert result.reachable is False
+
+
+def test_probe_output_is_not_reachable_on_nonzero_returncode_with_success_text():
+    result = sandbox._parse_probe_output(returncode=1, stdout="REACHABLE\n", stderr="")
+
+    assert result.reachable is False
