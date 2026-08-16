@@ -334,6 +334,15 @@ export interface WorkflowNode {
  * is the query that lists every generation as its own row, which is why a reader who wants
  * the others goes there rather than to a link this route cannot serve.
  */
+/** One generation of a finding's remediation runs. */
+export interface GenerationSummary {
+  thread_id: string
+  generation: number
+  outcome: WorkflowOutcome | null
+  abandon_reason: string | null
+  report_reason: string | null
+}
+
 export interface WorkflowState {
   nodes: WorkflowNode[]
   outcome: WorkflowOutcome | null
@@ -342,6 +351,7 @@ export interface WorkflowState {
   thread_id: string
   generation_count: number
   repo_id: string | null
+  generations: GenerationSummary[]
 }
 
 /**

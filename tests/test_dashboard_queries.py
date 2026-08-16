@@ -529,6 +529,29 @@ def test_workflow_state_of_three_generations_names_the_newest_threads_outcome(
     assert state["generation_count"] == 3
     assert state["thread_id"] == newest
     assert state["outcome"] == "opened"
+    assert state["generations"] == [
+        {
+            "thread_id": oldest,
+            "generation": 0,
+            "outcome": "abandoned",
+            "abandon_reason": "first attempt failed",
+            "report_reason": None,
+        },
+        {
+            "thread_id": middle,
+            "generation": 1,
+            "outcome": "abandoned",
+            "abandon_reason": "second attempt failed",
+            "report_reason": None,
+        },
+        {
+            "thread_id": newest,
+            "generation": 2,
+            "outcome": "opened",
+            "abandon_reason": None,
+            "report_reason": None,
+        },
+    ]
     evidence = {n["name"]: n["evidence"] for n in state["nodes"]}
     assert evidence["open_pr"]["pr_url"] == "https://github.com/x/y/pull/9"
 
