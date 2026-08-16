@@ -61,7 +61,18 @@ EXPECTED_TEMPLATES = [
             "no telemetry, which stay in the customer's own graph."
         ),
         "mimeType": "application/json",
-    }
+    },
+    {
+        "uriTemplate": "sync://context/{repo_id}",
+        "name": "repository-context",
+        "description": (
+            "What stays true of one repository while its code changes underneath: "
+            "conventions, generated directories, the package manager its lockfile names. "
+            "Written by an operator or copied from a `.sync/context.md` the repository "
+            "itself carries. Never a call site, a finding or telemetry."
+        ),
+        "mimeType": "text/markdown",
+    },
 ]
 
 
