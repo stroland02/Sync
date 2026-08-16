@@ -10,6 +10,20 @@ An item is only **Done** once it is on `main` with all three gates green
 Every item states what is wrong, why it matters, and what evidence would close it. An
 item that cannot say what evidence closes it is not ready to dispatch.
 
+**Before assigning a new `B`-number, check every local branch, not only `main`'s copy of this
+file.** `git log --all --oneline --grep="B<N>"` costs one command. Two development lines each
+independently filed `B122` for unrelated work on 2026-08-16, caught only by inspection during a
+merge two weeks later — the same class of collision `B116` was hand-picked to dodge once already,
+documented below at that entry. A number chosen against `main` alone is chosen blind to whatever
+another branch has already claimed.
+
+**A worktree with no commits in the last week and an unmerged branch is a backlog item, not
+invisible capacity.** Paused work does not surface itself: three branches (M3-W113, M3-W114,
+M3-W115) sat finished-but-unreviewed for seventeen days before a session's unrelated cleanup sweep
+found them via `orca worktree ps`. When a tick runs, check worktree age against this file's own
+**In flight** and **Ready** sections and add what's missing — a stale worktree holding real work is
+a fact this file should carry, the same way an abandoned run is data rather than a silent drop.
+
 ## Milestone status
 
 Percentages are judgement over measured facts, not a burndown. Each says what it counted. The

@@ -48,6 +48,29 @@ Stop and ask only for:
 
 Everything else is a ruling, not a question.
 
+## When work arrives already finished
+
+The plan → subagent TDD → two-stage review loop in `superpowers:subagent-driven-development`
+assumes the work does not exist yet. Some of it will arrive already built — a preserved branch
+from a session that hit its limit, a paused task somebody else implemented and tested. That is not
+the same situation, and it does not need the same ceremony.
+
+**Work gets a direct read-and-verify instead of a dispatched plan and two-stage review when all
+three hold:** it sits in a narrow, self-contained area (one module, one test file, no
+architectural surface); it already carries its own passing tests; and running the full gate suite
+against it is enough to show the tests are real rather than vacuous. Read the implementation for
+an obvious defect, run `uv run pytest` / `uv run lint-imports` /
+`uv run python scripts/lint_encoding.py src tests`, and merge — a written plan for "verify this is
+already correct" is process bought for nothing.
+
+The moment any of the three stops holding — the change touches an architectural boundary, no test
+exists yet, or the gate suite doesn't actually exercise the claim — the full loop applies again.
+This is a narrowing of scope, not a replacement for review; it does not license skipping tests or
+gates, only the planning and dispatched-review ceremony around code that already has both.
+
+Landed this way on 2026-08-16: a test-harness capture mechanism, a tier-routing docstring fix, and
+an indexer scope fix — each read, gate-verified, and merged directly rather than re-planned.
+
 ## Being a good ancestor to the next session
 
 A session that stops mid-plan should be resumable without its transcript. That is what the ledger
