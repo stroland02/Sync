@@ -111,31 +111,28 @@ export function FleetPage({ question = DEFAULT_QUESTION }: FleetPageProps) {
   return (
     <section className="flex flex-col gap-8">
       <PageHeaderRegion question={question} />
-      {/* The rail and the paragraph that qualifies it, beside one another rather than stacked.
-          Measured at 1440x900: stacking them put the first table 640px down the page with no row
-          of any table above the fold, against seven before this item. Prose in a column beside the
-          figures it qualifies costs width the screen has and height it does not. */}
-      <div className="grid gap-8 xl:grid-cols-3">
-        <div className="min-w-0 xl:col-span-2">
-          <FleetFacts />
-        </div>
-        <p className="max-w-prose text-body text-muted-foreground">
-          There is no composite health figure here on purpose. A scalar that averaged three
-          gates would collapse "we could not check" onto the same axis as "we checked and it
-          passed", which is the failure this console exists to replace. Every figure on this
-          screen instead names its own scope, and the panel beside them names what none of these
-          figures can tell you at all.
-        </p>
-      </div>
-      {/* Two thirds and a third rather than halves. The limits panel is prose and reads well
-          narrow; the runs table is four columns including a finding id, and halving the width
-          is what pushes those onto a third line. */}
+      
+      {/* 4-card metric strip across the entire width, matching demo layout */}
+      <FleetFacts />
+
       <div className="grid gap-8 xl:grid-cols-3">
         <div className="flex min-w-0 flex-col gap-8 xl:col-span-2">
           <VendorDistributionCard />
           <RunsCard />
         </div>
-        <ScreenLimitsCard />
+        <div className="flex min-w-0 flex-col gap-8">
+          <div className="flex flex-col gap-field rounded-surface border border-line bg-surface p-section text-body text-muted-foreground">
+            <span className="furniture text-meta text-ink-muted">Health score policy</span>
+            <p>
+              There is no composite health figure here on purpose. A scalar that averaged three
+              gates would collapse "we could not check" onto the same axis as "we checked and it
+              passed", which is the failure this console exists to replace. Every figure on this
+              screen instead names its own scope, and the panel beside them names what none of these
+              figures can tell you at all.
+            </p>
+          </div>
+          <ScreenLimitsCard />
+        </div>
       </div>
       <CorpusSummaryCard />
       <div className="grid gap-8 lg:grid-cols-2">

@@ -67,7 +67,7 @@ export function FleetFacts() {
   const corpus = useCorpus()
 
   return (
-    <div className="grid gap-section sm:grid-cols-2">
+    <div className="grid gap-section grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
       <FactTile
         label="Open findings"
         figure
