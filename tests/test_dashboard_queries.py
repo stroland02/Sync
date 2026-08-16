@@ -1,4 +1,4 @@
-"""View-model queries: plain dicts out of the graph and the checkpointer tables.
+"""View-model queries: plain dicts out of the checkpointer tables.
 
 The checkpoint fixtures insert rows the way langgraph-checkpoint-postgres 3.1.0
 lays them out: `checkpoints(thread_id, checkpoint_ns, checkpoint_id,
@@ -12,155 +12,22 @@ match by prefix rather than by equality.
 
 import json
 import os
+import re
+from pathlib import Path
 
 import psycopg
 import pytest
 
-from sync.core import CallSite, Finding, VendorChange
 from sync.dashboard.queries import (
-    finding_detail,
-    repository_overview,
-    vendor_detail,
+    NODE_STANDINGS,
+    WORKFLOW_NODES,
+    _EVIDENCE_KEYS,
     workflow_state,
 )
-from sync.graph.store import GraphStore
 
 DSN = os.environ.get("SYNC_DSN", "postgresql://sync:sync@localhost:5433/sync")
 
 FINDING_ID = "f" * 32
-
-
-@pytest.fixture()
-def store():
-    s = GraphStore(DSN)
-    s.apply_schema()
-    s.truncate_all()
-    return s
-
-
-def _site(**kw) -> CallSite:
-    base = dict(
-        repo_id="r1",
-        path="src/billing.ts",
-        line=42,
-        col=8,
-        vendor_id="stripe",
-        operation_id="PostCharges",
-        symbol="stripe.charges.create",
-        sdk_version="14.0.0",
-        content_hash="hash-42",
-    )
-    base.update(kw)
-    return CallSite(**base)
-
-
-def _change(**kw) -> VendorChange:
-    base = dict(
-        vendor_id="stripe",
-        from_version="2024-04-10",
-        to_version="2024-06-20",
-        kind="request-parameter-removed",
-        operation_id="PostCharges",
-        path_ptr="/paths/~1v1~1charges/post",
-        severity="breaking",
-        source="oasdiff",
-        raw={"text": "charges lost a parameter"},
-    )
-    base.update(kw)
-    return VendorChange(**base)
-
-
-def _finding(call_site_id: str, **kw) -> Finding:
-    base = dict(
-        detector="vendor-change",
-        claim="request-parameter-removed",
-        call_site_id=call_site_id,
-        severity="breaking",
-        rationale="the call passes a parameter the vendor removed",
-        binding_rung="static",
-    )
-    base.update(kw)
-    return Finding(**base)
-
-
-def test_overview_counts_call_sites_and_open_findings_per_vendor(store):
-    s1 = store.upsert_call_site(_site())
-    s2 = store.upsert_call_site(_site(line=99, content_hash="hash-99"))
-    s3 = store.upsert_call_site(
-        _site(path="src/sms.ts", vendor_id="twilio", operation_id="CreateMessage",
-              symbol="twilio.messages.create", content_hash="hash-sms")
-    )
-    store.insert_finding(_finding(s1))
-    store.insert_finding(_finding(s2, claim="second-claim"))
-    store.insert_finding(_finding(s3, severity="warning"))
-    # A non-open finding must not inflate the open count.
-    patched = store.insert_finding(_finding(s1, claim="already-patched"))
-    store.set_finding_status(patched, "patched")
-
-    overview = repository_overview(store)
-
-    by_vendor = {v["vendor_id"]: v for v in overview["vendors"]}
-    assert by_vendor["stripe"]["call_site_count"] == 2
-    assert by_vendor["stripe"]["open_finding_count"] == 2
-    assert by_vendor["twilio"]["call_site_count"] == 1
-    assert by_vendor["twilio"]["open_finding_count"] == 1
-    assert isinstance(overview["indexed_at"], str)
-
-
-def test_overview_of_an_empty_graph_is_empty_not_an_error(store):
-    overview = repository_overview(store)
-
-    assert overview["vendors"] == []
-    assert overview["indexed_at"] is None
-
-
-def test_vendor_detail_joins_findings_to_their_sites(store):
-    s1 = store.upsert_call_site(_site())
-    s3 = store.upsert_call_site(
-        _site(path="src/sms.ts", vendor_id="twilio", operation_id="CreateMessage",
-              symbol="twilio.messages.create", content_hash="hash-sms")
-    )
-    change_id = store.upsert_vendor_change(_change())
-    f1 = store.insert_finding(_finding(s1, vendor_change_id=change_id))
-    store.insert_finding(_finding(s3))
-
-    detail = vendor_detail(store, "stripe")
-
-    assert detail["vendor_id"] == "stripe"
-    assert [f["finding_id"] for f in detail["findings"]] == [f1]
-    row = detail["findings"][0]
-    assert row["file"] == "src/billing.ts"
-    assert row["line"] == 42
-    assert row["severity"] == "breaking"
-    assert row["status"] == "open"
-    assert row["rationale"] == "the call passes a parameter the vendor removed"
-    assert row["binding_rung"] == "static"
-    assert [c["id"] for c in detail["changes"]] == [change_id]
-    assert detail["changes"][0]["kind"] == "request-parameter-removed"
-    sites = {s["id"]: s for s in detail["call_sites"]}
-    assert sites[s1]["path"] == "src/billing.ts"
-    assert isinstance(sites[s1]["indexed_at"], str)
-
-
-def test_finding_detail_returns_none_for_an_unknown_id(store):
-    assert finding_detail(store, "does-not-exist") is None
-
-
-def test_finding_detail_joins_site_and_change(store):
-    s1 = store.upsert_call_site(_site())
-    change_id = store.upsert_vendor_change(_change())
-    with_change = store.insert_finding(_finding(s1, vendor_change_id=change_id))
-    without = store.insert_finding(_finding(s1, claim="telemetry-only"))
-
-    detail = finding_detail(store, with_change)
-    assert detail["finding"]["finding_id"] == with_change
-    assert detail["finding"]["binding_rung"] == "static"
-    assert detail["site"]["path"] == "src/billing.ts"
-    assert detail["site"]["line"] == 42
-    assert detail["change"]["id"] == change_id
-    assert detail["change"]["kind"] == "request-parameter-removed"
-
-    assert finding_detail(store, without)["change"] is None
 
 
 # --- the checkpointer side ---------------------------------------------------
@@ -283,6 +150,226 @@ def test_workflow_state_reports_nodes_with_evidence_once_rows_exist(checkpointer
     assert state["abandon_reason"] is None
 
 
+def test_a_current_node_with_no_evidence_is_due_rather_than_running(checkpointer_tables):
+    # The classification the console got wrong in two spellings: `current` says the graph owes
+    # this node a visit, and nothing in a checkpoint says whether anything is executing. A run
+    # parked on the customer's CI and one that died write the same nothing.
+    _insert_checkpoint(
+        f"{FINDING_ID}:abc123def456:0",
+        "1f069000-0000-6000-8000-00000000000a",
+        channel_values={"outcome": "running", "tier": 2, "prepare_ok": True},
+        channel_versions={"branch:to:static_verify": _version(4)},
+        versions_seen={
+            "__input__": {},
+            "locate": {"branch:to:locate": _version(1)},
+            "prepare": {"branch:to:prepare": _version(2)},
+            "patch": {"branch:to:patch": _version(3)},
+        },
+        step=4,
+    )
+
+    standing = {n["name"]: n["standing"] for n in workflow_state(DSN, FINDING_ID)["nodes"]}
+
+    assert standing["static_verify"] == "due"
+    assert standing["locate"] == "ran"
+    # The run is in flight, so a node it has not reached may still be reached.
+    assert standing["open_pr"] == "not_reached_yet"
+
+
+def test_a_current_node_that_already_produced_evidence_is_due_again(checkpointer_tables):
+    # `patch` ran, static verification rejected it, and the graph owes `patch` another visit.
+    # Rendering that as a first visit would render a retry as progress.
+    _insert_checkpoint(
+        f"{FINDING_ID}:abc123def456:0",
+        "1f069000-0000-6000-8000-00000000000b",
+        channel_values={
+            "outcome": "running",
+            "static_attempts": 1,
+            "attempt_strategy": "literal-swap",
+            "verify_ok": False,
+            "diagnostics": "src/billing.ts(42,8): error TS2345",
+        },
+        channel_versions={"branch:to:patch": _version(5)},
+        versions_seen={
+            "__input__": {},
+            "locate": {"branch:to:locate": _version(1)},
+            "prepare": {"branch:to:prepare": _version(2)},
+            "patch": {"branch:to:patch": _version(3)},
+            "static_verify": {"branch:to:static_verify": _version(4)},
+        },
+        step=5,
+    )
+
+    standing = {n["name"]: n["standing"] for n in workflow_state(DSN, FINDING_ID)["nodes"]}
+
+    assert standing["patch"] == "due_again"
+    assert standing["static_verify"] == "ran"
+
+
+def test_a_node_a_finished_run_never_reached_says_so(checkpointer_tables):
+    # The same `pending` status means two different things, and only the run's outcome
+    # separates them: a finished run will never come back for this node.
+    _insert_checkpoint(
+        f"{FINDING_ID}:abc123def456:0",
+        "1f069000-0000-6000-8000-00000000000c",
+        channel_values={"outcome": "reported", "report_reason": "no patch is warranted"},
+        channel_versions={"branch:to:report": _version(5)},
+        versions_seen={
+            "__input__": {},
+            "locate": {"branch:to:locate": _version(1)},
+            "report": {"branch:to:report": _version(4)},
+        },
+        step=5,
+    )
+
+    standing = {n["name"]: n["standing"] for n in workflow_state(DSN, FINDING_ID)["nodes"]}
+
+    assert standing["open_pr"] == "never_reached"
+    assert standing["locate"] == "ran"
+    # A finished run has no node the graph still owes a visit, whatever the triggers say.
+    assert not any(s in ("due", "due_again") for s in standing.values())
+
+
+def test_every_node_carries_a_standing_from_the_declared_vocabulary(checkpointer_tables):
+    _insert_checkpoint(
+        f"{FINDING_ID}:abc123def456:0",
+        "1f069000-0000-6000-8000-00000000000d",
+        channel_values={"outcome": "opened", "pr_url": "https://github.com/x/y/pull/3"},
+        channel_versions={},
+        versions_seen={"__input__": {}, "open_pr": {"branch:to:open_pr": _version(1)}},
+        step=9,
+    )
+
+    nodes = workflow_state(DSN, FINDING_ID)["nodes"]
+
+    assert len(nodes) == len(WORKFLOW_NODES)
+    assert all(node["standing"] in NODE_STANDINGS for node in nodes)
+
+
+def test_workflow_state_of_a_live_run_reports_no_outcome(checkpointer_tables):
+    # `locate` writes `outcome: "running"` on the first hop of every run, so a live run's
+    # newest checkpoint carries it for the whole rest of the run. The payload's `outcome`
+    # is the console's terminal signal, and a run in flight has not reached one.
+    _insert_checkpoint(
+        f"{FINDING_ID}:abc123def456:0",
+        "1f069000-0000-6000-8000-000000000003",
+        channel_values={
+            "outcome": "running",
+            "tier": 2,
+            "routing_row": "request-parameter-removed",
+            "prepare_ok": True,
+        },
+        channel_versions={"branch:to:patch": _version(3)},
+        versions_seen={
+            "__input__": {},
+            "locate": {"branch:to:locate": _version(1)},
+            "prepare": {"branch:to:prepare": _version(2)},
+        },
+        step=3,
+    )
+
+    state = workflow_state(DSN, FINDING_ID)
+
+    assert state["outcome"] is None
+    status = {n["name"]: n["status"] for n in state["nodes"]}
+    assert status["patch"] == "current"
+    assert status["locate"] == "done"
+    assert status["open_pr"] == "pending"
+
+
+def test_a_ci_failure_is_not_attributed_to_the_compiler(checkpointer_tables):
+    # `diagnostics` is one flat channel that six nodes write. `await_ci` writes
+    # "CI failed: {url}" into it, and the console renders `static_verify`'s evidence under
+    # "What the compiler said" -- so a run that typechecked, pushed and then failed CI showed
+    # a CI URL as compiler output. Attribution belongs to whoever knows which node wrote last,
+    # and only `verify_ok` says that for this key.
+    _insert_checkpoint(
+        f"{FINDING_ID}:abc123def456:0",
+        "1f069000-0000-6000-8000-00000000000e",
+        channel_values={
+            "outcome": "running",
+            "verify_ok": True,
+            "branch": "sync/fix-charges",
+            "ci_url": "https://github.com/x/y/actions/runs/9",
+            "ci_attempts": 1,
+            "attempt_ci_result": "failed",
+            "diagnostics": "CI failed: https://github.com/x/y/actions/runs/9",
+        },
+        channel_versions={"branch:to:patch": _version(9)},
+        versions_seen={
+            "__input__": {},
+            "locate": {"branch:to:locate": _version(1)},
+            "prepare": {"branch:to:prepare": _version(2)},
+            "patch": {"branch:to:patch": _version(3)},
+            "static_verify": {"branch:to:static_verify": _version(4)},
+            "replay": {"branch:to:replay": _version(5)},
+            "push_branch": {"branch:to:push_branch": _version(6)},
+            "await_ci": {"branch:to:await_ci": _version(7)},
+        },
+        step=9,
+    )
+
+    evidence = {n["name"]: n["evidence"] for n in workflow_state(DSN, FINDING_ID)["nodes"]}
+
+    assert evidence["static_verify"] == {"verify_ok": True}
+    # The failure is not lost -- `await_ci` carries its own attributed verdict.
+    assert evidence["await_ci"]["attempt_ci_result"] == "failed"
+
+
+def test_a_typecheck_failure_still_reaches_the_compiler_panel(checkpointer_tables):
+    _insert_checkpoint(
+        f"{FINDING_ID}:abc123def456:0",
+        "1f069000-0000-6000-8000-00000000000f",
+        channel_values={
+            "outcome": "running",
+            "verify_ok": False,
+            "diagnostics": "src/billing.ts(42,8): error TS2345",
+        },
+        channel_versions={"branch:to:patch": _version(6)},
+        versions_seen={
+            "__input__": {},
+            "locate": {"branch:to:locate": _version(1)},
+            "prepare": {"branch:to:prepare": _version(2)},
+            "patch": {"branch:to:patch": _version(3)},
+            "static_verify": {"branch:to:static_verify": _version(4)},
+        },
+        step=6,
+    )
+
+    evidence = {n["name"]: n["evidence"] for n in workflow_state(DSN, FINDING_ID)["nodes"]}
+
+    assert evidence["static_verify"]["diagnostics"] == "src/billing.ts(42,8): error TS2345"
+
+
+def test_a_run_that_never_typechecked_reports_no_compiler_output(checkpointer_tables):
+    # `prepare` writes `diagnostics` on its own failure path, before `static_verify` has run
+    # at all. Without `verify_ok` there is nothing saying the compiler produced this, so the
+    # compiler panel says nothing rather than borrowing another node's text.
+    _insert_checkpoint(
+        f"{FINDING_ID}:abc123def456:0",
+        "1f069000-0000-6000-8000-000000000010",
+        channel_values={
+            "outcome": "abandoned",
+            "abandon_reason": "the lockfile names a package manager that is not on PATH",
+            "prepare_ok": False,
+            "diagnostics": "RuntimeError: yarn is not on PATH",
+        },
+        channel_versions={"branch:to:abandon": _version(4)},
+        versions_seen={
+            "__input__": {},
+            "locate": {"branch:to:locate": _version(1)},
+            "prepare": {"branch:to:prepare": _version(2)},
+            "abandon": {"branch:to:abandon": _version(3)},
+        },
+        step=4,
+    )
+
+    evidence = {n["name"]: n["evidence"] for n in workflow_state(DSN, FINDING_ID)["nodes"]}
+
+    assert "diagnostics" not in evidence["static_verify"]
+    assert evidence["prepare"]["prepare_ok"] is False
+
+
 def test_workflow_state_of_an_abandoned_run_carries_the_reason(checkpointer_tables):
     _insert_checkpoint(
         f"{FINDING_ID}:abc123def456:0",
@@ -313,6 +400,54 @@ def test_workflow_state_of_an_abandoned_run_carries_the_reason(checkpointer_tabl
     assert all(n["status"] != "current" for n in state["nodes"])
 
 
+def test_workflow_state_of_a_reported_run_carries_the_reason(checkpointer_tables):
+    _insert_checkpoint(
+        f"{FINDING_ID}:abc123def456:0",
+        "1f069000-0000-6000-8000-000000000008",
+        channel_values={
+            "outcome": "reported",
+            "report_reason": "no patch is warranted for request-parameter-removed on "
+                              "PostCharges: routed to tier -1 by row 'unrouted'",
+            "tier": -1,
+        },
+        channel_versions={"branch:to:report": _version(6)},
+        versions_seen={
+            "__input__": {},
+            "locate": {"branch:to:locate": _version(1)},
+            "report": {"branch:to:report": _version(5)},
+        },
+        step=6,
+    )
+
+    state = workflow_state(DSN, FINDING_ID)
+
+    assert state["outcome"] == "reported"
+    assert state["report_reason"] == (
+        "no patch is warranted for request-parameter-removed on PostCharges: "
+        "routed to tier -1 by row 'unrouted'"
+    )
+
+
+def test_workflow_state_of_a_reported_run_without_a_reason_reports_none(checkpointer_tables):
+    _insert_checkpoint(
+        f"{FINDING_ID}:abc123def456:0",
+        "1f069000-0000-6000-8000-000000000006",
+        channel_values={"outcome": "reported"},
+        channel_versions={"branch:to:report": _version(6)},
+        versions_seen={
+            "__input__": {},
+            "locate": {"branch:to:locate": _version(1)},
+            "report": {"branch:to:report": _version(5)},
+        },
+        step=6,
+    )
+
+    state = workflow_state(DSN, FINDING_ID)
+
+    assert state["outcome"] == "reported"
+    assert state["report_reason"] is None
+
+
 def test_workflow_state_reads_the_newest_run_not_the_first(checkpointer_tables):
     _insert_checkpoint(
         f"{FINDING_ID}:aaa111bbb222:0",
@@ -336,3 +471,131 @@ def test_workflow_state_reads_the_newest_run_not_the_first(checkpointer_tables):
     assert state["outcome"] == "opened"
     evidence = {n["name"]: n["evidence"] for n in state["nodes"]}
     assert evidence["open_pr"]["pr_url"] == "https://github.com/x/y/pull/7"
+
+
+def test_workflow_state_names_the_owning_thread_of_a_single_generation(checkpointer_tables):
+    thread_id = f"{FINDING_ID}:abc123def456:0"
+    _insert_checkpoint(
+        thread_id,
+        "1f069000-0000-6000-8000-000000000001",
+        channel_values={"outcome": "opened", "pr_url": "https://github.com/x/y/pull/1"},
+        channel_versions={},
+        versions_seen={"__input__": {}, "open_pr": {"branch:to:open_pr": _version(1)}},
+        step=3,
+    )
+
+    state = workflow_state(DSN, FINDING_ID)
+
+    assert state["thread_id"] == thread_id
+    assert state["generation_count"] == 1
+
+
+def test_workflow_state_of_three_generations_names_the_newest_threads_outcome(
+    checkpointer_tables,
+):
+    # `f-multi-gen`'s own shape from the fleet-view review: retried across generations,
+    # each with a different outcome. The fleet screen lists all three as separate rows;
+    # this payload must say which one it is, not just which one it looks like.
+    oldest = f"{FINDING_ID}:ccc333ddd444:0"
+    middle = f"{FINDING_ID}:ccc333ddd444:1"
+    newest = f"{FINDING_ID}:ccc333ddd444:2"
+    _insert_checkpoint(
+        oldest,
+        "1f069200-0000-6000-8000-000000000001",
+        channel_values={"outcome": "abandoned", "abandon_reason": "first attempt failed"},
+        channel_versions={},
+        versions_seen={"__input__": {}, "abandon": {"branch:to:abandon": _version(1)}},
+        step=9,
+    )
+    _insert_checkpoint(
+        middle,
+        "1f069200-0000-6000-8000-000000000002",
+        channel_values={"outcome": "abandoned", "abandon_reason": "second attempt failed"},
+        channel_versions={},
+        versions_seen={"__input__": {}, "abandon": {"branch:to:abandon": _version(1)}},
+        step=9,
+    )
+    _insert_checkpoint(
+        newest,
+        "1f069200-0000-6000-8000-000000000003",
+        channel_values={"outcome": "opened", "pr_url": "https://github.com/x/y/pull/9"},
+        channel_versions={},
+        versions_seen={"__input__": {}, "open_pr": {"branch:to:open_pr": _version(1)}},
+        step=11,
+    )
+
+    state = workflow_state(DSN, FINDING_ID)
+
+    assert state["generation_count"] == 3
+    assert state["thread_id"] == newest
+    assert state["outcome"] == "opened"
+    evidence = {n["name"]: n["evidence"] for n in state["nodes"]}
+    assert evidence["open_pr"]["pr_url"] == "https://github.com/x/y/pull/9"
+
+
+# --- what the console mirrors from this module -------------------------------
+#
+# The console cannot import Python, so it restates the node order and the evidence keys
+# this module owns. Nothing else holds the two sides together: `web/` has no CI gate, so a
+# rename here and a stale copy there would both be correct on their own and wrong together.
+# The parsing is deliberately loose -- it reads the names out of the TypeScript, not its
+# formatting, because a guard that fails on a reflow is a guard that gets deleted.
+
+
+def _web_source(relative: str) -> str:
+    path = Path(__file__).resolve().parent.parent / "web" / relative
+    if not path.is_file():
+        pytest.skip(f"web/{relative} is absent; this checkout carries no console")
+    return path.read_text(encoding="utf-8")
+
+
+def _object_literal(source: str, name: str) -> str:
+    """The body of a top-level `const <name> ... = { ... }`."""
+    match = re.search(rf"const {name}\b[^{{]*\{{(.*?)\n\}}", source, re.S)
+    assert match is not None, f"{name} is no longer a top-level object literal"
+    return match.group(1)
+
+
+def _array_literal(source: str, name: str) -> str:
+    """The body of a top-level `export const <name> = [ ... ]`."""
+    match = re.search(rf"export const {name}\b[^\[]*\[(.*?)\]", source, re.S)
+    assert match is not None, f"{name} is no longer a top-level array literal"
+    return match.group(1)
+
+
+def test_the_consoles_node_order_matches_this_modules():
+    # Bound to the exported array, not to the surrounding prose -- a docstring edit that
+    # changes no code must not turn this suite red. `WORKFLOW_NODE_ORDER` is real code the
+    # console type-checks `PURPOSE` against in `node-sequence.tsx`, not a decorative export.
+    order = _array_literal(_web_source("src/api/types.ts"), "WORKFLOW_NODE_ORDER")
+    assert re.findall(r'"([a-z_]+)"', order) == list(WORKFLOW_NODES)
+
+
+def test_the_consoles_node_purposes_name_every_node_and_no_others():
+    purposes = _object_literal(_web_source("src/features/workflows/node-sequence.tsx"), "PURPOSE")
+    assert re.findall(r"^\s*([a-z_]+):", purposes, re.M) == list(WORKFLOW_NODES)
+
+
+def test_the_consoles_standing_vocabulary_matches_this_modules():
+    order = _array_literal(_web_source("src/api/types.ts"), "NODE_STANDINGS")
+    assert re.findall(r'"([a-z_]+)"', order) == list(NODE_STANDINGS)
+
+
+def test_the_console_spells_every_standing_in_one_place():
+    # The Critical this field exists to close: two screens each classified `current` for
+    # themselves and disagreed about what it meant. One label per standing, in one module both
+    # screens read, is the whole mechanism -- so a standing this module gains and the console
+    # does not is a node rendering nothing rather than a node rendering a guess.
+    labels = _object_literal(
+        _web_source("src/features/workflows/node-standing.ts"), "STANDING_LABEL"
+    )
+    assert re.findall(r"^\s*([a-z_]+):", labels, re.M) == list(NODE_STANDINGS)
+
+
+def test_the_consoles_evidence_fields_match_this_modules_keys():
+    fields = _object_literal(_web_source("src/features/workflows/evidence.tsx"), "FIELDS")
+    assert re.findall(r"^\s*([a-z_]+):\s*\[", fields, re.M) == list(WORKFLOW_NODES)
+
+    rendered = re.findall(r'key:\s*"([^"]+)"', fields)
+    assert len(rendered) == len(set(rendered)), "the console names an evidence key twice"
+    assert set(rendered) == {key for keys in _EVIDENCE_KEYS.values() for key in keys}

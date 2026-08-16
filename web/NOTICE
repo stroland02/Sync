@@ -1,0 +1,37 @@
+This directory vendors components from supabase/supabase
+(https://github.com/supabase/supabase), pinned at commit 6ac031673869c67a7c446b1c8cac8ce43476200b
+(6ac0316), under the Apache License 2.0. Original copyright Supabase Inc.
+
+Vendored files:
+  src/vendor/supabase/ui/badge.tsx
+  src/vendor/supabase/ui/breadcrumb.tsx
+  src/vendor/supabase/ui/button.tsx
+  src/vendor/supabase/ui/card.tsx
+  src/vendor/supabase/ui/command.tsx
+  src/vendor/supabase/ui/dialog.tsx
+  src/vendor/supabase/ui/dropdown-menu.tsx
+  src/vendor/supabase/ui/hooks/use-horizontal-scroll.ts
+  src/vendor/supabase/ui/hooks/use-mobile.tsx
+  src/vendor/supabase/ui/input.tsx
+  src/vendor/supabase/ui/lib/constants.ts
+  src/vendor/supabase/ui/lib/getExplicitTabIndex.ts
+  src/vendor/supabase/ui/popover.module.css
+  src/vendor/supabase/ui/popover.tsx
+  src/vendor/supabase/ui/scroll-area.tsx
+  src/vendor/supabase/ui/select.tsx
+  src/vendor/supabase/ui/separator.tsx
+  src/vendor/supabase/ui/shadow-scroll-area.tsx
+  src/vendor/supabase/ui/sheet.tsx
+  src/vendor/supabase/ui/sidebar.tsx
+  src/vendor/supabase/ui/skeleton.tsx
+  src/vendor/supabase/ui/table.tsx
+  src/vendor/supabase/ui/tabs.tsx
+  src/vendor/supabase/ui/tooltip.tsx
+  src/vendor/supabase/theme.css
+
+The seven files under src/vendor/supabase/ui/lib/, src/vendor/supabase/ui/hooks/ and
+src/vendor/supabase/ui/shadow-scroll-area.tsx are internal support modules the eighteen named
+components import (a tab-index helper, size-variant constants, the mobile-breakpoint hook, the
+horizontal-scroll hook, and the shadow-scrolling table container); they are vendored from the same
+commit for the same reason as the components themselves and are not part of the console's own
+source.

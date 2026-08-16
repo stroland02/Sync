@@ -2,11 +2,10 @@
 
 **Date:** 2026-08-06
 **Status:** Approved design, not yet built.
-**Branch:** `repo-context`, based on `178ff7b` — the console line's tip, which carries
-`sync.dashboard.graph_views`. `m4-dashboard` also carries it and sits eight commits behind;
-the fresher base was taken because
-`docs/superpowers/briefs/2026-08-06-m45-affordance-layer.md` records two agents losing an hour
-to conflicts from a stale one.
+**Branch:** written independently on both `repo-context` (based on `178ff7b`, the console
+line's tip) and `superlog-reference` (based on `origin/main`). Both landed on `main` at the same
+merge on 2026-08-16, which is why this document has one text rather than two — `main` now carries
+`sync.dashboard.graph_views` and the whole console line, so nothing in this design is blocked.
 **Scope:** How a durable statement about a customer's repository reaches the patch agent, who
 may write one, and what the MCP server says about it.
 

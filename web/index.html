@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="en" class="dark">
+  <!--
+    `class="dark"` is stamped here rather than resolved at runtime: the console is dark-only,
+    so there is no preference to read and no flash-of-wrong-theme to beat before first paint.
+    The class stays for the shadcn catalog's `dark:` utilities (button.tsx, input.tsx,
+    textarea.tsx, input-group.tsx), which key off `@custom-variant dark (&:is(.dark *))` in
+    index.css — removing the class would silently drop those rules instead of the toggle.
+  -->
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Sync — operator console</title>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

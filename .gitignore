@@ -37,3 +37,8 @@ coverage.json
 # a number that goes stale silently while looking authoritative. The floors are what gets
 # committed, in `gate_corpus.py`, beside the argument for each.
 corpus-score.json
+
+# The web console (M4). node_modules and the build output are reproducible from
+# package-lock.json; the lockfile is committed, these are not.
+web/node_modules/
+web/dist/

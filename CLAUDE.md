@@ -42,6 +42,45 @@ We never hold customer secrets. That one is unqualified.
 
 **Vendor-specific knowledge lives in adapters, never in core.** Stripe's URL conventions, its `operationId` scheme, its SDK naming — all of it belongs to `sync.signals.stripe`. The moment core knows a vendor's name, the plugin story is dead.
 
+## The console renders the product position, so its interface rules are not taste
+
+Sync's argument is that competing tools present a black box and a result and ask a reviewer to
+trust it. The operator console exists to show the system's reasoning instead. Three authorities
+bind it and none of them is this document:
+
+- **The hierarchy comes from the specification**, never from a plan.
+  `docs/superpowers/specs/2026-07-25-sync-self-maintaining-apis-design.md:427-445` is the
+  authoritative block. Three plans built a different one and nobody noticed until a reconciliation
+  on 2026-08-05 found three of eleven routes matched, four levels invented and two reparented.
+  `.claude/rules/console-hierarchy.md` holds it.
+- **`DESIGN.md` is the token contract** — every colour, size, space and elevation, with the
+  arithmetic that proves each contrast, against a 5.05:1 floor. Dark-only as of 2026-08-05.
+  `.claude/rules/console-surface.md` carries what binds while a screen is open.
+- **The interface is ours.** `.claude/rules/interface-originality.md`.
+
+**One rule sits here rather than in a path rule, because it binds a Python view model exactly as
+much as a React component: no composite score, no health figure, no traffic light, no green dot,
+no liveness pulse.** Rejected on the record three times. A scalar that averaged three gates would
+collapse "we could not check" onto the same axis as "we checked and it passed", which is the
+failure this console exists to replace.
+
+That refusal is not conservatism, and the strongest form of the argument is worth carrying because
+it is the form that survives a sceptic. A mature control plane ships all three patterns — a status
+dot, a gauge, a coloured badge — and documents a precondition for each. Its dot requires a stored
+state transition inside one closed lifecycle; nothing in our data tells a run parked on the
+customer's CI from one that has died. Its gauge requires a 0–100 ratio against a fixed maximum,
+with breakpoints that already exist elsewhere in the product; a composite health figure has
+neither. Its badge — a recorded value from a closed vocabulary, legible without its colour — is
+permitted, and **Sync already permits exactly that**: run outcome, error state, absence. **We are
+not stricter than a mature control plane. We have data that fails its own published tests, and we
+said so.** (`docs/superpowers/plans/2026-08-05-sync-console-architecture.md`, section 19.)
+
+Four distinctions follow from the same position, and each is rendered rather than assumed:
+provenance at two levels, absence apart from zero, staleness apart from liveness, and
+never-measured apart from nothing-here. Twenty-four sentences on screen carry them, reproduced with
+file and line in that plan's *Establish 2* (`:102-207`). **Restyling one is allowed. Deleting one,
+shortening one, collapsing one behind a disclosure, or moving one into a tooltip is not.**
+
 ## Toolchain
 
 | | |
@@ -64,7 +103,11 @@ Git warns `LF will be replaced by CRLF` on every commit. That is expected. Do no
 
 ## How we work
 
-**Test first, always.** Write the failing test, run it, watch it fail for the reason you expect, then implement. A test that has never failed has never been shown to test anything.
+**Test first, always, in both languages.** Write the failing test, run it, watch it fail for the reason you expect, then implement. A test that has never failed has never been shown to test anything.
+
+**TypeScript is test-first too, as of 2026-08-06.** The console has a runner: `cd web && npm test` is `vitest run` over jsdom, wired into CI's `web` job beside `lint` and `build`. Its scope is Decision 6's and it is deliberately narrow — **classification, derivation and structural invariants; never class names, never snapshots.** A snapshot test in a console being actively restyled fails on every correct change and gets deleted within a week by whoever it blocks. Anything about rendered pixels is measured in Chrome and written into `DESIGN.md` instead, which is a different discipline with a different gate. Where a rule *belongs* is a separate question from where it is tested, and `.claude/rules/console-dev-loop.md` carries it: a rule the payload can answer still belongs in the payload, so two screens cannot disagree about one fact.
+
+**Executing a plan, decide rather than ask.** `.claude/rules/autonomous-development.md` carries the rule and the three exceptions that are still the human's. It exists because one blocking question idled a milestone for three hours; a ruling recorded in the plan's ledger costs a fix round to reverse, and waiting costs the afternoon.
 
 **A test that cannot fail is worse than no test.** It reports a component as covered while asserting nothing, and nothing downstream ever contradicts it — the import-boundary test's original form exited 0 without parsing its own argument. When a test asserts on a subprocess, an exit code, or an external tool, break the thing deliberately and watch it go red before trusting it.
 
@@ -109,11 +152,57 @@ ClaudeAgentOptions(
 )
 ```
 
-Verified against the installed package: `ClaudeAgentOptions` exposes `cwd`, `model`, `thinking`, `effort`, `allowed_tools`, `disallowed_tools`, and `permission_mode`. Passing the Messages-API shape to it does not work, and this document previously said otherwise.
+Passing the Messages-API shape to `ClaudeAgentOptions` does not work, and this document previously said otherwise.
 
-Restricting a tool means listing it in `disallowed_tools`. Merely leaving it out of `allowed_tools` is not a block — with no `can_use_tool` callback registered, an out-of-list call has no resolution path in headless mode, which inside an unattended pipeline is a hang rather than a refusal.
+**It said something else wrong, and the correction matters because it is load-bearing for the patch agent's containment.** It listed seven fields as the verified surface. The installed package (`0.2.128`) declares **45**, and the ones this project cares about were all missing from that list: `hooks`, `can_use_tool`, `tools`, `sandbox`, `env`, `max_budget_usd`.
+
+Three facts about restricting what the agent may do, all checked against the installed package rather than inferred:
+
+- **Listing a tool in `disallowed_tools` is a real block. Omitting it from `allowed_tools` is not.** That much was right.
+- **A `can_use_tool` callback is shadowed by a whole-tool `allowed_tools` entry.** The SDK's own
+  `types._get_can_use_tool_shadowed_warning` says a whole-tool allow auto-approves *before* the
+  callback is consulted, and directs you to a `PreToolUse` hook to gate every call. Every entry in
+  the patch agent's allow-list is a whole-tool entry, so a `can_use_tool` gate there would have been
+  consulted for nothing and looked like it was working. `hooks` also works with a one-shot string
+  prompt; `can_use_tool` requires streaming mode and raises without it.
+- **The hang is a property of the default permission mode, not of headless mode.** `PermissionMode`
+  includes `dontAsk` — deny anything not pre-approved — alongside `default`, `acceptEdits`, `plan`,
+  `bypassPermissions` and `auto`.
+
+`sandbox` accepts network `deniedDomains` and is **macOS and Linux only**, so it is not available on
+this machine. That is the mechanism B97 needs to actually close, and knowing it is unavailable here
+is why the gate that shipped is a `PreToolUse` hook instead
+(`docs/superpowers/specs/2026-07-25-sync-threat-model.md`).
 
 `temperature`, `top_p`, and `budget_tokens` return HTTP 400 on this model on either surface. Steer with prompting instead. Thinking is on by default, and on the Messages API `max_tokens` caps thinking plus output together, which is why that ceiling is generous.
+
+## Technical debt is the scaling constraint, and it is paid down continuously
+
+This is the platform's integrity condition, not a preference. A product stops scaling when the cost
+of the next change is set by the accumulated shape of the last hundred, and that is what debt is.
+Sync is built by one person; there is no team here to absorb an interest payment later. So the
+standing instruction is to keep debt near zero as the work happens, rather than to schedule paying
+it down.
+
+What that means concretely, and each of these has cost this repository time:
+
+- **Factor at the second use, not the third.** The third is where the two copies have already
+  drifted, and reconciling drift is a different and more expensive job than extracting a function.
+- **Delete rather than deprecate.** A dead path still typechecks, still gets read, still gets
+  maintained by someone who cannot tell it is dead. `retracted_at` survived removal from the payload
+  because a TypeScript type kept describing it and the build stayed green.
+- **A fact written twice will disagree with itself.** This is the same rule as *prefer a pointer to
+  a copy* in *Where a convention goes*, and it is the most expensive form of debt here because the
+  disagreement is silent.
+- **Build for the case that exists.** An abstraction, a flag, or a hook added for an anticipated
+  second caller is debt with no asset behind it. Wait for the caller.
+- **A workaround ships with a backlog entry naming what retires it, or it does not ship.** The
+  oasdiff idempotency exemption is the model: written down, scoped, with the condition that ends it.
+
+The counterweight, because this instruction can be over-applied: the test is whether the debt would
+make a later change slower or a defect quieter. Work that fails that test is polish, and polish
+competes with the milestone. Nine ticks went to design-system refinement while two specified levels
+of the console did not exist.
 
 ## Code style
 
@@ -123,6 +212,66 @@ Prefer small, focused modules over large ones. A file that has grown past one cl
 
 Do not add error handling, fallbacks, or validation for conditions that cannot occur. Validate at system boundaries — user input, vendor responses, subprocess output — and trust internal code.
 
+## Where a convention goes
+
+Three tiers, and they cost very different amounts. Put a convention in the narrowest tier that
+still catches its failure.
+
+**Every turn, for every agent:** this file, and any file in `.claude/rules/` with no `paths:`
+frontmatter. Two rules load that way today and both are deliberate — `autonomous-development.md`,
+because plan execution is not predicted by any path, and `interface-originality.md`, because the
+directory of competitor screenshots it fences off can be opened from anywhere. **Adding a rule file
+without `paths:` promotes it to the most expensive tier in the repository.** Do that on purpose or
+not at all.
+
+**Only while a matching file is in play:** a rule with `paths:` frontmatter. That is where a
+convention scoped to a directory belongs, and where most of them are — `graph-grain.md`,
+`signal-stage.md`, `remediate-stage.md`, `test-discipline.md`, `console-hierarchy.md`,
+`console-surface.md`, `console-dev-loop.md`. A frontend convention loaded while somebody edits a
+Python detector is pure cost.
+
+**Only when something asks for it:** a skill, or a document under `docs/`. Specs and plans live
+here. They are the authorities; the tiers above cite them.
+
+Prefer a pointer to a copy. A fact written down twice is a fact that will disagree with itself, and
+this repository has spent a week fixing exactly that. What earns a full restatement in the two
+expensive tiers is what an agent must not be able to miss regardless of what it happens to be
+editing — nothing else.
+
+## Branches, and how work reaches `main`
+
+**One integration branch at a time.** It is named in the milestone's plan — `console-identity`
+during M7. Every worker branches from it, gates on it, and pushes its own branch. The coordinator
+merges into the integration branch. **A worker never opens a pull request and never pushes `main`.**
+
+**`main` catches up by fast-forward, on a schedule rather than at a milestone boundary.** The
+integration branch is only ever ahead of `main`, never divergent, so landing it is
+`git push origin <sha>:refs/heads/main` and nothing else — no merge commit, no conflict, no review
+round. Do it at least daily.
+
+The failure this exists to stop was measured on 2026-08-06: `main` sat 27 hours and 192 commits
+behind while eighteen branches accumulated, and the owner could not tell which of five running dev
+servers held current code. **Nothing had actually diverged** — fifteen of the sixteen work branches
+were already ancestors of the integration branch, contributing zero unique commits. The mess was
+entirely staleness plus uncleaned refs, and it read as merge debt. A stale `main` is expensive
+because it makes everything downstream unprovable, not because it is hard to fix.
+
+**Containment is a command, not a memory.** Before treating a branch as merged,
+`git merge-base --is-ancestor <branch> <integration>`. Before landing,
+`git merge-base --is-ancestor origin/main <integration>` — if that fails, the branch diverged and
+the fast-forward assumption is wrong.
+
+**A pull request is a record, not the merge mechanism.** Open one per milestone if the history is
+worth annotating. Landing the integration branch closes it automatically, because its head is
+already an ancestor. Do not gate a landing on CI: as of 2026-08-06 hosted runners acquire jobs
+intermittently and report a job that never started as `failure` (B112), so **the local gate is the
+authority** — `uv run pytest tests/ -q -n0`, then `npm run build`, `npm run lint`, `npm test` from
+`web/`. Say which of those ran. Never say CI covered something it never executed.
+
 ## Commits
 
 Conventional Commits (`feat:`, `fix:`, `test:`, `docs:`, `chore:`). Write the body in normal prose explaining why, not what — the diff already says what.
+
+**Carry the work item in the subject:** `feat: M4-W131 the expansion slice and four cold-start briefs`. The register is `docs/superpowers/WORKLOG.md`; take the next number, add the row before starting, and put the identifier on every commit belonging to that item. The sequence is one series across the whole project rather than one per milestone, so a number identifies work without its milestone having to disambiguate it — `M3-W125` and `M4-W126` are consecutive.
+
+A work item is one reviewable unit: what a brief asks for, or what a tick takes. Several commits under one number is normal. Two numbers for one change is not.

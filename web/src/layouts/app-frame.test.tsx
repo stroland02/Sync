@@ -1,0 +1,427 @@
+/**
+ * The chassis is two tiers, and this is the test that decides it.
+ *
+ * A fixed icon rail carries the product's areas; a contextual sidebar carries the destinations
+ * inside the area that is active. The discriminator between that and the single sidebar it
+ * replaces is **which tier changes when you navigate**: the rail's items are the same items in
+ * the same order on every route, and only the sidebar's contents move.
+ *
+ * **jsdom has no layout, so vertical position cannot be read directly** — `getBoundingClientRect`
+ * returns zeroes here. Saying so matters, because a test that asserted on those numbers would pass
+ * against any tree at all. What is asserted instead is the structural cause: the rail's ordered
+ * sequence of accessible names is identical on every route, and an item can only move if one above
+ * it appears or disappears. The pixels are measured in Chrome and recorded in `DESIGN.md`; this
+ * holds the property that makes that measurement come out right.
+ *
+ * Rewritten for M7-W171 from the M7-W160 file that pinned the one-sidebar arrangement. Four of its
+ * assertions described a collapse threshold and a reserved heading row and describe nothing that
+ * exists now; three described reachability, accessible naming and `reachedFrom`, which the two-tier
+ * shell owes exactly as much, and those are carried forward against the new tiers.
+ */
+
+import { cleanup, fireEvent, render, screen, within } from "@testing-library/react"
+import { MemoryRouter, useNavigate } from "react-router"
+import { afterEach, describe, expect, it, vi } from "vitest"
+
+import { AppFrame } from "@/layouts/app-frame"
+import { shortcutHint } from "@/layouts/command-palette"
+import { KINDS_SHOWN, clearErrors, reportError } from "@/lib/error-log"
+import { AREAS, ROUTES, type AreaEntry } from "@/lib/routes"
+
+// The top bar's switchers read the same two queries the list screens read. Mocked rather than
+// served through a client, for the reason `fleet-facts.test.tsx` gives: this file is about the
+// chassis, and a live client would make every assertion here depend on a fetch.
+vi.mock(import("@/api/queries"), async (importOriginal) => ({
+  ...(await importOriginal()),
+  useRepositories: () =>
+    ({
+      isPending: false,
+      isError: false,
+      isSuccess: true,
+      data: { repo_ids: ["seed-console"] },
+    }) as never,
+  useOverview: () =>
+    ({
+      isPending: false,
+      isError: false,
+      isSuccess: true,
+      data: { vendors: [{ vendor_id: "stripe", open_finding_count: 1 }] },
+    }) as never,
+}))
+
+afterEach(() => {
+  cleanup()
+  clearErrors()
+})
+
+function renderAt(path: string) {
+  return render(
+    <MemoryRouter initialEntries={[path]}>
+      <AppFrame />
+    </MemoryRouter>
+  )
+}
+
+/** The icon rail: the tier that does not change. */
+function rail(): HTMLElement {
+  return screen.getByRole("navigation", { name: /areas/i })
+}
+
+/** The contextual sidebar: the tier that does. */
+function destinations(): HTMLElement {
+  return screen.getByRole("navigation", { name: /destinations/i })
+}
+
+/**
+ * Every rail item's accessible name, in document order.
+ *
+ * Read off `aria-label` rather than through `getAllByRole("link")`, because the rail deliberately
+ * holds three kinds of control: a link for an area with a landing route, a button for an area whose
+ * every destination needs a subject the registry does not hold, and one `aria-disabled` entry for
+ * Settings. A role query would see one of the three and report the rail as shorter than it is.
+ */
+function railNames(): string[] {
+  return [...rail().querySelectorAll("[aria-label]")].map(
+    (el) => el.getAttribute("aria-label") ?? ""
+  )
+}
+
+/** The rail item the chassis is marking as the one being looked at. */
+function railCurrent(): (string | null)[] {
+  return [...rail().querySelectorAll('[aria-current="true"]')].map((el) =>
+    el.getAttribute("aria-label")
+  )
+}
+
+/**
+ * A real Back, rather than a second click forward onto the same address.
+ *
+ * The two are not the same assertion. A forward click would prove the rail agrees with the address
+ * it arrives at; Back proves it does not resurrect a state it left behind, which is where a pick
+ * that is masked rather than dropped goes wrong.
+ */
+function BackButton() {
+  const navigate = useNavigate()
+  return (
+    <button type="button" onClick={() => navigate(-1)}>
+      go back
+    </button>
+  )
+}
+
+function routesOf(area: AreaEntry) {
+  return ROUTES.filter((route) => area.levels.includes(route.level))
+}
+
+/** A concrete URL for a route, since `:findingId` matches nothing on its own. */
+function concrete(path: string): string {
+  return path.replace(/:([A-Za-z]+)/g, "subject")
+}
+
+describe("the top bar sits above the chassis", () => {
+  it("renders a banner on every route", () => {
+    // The measured gap this closes: `[role=banner]` counted 0 on every route, so the console had
+    // no persistent statement of which subject a nine-level hierarchy had you inside.
+    for (const route of ROUTES) {
+      renderAt(concrete(route.path))
+
+      expect(screen.getByRole("banner")).toBeTruthy()
+
+      cleanup()
+    }
+  })
+
+  it("puts the bar above the rail rather than inside the scrolling column", () => {
+    // The structural claim, asserted where jsdom can see it: the header is a sibling *before* the
+    // rail-and-content row. Inside `main` it would be the breadcrumb again — gone on first scroll.
+    renderAt("/")
+
+    const banner = screen.getByRole("banner")
+
+    expect(banner.contains(rail())).toBe(false)
+    expect(
+      banner.compareDocumentPosition(rail()) & Node.DOCUMENT_POSITION_FOLLOWING
+    ).toBeTruthy()
+  })
+
+  it("carries the scope trail, and it names the subject the address is inside", () => {
+    renderAt("/vendors/stripe?repo_id=seed-console")
+
+    const banner = screen.getByRole("banner")
+    const trail = within(banner).getByRole("navigation", { name: /scope/i })
+
+    expect(within(trail).getByText("seed-console")).toBeTruthy()
+    expect(within(trail).getByText("stripe")).toBeTruthy()
+  })
+
+  it("offers the command palette a trigger a pointer can find", () => {
+    // The palette was `Ctrl/Cmd-K` with nothing on screen saying so — a keyboard-only affordance
+    // nobody can discover. The dialog is not in the document until it opens, which is what makes
+    // this assertion a real one rather than a query against a permanently mounted node.
+    renderAt("/")
+    expect(screen.queryByRole("dialog")).toBeNull()
+
+    fireEvent.click(within(screen.getByRole("banner")).getByRole("button", { name: /destination/i }))
+
+    expect(screen.getByRole("dialog")).toBeTruthy()
+  })
+})
+
+describe("the keybind the trigger prints", () => {
+  // Asserted here because the app frame is what composes the trigger. The palette answers either
+  // modifier, so the hint is about the keyboard in front of the reader; naming the wrong key would
+  // be a fact about the console stated wrongly on every screen.
+  it("names the modifier the reader's keyboard actually has", () => {
+    expect(shortcutHint("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)")).toContain("⌘")
+    expect(shortcutHint("Mozilla/5.0 (Windows NT 10.0; Win64; x64)")).toBe("Ctrl K")
+  })
+})
+
+describe("a failure displaces the chassis rather than floating over it", () => {
+  it("puts the error banner above the top bar", () => {
+    // The owner's own capture showed 92 stacked "API is unreachable" cards obscuring the page. A
+    // slot above the header is the structural fix: it pushes the console down instead of covering
+    // it, so nothing a reader needs is behind it.
+    reportError({ summary: "The API is unreachable.", detail: "connection refused" })
+    renderAt("/")
+
+    const alert = screen.getByRole("alert")
+    const banner = screen.getByRole("banner")
+
+    expect(banner.contains(alert)).toBe(false)
+    expect(
+      alert.compareDocumentPosition(banner) & Node.DOCUMENT_POSITION_FOLLOWING
+    ).toBeTruthy()
+  })
+
+  it("draws three kinds and says how many it is not drawing", () => {
+    // The cap, where it is visible. `groupErrorsByKind` is tested on its own; this is the claim
+    // that the banner honours it and states the remainder rather than silently dropping it. The
+    // singular is pinned because the sentence has to read as English at the boundary it is most
+    // often seen at — one kind over the cap.
+    for (const summary of ["first", "second", "third", "fourth"]) {
+      reportError({ summary, detail: summary })
+    }
+    renderAt("/")
+
+    const alert = screen.getByRole("alert")
+
+    expect(alert.querySelectorAll("li")).toHaveLength(KINDS_SHOWN)
+    expect(alert.textContent).toContain("1 further kind is in the log")
+    expect(alert.textContent).toContain("Nothing was dropped")
+  })
+
+  it("says it in the plural when more than one kind is undrawn", () => {
+    for (const summary of ["first", "second", "third", "fourth", "fifth"]) {
+      reportError({ summary, detail: summary })
+    }
+    renderAt("/")
+
+    expect(screen.getByRole("alert").textContent).toContain("2 further kinds are in the log")
+  })
+})
+
+describe("the rail carries the product's areas", () => {
+  it("names every area exactly once and Settings last", () => {
+    renderAt("/")
+
+    const items = railNames()
+
+    expect(items[items.length - 1]).toMatch(/settings/i)
+    expect(new Set(items).size).toBe(items.length)
+    expect(items).toHaveLength(AREAS.length + 1)
+  })
+
+  it("keeps every rail item in the same position on every route", () => {
+    // The two-tier property, asserted where jsdom can see it. If the rail's sequence differed
+    // between two routes, an icon would move under the pointer as an operator navigated, which is
+    // the one thing a persistent rail must not do.
+    renderAt("/")
+    const atRoot = railNames()
+    cleanup()
+
+    for (const route of ROUTES) {
+      renderAt(concrete(route.path))
+      expect(railNames()).toEqual(atRoot)
+      cleanup()
+    }
+
+    expect(atRoot.length).toBeGreaterThan(1)
+  })
+
+  it("names each rail item for a screen reader, not only in a tooltip", () => {
+    // A tooltip supplements the name; it is not the mechanism that supplies it. Every rail control
+    // is icon-only, so without `aria-label` the rail is a column of unnamed buttons.
+    renderAt("/")
+
+    expect(within(rail()).getByRole("link", { name: /fleet/i })).toBeTruthy()
+    for (const area of AREAS) {
+      expect(railNames()).toContain(area.label)
+    }
+  })
+
+  it("offers Settings no destination and says what it is waiting for", () => {
+    // Settings is not an area: no route declares it and `GRAPH_LEVELS` gains nothing for it. It is
+    // on the rail because the write path is where it arrives, and the entry says so rather than
+    // leaving a gap somebody fills with an invented level.
+    renderAt("/")
+
+    const settings = within(rail()).getByLabelText(/settings/i)
+
+    expect(settings.getAttribute("aria-disabled")).toBe("true")
+    expect(settings.getAttribute("href")).toBeNull()
+    // Asserted on `title` rather than on the tooltip: a Radix tooltip is in the document only while
+    // it is open, so the sentence has to be readable without one.
+    expect(settings.getAttribute("title")).toBe("Settings arrives with the write path")
+  })
+
+  it("keeps an area's rail item current on every route that area owns", () => {
+    // This is the `pages` mechanism where it is genuinely load-bearing. A rail item owns a run of
+    // levels rather than one address, so it says which addresses it owns in data — the alternative
+    // is a regex over the path, which quietly stops matching the day a route is added beneath it.
+    for (const area of AREAS) {
+      for (const route of routesOf(area)) {
+        renderAt(concrete(route.path))
+
+        expect(railCurrent()).toEqual([area.label])
+
+        cleanup()
+      }
+    }
+  })
+
+  it("drops a pick when the address changes, and does not revive it on Back", () => {
+    // Picking an area with no landing route is a browse, not a navigation, so it has to be dropped
+    // the moment the address moves rather than suspended while the address differs. Suspended, it
+    // comes back the instant its own address does — and then the rail marks one area while another
+    // area's screen renders underneath it, which is the one disagreement this shell must not have.
+    render(
+      <MemoryRouter initialEntries={["/"]}>
+        <AppFrame />
+        <BackButton />
+      </MemoryRouter>
+    )
+    expect(railCurrent()).toEqual(["Fleet"])
+
+    fireEvent.click(within(rail()).getByLabelText("Codebase"))
+    expect(railCurrent()).toEqual(["Codebase"])
+
+    // A link, so this is a real navigation away from the address the pick was made at.
+    fireEvent.click(within(rail()).getByLabelText("Observe"))
+    expect(railCurrent()).toEqual(["Observe"])
+
+    fireEvent.click(screen.getByRole("button", { name: "go back" }))
+
+    // Back at `/`, where the Fleet screen renders. The rail says Fleet, not the area browsed here
+    // three clicks ago.
+    expect(railCurrent()).toEqual(["Fleet"])
+  })
+})
+
+describe("the contextual sidebar carries the active area's destinations", () => {
+  it("heads itself with the area the current route belongs to", () => {
+    for (const area of AREAS) {
+      const route = routesOf(area)[0]
+      renderAt(concrete(route.path))
+
+      expect(within(destinations()).getByRole("heading", { name: area.label })).toBeTruthy()
+
+      cleanup()
+    }
+  })
+
+  it("renders the active area's destinations and no other area's", () => {
+    for (const area of AREAS) {
+      const route = routesOf(area)[0]
+      renderAt(concrete(route.path))
+
+      const shown = [...destinations().querySelectorAll("[data-destination]")].map((el) =>
+        el.getAttribute("data-destination")
+      )
+      expect(shown).toEqual(routesOf(area).map((r) => r.path))
+
+      cleanup()
+    }
+  })
+
+  it("groups them under the graph levels the specification names", () => {
+    // The grouping is the specification's vocabulary rendered, not a second hierarchy: an area is a
+    // run of consecutive levels, and the sidebar prints the level names it holds. Read off the
+    // group labels rather than by text, because a level name and a destination's label are the same
+    // word on five of the nine routes.
+    for (const area of AREAS) {
+      renderAt(concrete(routesOf(area)[0].path))
+
+      const labels = [...destinations().querySelectorAll('[data-sidebar="group-label"]')].map(
+        (el) => el.textContent
+      )
+      expect(labels).toEqual([...area.levels])
+
+      cleanup()
+    }
+  })
+
+  it("marks the row for the current route, and marks only it", () => {
+    for (const route of ROUTES) {
+      renderAt(concrete(route.path))
+
+      const current = [...destinations().querySelectorAll('[aria-current="page"]')].map((el) =>
+        el.getAttribute("data-destination")
+      )
+      expect(current).toEqual([route.path])
+
+      cleanup()
+    }
+  })
+
+  it("names every destination for a screen reader", () => {
+    for (const area of AREAS) {
+      renderAt(concrete(routesOf(area)[0].path))
+
+      for (const route of routesOf(area)) {
+        const row = destinations().querySelector(`[data-destination="${route.path}"]`)
+        expect(row?.getAttribute("aria-label")).toContain(route.label)
+        // The tooltip is the sighted reader's equivalent of the accessible name, so it carries the
+        // same string rather than a shortened one.
+        expect(row?.getAttribute("title")).toBe(row?.getAttribute("aria-label"))
+      }
+
+      cleanup()
+    }
+  })
+
+  it("carries where a subject comes from on the routes that need one", () => {
+    // A destination the registry cannot link is not a dead label: `reachedFrom` says which screen
+    // supplies the subject, at the row itself, which is how seven of eleven routes stopped being
+    // unreachable.
+    for (const route of ROUTES.filter((r) => r.params.length > 0)) {
+      renderAt(concrete(route.path))
+
+      const row = destinations().querySelector(`[data-destination="${route.path}"]`)
+      expect(row?.getAttribute("aria-label")).toContain(route.reachedFrom ?? "")
+      expect(row?.getAttribute("href")).toBeNull()
+
+      cleanup()
+    }
+  })
+})
+
+describe("every declared destination is one rail activation away", () => {
+  it("shows an area's whole run of levels the moment its rail item is used", () => {
+    // The reachability claim the whole chassis exists to make, and the one the first version of this
+    // shell failed: four area icons remained and the nine specification levels could not be reached.
+    renderAt("/")
+
+    const seen = new Set<string>()
+    for (const area of AREAS) {
+      fireEvent.click(within(rail()).getByLabelText(area.label))
+
+      for (const route of routesOf(area)) {
+        expect(destinations().querySelector(`[data-destination="${route.path}"]`)).toBeTruthy()
+        seen.add(route.path)
+      }
+    }
+
+    expect([...seen].sort()).toEqual(ROUTES.map((route) => route.path).sort())
+  })
+})

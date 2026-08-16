@@ -20,49 +20,34 @@
 # collapsed distinction, which is worse than a baselined line.
 src/sync/route/templates.py:omit_property_at
 
-# A deferral rather than an acceptance, which makes it a different kind of entry from the one
-# above. `ea8f869` landed the M4 dashboard view models with their caller still unwritten.
-# `workflow_state` is genuinely wired: `src/sync/api/__main__.py` imports it and hands it to the
-# transport as the checkpoint reader, so its line left here in the same commit that wired it,
-# per this file's own rule that a repaired entry has to be removed by whoever repaired it. The
-# `vendor_detail` and `finding_detail` lines were deleted alongside it on a claim about the same
-# commit that is not true; the entry below restores them. `repository_overview` stayed
-# behind: the overview route composes its answer from `whats_at_risk` because the plan binds
-# the console to `GraphSurface` and not to `sync.dashboard`, so this function is dead in
-# `src/` for a reason the surface makes structural. It leaves when Task 3 or a followup either
-# wires it or removes it.
-src/sync/dashboard/queries.py:repository_overview
+# `repository_overview` (was `src/sync/dashboard/queries.py:repository_overview`) and
+# `GraphStore.observed_error_windows` were both entries here as of the same date this file's
+# header carries. Neither describes anything any more: `repository_overview` is gone from
+# `queries.py` outright, and `observed_error_windows` is now called from
+# `src/sync/dashboard/graph_views.py:317` (`observed_telemetry`'s windows page). Deleted per
+# this file's own rule -- a repaired entry is removed by whoever notices the repair, in the
+# commit that notices it, and the deletion is the thing that keeps this list load-bearing
+# rather than accumulating names nobody re-checks.
 
-# A correction to the decision above rather than a new acceptance. The header says adding a line
-# is a decision and not a formality; re-adding one is a decision about a decision, so it is worth
-# saying plainly what went wrong. These two were removed on the claim that
-# `src/sync/api/app.py` reaches them. It does not. It reaches `GraphSurface`, and nothing in
-# `src/` imports either function. What kept the lint quiet was a bare-name collision: `create_app`
-# named its route handlers `vendor_detail` and `finding_detail` after the graph entities they
-# serve, this lint matches by bare name and never resolves it, and so a local coroutine counted as
-# a reference to a module-level function it has nothing to do with. The handlers are
-# `_vendor_detail` and `_finding_detail` now, which is what makes these two visible again.
-#
-# They are dead for the same structural reason as `repository_overview`: the console binds to
-# `GraphSurface`, so a view model that takes a `GraphStore` has no caller on that path. Whether
-# the console ever binds to `sync.dashboard` is an open M4 question, and these lines leave when it
-# is answered either way.
-src/sync/dashboard/queries.py:vendor_detail
-src/sync/dashboard/queries.py:finding_detail
+# `open_findings_page` was listed here as a paginated sibling nothing called. It is called now:
+# `sync.dashboard.graph_views.detector_accountability` reads it unbounded so that the same
+# aggregate serves one repository and the whole fleet, which the unpaginated `open_findings` can
+# never do -- its signature is pinned exactly by `sync.mcp.tools.GraphReader`'s structural
+# protocol, so it takes no filter and never will. The entry is deleted rather than annotated,
+# per this file's own rule: a repaired entry is removed by whoever notices the repair, in the
+# commit that notices it.
 
-# `observed_error_windows` is a deferral like the entry above, but a weaker one, and the
-# difference is worth stating rather than borrowing the stronger framing. `repository_overview`
-# leaves when Task 3 or a followup wires it or removes it, so a written task decides its fate.
-# This one has no such task: B71 landed the Sentry error-count ingest deliberately without a
-# detector, because a detector written against the single fixture that exists would be a
-# detector tuned to that fixture. So the consumer is intended but unplanned, and no document
-# names the commit that deletes this line.
-#
-# The reader stays rather than the tests reading SQL directly. Every assertion about what the
-# ingest wrote goes through this method; replacing it with a query in the test file would put a
-# second copy of the row mapping there, and a test that builds its own expected row out of the
-# same SELECT it is checking is the shape of test this repository has twice found cannot fail.
-#
-# What retires this line is the first M5 detector querying these counts. Until then the entry is
-# the honest record: the write path is wired and the read path is not.
-src/sync/graph/store.py:GraphStore.observed_error_windows
+# `_SafeStreamHandler.emit` overrides `logging.StreamHandler.emit`. The logging framework calls
+# it by the base class's contract whenever a record reaches the handler, never by name from
+# anywhere `src/` would show a caller for -- the same shape as `__init__`, `__repr__`, or any
+# other dunder a scanner built on static call-graph reachability cannot see reflection reach.
+src/sync/obs/log.py:_SafeStreamHandler.emit
+
+# `_BorrowedTextIOWrapper.close` overrides `io.TextIOWrapper.close`, and the calls that matter
+# come from the interpreter rather than from a line in `src/` -- the collector reaching a
+# wrapper the previous `configure` dropped is the exact path this override exists to make safe.
+# Same shape as `_SafeStreamHandler.emit` above: a base-class contract a static call-graph
+# scanner cannot see. Deleting the override to satisfy this lint would restore the defect it
+# fixes, which `tests/test_obs_log.py` holds by writing to the borrowed stream after a second
+# `configure` and a forced collection.
+src/sync/obs/log.py:_BorrowedTextIOWrapper.close

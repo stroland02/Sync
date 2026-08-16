@@ -21,6 +21,27 @@ from pydantic import BaseModel, Field
 # `severity` as a bare string and `schema.sql` stores it as TEXT, so widening it moves no
 # contract.
 Severity = Literal["breaking", "warning", "deprecation", "addition", "info"]
+
+# Most severe first. **This is a declared judgement, not a fact the graph stores**, and it lives
+# here rather than in a view because it is a property of the vocabulary above: a rank kept
+# somewhere else drifts the first time that literal widens, and it has widened once already.
+# `tests/test_core_contracts.py` asserts the two cover each other exactly, so a sixth severity
+# fails a test instead of silently sorting to the end of a page an operator asked to see in order.
+#
+# The grading is by what the finding costs the codebase that calls the operation. `breaking` is a
+# call site that will fail. `warning` is oasdiff's second level -- something removed that the call
+# site may be reading. `deprecation` is a break with a date on it. `addition` and `info` cost
+# nothing and are here because the vocabulary holds them, not because anyone sorts to reach them.
+#
+# Anything ordering by this must say so on screen. A table that silently reorders is a table whose
+# page boundaries move under a reader, and an ordering nobody can see is one nobody can check.
+SEVERITY_ORDER: tuple[Severity, ...] = (
+    "breaking",
+    "warning",
+    "deprecation",
+    "addition",
+    "info",
+)
 ChangeSource = Literal["oasdiff", "changelog", "sdk-release", "vendor-deprecation-table"]
 PatchStrategy = Literal["codemod", "agent"]
 FindingStatus = Literal["open", "patched", "abandoned"]

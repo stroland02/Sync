@@ -1,0 +1,392 @@
+@import "tailwindcss";
+
+/* The class the shadcn catalog's `dark:` utilities key off (button.tsx, input.tsx,
+   textarea.tsx, input-group.tsx elsewhere in this tree read it). Selects descendants of
+   `.dark` rather than `.dark` itself, so the class has to land on an ancestor -- `<html>`,
+   stamped there once in index.html -- for the document to be covered. The console is
+   dark-only and the class is never removed, so this variant now names a permanent state
+   rather than a toggle; it stays declared because those `dark:` utilities are compiled
+   against it and this file does not own the components that use them. */
+@custom-variant dark (&:is(.dark *));
+
+/* Every colour below is the Supabase substrate resolved to a literal. The theme this
+   console adopts is generative: `web/src/vendor/supabase/theme.css` declares eight
+   parameters for `.dark` and the upstream `semantic.css` derives every semantic colour
+   from them in OKLCH. We resolve rather than re-implement, for two independent reasons.
+
+   `getComputedStyle` on a custom property returns the declared text rather than a
+   resolved colour, and `components/charts/echart.tsx` reads seven of these through it --
+   a `var()` reference or a relative-colour `oklch(from ...)` comes back unresolved and
+   zrender paints nothing. And a generative chain is a value nobody can read off the file:
+   the contrast arithmetic in DESIGN.md is checkable only against numbers.
+
+   `web/scripts/theme-contrast.mjs` is the resolver and the re-measurement tool. It carries
+   the eight inputs and the derivations transcribed from upstream, prints every value here
+   and every WCAG ratio DESIGN.md publishes. Change a parameter, run it, paste what it says.
+
+   `static`, not the bare directive: Tailwind v4 otherwise treats a theme variable as unused
+   and drops it from output whenever no generated utility class references it. Several
+   tokens here are read only dynamically, through `getComputedStyle` in echart.tsx, or are
+   consumed by a vendored component under a name no file in `src/` spells -- a bare `@theme`
+   block silently ships those with no value at all. */
+@theme static {
+  /* -- depth: four opaque steps, `--surface` plus `--elevation-step * ratio` ----------
+     The ratios are upstream's: card 1, popover 1.5, secondary 2. Our own names sit on
+     the first two, which are the only two depths a console needs. */
+  --color-background: oklch(0.19 0.0025 159);
+  --color-card: oklch(0.215 0.0025 159);
+  --color-popover: oklch(0.2275 0.0025 159);
+  --color-secondary: oklch(0.24 0.0025 159);
+  --color-surface-sunken: oklch(0.19 0.0025 159);
+  --color-surface: oklch(0.215 0.0025 159);
+
+  /* -- state: two foreground overlays, not two more depth steps ----------------------
+     `--muted` and `--accent` are the foreground at an alpha tuned upstream so each
+     matches the lightness delta of the same elevation ratio measured on the page plane.
+     Being an alpha of the ink already on the element is the point: one declaration means
+     one step toward the foreground at any nesting depth, which a fixed grey cannot do.
+     DESIGN.md's surface-ramp section carries why this is the sanctioned overlay shape
+     rather than the ad-hoc call-site wash the original ban was written against. */
+  --color-muted: oklch(0.95 0.00275 159 / 3.2895%);
+  --color-accent: oklch(0.95 0.00275 159 / 4.9342%);
+  --color-surface-subtle: oklch(0.95 0.00275 159 / 3.2895%);
+  --color-surface-emphasis: oklch(0.95 0.00275 159 / 4.9342%);
+
+  /* -- ink: three neutral levels, `--surface + --tone-span * level` -------------------
+     Levels 1, 0.8 and 0.65 upstream. Two of them are working DOM text steps; the third
+     is the chart legend's and is banned as a text class by
+     tests/test_console_design_tokens.py, which holds the class rather than the token so
+     a chart resolving it through getComputedStyle keeps working. */
+  --color-foreground: oklch(0.95 0.00275 159);
+  --color-foreground-light: oklch(0.798 0.00275 159);
+  --color-foreground-lighter: oklch(0.684 0.00275 159);
+  --color-foreground-muted: oklch(0.684 0.00275 159);
+  --color-muted-foreground: oklch(0.798 0.00275 159);
+  --color-ink: oklch(0.95 0.00275 159);
+  --color-ink-muted: oklch(0.798 0.00275 159);
+  --color-ink-secondary: oklch(0.684 0.00275 159);
+
+  /* Icons and other graphical marks, never text. An icon rendered at a text ink is
+     optically louder than the prose beside it -- a filled shape carries more area than a
+     stroke pattern at the same lightness -- so it takes its own name rather than borrowing
+     `ink`. Same value as `--color-ink-muted`: an allocation of an existing step, not a
+     fourth neutral level. Declared ahead of its first consumer so the first icon this
+     console ships reaches for `graphics` on day one instead of borrowing `ink-muted` and
+     leaving a second migration to do later; the day an icon lands, it either takes this
+     token or the token is the one that should go. */
+  --color-graphics: oklch(0.798 0.00275 159);
+
+  --color-card-foreground: oklch(0.95 0.00275 159);
+  --color-popover-foreground: oklch(0.95 0.00275 159);
+  --color-secondary-foreground: oklch(0.95 0.00275 159);
+  --color-accent-foreground: oklch(0.95 0.00275 159);
+
+  /* -- boundaries -------------------------------------------------------------------
+     `--border` is upstream's, verbatim: the foreground at an alpha the `--contrast` knob
+     drives. `--color-input` is not, and the deviation is named in DESIGN.md with both
+     measurements -- upstream's control boundary measures 1.43-1.47 against surfaces this
+     contract requires a control boundary to clear 3:1 against, and 0.578 is the lightness
+     that clears it on the substrate's own neutral hue and chroma. */
+  --color-border: oklch(0.95 0.001485 159 / 7.5125%);
+  --color-line: oklch(0.95 0.001485 159 / 7.5125%);
+  --color-input: oklch(0.578 0.00275 159);
+  --color-line-strong: oklch(0.578 0.00275 159);
+  --color-border-control: oklch(0.578 0.00275 159);
+  --color-border-overlay: oklch(0.95 0.001375 159 / 13.3713%);
+  --color-border-stronger: oklch(0.95 0.001375 159 / 17.4031%);
+
+  /* The focus ring at full strength. Upstream declares it as `--primary` at 55% alpha,
+     which composites to 3.38-3.55 against the four depth steps -- above the 3:1 non-text
+     floor, but the ring is frequently the only focus channel this console renders and a
+     ring at partial strength is a contrast figure nobody can read off a class name. The
+     recorded 2026-08-06 decision that removed an alpha from this ring is not reversed by
+     a substrate swap. DESIGN.md names it as a deviation and publishes both figures. */
+  --color-ring: oklch(0.76 0.15 159);
+
+  /* -- brand ------------------------------------------------------------------------
+     `--primary` is upstream's derived accent; `--color-brand` and the stepped scale are
+     its per-theme literals, carried in the spelling theme.css uses so their provenance is
+     visible in the file. The brand hue is the substrate's green, which is also the hue
+     `good` wears -- DESIGN.md's brand section carries why one green is better than two
+     14 degrees apart, and what still keeps a brand mark from reading as a verdict. */
+  --color-primary: oklch(0.76 0.15 159);
+  --color-primary-foreground: oklch(0.19 0.00225 159);
+  --color-brand: hsl(153.1 60.2% 52.7%);
+  --color-brand-link: hsl(155 100% 38.6%);
+  --color-brand-600: hsl(154.9 59.5% 70%);
+  --color-brand-500: hsl(154.9 100% 19.2%);
+  --color-brand-400: hsl(155.5 100% 9.6%);
+  --color-brand-300: hsl(155.1 100% 8%);
+  --color-brand-200: hsl(162 100% 2%);
+  --color-brand-surface: hsl(155.5 100% 9.6%);
+
+  /* -- status: four roles, three tokens each ----------------------------------------
+     Reserved. Never a series colour; never rendered without an icon and a word. Three of
+     the four take a substrate family whole. `serious` has no substrate family and is
+     built on the substrate's own expressive construction -- a fixed lightness, the shared
+     expressive chroma of 0.14, and a hue between warning's 75 and destructive's 25 that
+     falls inside neither's clamp. */
+  --color-good: hsl(153.1 60.2% 52.7%);
+  --color-good-ink: hsl(154.9 59.5% 70%);
+  --color-good-surface: hsl(155.5 100% 9.6%);
+  --color-warning: oklch(0.8 0.14 75);
+  --color-warning-ink: oklch(0.8 0.14 75);
+  --color-warning-surface: hsl(33.2 100% 14.5%);
+  --color-warning-foreground: oklch(0.12 0.0112 75);
+  --color-serious: oklch(0.66 0.16 45);
+  --color-serious-ink: oklch(0.77 0.14 45);
+  --color-serious-surface: oklch(0.26 0.055 45);
+  --color-critical: hsl(10.2 77.9% 53.9%);
+  --color-critical-ink: oklch(0.75 0.14 25);
+  --color-critical-surface: hsl(6.7 60% 20.6%);
+  --color-destructive: oklch(0.75 0.14 25);
+  --color-destructive-foreground: oklch(0.12 0.0112 25);
+
+  /* The stepped status scales, per-theme literals from theme.css. The vendored catalog
+     spells three of them directly (`text-brand-600`, `text-warning-600`,
+     `border-warning-500`); the rest complete the two families the roles above draw from,
+     so a later screen reaching for a tint has the step rather than an invented one. */
+  --color-warning-600: hsl(38.9 100% 42.9%);
+  --color-warning-500: hsl(34.8 90.9% 21.6%);
+  --color-warning-400: hsl(33.2 100% 14.5%);
+  --color-warning-300: hsl(32.3 100% 10.2%);
+  --color-warning-200: hsl(36.6 100% 8%);
+  --color-destructive-600: hsl(9.7 85.2% 62.9%);
+  --color-destructive-500: hsl(7.9 71.6% 29%);
+  --color-destructive-400: hsl(6.7 60% 20.6%);
+  --color-destructive-300: hsl(7.5 51.3% 15.3%);
+  --color-destructive-200: hsl(10.9 23.4% 9.2%);
+
+  /* -- the sidebar family the vendored rail reads ------------------------------------
+     Studio's own aliasing (apps/studio/styles/globals.css), minus the two `sidebar-primary`
+     entries: no vendored component in this tree spells them, and one of them upstream
+     resolves to the warning colour, which is not a value to adopt without a consumer that
+     explains it. */
+  --color-sidebar: oklch(0.19 0.0025 159);
+  --color-sidebar-foreground: oklch(0.95 0.00275 159);
+  --color-sidebar-accent: oklch(0.95 0.00275 159 / 4.9342%);
+  --color-sidebar-accent-foreground: oklch(0.95 0.00275 159);
+  --color-sidebar-border: oklch(0.95 0.001485 159 / 7.5125%);
+  --color-sidebar-ring: oklch(0.76 0.15 159);
+
+  /* -- the compat names the vendored catalog spells ----------------------------------
+     Upstream keeps these in `compat.css` as aliases onto the semantic tokens above, and
+     the vendored components still use them. Declared in the namespace that generates the
+     utility each component actually writes: `--background-color-*` for the `bg-` forms,
+     `--border-color-*` for the `border-` forms. A `--color-*` entry would generate
+     `bg-border-overlay` but not `border-overlay`, which is why upstream declares both and
+     so does this. */
+  --background-color-overlay: oklch(0.24 0.0025 159);
+  --background-color-overlay-hover: oklch(0.95 0.00275 159 / 4.9342%);
+  --background-color-selection: oklch(0.95 0.00275 159 / 4.9342%);
+  --background-color-alternative: oklch(0.19 0.0025 159);
+  --background-color-surface-100: oklch(0.215 0.0025 159);
+  --background-color-surface-200: oklch(0.95 0.00275 159 / 3.2895%);
+  --border-color-control: oklch(0.578 0.00275 159);
+  --border-color-strong: oklch(0.578 0.00275 159);
+  --border-color-stronger: oklch(0.95 0.001375 159 / 17.4031%);
+  --border-color-overlay: oklch(0.95 0.001375 159 / 13.3713%);
+  --color-background-overlay: oklch(0.24 0.0025 159);
+
+  /* -- the series palette, ours ------------------------------------------------------
+     Fixed slot order, assigned in sequence, never cycled. The order is the
+     colour-blindness gate, not a preference: re-ordering these requires re-running the
+     validator. The substrate ships no categorical chart palette -- its code-block colours
+     are a syntax palette, scored against nothing -- so there was nothing here to swap.
+     What did move is the surface these are drawn on; DESIGN.md carries the re-measurement. */
+  --color-series-1: #199e70;
+  --color-series-2: #d95926;
+  --color-series-3: #3987e5;
+  --color-series-4: #008300;
+  --color-series-5: #d55181;
+  --color-series-6: #c98500;
+  --color-series-7: #9085e9;
+  --color-series-8: #e66767;
+
+  /* Chart chrome, on the substrate's neutral hue and chroma so a gridline belongs to the
+     same ramp as everything behind it. */
+  --color-chart-grid: oklch(0.29 0.0025 159);
+  --color-chart-axis: oklch(0.42 0.0025 159);
+
+  /* The ink an in-segment label wears over a series fill (`corpus-chart.tsx`'s
+     `labelInkFor`), picked for contrast against the segment's own colour rather than for a
+     role in the surface's ink hierarchy -- which is why it is a literal instead of a step
+     on the ink ramp. Black, not white: every one of the eight series fills sits at a
+     luminance white cannot clear the 5.05 floor against (the least bad case is 4.95),
+     while black clears seven of the eight. DESIGN.md's Chart chrome section carries the
+     arithmetic and the one fill (`--color-series-4`) neither colour can clear. */
+  --color-chart-label-on-light: #000000;
+
+  /* The drop colour of the floating level, carried as a colour token because the
+     `shadow-*` utility resolves its theme value at build time: a literal written into
+     --shadow-float would be baked into the class, whereas a colour token is resolved per
+     element. */
+  --color-shadow: oklch(0 0 0 / 0.72);
+
+  /* -- type: the substrate's ramp, under our role names ------------------------------
+     Studio's own step sizes, tuned for its body face and adopted whole. The line box on
+     each of our seven role steps is Tailwind's stock ratio for the step it takes, rounded
+     up to the 4px grid -- which is a rule rather than seven choices, and which lands
+     `--text-body` on a 20px line box, the number DESIGN.md's `row-md` is derived from.
+     Tracking is two-tiered and travels with the heading role, not with size alone.
+     DESIGN.md's Type section carries the condition under which a step keeps it. */
+  --text-sm: 0.8125rem;
+  --text-base: 0.9375rem;
+  --text-lg: 1rem;
+  --text-xl: 1.125rem;
+  --text-2xl: 1.375rem;
+  --text-3xl: 1.75rem;
+  --text-4xl: 2.125rem;
+  --text-5xl: 2.875rem;
+  --text-6xl: 3.625rem;
+  --text-7xl: 4.375rem;
+  --text-8xl: 5.875rem;
+  --text-9xl: 7.875rem;
+
+  --text-meta: 0.75rem;
+  --text-meta--line-height: 1rem;
+  --text-body: 0.8125rem;
+  --text-body--line-height: 1.25rem;
+  --text-emphasis: 0.9375rem;
+  --text-emphasis--line-height: 1.5rem;
+  --text-emphasis--font-weight: 600;
+  --text-emphasis--letter-spacing: -0.02em;
+  --text-section: 1.125rem;
+  --text-section--line-height: 1.75rem;
+  --text-section--font-weight: 600;
+  --text-section--letter-spacing: -0.02em;
+  --text-page: 1.375rem;
+  --text-page--line-height: 2rem;
+  --text-page--font-weight: 600;
+  --text-page--letter-spacing: -0.04em;
+  --text-figure: 1.75rem;
+  --text-figure--line-height: 2.25rem;
+  --text-figure--font-weight: 600;
+  --text-figure--letter-spacing: -0.04em;
+  --text-display: 2.875rem;
+  --text-display--line-height: 3rem;
+  --text-display--font-weight: 600;
+  --text-display--letter-spacing: -0.045em;
+
+  /* Upstream's own weight adjustment, adopted with the ramp it belongs to. */
+  --font-weight-normal: 450;
+
+  /* The faces are not the substrate's. Upstream's sans is a licensed brand typeface and
+     Studio's is a webfont; both are identity rather than mechanism, and the carve-out in
+     .claude/rules/interface-originality.md keeps identity excluded. A webfont also buys a
+     network request, a flash of unstyled text and a licence question for a console nobody
+     outside this project has opened. */
+  --font-sans: system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: ui-monospace, "Cascadia Code", "Segoe UI Mono", Menlo, Consolas,
+    "Liberation Mono", monospace;
+
+  /* Four. A fifth is a decision recorded in DESIGN.md, not a value added in passing.
+     Three of them are the substrate's own compat scale exactly (xs 4, sm 8, md 16); the
+     frame is ours and is argued there. */
+  --spacing-field: 0.25rem;
+  --spacing-row: 0.5rem;
+  --spacing-section: 1rem;
+  --spacing-frame: 2.5rem;
+
+  /* The two radii the vendored catalog actually renders: `rounded-md` on every control,
+     `rounded-lg` on every card and dialog. */
+  --radius-control: 0.375rem;
+  --radius-surface: 0.5rem;
+
+  /* Two levels for surfaces this project draws. The ring is the mechanism at both; the
+     floating level adds a shadow, and only a thing that occludes content may take it.
+     The vendored catalog carries Tailwind's stock `shadow-xs/sm/md/lg` instead -- see
+     DESIGN.md's Elevation section for the boundary between the two. */
+  --shadow-flat: 0 0 0 1px var(--color-line);
+  --shadow-float: 0 0 0 1px var(--color-line), 0 12px 32px -12px var(--color-shadow);
+}
+
+/* `.furniture` is the uppercase, open-tracked treatment the old `site-nav.tsx` rendered by
+   hand for its graph-level labels -- defined once so nothing else in the tree hand-spells it
+   again. Its consumers as of M7-W160 are `fact-tile.tsx`, `fact-list.tsx` and the sidebar's
+   level labels in `app-frame.tsx`, which is what this class was defined for and never had. Outside the `text-*` namespace on purpose: `web/src/lib/utils.ts` teaches
+   `tailwind-merge` exactly six font-size names under that prefix, and an unlisted `text-*`
+   class merges as a text-*colour* conflict instead, which is the defect that file's docstring
+   already records once (`text-emphasis` dropped against `text-critical-ink`). Sets the
+   transform here rather than in copy, because a screen reader spells out letters that are
+   already capitalised in the string -- the transform is a rendering choice, not a fact about
+   the data. DESIGN.md's Type section carries which of `--text-meta`'s two jobs this covers. */
+@layer components {
+  .furniture {
+    text-transform: uppercase;
+    letter-spacing: 0.025em;
+  }
+}
+
+/* Every `--text-figure` value is a number an operator compares down a column or across a
+   poll; tabular figures make that comparison exact instead of a guess. Extends the utility
+   Tailwind already generates from the `--text-figure` theme entry above rather than
+   replacing it -- that entry still owns size, line height, weight and tracking. Mono numbers
+   do not also take this: mono already aligns by construction, and DESIGN.md's Type section
+   says why doubling up on them is the wrong fix. */
+@layer utilities {
+  .text-figure {
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+/* `web/src/lib/motion.ts` gates the three framer-motion usages from script; this is the CSS
+   half, covering every Tailwind transition and animation utility document-wide. Outside any
+   layer on purpose: `@theme` and every Tailwind utility compile into layers, and an unlayered
+   rule beats every layered rule regardless of specificity, so this needs no `!important` to
+   win against `transition-all` or `transition-colors`. Zeroed, not shortened -- a 0.01s
+   transition still renders a frame of motion. `Button`'s `active:...translate-y-px` is
+   deliberately untouched: with its transition gone it lands in one frame, an instant position
+   change rather than a motion effect, no different from any other state swap this query
+   already makes instant. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    transition-duration: 0s;
+    animation-duration: 0s;
+    scroll-behavior: auto;
+  }
+}
+
+@layer base {
+  :root {
+    color-scheme: dark;
+
+    /* `vendor/supabase/ui/card.tsx` spells its horizontal padding as `px-(--card-padding-x)`
+       and Supabase declares this variable in the globals we did not vendor -- undeclared, every
+       card on the substrate renders flush to its own border. Wired to the section token, which
+       is the same 16px the vendored card's own `py-4` already uses, so the box is square. Not a
+       theme token: it names no new value and belongs to none of the eight families DESIGN.md's
+       contract governs, which is why it is declared here rather than in `@theme`. */
+    --card-padding-x: var(--spacing-section);
+  }
+
+  /* Tailwind v4's preflight resets every element to `border: 0 solid`, which leaves
+     `border-color` at `currentColor`. A `border` or `border-b` utility that names no colour
+     therefore draws the *text* colour, and on a dark theme that is the primary ink at full
+     strength rather than a hairline. Every class in `src/` outside `vendor/` names its colour, so
+     nothing here hit it until the vendored components arrived: `vendor/supabase/ui/card.tsx`
+     spells bare `border` and `border-b`, because upstream ships exactly this rule in its own
+     globals and we vendored the components without them.
+
+     Measured at 1920x889 on the Fleet screen before this rule: every panel outline and every
+     header rule computed `oklch(0.95 0.00275 159)` -- identical to the element's own `color` --
+     against the `oklch(0.95 0.001485 159 / 7.5125%)` DESIGN.md declares. The icon rail beside
+     them, which spells `border-line`, was correct, which is what made the two comparable.
+
+     This sets the default only. Any utility naming a colour still wins, so it changes no
+     declaration this tree already makes. */
+  *,
+  ::after,
+  ::before,
+  ::backdrop,
+  ::file-selector-button {
+    border-color: var(--color-border);
+  }
+
+  body {
+    background-color: var(--color-background);
+    color: var(--color-foreground);
+  }
+}

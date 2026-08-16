@@ -55,6 +55,15 @@ from pathlib import Path
 from claude_agent_sdk import ClaudeAgentOptions, ResultMessage, query
 
 from sync.core import CallSite, Finding, Patch, RepoRef, VendorChange
+from sync.remediate import tool_gate, tool_output
+from sync.remediate.untrusted import (
+    HARDENING,
+    REPOSITORY,
+    TOOL_OUTPUT,
+    VENDOR,
+    fence,
+    fenced_block,
+)
 from sync.signals.oasdiff import changed_field
 
 MODEL = "claude-opus-5"
@@ -67,6 +76,9 @@ ALLOWED_TOOLS = ["Read", "Write", "Edit", "Bash", "Glob", "Grep"]
 # to the permission mode instead of being blocked, so network tools have to be
 # denied explicitly to guarantee none run.
 DISALLOWED_TOOLS = ["WebSearch", "WebFetch"]
+# Every entry above allows a whole tool, which auto-approves it before any permission callback
+# is consulted -- so what the agent may do inside those tools is decided in `sync.remediate
+# .tool_gate`, which the SDK reaches through a PreToolUse hook that nothing shadows.
 
 _SCOPE_RULES = """
 Rules:
@@ -83,6 +95,10 @@ Rules:
   whatever your commands happened to leave in this clone. Staging a file is you asserting
   the patch needs it, and it is the only thing that distinguishes a file the fix requires
   from a build artifact or a log.
+- The shell in this clone runs three commands and nothing else: `git add`, `git status`, and the
+  typechecker named below. Anything else is refused before it runs, one command at a time, so a
+  pipe, a redirection, a substitution or a second command on the same line is refused as well.
+  Read, Grep and Glob are how you inspect this repository.
 - Run `npx tsc --noEmit` once you have made the edit -- after staging anything you added,
   so that it measures the same tree the branch will carry -- and confirm you introduced no
   new errors. That is the whole of what it establishes. It cannot tell you whether the edit
@@ -98,24 +114,30 @@ def _required_edit(field: str | None, site: CallSite) -> str:
 
     Positional, not directional. What happened to the field is already stated two lines
     above as the oasdiff rule id; what the agent lacks is which expression to change.
+
+    This is the one line where Sync's instruction and a vendor's bytes share a sentence, so
+    the field is fenced where it sits rather than relying on the block above. `changed_field`
+    returns whatever the vendor backticked first, subject only to it holding no newline, so
+    the value cannot be assumed to be an identifier or to be short.
     """
     if field is None:
         return (
             "the vendor change does not name a field, so read the call site and the change"
             " above and determine the affected expression yourself"
         )
+    quoted = fence(VENDOR, field)
     if field in site.args_keys:
         return (
-            f"`{field}` is passed as an argument at this call site, so that argument is what"
+            f"{quoted} is passed as an argument at this call site, so that argument is what"
             f" your edit must change to agree with the change above"
         )
     if field in site.response_fields_read:
         return (
-            f"`{field}` is read from this call's response at this call site, so that read is"
+            f"{quoted} is read from this call's response at this call site, so that read is"
             f" what your edit must change to agree with the change above"
         )
     return (
-        f"the change affects `{field}`, which the index did not record among this call site's"
+        f"the change affects {quoted}, which the index did not record among this call site's"
         f" arguments or the response fields it reads -- locate it in the surrounding code"
         f" rather than assuming either position"
     )
@@ -134,20 +156,31 @@ def build_patch_prompt(
     sections = [
         "A third-party API changed and this repository's code no longer matches it.",
         "",
-        f"Vendor: {change.vendor_id}",
-        f"Change: {change.kind}",
-        f"Operation: {change.operation_id}  ({change.from_version} -> {change.to_version})",
-        f"Affected field: {field_line}",
+        HARDENING,
         "",
-        f"Call site: {site.path}, line {site.line}",
-        f"SDK call: {site.symbol}",
-        f"Arguments passed: {', '.join(site.args_keys) or 'none'}",
-        f"Response fields read: {', '.join(site.response_fields_read) or 'none'}",
+        *fenced_block(VENDOR, [
+            f"Vendor: {change.vendor_id}",
+            f"Change: {change.kind}",
+            f"Operation: {change.operation_id}  ({change.from_version} -> {change.to_version})",
+            f"Affected field: {field_line}",
+        ]),
+        "",
+        *fenced_block(REPOSITORY, [
+            f"Call site: {site.path}, line {site.line}",
+            f"SDK call: {site.symbol}",
+            f"Arguments passed: {', '.join(site.args_keys) or 'none'}",
+            f"Response fields read: {', '.join(site.response_fields_read) or 'none'}",
+        ]),
         "",
         f"Required edit: {_required_edit(field, site)}.",
         "Done when: that edit is made and the call site agrees with the change above.",
         "",
-        f"Why this matters: {finding.rationale}",
+        # Fenced whole rather than in part, and as vendor text although a detector composed
+        # the sentence around it. A rationale is Sync's template with the vendor's own prose
+        # inside it -- `sync.detect.parameter_deprecation` quotes a deprecation table's
+        # behaviour cell verbatim -- and nothing downstream can say where the seam is.
+        "Why this matters:",
+        *fenced_block(VENDOR, [finding.rationale]),
         "",
         _SCOPE_RULES,
     ]
@@ -160,7 +193,7 @@ def build_patch_prompt(
             "",
             "A previous attempt failed. What went wrong:",
             "",
-            diagnostics,
+            *fenced_block(TOOL_OUTPUT, [diagnostics]),
             "",
             "Fix the cause rather than suppressing the error.",
         ]
@@ -317,6 +350,9 @@ class AgentRemediator:
         asyncio.run(self._drive_agent(prompt, repo_path, identity))
 
     async def _drive_agent(self, prompt: str, repo_path: Path, identity: str) -> None:
+        # A hook cannot abandon a run -- an exception raised inside one is answered to the
+        # CLI, not to this frame -- so `tool_output` records its refusals here instead.
+        refusals: list[str] = []
         options = ClaudeAgentOptions(
             cwd=repo_path,
             model=MODEL,
@@ -324,11 +360,18 @@ class AgentRemediator:
             effort="xhigh",
             allowed_tools=ALLOWED_TOOLS,
             disallowed_tools=DISALLOWED_TOOLS,
+            hooks={**tool_gate.hooks(identity), **tool_output.hooks(identity, refusals)},
         )
         result: ResultMessage | None = None
         async for message in query(prompt=prompt, options=options):
             if isinstance(message, ResultMessage):
                 result = message
+
+        # Ahead of the two checks below, which describe how the run ended rather than why it
+        # was stopped. A refusal reports as an ordinary completion with an empty diff, and
+        # `route_after_patch` reads that as a remediator that found nothing to change.
+        if refusals:
+            raise RuntimeError(refusals[0])
 
         # A run that failed or never reported must not be mistaken for one that
         # completed and correctly found nothing to change: both would otherwise

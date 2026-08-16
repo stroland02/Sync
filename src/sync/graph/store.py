@@ -13,7 +13,13 @@ import psycopg
 from psycopg.rows import dict_row
 
 from sync.core import CallSite, Finding, FindingStatus, MigrationOutcome, VendorChange
-from sync.core.models import UNATTRIBUTED, ObservedCall, ObservedErrorWindow, ObservedShape
+from sync.core.models import (
+    SEVERITY_ORDER,
+    UNATTRIBUTED,
+    ObservedCall,
+    ObservedErrorWindow,
+    ObservedShape,
+)
 from sync.graph.sources import TRAFFIC_SOURCES
 
 
@@ -39,6 +45,136 @@ def _statements(ddl: str) -> list[str]:
     """
     without_comments = "\n".join(line.split("--", 1)[0] for line in ddl.splitlines())
     return [statement.strip() for statement in without_comments.split(";") if statement.strip()]
+
+
+# The order a page of open findings arrives in. Named orderings, not column names -- see
+# `open_findings_at_risk`'s docstring for why a column name must never reach this from a URL.
+#
+# `first-seen` is what this shipped with and is unchanged: `created_at` ascending, the order Sync
+# raised the findings in. It keeps the name it earned rather than being called "default", because a
+# reader has to be told which ordering they are looking at when they have chosen nothing, and
+# "default" tells them nothing.
+DEFAULT_FINDING_ORDER = "first-seen"
+FINDING_ORDERS = (DEFAULT_FINDING_ORDER, "severity")
+
+# `finding.created_at, finding.id` is the tiebreak on every ordering, not only the default: two
+# findings of one severity need a total order or `LIMIT`/`OFFSET` pages overlap and skip rows, and
+# the reader never sees the row that fell between two pages.
+_TIEBREAK = "finding.created_at, finding.id"
+
+# `array_position` over the rank rather than a `CASE` expression, so the ordering has exactly one
+# copy and it is the tuple in `sync.core.models`. A severity the rank does not name yields NULL,
+# which Postgres sorts last under `ASC` -- the behaviour to want: an unrankable finding at the top
+# of a page opened to see the worst first is a false claim about which finding matters most.
+_FINDING_ORDER_CLAUSES = {
+    DEFAULT_FINDING_ORDER: (_TIEBREAK, []),
+    "severity": (
+        f"array_position(%s::text[], finding.severity), {_TIEBREAK}",
+        [list(SEVERITY_ORDER)],
+    ),
+}
+
+
+def _finding_order_clause(order: str) -> tuple[str, list[object]]:
+    if order not in _FINDING_ORDER_CLAUSES:
+        raise ValueError(
+            f"unknown ordering {order!r}; must be one of {sorted(_FINDING_ORDER_CLAUSES)}"
+        )
+    clause, parameters = _FINDING_ORDER_CLAUSES[order]
+    return clause, list(parameters)
+
+
+def _common_directory(lo: str | None, hi: str | None) -> str:
+    """The deepest directory two paths share, ending in `/`, or `""`.
+
+    `lo` and `hi` are the lexicographic extremes of a set, which is enough to characterise the whole
+    set's common prefix -- see `call_sites_common_directory` for why. `None` means the set was empty.
+
+    The truncation is the load-bearing part. A common *character* prefix can stop in the middle of a
+    filename, and a prefix that does is not a directory: it names nothing on disk and the remainder
+    it leaves behind cannot be rejoined by a reader who wants to open the file.
+    """
+    if lo is None or hi is None:
+        return ""
+    shared = 0
+    for a, b in zip(lo, hi):
+        if a != b:
+            break
+        shared += 1
+    cut = lo.rfind("/", 0, shared)
+    return lo[: cut + 1] if cut >= 0 else ""
+
+
+def _open_findings_predicate(
+    *,
+    repo_id: str | None = None,
+    vendor_id: str | None = None,
+    severity: str | None = None,
+    path_prefix: str | None = None,
+) -> tuple[str, list[object]]:
+    """The `WHERE` clause every open-findings read shares, and its parameters.
+
+    Seven reads answer questions about the same set -- open status, and a call site the code
+    still has -- and each of them can now be narrowed to one repository, because repository
+    scope is what every console level below Codebase inherits. One builder rather than seven
+    copies of the clause: a filter added to six of them and forgotten in the seventh is a screen
+    that renders a fleet-wide figure under a repository heading, which is precisely the false
+    claim this scoping exists to remove.
+
+    Every filter is a placeholder rather than interpolated text. The clause itself carries no
+    caller-supplied string, so the `f`-strings that embed it are composing SQL this module wrote.
+    """
+    clauses = ["finding.status = 'open'", "call_site.retracted_at IS NULL"]
+    parameters: list[object] = []
+    if repo_id is not None:
+        clauses.append("call_site.repo_id = %s")
+        parameters.append(repo_id)
+    if vendor_id is not None:
+        clauses.append("call_site.vendor_id = %s")
+        parameters.append(vendor_id)
+    if severity is not None:
+        clauses.append("finding.severity = %s")
+        parameters.append(severity)
+    if path_prefix is not None:
+        # `starts_with` rather than `LIKE prefix || '%'`: the caller's string is a path, and a
+        # path holding `%` or `_` is a wildcard under `LIKE` and a literal under this.
+        clauses.append("starts_with(call_site.path, %s)")
+        parameters.append(path_prefix)
+    return " AND ".join(clauses), parameters
+
+
+def _call_site_predicate(
+    vendor_id: str,
+    operation_id: str,
+    *,
+    repo_id: str | None = None,
+    path_prefix: str | None = None,
+) -> tuple[str, list[object]]:
+    """The `WHERE` every live-call-site read on one operation shares, and its parameters.
+
+    A sibling of `_open_findings_predicate` rather than the same builder, because the two answer
+    over different relations: that one always joins `finding` and always asks for open status,
+    and this one reads `call_site` alone, where a call site exists whether or not any detector
+    has raised anything against it. Sharing a builder would mean either an open-findings join a
+    binding surface does not want or a status clause that quietly drops every unflagged site.
+
+    What they do share is the reason for `starts_with` over `LIKE`, and that argument is written
+    once, above, rather than restated here: a path holding `_` or `%` is a wildcard under `LIKE`
+    and a literal under this.
+
+    One builder for the page, its denominator and the repository facet, for the reason
+    `_open_findings_predicate` gives for its own seven readers: a filter added to two of three
+    and forgotten in the third is a page and a total that disagree about which rows exist.
+    """
+    clauses = ["vendor_id = %s", "operation_id = %s", "retracted_at IS NULL"]
+    parameters: list[object] = [vendor_id, operation_id]
+    if repo_id is not None:
+        clauses.append("repo_id = %s")
+        parameters.append(repo_id)
+    if path_prefix is not None:
+        clauses.append("starts_with(path, %s)")
+        parameters.append(path_prefix)
+    return " AND ".join(clauses), parameters
 
 
 def _table_name(create: str) -> str:
@@ -96,10 +232,13 @@ class GraphStore:
 
     A per-call connection costs a TCP handshake, an authentication round trip
     and a teardown for every row: an ingest of a few thousand vendor changes
-    spends most of its time connecting. The connection is never reopened once
-    it breaks -- a run whose database went away has no correct way to continue,
-    and reconnecting inside `transaction()` would silently turn one atomic
-    ingest into a partially committed one.
+    spends most of its time connecting. A connection that has died is replaced
+    on the next call -- the database is outside this process and a connection
+    dying is a condition that occurs, and the API holds one store for the
+    process lifetime, so handing the dead one back forever turned one dropped
+    connection into every console route failing until a restart (B117). The
+    one place that must not reconnect is under an open `transaction()` block,
+    and `_connect` carries why.
 
     A store is meant for one caller at a time. psycopg serialises statements on
     a shared connection, so concurrent callers corrupt nothing -- but they share
@@ -111,9 +250,16 @@ class GraphStore:
     def __init__(self, dsn: str) -> None:
         self._dsn = dsn
         self._conn: psycopg.Connection | None = None
+        self._transaction_depth = 0
 
     def _connect(self) -> psycopg.Connection:
-        if self._conn is None:
+        # Never reconnect under an open `transaction()` block: the block's transaction lives
+        # on the dead connection, so a fresh autocommit connection here would commit each
+        # later write on its own while the block rolls back -- a failed write turned into a
+        # silently partial one, which is worse than the outage. Inside a block the dead
+        # connection is handed back and the next statement raises OperationalError instead.
+        # `closed` covers a broken connection too: psycopg marks a broken connection closed.
+        if self._conn is None or (self._conn.closed and self._transaction_depth == 0):
             self._conn = psycopg.connect(self._dsn, row_factory=dict_row, autocommit=True)
         return self._conn
 
@@ -141,8 +287,15 @@ class GraphStore:
         ACCESS SHARE an ordinary SELECT takes, so the reader blocks for the
         duration of the block and then reads whatever it committed.
         """
-        with self._connect().transaction():
-            yield
+        # Resolve the connection before raising the depth, so a block starting on a dead
+        # connection gets a live one -- only calls inside the block are pinned to it.
+        connection = self._connect()
+        self._transaction_depth += 1
+        try:
+            with connection.transaction():
+                yield
+        finally:
+            self._transaction_depth -= 1
 
     def apply_schema(self) -> None:
         """Bring a database to the current schema, whether or not it already has one.
@@ -395,7 +548,14 @@ class GraphStore:
         return finding_id
 
     def call_sites_for_operation(
-        self, vendor_id: str, operation_id: str, *, repo_id: str | None = None
+        self,
+        vendor_id: str,
+        operation_id: str,
+        *,
+        repo_id: str | None = None,
+        path_prefix: str | None = None,
+        limit: int | None = None,
+        offset: int = 0,
     ) -> list[CallSite]:
         """Call sites the code currently has on one vendor operation, in one repository or in all.
 
@@ -415,18 +575,122 @@ class GraphStore:
         `tests/test_reindex_convergence.py` reads the detector sources and fails on a call here that
         omits it, because the parameter staying optional is what lets a fifth detector reacquire the
         defect silently.
+
+        `limit` is a real SQL `LIMIT`, not a slice applied to a fetch that already happened --
+        `limit=None`, the default, carries no bound at all, which is what every existing caller
+        (three detectors, `binding_surface`) needs: each of them ranks or counts over the whole
+        set, and a page of it would rank the wrong thing. `call_sites_for_operation_count` is the
+        matching denominator, read without fetching a single row's columns.
+
+        `path_prefix` narrows to a directory or a file prefix and is a real SQL predicate, for
+        the same reason `limit` is: a prefix applied after the fetch reads every row off the
+        wire before discarding most of them, which is the whole cost the filter exists to avoid
+        against a customer repository holding thousands of sites.
         """
-        clause = "" if repo_id is None else " AND repo_id = %s"
-        parameters = (vendor_id, operation_id) if repo_id is None else (
-            vendor_id, operation_id, repo_id
+        clause, parameters = _call_site_predicate(
+            vendor_id, operation_id, repo_id=repo_id, path_prefix=path_prefix
         )
+        limit_clause = ""
+        if limit is not None:
+            limit_clause = " LIMIT %s OFFSET %s"
+            parameters += [limit, offset]
         rows = self._connect().execute(
-            f"SELECT * FROM call_site "
-            f"WHERE vendor_id = %s AND operation_id = %s AND retracted_at IS NULL{clause} "
-            f"ORDER BY path, line",
+            f"SELECT * FROM call_site WHERE {clause} ORDER BY path, line{limit_clause}",
             parameters,
         ).fetchall()
         return [CallSite(**row) for row in rows]
+
+    def call_sites_for_operation_count(
+        self,
+        vendor_id: str,
+        operation_id: str,
+        *,
+        repo_id: str | None = None,
+        path_prefix: str | None = None,
+    ) -> int:
+        """How many rows `call_sites_for_operation` would return unbounded -- the denominator a
+        page of it is drawn from, read without a single column of any row.
+
+        Every narrowing parameter the page takes is taken here too. A denominator drawn from a
+        wider set than the page it sits beside tells a reader the page is a window on something
+        it is not, which is the failure the console keeps having to close by hand.
+        """
+        clause, parameters = _call_site_predicate(
+            vendor_id, operation_id, repo_id=repo_id, path_prefix=path_prefix
+        )
+        row = self._connect().execute(
+            f"SELECT count(*) AS n FROM call_site WHERE {clause}", parameters
+        ).fetchone()
+        return row["n"]
+
+    def call_sites_common_directory(
+        self,
+        vendor_id: str,
+        operation_id: str,
+        *,
+        repo_id: str | None = None,
+        path_prefix: str | None = None,
+    ) -> str:
+        """The deepest directory every live call site on this operation shares, or `""`.
+
+        The binding surface's path column is the widest thing on that screen, and on a real
+        repository most of its width is a prefix that is identical on every row. This is that
+        prefix, so the screen can state it once and give each row the part that distinguishes it.
+        Nothing is hidden by that: the prefix is on screen in words, above the column it came out of.
+
+        **A property of the filtered set, not of a page.** Computed under the same predicate the
+        page is drawn from, so it narrows when the filter does. Computing it over the fifty rows in
+        one window would make the same call site render differently on page one and page two, which
+        is a column whose meaning depends on where you are standing.
+
+        `min` and `max` are the whole scan, and that is not a trick worth hiding: for any set of
+        strings the longest common prefix of the set is the longest common prefix of its
+        lexicographic extremes, because a character position where the extremes agree is one where
+        everything between them agrees too. Two aggregates over an indexed column rather than
+        reading every path off the wire to fold in Python.
+
+        **Truncated at the last `/`, and that is the correctness condition rather than a nicety.**
+        `create-a.ts` and `create-b.ts` share the characters `create-`; stopping there would name a
+        directory that does not exist and leave each row holding a remainder no reader could rejoin
+        to anything. A shared prefix is only sayable at a segment boundary.
+        """
+        clause, parameters = _call_site_predicate(
+            vendor_id, operation_id, repo_id=repo_id, path_prefix=path_prefix
+        )
+        row = self._connect().execute(
+            f"SELECT min(path) AS lo, max(path) AS hi FROM call_site WHERE {clause}", parameters
+        ).fetchone()
+        return _common_directory(row["lo"], row["hi"])
+
+    def call_site_repositories_for_operation(
+        self, vendor_id: str, operation_id: str
+    ) -> dict[str, int]:
+        """Which repositories hold a live call site on one vendor operation, and how many each
+        holds -- one `GROUP BY`, never a query per repository.
+
+        Deliberately unscoped by `repo_id` and by `path_prefix`: this is the option list a
+        repository filter is built from, and an option list narrowed by the filter it sets
+        collapses to whatever is already selected, leaving no way back. The counts it carries
+        are therefore counts over the whole operation, which is a different number from the
+        page beside it whenever a path filter is active -- the caller renders which one it is
+        showing rather than letting a reader assume.
+
+        **A repository whose call sites have all been retracted is absent, not present with a
+        zero**, matching `call_sites_for_operation`'s own exclusion. Offering a repository that
+        can only ever answer with an empty page would invent a choice the graph does not hold.
+        """
+        clause, parameters = _call_site_predicate(vendor_id, operation_id)
+        rows = self._connect().execute(
+            f"""
+            SELECT repo_id, count(*) AS n
+              FROM call_site
+             WHERE {clause}
+             GROUP BY repo_id
+             ORDER BY repo_id
+            """,
+            parameters,
+        ).fetchall()
+        return {row["repo_id"]: row["n"] for row in rows}
 
     def call_site_counts(self, repo_id: str) -> dict[str, int]:
         """How many indexed call sites reach each vendor, for one repository.
@@ -463,6 +727,42 @@ class GraphStore:
         ).fetchall()
         return {row["vendor_id"]: row["sites"] for row in rows}
 
+    def call_site_coverage(self, repo_id: str) -> dict[str, tuple[int, datetime]]:
+        """How many current call sites reach each vendor, and when the newest of them was
+        indexed, for one repository -- both facts read off the same rows in one round trip.
+
+        This used to be two separate reads, `call_site_counts` plus a `call_site_last_indexed`
+        that no longer exists, composed by a caller keying one by the other's result. Both
+        queries shared the same `WHERE repo_id = %s AND retracted_at IS NULL GROUP BY vendor_id`,
+        so their key sets agreed only if nothing wrote to `call_site` between the two round
+        trips -- and Postgres's default READ COMMITTED gives every statement its own snapshot,
+        so even wrapping both in one transaction would not have closed the gap. A call site
+        indexed for a vendor between the two reads landed in one result and not the other, and
+        the caller's `{v: last_indexed[v] for v in counts}` raised `KeyError`. One query has one
+        snapshot, so the two facts cannot disagree and there is no key to be missing.
+
+        **A vendor with no call sites is absent from the result, not present with a zero or a
+        `None`.** `call_site_counts`'s own contract is why: that absence has two causes a query
+        cannot separate -- the indexer looked and found nothing, or it never looked because
+        nothing declares which package to look for -- and either a zero count or a null
+        timestamp would assert the first.
+
+        Retracted rows are excluded for the same reason `call_site_counts` excludes them: a
+        call site the last pass stopped finding is not part of what the repository currently
+        has, so it must contribute neither to the count nor to the timestamp -- a retracted
+        row's `indexed_at` must not win against a surviving row merely for being newer.
+        """
+        rows = self._connect().execute(
+            """
+            SELECT vendor_id, count(*) AS sites, max(indexed_at) AS last_indexed
+              FROM call_site
+             WHERE repo_id = %s AND retracted_at IS NULL
+             GROUP BY vendor_id
+            """,
+            (repo_id,),
+        ).fetchall()
+        return {row["vendor_id"]: (row["sites"], row["last_indexed"]) for row in rows}
+
     def get_call_site(self, call_site_id: str) -> CallSite:
         """One call site by id, retracted or not.
 
@@ -492,6 +792,41 @@ class GraphStore:
         ).fetchall()
         return [VendorChange(**row) for row in rows]
 
+    def vendor_changes_for_operation(
+        self, vendor_id: str, operation_id: str, *, limit: int | None = None, offset: int = 0
+    ) -> list[VendorChange]:
+        """One vendor's changes naming one operation -- what `binding_surface` actually shows,
+        as its own query rather than a Python filter over `all_vendor_changes`'s wide answer.
+
+        A sibling method rather than a parameter on `all_vendor_changes`, because
+        `all_vendor_changes(self, vendor_id: str)` is pinned exactly by
+        `sync.mcp.tools.GraphReader`, the frozen surface's structural protocol --
+        `tests/test_mcp_tools.py::test_the_real_graph_store_satisfies_the_reader_protocol` fails
+        the moment that signature grows a parameter the protocol does not declare. `cli.py`'s feed
+        render and `VendorChangeDetector` keep calling the wide method unchanged.
+
+        `limit=None` is unbounded. `vendor_changes_for_operation_count` is the matching
+        denominator.
+        """
+        parameters: list[object] = [vendor_id, operation_id]
+        limit_clause = ""
+        if limit is not None:
+            limit_clause = " LIMIT %s OFFSET %s"
+            parameters += [limit, offset]
+        rows = self._connect().execute(
+            f"SELECT * FROM vendor_change WHERE vendor_id = %s AND operation_id = %s "
+            f"ORDER BY detected_at{limit_clause}",
+            parameters,
+        ).fetchall()
+        return [VendorChange(**row) for row in rows]
+
+    def vendor_changes_for_operation_count(self, vendor_id: str, operation_id: str) -> int:
+        row = self._connect().execute(
+            "SELECT count(*) AS n FROM vendor_change WHERE vendor_id = %s AND operation_id = %s",
+            (vendor_id, operation_id),
+        ).fetchone()
+        return row["n"]
+
     def open_findings(self) -> list[Finding]:
         """Findings still to act on: open status, and a call site the code still has.
 
@@ -515,6 +850,286 @@ class GraphStore:
             """
         ).fetchall()
         return [Finding(**row) for row in rows]
+
+    def open_findings_page(
+        self, *, limit: int | None = None, offset: int = 0, repo_id: str | None = None
+    ) -> list[Finding]:
+        """`open_findings`, windowed by a real SQL `LIMIT` -- a sibling rather than a parameter
+        on `open_findings` itself, because `open_findings(self)` is pinned exactly by
+        `sync.mcp.tools.GraphReader`'s structural protocol and gaining a parameter there fails
+        `tests/test_mcp_tools.py::test_the_real_graph_store_satisfies_the_reader_protocol`.
+
+        `limit=None` is unbounded, matching `open_findings`. `open_findings_count` is the
+        matching denominator. `repo_id` narrows to one repository and is why
+        `detector_accountability` reads this method rather than the unpaginated one: an
+        aggregate scoped to a codebase and the same aggregate across the fleet are the same
+        query with one predicate, not two reads.
+        """
+        predicate, parameters = _open_findings_predicate(repo_id=repo_id)
+        limit_clause = ""
+        if limit is not None:
+            limit_clause = " LIMIT %s OFFSET %s"
+            parameters = parameters + [limit, offset]
+        rows = self._connect().execute(
+            f"""
+            SELECT finding.* FROM finding
+              JOIN call_site ON call_site.id = finding.call_site_id
+             WHERE {predicate}
+             ORDER BY finding.created_at{limit_clause}
+            """,
+            parameters,
+        ).fetchall()
+        return [Finding(**row) for row in rows]
+
+    def open_findings_count(
+        self, *, repo_id: str | None = None, vendor_id: str | None = None
+    ) -> int:
+        """How many rows `open_findings`/`open_findings_page` return unbounded, through the same
+        join -- a retracted call site's finding is invisible to both or neither.
+
+        `vendor_id` sits beside `repo_id` so `severity_rollup` can compute its total under the
+        same scope as its breakdown, through a second real aggregate rather than by summing the
+        first. Two numbers that cannot contradict each other are two numbers that can never
+        reveal one of them is wrong.
+        """
+        predicate, parameters = _open_findings_predicate(repo_id=repo_id, vendor_id=vendor_id)
+        row = self._connect().execute(
+            f"""
+            SELECT count(*) AS n FROM finding
+              JOIN call_site ON call_site.id = finding.call_site_id
+             WHERE {predicate}
+            """,
+            parameters,
+        ).fetchone()
+        return row["n"]
+
+    def open_findings_count_bounded(
+        self, bound: int, *, repo_id: str | None = None
+    ) -> tuple[int, bool]:
+        """How many open findings there are, up to `bound` -- and whether the true count reaches
+        it.
+
+        `open_findings_count` is already a single aggregate and materialises nothing, but it
+        still walks the whole join to produce an exact answer, and the fleet screen does not
+        need an exact answer to render -- it needs one fast enough to load in the time an
+        operator will wait. This is Sentry's `count_hits` pattern (`paginator.py:30-48`): the
+        join is truncated with a real SQL `LIMIT` before it is counted, so Postgres stops
+        scanning at `bound` rows however many actually match, and the count costs the same at
+        ten thousand matching rows as it does at one thousand.
+
+        The second element is the fact the count alone cannot carry: whether the scan stopped
+        because it ran out of rows or because it hit `bound`. `n == bound` is the only way to
+        tell -- the `LIMIT` makes `n` never exceed it, so equality means the bound was reached
+        rather than merely approached. A caller that wants a bound-free answer already has
+        `open_findings_count`; this is a different question, not a faster version of that one.
+        """
+        predicate, parameters = _open_findings_predicate(repo_id=repo_id)
+        row = self._connect().execute(
+            f"""
+            SELECT count(*) AS n FROM (
+                SELECT finding.id FROM finding
+                  JOIN call_site ON call_site.id = finding.call_site_id
+                 WHERE {predicate}
+                 LIMIT %s
+            ) AS bounded
+            """,
+            parameters + [bound],
+        ).fetchone()
+        n = row["n"]
+        return n, n >= bound
+
+    def open_findings_vendor_counts(self, *, repo_id: str | None = None) -> dict[str, int]:
+        """Every open finding, tallied by vendor -- one `GROUP BY`, never a loop over findings.
+
+        The vendor cardinality a customer integrates against does not grow with how many
+        findings are open against it, so this is cheap at any scale `open_findings_count_bounded`
+        is not: a customer with ten thousand open findings across six vendors still returns six
+        rows here. That is what makes it safe to leave this distribution unbounded while the
+        total beside it is truncated -- a `GROUP BY` over the whole table is not the defect a
+        full materialisation of every row into Python is, which is what this replaces: the old
+        `/api/overview` read every open finding, looked up its call site one row at a time, and
+        tallied vendors in a Python loop.
+        """
+        predicate, parameters = _open_findings_predicate(repo_id=repo_id)
+        rows = self._connect().execute(
+            f"""
+            SELECT call_site.vendor_id AS vendor_id, count(*) AS n
+              FROM finding
+              JOIN call_site ON call_site.id = finding.call_site_id
+             WHERE {predicate}
+             GROUP BY call_site.vendor_id
+             ORDER BY call_site.vendor_id
+            """,
+            parameters,
+        ).fetchall()
+        return {row["vendor_id"]: row["n"] for row in rows}
+
+    def open_findings_severity_counts(
+        self, *, repo_id: str | None = None, vendor_id: str | None = None
+    ) -> dict[str, int]:
+        """Every open finding, tallied by severity -- the same reasoning
+        `open_findings_vendor_counts` carries, over `finding.severity` instead of
+        `call_site.vendor_id`.
+
+        `repo_id` and `vendor_id` narrow together or separately, through the same shared
+        predicate every other open-findings read uses. A vendor screen's severity filter is built
+        from both at once: the breakdown beside one vendor's findings inside a selected repository
+        has to be that vendor in that repository, or it is the same false claim one axis at a
+        time.
+
+        A distribution derived from a bounded page understates whichever severities the ordering
+        happened not to reach before the bound -- exactly the failure `open_findings_count_bounded`
+        is not asked to avoid, because a total is a single honest number at whatever ceiling it
+        stopped at and a breakdown is not: a bounded breakdown presented as the breakdown is a
+        falsehood the truncation introduced, not a smaller version of the truth. So this reads
+        every row's severity, aggregated in SQL, rather than counting a `Counter` in Python over
+        a full fetch of every `Finding`.
+        """
+        predicate, parameters = _open_findings_predicate(repo_id=repo_id, vendor_id=vendor_id)
+        rows = self._connect().execute(
+            f"""
+            SELECT finding.severity AS severity, count(*) AS n
+              FROM finding
+              JOIN call_site ON call_site.id = finding.call_site_id
+             WHERE {predicate}
+             GROUP BY finding.severity
+             ORDER BY finding.severity
+            """,
+            parameters,
+        ).fetchall()
+        return {row["severity"]: row["n"] for row in rows}
+
+    def open_findings_summary(
+        self,
+        *,
+        repo_id: str | None = None,
+        vendor_id: str | None = None,
+        severity: str | None = None,
+        path_prefix: str | None = None,
+    ) -> dict:
+        """The newest `indexed_at` among every open finding's call site, and the rung they all
+        share -- `None` when there are none or when they disagree -- read together in one round
+        trip.
+
+        `call_site_coverage`'s docstring carries why this is one query rather than two: two
+        separate aggregate reads of the same join have no shared snapshot under READ COMMITTED,
+        so a write landing between them could pair one fact with a revision the other fact does
+        not describe -- here that would mean an `indexed_at` newer than the finding set
+        `binding_rung` was computed over. One query has one snapshot, so the two cannot disagree.
+
+        The three filters take the same values `open_findings_at_risk` takes, because that page
+        and this envelope describe one answer: a rung that summarised the fleet while the rows
+        beneath it were narrowed to one repository would be provenance for a set the reader
+        cannot see.
+        """
+        predicate, parameters = _open_findings_predicate(
+            repo_id=repo_id, vendor_id=vendor_id, severity=severity, path_prefix=path_prefix
+        )
+        row = self._connect().execute(
+            f"""
+            SELECT max(call_site.indexed_at) AS indexed_at,
+                   CASE WHEN count(DISTINCT finding.binding_rung) = 1
+                        THEN max(finding.binding_rung) END AS binding_rung
+              FROM finding
+              JOIN call_site ON call_site.id = finding.call_site_id
+             WHERE {predicate}
+            """,
+            parameters,
+        ).fetchone()
+        return {"indexed_at": row["indexed_at"], "binding_rung": row["binding_rung"]}
+
+    def open_findings_at_risk(
+        self,
+        *,
+        repo_id: str | None = None,
+        vendor_id: str | None = None,
+        severity: str | None = None,
+        path_prefix: str | None = None,
+        order: str = DEFAULT_FINDING_ORDER,
+        limit: int | None = None,
+        offset: int = 0,
+    ) -> list[dict]:
+        """One row per open finding, joined to the call site it names and the vendor change it
+        rests on -- the binding an operator reads, rather than the `Finding` model.
+
+        This is what `GraphSurface.whats_at_risk` answers for an agent, and it exists separately
+        because that method cannot answer it for a repository: `sync/mcp/tools.py` is frozen, its
+        rows carry no `repo_id`, and it walks every open finding doing one `get_call_site` round
+        trip per row before slicing the result in Python. Repository scope is what every console
+        level below Codebase inherits, so the filter has to reach the database.
+
+        `LEFT JOIN vendor_change`, not an inner one: a finding raised from watched traffic names
+        no change, and dropping it would silently shorten the page for exactly the detectors
+        whose claims rest on the observed rung.
+
+        `binding_rung` is `finding.binding_rung` -- the rung of that row's own claim, per finding
+        because a page can hold findings from several binders and no one value is true of all of
+        them. `open_findings_summary` carries the page-level rung, null when they disagree.
+
+        `order` names an ordering rather than a column, and `FINDING_ORDERS` is the whole of what
+        it may be. A column name reaching this from a query string would let a reader order by
+        whatever a header happened to hold -- a rank over `binding_rung`, which is an evidence
+        class and not a good-to-bad scale, or over a path, which sorts a codebase alphabetically
+        and calls it a priority.
+        """
+        predicate, parameters = _open_findings_predicate(
+            repo_id=repo_id, vendor_id=vendor_id, severity=severity, path_prefix=path_prefix
+        )
+        order_clause, order_parameters = _finding_order_clause(order)
+        parameters = parameters + order_parameters
+        limit_clause = ""
+        if limit is not None:
+            limit_clause = " LIMIT %s OFFSET %s"
+            parameters = parameters + [limit, offset]
+        return self._connect().execute(
+            f"""
+            SELECT finding.id AS finding_id,
+                   finding.severity AS severity,
+                   finding.binding_rung AS binding_rung,
+                   finding.detector AS detector,
+                   call_site.repo_id AS repo_id,
+                   call_site.path AS path,
+                   call_site.line AS line,
+                   call_site.symbol AS symbol,
+                   call_site.vendor_id AS vendor_id,
+                   call_site.operation_id AS operation_id,
+                   call_site.indexed_at AS indexed_at,
+                   vendor_change.kind AS change_kind
+              FROM finding
+              JOIN call_site ON call_site.id = finding.call_site_id
+              LEFT JOIN vendor_change ON vendor_change.id = finding.vendor_change_id
+             WHERE {predicate}
+             ORDER BY {order_clause}{limit_clause}
+            """,
+            parameters,
+        ).fetchall()
+
+    def open_findings_at_risk_count(
+        self,
+        *,
+        repo_id: str | None = None,
+        vendor_id: str | None = None,
+        severity: str | None = None,
+        path_prefix: str | None = None,
+    ) -> int:
+        """The true total `open_findings_at_risk` pages over, under the same filters.
+
+        Separate from the page rather than derived from it: a total counted off a page is the
+        page's own length wearing a bigger number's name, which is the defect this milestone
+        keeps closing.
+        """
+        predicate, parameters = _open_findings_predicate(
+            repo_id=repo_id, vendor_id=vendor_id, severity=severity, path_prefix=path_prefix
+        )
+        row = self._connect().execute(
+            f"""
+            SELECT count(*) AS n FROM finding
+              JOIN call_site ON call_site.id = finding.call_site_id
+             WHERE {predicate}
+            """,
+            parameters,
+        ).fetchone()
+        return row["n"]
 
     def set_finding_status(self, finding_id: str, status: FindingStatus) -> None:
         self._connect().execute("UPDATE finding SET status = %s WHERE id = %s", (status, finding_id))
@@ -553,6 +1168,57 @@ class GraphStore:
             "SELECT * FROM migration_outcome ORDER BY finding_id, attempt_index"
         ).fetchall()
         return [MigrationOutcome(**row) for row in rows]
+
+    def migration_outcome_rollup_by_kind(self) -> list[dict]:
+        """One row per (`change_kind`, `tier`) actually attempted -- a real SQL `GROUP BY` over
+        `migration_outcome_kind_idx`, not a Python `Counter` over every row.
+
+        **A (`change_kind`, `tier`) pair with no attempt has no row here.** That is what makes
+        this the answer to "which change kinds are not mechanically safe": absence and a
+        zero-abandonment group are two different facts, and only the group's presence tells
+        them apart. `sync.dashboard.fleet.abandonment_by_change_kind` is what a caller reads.
+
+        `attempt_count` and `distinct_finding_count` are the corpus grain rule
+        (`migration_outcome` is one row per attempt) applied per group, same as
+        `corpus_summary`'s fleet-wide `attempts`/`distinct_findings`. The `abandoned_*` pair is
+        the same distinction scoped to `terminal_status = 'abandoned'`.
+        """
+        rows = self._connect().execute(
+            """
+            SELECT change_kind, tier,
+                   count(*) AS attempt_count,
+                   count(DISTINCT finding_id) AS distinct_finding_count,
+                   count(*) FILTER (WHERE terminal_status = 'abandoned')
+                       AS abandoned_attempt_count,
+                   count(DISTINCT finding_id) FILTER (WHERE terminal_status = 'abandoned')
+                       AS abandoned_distinct_finding_count
+              FROM migration_outcome
+             GROUP BY change_kind, tier
+             ORDER BY change_kind, tier
+            """
+        ).fetchall()
+        return [dict(row) for row in rows]
+
+    def migration_outcome_abandon_reasons_by_kind(self) -> list[dict]:
+        """`abandon_reason`, tallied per (`change_kind`, `tier`), over abandoned attempts only.
+
+        `abandon_reason` is free text written by the abandoning node (`state.get("diagnostics")`
+        or exception text) rather than a coded vocabulary, so this reports whatever distinct
+        strings actually occurred -- a closed set *of what was observed*, not a promise the
+        column itself is bounded. `remediate-stage.md` requires `abandon_reason` non-null on an
+        abandoned run; a null here is a defect in the writer, not an expected case, and is
+        reported as `None` rather than silently folded into another bucket.
+        """
+        rows = self._connect().execute(
+            """
+            SELECT change_kind, tier, abandon_reason, count(*) AS n
+              FROM migration_outcome
+             WHERE terminal_status = 'abandoned'
+             GROUP BY change_kind, tier, abandon_reason
+             ORDER BY change_kind, tier
+            """
+        ).fetchall()
+        return [dict(row) for row in rows]
 
     def set_merge_outcome(
         self,
@@ -683,21 +1349,57 @@ class GraphStore:
             ),
         )
 
-    def observed_calls(self, repo_id: str) -> list[ObservedCall]:
+    def observed_calls(
+        self, repo_id: str, *, limit: int | None = None, offset: int = 0
+    ) -> list[ObservedCall]:
         """Every observed call for one repository.
 
         Scoped to a repository because that is the unit a finding is raised against, and a query
         that leaked another customer's traffic in would produce findings naming the wrong code.
+
+        `limit=None` is unbounded, matching the efficiency and status-rate detectors, which both
+        need every call to compute a per-trace count and would undercount from a page of them.
+        `observed_calls_count` is the matching denominator.
+        """
+        parameters: list[object] = [repo_id]
+        limit_clause = ""
+        if limit is not None:
+            limit_clause = " LIMIT %s OFFSET %s"
+            parameters += [limit, offset]
+        rows = self._connect().execute(
+            f"""
+            SELECT * FROM observed_call
+             WHERE repo_id = %s
+             ORDER BY trace_id, operation_id, http_method{limit_clause}
+            """,
+            parameters,
+        ).fetchall()
+        return [ObservedCall(**row) for row in rows]
+
+    def observed_calls_count(self, repo_id: str) -> int:
+        row = self._connect().execute(
+            "SELECT count(*) AS n FROM observed_call WHERE repo_id = %s", (repo_id,)
+        ).fetchone()
+        return row["n"]
+
+    def observed_operation_pairs(self, repo_id: str) -> list[tuple[str, str]]:
+        """Every `(vendor_id, operation_id)` this repository's observed traffic actually names.
+
+        Bounded by how many operations a repository calls, not by how many times it called
+        them -- the cardinality `observed_shapes_for_operations` needs in order to join the
+        baseline in with one query instead of one per pair. An uncorrelated span writes an empty
+        `operation_id`, and that is excluded here rather than left for the caller to filter: it
+        names no operation, so it must not manufacture a pair nothing can join against.
         """
         rows = self._connect().execute(
             """
-            SELECT * FROM observed_call
-             WHERE repo_id = %s
-             ORDER BY trace_id, operation_id, http_method
+            SELECT DISTINCT vendor_id, operation_id FROM observed_call
+             WHERE repo_id = %s AND operation_id <> ''
+             ORDER BY vendor_id, operation_id
             """,
             (repo_id,),
         ).fetchall()
-        return [ObservedCall(**row) for row in rows]
+        return [(row["vendor_id"], row["operation_id"]) for row in rows]
 
     def record_observed_error_window(self, window: ObservedErrorWindow) -> None:
         """Record one operation's failure count over one window.
@@ -782,22 +1484,53 @@ class GraphStore:
             (repo_id, vendor_id, source, window_start, window_end, operations, classes),
         ).rowcount
 
-    def observed_error_windows(self, repo_id: str) -> list[ObservedErrorWindow]:
+    def observed_error_windows(
+        self, repo_id: str, *, limit: int | None = None, offset: int = 0
+    ) -> list[ObservedErrorWindow]:
         """Every failure count recorded for one repository.
 
         Scoped to a repository for the reason `observed_calls` is: it is the unit a finding is
         raised against, and a query leaking another customer's error volume in would produce
         findings naming the wrong code.
+
+        `limit=None` is unbounded, the only shape any caller before this needed.
+        `observed_error_windows_count` is the matching denominator.
         """
+        parameters: list[object] = [repo_id]
+        limit_clause = ""
+        if limit is not None:
+            limit_clause = " LIMIT %s OFFSET %s"
+            parameters += [limit, offset]
         rows = self._connect().execute(
-            """
+            f"""
             SELECT * FROM observed_error_window
              WHERE repo_id = %s
-             ORDER BY window_start, window_end, operation_id, status_class, source
+             ORDER BY window_start, window_end, operation_id, status_class, source{limit_clause}
             """,
-            (repo_id,),
+            parameters,
         ).fetchall()
         return [ObservedErrorWindow(**row) for row in rows]
+
+    def observed_error_windows_count(self, repo_id: str) -> int:
+        row = self._connect().execute(
+            "SELECT count(*) AS n FROM observed_error_window WHERE repo_id = %s", (repo_id,)
+        ).fetchone()
+        return row["n"]
+
+    def repo_ids(self) -> list[str]:
+        """Every repository the index has seen, sorted.
+
+        `DISTINCT repo_id` over `call_site`, retracted rows included. That is what lets a
+        repository whose every finding has closed still appear -- `open_findings` cannot, since
+        it filters on finding status rather than on the repository. **What this cannot see:** a
+        repository that was configured but never indexed has no call site row at all, so it is
+        absent here exactly as it is absent from the graph -- indistinguishable from a
+        repository that was never configured in the first place.
+        """
+        rows = self._connect().execute(
+            "SELECT DISTINCT repo_id FROM call_site ORDER BY repo_id"
+        ).fetchall()
+        return [row["repo_id"] for row in rows]
 
     def observed_shapes(
         self, vendor_id: str, operation_id: str, *, traffic_only: bool = True
@@ -840,3 +1573,70 @@ class GraphStore:
             parameters,
         ).fetchall()
         return [ObservedShape(**row) for row in rows]
+
+    def _shapes_for_operations_clause(
+        self, pairs: Sequence[tuple[str, str]], *, traffic_only: bool
+    ) -> tuple[str, list[object]]:
+        vendor_ids = [vendor_id for vendor_id, _ in pairs]
+        operation_ids = [operation_id for _, operation_id in pairs]
+        where = " AND source = ANY(%s)" if traffic_only else ""
+        parameters: list[object] = [vendor_ids, operation_ids]
+        if traffic_only:
+            parameters.append(sorted(TRAFFIC_SOURCES))
+        return where, parameters
+
+    def observed_shapes_for_operations(
+        self,
+        pairs: Sequence[tuple[str, str]],
+        *,
+        traffic_only: bool = True,
+        limit: int | None = None,
+        offset: int = 0,
+    ) -> list[ObservedShape]:
+        """The baseline across every `(vendor_id, operation_id)` pair named, in one query.
+
+        This is what `observed_telemetry` reads instead of calling `observed_shapes` once per
+        pair -- a repository touching two hundred operations used to cost two hundred and one
+        round trips for one page load. `(vendor_id, operation_id) IN (SELECT * FROM
+        unnest(%s::text[], %s::text[]))` is the same tupled-unnest join
+        `remove_observed_error_windows_outside` already uses for exclusion; here it is inclusion,
+        one query regardless of how many pairs are named.
+
+        An empty `pairs` makes no query at all and returns empty -- the property
+        `observed_telemetry` depends on for a repository whose observed traffic is entirely
+        uncorrelated: nothing here mints a pair to join against.
+
+        `limit=None` is unbounded, matching `observed_shapes`'s own default.
+        `observed_shapes_for_operations_count` is the matching denominator.
+        """
+        if not pairs:
+            return []
+        where, parameters = self._shapes_for_operations_clause(pairs, traffic_only=traffic_only)
+        limit_clause = ""
+        if limit is not None:
+            limit_clause = " LIMIT %s OFFSET %s"
+            parameters += [limit, offset]
+        rows = self._connect().execute(
+            f"""
+            SELECT * FROM observed_shape
+             WHERE (vendor_id, operation_id) IN (SELECT * FROM unnest(%s::text[], %s::text[])){where}
+             ORDER BY vendor_id, operation_id, field_path, json_type, source{limit_clause}
+            """,
+            parameters,
+        ).fetchall()
+        return [ObservedShape(**row) for row in rows]
+
+    def observed_shapes_for_operations_count(
+        self, pairs: Sequence[tuple[str, str]], *, traffic_only: bool = True
+    ) -> int:
+        if not pairs:
+            return 0
+        where, parameters = self._shapes_for_operations_clause(pairs, traffic_only=traffic_only)
+        row = self._connect().execute(
+            f"""
+            SELECT count(*) AS n FROM observed_shape
+             WHERE (vendor_id, operation_id) IN (SELECT * FROM unnest(%s::text[], %s::text[])){where}
+            """,
+            parameters,
+        ).fetchone()
+        return row["n"]

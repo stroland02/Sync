@@ -90,3 +90,60 @@ def test_core_needs_one_third_party_package():
     core = REPO_ROOT / "src" / "sync" / "core"
 
     assert _third_party_imports_of(core) == {"pydantic"}
+
+
+# --- the list itself, kept honest -----------------------------------------------------------
+
+
+def _forbidden_modules_from_pyproject() -> list[str]:
+    """The hand-maintained denylist the `forbidden` contract actually runs with."""
+    import tomllib
+
+    with open(REPO_ROOT / "pyproject.toml", "rb") as f:
+        config = tomllib.load(f)
+    for contract in config["tool"]["importlinter"]["contracts"]:
+        if contract.get("source_modules") == ["sync.core"]:
+            return contract["forbidden_modules"]
+    raise AssertionError("no import-linter contract sourced from sync.core in pyproject.toml")
+
+
+def _sibling_packages_of_core() -> set[str]:
+    """Every top-level module or package under `src/sync`, dotted, excluding `sync.core`.
+
+    A directory counts as a package only if it holds `__init__.py` -- this repository does
+    not use namespace packages, and an incidental directory (`__pycache__`, a tool's scratch
+    output) must not become a phantom entry just because it sits under `src/sync`. A bare
+    `.py` file directly under `src/sync` counts too: `cli.py` is `sync.cli`, already on the
+    list, and a rule that only looked at directories would stop covering it the moment the
+    list were ever regenerated from this one.
+    """
+    sync_root = REPO_ROOT / "src" / "sync"
+    names: set[str] = set()
+    for entry in sync_root.iterdir():
+        if entry.name == "core" or entry.name.startswith("__"):
+            continue
+        if entry.is_dir() and (entry / "__init__.py").exists():
+            names.add(f"sync.{entry.name}")
+        elif entry.is_file() and entry.suffix == ".py":
+            names.add(f"sync.{entry.stem}")
+    return names
+
+
+def test_forbidden_modules_lists_every_sibling_package():
+    """`forbidden_modules` is a denylist, and a denylist is only as good as its completeness.
+
+    Nothing else in this repository notices when a package is added under `src/sync` --
+    `test_core_imports_no_sibling_package` above shells out to `lint-imports`, which only
+    ever evaluates the contract as hand-written, and would report the contract kept while a
+    new, unlisted package was imported freely from core. `bad76ef` added `sync.obs` and it
+    only reached the list because an agent happened to notice. This test replaces noticing:
+    it enumerates the packages actually present and fails the moment one is missing, which is
+    exactly the moment someone must decide -- and the answer is always no -- whether core may
+    depend on it.
+    """
+    forbidden = set(_forbidden_modules_from_pyproject())
+    missing = _sibling_packages_of_core() - forbidden
+    assert not missing, (
+        "packages under src/sync missing from forbidden_modules in pyproject.toml: "
+        + ", ".join(sorted(missing))
+    )

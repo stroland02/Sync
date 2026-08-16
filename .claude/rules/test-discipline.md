@@ -20,6 +20,14 @@ This has bitten this repository already: the import-boundary test's original for
 without parsing its own argument. It passed for the wrong reason and would have kept passing
 through any violation.
 
+A skip is the same defect in a different shape: it reports as neither pass nor fail, so a
+skip with no real reason manufactures the same false confidence a test that cannot fail
+does. `scripts/lint_test_skips.py`, gated in CI as "Test skip discipline", is the check —
+a skip is permitted only when its reason names a platform or a genuinely absent local
+toolchain; "because" or "flaky" name neither. Prove it the same way: put an unqualified
+`pytest.skip(...)` in a test file, run the linter, watch it exit non-zero naming the file
+and line, then remove it and watch it pass.
+
 ## No vendor API, no model API
 
 Fixtures are committed. Local toolchain access is fine — the Postgres container, `npx`

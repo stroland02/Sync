@@ -3,6 +3,8 @@
 **Date:** 2026-08-06
 **Status:** Proposed. Nothing scheduled, nothing started. Written now so the shape is settled
 before it comes up.
+**Source study:** [`references/notes/superlog-investigation-mechanism.md`](../references/notes/superlog-investigation-mechanism.md)
+— the read this plan rests on, with the `path:line` citations for every claim below.
 **Numbering:** M0–M6 are the design document's. M7 is the console. These take M8 onward.
 
 ## Why these four exist
@@ -180,7 +182,7 @@ it discovers repositories from a GitHub App installation and must guess which on
 came from. Sync is told which repository to work on. The one piece worth borrowing is their
 instruction-file probe — they read `CLAUDE.md`, `AGENTS.md`, `.cursorrules` and
 `.github/copilot-instructions.md` from the default branch so the agent follows the repository's
-conventions — and that is already designed as `B116`, per-repository context.
+conventions — and that is already designed as `B126`, per-repository context.
 
 ## Sequencing against everything else
 
