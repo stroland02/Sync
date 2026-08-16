@@ -66,8 +66,10 @@ import { ControlBar } from "@/layouts/control-bar"
 import { FooterBar } from "@/layouts/footer-bar"
 import { PageHeader } from "@/layouts/page-header"
 import { UnknownRoute } from "@/layouts/unknown-route"
-import { routeQuestion } from "@/lib/routes"
 import { useOffsetParam } from "@/lib/use-offset-param"
+
+const DEFAULT_QUESTION =
+  "Is this repository actually covered, and what does Sync not see in it?"
 
 /** A section inside the telemetry panel. Furniture register, `h3` under the panel's own `h2`. */
 function TelemetrySection({ title, children }: { title: string; children: ReactNode }) {
@@ -235,13 +237,17 @@ function ObservedTelemetryCard({ repoId }: { repoId: string }) {
   )
 }
 
-export function CodebasePage() {
+export interface CodebasePageProps {
+  readonly question?: string
+}
+
+export function CodebasePage({ question = DEFAULT_QUESTION }: CodebasePageProps) {
   const { repoId } = useParams<{ repoId: string }>()
   if (repoId === undefined) return <UnknownRoute />
 
   return (
     <section className="flex flex-col gap-8">
-      <PageHeaderRegion repoId={repoId} />
+      <PageHeaderRegion repoId={repoId} question={question} />
       {/* The two halves of the route's own question, beside one another. Both tables are narrow —
           two columns and three — and stacking them is what put the telemetry panel below the fold
           on every width. The telemetry panel keeps the full width because its three tables are
@@ -255,7 +261,7 @@ export function CodebasePage() {
   )
 }
 
-function PageHeaderRegion({ repoId }: { repoId: string }) {
+function PageHeaderRegion({ repoId, question }: { repoId: string; question: string }) {
   return (
     <div className="flex flex-col gap-section">
       {/* No trail. Fleet and the repository are both segments the top bar's scope trail derives
@@ -263,7 +269,7 @@ function PageHeaderRegion({ repoId }: { repoId: string }) {
           Task 1's review finding 1. `layouts/scope-switchers.tsx` carries what the bar reaches. */}
       <PageHeader
         title={<span className="font-mono">{repoId}</span>}
-        question={routeQuestion("/repositories/:repoId")}
+        question={question}
       />
       <ControlBar
         action={

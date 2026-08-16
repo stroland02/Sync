@@ -140,6 +140,7 @@ write path, are unbuilt; Phase 6 needs auth and tenancy and belongs to M4's host
 | M4-W202 | B78 Task 5: Rehearsals labelled in fleet runs table, outcome phrasing for local halts, tick verification updated to sync rehearse | landed | `web/src/features/fleet/runs-table.tsx`, `web/src/features/workflows/run-outcome.tsx`, `src/sync/dashboard/fleet.py`, `docs/superpowers/loops/console-improvement-tick.md` |
 | M4-W203 | B78 Task 6: Rehearsal smoke gate asserting checkpointer terminal outcomes wired into CI | landed | `scripts/rehearse_smoke.py`, `tests/test_rehearse_smoke.py`, `.github/workflows/ci.yml`, `BACKLOG.md` |
 | M4-W204 | B79: `is_rehearsal` joins `migration_outcome`'s natural key so a rehearsal row can no longer swallow a colliding production row | landed | `src/sync/graph/schema.sql`, `src/sync/graph/store.py`, `src/sync/core/models.py`, `src/sync/remediate/corpus.py`, `src/sync/remediate/graph.py`, `src/sync/rehearse/driver.py`, `tests/test_migration_corpus.py` |
+| M7-W205 | B120: Routes cycle eliminated — App.tsx passes question prop down to screens, zero features import routes registry, guard added (renumbered from M7-W204 on landing) | landed | `web/src/App.tsx`, `web/src/features/**`, `tests/test_console_design_tokens.py`, `BACKLOG.md` |
 
 **M7-W160's navigation was rebuilt once, on the owner's ruling of 2026-08-06.** The first pass built a
 56px icon rail of four product areas beside a 240px contextual panel, and collapsing removed the

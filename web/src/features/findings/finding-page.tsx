@@ -70,10 +70,8 @@ import { orAbsent } from "@/lib/format"
 import { Breadcrumbs } from "@/layouts/breadcrumbs"
 import { PageHeader } from "@/layouts/page-header"
 import { UnknownRoute } from "@/layouts/unknown-route"
-import { routeQuestion } from "@/lib/routes"
 
-/** This screen's own entry in the registry, so `PageHeader` renders the registry's sentence. */
-const ROUTE_PATH = "/findings/:findingId"
+const DEFAULT_QUESTION = "What is this finding, and what binding does it rest on?"
 
 /**
  * A set of recorded strings from the customer's own source, one chip each.
@@ -232,15 +230,25 @@ function findingFacts(
   ]
 }
 
-export function FindingPage() {
+export interface FindingPageProps {
+  readonly question?: string
+}
+
+export function FindingPage({ question = DEFAULT_QUESTION }: FindingPageProps) {
   // A URL is user input, so the identifier is checked here rather than assumed. The query
   // lives one level down so that check happens before a request is made for it.
   const { findingId } = useParams<{ findingId: string }>()
   if (findingId === undefined) return <UnknownRoute />
-  return <FindingDetailPage findingId={findingId} />
+  return <FindingDetailPage findingId={findingId} question={question} />
 }
 
-function FindingDetailPage({ findingId }: { findingId: string }) {
+function FindingDetailPage({
+  findingId,
+  question,
+}: {
+  findingId: string
+  question: string
+}) {
   const query = useFinding(findingId)
   const run = useWorkflow(findingId)
   const remediation = describeRemediation({
@@ -286,7 +294,7 @@ function FindingDetailPage({ findingId }: { findingId: string }) {
         <PageHeader
           trail={<Breadcrumbs trail={trail} />}
           title={title}
-          question={routeQuestion(ROUTE_PATH)}
+          question={question}
         />
       </div>
 

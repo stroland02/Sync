@@ -95,15 +95,14 @@ import { ControlBar } from "@/layouts/control-bar"
 import { FooterBar } from "@/layouts/footer-bar"
 import { PageHeader } from "@/layouts/page-header"
 import { UnknownRoute } from "@/layouts/unknown-route"
-import { routeQuestion } from "@/lib/routes"
 import { useClearFilters, useFilterParam } from "@/lib/use-filter-param"
 import { useOffsetParam } from "@/lib/use-offset-param"
 
+const DEFAULT_QUESTION =
+  "A vendor shipped a breaking change — what call sites does it hit?"
+
 const CALL_SITES_OFFSET_KEY = "call_sites_offset"
 const PATH_PREFIX_KEY = "path_prefix"
-
-/** This screen's own entry in the registry, so `PageHeader` renders the registry's sentence. */
-const ROUTE_PATH = "/bindings/vendors/:vendorId/operations/:operationId"
 
 /**
  * The repository scope, which arrives as a link parameter and is now also a control.
@@ -331,10 +330,12 @@ function BindingSurfaceDetail({
   vendorId,
   operationId,
   repoId,
+  question,
 }: {
   vendorId: string
   operationId: string
   repoId: string | null
+  question: string
 }) {
   const [callSitesOffset, setCallSitesOffset] = useOffsetParam(CALL_SITES_OFFSET_KEY)
   const [changesOffset, setChangesOffset] = useOffsetParam("changes_offset")
@@ -375,7 +376,7 @@ function BindingSurfaceDetail({
                 {vendorId} / {operationId}
               </span>
             }
-            question={routeQuestion(ROUTE_PATH)}
+            question={question}
           />
           <ScopeNote repoId={repoId} />
         </div>
@@ -585,10 +586,21 @@ function BindingSurfaceDetail({
   )
 }
 
-export function BindingSurfacePage() {
+export interface BindingSurfacePageProps {
+  readonly question?: string
+}
+
+export function BindingSurfacePage({ question = DEFAULT_QUESTION }: BindingSurfacePageProps) {
   const { vendorId, operationId } = useParams<{ vendorId: string; operationId: string }>()
   const [searchParams] = useSearchParams()
   if (vendorId === undefined || operationId === undefined) return <UnknownRoute />
   const repoId = searchParams.get("repo_id")
-  return <BindingSurfaceDetail vendorId={vendorId} operationId={operationId} repoId={repoId} />
+  return (
+    <BindingSurfaceDetail
+      vendorId={vendorId}
+      operationId={operationId}
+      repoId={repoId}
+      question={question}
+    />
+  )
 }

@@ -75,10 +75,9 @@ import { SubjectCatalogue } from "@/features/signals/subject-catalogue"
 import { Breadcrumbs } from "@/layouts/breadcrumbs"
 import { PageHeader } from "@/layouts/page-header"
 import { UnknownRoute } from "@/layouts/unknown-route"
-import { routeQuestion } from "@/lib/routes"
 
-/** This screen's own entry in the registry, so `PageHeader` renders the registry's sentence. */
-const ROUTE_PATH = "/repositories/:repoId/observed"
+const DEFAULT_QUESTION =
+  "What vendor, signal source and human surface does this repository have attached, and what has each reported?"
 
 function names(roles: readonly SignalRole[]): string {
   return roles.map((entry) => entry.role).join(", ")
@@ -118,18 +117,22 @@ function RoleGroup({ role, children }: { role: SignalRole; children: ReactNode }
   )
 }
 
-export function SignalsPage() {
-  const { repoId } = useParams<{ repoId: string }>()
-  if (repoId === undefined) return <UnknownRoute />
-  return <SignalsDetail repoId={repoId} />
+export interface SignalsPageProps {
+  readonly question?: string
 }
 
-function SignalsDetail({ repoId }: { repoId: string }) {
+export function SignalsPage({ question = DEFAULT_QUESTION }: SignalsPageProps) {
+  const { repoId } = useParams<{ repoId: string }>()
+  if (repoId === undefined) return <UnknownRoute />
+  return <SignalsDetail repoId={repoId} question={question} />
+}
+
+function SignalsDetail({ repoId, question }: { repoId: string; question: string }) {
   return (
     <section className="flex flex-col gap-8">
       <PageHeader
         title={<span className="font-mono">{repoId}</span>}
-        question={routeQuestion(ROUTE_PATH)}
+        question={question}
         // Fleet and the repository are the top bar's, derived from this same address. "Signals"
         // stays: it is the level, the bar's trail stops at the vendor, and this page's title is
         // the repository id rather than the level name. M7-W195.

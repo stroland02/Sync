@@ -1611,3 +1611,42 @@ def test_the_panel_heading_guard_rejects_a_heading_wearing_both_registers() -> N
 
     assert _SECTION_CLASS.search(classes)
     assert _FURNITURE_CLASS.search(classes)
+
+
+# -- B120: feature pages must not import the routes registry (routes.ts import cycle) ---
+
+_ROUTES_IMPORT_PATTERN = re.compile(
+    r"""import\s+(?:\{[^}]*\}|\*\s+as\s+\w+|\w+)\s+from\s+["'](?:@/lib/routes(?:\.ts)?|\.\./.*lib/routes)["']"""
+)
+
+
+def _scan_routes_imports(root: Path) -> list[str]:
+    violations = []
+    for path in _iter_source_files(root):
+        text = _read_stripped(path)
+        for match in _ROUTES_IMPORT_PATTERN.finditer(text):
+            line = _line_at(text, match.start())
+            violations.append(f"{path.name}:{line}: {match.group(0)}")
+    return violations
+
+
+def test_no_feature_page_imports_routes_registry():
+    _require_web_src()
+    features_dir = _WEB_SRC / "features"
+    files = _iter_source_files(features_dir)
+    _require_examined(files, features_dir)
+    violations = _scan_routes_imports(features_dir)
+    assert not violations, (
+        "features/ must not import from lib/routes: routes.ts already imports each feature page to "
+        "build its element, and an import in reverse closes a module-init cycle (B120). "
+        "Pass route props (like `question`) down from App.tsx instead.\nViolations:\n"
+        + "\n".join(f"  - {v}" for v in violations)
+    )
+
+
+def test_routes_import_guard_rejects_feature_import(tmp_path: Path):
+    bad_feature = tmp_path / "bad-page.tsx"
+    bad_feature.write_text('import { ROUTES } from "@/lib/routes"\nexport function Bad() {}', encoding="utf-8")
+    violations = _scan_routes_imports(tmp_path)
+    assert violations
+

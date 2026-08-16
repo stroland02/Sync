@@ -58,16 +58,19 @@ import { PageHeader } from "@/layouts/page-header"
 import { UnknownRoute } from "@/layouts/unknown-route"
 import { DetailTitleText, runTitle } from "@/lib/detail-title"
 import { formatTimestamp } from "@/lib/format"
-import { routeQuestion } from "@/lib/routes"
 
-/** This screen's own entry in the registry, so `PageHeader` renders the registry's sentence. */
-const ROUTE_PATH = "/findings/:findingId/workflow"
+const DEFAULT_QUESTION =
+  "What did Sync's remediation graph do about this finding, node by node?"
 
-export function WorkflowPage() {
+export interface WorkflowPageProps {
+  readonly question?: string
+}
+
+export function WorkflowPage({ question = DEFAULT_QUESTION }: WorkflowPageProps) {
   // The identifier comes out of the URL, so it is checked before a request is made for it.
   const { findingId } = useParams<{ findingId: string }>()
   if (findingId === undefined) return <UnknownRoute />
-  return <Workflow findingId={findingId} />
+  return <Workflow findingId={findingId} question={question} />
 }
 
 /**
@@ -237,7 +240,7 @@ function runFacts(data: WorkflowState | undefined, failure: ReactNode | null, fi
   ]
 }
 
-function Workflow({ findingId }: { findingId: string }) {
+function Workflow({ findingId, question }: { findingId: string; question: string }) {
   const query = useWorkflow(findingId)
   const data = query.data
   const terminal = isRunTerminal(data)
@@ -275,7 +278,7 @@ function Workflow({ findingId }: { findingId: string }) {
             />
           }
           title={title}
-          question={routeQuestion(ROUTE_PATH)}
+          question={question}
         />
       </div>
 

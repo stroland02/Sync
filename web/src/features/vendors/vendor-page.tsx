@@ -67,12 +67,14 @@ import {
 } from "@/features/vendors/vendor-findings-table"
 import { PageHeader } from "@/layouts/page-header"
 import { UnknownRoute } from "@/layouts/unknown-route"
-import { routeQuestion } from "@/lib/routes"
 
-/** This screen's own entry in the registry, so `PageHeader` renders the registry's sentence. */
-const ROUTE_PATH = "/vendors/:vendorId"
+const DEFAULT_QUESTION = "What is at risk from this vendor, and what did it change?"
 
-export function VendorPage() {
+export interface VendorPageProps {
+  readonly question?: string
+}
+
+export function VendorPage({ question = DEFAULT_QUESTION }: VendorPageProps) {
   const { vendorId } = useParams<{ vendorId: string }>()
   const [searchParams] = useSearchParams()
   if (vendorId === undefined) return <UnknownRoute />
@@ -89,7 +91,7 @@ export function VendorPage() {
         <div className="flex min-w-0 flex-col gap-section">
           <PageHeader
             title={<span className="font-mono">{vendorId}</span>}
-            question={routeQuestion(ROUTE_PATH)}
+            question={question}
           />
           {repoId === null ? (
             <p className="max-w-prose text-body text-muted-foreground">
