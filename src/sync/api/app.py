@@ -38,6 +38,7 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse
 from starlette.routing import Route
 
+from sync.core.models import CONTEXT_BODY_MAX
 from sync.mcp.tools import DEFAULT_LIMIT, GraphSurface
 
 WorkflowReader = Callable[[str], Optional[dict[str, Any]]]
@@ -95,6 +96,12 @@ VendorFindingsReader = Callable[..., dict[str, Any]]
 # total) and tally vendors in a Python loop over the result, which is the 9-19 second fleet screen
 # `overview_summary`'s own docstring measures and fixes.
 OverviewReader = Callable[[], dict[str, Any]]
+
+# Context is a reader and a writer rather than a reader alone, because this is the first route
+# on this app that writes. Both are injected for the reason every reader above is: a test
+# substitutes fakes without reaching into module state.
+ContextReader = Callable[[str], dict[str, Any]]
+ContextWriter = Callable[[str, str], None]
 
 
 # Ceiling on a page a caller may ask for. "Paginate every list" is a frozen rule of the graph
@@ -159,6 +166,8 @@ def create_app(
     severity_reader: SeverityReader,
     overview_reader: OverviewReader,
     vendor_findings_reader: VendorFindingsReader,
+    context_reader: ContextReader,
+    context_writer: ContextWriter,
 ) -> Starlette:
     """Build the Starlette app bound to a particular surface and readers.
 
@@ -326,6 +335,41 @@ def create_app(
     async def detectors(request: Request) -> JSONResponse:
         return JSONResponse(detector_reader(repo_id=request.query_params.get("repo_id")))
 
+    async def repo_context(request: Request) -> JSONResponse:
+        return JSONResponse(context_reader(request.path_params["repo_id"]))
+
+    async def set_repo_context(request: Request) -> JSONResponse:
+        """Write one repository's context.
+
+        The first write route on this app. The transport still holds no logic: it checks the
+        body is a non-empty string within the cap, calls one writer, and returns the reader's
+        view of what it wrote.
+
+        Over the cap is refused rather than truncated, and the message names the limit -- a 400
+        that does not say how long is too long leaves the caller guessing at a number this
+        module knows.
+        """
+        try:
+            payload = await request.json()
+        except ValueError:
+            # `request.json()` decodes the body before parsing it, so a client that sends bytes
+            # that are not valid UTF-8 raises `UnicodeDecodeError` here, not just a JSON syntax
+            # error -- and `UnicodeDecodeError` is a `ValueError`, so nothing needs its own
+            # clause. Both failures get the same 400: either way the caller sent a body this
+            # route cannot read as the JSON it asked for.
+            return JSONResponse({"error": "body must be JSON"}, status_code=400)
+        body = payload.get("body") if isinstance(payload, dict) else None
+        if not isinstance(body, str) or not body.strip():
+            return JSONResponse({"error": "body must be a non-empty string"}, status_code=400)
+        if len(body) > CONTEXT_BODY_MAX:
+            return JSONResponse(
+                {"error": f"body must be at most {CONTEXT_BODY_MAX} characters"},
+                status_code=400,
+            )
+        repo_id = request.path_params["repo_id"]
+        context_writer(repo_id, body.strip())
+        return JSONResponse(context_reader(repo_id))
+
     routes = [
         Route("/api/overview", overview, methods=["GET"]),
         Route("/api/vendors/{vendor_id}", vendor_detail, methods=["GET"]),
@@ -344,6 +388,10 @@ def create_app(
         Route("/api/repositories/{repo_id}/coverage", repository_coverage, methods=["GET"]),
         Route("/api/repositories/{repo_id}/observed", repository_observed, methods=["GET"]),
         Route("/api/detectors", detectors, methods=["GET"]),
+        # `{repo_id:path}` rather than `{repo_id}`: a `repo_id` is `host/owner/name` and
+        # contains slashes, so the default converter would never match one.
+        Route("/api/repos/{repo_id:path}/context", repo_context, methods=["GET"]),
+        Route("/api/repos/{repo_id:path}/context", set_repo_context, methods=["POST"]),
     ]
     return Starlette(routes=routes)
 

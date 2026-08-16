@@ -190,6 +190,14 @@ def _fake_vendor_findings_reader(
     }
 
 
+def _fake_context_reader(repo_id: str) -> dict[str, Any]:
+    return {"repo_id": repo_id, "body": "", "source": None, "updated_at": None}
+
+
+def _fake_context_writer(repo_id: str, body: str) -> None:
+    pass
+
+
 def _fake_overview_reader(*, repo_id=None) -> dict[str, Any]:
     return {
         "repo_id": repo_id,
@@ -219,6 +227,8 @@ def _build_app(
     severity_reader=_fake_severity_reader,
     overview_reader=_fake_overview_reader,
     vendor_findings_reader=_fake_vendor_findings_reader,
+    context_reader=_fake_context_reader,
+    context_writer=_fake_context_writer,
 ) -> Starlette:
     """`create_app` with every reader defaulted to a fake, so a test naming one override is
     not forced to restate the other ten.
@@ -242,6 +252,8 @@ def _build_app(
         severity_reader=severity_reader,
         overview_reader=overview_reader,
         vendor_findings_reader=vendor_findings_reader,
+        context_reader=context_reader,
+        context_writer=context_writer,
     )
 
 
@@ -1253,6 +1265,8 @@ def _recording_client(**graph_kw) -> _RecordingClient:
         severity_reader=severity_reader,
         overview_reader=overview_reader,
         vendor_findings_reader=vendor_findings_reader,
+        context_reader=_fake_context_reader,
+        context_writer=_fake_context_writer,
     )
     return _RecordingClient(
         TestClient(app), surface, workflow_reads, runs_reads, corpus_reads, repositories_reads,
@@ -1438,6 +1452,8 @@ _MULTI_CURSOR_COLLECTIONS = {
 #   `(change_kind, tier)` pair actually attempted, bounded by the vocabulary of change kinds and
 #   tiers rather than growing with usage the way `/api/runs` does, so it is an aggregate list
 #   rather than a page of records.
+# - `/api/repos/{repo_id}/context` answers one repository's context row -- one body, one
+#   source, one timestamp. There is nothing here that grows with usage the way a page does.
 _NOT_COLLECTIONS = {
     "/api/overview",
     "/api/findings/{finding_id}",
@@ -1447,6 +1463,7 @@ _NOT_COLLECTIONS = {
     "/api/repositories",
     "/api/repositories/{repo_id}/coverage",
     "/api/detectors",
+    "/api/repos/{repo_id:path}/context",
 }
 
 _PAGE_ENVELOPE_KEYS = {"items", "total", "next_offset"}
@@ -1740,6 +1757,7 @@ def _normalized(path: str) -> str:
 # a place routes go to be exempted from the drift guard forever.
 _NOT_YET_FETCHED_BY_CONSOLE = {
     "/api/corpus/abandonment",  # M12-W196: aggregate and route only, panel not yet scheduled
+    "/api/repos/{param}/context",  # B126 Task 5: route only, the console screen is M7's line
 }
 
 
