@@ -52,6 +52,11 @@ compares mtimes against the install and raises before `static_verify` compiles a
 `route_after_static` reads as `static_fatal` and abandons on — the edit stays in the clone, so
 every remaining attempt would meet the same doctored declaration.
 
+A forge-less graph (`forge=None`) is the supported way to run the pipeline without a remote. It
+structurally omits `push_branch`, `await_ci`, and `open_pr` from the compiled graph rather than
+guarding them at runtime. Adding a push node back to a forge-less graph is a breaking change to a
+non-negotiable safety property.
+
 ## Route on evidence, not on emptiness
 
 `route_after_static` trusts `verify_ok`, not whether `diagnostics` is non-empty — a real `tsc`

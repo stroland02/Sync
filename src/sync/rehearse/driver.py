@@ -10,33 +10,45 @@ and is not what makes the run safe -- the absence of a Forge is the safety guara
 from __future__ import annotations
 
 import argparse
+import os
+import subprocess
 import sys
 from datetime import date
 from pathlib import Path
-from typing import Any
+from typing import Any, Sequence
 
 from langgraph.checkpoint.postgres import PostgresSaver
 
-from sync.cli import (
-    _checkout_branch,
-    _coverage_lines,
-    _detector_suite,
-    _model_deprecations,
-    _parameter_deprecations,
-    _reset_clone,
-    _scan,
-    _select,
-    _thread_to_invoke,
-    build_remediator,
-    load_catalogue,
-    model_deprecation_sources,
-    prepare_vendor,
-    select_language_adapter,
-)
-from sync.detect.parameter_deprecation import LinkedDeprecation
+from sync.core import Finding, RepoRef
+from sync.detect.efficiency import EfficiencyDetector
+from sync.detect.observed_drift import DeclaredField, ObservedDriftDetector
+from sync.detect.parameter_deprecation import LinkedDeprecation, ParameterDeprecationDetector
+from sync.detect.status_rate import StatusRateDetector
+from sync.detect.vendor_change import VendorChangeDetector
 from sync.graph.store import GraphStore
+from sync.index.python_lang import PythonAdapter
+from sync.index.typescript import TypeScriptAdapter
 from sync.rehearse.fixture import prepare_fixture
+from sync.remediate.agent_patch import AgentRemediator
 from sync.remediate.graph import build_graph
+from sync.remediate.literal_swap import LiteralSwapRemediator
+from sync.remediate.parameters import (
+    ParameterOmitRemediator,
+    ParameterRenameRemediator,
+)
+from sync.remediate.property_omit import PropertyOmitRemediator
+from sync.remediate.tiered import TerminalTier, TieredRemediator
+from sync.route.matrix import catalogue_index
+from sync.signals.deprecations import (
+    model_deprecation_sources,
+    parameter_deprecation_sources,
+    parameters_to_vendor_changes,
+    parse_parameter_deprecations,
+)
+from sync.signals.oasdiff import run_oasdiff_checks
+from sync.signals.registry import VendorContext, prepare_vendor
+
+RESUMABLE_NODES = frozenset({"await_ci", "open_pr"})
 
 
 class _RehearsalPrepareAdapter:
@@ -47,12 +59,139 @@ class _RehearsalPrepareAdapter:
     graph execution while guaranteeing no model call is made.
     """
 
-    def __init__(self, adapter: Any, reason: str = "rehearsal depth 'prepare' halts before remediation"):
+    def __init__(
+        self,
+        adapter: Any,
+        reason: str = "rehearsal depth 'prepare' halts before remediation",
+    ):
         self._adapter = adapter
         self.unverifiable_reason = reason
 
     def __getattr__(self, name: str) -> Any:
         return getattr(self._adapter, name)
+
+
+def select_language_adapter(repo: RepoRef, vendor_adapter: Any) -> Any:
+    declined: list[str] = []
+    for build in (TypeScriptAdapter, PythonAdapter):
+        adapter = build(vendor_adapter=vendor_adapter)
+        if adapter.matches(repo):
+            return adapter
+        declined.append(f"{adapter.language}: {adapter.decline_reason(repo)}")
+    raise RuntimeError(f"no language adapter matched {repo.repo_id}: {'; '.join(declined)}")
+
+
+def load_catalogue() -> dict[str, dict]:
+    return catalogue_index(run_oasdiff_checks())
+
+
+def build_remediator(catalogue: dict[str, dict] | None = None) -> TieredRemediator:
+    return TieredRemediator(
+        [
+            LiteralSwapRemediator(),
+            ParameterOmitRemediator(),
+            ParameterRenameRemediator(),
+            PropertyOmitRemediator(),
+            TerminalTier(AgentRemediator()),
+        ],
+        catalogue=catalogue,
+    )
+
+
+def _declared_fields(spec_documents: Sequence[Any]) -> list[DeclaredField]:
+    declared: list[DeclaredField] = []
+    for doc in spec_documents:
+        declared.extend(getattr(doc, "declared_fields", ()))
+    return declared
+
+
+def _detector_suite(
+    store: GraphStore,
+    spec_documents: Sequence[Any],
+    call_sites: Sequence[Any],
+    deprecations: Sequence[LinkedDeprecation],
+    vendor_id: str,
+    repo_id: str,
+    deprecation_vendors: Sequence[str] = (),
+) -> list[tuple[str, Any]]:
+    return [
+        ("vendor_change", VendorChangeDetector(store, repo_id=repo_id)),
+        ("parameter-deprecation", ParameterDeprecationDetector(deprecations, call_sites)),
+        (
+            "observed-drift",
+            ObservedDriftDetector(
+                store, _declared_fields(spec_documents), vendor_id, repo_id=repo_id
+            ),
+        ),
+        *[
+            (
+                f"model-deprecation:{vendor}",
+                VendorChangeDetector(store, vendor_id=vendor, repo_id=repo_id),
+            )
+            for vendor in deprecation_vendors
+        ],
+        ("status-rate", StatusRateDetector(store, repo_id=repo_id, vendor_id=vendor_id)),
+        ("efficiency", EfficiencyDetector(store, repo_id=repo_id, vendor_id=vendor_id)),
+    ]
+
+
+def _scan(detectors: Sequence[tuple[str, Any]], store: GraphStore) -> list[Finding]:
+    findings: list[Finding] = []
+    for name, detector in detectors:
+        try:
+            produced = list(detector.scan())
+        except Exception as exc:
+            print(f"{name}: unavailable ({type(exc).__name__}: {exc})", file=sys.stderr)
+            continue
+
+        for finding in produced:
+            finding.id = store.insert_finding(finding)
+        findings.extend(produced)
+        declined = getattr(detector, "declined", None)
+        note = f", {len(declined)} declined" if declined is not None else ""
+        print(f"{name}: {len(produced)} finding(s){note}")
+
+    return findings
+
+
+def _select(findings: Sequence[Finding], limit: int) -> list[Finding]:
+    return list(findings[:limit]) if limit > 0 else list(findings)
+
+
+def _thread_to_invoke(graph: Any, base: str) -> tuple[str, bool]:
+    generation = 0
+    while True:
+        thread_id = f"{base}:{generation}"
+        snapshot = graph.get_state({"configurable": {"thread_id": thread_id}})
+        if snapshot.created_at is None:
+            return thread_id, False
+        if snapshot.next and set(snapshot.next) <= RESUMABLE_NODES:
+            return thread_id, True
+        generation += 1
+
+
+def _checkout_branch(repo: RepoRef, branch: str) -> None:
+    subprocess.run(
+        ["git", "checkout", "-q", branch],
+        cwd=repo.local_path,
+        check=True,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        env={**os.environ, "PYTHONIOENCODING": "utf-8"},
+    )
+
+
+def _reset_clone(repo: RepoRef) -> None:
+    subprocess.run(
+        ["git", "reset", "-q", "--hard", "HEAD"],
+        cwd=repo.local_path,
+        check=True,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        env={**os.environ, "PYTHONIOENCODING": "utf-8"},
+    )
 
 
 def run_rehearsal(args: argparse.Namespace, *, today: date | None = None) -> int:
@@ -64,9 +203,12 @@ def run_rehearsal(args: argparse.Namespace, *, today: date | None = None) -> int
     fixture_name = getattr(args, "fixture", "furever")
     repo = prepare_fixture(fixture_name, root=cache)
 
-    prepared = prepare_vendor(
-        args.vendor, args.from_version, args.to_version, cache=cache,
+    context = VendorContext(
+        cache_dir=cache,
+        from_version=args.from_version,
+        to_version=args.to_version,
     )
+    prepared = prepare_vendor(args.vendor, context)
     adapter = select_language_adapter(repo, prepared.adapter)
 
     with GraphStore(args.dsn) as store:
@@ -78,10 +220,14 @@ def run_rehearsal(args: argparse.Namespace, *, today: date | None = None) -> int
         for change in prepared.changes:
             store.upsert_vendor_change(change)
 
-        parameter_changes = _parameter_deprecations(
-            prepared.documents, prepared.adapter, repo, call_sites, today=today,
-        )
-        _model_deprecations(store, repo, today=today)
+        parameter_changes: list[tuple[Any, Any]] = []
+        for source in parameter_deprecation_sources():
+            spec_file = cache / f"{source.vendor_id}-deprecations.md"
+            if spec_file.exists():
+                deprecations = parse_parameter_deprecations(
+                    source.vendor_id, spec_file.read_text(encoding="utf-8")
+                )
+                parameter_changes.extend(parameters_to_vendor_changes(deprecations, today=today))
 
         linked = [
             LinkedDeprecation(
@@ -106,8 +252,8 @@ def run_rehearsal(args: argparse.Namespace, *, today: date | None = None) -> int
             store,
         )
 
-        for line in _coverage_lines(unread):
-            print(line)
+        for unread_path in unread:
+            print(f"coverage: unread {unread_path}")
 
         print(f"{len(findings)} finding(s)")
         if not findings:

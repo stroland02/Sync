@@ -136,6 +136,7 @@ write path, are unbuilt; Phase 6 needs auth and tenancy and belongs to M4's host
 | M7-W198 | M7-W195's review: the untrimmed `Fleet` crumbs are four named routes rather than one, and the binding surface's kept crumb is redundant like `/detectors`' rather than informative like Signals' — a correction to the brief, no code | landed | `briefs/2026-08-07-substrate-fidelity-task-4.md` |
 | M7-W199 | Fidelity Task 5: the rail expands on hover from 48px to 208px over the vendored primitive's own state machine, the two tiers stop sharing one active fill, and a second-tier row becomes a link wherever the address supplies its subject | dispatched | `briefs/2026-08-07-substrate-fidelity-task-5.md` |
 | M4-W200 | B78 Tasks 1 & 3: Local zero-remote rehearsal fixture and 'sync rehearse' driver with verified digest and depth control | landed | `src/sync/rehearse/fixture.py`, `src/sync/rehearse/driver.py`, `src/sync/cli.py`, `tests/test_rehearse_fixture.py`, `tests/test_rehearse_driver.py` |
+| M4-W201 | B78 Task 4: Rehearsal boundary across 4 independent layers (importlinter contract, graph node inspection, signature guard, zero remotes) | landed | `pyproject.toml`, `tests/test_rehearse_boundary.py`, `.claude/rules/remediate-stage.md` |
 
 **M7-W160's navigation was rebuilt once, on the owner's ruling of 2026-08-06.** The first pass built a
 56px icon rail of four product areas beside a 240px contextual panel, and collapsing removed the

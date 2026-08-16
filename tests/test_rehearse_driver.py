@@ -65,8 +65,8 @@ def test_rehearsal_prepare_depth_invokes_no_remediator(tmp_path):
         patch("sync.rehearse.driver.prepare_vendor") as mock_prep_vendor,
         patch("sync.rehearse.driver.select_language_adapter") as mock_sel_adapter,
         patch("sync.rehearse.driver.GraphStore") as mock_store_cls,
-        patch("sync.rehearse.driver._parameter_deprecations", return_value=[]),
-        patch("sync.rehearse.driver._model_deprecations"),
+        patch("sync.rehearse.driver.parameter_deprecation_sources", return_value=[]),
+        patch("sync.rehearse.driver.model_deprecation_sources", return_value=[]),
         patch("sync.rehearse.driver._scan", return_value=[mock_finding]),
         patch("sync.rehearse.driver.PostgresSaver") as mock_saver_cls,
         patch("sync.rehearse.driver.build_graph", return_value=mock_graph) as mock_build_graph,
@@ -117,8 +117,8 @@ def test_rehearsal_zero_findings_exits_cleanly(tmp_path, capsys):
         patch("sync.rehearse.driver.prepare_vendor"),
         patch("sync.rehearse.driver.select_language_adapter") as mock_sel_adapter,
         patch("sync.rehearse.driver.GraphStore") as mock_store_cls,
-        patch("sync.rehearse.driver._parameter_deprecations", return_value=[]),
-        patch("sync.rehearse.driver._model_deprecations"),
+        patch("sync.rehearse.driver.parameter_deprecation_sources", return_value=[]),
+        patch("sync.rehearse.driver.model_deprecation_sources", return_value=[]),
         patch("sync.rehearse.driver._scan", return_value=[]),
     ):
         mock_adapter = MagicMock()
