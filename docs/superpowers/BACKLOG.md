@@ -89,7 +89,7 @@ two milestones now have a target instead of a description.
 
 | | Milestone | % | The one sentence that matters |
 |---|---|---|---|
-| **M0** | Walking skeleton, one real PR | **~90%** | Every component exists; **the proof is 1,073 commits stale** — measured 2026-08-07, not the "~200" this row claimed for a fortnight |
+| **M0** | Walking skeleton, one real PR | **~90%** | Every component exists; **the proof is 1,206 commits stale** — measured 2026-08-17 (`git rev-list --count`, the last commit to touch `tests/test_e2e_stripe.py`..`HEAD`), up from "1,073" on 2026-08-07. The gate is `B7`, still the user's call |
 | **M1** | Runtime signals, efficiency detector | **~85%** | Built; the dollar estimate is deliberately unbuilt |
 | **M2** | Production error detector | **~85%** | Built; never exercised against real telemetry |
 | **M3** | Multi-vendor, MCP, plugin SDK | **~95%** | Packaging closed 2026-07-30; nothing structural left |
@@ -99,7 +99,7 @@ two milestones now have a target instead of a description.
 | **M6** | Show it, rather than describe it | **0%** | Needs a UI worth filming. That is M7's line now, not M4.5's, and M7 is close enough that this is becoming schedulable |
 | **M7** | The console becomes a product | **~98%** | All nine levels on vendored Supabase substrate. Fidelity Tasks 1–6, Mock-to-Build Phases 1–5, ChangeUnitsTable, B123 checkpointer timestamps, and screen de-congestion landed |
 | **M8–M11** | The resolution loop | **0%** | Proposed 2026-08-06, nothing scheduled; Sync opens a pull request and stops watching it |
-| **M12** | Dashboards that earn their screen | **0%** | Proposed 2026-08-07 from the owner's review of our screens against the references; full-stack, because the useful panels need aggregates `sync.dashboard` does not compute |
+| **M12** | Dashboards that earn their screen | **~10%** | One of Phase 1's four aggregates landed (`M12-W195`–`W197`, `ee7a8dc`/`9395cfb`: abandonment by change kind and tier, the corpus's first read-back, plus the exemption-outlives-its-panel guard). Phases 2–4 (panels, grid composition, the honesty-sentence re-placement) unstarted |
 | **M13** | Dynamic visuals, Remotion & live telemetry | **0%** | Proposed 2026-08-16; live agent execution stream, thinking disclosures, dynamic node states inspired by DeepSeek Harness, and Remotion motion diffs |
 
 ### Implementation Plans Ledger (`docs/superpowers/plans/`)
