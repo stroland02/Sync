@@ -51,10 +51,30 @@ Take your numbers from your own block. Nobody else will.
 Use them in order. The milestone prefix is whatever the work actually belongs to, so `M10-W241` and
 `M11-W242` from one lane is normal and correct.
 
+## Two rules about where you work, learned the hard way on the first afternoon
+
+**Never work in the shared `main` worktree.** Every Orca terminal is bound to
+`C:/Users/strol/orca/Sync/Sync`, so `cd`-ing nowhere and just working is the path of least
+resistance and it puts six agents in one checkout. Measured 2026-08-17: that worktree was found
+holding staged additions plus four unmerged index entries with no merge in progress, and its index
+changed between two reads seconds apart because a second agent was resolving conflicts in it at the
+same time. Work in your own worktree under `C:/Users/strol/orca/workspaces/Sync/`. If you do not
+have one, make one.
+
+**A commit that is not on a branch is not saved.** `be0692d` carried B118's `stop_server.py`, its
+author reported it landed, and it is contained in no branch and absent from `origin/main`. It
+survived only in the reflog. Land it or branch it; a commit reachable from nothing is a commit
+nobody will find.
+
 ## The loop
 
-Every iteration, in order. Do not skip step 1 and do not skip step 6.
+Every iteration, in order. Do not skip step 0, step 1 or step 6.
 
+0. **Read your mail.** `orca orchestration check --json`, process every message, then
+   `orca orchestration check --ack <delivery_id>`. The coordinator answers questions and issues
+   arbitrations through it, and mail is only read when you ask for it -- a long agent turn can sit
+   an hour on an instruction that was already waiting. Reply to a `question` with
+   `orca orchestration reply --id <msg_id> --body <answer>`.
 1. **Catch up.** `git fetch origin` then `git merge origin/main --no-edit` in your worktree.
    Resolve conflicts by the union rule above. Another session has almost certainly landed since
    your last iteration.
@@ -69,7 +89,11 @@ Every iteration, in order. Do not skip step 1 and do not skip step 6.
    - Python: `uv run lint-imports`, `uv run python scripts/lint_encoding.py src tests`,
      `uv run pytest tests/ -q -n 4`
    - Console: from `web/`, `npm test`, `npm run build`, `npm run lint`
-6. **Land it on `main` by fast-forward.** Merge `origin/main` once more, re-run the cheap gates,
+6. **Land it on `main` by fast-forward, per unit and not per plan.** This is the step the first
+   afternoon actually failed at: five lanes produced sixteen commits and landed none of them, while
+   one branch sat eleven commits ahead of a `main` that moves hourly. Unlanded work is invisible to
+   every other lane and rots against a moving base, which is the exact failure splitting into six
+   sessions was supposed to prevent. Land each reviewable unit as it passes its gate. Merge `origin/main` once more, re-run the cheap gates,
    then prove containment before you push:
    ```
    git fetch origin
