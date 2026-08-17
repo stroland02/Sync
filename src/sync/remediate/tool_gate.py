@@ -42,9 +42,7 @@ import logging
 import os
 import shlex
 from pathlib import Path
-from typing import Any
-
-from claude_agent_sdk import HookMatcher
+from typing import Any, Callable
 
 log = logging.getLogger(__name__)
 
@@ -159,7 +157,7 @@ def _summary(tool_name: str, tool_input: dict[str, Any]) -> str:
     return f"input={ {key: tool_input.get(key) for key in ('file_path', 'pattern')} !r}"
 
 
-def hooks(identity: str) -> dict[str, list[HookMatcher]]:
+def hooks(identity: str) -> dict[str, list[Callable]]:
     """The gate, bound to the run it is gating.
 
     `identity` is `sync.remediate.agent_patch._identity` -- the finding and the repository -- so
@@ -169,6 +167,11 @@ def hooks(identity: str) -> dict[str, list[HookMatcher]]:
     Registered against every tool rather than against `Bash`. The shell is where the damage is,
     but a record of only the shell cannot answer what the agent did on a run where it never
     reached for one.
+
+    **Plain callables keyed by event, not the SDK's `HookMatcher`.** What a patch may ask a
+    tool to do is Sync's policy and belongs on this side of the runner seam; producing an SDK
+    type here would put a model SDK back inside `sync.remediate` for one constructor call.
+    `sync.runner.claude_sdk` wraps these, and matching every tool is the wrap's own default.
     """
 
     async def gate(
@@ -196,4 +199,4 @@ def hooks(identity: str) -> dict[str, list[HookMatcher]]:
             }
         }
 
-    return {"PreToolUse": [HookMatcher(matcher=None, hooks=[gate])]}
+    return {"PreToolUse": [gate]}

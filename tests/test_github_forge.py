@@ -85,7 +85,9 @@ def test_a_patch_carries_its_findings_rationale_verbatim(tmp_path, monkeypatch):
         ["git", "-c", "user.name=Seed", "-c", "user.email=seed@example.com", "commit", "-m", "seed"],
         cwd=repo_path, capture_output=True, text=True, encoding="utf-8", check=True,
     )
-    monkeypatch.setattr(AgentRemediator, "_run_agent", lambda self, prompt, path, identity: None)
+    from sync.runner import ClaudeSdkRunner
+
+    monkeypatch.setattr(ClaudeSdkRunner, "run", lambda self, prompt, path, identity: None)
 
     finding = Finding(
         detector="vendor_change",

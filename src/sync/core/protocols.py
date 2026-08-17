@@ -1,7 +1,8 @@
-"""The four plugin protocols. A third-party adapter implements one of these."""
+"""The plugin protocols. A third-party adapter implements one of these."""
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Iterable, Protocol, runtime_checkable
 
 from sync.core.models import CallSite, Finding, OperationRef, Patch, RepoRef, VendorChange, VerifyResult
@@ -64,6 +65,27 @@ class Detector(Protocol):
     detector_id: str
 
     def scan(self) -> Iterable[Finding]: ...
+
+
+@runtime_checkable
+class PatchRunner(Protocol):
+    """Drives a model against a clone until it stops.
+
+    The narrowest thing that can be substituted. A runner is handed the prompt, the clone it
+    may edit, and the identity every message it raises has to carry; it reports nothing back,
+    because the clone is the report -- `AgentRemediator.propose` reads the diff from git
+    rather than from a return value, so a runner that returned a patch would be describing
+    work the tree either does or does not hold.
+
+    Failure is a raised `RuntimeError` naming the identity. A runner owns the whole vocabulary
+    of a failed run: the caller does not inspect the reason, and one that could not report a
+    reason would move that handling back across the seam.
+
+    One method, because one is the case that exists. M9's terminal outcomes and M10's parked
+    runs each arrive with a real caller, and each widens this then.
+    """
+
+    def run(self, prompt: str, repo_path: Path, identity: str) -> None: ...
 
 
 @runtime_checkable
