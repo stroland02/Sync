@@ -998,6 +998,10 @@ _DECODES_NOTHING = (
     "sync/cli.py::_window_bound::ValueError",
     "sync/mcp/tools.py::GraphSurface._change_for::KeyError+LookupError+ValueError",
     "sync/mcp/tools.py::GraphSurface._site_for::KeyError+LookupError+ValueError",
+    # `datetime.fromisoformat` over a value an `isinstance(pr_merged_at, str)` above the `try`
+    # has already established is a `str`. Nothing under the clause reads bytes, so a decode
+    # failure cannot arrive -- the same shape as `_int_param` and `_window_bound` above.
+    "sync/graph/store.py::GraphStore.set_merge_outcome::ValueError",
     # Two clauses in one method, guarding `flush` and `detach` on a wrapper whose buffer has
     # already gone. `ValueError: I/O operation on closed file` is a teardown race, not a decode:
     # this method exists to hand a borrowed buffer back rather than shut it, and it runs from the
@@ -1062,6 +1066,20 @@ _WHOLE_STAGE_CATCH_ALL = (
     "sync/signals/deprecations/adapter.py::DeprecationAdapter._page::Exception",
     "sync/signals/generated/adapter.py::GeneratedSpecAdapter._spec::Exception",
     "sync/signals/registry.py::_spec_source::Exception",
+    # Per row rather than per stage, and the argument is the same one. It wraps a single
+    # `forge.pull_request_outcome` so that one unreachable pull request cannot abort a reconcile
+    # over all of them. A decode failure genuinely can arrive -- that call reaches `gh api` and
+    # reads its output -- but the read is inside the forge, and what undecodable bytes mean there
+    # is decided by a handler at that read rather than by this `continue`. A driver here would
+    # prove the loop survives a row, which nobody doubts.
+    "sync/benchmark/reconcile.py::reconcile_pull_request_outcomes::Exception",
+    # The clearest member of this group, and the only one that demonstrably makes the decision
+    # rather than deferring it. `classify_intake_exception` names `UnicodeDecodeError` in the same
+    # arm as `json.JSONDecodeError` and `yaml.YAMLError` and returns the coded reason
+    # `spec_unparseable`, which is written to `intake_attempt.reason_code` from a closed
+    # vocabulary. So undecodable vendor bytes do not vanish into a catch-all here: they are
+    # recorded, aggregable, and distinguishable from a network error or a 404.
+    "sync/signals/intake_attempt.py::execute_intake_attempt::Exception",
 )
 
 # A read sits under these two, so they are the blind spot rather than an instance of it being
@@ -1070,6 +1088,16 @@ _GUARDS_A_READ = (
     "sync/api/app.py::create_app.set_repo_context::ValueError",
     "sync/cli.py::benchmark::KeyError+LookupError+ValueError",
     "sync/index/python_lang.py::PythonAdapter._syntax_errors::ValueError",
+    # `base64.b64decode(token).decode("utf-8")` sits directly under it, so this is a read and the
+    # bytes are the most attacker-controlled in the tree: an `Authorization: Basic` header from an
+    # unauthenticated request. Accounted, and wanting narrowing rather than a behaviour change --
+    # returning `None` on undecodable credentials is correct, since a credential that is not text
+    # cannot match a configured password. What the clause loses is the ability to tell a malformed
+    # base64 payload from a well-formed one carrying non-UTF-8 bytes, which are different facts
+    # about a caller. `except (binascii.Error, UnicodeDecodeError)` would say the same thing and
+    # keep them apart. Filed for Lane E rather than changed here: it is their file, and this
+    # accounting changes no behaviour in it.
+    "sync/api/auth.py::extract_credential::Exception",
 )
 
 SUBSUMING: tuple[str, ...] = _DECODES_NOTHING + _WHOLE_STAGE_CATCH_ALL + _GUARDS_A_READ
