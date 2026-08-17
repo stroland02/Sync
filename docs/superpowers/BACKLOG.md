@@ -440,7 +440,7 @@ failures into `237 passed`.
 and watching it go red — and the README's prerequisites are the set that check enforces, so the two
 cannot drift.
 
-### B170 — CI runs `-n auto` while every lane is told to use `-n 4`, and until today CI could not have reported a dead worker
+### B170 — CI runs `-n auto` while every lane is told to use `-n 4`, and until today CI could not have reported a dead worker — MEASURED, and the guidance is the thing to retire
 
 `pyproject.toml:99` is `addopts = "-m 'not e2e' -n auto"` and CI's `Tests` step is a bare
 `uv run pytest`, so the runner inherits `-n auto`. The lane charter tells every lane to use `-n 4`
@@ -456,11 +456,37 @@ trustworthiness check could not have told anyone if a worker had died on a runne
 whose reason has expired, and changing a setting because it once correlated with a symptom is how a
 workaround outlives its cause.
 
+**Measured 2026-08-17 (`CI-W298`), both environments, with `gate_verdict` reading the result --
+which is only possible since `CI-W295`, because before it every CI run reported `no summary line`.**
+
+| Where | Setting | Wall clock | Verdict |
+|---|---|---:|---|
+| Linux runner, run `32049200654` | `-n auto` | 185s | TRUSTWORTHY, 1 failed 3906 passed |
+| This Windows host | `-n auto` | **125s** | TRUSTWORTHY, 1 failed 3914 passed |
+| This Windows host, earlier | `-n 4` | 233s | TRUSTWORTHY |
+
+No worker was lost in either `-n auto` run. The single failure is
+`test_decode_handlers.py::test_no_subsuming_chain_in_src_is_unaccounted_for`, which was already
+failing under `-n 4` and is not this.
+
+**So the answer is the one the entry predicted, and the cost is larger than it guessed.** `-n 4`
+is not a neutral safety margin: it is a workaround for starvation on the npx resolve lock, that
+cause was fixed in `2cf2e62`, and it now charges every lane **108 seconds per run** to prevent a
+crash that no longer happens. The charter's guidance is the thing to retire, not the configuration
+to change.
+
+One check the measurement also validated: a run cancelled by concurrency (`32049551015`) reports
+`UNTRUSTWORTHY: the run printed no summary line`, which is correct -- a cancelled run is not a
+result -- and confirms `CI-W295`'s pattern is not simply matching everything.
+
+**The charter edit is not this lane's to make**, so it is proposed rather than applied.
+`scripts/beta_gates.py` moves to `-n auto` because that file is Lane C's.
+
 **Closes when:** `-n auto` is measured on a runner with the trustworthiness check reading the result,
 and either the charter's `-n 4` is retired with that measurement beside it, or CI is moved to `-n 4`
 with the crash it prevents named.
 
-### B171 — two of the four beta gates are measured continuously and two are measured when somebody remembers
+### B171 — two of the four beta gates are measured continuously and two are measured when somebody remembers — FIXED, and smaller than filed
 
 `beta_gates.py` runs on every push and reports Gates 1 and 2 as `CANNOT TELL`, correctly: CI has no
 corpus, and the job deliberately has no Postgres service because an empty database read as a
@@ -474,6 +500,26 @@ measured is the half about whether the product works.
 **Not solved by a database in CI.** Solved either by a scheduled run somewhere that has a real
 corpus, or by accepting that those two gates are human-run and saying so wherever the meter's output
 is read, so nobody mistakes a continuous `CANNOT TELL` for a fresh one.
+
+**Fixed 2026-08-17 (`CI-W298`), and inspection made it smaller than the entry claimed.** The
+published summary already closed most of it: its footer said `❔ means the environment could not
+answer, not that the answer is zero`, so absence was never being rendered as zero.
+
+What was actually missing is narrower and worth naming separately, because it is a different
+failure. A reader could not tell a `CANNOT TELL` that might resolve on the next run from one that
+is structural to the environment. In CI, gates 1 and 2 read `CANNOT TELL` on every push forever --
+CI has no corpus and deliberately gets no database -- and an unqualified forever-unknown is
+indistinguishable from a fresh unknown. A reader eventually stops looking at it, which is the same
+way a gate that fires on a CSS tweak teaches a lane to stop clearing it.
+
+The summary now says which gates cannot be answered in this environment at all, that a
+`CANNOT TELL` for them is structural rather than news, and what to run to get a real answer. A run
+that did answer carries none of that, because silence is the ordinary case.
+
+**The larger half of the original entry is deliberately not done.** Measuring the evidence gates on
+a schedule needs somewhere with a real corpus, which does not exist yet and is not this lane's to
+create -- it arrives with `B7`, and until a real run has happened there is nothing for a schedule
+to measure.
 
 **Closes when:** either the evidence gates are measured somewhere with a corpus on a schedule, or the
 published summary states which gates this environment can never answer and when they were last

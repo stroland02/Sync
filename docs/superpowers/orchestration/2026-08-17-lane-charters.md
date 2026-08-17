@@ -138,7 +138,14 @@ Escalate to the coordinator, not to the human, when the blocker is another lane.
   `-n 4` on 2026-08-17: about thirty phantom failures in a run cut off before its summary, reading
   as a catastrophic regression that did not exist. `-n 4` is the better default but it is not a cure
   for this, so a run without a summary line is not a result -- re-run it before reporting anything.
-- **Use `-n 4`, not `-n auto`, for the full suite.** `-n0` is unusable here -- it takes long enough that nobody runs it -- but `-n auto` is not the safe opposite: it has crashed an xdist worker outright on this machine (`INTERNALERROR ... KeyError: <WorkerController gw7>`) and Lane C measured the same thing independently. A crashed worker aborts the run, which reads as a catastrophic failure and is not one. `-n 4` is the working default; a single test file is fine with `-n0`.
+- **Use `-n auto`. The `-n 4` guidance is retired as of 2026-08-17 and it was costing you 108
+  seconds a run.** Measured by Lane C once `CI-W295` made a dead worker visible on a runner at all:
+  `-n auto` is 185s on a Linux runner and 125s on this Windows host, both with no worker lost,
+  against 233s for `-n 4`. The crash `-n 4` existed to avoid was npx-lock starvation, and Lane D
+  fixed that in `2cf2e62`. A workaround that outlives its cause is a tax nobody notices they are
+  paying, which is why this is the guidance being retired rather than the configuration being
+  changed.
+- **Superseded, kept for the record: use `-n 4`, not `-n auto`, for the full suite.** `-n0` is unusable here -- it takes long enough that nobody runs it -- but `-n auto` is not the safe opposite: it has crashed an xdist worker outright on this machine (`INTERNALERROR ... KeyError: <WorkerController gw7>`) and Lane C measured the same thing independently. A crashed worker aborts the run, which reads as a catastrophic failure and is not one. `-n 4` is the working default; a single test file is fine with `-n0`.
 - **Never `git stash`.** `refs/stash` is one stack shared by every worktree of this repository, so
   a pop in your tree can take another agent's work.
 - **Never `git checkout <file>` on a file with uncommitted work.** It reverts the whole file.
