@@ -340,6 +340,37 @@ this ruling exists to prevent.
 OAuth session, a dedicated API key, or a third-party provider. That is an account and a spend, and
 it decides what the proxy holds.
 
+## The empty-state gap is closed, and it found exactly one defect
+
+**Walked 2026-08-17 and the blocker is resolved.** The lane stood up a separate schema-applied
+zero-row database -- nine tables, zero rows verified before walking and dropped after -- rather than
+truncating the graph five other lanes were using, and walked it on the production runtime behind the
+credential gate.
+
+**One real defect.** Fleet rendered `Open findings 0` under its note across every vendor and every
+repository, which describes a search that never ran when nothing has been indexed. Fixed test-first
+as `M14-W346`: the note now says nothing has been searched, and that this is not a measurement that
+found nothing, reverting to the ordinary scope note the moment one repository is indexed.
+
+**Three of the rail's four zeros were already honest** and were left alone -- runs and repair
+attempts count events that genuinely did not occur, and repositories-indexed already carried the
+distinction. **Two screens were already right, quoted rather than reported as an absence of
+complaints:** detectors says *"The API answered, and the graph holds no open findings in this scope
+right now. That is an answer, not a failure"*; Settings renders *"Nothing received"* over a heading
+saying that nothing received has never delivered, which is not the same as having delivered nothing.
+
+**A hypothesis was disproved rather than confirmed.** The coordinator suggested the failed-fetch gap
+and the empty-graph gap might be one defect wearing two hats. They are not: with the API killed and
+the console still running, Fleet renders *"the API did not answer"* in the figure slot itself, with
+no bare zeros anywhere. The console already distinguishes them where it matters, so that stock-take
+item survives but shrinks from honesty to **affordance** -- it says which state it is in, it just
+offers no way to recover from the failed one.
+
+The Gate 3 signature now covers the empty graph as well as the seeded one, and was deliberately
+dated *after* the fix commit -- 12:54:34 against 12:54:13 -- because a signature dated before it
+would describe a console one commit older than the one it claims to cover, which is the staleness
+this gate exists to catch, self-inflicted.
+
 ## The one console gap that would block a design-partner beta
 
 `reports/2026-08-17-console-beta-stock-take.md`, from the lane that has walked every screen twice
