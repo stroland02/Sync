@@ -100,7 +100,7 @@ two milestones now have a target instead of a description.
 | **M7** | The console becomes a product | **~98%** | All nine levels on vendored Supabase substrate. Fidelity Tasks 1–6, Mock-to-Build Phases 1–5, ChangeUnitsTable, B123 checkpointer timestamps, and screen de-congestion landed |
 | **M8–M11** | The resolution loop | **0%** | Proposed 2026-08-06, nothing scheduled; Sync opens a pull request and stops watching it |
 | **M12** | Dashboards that earn their screen | **~10%** | One of Phase 1's four aggregates landed (`M12-W195`–`W197`, `ee7a8dc`/`9395cfb`: abandonment by change kind and tier, the corpus's first read-back, plus the exemption-outlives-its-panel guard). Phases 2–4 (panels, grid composition, the honesty-sentence re-placement) unstarted |
-| **M13** | Dynamic visuals, Remotion & live telemetry | **0%** | Superseded in phasing by `2026-08-17-console-mock-parity.md` per spec ruling 2 (no pulse) and 3 (Remotion deferred) |
+| **M13** | Dynamic visuals, Remotion & live telemetry | **0%** | Proposed 2026-08-16; live agent execution stream, thinking disclosures, dynamic node states inspired by DeepSeek Harness, and Remotion motion diffs |
 
 ### Implementation Plans Ledger (`docs/superpowers/plans/`)
 
