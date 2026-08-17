@@ -194,6 +194,22 @@ rather than waiting for it to ask for mail.
 
 Recorded here when one is made, so no lane has to ask the same question twice.
 
+**2026-08-17, the blanket exclusion of `test_lint_dead_links` is RESCINDED, and it was a
+coordinator error.** The exclusion was granted when the red had three causes none of which any
+working lane could fix. All three are now closed. Every violation standing today was introduced
+this afternoon by the lane that still owns it -- `reconcile_pull_request_outcomes` and
+`GraphStore.intake_attempts` (Lane E), `execute_intake_attempt` (Lane D) -- and the reason it kept
+happening is that I told every lane it could skip the one test that would have told them. A rule
+nobody's gate enforces is a rule that gets written twice and followed never.
+
+So: **run `tests/test_lint_dead_links.py`. If it reports a symbol you introduced, close it before
+you land** -- wire the caller if it can be wired, or add the baseline entry in the same commit,
+naming the work item that removes it. A seam-first workflow legitimately produces a producer before
+its consumer; that is exactly what the baseline-with-an-expiry is for, and it costs one line.
+
+If it reports a symbol you did not introduce, that is somebody else's and you may still exclude it
+-- say whose, and say so when you report.
+
 **2026-08-17, the dead-link red now has three causes and one owner each.** Re-measured against
 `main` after the afternoon's landings: `test_lint_dead_links` reports three unreachable symbols, not
 one, and every one of them is the same shape -- a primitive landed without the consumer that would
