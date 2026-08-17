@@ -1241,14 +1241,20 @@ measured at 1440x900 and 1280x800 at **4.00:1**, with regions placed beside anot
 to two on each. The presence guard still cannot land — it goes red on whatever remains — and the
 count of routes it would fail is the only thing this entry needs updating for.
 
-### B126 — every remediation run starts cold, and the facts it rediscovers do not change
+### B126 — every remediation run starts cold, and the facts it rediscovers do not change - CLOSED
 
 **Renumbered from B122 on 2026-08-16, landing the console line.** Two items were both filed as
 B122 on separate branches — this one and "the Finding level cannot name its own severity" below —
 and merging them onto one `main` would have let the collision stand. B126 is the next free number.
 
-**Designed and planned, deliberately not started.** The console is the current focus and this is
-pipeline work; it sits at the bottom of Ready so a tick takes the console items first.
+**All seven tasks landed 2026-08-16** (merge `5276718` per `git reflog show main`), verified present
+on the current tree: `src/sync/context/` (`seed.py`, `prompt.py`), `GraphStore.repo_context`/
+`upsert_repo_context`, `build_patch_prompt`'s `repo_context` parameter, `sync context show`/`set`
+on the CLI, the console's `GET`/`POST /api/repos/{repo_id}/context` routes, and the MCP
+`sync://context/{repo_id}` resource template with `SERVER_INSTRUCTIONS`. This entry's own text had
+gone stale back to its pre-landing form — likely lost in the origin/main reconciliation — while the
+code itself stayed on `main` throughout; corrected here rather than trusted from memory, per this
+repository's own rule about verifying before recommending from memory.
 
 - Design: [`specs/2026-08-06-sync-repo-context-design.md`](specs/2026-08-06-sync-repo-context-design.md)
 - Plan: [`plans/2026-08-06-sync-repo-context.md`](plans/2026-08-06-sync-repo-context.md), seven tasks
