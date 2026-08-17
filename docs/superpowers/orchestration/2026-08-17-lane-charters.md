@@ -190,6 +190,22 @@ arrive -- an arbitration, a stop-work, a regression another lane caused -- prefe
 `orca terminal send --terminal <handle> --enter`, which reaches a busy agent as its next input
 rather than waiting for it to ask for mail.
 
+## Fixing a red you caused in another lane's file
+
+The rule is escalate rather than edit outside your lane. **One exception, ratified 2026-08-17:** a
+lane may fix a red **it caused** in another lane's file when the failure message names the exact fix
+and the edit is unambiguous -- provided it declares the edit in its report and offers the reversal.
+
+The case: Lane B's `M14-W277` landed the Fleet panel, which was the event that expired an entry in
+`_NOT_YET_FETCHED_BY_CONSOLE` in `tests/test_api_routes.py` -- a set that documents its own expiry.
+The guard went red on `main` at that moment and stayed red. Escalating would have left `main` broken
+on Lane B's account while it waited on a coordinator, and a charter that produces that outcome is
+wrong at that point.
+
+Two things make it safe rather than a licence: the red must be **yours**, and the fix must be the
+one the failure message states. Anything requiring judgement about another lane's design is still an
+escalation.
+
 ## Standing arbitrations
 
 Recorded here when one is made, so no lane has to ask the same question twice.
