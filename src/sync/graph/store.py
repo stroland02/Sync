@@ -10,6 +10,7 @@ from datetime import datetime
 from importlib import resources
 
 import psycopg
+from psycopg.conninfo import conninfo_to_dict
 from psycopg.rows import dict_row
 
 from sync.core import CallSite, Finding, FindingStatus, MigrationOutcome, RepoContext, VendorChange
@@ -21,6 +22,26 @@ from sync.core.models import (
     ObservedShape,
 )
 from sync.graph.sources import TRAFFIC_SOURCES
+
+
+DEFAULT_DSN = "postgresql://sync:sync@localhost:5433/sync"
+"""The graph `docker compose up -d` brings up, and the default of every entry point.
+
+Here rather than in `sync.cli` because two entry points resolve it and neither owns the other:
+the CLI defaults `--dsn` to it and `python -m sync.api` falls back to it when `SYNC_GRAPH_DSN`
+is unset. Written twice they disagreed -- the API had no default at all and died on a bare
+`KeyError`, so the console and the pipeline documented on one page pointed at different
+databases, one of which did not exist.
+"""
+
+
+def describe_dsn(dsn: str) -> str:
+    """A DSN as `host:port/dbname` -- enough to say which database, never the password."""
+    info = conninfo_to_dict(dsn)
+    host = info.get("host") or "localhost"
+    port = info.get("port") or "5432"
+    dbname = info.get("dbname") or info.get("user") or "?"
+    return f"{host}:{port}/{dbname}"
 
 
 def _stable_id(*parts: str) -> str:
@@ -352,6 +373,25 @@ class GraphStore:
             for statement in _statements(ddl)
             if statement.upper().startswith("CREATE TABLE")
         ]
+
+    def missing_tables(self) -> list[str]:
+        """Which tables `schema.sql` declares that this database does not have.
+
+        For a reader that must not create them. `apply_schema` is the only writer of DDL here
+        and every caller of it is a command a person ran deliberately; the console API is
+        read-only, so it asks this instead and refuses with the answer rather than serving a
+        500 from every route.
+
+        Tables, not columns. A database whose schema is behind by a column is a different
+        condition with a different remedy -- `apply_schema` converges it -- and reporting it
+        here would send a reader to the wrong command.
+        """
+        declared = self._schema_tables()
+        rows = self._connect().execute(
+            "SELECT table_name FROM information_schema.tables WHERE table_schema = 'public'"
+        ).fetchall()
+        present = {row["table_name"] for row in rows}
+        return [table for table in declared if table not in present]
 
     def truncate_all(self) -> None:
         """Empty every table the schema declares.

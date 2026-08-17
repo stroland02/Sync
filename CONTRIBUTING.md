@@ -92,12 +92,22 @@ the moment the pull request merges.
 ## Getting set up
 
 ```bash
-uv sync                       # dependencies; uv only, never pip or poetry
-docker compose up -d          # Postgres 16 on port 5433, not 5432
-uv run pytest                 # run it once before committing
+uv sync                            # dependencies; uv only, never pip or poetry
+docker compose up -d               # Postgres 16 on port 5433, not 5432
+bash scripts/bootstrap_tools.sh    # the pinned oasdiff; once per checkout
+uv run pytest                      # run it once before committing
 ```
 
 Python is 3.12 and the interpreter is `python`, never `python3`.
+
+The console is a second toolchain and it installs separately. Run `npm install` in `web/` before
+`npm run dev`, `npm run build` or `npm test` — none of them works from a fresh checkout without
+it, and the Python gates never touch `web/`.
+
+Two executables have to be authenticated. `gh` fetches the pinned oasdiff release and every
+vendor specification, which makes it a prerequisite of the first run rather than of the first
+pull request. `claude` backs the Claude Agent SDK, the cascade's last tier. `README.md`'s Quick
+start names the code that reaches each.
 
 Do not set `SYNC_DSN`. `tests/conftest.py` provisions a database per process; pointing that
 variable at one that does not exist produces roughly thirty-five failures unrelated to your change.

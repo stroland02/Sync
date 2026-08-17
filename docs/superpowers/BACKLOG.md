@@ -1501,6 +1501,75 @@ per-vendor-and-version-range one for `vendor_change` — which has to survive th
 `CLAUDE.md` names, since those rows do not converge and a retraction pass over them would retract
 and re-assert the same change on alternate runs. That is a table-by-table grain argument with its
 own tests, not a line to change beside this one.
+### B130 — the documented first run could not be executed, and nothing was checking
+
+An audit walked `README.md`'s Quick start as a new user would, on 2026-08-16. Of the eight
+commands in it, three could not work and two prerequisites were named nowhere. Every one of the
+six defects was true when it was written; each stopped being true afterwards and nothing said so.
+
+**What was broken.**
+
+1. `scripts/bootstrap_tools.sh` downloaded `*windows_amd64.tar.gz` unconditionally and then
+   verified `./oasdiff.exe`. Every macOS and Linux checkout was blocked at the third command.
+2. `python -m sync.api` read `os.environ["SYNC_GRAPH_DSN"]` and died on a bare `KeyError`, while
+   every CLI subcommand defaulted `--dsn` to the docker-compose database. One fact, written
+   twice, disagreeing.
+3. The API was the one entry point that never applied the schema — confirmed, zero callers of
+   `apply_schema` under `src/sync/api/` — so against a fresh database it started and answered
+   500 from every route.
+4. `cd web && npm run dev` appeared with no `npm install` in `README.md`, `CONTRIBUTING.md` or
+   `ARCHITECTURE.md`.
+5. `--repo` was documented as a filesystem path while the flag's own help said git URL. `git
+   clone` accepts a path, so a run indexed and detected normally; `_repo_id` then reduced
+   `/path/to/your/checkout` to itself and `_owner_repo` took its last two segments, so every
+   `gh api` call addressed `your/checkout` and 404'd — after the run had paid for an agent turn.
+6. `gh` was documented as needed "if you want pull requests opened". It is needed for the first
+   run: `sync.signals.stripe.adapter.fetch_spec` shells out to `gh api`, and
+   `bootstrap_tools.sh` fetches oasdiff with `gh release download`. An authenticated `claude`
+   CLI is required by the cascade's last tier and was named nowhere in the repository's front
+   matter.
+
+**What closed it (M0-W218).** The platform mapping moved into `scripts/oasdiff_asset.sh`, a
+sourceable pair of shell functions, and the bootstrap script now names no platform of its own.
+`DEFAULT_DSN` and `describe_dsn` moved to `sync.graph.store`, which both entry points and
+`scripts/seed_console.py` read rather than restate — two copies of the literal and one entry
+point with no default at all became one constant, and `seed_console`'s private `_describe`
+became the redaction the API's refusal reuses.
+
+`sync.api.__main__.require_schema` refuses an empty database at start, naming
+`scripts/seed_console.py` and `sync run`, because a read-only surface must not be the one place
+that issues DDL. `sync.cli.remote_url` is `--repo`'s argparse type and refuses a value the forge
+cannot address, with the URL forms to pass instead. The README states the prerequisites with the
+`path:line` that produces each.
+
+**One placement was decided against the obvious one, and it is the judgement in this item.** The
+`--repo` refusal sits on the parser rather than inside `run`. `push_branch` genuinely serves a
+local origin — `test_two_findings_in_one_run_produce_branches_that_share_no_commits` drives the
+whole pipeline that way with the two `gh`-backed steps replaced — so a check inside `run` refuses
+a shape the pipeline supports, and it did, on the first pass. argv is the boundary; a `Namespace`
+a test builds is not.
+
+**Evidence that keeps it closed.** `tests/test_day_one_path.py` parses the Quick start block and
+holds every `uv run sync` command in it against the argparse surface `sync.cli.build_parser`
+returns — flags matched in full, so the README cannot go on relying on argparse's prefix
+matching, which is what let `--from v2320` run against `--from-version`. The same file pins that
+the API and the CLI resolve one default DSN, that the schema refusal names a command, that the
+console block installs and seeds before it starts anything, and that a local path is refused
+while argv is being read. `tests/test_bootstrap_tools.py` calls the asset mapping with nine
+`uname` pairs from whichever platform the suite is on.
+
+**What it does not close, deliberately.**
+
+- **`sync run` still cannot serve a local checkout.** Refusing is the honest third option of the
+  three the audit named; making it work needs a forge that is not `gh`, which is a different
+  item. What retires this is a `Forge` implementation with no remote, at which point the
+  refusal narrows rather than disappears.
+- **`.github/workflows/ci.yml` installs oasdiff by `curl` with a hardcoded `linux_amd64` URL, in
+  three jobs.** That is a fourth copy of the platform fact, deliberately left: CI's comment says
+  it copies the mechanism and not the number, and it runs on one known runner. It becomes wrong
+  the day a job moves to a macOS or arm runner.
+- **`tests/conftest.py` keeps its own `DEFAULT_DSN`.** It answers a different question — which
+  server to create a per-process database on — and is documented in place.
 
 ## In flight
 
