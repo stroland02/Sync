@@ -64,6 +64,29 @@ from the same review were already answered and are recorded in the M12 plan rath
 the background has not been pure black since `W170`, and the type scale already carries 22px, 28px
 and a 48px display step, so the defect there was assignment rather than absence.
 
+### 2026-08-08 — the console has a drawn target, and no more built code than yesterday
+
+A ten-screen mock of the console landed in `docs/console-mock/` with its provenance, a 40-second
+tour and twelve stills, and `plans/2026-08-08-console-mock-to-build.md` splits it into six tasks.
+**No percentage below moves.** A drawing is not an implementation, and the one honest change is that
+two milestones now have a target instead of a description.
+
+- **It answers the two things the owner named on 2026-08-07 and nobody had scheduled** — *"the
+  layout is one vertical stack where it should be a grid"* and *"Fleet carries more prose than
+  data."* Every mock screen is a grid; its Fleet is one table of six change units above a single
+  paragraph. That makes M12 schedulable against something specific rather than against a complaint.
+- **Two of the six tasks are full-stack and belong to M12** — the Fleet change-unit grain and the
+  cross-detector rung tally both need aggregates `sync.dashboard` does not compute, which is exactly
+  the shape M12 was proposed as.
+- **One task is M4's** — Settings & adapters is drawn, has no route, and is where the write path
+  will land. The plan's ruling is that it ships read-only and stays a destination rather than
+  becoming a tenth level.
+- **The remaining three are M7's** and are console-only: a measurement pass, one shared drawer
+  extracted from three copies, and an honest command palette.
+- **What is not true:** nothing in the mock is built, none of its numbers is a measurement, and
+  Task 1 exists precisely because no one has yet put a mock screen and its shipped counterpart side
+  by side under `getComputedStyle`.
+
 | | Milestone | % | The one sentence that matters |
 |---|---|---|---|
 | **M0** | Walking skeleton, one real PR | **~90%** | Every component exists; **the proof is 1,073 commits stale** — measured 2026-08-07, not the "~200" this row claimed for a fortnight |
@@ -100,7 +123,8 @@ Every plan in the repository mapped to its governing milestone, scope, and curre
 | [`2026-08-06-sync-repo-context.md`](plans/2026-08-06-sync-repo-context.md) | **M0/M3: Repo Context & AST** | Landed | Multi-language tree-sitter AST extraction, call site binding, symbol maps |
 | [`2026-08-07-console-fidelity-pass.md`](plans/2026-08-07-console-fidelity-pass.md) | **M7: Fidelity Pass (Tasks 1–6)** | Landed (`M7-W183`–`W209`) | 48px top bar, type ramp middle, spanning headers, fed bars, rail hover, table anatomy |
 | [`2026-08-07-m12-dashboards-that-earn-their-screen.md`](plans/2026-08-07-m12-dashboards-that-earn-their-screen.md) | **M12: Dashboards That Earn Their Screen** | Proposed | Aggregation queries, multi-column card grids, time-at-node analytics |
-| [`2026-08-08-console-mock-to-build.md`](plans/2026-08-08-console-mock-to-build.md) | **M7: Console Mock-to-Build** | In Progress (Phase 1 & B123 landed) | Translating 28 direction screenshots into built features, fact rails, syntax headers |
+| [`2026-08-08-console-mock-to-build.md`](plans/2026-08-08-console-mock-to-build.md) | **M7/M12/M4: Ten-Screen Mock to Build** | Proposed (`M7-W221`) | Six tasks turning the dated ten-screen artifact in `docs/console-mock/` into shipped console; two are full-stack because the panels need aggregates `sync.dashboard` does not compute |
+| [`2026-08-08-console-direction-parity.md`](plans/2026-08-08-console-direction-parity.md) | **M7: Console Direction Parity** | In Progress (Phase 1 & B123 landed) | Translating 28 direction screenshots into built features, fact rails, syntax headers |
 
 ### M0 — Walking skeleton, one real pull request · ~90%
 
