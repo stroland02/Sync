@@ -313,6 +313,45 @@ confidently instead of refusing.
 
 ## Ready
 
+### B154 — the gate wall-clock, measured before and after the npx lock fix — CLOSED by Lane D
+
+The charter calls this "the single largest tax on this whole workspace", and it was, and the
+cause was not what any of the three obvious guesses said. It was not xdist, not Postgres, and not
+the size of the suite.
+
+`run_tsc` falls back to `npx` whenever a clone carries no local TypeScript, and B101 put a
+host-wide lock around that resolve because two cold-cache resolves race and answer `ETXTBSY`. The
+lock was right; taking it on every call was not. `npx_lock.py`'s own opening paragraph had already
+ruled on this — *"`resolve_lock` exists to guard only the one-time resolve, not the compile that
+follows it"* — and `tsc.py` took it warm or cold, running a full `npx` invocation inside the
+critical section each time. With six sessions running suites at once, every tsc-dependent test in
+every lane queued on one lock. Not deadlock: starvation.
+
+Diagnosed from a worker-crash traceback that ended in `npx_lock.py:90 resolve_lock time.sleep`,
+handed to Lane D as `msg_34a9fc7a0bcd` with their own docstring quoted back, and fixed by them in
+`2cf2e62` — skip the lock once the cache is warm.
+
+**Measured on this host, same tree, same `-n 4`:**
+
+| | wall clock | verdict |
+|---|---:|---|
+| Before, three runs | 1215s, 1741s, 3270s | UNTRUSTWORTHY every time — a worker died in each |
+| After `2cf2e62` | **233s** | **TRUSTWORTHY**, `2 failed, 3844 passed, 4 skipped` |
+
+The verdict column is not decoration. Every pre-fix run had `gw0` or `gw1` die on
+`test_a_patch_that_only_typechecks_with_untracked_files_never_reaches_push_branch` — the same test
+four times — and printed `F` against tests that never ran. Those runs could not be compared to
+each other, let alone to this one, which is why B152 exists and why the before column reports a
+range rather than an average.
+
+The two remaining failures are not this: `test_lint_dead_links` (two functions from other lanes
+reached from nowhere) and `test_decode_handlers`. Both are somebody's real work in progress.
+
+**What this retires.** The charter's advice to prefer `-n 4` over `-n auto` was correct but
+treated the symptom; the crash it avoided was starvation, not a scheduler defect. Worth
+re-measuring `-n auto` now that the cause is gone, rather than carrying the workaround forever.
+
+
 ### B153 — a job that failed downloading an action reads as a failed build, and six lanes make it common
 
 **Observed 2026-08-17 on run `32042158113`.** `serial` reported `failure` having run exactly one
