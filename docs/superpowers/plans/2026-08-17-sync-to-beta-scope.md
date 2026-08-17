@@ -278,6 +278,38 @@ thing against a real repository with a real vendor change and a real CI run.
 The decision is still the owner's, for the reasons it always was -- a real pull request on a real
 repository, and real model spend.
 
+## Gate 4 is not blocked on wiring, and the coordinator was wrong about that
+
+I spent several cycles pressing Lane A to "wire the sandbox", on the meter's reading that
+`ephemeral_container`, `copy_between_containers` and `ensure_image_built` are baselined as reached
+from nowhere. Lane A declined and cited this repository's own re-scope of `B97`. It was right.
+
+**`B97`'s remainder is four items and two of them block hard.**
+
+1. Compose the risky/safe container pair into one patch attempt. The primitives exist; the assembly
+   does not. This is the only one that is actually wiring.
+2. **An Anthropic-only forward proxy, unbuilt and undesigned beyond a sketch.** A `network="none"`
+   container has no route for the SDK's own traffic -- which must flow for the whole run, from
+   inside the namespace the mitigation exists to cut off. `ClaudeAgentOptions`' own
+   `SandboxNetworkConfig` carries `httpProxyPort`, so a proxy is assumed by that surface too rather
+   than avoidable through it.
+3. **Nobody has established which credential the CLI needs to reach Anthropic.** No
+   `ANTHROPIC_API_KEY` reference exists anywhere in `src/`, and the environment snapshot carried no
+   `ANTHROPIC_*` variable at all -- only `CLAUDE_CODE_EXECPATH`, pointing at an already-authenticated
+   binary. A container that cannot authenticate cannot host a patch run, so this blocks item 1 as
+   hard as the proxy does. It is the cheapest of the four to answer and **it is a credential
+   question, which makes it the owner's.**
+4. Mitigation 5's remaining properties.
+
+So Gate 4 reads NOT MET for a truthful reason and will keep reading NOT MET until a proxy is
+designed and a credential is established. **The baseline entries are honest**, not a dodge: neither
+a worker process nor a scheduler exists to call the image builder, and inventing one would be an
+abstraction with no caller.
+
+The coordinator lesson is worth keeping: the meter said "reached from nowhere", which is true, and I
+read it as "somebody forgot to call this", which was not. A gate saying *what* is missing does not
+tell you *why*, and the lane that owns the file had the answer the whole time.
+
 ## The one console gap that would block a design-partner beta
 
 `reports/2026-08-17-console-beta-stock-take.md`, from the lane that has walked every screen twice
