@@ -1263,6 +1263,56 @@ plan asserts that so a third member is a deliberate edit rather than a quiet one
 repository with no context. The first two are assertions in the plan rather than review
 judgements.
 
+### B131 — four of six vendors can bind no call site, and the run reported it as a clean scan
+
+**The reporting half landed on 2026-08-16 (M3-W219). The binding half is what is left, and it is
+what this entry stays open for.**
+
+**Which vendors bind, measured rather than assumed.** `available_vendors()` offers six.
+
+| Vendor | Adapter | Symbol map | Binds a call site |
+|---|---|---|---|
+| `stripe` | `StripeAdapter` | built by `_prepare_stripe` from the specification and the generator input | yes |
+| `twilio` | `TwilioAdapter` | built by `_prepare_twilio` across every configured product | yes |
+| `anthropic` | `GeneratedSpecAdapter` | **never constructed** | no |
+| `openai` | `GeneratedSpecAdapter` | **never constructed** | no |
+| `cloudflare` | `GeneratedSpecAdapter` | **never constructed** | no |
+| `vercel` | `GeneratedSpecAdapter` | **never constructed** | no |
+
+Never constructed rather than empty, and the difference matters when reading the code: the map is
+built by `_extracted_symbols`, which returns `None` on its first line when `sdk_source` is absent.
+Neither `_prepare_generated` nor `_load_generated` passes one, so no call site was ever compared
+against anything for those four. `sync run --vendor openai --repo <a repository that calls OpenAI>`
+printed `0 finding(s)` and exited 0, which is what a repository with no OpenAI calls in it prints.
+
+**What landed.** The gap is declared by the adapter and reported by the run, so the two zeroes are
+no longer one output. `GeneratedSpecAdapter.unbindable_reason` is a property derived from whether a
+checkout was staged; `McpServerAdapter.unbindable_reason` is a constant, because there the cause is
+the protocol rather than the staging — an MCP tool name arrives as a runtime string and no static
+chain addresses it. `cli._binding_lines` reads it through `getattr`, the way `sdk_bindings` and
+`unverifiable_reason` are read, and prints it *before* the finding count for the reason
+`_coverage_lines` states. No vendor id appears in `sync.core` or in `cli.py`.
+
+**What did not land, and the ruling behind it.** No `sdk_source` was wired into
+`generated-vendors.yaml`. The knob is eight lines and was deliberately not written:
+`reports/2026-07-29-extraction-report-contract.md` records that `_sources` is keyed by version
+while `sdk_source` is not, and that nothing maps a staged checkout to a manifest version — so a
+bare path in configuration would pair an extraction from one tag against a manifest from another
+and call the result a binding. Shipping that would replace a loud gap with a quiet wrong answer.
+A version-aware staging step is the real fix and it is a design, not a knob.
+
+**What retires this entry:** a staging step that puts a generated SDK checkout at a known version
+beside the manifests already read for that version, and passes it as `sdk_source`. When it lands,
+`test_the_unstaged_set_is_exactly_the_set_that_resolves_nothing` and
+`test_a_registered_vendor_that_binds_nothing_declares_why` in `tests/test_shipped_conformance.py`
+both move those vendors into the resolving set with no edit to either, because both sides of both
+assertions are derived. Until then the honest report is the deliverable.
+
+**Evidence that closed the reporting half:** `tests/test_unbindable_vendor_report.py` drives
+`cli.run()` twice over one adapter class — staged against the committed `anthropic_python`
+checkout, and unstaged — and asserts the outputs differ. Before the fix they were byte-identical
+(`assert '0 finding(s)\n' != '0 finding(s)\n'`).
+
 ## In flight
 
 **Rewritten 2026-08-07.** The section had gone stale in the way it warns against below: it described
