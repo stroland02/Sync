@@ -41,7 +41,7 @@ import { useRepositories } from "@/api/queries"
 import type { OverviewResponse } from "@/api/types"
 import { Badge } from "@/vendor/supabase/ui/badge"
 import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/vendor/supabase/ui/card"
+import { Card, CardContent, CardHeader, CardTitle } from "@/vendor/supabase/ui/card"
 import { Absent } from "@/components/status"
 import { EmptyState, ErrorState, LoadingState } from "@/components/states"
 import { cardFacts, matchesFilter, type CodebaseCardFacts, type CodebaseFilter } from "@/features/fleet/codebase-cards"
@@ -100,9 +100,11 @@ function CodebaseCard({ facts }: { facts: CodebaseCardFacts }) {
                   {facts.repoId}
                 </Link>
               </CardTitle>
-              <CardDescription className="text-meta text-muted-foreground">
-                Git repository · Monitored by Sync
-              </CardDescription>
+              {/* No description. It read "Git repository · Monitored by Sync" on every card, and a
+                  reader looking at the Sync console's own repository list already knows both
+                  halves. Measured as 170 of Fleet's 450 discretionary characters against the drawn
+                  console's 340 — the largest prose on the screen carrying none of the four
+                  protected distinctions, and the only piece whose deletion removes no fact. */}
             </div>
           </div>
 

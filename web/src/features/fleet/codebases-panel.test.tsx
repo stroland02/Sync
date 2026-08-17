@@ -105,4 +105,20 @@ describe("CodebasesPanel", () => {
     expect(await screen.findByText("No codebases match the selected filter.")).toBeTruthy()
     expect(screen.queryByText("Loading monitored codebases…")).toBeNull()
   })
+
+  it("does not repeat a description that says nothing the card has not already said", () => {
+    /**
+     * Every card carried "Git repository - Monitored by Sync", once per repository. It carries none
+     * of the four protected distinctions and tells a reader nothing they do not already know from
+     * being on the Sync console's own repository list. Measured at 170 of Fleet's 450 discretionary
+     * characters against the drawn console's 340 -- the largest single piece of prose on the screen
+     * carrying no distinction, and the only one where deleting it removes no fact.
+     */
+    mockRepositories = { isPending: false, isError: false, data: { repo_ids: ["org/one", "org/two"] } }
+    fetchOverview.mockResolvedValue(overview({ repo_id: "org/one", total_findings: 0 }))
+
+    const { container } = renderPanel()
+
+    expect(container.textContent).not.toContain("Monitored by Sync")
+  })
 })
