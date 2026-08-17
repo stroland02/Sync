@@ -391,6 +391,34 @@ confidently instead of refusing.
 
 ## Ready
 
+### B156 — containerised patch agent authentication: SDK & CLI credential discovery contract (B97)
+
+Gate 4 is blocked on B97 (sandbox containment), and a containerised agent run fails before it
+starts unless authentication is designed. `sync.remediate.sandbox` starts containers with
+`build_container_env()` (`ENVIRONMENT_ALLOWLIST = ("PATH", "PYTHONIOENCODING")`), which passes no
+credentials. Investigated against the installed `claude_agent_sdk` Python package and the Claude
+Code CLI binary to establish the exact discovery order and what a container needs.
+
+**How `claude_agent_sdk` behaves (`_internal/transport/subprocess_cli.py`):**
+- The SDK does not manage or validate Anthropic credentials.
+- It builds a subprocess command (`claude --output-format stream-json --verbose --system-prompt ... --allowedTools ... --setting-sources ""`) and merges `ClaudeAgentOptions.env` onto `dict(os.environ)` (`subprocess_cli.py:689-695`).
+- It does not inject `ANTHROPIC_API_KEY` unless already present in the environment.
+
+**Claude Code CLI Authentication Discovery Order (verified via `claude auth status --json`):**
+1. `ANTHROPIC_AUTH_TOKEN` environment variable: sets `authMethod: "oauth_token"`.
+2. `ANTHROPIC_API_KEY` environment variable: sets `authMethod: "api_key"`, `apiKeySource: "ANTHROPIC_API_KEY"`.
+3. On-disk OAuth session credentials: `$CLAUDE_CONFIG_DIR/.credentials.json` or `$HOME/.claude/.credentials.json` (`claudeAiOauth: { accessToken, refreshToken, expiresAt, ... }`).
+4. `apiKeyHelper` command in settings: `$HOME/.claude/settings.json` or `--settings <json>` (sets `authMethod: "api_key_helper"`).
+5. 3rd-party Cloud Provider environment variables: Amazon Bedrock (`CLAUDE_CODE_USE_BEDROCK=1`, AWS credentials) or Google Cloud Vertex AI (`CLAUDE_CODE_USE_VERTEX=1`, GCP credentials).
+6. Fallback when none present: returns `{"loggedIn": false, "authMethod": "none"}` (exit code 1); in stream-json mode emits `error: "authentication_failed"` with `"Not logged in · Please run /login"`.
+
+**What a container needs (Design choices routed to Coordinator / Lane A):**
+- A network forward proxy (restricting traffic to `api.anthropic.com`) is necessary for network containment, but does NOT solve authentication by itself.
+- Three container authentication architectures are possible:
+  1. **Option A (API key / auth token injection)**: Host provides `ANTHROPIC_API_KEY` or `ANTHROPIC_AUTH_TOKEN` via `auth_env` to `build_container_env(auth_env)`. Container reaches Anthropic via forward proxy.
+  2. **Option B (Mounted OAuth credentials)**: Host mounts `$CLAUDE_CONFIG_DIR/.credentials.json` into container user's `$HOME/.claude/.credentials.json`. Requires handling container UID permissions and token refresh lifetimes.
+  3. **Option C (Credential-injecting forward auth proxy)**: Container runs with dummy credentials or no credentials pointing to a local forward proxy (`HTTPS_PROXY` / `ANTHROPIC_BASE_URL`), and the proxy attaches the real `x-api-key` / `Authorization` header before forwarding upstream. Keeps all secrets strictly outside the sandbox container.
+
 ### B154 — the gate wall-clock, measured before and after the npx lock fix — CLOSED by Lane D
 
 The charter calls this "the single largest tax on this whole workspace", and it was, and the
