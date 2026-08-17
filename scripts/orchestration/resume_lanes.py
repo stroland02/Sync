@@ -156,6 +156,39 @@ def reset_seconds(notice: str) -> int | None:
     return hours * 3600 + minutes * 60 + seconds
 
 
+HOLD_CLOCK = Path(__file__).resolve().parent / "hold_clock.json"
+
+
+def hold_elapsed(path: Path, task_id: str, notice: str, now: int) -> int:
+    """Seconds since *this* notice was first seen, remembering across sweeps.
+
+    A hold's remaining time cannot be measured from the terminal's last-output timestamp. Those
+    agree only while the notice is the last thing the agent printed *and* Orca's timestamp is
+    tracking, and on 2026-08-17 neither held: Lane D reported 23 minutes of silence while carrying a
+    `Resets in 17m34s` banner printed seconds earlier. The sweep compared a new window against an old
+    clock, called the hold expired, and retried straight into the same wall -- and the pass after
+    that reported the lane STALE, which is the classification that invites an interrupt.
+
+    So a *changed* notice restarts the clock: a fresh banner is proof the last retry already failed.
+    """
+    state: dict = {}
+    if path.exists():
+        try:
+            state = json.loads(path.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, OSError):
+            # The safety net exists to run when nobody is watching, so it never dies on its own
+            # state file. A corrupt clock costs one held lane one extra window, not the sweep.
+            state = {}
+
+    entry = state.get(task_id)
+    if not isinstance(entry, dict) or entry.get("notice") != notice:
+        entry = {"notice": notice, "seen_at": now}
+        state[task_id] = entry
+        path.write_text(json.dumps(state, indent=2) + "\n", encoding="utf-8")
+        return 0
+    return max(0, now - int(entry.get("seen_at", now)))
+
+
 def budget_held(cli: str, handle: str, silent: bool = False) -> str | None:
     """The reset notice on a terminal that has stopped for budget, or `None`.
 
@@ -343,8 +376,11 @@ def main() -> int:
                 # is reported alongside how long ago that was. Printing a frozen "resets in 2h" an
                 # hour later reads as a live figure and overstates the outage by exactly the time
                 # already served.
-                quiet_s = int((int(time.time() * 1000) - terminals[handle]) / 1000)
                 window = reset_seconds(held)
+                # Measured from when *this* notice was first seen rather than from the terminal's
+                # last-output time, which is a proxy that fails in both directions -- see
+                # `hold_elapsed`.
+                quiet_s = hold_elapsed(HOLD_CLOCK, task["id"], held, int(time.time()))
 
                 # **A hold must expire.** An exhausted agent produces no output, so its banner never
                 # scrolls out of the tail -- without a deadline the lane stays held forever, which
