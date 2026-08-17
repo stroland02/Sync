@@ -76,3 +76,27 @@ src/sync/runner/static.py:StaticRunner
 # emitted during agent remediation runs, exported in `sync.runner` for model driving harnesses.
 src/sync/runner/outcome_tools.py:validate_outcome_call
 
+# `ensure_image_built` (B97 Decision 2) is the idempotent inspect-or-build primitive for the
+# patch-sandbox image, proven by hand and by `tests/test_sandbox_image.py` -- finished and
+# tested, unreachable on purpose. Its own module docstring names both call sites this repository
+# does not yet have: "once when the remediation worker process starts, and once on a schedule."
+# Neither a worker process nor a scheduler exists in this tree yet (`BACKLOG.md`: "Nothing is
+# hosted"), and inventing either just to satisfy this lint would be exactly the abstraction-with-
+# no-caller debt CLAUDE.md's "wait for the caller" rule forbids. It is also the production image
+# the five `sandbox.py` entries above are waiting on -- their own caller still does not exist
+# either, so this landing alone does not retire them.
+src/sync/remediate/sandbox_image.py:ensure_image_built
+
+# `dispatch_webhook_event` (M10) verifies an incoming GitHub webhook's HMAC signature, decodes
+# the event, and resumes the durable run it names -- the wake path for "a pull request review
+# comment resumes a run and pushes a follow-up commit with nobody re-running anything." The logic
+# is finished and directly tested (`tests/test_durable_runs.py::
+# test_dispatch_webhook_event_routes_and_resumes`, `test_resume_durable_run_on_review_comment_
+# pushes_followup_commit`). What is missing is not this function but the HTTP server that would
+# receive GitHub's POST and call it -- a real internet-facing surface whose deployment topology,
+# port, and auth boundary are operational decisions this repository has not made anywhere else
+# yet, not a lint fix. Building one is real, separate, security-relevant work
+# (`docs/superpowers/specs/2026-07-25-sync-threat-model.md` is binding on anything that accepts
+# external input), not something to wire in as a side effect of closing a dead-link entry.
+src/sync/forge/webhook.py:dispatch_webhook_event
+
