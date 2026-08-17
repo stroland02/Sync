@@ -4263,7 +4263,9 @@ the same way.
 being measured at all, and `B148` (Fleet's per-repository overview N+1) is the third payload-shape
 item on the same screen family. All three are one conversation with Lane E rather than three.
 
-### B150 — "Viewing the code" means call sites, because Sync does not store customer source
+### B173 — "Viewing the code" means call sites, because Sync does not store customer source
+
+*Renumbered from B150 by the coordinator, 2026-08-17. Lane B's block (B145-B149) was full and the next number taken landed on Lane C's B150, which is a different, already-fixed item. Lane B's block is extended to B173-B182; nothing about this item changed.*
 
 Recorded so the Codebase screen is not designed around a file browser that cannot exist.
 

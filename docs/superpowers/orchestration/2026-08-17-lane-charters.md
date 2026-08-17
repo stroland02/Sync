@@ -42,7 +42,7 @@ Take your numbers from your own block. Nobody else will.
 | Lane | Work items | Backlog items |
 |---|---|---|
 | A -- remediation loop | W240-W259 | B140-B144 |
-| B -- console | W260-W279 | B145-B149 |
+| B -- console | W260-W279, W340-W359 | B145-B149, B173-B182 |
 | C -- pipeline health | W280-W299 | B150-B154 |
 | D -- signals and adapters | W300-W319 | B155-B159 |
 | E -- graph, dashboard, API | W320-W339 | B160-B164 |
