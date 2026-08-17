@@ -4160,3 +4160,28 @@ already renders that case — the empty-state walk (`M14-W347`) proved every scr
 never-indexed from zero when the payload lets it.
 
 `src/sync/api` and `src/sync/dashboard` are Lane E's files, so this is filed rather than taken.
+
+### B148 — Fleet issues one `/api/overview` per repository, which is an N+1 on the landing screen
+
+Measured in `reports/2026-08-17-console-fetch-audit.md` (`M14-W360`): the Fleet screen makes twelve
+API requests, six of them to `/api/overview` — one fleet-wide and one scoped to each of five seeded
+repositories, every one a distinct URL.
+
+**Nothing is being fetched twice and React Query is behaving correctly.** The scoped calls exist
+because `M14-W265` fixed a real honesty defect: every repository card was showing the fleet-wide
+finding count, and `/api/overview` echoes the scope it was computed for, so a fleet-wide figure under
+a repository's name is a false claim about that repository. The scoped call is what makes each card
+true, and removing it would reintroduce the defect.
+
+**The cost scales linearly with the repository count.** Five repositories cost six overview round
+trips on the console's landing screen; fifty would cost fifty-one. This is the one measurement in
+that audit that does not hold as a customer's fleet grows.
+
+**What closes it:** a payload that answers per-repository in one request. Either `/api/overview`
+accepts several repository ids and answers per scope, or the fleet-wide payload carries a
+per-repository breakdown. Both are `sync.dashboard` and `sync.api` — Lane E's files — so this is
+filed rather than taken. The console half is small once such a payload exists: `useRepoOverviews`
+collapses to one query, and `cardFacts` already takes a scoped answer per repository.
+
+**Not urgent for beta.** A design partner's deployment holds few repositories, which is exactly the
+case where N+1 is invisible.
