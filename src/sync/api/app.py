@@ -335,20 +335,26 @@ def create_app(
         )
 
     async def repository_coverage(request: Request) -> JSONResponse:
-        return JSONResponse(coverage_reader(request.path_params["repo_id"]))
+        repo_id = request.path_params["repo_id"]
+        payload = coverage_reader(repo_id)
+        if payload is None:
+            return _not_found("repository", repo_id)
+        return JSONResponse(payload)
 
     async def repository_observed(request: Request) -> JSONResponse:
-        return JSONResponse(
-            observed_reader(
-                request.path_params["repo_id"],
-                calls_limit=_limit_param(request, "calls_limit"),
-                calls_offset=_offset_param(request, "calls_offset"),
-                shapes_limit=_limit_param(request, "shapes_limit"),
-                shapes_offset=_offset_param(request, "shapes_offset"),
-                error_windows_limit=_limit_param(request, "error_windows_limit"),
-                error_windows_offset=_offset_param(request, "error_windows_offset"),
-            )
+        repo_id = request.path_params["repo_id"]
+        payload = observed_reader(
+            repo_id,
+            calls_limit=_limit_param(request, "calls_limit"),
+            calls_offset=_offset_param(request, "calls_offset"),
+            shapes_limit=_limit_param(request, "shapes_limit"),
+            shapes_offset=_offset_param(request, "shapes_offset"),
+            error_windows_limit=_limit_param(request, "error_windows_limit"),
+            error_windows_offset=_offset_param(request, "error_windows_offset"),
         )
+        if payload is None:
+            return _not_found("repository", repo_id)
+        return JSONResponse(payload)
 
     async def detectors(request: Request) -> JSONResponse:
         return JSONResponse(detector_reader(repo_id=request.query_params.get("repo_id")))
@@ -419,8 +425,8 @@ def create_app(
             binding,
             methods=["GET"],
         ),
-        Route("/api/repositories/{repo_id}/coverage", repository_coverage, methods=["GET"]),
-        Route("/api/repositories/{repo_id}/observed", repository_observed, methods=["GET"]),
+        Route("/api/repositories/{repo_id:path}/coverage", repository_coverage, methods=["GET"]),
+        Route("/api/repositories/{repo_id:path}/observed", repository_observed, methods=["GET"]),
         Route("/api/detectors", detectors, methods=["GET"]),
         Route("/api/adapters", adapters, methods=["GET"]),
         # `{repo_id:path}` rather than `{repo_id}`: a `repo_id` is `host/owner/name` and

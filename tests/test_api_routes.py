@@ -125,7 +125,7 @@ def _fake_corpus_health_reader() -> dict[str, Any]:
 
 
 def _fake_repositories_reader() -> dict[str, Any]:
-    return {"repo_ids": []}
+    return {"repo_ids": ["r1"]}
 
 
 def _fake_abandonment_reader() -> dict[str, Any]:
@@ -1048,6 +1048,7 @@ def test_coverage_route_returns_the_readers_payload_unaltered():
     payload = {"repo_id": "r1", "by_vendor": {"stripe": 3}, "total_call_sites": 3}
     app = _build_app(
         surface=GraphSurface(FakeGraph(), feed_fetched_at=FETCHED),
+        repositories_reader=lambda: {"repo_ids": ["r1"]},
         coverage_reader=lambda repo_id: payload,
     )
     client = TestClient(app)
@@ -1058,6 +1059,49 @@ def test_coverage_route_returns_the_readers_payload_unaltered():
     assert response.json() == payload
 
 
+def test_coverage_and_observed_routes_return_404_for_unknown_repository():
+    app = _build_app(
+        surface=GraphSurface(FakeGraph(), feed_fetched_at=FETCHED),
+        coverage_reader=lambda r: None if r == "nonexistent-repo" else _fake_coverage_reader(r),
+        observed_reader=lambda r, **_: None if r == "nonexistent-repo" else _fake_observed_reader(r),
+    )
+    client = TestClient(app)
+
+    cov_res = client.get("/api/repositories/nonexistent-repo/coverage")
+    assert cov_res.status_code == 404
+    assert cov_res.json() == {"error": "repository not found", "identifier": "nonexistent-repo"}
+
+    obs_res = client.get("/api/repositories/nonexistent-repo/observed")
+    assert obs_res.status_code == 404
+    assert obs_res.json() == {"error": "repository not found", "identifier": "nonexistent-repo"}
+
+
+def test_coverage_and_observed_routes_handle_slashed_repo_id_for_known_repo():
+    repo_id = "github.com/acme/storefront"
+    app = _build_app(
+        surface=GraphSurface(FakeGraph(), feed_fetched_at=FETCHED),
+        repositories_reader=lambda: {"repo_ids": [repo_id]},
+        coverage_reader=lambda r: {"repo_id": r, "by_vendor": {}, "last_indexed": {}, "total_call_sites": 0},
+        observed_reader=lambda r, **_: {
+            "repo_id": r,
+            "calls": dict(_EMPTY_PAGE),
+            "shapes": dict(_EMPTY_PAGE),
+            "error_windows": dict(_EMPTY_PAGE),
+        },
+    )
+    client = TestClient(app)
+
+    cov_res = client.get(f"/api/repositories/{repo_id}/coverage")
+    assert cov_res.status_code == 200
+    assert cov_res.json()["repo_id"] == repo_id
+    assert cov_res.json()["total_call_sites"] == 0
+
+    obs_res = client.get(f"/api/repositories/{repo_id}/observed")
+    assert obs_res.status_code == 200
+    assert obs_res.json()["repo_id"] == repo_id
+    assert obs_res.json()["calls"]["total"] == 0
+
+
 def test_coverage_route_passes_the_path_repo_id_to_its_reader():
     calls: list[str] = []
 
@@ -1065,7 +1109,11 @@ def test_coverage_route_passes_the_path_repo_id_to_its_reader():
         calls.append(repo_id)
         return _fake_coverage_reader(repo_id)
 
-    app = _build_app(surface=GraphSurface(FakeGraph(), feed_fetched_at=FETCHED), coverage_reader=reader)
+    app = _build_app(
+        surface=GraphSurface(FakeGraph(), feed_fetched_at=FETCHED),
+        repositories_reader=lambda: {"repo_ids": ["r1"]},
+        coverage_reader=reader,
+    )
     client = TestClient(app)
 
     client.get("/api/repositories/r1/coverage")
@@ -1563,7 +1611,7 @@ _LIMIT_OFFSET_COLLECTIONS = {
 # either is unaccounted for.
 _MULTI_CURSOR_COLLECTIONS = {
     "/api/vendors/{vendor_id}/operations/{operation_id}/bindings",
-    "/api/repositories/{repo_id}/observed",
+    "/api/repositories/{repo_id:path}/observed",
 }
 
 # Routes that answer with a list but are not a page of it, each for a reason evidenced in the
@@ -1580,14 +1628,14 @@ _MULTI_CURSOR_COLLECTIONS = {
 # - `/api/findings/{finding_id}` and `/api/workflows/{finding_id}` each answer one resource. A
 #   finding's list-valued fields (`args_keys`, `response_fields_read`, `known_changes`) describe
 #   that one finding, not a page of findings.
-# - `/api/corpus` and `/api/repositories/{repo_id}/coverage` are aggregate counts grouped into
+# - `/api/corpus` and `/api/repositories/{repo_id:path}/coverage` are aggregate counts grouped into
 #   dicts (`by_terminal_status`, `by_vendor`, ...), not lists of records -- there is nothing to
 #   page through.
 # - `/api/corpus/abandonment` is the same shape one level deeper: `groups` is one entry per
 #   `(change_kind, tier)` pair actually attempted, bounded by the vocabulary of change kinds and
 #   tiers rather than growing with usage the way `/api/runs` does, so it is an aggregate list
 #   rather than a page of records.
-# - `/api/repos/{repo_id}/context` answers one repository's context row -- one body, one
+# - `/api/repos/{repo_id:path}/context` answers one repository's context row -- one body, one
 #   source, one timestamp. There is nothing here that grows with usage the way a page does.
 _NOT_COLLECTIONS = {
     "/api/overview",
@@ -1597,7 +1645,7 @@ _NOT_COLLECTIONS = {
     "/api/corpus/health",
     "/api/corpus/abandonment",
     "/api/repositories",
-    "/api/repositories/{repo_id}/coverage",
+    "/api/repositories/{repo_id:path}/coverage",
     "/api/detectors",
     # Bounded by what the deployment registers plus what the graph has history for -- a number an
     # operator configured, not one a customer's traffic grows. A cursor over it would page a list
@@ -2125,7 +2173,21 @@ def test_app_factory_readers_accept_what_their_routes_actually_pass(monkeypatch)
     the same treatment and a checkpointer fixture to hang it on.
     """
     dsn = os.environ.get("SYNC_DSN", "postgresql://sync:sync@localhost:5433/sync")
-    GraphStore(dsn).apply_schema()
+    store = GraphStore(dsn)
+    store.apply_schema()
+    store.upsert_call_site(
+        CallSite(
+            repo_id="r1",
+            path="src/billing.ts",
+            line=10,
+            col=1,
+            symbol="stripe.charges.create",
+            sdk_version="1.0.0",
+            content_hash="h1",
+            vendor_id="stripe",
+            operation_id="PostCharges",
+        )
+    )
     monkeypatch.setenv("SYNC_GRAPH_DSN", dsn)
     monkeypatch.delenv("SYNC_CHECKPOINTER_DSN", raising=False)
     monkeypatch.delenv("SYNC_API_RELOAD", raising=False)

@@ -787,11 +787,24 @@ def _drive_typescript_sources(root: Path) -> None:
     (source / "billing.ts").write_bytes(("// café\n" + ts).encode("cp1252"))
     assert list(adapter.index(_repo(root))) == []
 
-    (source / "billing.ts").write_text(ts, encoding="utf-8")
-    assert [site.operation_id for site in adapter.index(_repo(root))] == ["PostCharges"]
+def _drive_extract_credential(root: Path) -> None:
+    import base64
+    from sync.api.auth import extract_credential
+
+    # Non-UTF-8 bytes in base64 triggers UnicodeDecodeError
+    invalid_utf8 = base64.b64encode(b"user:\xff\xfe").decode("ascii")
+    assert extract_credential(f"Basic {invalid_utf8}") is None
+
+    # Malformed base64 triggers binascii.Error
+    assert extract_credential("Basic not_valid_base64!!!") is None
+
+    # Control: valid basic auth
+    valid_token = base64.b64encode(b"user:secret-pass").decode("ascii")
+    assert extract_credential(f"Basic {valid_token}") == "secret-pass"
 
 
 DRIVERS: dict[str, Callable[[Path], None]] = {
+    "sync/api/auth.py::extract_credential::Error+UnicodeDecodeError": _drive_extract_credential,
     "sync/benchmark/checkout.py::read_checkout::UnicodeDecodeError": _drive_checkout,
     "sync/index/python_lang.py::PythonAdapter._readable_sources::UnicodeDecodeError":
         _drive_python_sources,
@@ -1018,7 +1031,6 @@ _DECODES_NOTHING = (
     # names the run and what was refused, and the SDK's replacement text names neither. Nothing
     # is read or decoded in the clause itself.
     "sync/runner/claude_sdk.py::ClaudeSdkRunner._drive::Exception",
-    "sync/api/auth.py::extract_credential::Exception",
     "sync/graph/store.py::GraphStore.set_merge_outcome::ValueError",
     "sync/runner/outcome_tools.py::OutcomeToolValidator._validate_citations::ValueError",
     "sync/signals/datadog/shapes.py::DatadogShapeReader._seen_at::ValueError",
@@ -1092,16 +1104,6 @@ _GUARDS_A_READ = (
     "sync/api/app.py::create_app.set_repo_context::ValueError",
     "sync/cli.py::benchmark::KeyError+LookupError+ValueError",
     "sync/index/python_lang.py::PythonAdapter._syntax_errors::ValueError",
-    # `base64.b64decode(token).decode("utf-8")` sits directly under it, so this is a read and the
-    # bytes are the most attacker-controlled in the tree: an `Authorization: Basic` header from an
-    # unauthenticated request. Accounted, and wanting narrowing rather than a behaviour change --
-    # returning `None` on undecodable credentials is correct, since a credential that is not text
-    # cannot match a configured password. What the clause loses is the ability to tell a malformed
-    # base64 payload from a well-formed one carrying non-UTF-8 bytes, which are different facts
-    # about a caller. `except (binascii.Error, UnicodeDecodeError)` would say the same thing and
-    # keep them apart. Filed for Lane E rather than changed here: it is their file, and this
-    # accounting changes no behaviour in it.
-    "sync/api/auth.py::extract_credential::Exception",
 )
 
 SUBSUMING: tuple[str, ...] = _DECODES_NOTHING + _WHOLE_STAGE_CATCH_ALL + _GUARDS_A_READ

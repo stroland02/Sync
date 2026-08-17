@@ -672,6 +672,7 @@ class RepoContext(BaseModel):
     body: str
     source: str
     updated_at: datetime | None = None
+    telemetry_attached_at: datetime | None = None
 
 
 class ObservedErrorWindow(BaseModel):

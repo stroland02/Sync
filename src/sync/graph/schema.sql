@@ -493,10 +493,11 @@ CREATE TABLE IF NOT EXISTS observed_error_window (
 -- No foreign key to `call_site`. Context may precede an index, and a repository Sync has never
 -- indexed is one an operator may still describe.
 CREATE TABLE IF NOT EXISTS repo_context (
-    repo_id     TEXT PRIMARY KEY,
-    body        TEXT NOT NULL,
-    source      TEXT NOT NULL,
-    updated_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+    repo_id                TEXT PRIMARY KEY,
+    body                   TEXT NOT NULL,
+    source                 TEXT NOT NULL,
+    updated_at             TIMESTAMPTZ NOT NULL DEFAULT now(),
+    telemetry_attached_at  TIMESTAMPTZ
 );
 
 -- Grain: one row per attempt (not per adapter).

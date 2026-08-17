@@ -369,8 +369,16 @@ def observed_telemetry(
         [_observed_error_window_row(w) for w in windows], windows_total, error_windows_offset
     )
 
+    ctx = store.repo_context(repo_id)
+    telemetry_attached_at = (
+        ctx.telemetry_attached_at.isoformat()
+        if ctx is not None and ctx.telemetry_attached_at is not None
+        else None
+    )
+
     return {
         "repo_id": repo_id,
+        "telemetry_attached_at": telemetry_attached_at,
         "calls": calls_page,
         "shapes": shapes_page,
         "error_windows": windows_page,
@@ -570,7 +578,7 @@ def overview_summary(
     vendor_counts = store.open_findings_vendor_counts(repo_id=repo_id)
     summary = store.open_findings_summary(repo_id=repo_id)
     indexed_at = summary["indexed_at"]
-    return {
+    payload = {
         "repo_id": repo_id,
         "vendors": [
             {"vendor_id": vendor_id, "open_finding_count": count}
@@ -585,6 +593,9 @@ def overview_summary(
         "context_savings": total * _TOKENS_PER_AVOIDED_READ,
         "context_savings_bound_reached": bound_reached,
     }
+    if repo_id is None:
+        payload["repositories"] = store.open_findings_repository_summaries()
+    return payload
 
 
 def repo_context(store: GraphStore, repo_id: str) -> dict:
@@ -608,6 +619,11 @@ def repo_context(store: GraphStore, repo_id: str) -> dict:
         "body": found.body if found is not None else "",
         "source": found.source if found is not None else None,
         "updated_at": found.updated_at.isoformat() if found is not None and found.updated_at else None,
+        "telemetry_attached_at": (
+            found.telemetry_attached_at.isoformat()
+            if found is not None and found.telemetry_attached_at is not None
+            else None
+        ),
     }
 
 

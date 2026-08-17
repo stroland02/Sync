@@ -554,6 +554,7 @@ def test_observed_telemetry_of_a_repository_with_no_traffic_is_all_empty(store):
 
     assert result == {
         "repo_id": "never-observed",
+        "telemetry_attached_at": None,
         "calls": _EMPTY_PAGE,
         "shapes": _EMPTY_PAGE,
         "error_windows": _EMPTY_PAGE,
@@ -842,6 +843,7 @@ def test_overview_summary_with_no_findings_is_empty_not_an_error(store):
         "binding_source": None,
         "context_savings": 0,
         "context_savings_bound_reached": False,
+        "repositories": [],
     }
 
 
@@ -895,6 +897,23 @@ def test_overview_summary_unscoped_still_answers_for_the_fleet_and_says_so(store
 
     assert fleet["total_findings"] == 2
     assert fleet["repo_id"] is None, "null is the fleet scope, and the payload has to carry it"
+
+
+def test_overview_summary_unscoped_carries_per_repository_breakdown(store):
+    _one_finding_per_repository(store)
+    # Add a 3rd repository with an indexed call site but no findings
+    store.upsert_call_site(_site(repo_id="r3", path="src/c.ts", line=1, vendor_id="twilio"))
+
+    fleet = overview_summary(store)
+
+    assert "repositories" in fleet
+    repos = {r["repo_id"]: r for r in fleet["repositories"]}
+    assert repos["r1"] == {"repo_id": "r1", "open_finding_count": 1, "vendors": ["stripe"]}
+    assert repos["r2"] == {"repo_id": "r2", "open_finding_count": 1, "vendors": ["shopify"]}
+    assert repos["r3"] == {"repo_id": "r3", "open_finding_count": 0, "vendors": []}
+
+    scoped = overview_summary(store, repo_id="r1")
+    assert "repositories" not in scoped
 
 
 def test_severity_rollup_scoped_to_a_repository(store):

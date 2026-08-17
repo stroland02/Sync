@@ -1157,6 +1157,39 @@ class GraphStore:
         ).fetchall()
         return {row["vendor_id"]: row["n"] for row in rows}
 
+    def open_findings_repository_summaries(self) -> list[dict]:
+        """Every open finding and its attached vendors, grouped by repository across the fleet.
+
+        Answers in a single query what the fleet screen previously issued N+1 scoped queries for
+        (B148): for each repository known to the index, returns its total open findings count and
+        the list of distinct vendor IDs attached to those open findings.
+        """
+        rows = self._connect().execute(
+            """
+            SELECT call_site.repo_id AS repo_id,
+                   call_site.vendor_id AS vendor_id,
+                   count(finding.id) AS n
+              FROM call_site
+              LEFT JOIN finding ON finding.call_site_id = call_site.id AND finding.status = 'open'
+             WHERE call_site.retracted_at IS NULL
+             GROUP BY call_site.repo_id, call_site.vendor_id
+             ORDER BY call_site.repo_id, call_site.vendor_id
+            """
+        ).fetchall()
+
+        by_repo: dict[str, dict] = {}
+        for row in rows:
+            repo_id = row["repo_id"]
+            if repo_id not in by_repo:
+                by_repo[repo_id] = {"repo_id": repo_id, "open_finding_count": 0, "vendors": []}
+            n = row["n"]
+            if n > 0:
+                by_repo[repo_id]["open_finding_count"] += n
+                if row["vendor_id"] not in by_repo[repo_id]["vendors"]:
+                    by_repo[repo_id]["vendors"].append(row["vendor_id"])
+
+        return sorted(by_repo.values(), key=lambda r: r["repo_id"])
+
     def open_findings_severity_counts(
         self, *, repo_id: str | None = None, vendor_id: str | None = None
     ) -> dict[str, int]:
@@ -2067,14 +2100,29 @@ class GraphStore:
         """
         self._connect().execute(
             """
-            INSERT INTO repo_context (repo_id, body, source)
-            VALUES (%s, %s, %s)
+            INSERT INTO repo_context (repo_id, body, source, telemetry_attached_at)
+            VALUES (%s, %s, %s, %s)
             ON CONFLICT (repo_id) DO UPDATE SET
                 body = EXCLUDED.body,
                 source = EXCLUDED.source,
+                updated_at = now(),
+                telemetry_attached_at = COALESCE(EXCLUDED.telemetry_attached_at, repo_context.telemetry_attached_at)
+            """,
+            [context.repo_id, context.body, context.source, context.telemetry_attached_at],
+        )
+
+    def mark_telemetry_attached(self, repo_id: str, attached_at: datetime | None = None) -> None:
+        """Record that telemetry has been attached for a repository (B157)."""
+        ts = attached_at or datetime.now(timezone.utc)
+        self._connect().execute(
+            """
+            INSERT INTO repo_context (repo_id, body, source, telemetry_attached_at)
+            VALUES (%s, '', 'telemetry', %s)
+            ON CONFLICT (repo_id) DO UPDATE SET
+                telemetry_attached_at = EXCLUDED.telemetry_attached_at,
                 updated_at = now()
             """,
-            [context.repo_id, context.body, context.source],
+            [repo_id, ts],
         )
 
     def repo_context(self, repo_id: str) -> RepoContext | None:
