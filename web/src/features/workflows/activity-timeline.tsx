@@ -48,8 +48,10 @@ export function ActivityTimeline({ state }: { state: WorkflowState }) {
       )}
       {omitted > 0 && (
         <p className="text-meta text-ink-muted">
-          {omitted} nodes have written no checkpoint timestamp and have no row here — absence,
-          not zero.
+          {omitted === 1
+            ? "One node has written no checkpoint timestamp and has no row here"
+            : `${omitted} nodes have written no checkpoint timestamp and have no row here`}{" "}
+          — absence, not zero.
         </p>
       )}
     </MetricPanel>

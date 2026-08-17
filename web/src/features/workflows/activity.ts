@@ -55,7 +55,10 @@ export function primaryDetail(node: WorkflowNode): string | null {
   const fields = FIELDS[node.name] ?? []
   for (const field of fields) {
     const value = node.evidence[field.key]
-    if (typeof value === "string") return value
+    // An empty string is "produced, and empty" rather than "not produced", and the two are
+    // distinguished where the evidence itself is rendered. As a one-line summary it says nothing,
+    // so the search continues rather than surfacing a blank line under a timestamp.
+    if (typeof value === "string" && value !== "") return value
   }
   return null
 }

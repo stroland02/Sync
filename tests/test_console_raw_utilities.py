@@ -37,11 +37,28 @@ _RAW = re.compile(
 )
 
 
+# Comments are not code, and the first form of this guard did not know the difference. It scanned
+# whole file text, so a docstring *quoting* a class name tripped it -- and the fix a reader reaches
+# for is to reword the docstring, which is what happened: `evidence-bundle.tsx`'s account of what
+# M7-W179 changed had to stop naming the class it changed. A guard whose first measured effect is
+# making a file's history less accurate is a broken guard.
+#
+# Comments are stripped rather than the scan being narrowed to `className=` attributes, which was
+# the other candidate and is worse: a class string held in a variable -- `change-units-table.tsx`
+# builds one per run outcome as a `tone` field -- never appears inside a class attribute, so that
+# narrowing would have stopped hunting exactly the colours this guard exists to catch.
+_COMMENT = re.compile(r"/\*.*?\*/|//[^\n]*", re.DOTALL)
+
+
+def _code_only(text: str) -> str:
+    return _COMMENT.sub(" ", text)
+
+
 def _current_pairs() -> set[str]:
     pairs: set[str] = set()
     for path in sorted(_FEATURES.rglob("*.tsx")):
         text = path.read_text(encoding="utf-8")
-        for match in _RAW.finditer(text):
+        for match in _RAW.finditer(_code_only(text)):
             rel = path.relative_to(_REPO_ROOT / "web").as_posix()
             pairs.add(f"{rel}\t{match.group(1)}")
     return pairs

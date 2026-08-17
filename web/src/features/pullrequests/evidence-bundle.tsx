@@ -12,8 +12,8 @@
  * ## The stage is the frame, M7-W180
  *
  * `docs/superpowers/briefs/2026-08-07-substrate-pull-request.md` is the mapping table this port was
- * gated on, and ruling 3 is this file. Each stage drew its own soft-cornered `border border-border`
- * box around an `li`; M7-W179 then gave a multi-line evidence value the vendored card's plane, so a stage
+ * gated on, and ruling 3 is this file. Each stage drew its own `rounded border border-border` around
+ * an `li`; M7-W179 then gave a multi-line evidence value the vendored card's plane, so a stage
  * carrying `diagnostics` or `replay_evidence` drew a card inside a hand-spelled border — two plain
  * hairline rectangles at two different radii with nothing to tell them apart. The stage is a
  * `MetricPanel` now: the title in the header strip, the blurb and the evidence in the body, and the

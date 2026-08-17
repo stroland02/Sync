@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest"
 
-import { activityEntries, omittedCount } from "@/features/workflows/activity"
+import { activityEntries, omittedCount, primaryDetail } from "@/features/workflows/activity"
 import type { WorkflowState, WorkflowNode } from "@/api/types"
 
 const node = (over: Partial<WorkflowNode>): WorkflowNode => ({
@@ -59,5 +59,19 @@ describe("activityEntries", () => {
   it("emits no closing entry while the run has no outcome", () => {
     const s = state([node({ first_seen_at: "2026-08-17T14:02:14Z" })])
     expect(activityEntries(s).some((e) => e.name.startsWith("run."))).toBe(false)
+  })
+})
+
+describe("primaryDetail", () => {
+  it("passes over an evidence value that is present but empty", () => {
+    // An empty string is "produced, and empty" -- a real distinction, and `NodeEvidence` is where
+    // it is rendered in full. As a one-line summary it says nothing, so the detail falls through
+    // to the next field that has something to say rather than surfacing a blank line.
+    const stampedNode = node({
+      name: "replay",
+      evidence: { replay_outcome: "", replay_reason: "3 recorded exchanges replayed" },
+    })
+
+    expect(primaryDetail(stampedNode)).toBe("3 recorded exchanges replayed")
   })
 })
