@@ -184,6 +184,97 @@ def test_the_sweep_stops_at_its_budget_rather_than_working_through_the_list():
         conftest.drop_databases_best_effort(ADMIN, name)
 
 
+# --- a server that is coming up is not a server that is gone ------------------------
+
+
+class _Clock:
+    """A hand-wound monotonic clock, so a bounded wait can be tested without spending it."""
+
+    def __init__(self):
+        self.t = 0.0
+
+    def __call__(self):
+        return self.t
+
+    def advance(self, seconds):
+        self.t += seconds
+
+
+def test_a_recovering_database_is_waited_for_rather_than_reported_absent():
+    """B185: `CannotConnectNow` is SQLSTATE 57P03 -- "the database system is starting up".
+
+    It is an `OperationalError` subclass, so the precondition's `except psycopg.Operational
+    Error` swallowed it and ran the whole suite unisolated. Measured on the shared container
+    on 2026-08-17: a crash recovery refused 25 connections over 2.74s. Every database-touching
+    test in a run that started inside that window failed for a reason that was not its own.
+    """
+    clock = _Clock()
+    attempts = []
+    sentinel = object()
+
+    def connect(dsn):
+        attempts.append(dsn)
+        if len(attempts) < 3:
+            raise psycopg.errors.CannotConnectNow("the database system is starting up")
+        return sentinel
+
+    result = conftest.admin_connection_once_ready(
+        "dsn", connect=connect, sleep=lambda s: clock.advance(s), now=clock
+    )
+
+    assert result is sentinel
+    assert len(attempts) == 3, "a server that says it is starting up has to be retried"
+
+
+def test_an_absent_server_is_not_waited_for():
+    """The other half, and without it the wait above would punish the common case.
+
+    A server that is not running refuses the socket: psycopg raises a plain
+    `OperationalError` carrying no SQLSTATE, because nothing was there to answer. There is
+    no end state to wait for, so this must fail immediately rather than spend the budget.
+    """
+    clock = _Clock()
+    slept = []
+
+    def connect(dsn):
+        raise psycopg.OperationalError("connection failed: no server")
+
+    with pytest.raises(psycopg.OperationalError):
+        conftest.admin_connection_once_ready(
+            "dsn", connect=connect, sleep=lambda s: slept.append(s), now=clock
+        )
+
+    assert not slept, "an absent server has nothing to wait for and must not be waited for"
+
+
+def test_the_wait_for_a_recovering_database_is_bounded():
+    """A recovery that never ends must surface, not hang the run.
+
+    This file's subject: every wait here is bounded, because an unbounded one converts a
+    diagnosable failure into a suite that appears to have stopped.
+    """
+    clock = _Clock()
+    attempts = []
+
+    def connect(dsn):
+        attempts.append(dsn)
+        # A hard stop, so an implementation that never gives up fails this test instead of
+        # hanging it. A test that detects a defect by never finishing is not a test anyone
+        # can read a verdict from -- which is the subject of this whole file.
+        assert len(attempts) < 1000, "the wait never gave up: it is unbounded"
+        raise psycopg.errors.CannotConnectNow("still starting up")
+
+    with pytest.raises(psycopg.errors.CannotConnectNow):
+        conftest.admin_connection_once_ready(
+            "dsn", budget_seconds=5, connect=connect,
+            sleep=lambda s: clock.advance(s), now=clock,
+        )
+
+    assert clock.t <= 5 + conftest.POSTGRES_RECOVERY_POLL_SECONDS, (
+        f"the wait overran its own budget: {clock.t}s"
+    )
+
+
 # --- the container side: an absent runtime is a skip, and it says so ----------------
 
 

@@ -96,7 +96,7 @@ def _real_runs(outcomes: Sequence[Any]) -> list[Any]:
     return [row for row in outcomes if not _field(row, "is_rehearsal")]
 
 
-def gate_one_loop_closes(store: _Store, *, resume_built: bool) -> Verdict:
+def gate_one_loop_closes(store: _Store, *, resume_built: bool | None) -> Verdict:
     """Gate 1: one run produces a CI-green pull request, and a review comment resumes a run.
 
     Two claims, both required. B7 alone is half the gate: without the resume half Sync opens a
@@ -138,11 +138,18 @@ def gate_one_loop_closes(store: _Store, *, resume_built: bool) -> Verdict:
     ]
     evidence = [
         f"{len(real)} real attempt(s) in the corpus, {len(green)} with a pull request that went green",
-        f"resume-on-review-comment built: {resume_built}",
+        "resume-on-review-comment built: "
+        + ("could not be read" if resume_built is None else str(resume_built)),
     ]
     if not green:
         evidence.append("no attempt has produced a CI-green pull request, so B7 has never passed")
         return Verdict(gate="1", name=name, status=NOT_MET, evidence=evidence)
+    if resume_built is None:
+        evidence.append(
+            "the second half could not be measured: the files carrying the resume path could not "
+            "be read, which says nothing about whether the path is there"
+        )
+        return Verdict(gate="1", name=name, status=CANNOT_TELL, evidence=evidence)
     if not resume_built:
         evidence.append(
             "the first half holds and the second does not: no resume path, so a review comment "
@@ -717,12 +724,19 @@ def _health_reader(store_error: Exception | None):
     return corpus_health
 
 
-def _resume_path_exists() -> bool:
+def _resume_path_exists() -> bool | None:
     """Gate 1's second half, asked of the code rather than of a run.
 
     A real answer needs a pull request receiving a review comment and a follow-up commit appearing
     with nobody re-running anything, which this script cannot stage. What it can say is whether the
     path exists at all, and that is reported as what it is rather than as the gate.
+
+    **`None` when a file could not be read, and that is not the same as `False`.** This returned
+    `False` on `OSError`, so a file it could not open reported the resume path as *missing* and
+    Gate 1 failed with "no resume path, so a review comment leaves the run parked forever" -- a
+    specific claim about the code, made on the strength of not having read it. This script already
+    makes the opposite argument for the database it cannot reach; the same sentence is true of a
+    file it cannot open.
     """
     durable = REPO_ROOT / "src" / "sync" / "remediate" / "durable.py"
     webhook = REPO_ROOT / "src" / "sync" / "forge" / "webhook.py"
@@ -732,7 +746,7 @@ def _resume_path_exists() -> bool:
             and "pull_request_review_comment" in webhook.read_text(encoding="utf-8")
         )
     except OSError:
-        return False
+        return None
 
 
 def main(argv: Sequence[str]) -> int:
