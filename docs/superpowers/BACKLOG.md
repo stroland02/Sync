@@ -313,6 +313,45 @@ confidently instead of refusing.
 
 ## Ready
 
+### B152 — a crashed xdist worker reads as failing tests, and nothing told a lane otherwise — FIXED
+
+**Measured 2026-08-17, twice, on the same tree.** One run reported roughly thirty `F` marks and no
+summary after `[gw0] node down: Not properly terminated`; the same tree run to completion reported
+`1 failed, 3742 passed`. A third reported `60 failed` with two dead workers inside it. The three
+are not distinguishable by counting, and the first two describe the same code.
+
+Every mark printed after a worker dies belongs to a test that never reached a verdict. pytest
+prints it as `F` regardless, so an absence wears a failure's glyph — the exact distinction this
+project refuses to lose anywhere else. A finding carries the rung it came from; absence renders
+apart from zero; a vendor that can bind nothing says so rather than reporting no findings. A run
+whose tally cannot be attributed belongs in the same set, and now is.
+
+`scripts/gate_verdict.py` reads a captured pytest output and answers whether its verdict can be
+believed at all — a prior question to whether the suite passed, and deliberately separate from it.
+A failing suite is still exit 0 here; a run that died is exit 2.
+
+It reads the text rather than hooking pytest, and that is the ruling rather than an omission: the
+runs this exists to catch are the ones that died, and a plugin inside a dead worker reports
+nothing. The output file is the only artifact that survives both shapes.
+
+Three shapes are caught, each measured from a real run rather than imagined: `[gwN] node down`,
+which is the common one and now names the test the worker was running; `INTERNALERROR>` from
+xdist's own bookkeeping, which ends in `no tests ran` and reads as nothing-to-see to anybody
+skimming the last line; and a run with no summary line at all, which is what a killed run leaves.
+
+**Evidence it works rather than merely runs.** The nine tests were shown red before the module
+existed and red again against a sabotaged implementation that ignored the crash. Then it was run
+against the four real captures from this day's gating: the clean run classified `TRUSTWORTHY`, two
+crashed runs `UNTRUSTWORTHY` naming `gw0` and `gw1, gw4`, and the truncated run reported as never
+reaching a verdict. Pointed at a path that does not exist it exits 64 rather than reporting
+success, which is the refusal `lint_dead_links` and `lint_test_skips` already make.
+
+**What it does not do.** It does not stop workers crashing. The cause measured today is starvation
+on the host-wide npx resolve lock (`src/sync/index/npx_lock.py`, Lane D's path, escalated as
+`msg_34a9fc7a0bcd`), and a run of 3,270 seconds against 262 on a quiet host. This makes the lie
+legible; it does not make the run fast.
+
+
 ### B151 — `main` is 60 tests red, the remediation graph does not terminate, and a crashed worker hides it
 
 **Filed by Lane C against Lane A's path, not fixed here.** `src/sync/remediate/**` is Lane A's,
