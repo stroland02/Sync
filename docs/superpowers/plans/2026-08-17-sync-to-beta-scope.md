@@ -225,6 +225,30 @@ the beta critical path; everything else is real work that does not block the gat
 3. Track the four gates and say plainly which are met.
 4. Surface the three human decisions below at the moment they become blocking, not before.
 
+## `B7`'s risk changed materially on 2026-08-17, and the decision is now better informed
+
+`B7` was frightening for one stated reason: the acceptance run had not executed since the pipeline
+gained four graph nodes, so authorising it meant possibly discovering a months-old break while
+spending a real pull request and `xhigh` model time on somebody's repository.
+
+**Both halves have now been exercised without spending either.**
+
+- `M5-W306` drove INDEX and SIGNAL end to end -- both coded vendors' change extraction, TypeScript
+  and Python AST indexing, OpenAPI symbol resolution, intake assessment, finding creation. Zero
+  defects.
+- `M5-W307` drove all twelve remediation nodes individually *and* across compiled `StateGraph`
+  routing paths -- the rehearsal path, remote CI passing through to a pull request being opened, and
+  remote CI failing through retry to abandonment -- over the zero-remote rehearsal fixture against a
+  real pinned corpus repository. Transition conditions and retry budgets behave. Zero regressions.
+
+That does not make `B7` pass; only `B7` passing does that, and the gate meter still reads
+`0 with a pull request that went green`. What it removes is the specific fear that authorising it
+would be an experiment on unknown code. The nodes work. What has never been tested is the whole
+thing against a real repository with a real vendor change and a real CI run.
+
+The decision is still the owner's, for the reasons it always was -- a real pull request on a real
+repository, and real model spend.
+
 ## The three decisions that are the human's, named now
 
 None of these blocks a lane today. Each will block a gate, and naming them now means nobody
