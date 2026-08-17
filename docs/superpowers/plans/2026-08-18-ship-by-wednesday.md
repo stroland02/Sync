@@ -8,6 +8,33 @@ This document reorders everything against that date. It supersedes the ordering 
 `2026-08-17-sync-to-beta-scope.md` — not its rulings, which stand, but its priorities, which were
 written against gates rather than against a ship date.
 
+## The owner answered the three decisions, 2026-08-18, and they change this plan
+
+- **Deployment: local-only, documented.** Nothing is hosted. The deliverable is a clean clone that
+  comes up with one command. This removes every outward-facing risk and makes fresh-clone bring-up
+  the product surface rather than a nicety.
+- **`B7`: authorised against a scratch repository we own.** Not a design partner's. This is the
+  change that matters most — **the loop can be proven end to end tonight**, with nothing waiting on
+  anybody else's CI queue.
+- **Finished means complete and honest.** Every screen renders real data, one command brings it up,
+  and the meter states what it cannot tell and why.
+- **The audience is an investor or stakeholder**, asking *is this real, and does it work*.
+
+**That last answer reorders the rest.** An investor does not check whether a sidebar collapses
+without moving a row. They ask whether the thing works, and they discount a claim they cannot check.
+So three consequences:
+
+1. **`B7` against the scratch repo is now the single highest-value item in the workspace**, ahead of
+   everything including the UI. Gate 1 turning `MET` converts *"the loop has never closed"* into
+   *"the loop closed, here is the pull request"*. Nothing else available this week changes the
+   answer to *is this real* by as much.
+2. **The meter's `CANNOT TELL` stops being an apology and becomes the pitch.** Every competitor
+   shows a number. Sync shows a number, its provenance, and an explicit refusal where the evidence
+   does not exist. **That refusal is the differentiator and it must read as deliberate on screen**,
+   not as an unfinished state. This is Lane B's highest-value work now.
+3. **Empty screens are the biggest UI risk, not unpolished ones.** A screen with real data and plain
+   styling survives the question. A beautifully composed empty state does not.
+
 ## The honest headline, stated first because everything else depends on it
 
 **Two of the four beta gates cannot be met by Wednesday, and pretending otherwise would be the
@@ -45,6 +72,7 @@ Four things, and only the first is mostly done:
 
 | # | Item | Lane | Why it is P0 |
 |---|---|---|---|
+| -1 | **`B7` against a scratch repo we own** | A | **Owner-authorised 2026-08-18.** The loop has never run end to end. Proving it once converts the whole pitch, and it is now schedulable because no external CI is involved |
 | 0 | **`main` is green** | C | Two `B97` positive controls fail under `-n auto` (measured 2026-08-18: 2 failed, 3997 passed). A red `main` makes every other claim unverifiable |
 | 1 | **`B147`** — a 404 claiming absence where the truth is zero | E | One of seven console screens cannot render at all. It is also the honesty principle violated below the console, so no screen can fix it |
 | 2 | **The console IA settles and stops moving** | B | Every screen must exist and be reachable. The IA rulings are made (`M14-W365`); what remains is building them |
