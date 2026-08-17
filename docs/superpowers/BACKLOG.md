@@ -553,6 +553,49 @@ collapsed onto "there is nothing here."** Worth carrying as a class, not three s
 **A fourth was then found by looking for it, and that is the argument for treating it as a class.** `CI-W365` audited this lane's surface for the same shape and found `scripts/beta_gates.py::_resume_path_exists` returning `False` on `OSError` -- an unreadable file reported as a missing resume path, which made Gate 1 fail with a specific claim about code it had not read. The same script argues the opposite of itself six hundred lines earlier for the database it cannot reach. Fixed there; the audit's other candidates were each checked and found deliberate.
 
 
+### B186 — `probe_connect` cannot say "I could not find out", and a positive control needs it — Lane A
+
+**Filed 2026-08-17 by `CI-W366`, and the test-side half is already done so this is not blocking
+anybody.** `src/sync/remediate/sandbox.py` is Lane A's file, hence a backlog entry rather than an
+edit.
+
+`probe_connect` returns `ProbeResult(reachable=False, detail="docker exec timed out after 15s")`
+when its own `docker exec` runs out of time. **That is right for the question it was written for**
+— a caller asking "is this blocked" is correct to treat a hung connect and a refused one alike, and
+the docstring says so deliberately.
+
+It is wrong for the other caller. A **positive control** asserts the container *can* reach
+something, so a probe that ran out of time manufactures "positive control failed" out of a
+container that was reachable throughout. Measured on this host: a bare `docker version` took
+432–2552ms during a full `-n auto` run against roughly 100–200ms idle, so the 15s budget is far
+less margin than it looks, and `test_container_network_cutoff_blocks_arbitrary_egress`'s control
+sits directly on it.
+
+**The shape wanted**, matching what `tests/conftest.py` already does for Docker and Postgres:
+
+```python
+@dataclass(frozen=True)
+class ProbeResult:
+    reachable: bool
+    detail: str
+    timed_out: bool = False   # the probe did not answer; `reachable` says nothing
+```
+
+`timed_out` is written only by the `subprocess.TimeoutExpired` branch. `False` everywhere else,
+including every present caller, so nothing existing changes meaning. **A consumer asking "is this
+blocked" reads `reachable` exactly as today and may ignore the new field; a consumer asking "can
+this reach" must treat `timed_out=True` as *no measurement* and retry or fail saying so — never as
+`reachable=False`.**
+
+**Closes when** `ProbeResult` carries the distinction and
+`tests/test_patch_sandbox.py::_probe_until_reachable` reads it instead of retrying blind. Until
+then the retry is the mitigation and it is honest: something genuinely unreachable still reports
+unreachable on every attempt and still fails at the deadline.
+
+**This is the fifth instance of one class today**, after `B183`, `B184`, `B185` and `CI-W365`:
+a transient or unknown condition recorded as a definite negative.
+
+
 ### B174 — `extract_credential` cannot tell malformed base64 from non-UTF-8 credentials — Lane E
 
 **Accounted rather than broken, and filed rather than fixed.** `CI-W304` added this clause to

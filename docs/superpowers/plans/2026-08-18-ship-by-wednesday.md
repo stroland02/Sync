@@ -176,6 +176,39 @@ a build log. **The container is the artifact; `npx` is the doorbell.**
 running product, and a published or buildable image. `docker compose up -d` exists for Postgres
 today; the product itself has never been containerised. That is the work.
 
+## Correction to the quickstart above: we cannot say "point your exporter at us"
+
+**Checked against the code rather than assumed, after a fourth reference described an OTLP intake
+endpoint.** The quickstart section above promised step 2 as *attach telemetry and watch bindings move
+from `static` to `observed`*. **Sync has no OTLP listener.** `sync ingest` folds a *captured*
+OTLP/JSON payload from a file or stdin, and `cli.py:1519` records that as a deliberate choice — *"a
+listener needs a port, a supervisor, and an [ongoing] infrastructure"*.
+
+So the honest version of step 2 is: **export a payload, then `sync ingest` it.** Not: point your
+exporter at a URL and wait. That is a real difference from the reference and it must not be papered
+over in a README a stranger will follow.
+
+**Decision for Wednesday: do not build a listener.** It is a port, a supervisor, and an operational
+surface, and it would be built in two days to serve a demo rather than a user. The `static` rung is
+what the one command delivers and it is already the strongest part of the story — findings on your
+own code before you configure anything. `observed` is demonstrable from a captured payload, which is
+enough to show the rung *moving*, which is the actual argument.
+
+**Two things the fourth reference does supply that we should take, both cheap:**
+
+- **A service endpoint table** — service, URL, purpose — stated before setup rather than discovered.
+  Ours is smaller: the console on `localhost:5173`, the API beside it. Say it in the README.
+- **Prerequisites stated up front, as a list, before step 1.** Ours is one line: Docker.
+
+**And one thing checked and found already done:** the reference states its licence prominently.
+`LICENSE` exists, `pyproject.toml` declares `Apache-2.0`, and the README already carries the badge.
+No work.
+
+**One thing their compose does that ours must beat, and can.** Their `docker compose up -d` starts
+only the databases and a collector; the application still needs `pnpm install` and `pnpm dev`. Five
+steps total. **Our target — one image carrying the product — is genuinely simpler than the thing it
+is being compared to, and that is worth stating plainly rather than implying.**
+
 ## Agent automation settings, and the one option we refuse
 
 **Two further reference documents supplied 2026-08-18: a GitHub App integration flow, and per-project
