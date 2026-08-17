@@ -371,9 +371,14 @@ def corpus_health(store: GraphStore) -> dict[str, Any]:
     quality axes have samples, which have none, and how many runs produced them.
     Absence (status='unmeasured', has_samples=False, value=None) is distinct from
     zero (status='measured', has_samples=True, value=0.0).
+
+    Uses SQL aggregation on GraphStore (B167) or falls back to compute_axes(store.migration_outcomes()).
     """
-    outcomes = store.migration_outcomes()
-    axes = compute_axes(outcomes)
+    if hasattr(store, "corpus_health_aggregates"):
+        axes = store.corpus_health_aggregates()
+    else:
+        outcomes = store.migration_outcomes()
+        axes = compute_axes(outcomes)
 
     # 1. merge_rate_by_change_kind
     kind_groups = {

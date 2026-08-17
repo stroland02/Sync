@@ -206,6 +206,8 @@ def app_factory() -> Starlette:
     def context_writer(repo_id: str, body: str) -> None:
         store.upsert_repo_context(RepoContext(repo_id=repo_id, body=body, source="operator"))
 
+    from sync.api.auth import configured_api_password, validate_bind_security
+
     return create_app(
         surface=surface,
         workflow_reader=workflow_reader,
@@ -225,6 +227,7 @@ def app_factory() -> Starlette:
         change_units_reader=change_units_reader,
         context_reader=context_reader,
         context_writer=context_writer,
+        api_password=configured_api_password(),
     )
 
 
@@ -237,6 +240,9 @@ def main() -> None:
 
     host = os.environ.get("SYNC_API_HOST", "127.0.0.1")
     port = int(os.environ.get("SYNC_API_PORT", DEFAULT_PORT))
+    password = configured_api_password()
+    validate_bind_security(host, password)
+
     if _reload_enabled():
         uvicorn.run("sync.api.__main__:app_factory", factory=True, host=host, port=port, reload=True)
     else:

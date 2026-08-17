@@ -182,6 +182,7 @@ def create_app(
     change_units_reader: ChangeUnitsReader,
     context_reader: ContextReader,
     context_writer: ContextWriter,
+    api_password: str | None = None,
 ) -> Starlette:
     """Build the Starlette app bound to a particular surface and readers.
 
@@ -427,5 +428,13 @@ def create_app(
         Route("/api/repos/{repo_id:path}/context", repo_context, methods=["GET"]),
         Route("/api/repos/{repo_id:path}/context", set_repo_context, methods=["POST"]),
     ]
-    return Starlette(routes=routes)
+
+    from starlette.middleware import Middleware
+    from sync.api.auth import AuthenticationMiddleware
+
+    middleware = []
+    if api_password:
+        middleware.append(Middleware(AuthenticationMiddleware, password=api_password))
+
+    return Starlette(routes=routes, middleware=middleware)
 
