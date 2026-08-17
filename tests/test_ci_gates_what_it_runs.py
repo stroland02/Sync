@@ -235,6 +235,30 @@ def test_the_trustworthiness_check_runs_even_when_the_suite_fails():
             )
 
 
+def test_the_trustworthiness_check_is_skipped_when_no_suite_ran_at_all():
+    """`always()` alone was wrong, and CI said so within a minute of the first push.
+
+    The `test` job exits at `Dead links`, seven steps before `Tests`, while the dead-link
+    arbitration stands. So no log was written, and the verdict step ran anyway and failed with
+    `suite-test.log does not exist` — a second red naming a file, for a run that had already
+    failed for an unrelated reason.
+
+    Refusing a path that does not exist is right and stays: a checker pointed at nothing must not
+    report success. What was wrong is asking it a question about a suite that never ran.
+    `hashFiles` returns an empty string for a missing file, which is the only way this workflow
+    can ask "did that step actually produce anything" without a step id and an outcome check.
+    """
+    for name, job in _jobs_running_pytest():
+        for _, step in _verdict_steps(job):
+            condition = str(step.get("if", ""))
+            log = _script(step).split()[-1]
+            assert "hashFiles" in condition and log in condition, (
+                f"step {step.get('name')!r} of job {name!r} runs {VERDICT_CHECK} whenever the job "
+                f"reaches it, so a job that failed before writing {log} fails a second time on a "
+                "missing file rather than on what actually broke"
+            )
+
+
 def test_no_step_carries_a_literal_backslash_n_in_its_script():
     """A two-character `\n` where a line continuation was meant.
 
