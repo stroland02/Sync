@@ -46,13 +46,23 @@ Run it yourself; it takes seconds:
 uv run python scripts/beta_gates.py
 ```
 
-As of this writing: **0 of 4 gates met, 2 cannot be told.**
+As of this writing: **1 of 4 gates met, 1 cannot be told.** Gate 3 went `MET` at 16:50 on
+2026-08-17 — the first gate to move that day.
+
+**Gate 3 will flap, and that is correct rather than a defect.** It compares a signature timestamp
+against the last change to `web/src`, so *any* console landing returns it to `CANNOT TELL` until
+somebody walks the screens again. It is a release gate, meaningful at the moment of release, not a
+steady-state health light. Reading it as one would be building the composite-score-with-extra-steps
+that this console refuses on the record. **What clears it is a freeze**: stop landing console work,
+walk, sign, land the signature, then resume — which is exactly how `M14-W364` cleared it, after the
+console-changed timestamp had climbed 14:36 → 15:32 → 16:40 while a lane tried to sign a console it
+was still changing.
 
 | Gate | Verdict | Why |
 |---|---|---|
 | 1 -- the loop closes | **NOT MET** | 4 real attempts, 0 with a pull request that went green. Resume-on-review-comment *is* built. The blocker is `B7`, the owner's call |
 | 2 -- the evidence exists | **CANNOT TELL** | 0 of 5 axes carry samples -- **but not all for the same reason**, and `CI-W308` separated them. Four are denominated on a *merged pull request* and cannot move before `B7`. **Routing accuracy is not**: no pull request appears in `routed_to_tier_zero` or `held_at_tier_zero`. It reads zero because nothing has been routed to tier 0 yet -- the four attempts carry tiers 1, 2, 2 and -1 |
-| 3 -- the console tells the truth | **CANNOT TELL** | Signed on a ten-screen measured pass, then the console changed after the signature. A re-sign is in flight |
+| 3 -- the console tells the truth | **MET** | Re-signed at 16:50:47 against a console last changed 16:40:10 (`M14-W364`), after freezing `web/src` for the walk. **A walk, not a line edit** -- `M0-W291` corrected the coordinator twice for calling it one. Will return to `CANNOT TELL` on the next console landing, by design |
 | 4 -- containment is true as written | **NOT MET** | No *unbaselined* dead links -- because the sandbox primitives are baselined. `B97`: the sandbox is built and unwired, so no patch run is contained. The suite itself is green and now *says so* -- `CI-W306` replaced "main-is-green not measured" with a durable verdict keyed to the head commit: **3984 passed, 4 skipped** |
 
 **`CANNOT TELL` is not a softer `NOT MET`.** It means the question could not be answered from here,
