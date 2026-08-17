@@ -121,6 +121,16 @@ Escalate to the coordinator, not to the human, when the blocker is another lane.
 
 ## Traps that have each cost this project an hour
 
+- **A stale worktree makes you rebuild what already landed, and the rebuild looks like progress.**
+  Step 1 of the loop is `git fetch origin && git merge origin/main --no-edit`, and it is first for
+  this reason rather than for tidiness. Measured twice on 2026-08-17: Lane A gated a merge and held
+  a day of work against a branch it was not using, and Lane E — two hours after the API entrypoint
+  fix landed on `main` as `6a9637d` — read its own stale copy of `src/sync/api/__main__.py`,
+  concluded the import was missing, and began writing it again. Nothing in that file said the fix
+  existed. **Four lanes land continuously here, so a branch that merged once and then worked for
+  hours is stale by definition**, and the failure does not announce itself: you are reading a real
+  file, seeing a real absence, and fixing a real bug that is already fixed somewhere you did not
+  look.
 - **Gate from your own worktree, and check the path before you read the result.** `cd` to
   `C:\Users\strol\orca\Sync\Sync` runs the suite against the *primary* tree, which holds `main` — so
   the gate passes, proves nothing about your branch, and reads exactly like success. Caught on
