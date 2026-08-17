@@ -36,7 +36,7 @@
  * are later simplified.
  */
 
-import { cleanup, render } from "@testing-library/react"
+import { cleanup, fireEvent, render, screen } from "@testing-library/react"
 import { afterEach, describe, expect, it } from "vitest"
 
 import type { WorkflowNode } from "@/api/types"
@@ -225,5 +225,102 @@ describe("the narrative's bracket entries", () => {
 
     const timeEl = container.querySelector("time")
     expect(timeEl).toBeNull()
+  })
+})
+
+/**
+ * The evidence disclosure, Task 11: only the last-reached node opens by default; every earlier
+ * node with evidence is a click away rather than either hidden for good or dumped on screen.
+ */
+describe("the evidence disclosure", () => {
+  it("hides a non-default node's evidence until its button is clicked", () => {
+    render(
+      <NodeSequence
+        nodes={[
+          node({ name: "locate", standing: "ran", evidence: { tier: "Tier 1" } }),
+          node({ name: "patch", standing: "due", evidence: {} }),
+        ]}
+      />
+    )
+
+    // "patch" is the last reached node (due counts as reached) and carries no evidence, so the
+    // only button on screen belongs to "locate" — reached, but not last, and closed by default.
+    expect(screen.queryByText("Tier 1")).toBeNull()
+
+    const button = screen.getByRole("button", { name: /evidence/i })
+    expect(button.getAttribute("aria-expanded")).toBe("false")
+
+    fireEvent.click(button)
+
+    expect(screen.getByText("Tier 1")).not.toBeNull()
+    expect(button.getAttribute("aria-expanded")).toBe("true")
+  })
+
+  it("opens the last reached node's evidence without a click", () => {
+    render(
+      <NodeSequence
+        nodes={[
+          node({ name: "locate", standing: "ran", evidence: {} }),
+          node({ name: "static_verify", standing: "ran", evidence: { verify_ok: true } }),
+        ]}
+      />
+    )
+
+    expect(screen.getByText(/PASS/)).not.toBeNull()
+  })
+})
+
+/**
+ * The evidence-age figure, Task 11: staleness, never liveness, and only when there is both an
+ * unfinished run and a timestamp to measure it from.
+ */
+describe("the evidence age", () => {
+  it("renders beside the due node when the run is unfinished and something is stamped", () => {
+    render(
+      <NodeSequence
+        nodes={[
+          node({
+            name: "locate",
+            standing: "ran",
+            first_seen_at: "2026-08-17T14:00:00.000000+00:00",
+            last_seen_at: "2026-08-17T14:00:05.000000+00:00",
+          }),
+          node({ name: "patch", standing: "due" }),
+        ]}
+        outcome={null}
+      />
+    )
+
+    expect(screen.getByText(/since last evidence/i)).not.toBeNull()
+  })
+
+  it("renders nothing when nothing has been stamped yet", () => {
+    render(
+      <NodeSequence
+        nodes={[node({ name: "locate", standing: "due", first_seen_at: null, last_seen_at: null })]}
+        outcome={null}
+      />
+    )
+
+    expect(screen.queryByText(/since last evidence/i)).toBeNull()
+  })
+
+  it("renders nothing once the run has an outcome, even with a due node and a stamp", () => {
+    render(
+      <NodeSequence
+        nodes={[
+          node({
+            name: "locate",
+            standing: "ran",
+            first_seen_at: "2026-08-17T14:00:00.000000+00:00",
+            last_seen_at: "2026-08-17T14:00:05.000000+00:00",
+          }),
+          node({ name: "patch", standing: "due" }),
+        ]}
+        outcome="opened"
+      />
+    )
+
+    expect(screen.queryByText(/since last evidence/i)).toBeNull()
   })
 })

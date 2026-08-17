@@ -357,6 +357,7 @@ function Workflow({ findingId, question }: { findingId: string; question: string
 
             <NodeSequence
               nodes={data.nodes}
+              outcome={data.outcome}
               opening={<Arrival findingId={findingId} />}
               closing={
                 <RunOutcome
