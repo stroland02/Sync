@@ -476,6 +476,121 @@ illustrate.
 The screen is built and honest without it. This is the row that lets it answer the question it was
 drawn to answer.
 
+### B137 — CI was red on `main`, and the one run on a schedule reported success over a failing suite — FIXED
+
+**Filed as B133 and renumbered before it was written.** `docs/superpowers/BACKLOG.md` already held
+B133 through B136, exactly the collision B135's own opening note describes; B137 was the next free
+number by `git log --all --oneline --grep` and by this file.
+
+**What was red.** Run `32024607194` on `04ece58`: `test` failed, `serial` failed, `web` passed,
+`coverage` skipped. Steps ran, so this is not B112's "job never acquired" signature.
+
+The `test` job last succeeded on 2026-08-08 21:49 (`97273e6b`, run `31280233194`), and **156 commits
+separate that sha from `04ece58`**. No push run touched `main` at all between then and 2026-08-17
+02:38 — the fast-forward `main` is supposed to take at least daily did not happen for eight days —
+and every one of the eleven push runs since has stopped at `Dead links`, which is step four of
+seventeen. So the suite, the corpus score and the binding floors have not run in that job since
+2026-08-08. What did run in that window was the nightly, and cause 5 below is what the nightly was
+worth.
+
+Five causes, and the last of them is the one that made the other four invisible.
+
+**1. A `gh` stub that ignored the flag the script depends on.** `M0-W230` made
+`scripts/bootstrap_tools.sh` choose its release asset per platform through `scripts/oasdiff_asset.sh`.
+That fix is correct and stays. What it exposed is that `tests/test_oasdiff_pin.py` stubbed
+`gh release download` with a recorder that copied one fixed, Windows-named archive and never read
+`--pattern`. On Windows the requested asset and the fixture's filename agree, so all three
+parametrisations passed here and every one failed on Linux with
+`tar (child): ./*_linux_amd64.tar.gz: Cannot open`. **This is the defect class B130 existed to
+close, reproduced one layer down: a test whose fixture hardcodes one platform is not testing the
+platform mapping, it is testing that platform.** Closed by a stub that reads `--pattern` out of its
+own argv, glob-matches it against a release directory publishing all five assets, and fails when
+none match — which is what real `gh` does. The bootstrap test now asserts the pattern that reached
+`gh` and the binary name that landed in `tools/`, both read from `oasdiff_asset.sh` rather than
+spelled out, so the mapping is exercised on whatever platform runs it.
+
+**2. The corpus was fetched after the suite that reads it.** `scripts/fetch_corpus_repositories.py`
+sat four steps below `Tests` in the `test` job and was absent from `serial` and `coverage` entirely,
+so `sync.rehearse.fixture` refused by name on every runner —
+`Corpus repository 'furever' is missing at /home/runner/work/Sync/Sync/.cache/corpus/furever`.
+Closed by moving the fetch above the suite and adding it, with an `actions/cache` entry keyed on
+`benchmark/corpus/repositories.yaml`, to all three jobs that run pytest. The cache saves the network
+round trip and nothing else: the script still materialises every tree and still checks it against
+the digest the manifest pins, so a hit is verified rather than trusted. `sync rehearse` is the only
+end-to-end exercise of the pipeline that opens no pull request, so skipping these was not an option.
+
+**3. A checkpointer migration ledger left behind by a module that never uses the checkpointer.**
+`tests/test_rehearse_smoke.py` stands its own `checkpoints` table up by hand and dropped three
+tables on teardown — `checkpoints`, `checkpoint_blobs`, `checkpoint_writes` — leaving
+`checkpoint_migrations`. `PostgresSaver.setup()` reads the highest version recorded there and
+applies only the migrations above it, so every later `setup()` on that database reported success and
+did nothing. The module sorts before `tests/test_seed_console.py` and shares its database, so under
+`-n0` all fourteen of that file's tests met
+`psycopg.errors.UndefinedTable: relation "checkpoints" does not exist` on the first INSERT. **The
+`serial` job is what caught this, which is exactly what `2026-07-30-ci-does-not-run-serial.md` built
+it for**: one test breaking a later test in the same process, invisible to `-n auto` unless the
+scheduler happens to put both files in one worker. Closed by dropping the fourth table, and pinned
+by a test that asserts a later `setup()` can rebuild what the helper drops.
+
+**4. Both B97 positive controls were disarmed on Linux, and a disarmed positive control proves
+nothing.** `tests/test_patch_sandbox.py` reached the host's listener at the literal
+`host.docker.internal`. Docker Desktop publishes that name; a plain Linux Docker Engine does not,
+unless a container is created with `--add-host=...:host-gateway`. So on a GitHub runner the
+exfiltration process connected to nothing, no byte reached the listener, and both tests failed with
+`assert 0 > 0` — **neither passing honestly nor failing honestly. The two tests that are the only
+evidence Sync's container network boundary holds were, on Linux, measuring nothing at all.** Closed
+in the test rather than in `src/sync/remediate/sandbox.py`: adding `--add-host` to
+`ephemeral_container` would have given a sandboxed install phase a name for the host, and widening
+the thing under measurement to make the measurement work is the wrong direction on a security
+boundary. `host_addresses` is a pure function over `socket.gethostbyname('host.docker.internal')`
+and the container's own `/proc/net/route`, returning the resolved name first and the default gateway
+second — ordered, because under Docker Desktop the gateway is the virtual machine and not the host
+the listener is bound on. It is unit-tested with both backends' inputs for the reason
+`scripts/oasdiff_asset.sh` is a function: this machine can only ever execute one branch. The
+never-networked probe now refuses **every** candidate rather than one name, which is a stronger
+claim than it made before: unreachable because there is no route, not unreachable because a name did
+not resolve.
+
+**5. The nightly could not fail, and it was the only run on a schedule.** `test` and `web` both
+carry `if: github.event_name != 'schedule'` and `serial` runs only on a push, so a scheduled run
+executes `coverage` alone. That job captured pytest's exit code and re-raised only when it exceeded
+1 — and a failing test is exactly 1. **Measured, not inferred: the nightly of 2026-08-17
+(`31994303030`, on `80f193c`) is recorded `success` and its own log ends
+`5 failed, 3632 passed, 7 skipped`** — the three corpus refusals of cause 2 and both disarmed
+positive controls of cause 4, reported as a green tick. Closed by letting pytest's exit code stand.
+**The coverage number is still not gated and nothing here asks it to be**: no `--cov-fail-under` is
+passed anywhere, so coverage cannot produce an exit code of its own; what may not be discarded is
+the suite's own verdict, which is not a quality threshold.
+`2026-07-27-sync-benchmark-gates.md`'s refusal is intact.
+
+**What the nightly covers now:** the Python suite under `-n auto` against the service database, with
+coverage recorded. Not the lints, not the corpus score and its floors, not `web` — each of those
+runs on the push that put `main` where the nightly found it, and that division is deliberate and
+unchanged.
+
+**What keeps it closed.** `tests/test_ci_gates_what_it_runs.py` parses the workflow and asserts
+three things of every job that runs pytest: it fetches the corpus at an earlier step index, it does
+not put pytest behind `||` or compare its exit code against a floor, and at least one such job is
+selected on `schedule`. Positions rather than presence, for the reason
+`tests/test_ci_stages_the_corpus_inputs.py` already gives: a step that exists in the wrong place
+reads as a step that is there. The `if` reading is a substring match over the three shapes this
+workflow uses, not a GitHub expression evaluator, and a fourth shape would need it widened.
+
+**What is still red, deliberately.** Two dead-link violations —
+`src/sync/forge/github.py:631` (`GitHubForge.pull_request_outcome`) and
+`src/sync/remediate/sandbox_image.py:113` (`ensure_image_built`, landed in `21b99f6`). Both belong to
+a session that is mid-way through wiring them. Neither was baselined: `scripts/dead_links_baseline.txt`
+exists to record what is *accepted* as unreachable, and baselining half-wired work in progress hides
+it, which is the opposite of what the baseline is for. **A truthful red is the correct outcome
+here** — it closes when the callers land, not when the list grows.
+
+**One structural observation, filed rather than fixed.** Steps in a GitHub job stop at the first
+failure, so `Dead links` failing at step four is why the suite, the corpus score and the binding
+floors have not run in the `test` job since 2026-08-08. That ordering is deliberate — a lint failure
+is a fact about the source and needs no database — but it means one unreachable symbol hides every
+other signal the job carries. Splitting the lints into a job of their own would decouple them; that
+is a change to the workflow's shape and is not made here.
+
 ### B90 — The console is one idiom repeated eight times, and the resources to fix it are already installed
 
 Measured on 2026-08-05 across `web/src`: **21 `<Card>`, 17 `<Table>`, 1 chart, 5,781 lines.** The
