@@ -1,6 +1,26 @@
 # Gate 3 against an empty graph — the state a design partner sees first
 
-Signed: 2026-08-17T13:14:37-04:00
+Signed: 2026-08-17T13:28:32-04:00
+
+**Re-signed at 13:28:32 to cover `M14-W351` and `M14-W352`**, and the re-signature is voluntary —
+which is itself the finding below. W351 adds a sentence to the shell saying that every screen reads
+one deployment's graph and nothing is filtered per viewer; W352 moves focus to the content region on
+navigation. Neither adds a figure. The deployment sentence is the only new claim, it is a statement
+about the tenancy model rather than about a number, and it deliberately names no deployment because
+no route serves an identifier for one.
+
+**A gap in the watched set, and it is in the narrowing this lane recommended.** `CONSOLE_CLAIM_PATHS`
+covers `web/src/features`, `web/src/components` and `web/src/api`. It does **not** cover
+`web/src/layouts` — so W351, which puts a claim-bearing sentence on every screen in
+`layouts/app-frame.tsx`, did not move the meter at all. The gate read `MET` across a change it could
+not see. That is the same class of miss as the hardcoded report path, arriving through the other
+side of the same check, and it is mine: I proposed the three paths and did not think about the
+shell. **Recommended to Lane C: add `web/src/layouts` to `CONSOLE_CLAIM_PATHS`.** The shell renders
+on every route, so a claim placed there is the most widely seen claim in the product.
+
+The previous signature for the retry affordance follows.
+
+Signed-previous: 2026-08-17T13:14:37-04:00
 
 **Re-signed at 13:14:37 to cover `M14-W349`** (the retry affordance, committed 13:13:59), which
 touched `web/src/components` and twenty feature files and so moved the console after the previous
