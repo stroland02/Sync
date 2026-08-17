@@ -66,7 +66,7 @@ export function CorpusSummaryCard() {
   return (
     <div className="flex flex-col gap-section">
       {query.isPending && <LoadingState what="the repair record" />}
-      {query.isError && <ErrorState error={query.error} what="the repair record" />}
+      {query.isError && <ErrorState error={query.error} what="the repair record" onRetry={() => void query.refetch()} />}
 
       {query.isSuccess && (
         <MetricPanel

@@ -134,7 +134,7 @@ function ObservedTelemetryCard({ repoId }: { repoId: string }) {
     <div className="flex min-w-0 flex-col gap-section">
       {query.isPending && <LoadingState what={`observed telemetry for ${repoId}`} />}
       {query.isError && (
-        <ErrorState error={query.error} what={`observed telemetry for ${repoId}`} />
+        <ErrorState error={query.error} what={`observed telemetry for ${repoId}`} onRetry={() => void query.refetch()} />
       )}
 
       {query.isSuccess && (

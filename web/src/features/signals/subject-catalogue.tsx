@@ -102,7 +102,7 @@ export function SubjectCatalogue({ repoId }: { repoId: string }) {
 
   if (query.isPending) return <LoadingState what={`index coverage for ${repoId}`} />
   if (query.isError) {
-    return <ErrorState error={query.error} what={`index coverage for ${repoId}`} />
+    return <ErrorState error={query.error} what={`index coverage for ${repoId}`} onRetry={() => void query.refetch()} />
   }
 
   const vendors = attachedVendors(query.data)

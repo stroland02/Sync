@@ -84,7 +84,7 @@ export function OpenFindingsCard({ repoId }: { repoId: string }) {
   return (
     <div className="flex min-w-0 flex-col gap-section">
       {query.isPending && <LoadingState what={`open findings in ${repoId}`} />}
-      {query.isError && <ErrorState error={query.error} what={`open findings in ${repoId}`} />}
+      {query.isError && <ErrorState error={query.error} what={`open findings in ${repoId}`} onRetry={() => void query.refetch()} />}
 
       {query.isSuccess && (
         <MetricPanel

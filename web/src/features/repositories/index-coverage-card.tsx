@@ -42,7 +42,7 @@ export function IndexCoverageCard({ repoId }: { repoId: string }) {
     <div className="flex min-w-0 flex-col gap-section">
       {query.isPending && <LoadingState what={`index coverage for ${repoId}`} />}
       {query.isError && (
-        <ErrorState error={query.error} what={`index coverage for ${repoId}`} />
+        <ErrorState error={query.error} what={`index coverage for ${repoId}`} onRetry={() => void query.refetch()} />
       )}
 
       {query.isSuccess && (

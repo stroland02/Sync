@@ -78,7 +78,7 @@ export function SettingsPage({ question = DEFAULT_QUESTION }: SettingsPageProps)
           </p>
         </div>
         {query.isPending && <LoadingState what="the adapter inventory" />}
-        {query.isError && <ErrorState error={query.error} what="the adapter inventory" />}
+        {query.isError && <ErrorState error={query.error} what="the adapter inventory" onRetry={() => void query.refetch()} />}
         {query.isSuccess && <AdapterTable adapters={query.data.adapters} />}
       </div>
     </DetailGrid>

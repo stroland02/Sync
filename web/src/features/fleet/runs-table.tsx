@@ -91,7 +91,7 @@ export function RunsCard() {
   return (
     <div className="flex flex-col gap-section">
       {query.isPending && <LoadingState what="the fleet's runs" />}
-      {query.error && <ErrorState error={query.error} what="the fleet's runs" />}
+      {query.error && <ErrorState error={query.error} what="the fleet's runs" onRetry={() => void query.refetch()} />}
 
       {query.isSuccess && (
         <MetricPanel

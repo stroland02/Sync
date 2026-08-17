@@ -154,7 +154,7 @@ export function ChangeUnitsTable({ repoId }: { repoId?: string }) {
   const query = useChangeUnits({ repoId, limit: DEFAULT_LIMIT, offset })
 
   if (query.isPending) return <LoadingState what="change units" />
-  if (query.isError) return <ErrorState error={query.error} what="change units" />
+  if (query.isError) return <ErrorState error={query.error} what="change units" onRetry={() => void query.refetch()} />
 
   const page = query.data
 
