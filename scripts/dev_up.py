@@ -14,10 +14,16 @@ not the missing precondition, it is the missing precondition that presents as so
 the command that fixes it, because a check that says a thing is missing without saying how to get
 it has moved the search rather than ended it.
 
-**It does not route around a broken entrypoint.** `python -m sync.api` currently raises
-`NameError` and that is Lane E's to fix; a launcher that quietly used `uvicorn --factory` instead
-would hide a defect on `main` behind a convenience, which is how a repository accumulates knowledge
-that only lives in one person's head.
+**It does not route around a broken entrypoint.** When `python -m sync.api` was raising `NameError`
+this reported it, named the owning lane and offered no fix command, rather than quietly using
+`uvicorn --factory` — which starts the app and hides the defect behind a convenience, and is how a
+repository accumulates knowledge that lives in one person's head. That entrypoint is fixed now and
+the check went green without a change here, which is what building around a defect rather than into
+it buys.
+
+**Preconditions passing is not the same as the stack being up.** The API is started first and the
+console only once it answers, because the realistic failure — a port already in use — happens after
+every check has passed, and a console pointed at a dead API presents as a console bug.
 """
 
 from __future__ import annotations
@@ -29,6 +35,7 @@ import re
 import shutil
 import subprocess
 import sys
+import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable, Sequence
@@ -160,6 +167,46 @@ def check_api_entrypoint() -> Check:
     return Check("api entrypoint", OK, "python -m sync.api resolves every name main() calls")
 
 
+API_PORT = int(os.environ.get("SYNC_API_PORT", "8787"))
+
+
+def port_is_free(port: int, host: str = "127.0.0.1") -> bool:
+    import socket
+
+    with socket.socket() as probe:
+        try:
+            probe.bind((host, port))
+        except OSError:
+            return False
+    return True
+
+
+def check_api_port(port: int = API_PORT) -> Check:
+    """Whether the API's port is free, asked before anything is started.
+
+    **This exists because the readiness poll could be satisfied by somebody else's server.**
+    Measured: with a stale API still holding 8787, a newly started one failed to bind with
+    `[Errno 10048] only one usage of each socket address` and exited, while the poll got `200` from
+    the old process, called the API ready, and started the console against it. The check proved
+    "something answers on this port", which is not the question anyone was asking.
+
+    A precondition that passes for the wrong reason is worse than one that fails, and this one hid
+    a dead API behind a live port — the half stack this command exists to refuse, wearing the
+    costume of a working one.
+    """
+    if not port_is_free(port):
+        return Check(
+            "api port",
+            MISSING,
+            (
+                f"something is already listening on {port}, so a new API cannot bind and a "
+                "readiness check would answer from whatever is already there"
+            ),
+            "stop it, or set SYNC_API_PORT to a free port",
+        )
+    return Check("api port", OK, f"{port} is free")
+
+
 def npm_executable() -> str | None:
     """`npm` as Windows can actually execute it.
 
@@ -198,6 +245,7 @@ CHECKS: tuple[Callable[[], Check], ...] = (
     check_schema,
     check_seeded,
     check_api_entrypoint,
+    check_api_port,
     check_npm,
     check_console_dependencies,
 )
@@ -232,6 +280,83 @@ def render(checks: Sequence[Check]) -> str:
     return "\n".join(lines)
 
 
+API_URL = "http://127.0.0.1:8787/api/overview"
+CONSOLE_URL = "http://localhost:5173"
+"""`localhost` rather than `127.0.0.1`, and that is not cosmetic.
+
+Vite binds IPv6-only here, so `127.0.0.1:5173` refuses the connection while `localhost:5173`
+serves. A launcher whose purpose is removing tedium must not hand somebody the address that fails
+— they read it as a broken dev server, which is the same wrong-component diagnosis this command
+exists to prevent.
+"""
+
+API_READY_TIMEOUT_SECONDS = 30
+
+
+def wait_for_api(process, url: str = API_URL, timeout: float = API_READY_TIMEOUT_SECONDS):
+    """Whether the API is actually serving, or why it is not.
+
+    Preconditions passing says the API *can* start. It does not say it did, and the realistic
+    failure — a port already in use because somebody has the loop running in another terminal —
+    happens after every check has passed.
+    """
+    import urllib.error
+    import urllib.request
+
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        code = process.poll()
+        if code is not None:
+            return False, f"exited with code {code} before it answered"
+        try:
+            with urllib.request.urlopen(url, timeout=2) as response:
+                return True, f"answered {response.status} on {url}"
+        except urllib.error.HTTPError as exc:
+            # A 4xx or 5xx is still the server answering, which is what this asks.
+            return True, f"answered {exc.code} on {url}"
+        except Exception:  # noqa: BLE001 -- not up yet is the ordinary case
+            time.sleep(0.5)
+    return False, f"did not answer {url} within {timeout:.0f}s"
+
+
+def start_loop(*, start_api=None, start_console=None, wait_ready=None) -> int:
+    """Start the API, wait until it serves, and only then start the console.
+
+    **The console is never started against an API that did not come up.** Checking preconditions
+    catches that before anything runs; this catches it after, which is where the port-in-use case
+    lives. A dev server pointed at a dead API presents as a console bug and sends whoever debugs it
+    to the wrong component — the failure this command exists to remove, surviving one layer below
+    where it was being refused.
+    """
+    start_api = start_api or (
+        lambda: subprocess.Popen([sys.executable, "-m", "sync.api"], cwd=REPO_ROOT)
+    )
+    start_console = start_console or (
+        lambda: subprocess.run(
+            [npm_executable(), "run", "dev", "--prefix", "web"], cwd=REPO_ROOT, check=False
+        )
+    )
+    wait_ready = wait_ready or wait_for_api
+
+    print("\nstarting the API")
+    api = start_api()
+    ready, detail = wait_ready(api)
+    if not ready:
+        api.terminate()
+        print(f"the API {detail}, so the console was not started.")
+        print("a console against a dead API looks like a console bug; this would not be one.")
+        return 1
+
+    print(f"API {detail}")
+    print(f"console will serve on {CONSOLE_URL}")
+    print("stop both with Ctrl-C")
+    try:
+        start_console()
+    finally:
+        api.terminate()
+    return 0
+
+
 def main(argv: Sequence[str]) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument(
@@ -248,15 +373,7 @@ def main(argv: Sequence[str]) -> int:
     if args.check:
         return 0
 
-    print("\nstarting the API and the console dev server; stop them with Ctrl-C")
-    api = subprocess.Popen([sys.executable, "-m", "sync.api"], cwd=REPO_ROOT)
-    try:
-        subprocess.run(
-            [npm_executable(), "run", "dev", "--prefix", "web"], cwd=REPO_ROOT, check=False
-        )
-    finally:
-        api.terminate()
-    return 0
+    return start_loop()
 
 
 if __name__ == "__main__":

@@ -121,6 +121,13 @@ Escalate to the coordinator, not to the human, when the blocker is another lane.
 
 ## Traps that have each cost this project an hour
 
+- **Gate from your own worktree, and check the path before you read the result.** `cd` to
+  `C:\Users\strol\orca\Sync\Sync` runs the suite against the *primary* tree, which holds `main` — so
+  the gate passes, proves nothing about your branch, and reads exactly like success. Caught on
+  2026-08-17 while Lane A gated a fresh merge that way. This is the same shape as every other defect
+  found that day: a check that returns a plausible answer instead of an error. Your worktree path is
+  under `C:\Users\strol\orca\workspaces\Sync\<branch>`; `git rev-parse --show-toplevel` tells you
+  where you actually are, and it is worth printing beside the result.
 - **A fresh worktree fails about 50 tests for missing gitignored tooling.** Run
   `bash scripts/bootstrap_tools.sh` and `uv run python scripts/fetch_corpus_repositories.py` once
   per checkout. Do this before you believe any failure.

@@ -25,8 +25,11 @@ from scripts.dev_up import (
     OK,
     Check,
     check_api_entrypoint,
+    check_api_port,
     check_npm,
     npm_executable,
+    port_is_free,
+    start_loop,
     render,
     undefined_names_in,
 )
@@ -236,3 +239,125 @@ def test_npm_resolves_on_this_machine() -> None:
     assert resolved is not None
     assert Path(resolved).exists(), f"{resolved} was resolved and does not exist"
     assert check_npm().status == OK
+
+
+# --- the runtime half of the half-stack rule -----------------------------------------
+
+
+class _FakeProcess:
+    """A started process that either stays up or has already exited."""
+
+    def __init__(self, returncode=None) -> None:
+        self.returncode = returncode
+        self.terminated = False
+
+    def poll(self):
+        return self.returncode
+
+    def terminate(self) -> None:
+        self.terminated = True
+
+
+def test_the_console_does_not_start_when_the_api_died_on_startup() -> None:
+    """The hole `--check` cannot see, and the one this command exists to close.
+
+    Preconditions passing says the API *can* start. It does not say it *did*. The realistic case is
+    a port already in use -- somebody has the loop running in another terminal -- and the old start
+    path spawned the console regardless. That is the half stack the whole tool refuses, arriving
+    one layer below where it was being refused.
+    """
+    started = []
+    api = _FakeProcess(returncode=1)
+
+    code = start_loop(
+        start_api=lambda: api,
+        start_console=lambda: started.append("console"),
+        wait_ready=lambda process: (False, "exited with code 1 before it answered"),
+    )
+
+    assert code != 0
+    assert started == [], "the console was started against an API that never came up"
+    assert api.terminated, "the dead API was left running"
+
+
+def test_the_failure_says_what_happened_rather_than_exiting_quietly(capsys) -> None:
+    start_loop(
+        start_api=lambda: _FakeProcess(returncode=1),
+        start_console=lambda: None,
+        wait_ready=lambda process: (False, "exited with code 1 before it answered"),
+    )
+
+    printed = capsys.readouterr().out
+    assert "exited with code 1" in printed
+    assert "console was not started" in printed
+
+
+def test_the_console_starts_once_the_api_answers(capsys) -> None:
+    started = []
+
+    code = start_loop(
+        start_api=lambda: _FakeProcess(),
+        start_console=lambda: started.append("console"),
+        wait_ready=lambda process: (True, "answered on http://127.0.0.1:8787"),
+    )
+
+    assert code == 0
+    assert started == ["console"]
+
+
+def test_the_addresses_printed_are_the_ones_that_actually_work(capsys) -> None:
+    """Vite binds IPv6-only here, so `127.0.0.1:5173` refuses while `localhost:5173` serves.
+
+    A launcher that exists to remove tedium should not hand somebody the address that fails.
+    """
+    start_loop(
+        start_api=lambda: _FakeProcess(),
+        start_console=lambda: None,
+        wait_ready=lambda process: (True, "answered"),
+    )
+
+    printed = capsys.readouterr().out
+    assert "http://localhost:5173" in printed
+    assert "http://127.0.0.1:5173" not in printed
+
+
+# --- a check that passes for the wrong reason --------------------------------------
+
+
+def test_a_port_already_serving_is_a_precondition_rather_than_a_silent_attach() -> None:
+    """Found by running it twice, and it is the worse of the two defects.
+
+    Stale servers from an earlier run held 8787. The new API failed to bind with
+    `[Errno 10048] only one usage of each socket address` and exited — and the readiness poll got
+    `200` from the *old* server, declared the API ready, and started the console against somebody
+    else's process. The check proved "something answers on this port", which is not the question.
+
+    A precondition that passes for the wrong reason is worse than one that fails: this one hid a
+    dead API behind a live port, which is the half-stack the whole command exists to refuse.
+    """
+    import socket
+
+    holder = socket.socket()
+    holder.bind(("127.0.0.1", 0))
+    holder.listen(1)
+    taken = holder.getsockname()[1]
+    try:
+        assert port_is_free(taken) is False
+        check = check_api_port(taken)
+        assert check.status == MISSING
+        assert str(taken) in check.detail
+        assert check.fix, "the reader is told a port is busy and not what to do about it"
+    finally:
+        holder.close()
+
+
+def test_a_free_port_is_reported_ok() -> None:
+    import socket
+
+    probe = socket.socket()
+    probe.bind(("127.0.0.1", 0))
+    free = probe.getsockname()[1]
+    probe.close()
+
+    assert port_is_free(free) is True
+    assert check_api_port(free).status == OK
