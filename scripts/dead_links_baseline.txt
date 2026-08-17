@@ -104,3 +104,14 @@ src/sync/forge/webhook.py:dispatch_webhook_event
 # will be wired in Lane E's subsequent intake status dashboard work item.
 src/sync/graph/store.py:GraphStore.intake_attempts
 
+# `build_forward_request` (B97) is the pure request transform for the forward proxy
+# `docs/superpowers/specs/2026-08-17-sync-b97-forward-proxy-design.md` designs: it forwards a
+# relative target to the one configured upstream, refuses an absolute-URI target outright, and
+# replaces any credential-shaped header the request already carried rather than trusting it.
+# Finished and tested (`tests/test_forward_proxy.py`, eight tests). Unreachable on purpose,
+# same shape this file's own header describes: nothing in this tree yet opens the socket that
+# would call it per request, because that server and the container-side network topology that
+# makes this proxy the only thing a sandboxed container can reach are later units of the same
+# design, not this one. Comes out the day the server lands and calls it.
+src/sync/remediate/forward_proxy.py:build_forward_request
+
