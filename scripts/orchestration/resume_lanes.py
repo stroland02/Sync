@@ -67,6 +67,8 @@ BUDGET_EXHAUSTED = (
     "usage limit",
     "rate limit",
     "quota exceeded",
+    "quota reached",          # Gemini's wording; "exceeded" alone missed a real outage
+    "upgrade your subscription",
     "insufficient credit",
 )
 
@@ -245,11 +247,6 @@ def main() -> int:
                 print(f"HELD    {label}: out of budget, not retried ({held})")
                 continue
 
-        if args.dry_run:
-            print(f"WOULD   {label}: {why}")
-            restarted += 1
-            continue
-
         # Re-attach to the terminal the lane already owns when we still know it, so a lane keeps its
         # worktree and its conversation. Without a handle there is nothing to re-attach to, and
         # choosing a new placement is a coordinator decision rather than this script's.
@@ -257,8 +254,27 @@ def main() -> int:
             print(f"MANUAL  {label}: {why}; no live terminal to re-attach, coordinator must place it")
             continue
 
+        # `--retry-of` is only valid against a dispatch the runtime considers settled. Passing it
+        # for a still-active one is rejected with "cannot retry from Dispatch <id>", which is how
+        # three healthy lanes were reported as failures. A dispatch that is still `dispatched` with
+        # a live terminal is not ours to restart at all: Orca believes it is running, and forcing a
+        # retry is how a merely-quiet worker gets circuit-broken.
+        status = dispatch.get("status")
+        if status not in {"failed", "stopped"} and dispatch.get("assignee_handle"):
+            print(f"STALE   {label}: {why}; dispatch still active, not retried "
+                  f"(read the terminal before deciding it is dead)")
+            continue
+
+        # Every verdict above is reached identically with and without `--dry-run`, which is the
+        # whole point: a preview that takes a different path from the run it previews predicts
+        # nothing. Only the mutation itself is skipped.
+        if args.dry_run:
+            print(f"WOULD   {label}: {why}")
+            restarted += 1
+            continue
+
         start = ["orchestration", "worker-start", "--task", task["id"], "--terminal", handle, "--json"]
-        if dispatch.get("id"):
+        if dispatch.get("id") and status in {"failed", "stopped"}:
             start += ["--retry-of", dispatch["id"]]
         before = dispatch.get("id")
         outcome = call(cli, *start)
