@@ -33,7 +33,7 @@ by content, because items were never tagged with a milestone as they landed.
 
 ### Where development stands, 2026-08-17 evening -- read this first
 
-**121 commits and 72 work items landed today across five parallel lanes.** This section is the
+**178 work items landed today across five parallel lanes.** This section is the
 single place to find out what is done, what is being worked right now, and what to do next. If it
 disagrees with a memory, a chat message or a plan, this section is the one that was written against
 `git log` and a measurement.
@@ -51,9 +51,9 @@ As of this writing: **0 of 4 gates met, 2 cannot be told.**
 | Gate | Verdict | Why |
 |---|---|---|
 | 1 -- the loop closes | **NOT MET** | 4 real attempts, 0 with a pull request that went green. Resume-on-review-comment *is* built. The blocker is `B7`, the owner's call |
-| 2 -- the evidence exists | **CANNOT TELL** | 0 of 5 axes carry samples. The machinery is proven correct and rehearsal rows are provably excluded; there is simply no data, and only real runs make it |
+| 2 -- the evidence exists | **CANNOT TELL** | 0 of 5 axes carry samples -- **but not all for the same reason**, and `CI-W308` separated them. Four are denominated on a *merged pull request* and cannot move before `B7`. **Routing accuracy is not**: no pull request appears in `routed_to_tier_zero` or `held_at_tier_zero`. It reads zero because nothing has been routed to tier 0 yet -- the four attempts carry tiers 1, 2, 2 and -1 |
 | 3 -- the console tells the truth | **CANNOT TELL** | Signed on a ten-screen measured pass, then the console changed after the signature. A re-sign is in flight |
-| 4 -- containment is true as written | **NOT MET** | No *unbaselined* dead links -- because the sandbox primitives are baselined. `B97`: the sandbox is built and unwired, so no patch run is contained |
+| 4 -- containment is true as written | **NOT MET** | No *unbaselined* dead links -- because the sandbox primitives are baselined. `B97`: the sandbox is built and unwired, so no patch run is contained. The suite itself is green and now *says so* -- `CI-W306` replaced "main-is-green not measured" with a durable verdict keyed to the head commit: **3984 passed, 4 skipped** |
 
 **`CANNOT TELL` is not a softer `NOT MET`.** It means the question could not be answered from here,
 which is a different fact and usually a different fix. The meter refuses to collapse them for the
@@ -61,17 +61,27 @@ same reason the console refuses to collapse absence into zero.
 
 #### The order things should be done in, and why
 
-1. **`B97` -- wire the sandbox** (Lane A). Gate 4's only blocker. The code exists, nothing calls it,
-   and a baseline entry is what let it read green. Until this lands, "nothing reaches a pull request
-   unverified" is false as written.
-2. **Re-sign Gate 3** (Lane B). Small -- a re-walk of what changed since the signature, not all ten
-   screens again.
-3. **Axis provenance** (Lane E). Every axis states its sample count beside its value, so no number
-   is quotable without the evidence behind it.
-4. **The gate meter in CI** (Lane C). Readiness stops ageing between the times somebody types the
-   command.
+**Reordered 2026-08-17 late evening, and the top item changed.** `CI-W308` found that one axis of
+Gate 2 is not blocked on `B7` at all, which makes it the cheapest gate movement available anywhere
+on this board.
+
+1. **One production run over a change the cascade routes to tier 0** (Lane A). Moves *routing
+   accuracy*, the one Gate 2 axis whose predicates mention no pull request. The shortcut is already
+   closed: rehearsal rows cannot supply it, because `migration_outcomes` filters
+   `WHERE NOT is_rehearsal` in SQL. This is a run, not a build.
+2. **Re-sign Gate 3** (Lane B). **Corrected: this is a walk, not a line.** `M0-W291` -- the meter
+   reads a `Signed:` line out of the document text, so editing the line without walking the screens
+   is this gate's own failure mode performed on the gate. The console has moved since 13:28:32.
+3. **`B147`, then `B148`** (Lane E). `B147` is a 404 claiming *there is no such thing* where the
+   truth is *it exists and has nothing recorded* -- absence-versus-zero collapsed one layer *below*
+   the console, so no screen can render it honestly. `B157` from Lane D is the contract it must use
+   rather than inventing a second answer.
+4. **`B97` -- wire the sandbox** (Lane A). Gate 4's only remaining blocker. The pure request
+   transform landed as `M10-W249`; the server that calls it per request is the next slice. Until
+   this lands, "nothing reaches a pull request unverified" is false as written.
 5. **`B7`** -- owner's call, and now an informed one. Both halves of the pipeline are verified; what
-   has never been tested is the whole thing against a real repository and a real CI run.
+   has never been tested is the whole thing against a real repository and a real CI run. It gates
+   Gate 1 outright and four of Gate 2's five axes.
 
 Everything else is post-beta by the rulings in
 `plans/2026-08-17-sync-to-beta-scope.md`: M11 fan-in, M13, M6, and most of M12.
@@ -83,11 +93,11 @@ Five lanes, each owning a disjoint set of paths. Full charter:
 
 | Lane | Owns | In flight |
 |---|---|---|
-| A | `remediate/`, `runner/`, `core/outcomes.py`, `core/protocols.py`, `rehearse/` | `B97`, the sandbox wiring |
-| B | `web/`, `DESIGN.md`, console rules and plans | Gate 3 re-sign |
+| A | `remediate/`, `runner/`, `core/outcomes.py`, `core/protocols.py`, `rehearse/` | A tier-0 production run (item 1), then the `B97` proxy server slice |
+| B | `web/`, `DESIGN.md`, console rules and plans | Two vacuous tests, then the Gate 3 re-walk, then the console IA questions -- in that order |
 | C | `.github/`, `scripts/` (except `scripts/orchestration/`), `pyproject.toml`, docker, gate tests | The gate meter in CI |
-| D | `signals/`, `index/` | Corpus rows across dispositions |
-| E | `graph/`, `dashboard/`, `api/`, `mcp/`, `benchmark/` | Axis sample counts and provenance |
+| D | `signals/`, `index/` | M5 queue; `B157` filed and handed off |
+| E | `graph/`, `dashboard/`, `api/`, `mcp/`, `benchmark/` | `B147`, then `B148`, then `B174` |
 
 **A lane owns files, not topics.** Three duplications happened today because a lane worked by
 subject rather than by path -- the same aggregate built twice, panel wiring built twice, and an edit
@@ -101,10 +111,26 @@ made to a file another lane was editing in the same minute. Check the path list 
   promise, and the intake attempt record exists end to end.
 - **The evidence layer became measurable.** `beta_gates.py`, the corpus health view, and proof that
   rehearsal rows cannot pollute the metrics.
-- **Twelve coordination defects were found and fixed by the workspace watching itself**, including
-  a safety net that reported success while doing nothing, a sweep that misread dropped connections
-  as failures, and a coordinator arbitration that was unenforceable because the coordinator had
-  told every lane to skip the test enforcing it.
+- **The workspace spent the evening finding defects in how it watches itself, and they share one
+  shape: a channel or a check that reports success and delivers nothing a reader can use.** Four
+  were addressing failures -- two inboxes where the coordinator read one (`M0-W280`), `worker-done`
+  rejected once a dispatch is superseded so two lanes' reports vanished (`M0-W289`), `terminal send`
+  text landing in neither inbox (`M0-W287`), and a long `terminal send` arriving **truncated** while
+  returning `ok` (`M0-W293`) -- that last one cost a lane an afternoon of correctly refusing to act
+  on half an authorisation. Three were in the safety net: an exhausted lane read as dead
+  (`M0-W276`), a working lane re-dispatched once per sweep because its dispatch record went bad
+  (`M0-W279`), and a hold clock measured from the wrong timestamp (`M0-W285`).
+- **The visual eval was withdrawn three times by the lane that built it, twice against the
+  coordinator's own routing.** A metric comparing markup technique rather than composition, a
+  harness authenticating differently from the product, and a probe reading half-rendered pages --
+  each returned a plausible number rather than an error. The standing rule: **a visual metric must
+  repeat before it may order work, and must refuse rather than estimate when its subject is not in a
+  measurable state.** On the fixed instrument the console is *ahead* of the drawing on two screens
+  and behind by exactly one pairing on three.
+- **Two things the coordinator got wrong and corrected on the record**, because a plan is only
+  resumable if the reversals are in it: Gate 3 was reported twice as "one `Signed:` line away" when
+  it is a re-walk (`M0-W291`), and a lane was escalated at twice over a diverged branch it was not
+  working in (`M0-W293`). Both cost a lane real hours.
 
 ### Where development stands, 2026-08-07
 
@@ -170,12 +196,12 @@ two milestones now have a target instead of a description.
 | **M3** | Multi-vendor, MCP, plugin SDK | **~97%** | `M5-W301` gave the plugin claim its missing sample: conformance proven against *configured* vendors (Anthropic, Vercel), not only the two coded adapters. Nothing structural left |
 | **M4** | Hosted control plane (**the front end**) | **~65%** | Read-only Settings landed (`M4-W231`); the console is proven servable as a production artefact behind one shared credential (`M14-W340`), with CORS and path-prefix constraints found before deploy rather than after. **Still not hosted** -- where and under what credential is one of the three owner decisions. Tenancy and the write path are out of beta scope by Ruling 1 |
 | **M4.5** | The console is worth looking at | **~90%** | Unchanged; what remained moved into M7 |
-| **M5** | Integration layer | **~80%** | The biggest single move of 2026-08-17, from ~35%. `RequestCorrelator` is real on both coded vendors and the generated and MCP adapters declare `uncorrelatable_reason` rather than half-implementing (`M5-W300`, `W304`); `cli.py` reaches it at three call sites, so the `observed` rung is a production path and not a promise. B136's intake attempt record is built end to end -- producer, closed seventeen-member vocabulary, table and wiring (`M5-W303`, `W305`, `M12-W322`) |
+| **M5** | Integration layer | **~85%** | The biggest single move of 2026-08-17, from ~35%. `RequestCorrelator` is real on both coded vendors and the generated and MCP adapters declare `uncorrelatable_reason` rather than half-implementing (`M5-W300`, `W304`); `cli.py` reaches it at three call sites, so the `observed` rung is a production path and not a promise. B136's intake attempt record is built end to end -- producer, closed seventeen-member vocabulary, table and wiring (`M5-W303`, `W305`, `M12-W322`). Since: `M5-W311` gave an *unbindable wrapper* an address -- `unbound_import_paths` on both adapters threaded into `reachability.py`, so a wrapper attributes its reason instead of reporting a false uncalled zero -- and `M5-W313` landed `CorrelatingGeneratedSpecAdapter` with correlation conformance. `M5-W312` filed `B157`, the telemetry attachment contract that keeps Lanes E and B from inventing two answers to *how does the API say nothing was ever recorded* |
 | **M6** | Show it, rather than describe it | **0%** | Post-beta by Ruling 5. Needs a product worth filming |
 | **M7** | The console becomes a product | **~99%** | The mock-parity plan is complete, including two recorded refusals with evidence rather than gaps. Gate 3 was signed on a ten-screen measured pass; the meter then caught the signature going stale against later console changes, and a re-sign is in flight |
 | **M8** | The runner seam | **done** | `M8-W217`/`W228`. `PatchRunner` in `sync.core.protocols`, `sync.runner` owning every line that knows a model SDK exists, and an import contract proving `sync.remediate` reaches none of it |
 | **M9** | The outcome vocabulary | **done** | `M9-W219`. Built behind the seam, with a calibrated confidence rubric and server-side validation |
-| **M10** | Durable runs and the human turn | **~85%** | The state machine landed and the gate meter confirms `resume-on-review-comment built: True`. `pull_request_outcome` is wired to the corpus through `sync reconcile-pull-requests` (`M10-W229`, `M12-W321`, `M12-W324`), so merge rate finally has a producer. What is missing is not code: no run has yet resumed on a real review comment, which needs `B7` |
+| **M10** | Durable runs and the human turn | **~87%** | The state machine landed and the gate meter confirms `resume-on-review-comment built: True`. `pull_request_outcome` is wired to the corpus through `sync reconcile-pull-requests` (`M10-W229`, `M12-W321`, `M12-W324`), so merge rate finally has a producer. What is missing is not code: no run has yet resumed on a real review comment, which needs `B7`. `B165` also closed here (`M10-W245`, `W246`) -- a customer's own `.sync/context.md` reached the patch prompt unfenced at instruction position, reachable through an unauthenticated POST, and it was the only live injection path in the tree |
 | **M11** | Fan-in: many findings, one remediation | **0%** | Post-beta by Ruling 3. Eight pull requests where one would do is ugly and honest; a design partner can tell us whether it is the problem we think it is |
 | **M12** | Dashboards that earn their screen | **~55%** | From ~10%. The aggregates the console could not compute now exist and are consumed: Fleet change-unit grain and cross-detector rung tally (`M12-W320`), the `intake_attempt` table (`W322`), the corpus health view naming which axes have samples (`W323`), Fleet reading the grain the payload computes rather than synthesising it (`M14-W277`, prose-to-data 125.2 to 25.0 measured), and Settings composed as a grid (`M14-W278`). The rest is post-beta |
 | **M13** | Dynamic visuals, Remotion & live telemetry | **0%** | Post-beta by Ruling 5. Proposed 2026-08-16; decoration on a loop that has not yet closed |
@@ -205,7 +231,7 @@ Every plan in the repository mapped to its governing milestone, scope, and curre
 | [`2026-08-08-console-direction-parity.md`](plans/2026-08-08-console-direction-parity.md) | **M7: Console Direction Parity** | In Progress (Phase 1 & B123 landed); checkboxes predate reconciliation — tree is authority | Translating 28 direction screenshots into built features, fact rails, syntax headers |
 | [`2026-08-16-sync-m13-dynamic-visuals-and-telemetry.md`](plans/2026-08-16-sync-m13-dynamic-visuals-and-telemetry.md) | **M13: Dynamic Visuals & Live Telemetry** | Superseded in phasing by `2026-08-17-console-mock-parity.md` per spec ruling 2 (no pulse) and 3 (Remotion deferred) | Dynamic agent execution stream, thinking disclosures, live node states inspired by DeepSeek Harness, and Remotion motion diffs |
 
-### M0 — Walking skeleton, one real pull request · ~90%
+### M0 — Walking skeleton, one real pull request · ~92%
 
 **Done.** Stripe adapter, TypeScript indexer, vendor-change detector, LangGraph remediation graph and
 GitHub forge all ship. The verification path is the part that got hardened most: a push lease that
@@ -245,7 +271,7 @@ seen. A Sentry source exists, which the design document calls the fastest route 
 **Remaining.** None of it has run against real telemetry, so the detectors are correct by
 construction and unproven in the field. Same root as M0: no real run has happened.
 
-### M3 — Multi-vendor, MCP, and the public plugin SDK · ~95%
+### M3 — Multi-vendor, MCP, and the public plugin SDK · ~97%
 
 **Done.** Twilio as the second adapter — the first real second implementation of
 `operation_for_symbol`, which inverted an assumption the symbol map was built around. A Python
@@ -262,7 +288,7 @@ packaging level, not only the import level.
 **Remaining.** Publishing `sync-core` anywhere is public and irreversible and is the user's call. The
 wheel builds and installs; nobody has uploaded it.
 
-### M4 — Hosted control plane · ~50% — **this is where the front end lives**
+### M4 — Hosted control plane · ~65% — **this is where the front end lives**
 
 Reconciled against the tree on 2026-08-05. The previous entry said "0%, nothing started, no plan file
 exists", which was true when written and has been false for about seventy commits.
@@ -334,7 +360,7 @@ layer, type and ink and space against rendered pixels, motion (one keyframe, not
 density with its 11px floor, and the one visual that earns itself. M6 sits behind this rather than
 behind M4, because what gets photographed is this milestone's output.
 
-### M5 — The integration layer · ~35%
+### M5 — The integration layer · ~85%
 
 **Done.** The signed public change feed with its consumer and cache, the vendor registry and its
 tiering, the deprecations catalogue, and B71's Sentry error-count ingest.
