@@ -21,7 +21,7 @@ export default defineConfig({
   resolve: { alias: { "@": path.resolve(import.meta.dirname, "./src") } },
   test: {
     environment: "jsdom",
-    include: ["src/**/*.test.{ts,tsx}"],
+    include: ["src/**/*.test.{ts,tsx}", "scripts/**/*.test.ts"],
     // One file, and it only fills in `matchMedia`, which jsdom does not implement and the vendored
     // sidebar calls on mount. Its own docstring carries why the stub answers the way it does.
     setupFiles: ["./src/test-setup.ts"],
