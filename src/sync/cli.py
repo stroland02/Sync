@@ -19,6 +19,7 @@ from langgraph.checkpoint.postgres import PostgresSaver
 import yaml
 
 from sync.benchmark.checkout import read_checkout
+from sync.benchmark.reconcile import reconcile_pull_request_outcomes
 from sync.benchmark.report import render_report
 from sync.benchmark.score import index_sources, materialise, score_change
 from sync.context import SEED_RELATIVE_PATH, read_seed
@@ -1873,6 +1874,19 @@ def benchmark(args: argparse.Namespace) -> int:
     store = GraphStore(args.dsn)
     store.apply_schema()
 
+    if getattr(args, "reconcile", False):
+        forge = GitHubForge()
+        reconcile_pull_request_outcomes(
+            store,
+            forge,
+            lambda repo_id: RepoRef(
+                repo_id=repo_id,
+                url=f"https://github.com/{repo_id}",
+                local_path="",
+                head_sha="",
+            ),
+        )
+
     # Read before anything is scored. Scoring truncates the graph it works in, so the corpus has
     # to be in hand before that happens even though the two databases are required to differ --
     # the ordering costs nothing and does not depend on the check below holding.
@@ -2196,6 +2210,34 @@ def context_set(args: argparse.Namespace) -> int:
     return 0
 
 
+def reconcile_pull_requests(args: argparse.Namespace) -> int:
+    """Ask GitHub for the merge outcome of all pending pull requests in the corpus.
+
+    Updates `migration_outcome` rows in the graph store with exact merge status and timestamp.
+    """
+    store = GraphStore(args.dsn)
+    store.apply_schema()
+    forge = GitHubForge()
+
+    def resolve_repo(repo_id: str) -> RepoRef | None:
+        return RepoRef(
+            repo_id=repo_id,
+            url=f"https://github.com/{repo_id}",
+            local_path="",
+            head_sha="",
+        )
+
+    updated = reconcile_pull_request_outcomes(store, forge, resolve_repo)
+    print(f"reconciled {len(updated)} pending pull request outcome(s)")
+    for outcome, pr_outcome in updated:
+        status_str = "merged" if pr_outcome.merged else "closed without merge"
+        print(
+            f"  finding {outcome.finding_id} attempt {outcome.attempt_index}: "
+            f"PR #{pr_outcome.number} -> {status_str}"
+        )
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     """The whole command surface, built without parsing anything.
 
@@ -2355,6 +2397,10 @@ def build_parser() -> argparse.ArgumentParser:
     )
     benchmark_parser.add_argument("--dsn", default=DEFAULT_DSN)
     benchmark_parser.add_argument(
+        "--reconcile", action="store_true",
+        help="query GitHub for pending pull request merge outcomes before computing axes",
+    )
+    benchmark_parser.add_argument(
         "--score-pair", dest="score_pair", default=None,
         help="a corpus specification naming a checkout, a staged vendor cache and one change; "
              "the pair is generated from it and the pipeline scored against its labels",
@@ -2365,6 +2411,13 @@ def build_parser() -> argparse.ArgumentParser:
              "name the database --dsn reads the corpus from",
     )
     benchmark_parser.set_defaults(func=benchmark)
+
+    reconcile_parser = sub.add_parser(
+        "reconcile-pull-requests",
+        help="reconcile pending pull request merge outcomes against GitHub",
+    )
+    reconcile_parser.add_argument("--dsn", default=DEFAULT_DSN)
+    reconcile_parser.set_defaults(func=reconcile_pull_requests)
 
     rehearse_parser = sub.add_parser(
         "rehearse",

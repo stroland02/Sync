@@ -342,3 +342,73 @@ def test_reconcile_pull_request_outcomes_updates_merged_and_closed_rows(store: G
     # Merge rate over decided PRs (1 merged / 2 decided)
     assert axes.merge_rate_by_change_kind["request-property-removed"].value == 0.5
     assert axes.merge_rate_by_change_kind["request-property-removed"].n == 2
+
+
+def test_cli_reconcile_pull_requests_command(store: GraphStore, monkeypatch):
+    from sync.cli import build_parser, reconcile_pull_requests
+
+    cs_id = store.upsert_call_site(SITE)
+    finding = Finding(
+        detector="vendor_change",
+        claim="request-field",
+        call_site_id=cs_id,
+        severity="breaking",
+        rationale="amount removed",
+        binding_rung="static",
+    )
+    f_id = store.insert_finding(finding)
+    store.record_migration_outcome(_outcome(finding_id=f_id, attempt_index=0, pr_number=41))
+
+    forge = _fake_forge({
+        41: {
+            "number": 41,
+            "state": "MERGED",
+            "mergedAt": "2026-08-16T10:04:00Z",
+            "commits": [{"authors": [{"email": COMMIT_AUTHOR_EMAIL}]}],
+        }
+    })
+    monkeypatch.setattr("sync.cli.GitHubForge", lambda: forge)
+
+    args = build_parser().parse_args(["reconcile-pull-requests", "--dsn", DSN])
+    exit_code = reconcile_pull_requests(args)
+    assert exit_code == 0
+
+    outcome = store.migration_outcomes()[0]
+    assert outcome.pr_merged is True
+    assert outcome.pr_merged_at is not None
+
+
+def test_cli_benchmark_reconcile_flag(store: GraphStore, monkeypatch, capsys):
+    from sync.cli import benchmark, build_parser
+
+    cs_id = store.upsert_call_site(SITE)
+    finding = Finding(
+        detector="vendor_change",
+        claim="request-field",
+        call_site_id=cs_id,
+        severity="breaking",
+        rationale="amount removed",
+        binding_rung="static",
+    )
+    f_id = store.insert_finding(finding)
+    store.record_migration_outcome(_outcome(finding_id=f_id, attempt_index=0, pr_number=41))
+
+    forge = _fake_forge({
+        41: {
+            "number": 41,
+            "state": "MERGED",
+            "mergedAt": "2026-08-16T10:04:00Z",
+            "commits": [{"authors": [{"email": COMMIT_AUTHOR_EMAIL}]}],
+        }
+    })
+    monkeypatch.setattr("sync.cli.GitHubForge", lambda: forge)
+
+    args = build_parser().parse_args(["benchmark", "--dsn", DSN, "--reconcile"])
+    exit_code = benchmark(args)
+    assert exit_code == 0
+
+    captured = capsys.readouterr()
+    assert "Merge rate" in captured.out or "merge_rate" in captured.out or "Merge decisions" in captured.out
+    outcome = store.migration_outcomes()[0]
+    assert outcome.pr_merged is True
+
