@@ -181,9 +181,15 @@ def build_patch_prompt(
     # the diagnostics block so the cacheable prefix grows rather than moves. An empty context
     # appends nothing at all -- not an empty heading -- which is what keeps a prompt built for a
     # repository with no context byte-identical to the prompt built before this feature existed.
+    #
+    # B165: fenced as REPOSITORY, the same tag `sync.context`'s own docstring says this content
+    # is -- "content read out of the repository being patched" -- and the tag `.sync/context.md`
+    # already carries by name. `render_section`'s output reached the prompt unfenced from the
+    # day this feature landed, which every other untrusted section here does not: a customer's
+    # own file, quoted raw, sat in the position `HARDENING` tells the agent is instruction.
     context_section = render_section(repo_context)
     if context_section:
-        sections += [context_section, ""]
+        sections += [*fenced_block(REPOSITORY, context_section.splitlines()), ""]
 
     sections.append(_SCOPE_RULES)
 
