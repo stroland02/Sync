@@ -411,36 +411,65 @@ These are enforced rather than encouraged, because each one failed silently at l
 
 ## Quick start
 
-**Requirements:** Python 3.12, [uv](https://docs.astral.sh/uv/), Docker, Node (for `tsc` via
-`npx`), and the `gh` CLI authenticated if you want pull requests opened.
+### What you need before the first command
+
+- **Python 3.12** and [uv](https://docs.astral.sh/uv/). The interpreter is `python`.
+- **Docker**, for the Postgres 16 that holds the graph. It is published on port 5433.
+- **Node 22.22 or later**, for `npm` in `web/` and for `tsc` through `npx`. The floor is
+  react-router's own, and CI pins that version.
+- **The [`gh` CLI](https://cli.github.com/), authenticated before the *first run* rather than
+  before the first pull request.** Sync downloads a vendor's OpenAPI specification with
+  `gh api` (`src/sync/signals/stripe/adapter.py:57`) and `scripts/bootstrap_tools.sh` fetches
+  the pinned oasdiff release the same way, so an unauthenticated `gh` stops a run at its first
+  step and stops the checkout before that.
+- **The [`claude` CLI](https://claude.com/claude-code), authenticated.** The last tier of the
+  cascade is the Claude Agent SDK (`src/sync/remediate/agent_patch.py:56`), which runs that
+  binary as a subprocess. A finding a codemod resolves never reaches it; anything else abandons
+  without it.
+
+### Install the checkout
 
 ```bash
 git clone https://github.com/stroland02/sync.git
 cd sync
 
-uv sync                       # install dependencies
-docker compose up -d          # Postgres 16, on port 5433
-bash scripts/bootstrap_tools.sh   # the pinned oasdiff; once per checkout
+uv sync                            # install dependencies
+docker compose up -d               # Postgres 16, on port 5433
+bash scripts/bootstrap_tools.sh    # the pinned oasdiff; once per checkout
 
-uv run pytest                 # ~3400 tests, four to eleven minutes
+uv run pytest                      # ~3400 tests, four to eleven minutes
 ```
 
-Detect and remediate vendor changes against a checkout:
+`bootstrap_tools.sh` picks the release asset for your own platform and prints the version
+`.oasdiff-version` pins. It refuses rather than guesses on a platform oasdiff publishes no build
+for, and it never overwrites a build a checkout already holds.
+
+### Detect and remediate vendor changes in a repository
 
 ```bash
 uv run sync run \
   --vendor stripe \
-  --from v2320 --to v2330 \
-  --repo /path/to/your/checkout
+  --from-version v2320 --to-version v2330 \
+  --repo https://github.com/your-org/your-repo
 ```
 
-Run the operator console:
+**`--repo` takes a git remote URL, not a checkout on disk.** Sync clones it itself, and it
+addresses the same repository through `gh api` to read CI and open the pull request — a
+filesystem path carries no owner and name for that call. A path is refused while the arguments
+are read, before anything is downloaded, and the refusal names the URL forms to pass instead.
+
+### Run the operator console
 
 ```bash
+uv run python scripts/seed_console.py             # the schema, plus a fixture to look at
 SYNC_API_RELOAD=true uv run python -m sync.api    # :8787
-uv run python scripts/seed_console.py             # a fixture to look at
-cd web && npm run dev                             # :5173
+cd web && npm install && npm run dev              # :5173
 ```
+
+Seed before starting the API. Every console route is a read and none of them creates a table,
+so against an empty database the API refuses to start and names the command that applies the
+schema. Both processes read `SYNC_GRAPH_DSN`; unset, it resolves to the same `docker compose`
+database `--dsn` defaults to on every subcommand below.
 
 Other entry points:
 
