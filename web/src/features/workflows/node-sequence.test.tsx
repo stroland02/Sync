@@ -324,3 +324,36 @@ describe("the evidence age", () => {
     expect(screen.queryByText(/since last evidence/i)).toBeNull()
   })
 })
+
+describe("the node mechanics disclosure", () => {
+  /**
+   * M13-W227 put this text inside `NodeEvidence` under the title "Reasoning & Strategy", where
+   * it read as reasoning the run recorded. It is static -- the same words for every run of that
+   * node -- so it was rehomed beside the purpose sentence and retitled. This asserts the part
+   * that matters: it is a sibling of the evidence disclosure and never inside it, so opening it
+   * cannot be mistaken for opening what the run actually produced.
+   */
+  it("stays visible while the evidence it sits beside is still collapsed", () => {
+    render(
+      <NodeSequence
+        nodes={[node({ name: "locate", standing: "ran", evidence: { tier: "Tier 1" } })]}
+      />
+    )
+
+    const toggle = screen.getByRole("button", { name: /evidence/i })
+    const panelId = toggle.getAttribute("aria-controls")
+    const panel = panelId === null ? null : document.getElementById(panelId)
+    const mechanics = screen.getByText("How this node works")
+
+    // The panel holds what this run produced. The mechanics text describes how the node works in
+    // general and is true whether or not the run produced anything, so it must sit outside.
+    expect(panel).not.toBeNull()
+    expect(panel!.contains(mechanics)).toBe(false)
+  })
+
+  it("says nothing for a node it does not name, rather than inventing a description", () => {
+    render(<NodeSequence nodes={[node({ name: "some_future_node", standing: "ran" })]} />)
+
+    expect(screen.queryByText("How this node works")).toBeNull()
+  })
+})
