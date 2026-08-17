@@ -225,6 +225,28 @@ the beta critical path; everything else is real work that does not block the gat
 3. Track the four gates and say plainly which are met.
 4. Surface the three human decisions below at the moment they become blocking, not before.
 
+## Gate 2's machinery is proven; only its data is missing
+
+`M5-W308` separated the two questions hiding inside "Gate 2 CANNOT TELL", and the answer to the
+dangerous one is the good one.
+
+**Rehearsal rows cannot reach Gate 2's metrics.** `is_rehearsal` is recorded on every rehearsal row
+and `GraphStore.migration_outcomes` filters `WHERE NOT is_rehearsal` -- confirmed in the source, not
+taken from a report: the conflict clause is keyed on it at `store.py:1355`, and `:1363` states the
+reason it is filtered there rather than handed to every caller. This was the finding that would have
+been serious. Had a rehearsal row been indistinguishable from a customer run, every axis would have
+been quotable as evidence it had not earned, and the first person to notice would have been a design
+partner reading a number we gave them.
+
+**All five axes compute correctly** over a wide population -- `merge_rate_by_change_kind`,
+`merge_rate_by_tier`, `routing_accuracy`, `tokens_per_merged_patch`, `wall_ms_per_merged_patch` --
+and `corpus_health` and `beta_gates`' Gate 2 evaluate with zero computational defects.
+
+So Gate 2 is no longer "we do not know whether this works." It is "this works and has no data yet,"
+and the only thing that produces the data is real runs -- which is `B7`, which is the owner's call.
+The gate correctly still reads CANNOT TELL, because a proven calculation over zero rows is still
+zero rows.
+
 ## `B7`'s risk changed materially on 2026-08-17, and the decision is now better informed
 
 `B7` was frightening for one stated reason: the acceptance run had not executed since the pipeline
