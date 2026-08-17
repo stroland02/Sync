@@ -11,14 +11,24 @@
 # `npx --package=typescript@latest` at verify time, which also closes threat-model
 # mitigation 4 and removes a network fetch from the verify step entirely.
 #
-# NOT YET WIRED: nothing in `sync.remediate` invokes this image today.
 # `sync.remediate.sandbox` proves the network-cutoff primitive this image would run
-# under; this Dockerfile is the artifact that primitive is specified against, authored
-# and reviewable but not built or run as part of closing this backlog entry. Building
-# and pre-warming it is deploy-time work the design this implements explicitly calls
-# out as unsolved here.
+# under. `sync.remediate.sandbox_image` (B97 Decision 2) computes a content-hash tag
+# for this Dockerfile and its build args, and builds it idempotently -- once at worker
+# startup and once on a schedule, never on a real patch attempt's own critical path.
+#
+# STILL NOT WIRED: nothing in `sync.remediate.nodes` or `AgentRemediator` starts a
+# container from this image during an actual patch attempt yet. That is B97
+# Decision 1, a separate and larger piece of work this Dockerfile and its build
+# mechanism are specified against but do not themselves close.
 
-FROM python:3.12-slim-bookworm
+# Pinned by digest, not by the mutable `python:3.12-slim-bookworm` tag: a content
+# hash of this file's bytes is only a meaningful "is my image current" check if the
+# base underneath it cannot drift out from under an unchanged tag. Upstream rebuilds
+# `python:3.12-slim-bookworm` on its own schedule; pinning the digest makes a base
+# bump a deliberate, reviewed edit to this line instead of a silent drift the content
+# hash would misreport as unchanged. Resolved 2026-08-16 against Docker Hub; bump
+# deliberately, not automatically.
+FROM python:3.12-slim-bookworm@sha256:a116514e19457bcb7af7efe9c3dd0b9b71e85b317694e7882a1c52aa15a78134
 
 ARG TYPESCRIPT_VERSION=5.9.3
 ARG NODE_MAJOR=22
