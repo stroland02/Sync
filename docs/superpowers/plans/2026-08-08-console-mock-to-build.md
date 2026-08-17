@@ -1,5 +1,7 @@
 # Console Mock to Build — Implementation Plan
 
+> **Status, 2026-08-17:** Tasks 2 (frontend ChangeUnitsTable) partially shipped. Tasks 1 (mock gaps report), 3 (shared drawer), 5 (settings route), and 6 (palette test) remain open; these are absorbed into the new `2026-08-17-console-mock-parity.md` plan. Phases 1-6 structure migrated to that plan for reconciliation against what the tree actually contains.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Turn the ten-screen mock in `docs/console-mock/` into shipped console, without letting a drawing overrule a specification.

@@ -4,6 +4,8 @@
 > **Reference Architecture:** [DeepSeek Harness (open-source live agent workflow & progress inspection)](https://github.com/deepseek-ai/deepseek-harness) & Remotion programmatic animations  
 > **Status:** Registered & Planned
 
+> **Status, 2026-08-17:** Superseded in phasing. Per spec ruligns 2 and 3 documented in `2026-08-17-console-mock-parity.md`, live pulse indicators and Remotion animations are deferred beyond M7. The plan remains in the archive as a reference architecture; M13 deliverables may be resequenced into later milestones.
+
 ---
 
 ## 1. Goal & Motivation
