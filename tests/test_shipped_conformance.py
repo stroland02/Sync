@@ -399,6 +399,18 @@ def test_a_vendor_that_does_not_correlate_declares_no_correlation_case():
             )
 
 
+def test_adapters_without_request_correlator_declare_uncorrelatable_reason(tmp_path):
+    """Adapters that cannot correlate HTTP telemetry declare uncorrelatable_reason so
+    the gap is explicit and countable rather than failing silently with an AttributeError."""
+    for vendor_id in available_vendors():
+        if vendor_id not in CORRELATORS:
+            adapter = _built(vendor_id, tmp_path / vendor_id)
+            assert not isinstance(adapter, RequestCorrelator)
+            reason = getattr(adapter, "uncorrelatable_reason", None)
+            assert reason is not None, f"{vendor_id} is not a RequestCorrelator and has no uncorrelatable_reason"
+            assert isinstance(reason, str) and len(reason) > 0
+
+
 # --- Remediator ----------------------------------------------------------------------
 
 # One call carrying a retired model and both deprecated parameters, which is what lets the three
