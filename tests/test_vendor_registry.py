@@ -167,7 +167,7 @@ def test_the_command_line_offers_exactly_the_registered_vendors():
     hand-maintained list beside it is a second place to add a vendor and the one somebody
     forgets, which is how a registered adapter stays unreachable while looking wired.
     """
-    parser_source = inspect.getsource(cli.main)
+    parser_source = inspect.getsource(cli.build_parser)
 
     assert "available_vendors()" in parser_source
     assert '["stripe"]' not in parser_source

@@ -80,7 +80,9 @@ class _RecordingStore:
 
         return _Nothing()
 
-    def truncate_all(self, keep=()) -> None: ...
+    def truncate_all(self) -> None: ...
+
+    def truncate_signal_and_detect(self) -> None: ...
 
     def replace_call_sites(self, repo_id, sites) -> list[str]:
         return [f"cs-{index}" for index, _ in enumerate(sites)]
