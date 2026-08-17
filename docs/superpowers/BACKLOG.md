@@ -3470,3 +3470,27 @@ or driver when every write systematically failed (as occurred with B129).
 **Closed in `M8-W218`**: `make_recorder` now returns `CorpusRecorder`, tracking `.attempt_count`, `.success_count`, `.failure_count`, and `.errors` without raising or breaking customer runs. Tested in `tests/test_migration_recording.py`.
 
 
+
+### B145 — Context savings is a model presented as a measurement, on one branch only
+
+Found by the Gate 3 screen pass (`reports/2026-08-17-gate-3-screen-pass.md`, `M14-W275`), which
+cleared every screen on the question it asks — does anything here assert a number nothing computed —
+and surfaced this beside it.
+
+`context_savings` is computed rather than invented, so it is not a Gate 3 failure:
+`sync.dashboard.graph_views` derives it as `len(rows) * _TOKENS_PER_AVOIDED_READ` (`:467`) and
+`total * _TOKENS_PER_AVOIDED_READ` (`:585`). But no tokens are ever counted. The figure is a row
+count multiplied by a fixed per-read constant, and the console discloses that on one branch and not
+the other: when the count behind it stopped early, `web/src/components/provenance.tsx:99-104` says
+in full that the figure is a floor rather than the true savings; when the count completed, the
+reader gets a bare `1,200 tokens` with the constant and the modelling invisible.
+
+The asymmetry is the defect. A reader who never triggers a bounded scan has no way to learn that
+this figure is modelled at all, and "tokens" reads as a measured quantity in a console whose whole
+argument is that it distinguishes what was measured from what was inferred.
+
+**What closes it:** the unbounded branch states the same qualification the bounded one already
+does — that the figure is derived from a count and a per-read constant rather than from counted
+tokens. The wording is a judgement for whoever takes it; the constant should be nameable from the
+screen. Alternatively the field stops being expressed in tokens and is expressed as what it
+actually is, a count of avoided reads, which needs no qualification at all and is the stronger fix.
