@@ -315,6 +315,14 @@ class AgentRemediator:
 
     strategy = "agent"
 
+    def __init__(self, repo_context: str = "") -> None:
+        # Bound once at construction rather than threaded through `propose()`. The caller
+        # constructs one `AgentRemediator` per run, after reading the stored context once, so
+        # every finding in the run sees the same repository facts without widening the shared
+        # `Remediator` protocol -- and every codemod tier that never reads it -- to carry a
+        # value only this tier consumes.
+        self._repo_context = repo_context
+
     def can_handle(self, finding: Finding, change: VendorChange) -> bool:
         return finding.severity in ("breaking", "deprecation")
 
@@ -326,7 +334,7 @@ class AgentRemediator:
         repo: RepoRef,
         diagnostics: str = "",
     ) -> Patch:
-        prompt = build_patch_prompt(finding, change, site, diagnostics)
+        prompt = build_patch_prompt(finding, change, site, diagnostics, self._repo_context)
         repo_path = Path(repo.local_path)
 
         identity = _identity(finding, repo)

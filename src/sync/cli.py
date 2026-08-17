@@ -21,6 +21,7 @@ import yaml
 from sync.benchmark.checkout import read_checkout
 from sync.benchmark.report import render_report
 from sync.benchmark.score import index_sources, materialise, score_change
+from sync.context import SEED_RELATIVE_PATH, read_seed
 from sync.core import CallSite, Finding, LanguageAdapter, RepoRef, VendorChange
 from sync.core.models import CONTEXT_BODY_MAX, RepoContext
 from sync.core.protocols import RequestCorrelator
@@ -125,7 +126,9 @@ def load_catalogue() -> dict[str, dict]:
     return catalogue_index(run_oasdiff_checks())
 
 
-def build_remediator(catalogue: dict[str, dict] | None = None) -> TieredRemediator:
+def build_remediator(
+    catalogue: dict[str, dict] | None = None, repo_context: str = ""
+) -> TieredRemediator:
     """The tier cascade, cheapest first, with the agent last and unconditional.
 
     Pulled out of `run()` for the same reason `_select` is: the ordering is the whole
@@ -151,6 +154,12 @@ def build_remediator(catalogue: dict[str, dict] | None = None) -> TieredRemediat
     everything, so a remediator placed after it is never reached however correct it is. Both
     parameter tiers were missing from this list entirely, which sent every parameter
     deprecation to a model call over a change a codemod resolves deterministically.
+
+    `repo_context` reaches only the agent, bound once at construction rather than threaded
+    through every tier's `propose()`. The codemods above it never read it, and widening the
+    shared `Remediator` protocol for every implementation -- including every test double that
+    stands in for one -- to carry a value only the last tier consumes would be a wider seam
+    than what this call already correctly narrows.
     """
     return TieredRemediator(
         [
@@ -158,7 +167,7 @@ def build_remediator(catalogue: dict[str, dict] | None = None) -> TieredRemediat
             ParameterOmitRemediator(),
             ParameterRenameRemediator(),
             PropertyOmitRemediator(),
-            TerminalTier(AgentRemediator()),
+            TerminalTier(AgentRemediator(repo_context=repo_context)),
         ],
         catalogue=catalogue,
     )
@@ -313,6 +322,26 @@ def _reset_clone(repo: RepoRef) -> None:
     path = Path(repo.local_path)
     _git(["checkout", "-f", repo.head_sha], path)
     _git(["clean", "-fd"], path)
+
+
+def seed_repo_context(store: GraphStore, repo: RepoRef) -> bool:
+    """Copy the checkout's `.sync/context.md` into the graph, if it has one.
+
+    Returns whether a row was written, which is what the caller logs. Absent, empty, unreadable
+    and oversize all return False: the caller cannot act differently on any of them, and a run
+    must not be abandoned because a customer's optional file is malformed.
+
+    A missing file leaves an existing row alone. Absence of a file is not an instruction to
+    erase what an operator wrote -- only a present, readable file overwrites, and then the
+    customer's own text is what wins.
+    """
+    body = read_seed(repo.local_path)
+    if body is None:
+        return False
+    store.upsert_repo_context(
+        RepoContext(repo_id=repo.repo_id, body=body, source="seeded-file")
+    )
+    return True
 
 
 def _checkout_branch(repo: RepoRef, branch: str) -> None:
@@ -911,6 +940,9 @@ def run(args: argparse.Namespace, today: date | None = None) -> int:
     with tempfile.TemporaryDirectory() as workdir:
         repo = _clone(args.repo, Path(workdir) / "repo")
 
+        if seed_repo_context(store, repo):
+            print(f"context: seeded from {SEED_RELATIVE_PATH} for {repo.repo_id}")
+
         try:
             # Selection is now data at the index stage as well as the signal stage: the
             # repository's own manifest decides, through each adapter's `matches`, and this
@@ -1044,11 +1076,18 @@ def run(args: argparse.Namespace, today: date | None = None) -> int:
         selected = _select(findings, args.limit)
         print(f"remediating {len(selected)} of {len(findings)}")
 
+        # Read once per run, not once per finding -- context is a fact about the repository,
+        # not about any one attempt, and the seed above just converged this row on the
+        # checkout's own file.
+        context_row = store.repo_context(repo.repo_id)
+        repo_context = context_row.body if context_row is not None else ""
+
         with PostgresSaver.from_conn_string(args.dsn) as checkpointer:
             checkpointer.setup()
             catalogue = load_catalogue()
             graph = build_graph(
-                store=store, adapter=adapter, remediator=build_remediator(catalogue),
+                store=store, adapter=adapter,
+                remediator=build_remediator(catalogue, repo_context=repo_context),
                 forge=GitHubForge(), checkpointer=checkpointer, catalogue=catalogue,
             )
             for finding in selected:

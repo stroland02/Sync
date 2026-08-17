@@ -1207,6 +1207,14 @@ class _LoopStore:
     def insert_finding(self, finding):
         return finding.call_site_id
 
+    def repo_context(self, repo_id):
+        # `run()` reads this once per run since the context-seeding task landed. No fixture
+        # here carries a `.sync/context.md`, so a real store would also answer None.
+        return None
+
+    def upsert_repo_context(self, context) -> None:
+        pass
+
 
 class _LoopVendor:
     vendor_id = VENDOR
