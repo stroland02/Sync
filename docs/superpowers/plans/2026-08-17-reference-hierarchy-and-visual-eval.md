@@ -95,7 +95,22 @@ never needs asking twice.
 | `index.html`, `README.md` | the tour's own page and provenance | why the mock exists and what it claims |
 | `_ds/`, `support.js` | design-system assets the mock loads | where a token's *drawn* value can be read |
 
-**v2 supersedes v1 where they differ**, and any eval must say which it measured.
+**Corrected 2026-08-17, and the correction is the coordinator's.** This plan originally said *v2
+supersedes v1 where they differ*. I wrote that from filename order without opening either file, and
+the first run of the eval refuted it on three independent measurements:
+
+- **v2 is a light theme** (`rgb(242,242,243)`) against a dark-only ruling the owner recorded on
+  2026-08-05.
+- **v2 draws no `border-radius` at all**, against `DESIGN.md`'s two declared radius tokens.
+- **v2's type range is 1.45**, against a console deliberately rebuilt to clear 3.4.
+
+And decisively for this eval's own purpose: **v2 draws 6 side-by-side regions to v1's 17**, so
+following it would have made the console *worse* at precisely the complaint the eval exists to
+measure.
+
+**The ruling is therefore: `Sync Console.dc.html` (v1) is the appearance target. v2 supersedes on
+vocabulary only** — where it says `Codebases` and v1 still says `Fleet`. Any eval must state which
+it measured, and it must measure v1 for appearance.
 
 ### Tier 2 — Superlog and the competitor set
 
@@ -135,6 +150,22 @@ the mock's 8px"* — assignable, fixable, and re-runnable.
   grid" was the owner's original complaint and it is a count
 - density — data cells and figures per screen, the ratio the Fleet work already moved from 125.2 to
   25.0
+
+**Which properties may gate, and which may not.** This is the load-bearing constraint and it comes
+from `CI-W300`. **Token-derived properties may gate; content counts may not.** Colour and radius
+matched the mock exactly on the first run, so they can be asserted — they move only when somebody
+changes a token, which is exactly when a gate should fire. Side-by-side regions, prose characters
+and density move on **every copy edit**, and gating those turns the eval into a snapshot test, which
+this repository has already ruled fails on every correct change and gets deleted within a week.
+
+So the eval reports all twelve properties and gates on the token half only. The content half is a
+measurement a human reads and acts on, which is how the Fleet numbers -- 4 regions against 17, 915
+prose characters against 340 -- did their job without anyone needing a build to go red.
+
+**Where it runs.** The `web` job, not `beta-gates`. `beta-gates` carries `--exit-zero` precisely so a
+readiness verdict can never fail a build; an eval intended to gate needs the opposite, and one job
+cannot hold both without a `continue-on-error` carve-out that would swallow a crashed script too.
+Three to five minutes on `web`'s existing schedule.
 
 **What it must not do.** It must not score. A single similarity number over these properties would
 be exactly the composite figure this console refuses everywhere else, and it would hide which of the
@@ -193,6 +224,34 @@ categories, and it is why the extraction tools are the ones to trial.
 3. **A tool that emits a Tailwind or shadcn theme is not thereby authoritative.** `DESIGN.md` is the
    token contract and its values carry contrast arithmetic. An extractor's output is an *observation
    of the mock*, to be compared against that contract — never a replacement for it.
+
+## First run, 2026-08-17: the method works and the news is good
+
+`reports/2026-08-17-visual-eval-first-run.md`, with nine routes captured at 1440x900 in
+`reports/screens/2026-08-17/` — the stale-capture cause is closed.
+
+**The central claim held.** The mock renders headless and its computed styles read exactly like the
+console's. What had been five weeks of comparing by eye is now about ninety seconds of comparing by
+measurement.
+
+**The tool verdict was measured rather than argued, and the in-house script won with zero
+dependencies added.** All four candidate extractors are built to crawl public sites and answer a
+*superset* question — what tokens does this page use — which still has to be reduced to the twelve
+properties before anything can be diffed. That is not a permanent verdict: if the eval grows toward
+full token extraction across breakpoints and interaction states, `d-extract` becomes the better
+answer.
+
+**The finding on Fleet, and it is a better position than anyone assumed.** Colour and radius match
+the mock **exactly** — both OKLCH values, both radii. What differs is composition and prose:
+
+| | built | mock |
+|---|---|---|
+| side-by-side regions | 4 | 17 |
+| prose characters | 915 | 340 |
+
+So the owner's original complaint — *one vertical stack where it should be a grid, and Fleet carries
+more prose than data* — is now **countable**, and the gap is structural rather than a palette
+problem. Palette problems are a rewrite. Composition problems are a layout pass.
 
 ## Sequence
 

@@ -201,19 +201,31 @@ def gate_two_evidence_exists(
     return Verdict(gate="2", name=name, status=MET, evidence=evidence)
 
 
-# What a change to the console can actually alter about a claim on a screen. Watching all of
-# `web/` meant a token, a build config, a vitest file or a script re-opened this gate, and a gate
-# that fires on a CSS tweak teaches the lane that clearing it is ceremony -- which is how a gate
-# stops being read at all. Narrowed on Lane B's proposal after its first re-sign.
+# What can put a sentence or a figure in front of a reader. Watching all of `web/` meant a token,
+# a build config or a script re-opened this gate, and a gate that fires on a CSS tweak teaches the
+# lane that clearing it is ceremony. Narrowed to three directories on Lane B's proposal, and that
+# narrowing was wrong in a way worth recording rather than quietly widening.
 #
-# Deliberately conservative rather than minimal: this gate can only ever say MET or CANNOT TELL,
-# never NOT MET, so a path wrongly left out costs a re-walk nobody needed, while a path wrongly
-# left in costs the gate its readers.
+# **An include-list of directory names is invisible-by-default, and it hid a real change.**
+# `web/src/layouts` renders on every screen -- the deployment-identity sentence sits in the sidebar
+# footer -- and was not one of the three, so Gate 3 read MET across `M14-W351`, which the gate could
+# not see. Measured: the three-name list reports the console last changed at 13:13:59 and this one
+# reports 13:27:20, the difference being `fa6693c`, a `layouts/` commit. `lib/`, `vendor/`,
+# `App.tsx` and `main.tsx` were missing for the same reason -- nobody asked what else renders.
+#
+# So the set names what it excludes, which is the inversion `B129` made when a scan named the one
+# table it spared rather than the two it cleared: a directory nobody thought about is watched
+# instead of invisible. Tests, stylesheets and markdown stay out, because appearance is measured in
+# `DESIGN.md` against rendered pixels and that is a different discipline with a different gate.
+#
+# The asymmetry justifies erring wide: this gate can only say MET or CANNOT TELL, never NOT MET, so
+# a path wrongly left in costs a re-walk and a path wrongly left out costs a false MET on the gate
+# about whether screens tell the truth.
 CONSOLE_CLAIM_PATHS = (
-    "web/src/features",
-    "web/src/components",
-    "web/src/api",
+    "web/src",
     ":(exclude)*.test.*",
+    ":(exclude)*.css",
+    ":(exclude)*.md",
 )
 
 # The line a sign-off writes to say when it was signed. A recorded date rather than the file's

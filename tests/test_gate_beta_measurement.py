@@ -421,6 +421,47 @@ def test_signature_date_reads_the_recorded_line_rather_than_the_prose() -> None:
 # --- the watched set ----------------------------------------------------------------
 
 
+def test_the_watched_set_names_what_it_excludes_rather_than_what_it_includes() -> None:
+    """The abstraction, not the list. An include-list of directory names is invisible-by-default.
+
+    Three names were adopted as a proxy for "the claim surface" and the proxy was wrong: `layouts/`
+    renders on every screen -- the deployment-identity sentence sits in the sidebar footer -- and
+    was not among them, so Gate 3 read MET across a change it could not see. `lib/`, `vendor/`,
+    `App.tsx` and `main.tsx` were missing for the same reason.
+
+    The fix is the same inversion `B129` made when a scan named the one table it spared instead of
+    the two it cleared: name the exclusions, so a directory nobody thought about is watched rather
+    than invisible. A miss here costs a false MET on a gate about whether screens tell the truth;
+    a false positive costs a re-walk.
+    """
+    assert "web/src" in CONSOLE_CLAIM_PATHS
+    excluded = [p for p in CONSOLE_CLAIM_PATHS if p.startswith(":(exclude)")]
+    assert excluded, "the watched set is an include-list again, so a new directory is invisible"
+    assert not any(
+        p.startswith("web/src/") for p in CONSOLE_CLAIM_PATHS
+    ), "naming subdirectories reintroduces invisible-by-default"
+
+
+def test_everything_that_can_render_is_watched() -> None:
+    """`layouts/` is the one that was missed; the others were missed for the same reason."""
+    for renders in ("web/src/layouts", "web/src/lib", "web/src/vendor", "web/src/App.tsx"):
+        assert any(
+            renders.startswith(path) or path == "web/src" for path in CONSOLE_CLAIM_PATHS
+        ), f"{renders} can put a sentence in front of a reader and is not watched"
+
+
+def test_a_stylesheet_or_a_test_still_does_not_reopen_the_gate() -> None:
+    """Lane B's original complaint, which the widening must not undo.
+
+    A gate that fires on a CSS tweak teaches the lane that clearing it is ceremony. Appearance is
+    measured in `DESIGN.md` against rendered pixels, which is a different discipline with a
+    different gate.
+    """
+    joined = " ".join(CONSOLE_CLAIM_PATHS)
+    for noisy in (".test.", ".css", ".md"):
+        assert noisy in joined, f"{noisy} is no longer excluded, so the gate fires on it"
+
+
 def test_the_watched_set_is_only_what_can_change_a_claim_about_data() -> None:
     """Watching all of `web/` meant a token, a build config or a script re-opened the gate.
 
@@ -429,10 +470,9 @@ def test_the_watched_set_is_only_what_can_change_a_claim_about_data() -> None:
     can only ever say MET or CANNOT TELL, never NOT MET, so a miss costs a re-walk rather than a
     false pass.
     """
-    assert "web/src/features" in CONSOLE_CLAIM_PATHS
-    assert "web/src/components" in CONSOLE_CLAIM_PATHS
-    assert "web/src/api" in CONSOLE_CLAIM_PATHS
-    assert not any(path == "web" or path == "web/src" for path in CONSOLE_CLAIM_PATHS)
+    assert not any(path == "web" for path in CONSOLE_CLAIM_PATHS), (
+        "watching all of web/ pulls in build config and tokens, which cannot change a claim"
+    )
 
 
 def test_tests_are_excluded_from_the_watched_set() -> None:
