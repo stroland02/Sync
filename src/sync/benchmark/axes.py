@@ -69,21 +69,30 @@ TIER_ZERO = 0
 
 
 class Axis(BaseModel):
-    """One measurement and the number of samples behind it.
+    """One measurement, the number of samples behind it, and its row provenance.
 
     `value` is `None` exactly when `n` is zero. A rate over no samples is not zero, and the two
     have to stay distinguishable through serialisation, which is why this is a null rather than a
     sentinel float.
+    `provenance` describes the kind of rows contributing to the measurement: 'unmeasured' when
+    n is zero, 'production' when all contributing attempts are live runs, 'rehearsal' when all
+    are fixture rehearsals, or 'mixed' when both kinds contributed.
     """
 
     value: float | None
     n: int
+    provenance: str = "unmeasured"
 
     @classmethod
-    def over(cls, numerator: float, denominator: int) -> "Axis":
+    def over(
+        cls,
+        numerator: float,
+        denominator: int,
+        provenance: str = "unmeasured",
+    ) -> "Axis":
         if denominator == 0:
-            return cls(value=None, n=0)
-        return cls(value=numerator / denominator, n=denominator)
+            return cls(value=None, n=0, provenance="unmeasured")
+        return cls(value=numerator / denominator, n=denominator, provenance=provenance)
 
 
 class Counts(BaseModel):
@@ -99,6 +108,8 @@ class Counts(BaseModel):
     pull_requests_opened: int
     pull_requests_merged: int
     findings_abandoned: int
+    production_attempts: int = 0
+    rehearsal_attempts: int = 0
 
 
 class BenchmarkAxes(BaseModel):
@@ -116,13 +127,32 @@ def _tokens(attempt: MigrationOutcome) -> int:
     return (attempt.input_tokens or 0) + (attempt.output_tokens or 0)
 
 
-def _merge_rate(pairs: Iterable[tuple[object, bool]]) -> dict:
-    """Merge rate per group, from (group, merged) pairs of pull requests that opened."""
-    totals: dict[object, list[int]] = defaultdict(lambda: [0, 0])
-    for group, merged in pairs:
-        totals[group][0] += int(merged)
-        totals[group][1] += 1
-    return {group: Axis.over(merged, opened) for group, (merged, opened) in totals.items()}
+def _provenance(attempts: Iterable[MigrationOutcome]) -> str:
+    """Determine the provenance category for a collection of attempts."""
+    attempts_list = list(attempts)
+    if not attempts_list:
+        return "unmeasured"
+    has_prod = any(not a.is_rehearsal for a in attempts_list)
+    has_rehearsal = any(a.is_rehearsal for a in attempts_list)
+    if has_prod and has_rehearsal:
+        return "mixed"
+    if has_rehearsal:
+        return "rehearsal"
+    return "production"
+
+
+def _merge_rate_grouped(groups: dict[object, list[MigrationOutcome]]) -> dict:
+    """Merge rate per group with provenance, from attempts of pull requests that opened."""
+    result = {}
+    for group, group_attempts in groups.items():
+        merged_count = sum(1 for a in group_attempts if a.pr_merged)
+        total_count = len(group_attempts)
+        result[group] = Axis.over(
+            merged_count,
+            total_count,
+            provenance=_provenance(group_attempts),
+        )
+    return result
 
 
 def compute_axes(outcomes: Sequence[MigrationOutcome]) -> BenchmarkAxes:
@@ -152,16 +182,31 @@ def compute_axes(outcomes: Sequence[MigrationOutcome]) -> BenchmarkAxes:
         if not any(a.tier > TIER_ZERO for a in by_finding[finding])
         and any(a.tier == TIER_ZERO and a.static_verify_passed for a in by_finding[finding])
     }
+    tier_zero_attempts = [a for f in routed_to_tier_zero for a in by_finding[f]]
+
+    kind_groups: dict[object, list[MigrationOutcome]] = defaultdict(list)
+    tier_groups: dict[object, list[MigrationOutcome]] = defaultdict(list)
+    for a in decided:
+        kind_groups[a.change_kind].append(a)
+        tier_groups[a.tier].append(a)
 
     return BenchmarkAxes(
-        merge_rate_by_change_kind=_merge_rate((a.change_kind, bool(a.pr_merged)) for a in decided),
-        merge_rate_by_tier=_merge_rate((a.tier, bool(a.pr_merged)) for a in decided),
-        routing_accuracy=Axis.over(len(held_at_tier_zero), len(routed_to_tier_zero)),
+        merge_rate_by_change_kind=_merge_rate_grouped(kind_groups),
+        merge_rate_by_tier=_merge_rate_grouped(tier_groups),
+        routing_accuracy=Axis.over(
+            len(held_at_tier_zero),
+            len(routed_to_tier_zero),
+            provenance=_provenance(tier_zero_attempts),
+        ),
         tokens_per_merged_patch=Axis.over(
-            sum(_tokens(a) for a in merged_attempts), len(merged_findings)
+            sum(_tokens(a) for a in merged_attempts),
+            len(merged_findings),
+            provenance=_provenance(merged_attempts),
         ),
         wall_ms_per_merged_patch=Axis.over(
-            sum(a.wall_ms for a in merged_attempts), len(merged_findings)
+            sum(a.wall_ms for a in merged_attempts),
+            len(merged_findings),
+            provenance=_provenance(merged_attempts),
         ),
         counts=Counts(
             attempts=len(outcomes),
@@ -171,5 +216,8 @@ def compute_axes(outcomes: Sequence[MigrationOutcome]) -> BenchmarkAxes:
             findings_abandoned=len(
                 {a.finding_id for a in outcomes if a.terminal_status == "abandoned"}
             ),
+            production_attempts=sum(1 for a in outcomes if not a.is_rehearsal),
+            rehearsal_attempts=sum(1 for a in outcomes if a.is_rehearsal),
         ),
     )
+

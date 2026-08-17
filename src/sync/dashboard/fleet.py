@@ -382,17 +382,28 @@ def corpus_health(store: GraphStore) -> dict[str, Any]:
             "n": axis.n,
             "has_samples": axis.n > 0,
             "status": "measured" if axis.n > 0 else "unmeasured",
+            "provenance": axis.provenance,
         }
         for kind, axis in axes.merge_rate_by_change_kind.items()
     }
     kind_sample_count = sum(axis.n for axis in axes.merge_rate_by_change_kind.values())
     kind_has_samples = kind_sample_count > 0
+    kind_provenance = (
+        "unmeasured"
+        if not kind_has_samples
+        else (
+            "mixed"
+            if len({v["provenance"] for v in kind_groups.values() if v["has_samples"]}) > 1
+            else next(v["provenance"] for v in kind_groups.values() if v["has_samples"])
+        )
+    )
     kind_axis = {
         "name": "merge_rate_by_change_kind",
         "display_name": "Merge Rate by Change Kind",
         "status": "measured" if kind_has_samples else "unmeasured",
         "has_samples": kind_has_samples,
         "sample_count": kind_sample_count,
+        "provenance": kind_provenance,
         "value": {k: v["value"] for k, v in kind_groups.items()} if kind_has_samples else None,
         "groups": kind_groups,
         "unit": "ratio",
@@ -406,17 +417,28 @@ def corpus_health(store: GraphStore) -> dict[str, Any]:
             "n": axis.n,
             "has_samples": axis.n > 0,
             "status": "measured" if axis.n > 0 else "unmeasured",
+            "provenance": axis.provenance,
         }
         for tier, axis in axes.merge_rate_by_tier.items()
     }
     tier_sample_count = sum(axis.n for axis in axes.merge_rate_by_tier.values())
     tier_has_samples = tier_sample_count > 0
+    tier_provenance = (
+        "unmeasured"
+        if not tier_has_samples
+        else (
+            "mixed"
+            if len({v["provenance"] for v in tier_groups.values() if v["has_samples"]}) > 1
+            else next(v["provenance"] for v in tier_groups.values() if v["has_samples"])
+        )
+    )
     tier_axis = {
         "name": "merge_rate_by_tier",
         "display_name": "Merge Rate by Repair Tier",
         "status": "measured" if tier_has_samples else "unmeasured",
         "has_samples": tier_has_samples,
         "sample_count": tier_sample_count,
+        "provenance": tier_provenance,
         "value": {k: v["value"] for k, v in tier_groups.items()} if tier_has_samples else None,
         "groups": tier_groups,
         "unit": "ratio",
@@ -431,6 +453,7 @@ def corpus_health(store: GraphStore) -> dict[str, Any]:
         "status": "measured" if routing_has_samples else "unmeasured",
         "has_samples": routing_has_samples,
         "sample_count": axes.routing_accuracy.n,
+        "provenance": axes.routing_accuracy.provenance,
         "value": axes.routing_accuracy.value if routing_has_samples else None,
         "unit": "ratio",
         "denominator_description": "findings routed to tier 0",
@@ -444,6 +467,7 @@ def corpus_health(store: GraphStore) -> dict[str, Any]:
         "status": "measured" if tokens_has_samples else "unmeasured",
         "has_samples": tokens_has_samples,
         "sample_count": axes.tokens_per_merged_patch.n,
+        "provenance": axes.tokens_per_merged_patch.provenance,
         "value": axes.tokens_per_merged_patch.value if tokens_has_samples else None,
         "unit": "tokens",
         "denominator_description": "merged pull requests",
@@ -457,6 +481,7 @@ def corpus_health(store: GraphStore) -> dict[str, Any]:
         "status": "measured" if wall_ms_has_samples else "unmeasured",
         "has_samples": wall_ms_has_samples,
         "sample_count": axes.wall_ms_per_merged_patch.n,
+        "provenance": axes.wall_ms_per_merged_patch.provenance,
         "value": axes.wall_ms_per_merged_patch.value if wall_ms_has_samples else None,
         "unit": "milliseconds",
         "denominator_description": "merged pull requests",
@@ -473,6 +498,8 @@ def corpus_health(store: GraphStore) -> dict[str, Any]:
             "pull_requests_opened": axes.counts.pull_requests_opened,
             "pull_requests_merged": axes.counts.pull_requests_merged,
             "findings_abandoned": axes.counts.findings_abandoned,
+            "production_attempts": axes.counts.production_attempts,
+            "rehearsal_attempts": axes.counts.rehearsal_attempts,
             "axes_measured_count": measured_count,
             "axes_unmeasured_count": unmeasured_count,
             "total_axes": len(axis_list),
