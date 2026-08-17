@@ -11,7 +11,8 @@
  * eye from an honest empty state. `CrashState` is what stands in that hole.
  */
 
-import { useState, type ReactNode } from "react"
+import { motion } from "framer-motion"
+import { useEffect, useState, type ReactNode } from "react"
 
 import {
   ApiStatusError,
@@ -21,6 +22,12 @@ import {
 } from "@/api/errors"
 import { Status, statusSurfaceClass, type StatusTone } from "@/components/status"
 import { Button } from "@/components/ui/button"
+import {
+  EASE_STANDARD,
+  LOADING_ELAPSED_THRESHOLD_MS,
+  LOADING_SWEEP_DURATION,
+  useReducedMotion,
+} from "@/lib/motion"
 
 function Panel({
   status,
@@ -51,11 +58,85 @@ function Panel({
   )
 }
 
+/**
+ * How long this component has been mounted, in whole seconds, or `null` before the threshold.
+ *
+ * A loading state is mounted exactly while its request is in flight, so its own lifetime is the
+ * request's. That makes elapsed time the one figure this surface can report without inferring
+ * anything — it is measured here rather than taken from the query client, which would report the
+ * fetch's age across a retry and describe a different span than the one the operator is watching.
+ */
+function useElapsedSeconds(): number | null {
+  const [elapsedMs, setElapsedMs] = useState(0)
+
+  useEffect(() => {
+    const startedAt = Date.now()
+    // Wall clock rather than an accumulated tick count: a background tab throttles the interval,
+    // and a counter that added one per fire would report a number smaller than the wait the
+    // operator actually experienced, which is the one thing this figure exists to be right about.
+    const timer = window.setInterval(() => setElapsedMs(Date.now() - startedAt), 250)
+    return () => window.clearInterval(timer)
+  }, [])
+
+  if (elapsedMs < LOADING_ELAPSED_THRESHOLD_MS) return null
+  return Math.floor(elapsedMs / 1000)
+}
+
+/**
+ * A sweep across a track, running while the request is.
+ *
+ * Indeterminate on purpose. Nothing here knows how far along the request is, so a fill that grew
+ * toward an end would be claiming progress it cannot measure — the same defect as a percentage
+ * invented to fill a bar. What this claims is only that time is passing, which is true for exactly
+ * as long as the component is mounted.
+ *
+ * Under `prefers-reduced-motion` the track renders and does not move. The elapsed count below it
+ * keeps running, because that is information rather than motion, and a reader who has asked for
+ * less movement has not asked to be told less.
+ */
+function LoadingSweep() {
+  const reduced = useReducedMotion()
+
+  return (
+    <div
+      className="mt-3 h-px w-full overflow-hidden bg-surface-subtle"
+      role="presentation"
+      aria-hidden="true"
+    >
+      {reduced ? null : (
+        <motion.div
+          className="h-px w-1/3 bg-surface-emphasis"
+          initial={{ x: "-100%" }}
+          animate={{ x: "300%" }}
+          transition={{
+            duration: LOADING_SWEEP_DURATION,
+            ease: EASE_STANDARD,
+            repeat: Infinity,
+            repeatType: "loop",
+          }}
+        />
+      )}
+    </div>
+  )
+}
+
 /** The request is in flight. Says what is being asked for, so a stuck screen names itself. */
 export function LoadingState({ what }: { what: string }) {
+  const elapsed = useElapsedSeconds()
+
   return (
     <Panel headline={`Loading ${what}…`}>
-      <p>Waiting for the API to answer.</p>
+      <p>
+        Waiting for the API to answer.
+        {/* The sentence above is the honest minimum and does not move. What follows is added only
+            once the wait is long enough to be a fact worth reporting: a screen that is slow and a
+            screen that is stuck look identical without it, and telling those apart is the whole
+            job of this file. */}
+        {elapsed === null ? null : (
+          <span className="text-muted-foreground"> {elapsed}s so far.</span>
+        )}
+      </p>
+      <LoadingSweep />
     </Panel>
   )
 }
