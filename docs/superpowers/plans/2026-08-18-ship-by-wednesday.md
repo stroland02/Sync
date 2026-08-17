@@ -74,6 +74,24 @@ types, check every precondition, and say precisely which one is missing and how 
 `scripts/dev_up.py` already does exactly this (`CI-W302`, `CI-W303`), and it refuses rather than
 dying. The `npx` entry point wraps that and surfaces its messages rather than hiding them.
 
+**What the one command actually does, per the owner 2026-08-18: all setup, launch localhost, and
+index the codebase.** That third step is the one that matters and it is the one nobody had scoped.
+It means first-run is not *bring up a product with seed data* — it is **point Sync at a repository
+and watch it build that repository's API dependency graph**. The console then shows the user's own
+call sites, their own vendors, their own findings.
+
+Three consequences, and the first is the whole reason this is worth doing before Wednesday:
+
+- **It is the answer to *is this real*.** Seeded data proves nothing to a sceptic; a graph built from
+  a repository they chose, in front of them, proves the indexer works on code nobody tuned it for.
+- **The INDEX path must survive an arbitrary repository**, not just the corpus fixtures. Unknown
+  frameworks, missing lockfiles, a language we do not index, zero call sites — each needs a legible
+  outcome rather than a traceback. `sync.index` already attributes an unbindable wrapper rather than
+  reporting a false zero (`M5-W311`), which is exactly the shape the rest of it needs.
+- **Seed data becomes a fallback, not the demo.** If indexing the target produces nothing, the
+  console must say *this repository has no calls we recognise* — never show somebody else's data
+  where theirs should be.
+
 The honest form of the promise: **one command to type, one screen of output, and either the product
 is running or you know exactly what to install.** Not: one command that silently installs a language
 runtime.
