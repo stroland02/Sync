@@ -12,8 +12,14 @@ import unittest.mock
 import psycopg
 import pytest
 
-from sync.core import CallSite, Finding, MigrationOutcome
-from sync.dashboard.fleet import abandonment_by_change_kind, corpus_summary, repositories, runs
+from sync.core import CallSite, Finding, MigrationOutcome, VendorChange
+from sync.dashboard.fleet import (
+    abandonment_by_change_kind,
+    change_units,
+    corpus_summary,
+    repositories,
+    runs,
+)
 from sync.dashboard.queries import _FINISHED
 from sync.graph.store import GraphStore
 
@@ -585,3 +591,77 @@ def test_repositories_of_an_empty_graph_is_empty_not_an_error(store):
     result = repositories(store)
 
     assert result["repo_ids"] == []
+
+
+# --- change_units -----------------------------------------------------------
+
+
+def test_change_units_groups_open_findings_by_vendor_change(store):
+    # A single vendor change spanning 3 call sites across 2 repositories is one ChangeUnit.
+    change_id = store.upsert_vendor_change(
+        VendorChange(
+            vendor_id="stripe",
+            from_version="2024-04-10",
+            to_version="2024-06-20",
+            kind="parameter-removed",
+            operation_id="PostCharges",
+            path_ptr="#/paths/~1v1~1charges/post",
+            severity="breaking",
+            source="oasdiff",
+        )
+    )
+    site_r1_a = store.upsert_call_site(_site(repo_id="r1", path="src/a.ts", line=10))
+    site_r1_b = store.upsert_call_site(_site(repo_id="r1", path="src/b.ts", line=20))
+    site_r2 = store.upsert_call_site(_site(repo_id="r2", path="src/c.ts", line=30))
+
+    f1 = store.insert_finding(_finding(site_r1_a, vendor_change_id=change_id, binding_rung="static"))
+    f2 = store.insert_finding(_finding(site_r1_b, vendor_change_id=change_id, binding_rung="static"))
+    f3 = store.insert_finding(_finding(site_r2, vendor_change_id=change_id, binding_rung="static"))
+
+    result = change_units(store)
+
+    assert result["total"] == 1
+    unit = result["items"][0]
+    assert unit["vendor_id"] == "stripe"
+    assert unit["operation_id"] == "PostCharges"
+    assert unit["change_kind"] == "parameter-removed"
+    assert unit["from_version"] == "2024-04-10"
+    assert unit["to_version"] == "2024-06-20"
+    assert unit["severity"] == "breaking"
+    assert unit["repository_count"] == 2
+    assert unit["call_site_count"] == 3
+    assert unit["binding_rung"] == "static"
+    assert set(unit["finding_ids"]) == {f1, f2, f3}
+    assert unit["repo_ids"] == ["r1", "r2"]
+
+
+def test_change_units_reports_weakest_rung_when_mixed(store):
+    # If call sites within a change unit carry mixed rungs (e.g. static and observed),
+    # the change unit reports the weaker rung while preserving finding details.
+    site_a = store.upsert_call_site(_site(repo_id="r1", path="src/a.ts", line=10))
+    site_b = store.upsert_call_site(_site(repo_id="r1", path="src/b.ts", line=20))
+    f1 = store.insert_finding(_finding(site_a, binding_rung="observed"))
+    f2 = store.insert_finding(_finding(site_b, binding_rung="static"))
+
+    result = change_units(store)
+
+    assert result["total"] == 1
+    unit = result["items"][0]
+    assert unit["call_site_count"] == 2
+    assert unit["binding_rung"] in ("static", "mixed")
+
+
+def test_change_units_scoped_to_repo_id(store):
+    site_r1 = store.upsert_call_site(_site(repo_id="r1", path="src/a.ts", line=10, operation_id="OpA"))
+    site_r2 = store.upsert_call_site(_site(repo_id="r2", path="src/b.ts", line=20, operation_id="OpB"))
+    store.insert_finding(_finding(site_r1, claim="c1"))
+    store.insert_finding(_finding(site_r2, claim="c2"))
+
+    scoped = change_units(store, repo_id="r1")
+    assert scoped["total"] == 1
+    assert scoped["items"][0]["repo_ids"] == ["r1"]
+
+
+def test_change_units_of_an_empty_graph_is_empty_not_an_error(store):
+    result = change_units(store)
+    assert result == {"items": [], "total": 0, "next_offset": None}

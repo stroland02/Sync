@@ -624,10 +624,41 @@ def test_detector_accountability_excludes_findings_that_are_no_longer_open(store
     assert result["total_open_findings"] == 0
 
 
+def test_detector_accountability_cross_detector_rung_tally(store):
+    # Cross-detector tally counts each open finding once across all detectors,
+    # with explicit presence of every known rung (even zero counts).
+    site_a = store.upsert_call_site(_site(path="src/a.ts", line=1))
+    site_b = store.upsert_call_site(_site(path="src/b.ts", line=2))
+    site_c = store.upsert_call_site(_site(path="src/c.ts", line=3))
+    store.insert_finding(_finding(site_a, detector="vendor-change", claim="c1", binding_rung="static"))
+    store.insert_finding(_finding(site_b, detector="observed-drift", claim="c2", binding_rung="observed"))
+    store.insert_finding(_finding(site_c, detector="efficiency", claim="c3", binding_rung="static"))
+
+    result = detector_accountability(store)
+
+    assert result["by_rung"]["static"] == 2
+    assert result["by_rung"]["observed"] == 1
+    assert result["by_rung"]["resolved"] == 0
+    assert result["by_rung"]["unresolved"] == 0
+    assert result["by_rung"]["unattributed"] == 0
+    assert result["total_open_findings"] == 3
+
+
 def test_detector_accountability_with_no_findings_is_empty_not_an_error(store):
     result = detector_accountability(store)
 
-    assert result == {"repo_id": None, "detectors": [], "total_open_findings": 0}
+    assert result == {
+        "repo_id": None,
+        "detectors": [],
+        "by_rung": {
+            "static": 0,
+            "resolved": 0,
+            "observed": 0,
+            "unresolved": 0,
+            "unattributed": 0,
+        },
+        "total_open_findings": 0,
+    }
 
 
 # -- severity_rollup ----------------------------------------------------------------
