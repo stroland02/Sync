@@ -87,6 +87,8 @@ def store() -> GraphStore:
     return store
 
 
+from sync.runner import ClaudeSdkRunner
+
 @pytest.fixture(autouse=True)
 def the_agent_never_runs(monkeypatch):
     """Arm the agent tier to fail loudly instead of trusting it not to fire.
@@ -99,7 +101,7 @@ def the_agent_never_runs(monkeypatch):
     def refuse(self, prompt, repo_path, identity):
         raise AssertionError("the pipeline reached the agent tier, which needs a model call")
 
-    monkeypatch.setattr("sync.remediate.agent_patch.AgentRemediator._run_agent", refuse)
+    monkeypatch.setattr(ClaudeSdkRunner, "run", refuse)
 
 
 def _clone(tmp_path: Path, fixture: str, into: str | None = None) -> RepoRef:

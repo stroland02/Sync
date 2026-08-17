@@ -103,6 +103,9 @@ markers = [
 
 [tool.importlinter]
 root_package = "sync"
+# Required for the model-SDK contract below: without it the graph stops at Sync's own
+# packages, and a forbidden module outside them cannot be named at all.
+include_external_packages = true
 
 [[tool.importlinter.contracts]]
 name = "sync.core depends on nothing"
@@ -126,6 +129,7 @@ forbidden_modules = [
     "sync.verify",
     "sync.rehearse",
     "sync.context",
+    "sync.runner",
 ]
 
 [[tool.importlinter.contracts]]
@@ -133,4 +137,19 @@ name = "sync.rehearse cannot import sync.forge"
 type = "forbidden"
 source_modules = ["sync.rehearse"]
 forbidden_modules = ["sync.forge"]
+
+# M8's seam, stated as the property it defends rather than as a layering preference: the
+# remediation pipeline runs without a model. `sync.runner` owns every line that knows a model
+# SDK exists, so a test can drive `locate -> patch -> verify` against a runner that returns a
+# fixed result and needs no key and no network.
+[[tool.importlinter.contracts]]
+name = "sync.remediate cannot import a model SDK"
+type = "forbidden"
+source_modules = ["sync.remediate"]
+forbidden_modules = ["claude_agent_sdk"]
+# The chain `agent_patch -> sync.runner -> claude_agent_sdk` is the seam, not a violation of
+# it: what this defends is that no module in `sync.remediate` names the SDK itself, so
+# substituting a runner substitutes every line that knows a model exists. Forbidding the
+# chain would forbid the arrangement the contract was written to require.
+allow_indirect_imports = true
 

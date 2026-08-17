@@ -39,9 +39,7 @@ are still read off the disk, and only what the *model* sees is changed. See the 
 from __future__ import annotations
 
 import logging
-from typing import Any
-
-from claude_agent_sdk import HookMatcher
+from typing import Any, Callable
 
 from sync.remediate.untrusted import (
     REPOSITORY,
@@ -221,14 +219,18 @@ def _subject(tool_name: str, tool_input: dict[str, Any]) -> str:
     return f"input={ {key: tool_input.get(key) for key in ('file_path', 'pattern', 'path')} !r}"
 
 
-def hooks(identity: str, refusals: list[str]) -> dict[str, list[HookMatcher]]:
+def hooks(identity: str, refusals: list[str]) -> dict[str, list[Callable]]:
     """The fence, bound to the run it is fencing.
 
-    `refusals` is the caller's list and is how a refusal leaves the hook. A hook cannot
+    `refusals` is the runner's list and is how a refusal leaves the hook. A hook cannot
     abandon a run: raising inside one is answered to the CLI rather than to `propose`. So the
-    reason is recorded here and `agent_patch._drive_agent` raises on it after the query ends,
-    which is what puts it in `abandon_reason` where this project keeps its interesting
-    failures.
+    reason is recorded here and `sync.runner.claude_sdk.ClaudeSdkRunner` raises on it after
+    the query ends, which is what puts it in `abandon_reason` where this project keeps its
+    interesting failures.
+
+    **Plain callables keyed by event, not the SDK's `HookMatcher`.** How a tool's output is
+    framed as untrusted text is Sync's policy and belongs on this side of the runner seam;
+    the runner does the wrapping. See `tool_gate.hooks`.
     """
 
     async def fence_result(
@@ -269,4 +271,4 @@ def hooks(identity: str, refusals: list[str]) -> dict[str, list[HookMatcher]]:
             }
         }
 
-    return {"PostToolUse": [HookMatcher(matcher=None, hooks=[fence_result])]}
+    return {"PostToolUse": [fence_result]}

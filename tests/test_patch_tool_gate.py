@@ -191,7 +191,7 @@ def _input(tool_name: str, tool_input: dict, cwd: str = "/clone") -> dict:
 
 
 def _call(hook_input: dict) -> dict:
-    callback = tool_gate.hooks("finding=f-42 repo=acme-billing")["PreToolUse"][0].hooks[0]
+    callback = tool_gate.hooks("finding=f-42 repo=acme-billing")["PreToolUse"][0]
     return asyncio.run(callback(hook_input, hook_input["tool_use_id"], {"signal": None}))
 
 
@@ -276,18 +276,21 @@ def test_the_prompt_tells_the_agent_what_the_shell_will_accept():
 
 
 def test_the_gate_is_handed_to_the_sdk_for_every_tool_not_only_bash(monkeypatch, tmp_path):
+    from claude_agent_sdk import ResultMessage
+    from sync.runner import ClaudeSdkRunner, claude_sdk
+
     captured = {}
 
     async def fake_query(*, prompt, options):
         captured["options"] = options
-        yield agent_patch.ResultMessage(
+        yield ResultMessage(
             subtype="success", duration_ms=1, duration_api_ms=1, is_error=False,
             num_turns=1, session_id="s1",
         )
 
-    monkeypatch.setattr(agent_patch, "query", fake_query)
+    monkeypatch.setattr(claude_sdk, "query", fake_query)
 
-    AgentRemediator()._run_agent("do the patch", tmp_path, "finding=f-42 repo=acme-billing")
+    ClaudeSdkRunner(agent_patch.patch_hooks).run("do the patch", tmp_path, "finding=f-42 repo=acme-billing")
 
     matchers = captured["options"].hooks["PreToolUse"]
     assert [matcher.matcher for matcher in matchers] == [None]
