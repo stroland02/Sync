@@ -78,7 +78,31 @@ fixtures, for merge rate and at least three of the five quality axes. Merge rate
 `pull_request_outcome` wired to something that updates the corpus; the rest need runs to have
 happened.
 
-**Gate 3 -- SIGNED 2026-08-17.** Evidence:
+## Measured, not asserted: `uv run python scripts/beta_gates.py`
+
+**As of 2026-08-17, 0 of 4 met, 2 cannot be told.** The gates stopped being a coordinator's prose
+the moment `CI-W289` landed, and the first thing the tool did was contradict this document.
+
+- **Gate 1 -- NOT MET.** Four real attempts in the corpus, none with a pull request that went green.
+  The resume-on-review-comment path *is* built; what has never happened is `B7`.
+- **Gate 2 -- CANNOT TELL.** Zero of five axes carry samples; one pull request opened, none merged.
+  The tool refuses to call that a failure, correctly: unmeasured is absence rather than a value of
+  zero, so there is nothing here to pass or fail yet.
+- **Gate 3 -- CANNOT TELL.** The pass was signed at 11:10 and the console changed at 11:54, so the
+  signature describes an earlier tree. **This document recorded it as signed and that was stale
+  within forty-four minutes.** Re-signing is Lane B's call, not the tool's and not the
+  coordinator's.
+- **Gate 4 -- NOT MET, and this is the finding of the day.** There are no unbaselined dead links --
+  and `ephemeral_container`, `copy_between_containers` and `ensure_image_built` are *baselined* as
+  reached from nowhere. **The sandbox is built and unwired, so no patch run is contained.** `B97` is
+  the threat model's ranked-first item, and the baseline mechanism -- which this document sanctions
+  for a producer landing ahead of its consumer -- is what let it sit that way while the gate read
+  green.
+
+The lesson is the one the product is built on, turned inward: a green check that was never wired to
+anything is worse than a red one, because it is trusted.
+
+**Gate 3 -- signed 2026-08-17, superseded by the measurement above.** Evidence:
 `docs/superpowers/reports/2026-08-17-gate-3-screen-pass.md`. Ten of ten screens, every number traced
 to a named payload field or a named derivation, read live off the API and compared against what the
 screen renders; a number seen in only one of the two is not sourced. No product code changed to
