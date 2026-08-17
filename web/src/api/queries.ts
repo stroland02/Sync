@@ -11,6 +11,7 @@ import {
   DEFAULT_LIMIT,
   fetchAdapters,
   fetchBindingSurface,
+  fetchChangeUnits,
   fetchCorpus,
   fetchDetectors,
   fetchFinding,
@@ -25,6 +26,7 @@ import {
 } from "@/api/client"
 import type {
   BindingSurfaceParams,
+  ChangeUnitsParams,
   ObservedTelemetryParams,
   PageParams,
   VendorFindingsParams,
@@ -256,6 +258,20 @@ export function useDetectors(repoId?: string) {
   return useQuery({
     queryKey: ["detectors", repoId ?? null],
     queryFn: ({ signal }) => fetchDetectors({ repoId }, signal),
+  })
+}
+
+/**
+ * Open findings grouped into change units, fleet-wide or for one repository. Not polled: a
+ * change unit moves only when SIGNAL or a remediation checkpoint writes, neither of which this
+ * screen would learn about sooner than a manual refresh.
+ */
+export function useChangeUnits(params: ChangeUnitsParams = {}) {
+  const limit = params.limit ?? DEFAULT_LIMIT
+  const offset = params.offset ?? 0
+  return useQuery({
+    queryKey: ["change-units", params.repoId ?? null, limit, offset],
+    queryFn: ({ signal }) => fetchChangeUnits({ ...params, limit, offset }, signal),
   })
 }
 

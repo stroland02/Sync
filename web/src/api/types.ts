@@ -433,6 +433,37 @@ export interface RunsPage {
 }
 
 /**
+ * `GET /api/change-units`. One row is `sync.dashboard.fleet.change_units`'s grain: one
+ * distinct vendor change (`vendor_id`, `operation_id`, `from_version`, `to_version`,
+ * `change_kind`) across the open findings it produced, fleet-wide or narrowed to one
+ * repository.
+ *
+ * `binding_rung` is the weakest rung among the constituent findings, or the one rung every
+ * constituent finding shares — never a claim about any single call site. `standing` and
+ * `last_checkpoint_at` are the checkpointer's own words for the newest run against this unit's
+ * findings, and are null exactly when no checkpointer DSN was configured or no run has
+ * started — absence, not "nothing happened yet".
+ */
+export interface ChangeUnitRow {
+  change_unit_id: string
+  vendor_id: string
+  operation_id: string | null
+  change_kind: string
+  from_version: string | null
+  to_version: string | null
+  severity: string
+  repository_count: number
+  call_site_count: number
+  binding_rung: BindingSource
+  finding_ids: string[]
+  repo_ids: string[]
+  standing: string | null
+  last_checkpoint_at: string | null
+}
+
+export type ChangeUnitsPage = ItemPage<ChangeUnitRow>
+
+/**
  * One count per distinct value of a `migration_outcome` column.
  *
  * The key `"null"` is not the string form of an empty bucket — `sync.dashboard.fleet`

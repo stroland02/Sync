@@ -1,5 +1,5 @@
 /**
- * The console's only data source: twelve GET routes over the Python transport.
+ * The console's only data source: sixteen GET routes over the Python transport.
  *
  * Paths are relative so one origin in development is one origin in production — the Vite
  * proxy in `vite.config.ts` exists so that nothing here depends on a cross-origin
@@ -15,6 +15,7 @@ import {
 import type {
   AdapterInventoryResponse,
   BindingSurfaceResponse,
+  ChangeUnitsPage,
   CorpusSummary,
   DetectorAccountabilityResponse,
   FindingDetail,
@@ -310,6 +311,24 @@ export function fetchDetectors(
     withQueryParams("/api/detectors", { repo_id: params.repoId }),
     signal,
   )
+}
+
+export interface ChangeUnitsParams extends PageParams, ScopeParams {}
+
+/**
+ * Open findings grouped by vendor change and operation — one row per `sync.dashboard.fleet
+ * .change_units` unit, fleet-wide or narrowed to one repository.
+ */
+export function fetchChangeUnits(
+  params: ChangeUnitsParams = {},
+  signal?: AbortSignal,
+): Promise<ChangeUnitsPage> {
+  const path = withQueryParams("/api/change-units", {
+    repo_id: params.repoId,
+    limit: params.limit,
+    offset: params.offset,
+  })
+  return getJson<ChangeUnitsPage>(path, signal)
 }
 
 /**
