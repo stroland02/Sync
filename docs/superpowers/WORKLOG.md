@@ -163,6 +163,7 @@ write path, are unbuilt; Phase 6 needs auth and tenancy and belongs to M4's host
 | M7-W226 | Vitest coverage for `NodeEvidence` component across scalars, flags, language-tagged blocks, and unnamed properties; dev server verified live on port 5173 with proxy to 8787 | landed | `web/src/features/workflows/evidence.test.tsx`, `docs/superpowers/WORKLOG.md` |
 | M13-W227 | M13 Phase 1: Reasoning & Strategy disclosures in Solution Workflow `NodeEvidence` component, providing structured deductions across AST transforms, compiler checks, sandbox safety, and CI polling inspired by DeepSeek Harness | landed | `web/src/features/workflows/evidence.tsx`, `web/src/features/workflows/evidence.test.tsx`, `docs/superpowers/WORKLOG.md` |
 | M14-W228 | Make ledgers true: reconcile console plan statuses against the tree before build work starts | landed | `docs/superpowers/BACKLOG.md`, `docs/superpowers/plans/2026-08-08-console-mock-to-build.md`, `docs/superpowers/plans/2026-08-16-sync-m13-dynamic-visuals-and-telemetry.md`, `docs/superpowers/WORKLOG.md` |
+| M14-W229 | Raw-utility guard over `web/src/features/` with a shrinking baseline; pytest detects new raw Tailwind utilities not in `console_raw_utilities_baseline.txt` and fails until pair count is reduced to zero | landed | `tests/test_console_raw_utilities.py`, `tests/console_raw_utilities_baseline.txt` |
 
 **M7-W160's navigation was rebuilt once, on the owner's ruling of 2026-08-06.** The first pass built a
 56px icon rail of four product areas beside a 240px contextual panel, and collapsing removed the
