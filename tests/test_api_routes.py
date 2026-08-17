@@ -164,6 +164,10 @@ def _fake_detector_reader(*, repo_id=None) -> dict[str, Any]:
     return {"repo_id": repo_id, "detectors": [], "total_open_findings": 0}
 
 
+def _fake_adapters_reader() -> dict[str, Any]:
+    return {"adapters": []}
+
+
 def _fake_severity_reader(
     *, repo_id: str | None = None, vendor_id: str | None = None
 ) -> dict[str, Any]:
@@ -224,6 +228,7 @@ def _build_app(
     coverage_reader=_fake_coverage_reader,
     observed_reader=_fake_observed_reader,
     detector_reader=_fake_detector_reader,
+    adapters_reader=_fake_adapters_reader,
     severity_reader=_fake_severity_reader,
     overview_reader=_fake_overview_reader,
     vendor_findings_reader=_fake_vendor_findings_reader,
@@ -249,6 +254,7 @@ def _build_app(
         coverage_reader=coverage_reader,
         observed_reader=observed_reader,
         detector_reader=detector_reader,
+        adapters_reader=adapters_reader,
         severity_reader=severity_reader,
         overview_reader=overview_reader,
         vendor_findings_reader=vendor_findings_reader,
@@ -1084,6 +1090,37 @@ def test_detectors_route_returns_the_readers_payload_unaltered():
     assert response.json() == payload
 
 
+def test_adapters_route_returns_the_readers_payload_unaltered():
+    """The Settings screen's read surface.
+
+    `adapter_inventory` already decides what a null count means -- an adapter the graph has no
+    row for has never delivered, which is not the same as having delivered nothing -- and this
+    route must not soften it. A transport that filled a null with `0` would erase the one
+    distinction the screen exists to draw, so the assertion is on the nulls specifically rather
+    than on the payload's shape.
+    """
+    payload = {
+        "adapters": [
+            {"vendor_id": "acme", "kind": "generated", "source": "acme/acme-node",
+             "changes": None, "operations": None, "last_change_at": None, "sources": None},
+            {"vendor_id": "stripe", "kind": "coded", "source": None,
+             "changes": 3, "operations": 2, "last_change_at": "2026-08-17T09:00:00+00:00",
+             "sources": ["oasdiff"]},
+        ]
+    }
+    app = _build_app(
+        surface=GraphSurface(FakeGraph(), feed_fetched_at=FETCHED),
+        adapters_reader=lambda: payload,
+    )
+    client = TestClient(app)
+
+    response = client.get("/api/adapters")
+
+    assert response.status_code == 200
+    assert response.json() == payload
+    assert response.json()["adapters"][0]["changes"] is None
+
+
 def _recording_detector_reader() -> tuple[Any, list[str | None]]:
     calls: list[str | None] = []
 
@@ -1262,6 +1299,7 @@ def _recording_client(**graph_kw) -> _RecordingClient:
         coverage_reader=coverage_reader,
         observed_reader=observed_reader,
         detector_reader=detector_reader,
+        adapters_reader=_fake_adapters_reader,
         severity_reader=severity_reader,
         overview_reader=overview_reader,
         vendor_findings_reader=vendor_findings_reader,
@@ -1463,6 +1501,10 @@ _NOT_COLLECTIONS = {
     "/api/repositories",
     "/api/repositories/{repo_id}/coverage",
     "/api/detectors",
+    # Bounded by what the deployment registers plus what the graph has history for -- a number an
+    # operator configured, not one a customer's traffic grows. A cursor over it would page a list
+    # whose length is a property of the configuration file.
+    "/api/adapters",
     "/api/repos/{repo_id:path}/context",
 }
 

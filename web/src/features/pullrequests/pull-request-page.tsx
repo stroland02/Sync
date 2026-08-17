@@ -68,6 +68,7 @@ import { Breadcrumbs } from "@/layouts/breadcrumbs"
 import { PageHeader } from "@/layouts/page-header"
 import { UnknownRoute } from "@/layouts/unknown-route"
 import { DetailTitleText, pullRequestTitle } from "@/lib/detail-title"
+import { formatFindingBadge } from "@/lib/format"
 
 const DEFAULT_QUESTION =
   "Did Sync open a pull request for this finding, and what proof backs it?"
@@ -190,7 +191,7 @@ function railFacts(
               this finding. An earlier generation may have reached a pull request even where this one
               has not;{" "}
               <Link to="/" className="underline underline-offset-2">
-                the fleet screen
+                the codebase overview
               </Link>{" "}
               lists every one.
             </span>
@@ -204,13 +205,8 @@ function railFacts(
 function PullRequest({ findingId, question }: { findingId: string; question: string }) {
   const query = useWorkflow(findingId)
   const data = query.data
-  // One read of the evidence per render, shared by the rail and by the link out. `bundleFacts`
-  // scans the node list, and three rows asking it the same question three times is the same work
-  // three times.
   const facts = bundleFacts(data?.nodes ?? [])
 
-  // Short, because the content column carries the same answer in full: four rows spelling out that
-  // state's whole sentence would be one fact written five times. Each still says which nothing it is.
   const failure = query.isError ? (
     query.error instanceof NotFoundError ? (
       <Absent>no run for this finding</Absent>
@@ -220,8 +216,8 @@ function PullRequest({ findingId, question }: { findingId: string; question: str
   ) : null
 
   const trail = [
-    { label: "Fleet", to: "/" },
-    { label: findingId, to: `/findings/${encodeURIComponent(findingId)}` },
+    { label: "Repositories", to: "/" },
+    { label: formatFindingBadge(findingId), to: `/findings/${encodeURIComponent(findingId)}` },
     { label: "Solution workflow", to: `/findings/${encodeURIComponent(findingId)}/workflow` },
     { label: "Pull request" },
   ]

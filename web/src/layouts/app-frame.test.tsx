@@ -289,25 +289,27 @@ describe("the rail carries the product's areas", () => {
     // is icon-only, so without `aria-label` the rail is a column of unnamed buttons.
     renderAt("/")
 
-    expect(within(rail()).getByRole("link", { name: /fleet/i })).toBeTruthy()
+    expect(within(rail()).getByRole("link", { name: /codebases|repositories|fleet/i })).toBeTruthy()
     for (const area of AREAS) {
       expect(railNames()).toContain(area.label)
     }
   })
 
-  it("offers Settings no destination and says what it is waiting for", () => {
-    // Settings is not an area: no route declares it and `GRAPH_LEVELS` gains nothing for it. It is
-    // on the rail because the write path is where it arrives, and the entry says so rather than
-    // leaving a gap somebody fills with an invented level.
+  it("reaches Settings without making it an area or a level", () => {
+    // Settings is a destination, not a rung: `DESTINATIONS` declares it, `GRAPH_LEVELS` stays at
+    // nine, and `AREAS` never gains a seventh member. This rail slot held a disabled button for as
+    // long as no screen existed; the screen exists now and is read-only, so the entry links and its
+    // note says which of those two things is true rather than continuing to promise the other.
     renderAt("/")
 
     const settings = within(rail()).getByLabelText(/settings/i)
 
-    expect(settings.getAttribute("aria-disabled")).toBe("true")
-    expect(settings.getAttribute("href")).toBeNull()
+    expect(settings.getAttribute("href")).toBe("/settings")
+    expect(settings.getAttribute("aria-disabled")).toBeNull()
+    expect(AREAS.map((area) => area.label)).not.toContain("Settings")
     // Asserted on `title` rather than on the tooltip: a Radix tooltip is in the document only while
     // it is open, so the sentence has to be readable without one.
-    expect(settings.getAttribute("title")).toBe("Settings arrives with the write path")
+    expect(settings.getAttribute("title")).toBe("Settings — read-only until the write path lands")
   })
 
   it("keeps an area's rail item current on every route that area owns", () => {
@@ -375,7 +377,7 @@ describe("the rail carries the product's areas", () => {
         <BackButton />
       </MemoryRouter>
     )
-    expect(railCurrent()).toEqual(["Fleet"])
+    expect(railCurrent()).toEqual(["Codebases"])
 
     fireEvent.click(within(rail()).getByLabelText("Codebase"))
     expect(railCurrent()).toEqual(["Codebase"])
@@ -386,9 +388,9 @@ describe("the rail carries the product's areas", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "go back" }))
 
-    // Back at `/`, where the Fleet screen renders. The rail says Fleet, not the area browsed here
+    // Back at `/`, where the Codebases screen renders. The rail says Codebases, not the area browsed here
     // three clicks ago.
-    expect(railCurrent()).toEqual(["Fleet"])
+    expect(railCurrent()).toEqual(["Codebases"])
   })
 })
 

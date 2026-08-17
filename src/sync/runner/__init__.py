@@ -47,3 +47,4 @@ __all__ = [
     "StaticRunner",
     "validate_outcome_call",
 ]
+

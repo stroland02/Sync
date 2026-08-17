@@ -1,0 +1,295 @@
+# Lane charters, 2026-08-17
+
+Six agents work this repository at once. This file is what each of them reads at the top of every
+loop iteration. It exists because the coordination cost of six sessions is not the work; it is the
+collisions, and every collision this project has had so far falls into three kinds: two agents
+editing one file, two agents claiming one work-item number, and an agent landing on a stale `main`.
+
+Each of the three has a mechanical fix here rather than a convention anybody has to remember.
+
+Read your own lane. Do not read the others' lanes for instruction; read them only to know what you
+must not touch.
+
+## The rule that makes the rest work
+
+**A lane owns files, not tasks.** A task name does not collide. A file does. So the lane boundary
+below is a path list, and the question "may I do this piece of work" is answered by "are the files
+in my lane", never by "does this sound like my area".
+
+If a change you need crosses into another lane, do not make it. Send the coordinator a message
+naming the file and what you need, and keep working on something else in your lane while you wait.
+A five-minute wait is cheaper than a merge conflict in a file two sessions rewrote.
+
+## The three shared files, and the only safe way to edit them
+
+`docs/superpowers/WORKLOG.md`, `docs/superpowers/BACKLOG.md` and the plan files under
+`docs/superpowers/plans/` are touched by every lane. They caused every merge conflict recorded on
+2026-08-17.
+
+**When you resolve a conflict in any of these, the resolution is the union of both sides.** Keep
+every row from both sides. Never delete another agent's row, never reorder to make a diff smaller,
+and never take one side wholesale. If both sides added a row with the same number, keep both rows
+and renumber *yours* using your block below, because the other agent may already have pushed.
+
+## Work item and backlog numbers are pre-allocated, so they cannot collide
+
+`M<milestone>-W<n>` is one sequence across the whole project. On 2026-08-17 five collisions
+happened in a single afternoon because five sessions each took "the next number" from a register
+that was already stale in their working tree.
+
+Take your numbers from your own block. Nobody else will.
+
+| Lane | Work items | Backlog items |
+|---|---|---|
+| A -- remediation loop | W240-W259 | B140-B144 |
+| B -- console | W260-W279 | B145-B149 |
+| C -- pipeline health | W280-W299 | B150-B154 |
+| D -- signals and adapters | W300-W319 | B155-B159 |
+| E -- graph, dashboard, API | W320-W339 | B160-B164 |
+| Coordinator | W233-W239 | B137-B139 |
+
+Use them in order. The milestone prefix is whatever the work actually belongs to, so `M10-W241` and
+`M11-W242` from one lane is normal and correct.
+
+## The loop
+
+Every iteration, in order. Do not skip step 1 and do not skip step 6.
+
+1. **Catch up.** `git fetch origin` then `git merge origin/main --no-edit` in your worktree.
+   Resolve conflicts by the union rule above. Another session has almost certainly landed since
+   your last iteration.
+2. **Pick one item** from your lane's queue below. One reviewable unit, not three.
+3. **Claim it** by adding its row to `docs/superpowers/WORKLOG.md` with the next number from your
+   block, before you write code.
+4. **Build it test-first.** Write the failing test, run it, watch it fail for the reason you
+   expect, then implement. This is not negotiable and it is not slower; it is the only thing that
+   distinguishes a test from a comment.
+5. **Gate locally.** The local gate is the authority, not CI -- hosted runners here report a job
+   that never started as `failure`. Run every gate your change touches and say which ones ran:
+   - Python: `uv run lint-imports`, `uv run python scripts/lint_encoding.py src tests`,
+     `uv run pytest tests/ -q -n 4`
+   - Console: from `web/`, `npm test`, `npm run build`, `npm run lint`
+6. **Land it on `main` by fast-forward.** Merge `origin/main` once more, re-run the cheap gates,
+   then prove containment before you push:
+   ```
+   git fetch origin
+   git merge-base --is-ancestor origin/main HEAD && git push origin HEAD:refs/heads/main
+   ```
+   If the ancestor check fails, the branch diverged: merge again and re-check. Never force-push,
+   never open a pull request, never push a branch to `main` you have not gated.
+7. **Report.** Send `worker_done` naming the commit range that landed, what you gated, and what you
+   deliberately did not do. The coordinator re-dispatches you immediately; you do not need to ask
+   for more work.
+
+If an iteration produces nothing landable -- the item turned out to be already done, or blocked --
+report that as `worker_done` with `--outcome succeeded` and say so plainly. An honest empty
+iteration is a result. Do not invent work to fill it.
+
+## Deciding rather than asking
+
+While executing, decide and continue. `.claude/rules/autonomous-development.md` is binding: write
+the ruling into the plan's ledger and keep going. Three things only are still the human's -- an
+irreversible action outside this repository, a decision that invalidates a plan's architecture, and
+anything needing a credential or a spend. Landing on `main` by fast-forward is explicitly
+authorized for every lane and is not one of the three.
+
+Escalate to the coordinator, not to the human, when the blocker is another lane.
+
+## Traps that have each cost this project an hour
+
+- **A fresh worktree fails about 50 tests for missing gitignored tooling.** Run
+  `bash scripts/bootstrap_tools.sh` and `uv run python scripts/fetch_corpus_repositories.py` once
+  per checkout. Do this before you believe any failure.
+- **Postgres is shared, on port 5433, and it bounces.** A run that fails in the hundreds with
+  `the database system is starting up`, `is in recovery mode`, or `connection failed` is
+  environmental. Wait for `docker exec sync-postgres-1 pg_isready -U sync`, then re-run. Do not
+  debug it and do not restart the container -- five other agents are using it.
+- **`python3` does not exist here.** The interpreter is `python`. `uv` only; never Poetry.
+- **Use `-n 4`, not `-n auto`, for the full suite.** `-n0` is unusable here -- it takes long enough that nobody runs it -- but `-n auto` is not the safe opposite: it has crashed an xdist worker outright on this machine (`INTERNALERROR ... KeyError: <WorkerController gw7>`) and Lane C measured the same thing independently. A crashed worker aborts the run, which reads as a catastrophic failure and is not one. `-n 4` is the working default; a single test file is fine with `-n0`.
+- **Never `git stash`.** `refs/stash` is one stack shared by every worktree of this repository, so
+  a pop in your tree can take another agent's work.
+- **Never `git checkout <file>` on a file with uncommitted work.** It reverts the whole file.
+- **Always pass `encoding="utf-8"`** to `read_text`, `write_text`, `open` and
+  `subprocess.run(..., text=True)`, and set `PYTHONIOENCODING=utf-8` in a child process's
+  environment. Every fixture here is ASCII, so no test will ever catch a missing one.
+- **A spec passed through the Orca CLI must be ASCII.** Em dashes arrive as mojibake.
+
+## Standing arbitrations
+
+Recorded here when one is made, so no lane has to ask the same question twice.
+
+**2026-08-17, the dead-link red on `main`.** `ensure_image_built` in
+`src/sync/remediate/sandbox_image.py` is reached from nowhere and fails
+`test_lint_dead_links`. Lane C is right that baselining it would hide another session's in-progress
+work, and reached that on its own. **Ruling: leave the red, name `21b99f6` when reporting it, and do
+not edit or baseline that file. Lane A wires it as part of its own queue** -- the file is Lane A's,
+the function is B97's, and a lane that owns neither should not be the one to decide it is dead. Any
+lane may exclude that one test from its own gate run while this stands, and must say so when
+reporting.
+
+## The lanes
+
+### Lane A -- the remediation loop, M9 through M11
+
+**Owns:** `src/sync/remediate/**`, `src/sync/runner/**`, `src/sync/core/outcomes.py`,
+`src/sync/core/protocols.py`, `src/sync/rehearse/**`, and the tests named for them
+(`tests/test_remediate*`, `tests/test_outcome*`, `tests/test_patch_runner_seam.py`,
+`tests/test_durable_runs.py`, `tests/test_tiered*`, `tests/test_rehearse*`).
+
+**Authority:** `docs/superpowers/plans/2026-08-06-sync-m8-m11-resolution-loop.md`.
+
+M8's runner seam landed as `M8-W228`. M9's outcome vocabulary is built. What remains is the half
+that earns the product's name.
+
+Queue, in order:
+
+1. **M10, durable runs and the human turn.** A run that parks instead of ending:
+   `queued -> repo_discovery -> running -> { awaiting_human | awaiting_events | complete | failed }`,
+   with `resuming -> running` when a human replies or a pull request event arrives. LangGraph
+   checkpoints in Postgres are already a durable session store; what is missing is the parked
+   states, the event ingress, and the rule that a parked run is not ticked until something wakes
+   it. Closes when a run whose pull request receives a review comment resumes and pushes a
+   follow-up commit with no human re-running anything, and when abandoned and parked are
+   distinguishable in the corpus.
+2. **M11, fan-in.** Findings sharing a `vendor_change_id` against one repository are one unit of
+   work. One vendor change across N call sites becomes one pull request with N edits and one
+   resolution carrying N dispositions, applied atomically -- if any entry is invalid, nothing
+   changes. The corpus records one attempt, not N.
+
+**Do not touch** `src/sync/forge/**` without messaging the coordinator; `pull_request_outcome`
+landed there as `M10-W229` and Lane A's event ingress will want it. Reading it is free.
+
+### Lane B -- the console, M7's remainder and M12
+
+**Owns:** `web/**`, `DESIGN.md`, `.claude/rules/console-*.md`, and the console plans under
+`docs/superpowers/plans/`.
+
+**Authorities:** `docs/superpowers/plans/2026-08-17-console-mock-parity.md`,
+`docs/superpowers/plans/2026-08-08-console-mock-to-build.md`, and the three that bind every screen:
+the specification's hierarchy block, `DESIGN.md` as the token contract, and
+`.claude/rules/interface-originality.md`.
+
+Queue, in order:
+
+1. **Finish the mock-parity plan** you are already executing, task by task, landing each on `main`
+   rather than batching them.
+2. **Mock-to-build Task 1**, the measurement pass: put a mock screen and its shipped counterpart
+   side by side under `getComputedStyle` and write what differs. Nobody has done this, which is why
+   every other task in that plan argues from a drawing.
+3. **M12, dashboards that earn their screen.** The two things the owner named and nobody scheduled:
+   the layout is one vertical stack where it should be a grid, and Fleet carries more prose than
+   data. The useful panels need aggregates `sync.dashboard` does not compute -- those aggregates
+   are Lane E's, so message the coordinator with the exact shape you need and build against it when
+   it lands.
+
+**The refusals are not style and they are not yours to relax:** no composite score, no health
+figure, no traffic light, no green dot, no liveness pulse. Restyling one of the twenty-four honesty
+sentences is allowed; deleting, shortening, collapsing behind a disclosure, or moving one into a
+tooltip is not.
+
+**Mock-to-build Task 3 is blocked on its own premise** and the plan says so -- the drawer has one
+consumer, not five. The work it actually contains is building the second drawer.
+
+### Lane C -- pipeline health, the gate, and CI
+
+**Owns:** `.github/**`, `scripts/**` except `scripts/orchestration/**`, `pyproject.toml`, `docker-compose.yml`, `docker/**`,
+`tests/conftest.py`, `tests/test_lint_*`, `tests/test_ci_*`, `tests/test_gate_*`,
+`tests/test_leaked_database_sweep.py`, `tests/test_patch_sandbox.py`, `tests/test_sandbox.py`.
+
+Queue, in order:
+
+1. **`main` is red and has been all day.** `tests/test_lint_dead_links.py::test_the_repository_matches_its_baseline`
+   fails because `ensure_image_built` in `src/sync/remediate/sandbox_image.py:113` landed with B97
+   Decision 2 and is reached from nowhere. Wire it or baseline it -- B111's standard applies, a
+   thing held out of the gate must be wired somewhere real rather than dropped. This is the highest
+   priority item in any lane, because every other lane is currently gating around it.
+   `sandbox_image.py` is Lane A's path: coordinate through the coordinator, or baseline it from
+   your side and file the wiring as a backlog item against Lane A.
+2. **Postgres bounces under six concurrent sessions** and takes about three minutes of crash
+   recovery each time, which reads as a mass test failure and costs whoever hit it a diagnosis.
+   Measured twice on 2026-08-17. Find out whether this is Docker Desktop, a resource ceiling, or
+   the leaked-database volume, and fix or document it with evidence.
+3. **`test_disconnect_network_does_not_stop_an_already_open_socket`** fails under `-n auto` and
+   passes alone. A test that fails only under contention is a test nobody can read a verdict from.
+4. **Gate wall-clock.** The full suite is eight to fourteen minutes and every lane pays it on every
+   iteration. That is the single largest tax on this whole workspace.
+
+### Lane D -- signals, adapters and intake, M5
+
+**Owns:** `src/sync/signals/**`, `src/sync/index/**`, and their tests (`tests/test_*adapter*`,
+`tests/test_*signal*`, `tests/test_*vendor*` except `tests/test_adapter_inventory.py`,
+`tests/test_intake*`, `tests/test_index*`, `tests/test_oasdiff*`, `tests/test_reachability*`).
+
+M5 is at about 35 percent: Sentry feeds counts in, and nothing correlates anything. That
+correlation is this lane's subject.
+
+Queue, in order:
+
+1. **Make the request correlator real.** `RequestCorrelator` is a protocol in `sync.core` with no
+   production implementation joining runtime telemetry to a static call site. Until that join
+   exists, the `observed` rung is a promise rather than a rung, and two detectors depend on it.
+2. **Adapter conformance against a second configured vendor.** The registry serves coded,
+   generated-from-manifest and MCP vendors; only the coded pair is exercised end to end.
+3. **B136, the intake attempt record**, is filed and is Lane E's schema but this lane's producer.
+   Nothing records that an adapter was *asked*, only what it answered, so an adapter whose fetch has
+   been failing for a week is indistinguishable from one that found nothing new. Coordinate the
+   schema half through the coordinator.
+
+**Vendor-specific knowledge lives in adapters, never in core.** The moment `sync.core` knows a
+vendor's name the plugin story is dead, and `tests/test_import_boundary.py` is not advisory.
+
+### Lane E -- the graph, the dashboard view models, and the API
+
+**Owns:** `src/sync/graph/**`, `src/sync/dashboard/**`, `src/sync/api/**`, `src/sync/mcp/**`,
+`src/sync/benchmark/**`, and their tests (`tests/test_graph*`, `tests/test_dashboard*`,
+`tests/test_api*`, `tests/test_mcp*`, `tests/test_adapter_inventory.py`, `tests/test_severity*`,
+`tests/test_pipeline_composes.py`).
+
+Queue, in order:
+
+1. **The aggregates M12 needs.** Lane B cannot build a panel over a number nothing computes. The
+   two named in the mock-to-build plan are the Fleet change-unit grain and the cross-detector rung
+   tally. Build them as view models with tests, land them, and tell the coordinator the payload
+   shape so Lane B can consume it.
+2. **B136's schema half**, the intake attempt record. One row per *attempt*, not per adapter,
+   carrying the outcome and, on failure, a reason from a closed vocabulary rather than free text --
+   B128's argument for `abandon_reason_code` applies unchanged, because a promise to learn from
+   failures needs a schema that can be aggregated. Declare the grain as a comment in `schema.sql`
+   before you add the first column.
+3. **Wire `pull_request_outcome` to something that updates the corpus.** It landed as `M10-W229`
+   and nothing calls it, so `pr_merged` is still null on every row and merge rate still has no
+   sample. This needs repository resolution per corpus row, and `store.record_merge_outcome`
+   currently stamps `pr_merged_at = now()` rather than the instant GitHub holds, which is a
+   fidelity gap to close while you are there.
+
+**Every stage is idempotent and every table declares its grain as a comment before it gains a
+column.** One `migration_outcome` row is one attempt, not one finding.
+
+## The loop survives the session that started it
+
+Every agent here, the coordinator included, eventually stops mid-loop: a token budget runs out, a
+session closes, a runtime drops a connection. The lane then goes quiet and nothing notices, because
+the thing that would have noticed is the session that died.
+
+`scripts/orchestration/resume_lanes.py` is what notices. It is idempotent, takes no arguments in its
+normal form, and re-attaches any stopped lane to its own terminal. A scheduled task on this machine
+runs it every twenty minutes, so a lane that dies while nobody is watching is picked up within
+twenty minutes rather than at the next time a human happens to look.
+
+Run `uv run python scripts/orchestration/resume_lanes.py --dry-run` to see every lane's verdict
+without changing anything. That is the right first command when you do not know what state the
+workspace is in.
+
+**It never invents work.** It re-attaches an existing Task to an existing terminal. Deciding what a
+lane does next is a coordinator judgement, and a script that guessed would turn a finished milestone
+into busywork.
+
+## The coordinator
+
+Owns `docs/superpowers/WORKLOG.md`, `docs/superpowers/BACKLOG.md`, this file,
+`scripts/orchestration/**`, arbitration between lanes, and reconciling a landing that two lanes
+raced. Message it with
+`orca orchestration ask` when you are blocked on another lane, and with `escalation` when something
+is wrong that your lane cannot fix.
+
+It does not review your work before you land it. The gate does that, and you ran it.

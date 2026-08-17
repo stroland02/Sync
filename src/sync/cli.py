@@ -37,7 +37,7 @@ from sync.forge.webhook import (
     WebhookSignatureError,
     record_merge_outcome,
 )
-from sync.graph.store import GraphStore
+from sync.graph.store import DEFAULT_DSN, GraphStore
 from sync.index.literals import index_operation_literals
 from sync.index.python_lang import PythonAdapter
 from sync.index.typescript import TypeScriptAdapter
@@ -78,8 +78,6 @@ from sync.signals.registry import (
 from sync.signals.sentry.errors import SentryErrorReader, UnreadableExport
 from sync.signals.sentry.shapes import SentryShapeReader
 from sync.telemetry import ingest_payload
-
-DEFAULT_DSN = "postgresql://sync:sync@localhost:5433/sync"
 
 # Where the GitHub webhook secret is read from when no file is named. An environment
 # variable rather than a setting with a default: a shared secret has no value this
@@ -285,6 +283,41 @@ def _repo_id(url: str) -> str:
     remote = remote.replace(":", "/", 1)
     host, _, path = remote.removesuffix(".git").partition("/")
     return f"{host.lower()}/{path}"
+
+
+# The schemes a forge-addressable remote is spelled with, plus the scp-style form git accepts
+# without one. `file://` is deliberately absent: git clones it, and nothing after the clone can
+# address it, which is the same failure a bare path produces one step later.
+_REMOTE_SCHEMES = ("https://", "http://", "ssh://", "git://")
+_SCP_REMOTE = re.compile(r"^[^/\\:@]+@[^/\\:@]+:")
+
+
+def remote_url(value: str) -> str:
+    """`--repo`'s argparse type: a git remote `GitHubForge` can address, or a refusal.
+
+    `git clone` accepts a local path, so a checkout on disk clones, indexes and detects and
+    looks like it is working. What it cannot reach is the forge: `_repo_id` reduces
+    `/path/to/your/checkout` to itself and `_owner_repo` takes its last two segments, so every
+    `gh api` call addresses `your/checkout` and 404s -- after the run has cloned, indexed,
+    detected and paid for an agent turn. Nothing downstream can repair that. A directory has
+    no owner and no name on any forge, and inventing one would only move the 404.
+
+    An argparse type rather than a check inside `run`, because argv is the boundary and `run`
+    is not: `push_branch` genuinely serves a local origin, and
+    `test_two_findings_in_one_run_produce_branches_that_share_no_commits` drives the whole
+    pipeline that way with the two `gh`-backed steps replaced. Refusing inside `run` would
+    have refused a shape the pipeline supports; refusing here refuses only the shape a person
+    can type, which is the one that reaches the real forge.
+    """
+    if value.startswith(_REMOTE_SCHEMES) or _SCP_REMOTE.match(value):
+        return value
+    raise argparse.ArgumentTypeError(
+        f"takes a git remote URL, not a path to a checkout.\n"
+        f"  got:  {value}\n"
+        f"  pass: https://github.com/<owner>/<name>, or git@github.com:<owner>/<name>.git\n"
+        f"Sync clones the URL itself, and addresses the same repository through `gh api` to "
+        f"read CI and open the pull request. A path has no owner and name for that call."
+    )
 
 
 def _clone(url: str, dest: Path) -> RepoRef:
@@ -822,6 +855,42 @@ def _coverage_lines(unread: Sequence[str]) -> list[str]:
     ]
 
 
+def _binding_lines(vendor: Any) -> list[str]:
+    """Why this run could bind no call site at all, or nothing when it could bind one.
+
+    The distinction `_coverage_lines` draws for a file, drawn for a whole vendor. An adapter with
+    no symbol map declines every symbol, both indexers skip every call, and the run prints the
+    same zero for a repository that calls the vendor and one that has never imported it. Neither
+    is an error and neither raises, so the count is the only thing a reader gets -- and holding
+    only the count, they cannot recover which of the two they are looking at.
+
+    That is the shape `select_language_adapter` refuses in its own docstring, "a run that appears
+    to work and establishes nothing", reached from the other side: the language matched, the
+    repository was walked, and nothing downstream of `operation_for_symbol` could ever fire.
+
+    `unbindable_reason` is optional the way `unverifiable_reason` and `sdk_bindings` are, and the
+    default runs in the safe direction. An adapter that declares nothing is reported as ordinary,
+    so a third party's adapter written before the field existed goes on running unqualified; the
+    cost of that default is a silent zero for an adapter nobody has updated, and the cost of the
+    other one is a qualification printed over every real measurement, which retires itself by
+    teaching the reader to skip it.
+
+    Nothing here is composed about the vendor. The sentence naming what is missing is the
+    adapter's, because the substrate that failed to produce a map is the only thing that knows
+    why -- a message written at this boundary would be `cli.py` holding vendor knowledge, and
+    would have to be edited for each new way of failing to bind.
+    """
+    reason = getattr(vendor, "unbindable_reason", None)
+    if not reason:
+        return []
+    return [
+        f"no call site can bind to '{vendor.vendor_id}' in any repository",
+        f"  {reason}",
+        "  The count below is not a measurement: a repository that calls this vendor arrives "
+        "at the same zero.",
+    ]
+
+
 def _detector_suite(
     store: GraphStore,
     *,
@@ -962,13 +1031,18 @@ def run(args: argparse.Namespace, today: date | None = None) -> int:
         # an absent call site.
         #
         # A stale row from a previous invocation is indistinguishable from a real
-        # finding to the detector, so everything a scan re-derives is cleared
-        # first. `call_site` is the exception and is now converged per repository
-        # instead: position is part of a call site's identity, so one blank line
-        # inserted above a call used to leave the old row behind forever with its
-        # finding attached, and the only thing that had ever cleared those was a
-        # truncate of the whole database -- which erases every other repository's
-        # rows, exactly what a hosted control plane must never do.
+        # finding to the detector, so what a scan rebuilds from scratch is cleared
+        # first -- and only that. `truncate_signal_and_detect` names the two tables
+        # rather than naming the six it spares, which is what stopped a scan from
+        # emptying the migration corpus, the context it had seeded a few lines above,
+        # and three tables of telemetry no scan produces.
+        #
+        # `call_site` is rebuilt too and is converged per repository instead: position
+        # is part of a call site's identity, so one blank line inserted above a call
+        # used to leave the old row behind forever with its finding attached, and the
+        # only thing that had ever cleared those was a truncate of the whole database
+        # -- which erases every other repository's rows, exactly what a hosted control
+        # plane must never do.
         #
         # Converged by retraction rather than by deletion, which is not a detail:
         # `finding.call_site_id` cascades, so deleting the stale row deletes what
@@ -978,11 +1052,6 @@ def run(args: argparse.Namespace, today: date | None = None) -> int:
         # Finding ids are stable hashes of (detector, call_site_id, vendor_change_id),
         # so a re-inserted finding gets the same id its checkpoint thread already
         # used -- checkpoint coordinates survive the truncate.
-        #
-        # What is still truncated wholesale, and is still cross-repository:
-        # `finding` and `vendor_change` are re-derived every scan, and the observed
-        # tables are cleared by a scan that did not produce them. Narrowing those is
-        # a decision per table with its own grain argument and is not made here.
         # Fetched before the transaction opens. The ingest holds an ACCESS EXCLUSIVE lock on the
         # graph tables, and two vendor pages behind a slow network would hold it for the length
         # of the download rather than the length of the write.
@@ -995,7 +1064,7 @@ def run(args: argparse.Namespace, today: date | None = None) -> int:
         )
 
         with store.transaction():
-            store.truncate_all(keep=("call_site",))
+            store.truncate_signal_and_detect()
 
             # Kept as well as stored: `ParameterDeprecationDetector` takes call sites directly,
             # and the store answers `call_sites_for_operation` rather than "all of them". The id
@@ -1061,9 +1130,11 @@ def run(args: argparse.Namespace, today: date | None = None) -> int:
                 store,
             )
 
-        # Before the finding count, because it qualifies it. A reader who sees the number first
-        # has already drawn a conclusion from it.
-        for line in _coverage_lines(unread):
+        # Before the finding count, because they qualify it. A reader who sees the number first
+        # has already drawn a conclusion from it. The binding gap leads, because it is the wider
+        # of the two: unread paths cost part of the answer, and a vendor that binds nothing
+        # means there was never an answer to cost.
+        for line in _binding_lines(vendor) + _coverage_lines(unread):
             print(line)
 
         print(f"{len(findings)} finding(s)")
@@ -2118,7 +2189,13 @@ def context_set(args: argparse.Namespace) -> int:
     return 0
 
 
-def main() -> int:
+def build_parser() -> argparse.ArgumentParser:
+    """The whole command surface, built without parsing anything.
+
+    Separate from `main` so the surface can be read rather than executed:
+    `tests/test_day_one_path.py` holds every command the README tells a new user to type
+    against what this declares, which needs the parser and must never run a command.
+    """
     parser = argparse.ArgumentParser(prog="sync")
     sub = parser.add_subparsers(dest="command", required=True)
 
@@ -2126,7 +2203,11 @@ def main() -> int:
     run_parser.add_argument("--vendor", default="stripe", choices=available_vendors())
     run_parser.add_argument("--from-version", dest="from_version", required=True)
     run_parser.add_argument("--to-version", dest="to_version", required=True)
-    run_parser.add_argument("--repo", required=True, help="git URL of the repository to scan")
+    run_parser.add_argument(
+        "--repo", required=True, type=remote_url,
+        help="git remote URL of the repository to scan, which Sync clones itself; a path to a "
+             "checkout is refused, because `gh api` addresses the same repository as owner/name",
+    )
     run_parser.add_argument("--dsn", default=DEFAULT_DSN)
     run_parser.add_argument("--cache", default=".cache/specs")
     run_parser.add_argument("--limit", type=int, default=1, help="findings to remediate; 0 for all")
@@ -2319,7 +2400,11 @@ def main() -> int:
     context_set_parser.add_argument("--dsn", default=DEFAULT_DSN)
     context_set_parser.set_defaults(func=context_set)
 
-    args = parser.parse_args()
+    return parser
+
+
+def main() -> int:
+    args = build_parser().parse_args()
     return args.func(args)
 
 

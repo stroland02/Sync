@@ -88,7 +88,7 @@ from sync.core import (
     ObservedShape,
     VendorChange,
 )
-from sync.graph.store import GraphStore
+from sync.graph.store import DEFAULT_DSN, GraphStore, describe_dsn
 
 MARKER = "seed-console"
 
@@ -164,18 +164,10 @@ def _looks_like_dev(dsn: str) -> bool:
     return host in {"localhost", "127.0.0.1"}
 
 
-def _describe(dsn: str) -> str:
-    info = psycopg.conninfo.conninfo_to_dict(dsn)
-    host = info.get("host") or "localhost"
-    port = info.get("port") or "5432"
-    dbname = info.get("dbname") or info.get("user") or "?"
-    return f"{host}:{port}/{dbname}"
-
-
 def _require_dev_dsn(dsn: str, label: str) -> None:
     if not _looks_like_dev(dsn):
         raise SystemExit(
-            f"refusing to run: {label} {_describe(dsn)} does not look like a local development "
+            f"refusing to run: {label} {describe_dsn(dsn)} does not look like a local development "
             f"database (host must be localhost or 127.0.0.1). This script writes and deletes "
             f"rows tagged '{MARKER}'; pointed at anything else, that is not a safe operation."
         )
@@ -492,6 +484,8 @@ def _seed_checkpoints(checkpointer_dsn: str, f_a: str, f_b: str, f_c: str) -> tu
     with PostgresSaver.from_conn_string(checkpointer_dsn) as saver:
         saver.setup()
 
+    with PostgresSaver.from_conn_string(checkpointer_dsn) as saver:
+
         _put(
             saver, thread_a0, 0, "2026-08-03T09:00:00.000000+00:00", step=6,
             channel_values={
@@ -762,7 +756,7 @@ def main(argv: list[str] | None = None) -> int:
     )
     args = parser.parse_args(argv)
 
-    graph_dsn = os.environ.get("SYNC_GRAPH_DSN", "postgresql://sync:sync@localhost:5433/sync")
+    graph_dsn = os.environ.get("SYNC_GRAPH_DSN", DEFAULT_DSN)
     checkpointer_dsn = os.environ.get("SYNC_CHECKPOINTER_DSN", graph_dsn)
 
     _require_dev_dsn(graph_dsn, "SYNC_GRAPH_DSN")
@@ -771,13 +765,13 @@ def main(argv: list[str] | None = None) -> int:
     if args.scale is not None:
         if args.remove:
             print(f"removing scale rows tagged '{SCALE_REPO_ID}' from:")
-            print(f"  graph: {_describe(graph_dsn)}")
+            print(f"  graph: {describe_dsn(graph_dsn)}")
             remove_scale(graph_dsn)
             print("done.")
             return 0
 
         print(f"seeding {args.scale} scale call sites tagged '{SCALE_REPO_ID}' into:")
-        print(f"  graph: {_describe(graph_dsn)}")
+        print(f"  graph: {describe_dsn(graph_dsn)}")
         started = _perf_counter()
         count = seed_scale(graph_dsn, args.scale)
         elapsed = _perf_counter() - started
@@ -787,15 +781,15 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.remove:
         print(f"removing rows tagged '{MARKER}' from:")
-        print(f"  graph:        {_describe(graph_dsn)}")
-        print(f"  checkpointer: {_describe(checkpointer_dsn)}")
+        print(f"  graph:        {describe_dsn(graph_dsn)}")
+        print(f"  checkpointer: {describe_dsn(checkpointer_dsn)}")
         remove(graph_dsn, checkpointer_dsn)
         print("done.")
         return 0
 
     print(f"seeding rows tagged '{MARKER}' into:")
-    print(f"  graph:        {_describe(graph_dsn)}")
-    print(f"  checkpointer: {_describe(checkpointer_dsn)}")
+    print(f"  graph:        {describe_dsn(graph_dsn)}")
+    print(f"  checkpointer: {describe_dsn(checkpointer_dsn)}")
     summary = seed(graph_dsn, checkpointer_dsn)
     print(
         f"wrote {len(summary.call_site_ids)} call sites, {len(summary.vendor_change_ids)} "

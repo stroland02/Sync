@@ -1,0 +1,1045 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Sync — operator console</title>
+<style>
+  html, body { margin:0; padding:0; background:oklch(0.19 0.0025 159); color:oklch(0.95 0.00275 159); font-family:system-ui,-apple-system,"Segoe UI",sans-serif; font-weight:450; -webkit-font-smoothing:antialiased; }
+  * { box-sizing:border-box; }
+  a { color:oklch(0.76 0.15 159); text-decoration:none; }
+  a:hover { color:oklch(0.84 0.13 159); text-decoration:underline; text-underline-offset:2px; }
+  ::selection { background:oklch(0.95 0.00275 159 / 12%); }
+  ::-webkit-scrollbar { width:10px; height:10px; }
+  ::-webkit-scrollbar-thumb { background:oklch(0.95 0.00275 159 / 10%); border-radius:8px; border:3px solid oklch(0.19 0.0025 159); }
+  @keyframes rise { from { opacity:0; transform:translateY(8px); } to { opacity:1; transform:none; } }
+  @keyframes slideIn { from { opacity:0; transform:translateX(24px); } to { opacity:1; transform:none; } }
+  @keyframes fadeIn { from { opacity:0; } to { opacity:1; } }
+  @keyframes popIn { from { opacity:0; transform:translateY(-6px) scale(.985); } to { opacity:1; transform:none; } }
+  @keyframes draw { from { stroke-dashoffset:120; } to { stroke-dashoffset:0; } }
+  @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration:0s !important; transition-duration:0s !important; } }
+</style>
+</helmet>
+
+<div style="display:flex; height:100vh; min-height:760px; overflow:hidden; font-size:13px; line-height:20px;">
+
+  <nav style="width:246px; flex:0 0 246px; background:oklch(0.19 0.0025 159); border-right:1px solid oklch(0.95 0.001485 159 / 7.5125%); display:flex; flex-direction:column; padding:16px 0;">
+    <div style="padding:0 16px 16px; display:flex; align-items:baseline; gap:2px;">
+      <span style="font-size:22px; line-height:32px; font-weight:600; letter-spacing:-0.04em;">sync</span>
+      <span style="font-size:22px; line-height:32px; font-weight:600; color:oklch(0.76 0.15 159);">.</span>
+      <span style="margin-left:auto; font-size:12px; line-height:16px; color:oklch(0.684 0.00275 159); text-transform:uppercase; letter-spacing:0.025em;">console</span>
+    </div>
+
+    <div style="display:flex; flex-direction:column; gap:2px; padding:0 8px;">
+      <sc-for list="{{ areas }}" as="area" hint-placeholder-count="6">
+        <button type="button" onClick="{{ area.go }}" style="all:unset; cursor:pointer; display:block; padding:8px 10px; border-radius:6px; background:{{ area.bg }}; box-shadow:{{ area.ring }}; transition:background .16s ease, transform .16s ease;" style-hover="background:oklch(0.95 0.00275 159 / 4.9342%); transform:translateX(2px);" style-focus="outline:2px solid oklch(0.76 0.15 159); outline-offset:2px;">
+          <span style="display:flex; align-items:center; gap:8px;">
+            <span style="font-size:13px; line-height:20px; color:{{ area.ink }}; font-weight:{{ area.weight }};">{{ area.label }}</span>
+            <span style="margin-left:auto; font-family:ui-monospace,Menlo,Consolas,monospace; font-size:12px; line-height:16px; color:oklch(0.684 0.00275 159);">{{ area.count }}</span>
+          </span>
+          <sc-if value="{{ showPurpose }}" hint-placeholder-val="{{ true }}">
+            <span style="display:block; font-size:12px; line-height:16px; color:oklch(0.684 0.00275 159); margin-top:2px; text-wrap:pretty;">{{ area.purpose }}</span>
+          </sc-if>
+        </button>
+      </sc-for>
+    </div>
+
+    <div style="margin-top:auto; padding:0 8px;">
+      <div style="height:1px; background:oklch(0.95 0.001485 159 / 7.5125%); margin:8px 10px 8px;"></div>
+      <button type="button" onClick="{{ goSettings }}" style="all:unset; cursor:pointer; display:flex; align-items:center; gap:8px; padding:8px 10px; border-radius:6px; width:calc(100% - 0px); transition:background .16s ease;" style-hover="background:oklch(0.95 0.00275 159 / 4.9342%);">
+        <span style="font-size:13px; line-height:20px; color:{{ settingsInk }};">Settings &amp; adapters</span>
+      </button>
+      <div style="padding:8px 10px 0; font-size:12px; line-height:16px; color:oklch(0.684 0.00275 159); text-wrap:pretty;">Nine graph levels, six areas. An area groups a run of levels — it is not a level itself.</div>
+    </div>
+  </nav>
+
+  <main style="flex:1; min-width:0; display:flex; flex-direction:column; background:oklch(0.19 0.0025 159);">
+
+    <header style="border-bottom:1px solid oklch(0.95 0.001485 159 / 7.5125%); padding:16px 40px 0; flex:0 0 auto;">
+      <div style="display:flex; align-items:center; gap:8px; min-height:20px;">
+        <sc-for list="{{ crumbs }}" as="crumb" hint-placeholder-count="2">
+          <span style="display:flex; align-items:center; gap:8px;">
+            <span style="color:oklch(0.684 0.00275 159); font-size:12px; line-height:16px;">{{ crumb.sep }}</span>
+            <button type="button" onClick="{{ crumb.go }}" style="all:unset; cursor:pointer; font-size:12px; line-height:16px; color:{{ crumb.ink }}; transition:color .16s ease;" style-hover="color:oklch(0.95 0.00275 159);">{{ crumb.label }}</button>
+          </span>
+        </sc-for>
+        <span style="margin-left:auto; display:flex; align-items:center; gap:8px;">
+          <button type="button" onClick="{{ openPalette }}" style="all:unset; cursor:pointer; display:flex; align-items:center; gap:8px; padding:4px 8px; border-radius:6px; border:1px solid oklch(0.95 0.001485 159 / 7.5125%); color:oklch(0.684 0.00275 159); font-size:12px; line-height:16px; transition:border-color .16s ease, color .16s ease;" style-hover="border-color:oklch(0.578 0.00275 159); color:oklch(0.95 0.00275 159);">
+            <span>Search every destination</span>
+            <span style="font-family:ui-monospace,Menlo,Consolas,monospace;">⌘K</span>
+          </button>
+        </span>
+      </div>
+
+      <div style="display:flex; align-items:flex-end; gap:16px; padding:8px 0 16px;">
+        <div style="min-width:0;">
+          <div style="display:flex; align-items:center; gap:8px;">
+            <h1 style="margin:0; font-size:22px; line-height:32px; font-weight:600; letter-spacing:-0.04em;">{{ title }}</h1>
+            <span style="font-size:12px; line-height:16px; text-transform:uppercase; letter-spacing:0.025em; color:oklch(0.684 0.00275 159); border:1px solid oklch(0.95 0.001485 159 / 7.5125%); border-radius:6px; padding:0 6px;">{{ level }}</span>
+          </div>
+          <p style="margin:2px 0 0; font-size:13px; line-height:20px; color:oklch(0.798 0.00275 159); max-width:76ch; text-wrap:pretty;">{{ question }}</p>
+        </div>
+        <div style="margin-left:auto; display:flex; align-items:center; gap:8px; flex:0 0 auto;">
+          <button type="button" onClick="{{ goPr }}" style="all:unset; cursor:pointer; padding:0 12px; height:32px; display:flex; align-items:center; border-radius:6px; background:oklch(0.76 0.15 159); color:oklch(0.19 0.00225 159); font-size:13px; line-height:20px; font-weight:600; transition:filter .16s ease, transform .12s ease;" style-hover="filter:brightness(1.08);" style-active="transform:translateY(1px);" style-focus="outline:2px solid oklch(0.76 0.15 159); outline-offset:2px;">Review proposed patch</button>
+        </div>
+      </div>
+    </header>
+
+    <div style="flex:1; min-height:0; overflow:auto;">
+
+      <sc-if value="{{ isFleet }}" hint-placeholder-val="{{ true }}">
+        <section style="padding:16px 40px 40px; animation:rise .28s cubic-bezier(.2,.7,.3,1) both;">
+          <div style="display:flex; align-items:center; gap:8px; padding-bottom:16px; flex-wrap:wrap;">
+            <div style="display:flex; align-items:center; gap:0; border:1px solid oklch(0.95 0.001485 159 / 7.5125%); border-radius:6px; overflow:hidden;">
+              <sc-for list="{{ scopes }}" as="scope" hint-placeholder-count="3">
+                <button type="button" onClick="{{ scope.go }}" style="all:unset; cursor:pointer; padding:0 12px; height:30px; display:flex; align-items:center; font-size:13px; line-height:20px; color:{{ scope.ink }}; background:{{ scope.bg }}; transition:background .16s ease;" style-hover="background:oklch(0.95 0.00275 159 / 4.9342%);">{{ scope.label }}</button>
+              </sc-for>
+            </div>
+            <div style="display:flex; align-items:center; gap:8px; height:30px; padding:0 10px; border:1px solid oklch(0.95 0.001485 159 / 7.5125%); border-radius:6px; min-width:280px; color:oklch(0.684 0.00275 159);">
+              <span style="font-family:ui-monospace,Menlo,Consolas,monospace; font-size:12px;">/</span>
+              <span style="font-size:13px; line-height:20px;">Filter by vendor, operation or repository</span>
+            </div>
+            <span style="margin-left:auto; font-size:12px; line-height:16px; color:oklch(0.684 0.00275 159);">Grain: one row per vendor change × repository set</span>
+          </div>
+
+          <div style="border:1px solid oklch(0.95 0.001485 159 / 7.5125%); border-radius:8px; background:oklch(0.215 0.0025 159); overflow-x:auto;">
+            <div style="display:grid; grid-template-columns:minmax(240px,1.7fr) 84px 92px 132px 208px 108px 36px; align-items:center; gap:16px; min-width:996px; padding:0 16px; height:36px; border-bottom:1px solid oklch(0.95 0.001485 159 / 7.5125%); background:oklch(0.95 0.00275 159 / 3.2895%);">
+              <span style="font-size:12px; line-height:16px; text-transform:uppercase; letter-spacing:0.025em; color:oklch(0.798 0.00275 159);">Change unit</span>
+              <span style="font-size:12px; line-height:16px; text-transform:uppercase; letter-spacing:0.025em; color:oklch(0.798 0.00275 159); text-align:right;">Repos</span>
+              <span style="font-size:12px; line-height:16px; text-transform:uppercase; letter-spacing:0.025em; color:oklch(0.798 0.00275 159); text-align:right;">Call sites</span>
+              <sc-if value="{{ rungColumnVisible }}" hint-placeholder-val="{{ true }}">
+                <span style="font-size:12px; line-height:16px; text-transform:uppercase; letter-spacing:0.025em; color:oklch(0.798 0.00275 159);">Rung</span>
+              </sc-if>
+              <span style="font-size:12px; line-height:16px; text-transform:uppercase; letter-spacing:0.025em; color:oklch(0.798 0.00275 159);">Standing</span>
+              <span style="font-size:12px; line-height:16px; text-transform:uppercase; letter-spacing:0.025em; color:oklch(0.798 0.00275 159);">Checkpoint</span>
+              <span></span>
+            </div>
+
+            <sc-for list="{{ units }}" as="unit" hint-placeholder-count="6">
+              <div style="display:grid; grid-template-columns:minmax(240px,1.7fr) 84px 92px 132px 208px 108px 36px; align-items:center; gap:16px; min-width:996px; padding:10px 16px; border-bottom:1px solid oklch(0.95 0.001485 159 / 7.5125%); transition:background .16s ease;" style-hover="background:oklch(0.95 0.00275 159 / 3.2895%);">
+                <button type="button" onClick="{{ unit.go }}" style="all:unset; cursor:pointer; min-width:0; display:block;">
+                  <span style="display:flex; align-items:baseline; gap:8px; min-width:0;">
+                    <span style="font-size:13px; line-height:20px; font-weight:600; white-space:nowrap;">{{ unit.vendor }}</span>
+                    <span style="font-family:ui-monospace,Menlo,Consolas,monospace; font-size:12px; line-height:20px; color:oklch(0.798 0.00275 159); overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">{{ unit.op }}</span>
+                  </span>
+                  <span style="display:block; font-size:12px; line-height:16px; color:oklch(0.684 0.00275 159); overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">{{ unit.change }}</span>
+                </button>
+                <span style="font-family:ui-monospace,Menlo,Consolas,monospace; font-size:13px; text-align:right; font-variant-numeric:tabular-nums;">{{ unit.repos }}</span>
+                <span style="font-family:ui-monospace,Menlo,Consolas,monospace; font-size:13px; text-align:right; font-variant-numeric:tabular-nums;">{{ unit.sites }}</span>
+                <sc-if value="{{ rungColumnVisible }}" hint-placeholder-val="{{ true }}">
+                  <span style="display:inline-flex; align-items:center; height:20px; padding:0 6px; border:1px solid oklch(0.95 0.001485 159 / 7.5125%); border-radius:6px; font-family:ui-monospace,Menlo,Consolas,monospace; font-size:12px; color:oklch(0.798 0.00275 159); width:fit-content;" title="{{ unit.rungNote }}">{{ unit.rung }}</span>
+                </sc-if>
+                <span style="display:flex; align-items:center; gap:8px; min-width:0;">
+                  <span style="font-family:ui-monospace,Menlo,Consolas,monospace; font-size:12px; color:{{ unit.tone }};">{{ unit.glyph }}</span>
+                  <span style="font-size:13px; line-height:20px; color:{{ unit.tone }}; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">{{ unit.standing }}</span>
+                </span>
+                <span style="font-size:12px; line-height:16px; color:oklch(0.684 0.00275 159); font-variant-numeric:tabular-nums;">{{ unit.when }}</span>
+                <button type="button" onClick="{{ unit.drawer }}" title="Call sites and provenance" style="all:unset; cursor:pointer; width:24px; height:24px; display:flex; align-items:center; justify-content:center; border-radius:6px; color:oklch(0.684 0.00275 159); transition:background .16s ease, color .16s ease, transform .16s ease;" style-hover="background:oklch(0.95 0.00275 159 / 4.9342%); color:oklch(0.95 0.00275 159); transform:translateX(2px);">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"></path></svg>
+                </button>
+              </div>
+            </sc-for>
+
+            <div style="display:flex; align-items:center; gap:16px; padding:8px 16px; background:oklch(0.95 0.00275 159 / 3.2895%);">
+              <span style="font-size:12px; line-height:16px; color:oklch(0.798 0.00275 159); font-variant-numeric:tabular-nums;">1–6 of 6</span>
+              <span style="font-size:12px; line-height:16px; color:oklch(0.684 0.00275 159);">Every open change unit in this scope.</span>
+            </div>
+          </div>
+
+          <p style="margin:16px 0 0; font-size:12px; line-height:16px; color:oklch(0.684 0.00275 159); max-width:96ch; text-wrap:pretty;">A checkpoint age is staleness, not liveness — it says how old the evidence is, not whether the run is still going. A change unit collapses findings sharing a vendor change against one repository set; the call-site grain is intact underneath and reachable from every row.</p>
+        </section>
+      </sc-if>
+
+      <sc-if value="{{ isCodebase }}" hint-placeholder-val="{{ false }}">
+        <section style="padding:16px 40px 40px; animation:rise .28s cubic-bezier(.2,.7,.3,1) both;">
+          <div style="display:grid; grid-template-columns:repeat(4, minmax(0,1fr)); gap:16px; padding-bottom:16px;">
+            <sc-for list="{{ codebaseFacts }}" as="fact" hint-placeholder-count="4">
+              <div style="border:1px solid oklch(0.95 0.001485 159 / 7.5125%); border-radius:8px; padding:16px; background:oklch(0.215 0.0025 159);">
+                <div style="font-size:12px; line-height:16px; text-transform:uppercase; letter-spacing:0.025em; color:oklch(0.684 0.00275 159);">{{ fact.label }}</div>
+                <div style="font-size:28px; line-height:36px; font-weight:600; letter-spacing:-0.04em; font-variant-numeric:tabular-nums; margin-top:4px;">{{ fact.value }}</div>
+                <div style="font-size:12px; line-height:16px; color:oklch(0.798 0.00275 159); margin-top:4px; text-wrap:pretty;">{{ fact.evidence }}</div>
+              </div>
+            </sc-for>
+          </div>
+
+          <div style="display:grid; grid-template-columns:minmax(0,1.4fr) minmax(0,1fr); gap:16px;">
+            <div style="border:1px solid oklch(0.95 0.001485 159 / 7.5125%); border-radius:8px; background:oklch(0.215 0.0025 159); overflow-x:auto;">
+              <div style="padding:16px 16px 8px;">
+                <h2 style="margin:0; font-size:18px; line-height:28px; font-weight:600; letter-spacing:-0.02em;">Vendor clients the index found</h2>
+                <p style="margin:0; font-size:12px; line-height:16px; color:oklch(0.684 0.00275 159);">One row per client the static index resolved, with the operations bound through it.</p>
+              </div>
+              <sc-for list="{{ clients }}" as="client" hint-placeholder-count="5">
+                <div style="display:grid; grid-template-columns:minmax(160px,1fr) 96px 88px 120px; align-items:center; gap:16px; min-width:512px; padding:10px 16px; border-top:1px solid oklch(0.95 0.001485 159 / 7.5125%); transition:background .16s ease;" style-hover="background:oklch(0.95 0.00275 159 / 3.2895%);">
+                  <span style="font-family:ui-monospace,Menlo,Consolas,monospace; font-size:12px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">{{ client.path }}</span>
+                  <span style="font-size:13px; color:oklch(0.798 0.00275 159);">{{ client.vendor }}</span>
+                  <span style="font-family:ui-monospace,Menlo,Consolas,monospace; font-size:13px; text-align:right; font-variant-numeric:tabular-nums;">{{ client.ops }}</span>
+                  <span style="display:inline-flex; align-items:center; height:20px; padding:0 6px; border:1px solid oklch(0.95 0.001485 159 / 7.5125%); border-radius:6px; font-family:ui-monospace,Menlo,Consolas,monospace; font-size:12px; color:oklch(0.798 0.00275 159); width:fit-content;">{{ client.rung }}</span>
+                </div>
+              </sc-for>
+            </div>
+
+            <div style="border:1px solid oklch(0.95 0.001485 159 / 7.5125%); border-radius:8px; background:oklch(0.215 0.0025 159); padding:16px;">
+              <h2 style="margin:0 0 4px; font-size:18px; line-height:28px; font-weight:600; letter-spacing:-0.02em;">What Sync cannot see here</h2>
+              <p style="margin:0 0 16px; font-size:12px; line-height:16px; color:oklch(0.684 0.00275 159); text-wrap:pretty;">Coverage is not a percentage. Each line below is a directory or construct the index recorded a skip for, with the reason it gave.</p>
+              <div style="display:flex; flex-direction:column; gap:8px;">
+                <sc-for list="{{ blindSpots }}" as="spot" hint-placeholder-count="4">
+                  <div style="border-left:1px solid oklch(0.578 0.00275 159); padding-left:12px;">
+                    <div style="font-family:ui-monospace,Menlo,Consolas,monospace; font-size:12px; line-height:16px; color:oklch(0.95 0.00275 159);">{{ spot.where }}</div>
+                    <div style="font-size:12px; line-height:16px; color:oklch(0.798 0.00275 159); text-wrap:pretty;">{{ spot.reason }}</div>
+                  </div>
+                </sc-for>
+              </div>
+            </div>
+          </div>
+        </section>
+      </sc-if>
+
+      <sc-if value="{{ isVendor }}" hint-placeholder-val="{{ false }}">
+        <section style="padding:16px 40px 40px; animation:rise .28s cubic-bezier(.2,.7,.3,1) both;">
+          <div style="display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr); gap:16px; padding-bottom:16px;">
+            <div style="border:1px solid oklch(0.95 0.001485 159 / 7.5125%); border-radius:8px; background:oklch(0.215 0.0025 159); padding:16px;">
+              <h2 style="margin:0 0 8px; font-size:18px; line-height:28px; font-weight:600; letter-spacing:-0.02em;">What the vendor changed</h2>
+              <sc-for list="{{ vendorChanges }}" as="vc" hint-placeholder-count="4">
+                <div style="display:grid; grid-template-columns:minmax(120px,1fr) 132px 96px; gap:16px; min-width:380px; align-items:baseline; padding:8px 0; border-top:1px solid oklch(0.95 0.001485 159 / 7.5125%);">
+                  <span style="font-family:ui-monospace,Menlo,Consolas,monospace; font-size:12px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">{{ vc.op }}</span>
+                  <span style="font-size:12px; color:oklch(0.798 0.00275 159);">{{ vc.kind }}</span>
+                  <span style="font-size:12px; color:oklch(0.684 0.00275 159); text-align:right;">{{ vc.seen }}</span>
+                </div>
+              </sc-for>
+              <p style="margin:16px 0 0; font-size:12px; line-height:16px; color:oklch(0.684 0.00275 159); text-wrap:pretty;">A vendor change carries no rung. It is evidence about the vendor rather than about your source, so nothing in it was read out of your code — whether a call site is affected is a detector's answer, and a detector's answer is a finding.</p>
+            </div>
+
+            <div style="border:1px solid oklch(0.95 0.001485 159 / 7.5125%); border-radius:8px; background:oklch(0.215 0.0025 159); padding:16px;">
+              <h2 style="margin:0 0 8px; font-size:18px; line-height:28px; font-weight:600; letter-spacing:-0.02em;">Where it was read from</h2>
+              <div style="display:flex; flex-direction:column; gap:16px;">
+                <sc-for list="{{ vendorSources }}" as="src" hint-placeholder-count="3">
+                  <div>
+                    <div style="display:flex; align-items:baseline; gap:8px;">
+                      <span style="font-size:15px; line-height:24px; font-weight:600; letter-spacing:-0.02em;">{{ src.name }}</span>
+                      <span style="margin-left:auto; font-size:12px; color:oklch(0.684 0.00275 159);">{{ src.when }}</span>
+                    </div>
+                    <div style="font-family:ui-monospace,Menlo,Consolas,monospace; font-size:12px; line-height:16px; color:oklch(0.798 0.00275 159); overflow-wrap:anywhere;">{{ src.locator }}</div>
+                    <div style="font-size:12px; line-height:16px; color:oklch(0.684 0.00275 159); text-wrap:pretty;">{{ src.note }}</div>
+                  </div>
+                </sc-for>
+              </div>
+            </div>
+          </div>
+
+          <div style="border:1px solid oklch(0.95 0.001485 159 / 7.5125%); border-radius:8px; background:oklch(0.215 0.0025 159); overflow-x:auto;">
+            <div style="display:grid; grid-template-columns:120px minmax(180px,1fr) 100px 96px 148px; align-items:center; gap:16px; min-width:708px; padding:0 16px; height:36px; background:oklch(0.95 0.00275 159 / 3.2895%); border-bottom:1px solid oklch(0.95 0.001485 159 / 7.5125%);">
+              <span style="font-size:12px; text-transform:uppercase; letter-spacing:0.025em; color:oklch(0.798 0.00275 159);">Rung</span>
+              <span style="font-size:12px; text-transform:uppercase; letter-spacing:0.025em; color:oklch(0.798 0.00275 159);">Operation</span>
+              <span style="font-size:12px; text-transform:uppercase; letter-spacing:0.025em; color:oklch(0.798 0.00275 159); text-align:right;">Call sites</span>
+              <span style="font-size:12px; text-transform:uppercase; letter-spacing:0.025em; color:oklch(0.798 0.00275 159); text-align:right;">Repos</span>
+              <span style="font-size:12px; text-transform:uppercase; letter-spacing:0.025em; color:oklch(0.798 0.00275 159);">Detector</span>
+            </div>
+            <sc-for list="{{ vendorFindings }}" as="vf" hint-placeholder-count="5">
+              <button type="button" onClick="{{ vf.go }}" style="all:unset; cursor:pointer; display:grid; grid-template-columns:120px minmax(180px,1fr) 100px 96px 148px; align-items:center; gap:16px; min-width:708px; padding:10px 16px; border-bottom:1px solid oklch(0.95 0.001485 159 / 7.5125%); transition:background .16s ease;" style-hover="background:oklch(0.95 0.00275 159 / 3.2895%);">
+                <span style="display:inline-flex; align-items:center; height:20px; padding:0 6px; border:1px solid oklch(0.95 0.001485 159 / 7.5125%); border-radius:6px; font-family:ui-monospace,Menlo,Consolas,monospace; font-size:12px; color:oklch(0.798 0.00275 159); width:fit-content;">{{ vf.rung }}</span>
+                <span style="font-family:ui-monospace,Menlo,Consolas,monospace; font-size:12px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">{{ vf.op }}</span>
+                <span style="font-family:ui-monospace,Menlo,Consolas,monospace; font-size:13px; text-align:right; font-variant-numeric:tabular-nums;">{{ vf.sites }}</span>
+                <span style="font-family:ui-monospace,Menlo,Consolas,monospace; font-size:13px; text-align:right; font-variant-numeric:tabular-nums;">{{ vf.repos }}</span>
+                <span style="font-family:ui-monospace,Menlo,Consolas,monospace; font-size:12px; color:oklch(0.798 0.00275 159);">{{ vf.detector }}</span>
+              </button>
+            </sc-for>
+          </div>
+        </section>
+      </sc-if>
+
+      <sc-if value="{{ isBinding }}" hint-placeholder-val="{{ false }}">
+        <section style="padding:16px 40px 40px; animation:rise .28s cubic-bezier(.2,.7,.3,1) both;">
+          <div style="display:grid; grid-template-columns:repeat(4, minmax(0,1fr)); gap:16px; padding-bottom:16px;">
+            <sc-for list="{{ bindingFacts }}" as="fact" hint-placeholder-count="4">
+              <div style="border:1px solid oklch(0.95 0.001485 159 / 7.5125%); border-radius:8px; padding:16px; background:oklch(0.215 0.0025 159);">
+                <div style="font-size:12px; line-height:16px; text-transform:uppercase; letter-spacing:0.025em; color:oklch(0.684 0.00275 159);">{{ fact.label }}</div>
+                <div style="font-size:28px; line-height:36px; font-weight:600; letter-spacing:-0.04em; font-variant-numeric:tabular-nums; margin-top:4px;">{{ fact.value }}</div>
+                <div style="font-size:12px; line-height:16px; color:oklch(0.798 0.00275 159); margin-top:4px;">{{ fact.evidence }}</div>
+              </div>
+            </sc-for>
+          </div>
+
+          <p style="margin:0 0 16px; font-size:13px; line-height:20px; color:oklch(0.798 0.00275 159); max-width:100ch; text-wrap:pretty;">Every call site below rests on the <span style="display:inline-flex; align-items:center; height:20px; padding:0 6px; border:1px solid oklch(0.95 0.001485 159 / 7.5125%); border-radius:6px; font-family:ui-monospace,Menlo,Consolas,monospace; font-size:12px; color:oklch(0.798 0.00275 159);">static</span> rung: what the index found by reading the source, never a resolution or a correlation step. A stronger rung for this operation would come from a different detector, and none has run here.</p>
+
+          <div style="border:1px solid oklch(0.95 0.001485 159 / 7.5125%); border-radius:8px; background:oklch(0.215 0.0025 159); overflow-x:auto;">
+            <div style="display:flex; align-items:center; gap:8px; padding:8px 16px; border-bottom:1px solid oklch(0.95 0.001485 159 / 7.5125%); background:oklch(0.95 0.00275 159 / 3.2895%);">
+              <span style="font-size:12px; color:oklch(0.684 0.00275 159);">Shared directory</span>
+              <span style="font-family:ui-monospace,Menlo,Consolas,monospace; font-size:12px; color:oklch(0.95 0.00275 159);">services/billing/src/</span>
+              <span style="font-size:12px; color:oklch(0.684 0.00275 159); margin-left:auto;">Each row renders what follows it — the whole path is the prefix plus the cell.</span>
+            </div>
+            <div style="display:grid; grid-template-columns:120px minmax(200px,1fr) 200px 132px 36px; align-items:center; gap:16px; min-width:752px; padding:0 16px; height:36px; border-bottom:1px solid oklch(0.95 0.001485 159 / 7.5125%);">
+              <span style="font-size:12px; text-transform:uppercase; letter-spacing:0.025em; color:oklch(0.798 0.00275 159);">Rung</span>
+              <span style="font-size:12px; text-transform:uppercase; letter-spacing:0.025em; color:oklch(0.798 0.00275 159);">Call site</span>
+              <span style="font-size:12px; text-transform:uppercase; letter-spacing:0.025em; color:oklch(0.798 0.00275 159);">Symbol</span>
+              <span style="font-size:12px; text-transform:uppercase; letter-spacing:0.025em; color:oklch(0.798 0.00275 159);">Argument</span>
+              <span></span>
+            </div>
+            <sc-for list="{{ callSites }}" as="site" hint-placeholder-count="8">
+              <div style="display:grid; grid-template-columns:120px minmax(200px,1fr) 200px 132px 36px; align-items:center; gap:16px; min-width:752px; padding:10px 16px; border-bottom:1px solid oklch(0.95 0.001485 159 / 7.5125%); transition:background .16s ease;" style-hover="background:oklch(0.95 0.00275 159 / 3.2895%);">
+                <span style="display:inline-flex; align-items:center; height:20px; padding:0 6px; border:1px solid oklch(0.95 0.001485 159 / 7.5125%); border-radius:6px; font-family:ui-monospace,Menlo,Consolas,monospace; font-size:12px; color:oklch(0.798 0.00275 159); width:fit-content;" title="{{ site.rungNote }}">{{ site.rung }}</span>
+                <span style="font-family:ui-monospace,Menlo,Consolas,monospace; font-size:12px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">{{ site.path }}</span>
+                <span style="font-family:ui-monospace,Menlo,Consolas,monospace; font-size:12px; color:oklch(0.798 0.00275 159); overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">{{ site.symbol }}</span>
+                <span style="font-family:ui-monospace,Menlo,Consolas,monospace; font-size:12px; color:oklch(0.798 0.00275 159);">{{ site.arg }}</span>
+                <button type="button" onClick="{{ site.drawer }}" style="all:unset; cursor:pointer; width:24px; height:24px; display:flex; align-items:center; justify-content:center; border-radius:6px; color:oklch(0.684 0.00275 159); transition:background .16s ease, color .16s ease, transform .16s ease;" style-hover="background:oklch(0.95 0.00275 159 / 4.9342%); color:oklch(0.95 0.00275 159); transform:translateX(2px);">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"></path></svg>
+                </button>
+              </div>
+            </sc-for>
+            <div style="display:flex; align-items:center; gap:16px; padding:8px 16px; background:oklch(0.95 0.00275 159 / 3.2895%);">
+              <span style="font-size:12px; color:oklch(0.798 0.00275 159); font-variant-numeric:tabular-nums;">1–8 of 14</span>
+              <button type="button" style="all:unset; cursor:pointer; font-size:12px; color:oklch(0.76 0.15 159);" style-hover="text-decoration:underline;">Next 6</button>
+            </div>
+          </div>
+        </section>
+      </sc-if>
+
+      <sc-if value="{{ isFinding }}" hint-placeholder-val="{{ false }}">
+        <section style="padding:16px 40px 40px; animation:rise .28s cubic-bezier(.2,.7,.3,1) both;">
+          <div style="display:grid; grid-template-columns:minmax(0,1.5fr) minmax(0,1fr); gap:16px;">
+            <div style="display:flex; flex-direction:column; gap:16px;">
+              <div style="border:1px solid oklch(0.95 0.001485 159 / 7.5125%); border-radius:8px; background:oklch(0.215 0.0025 159); padding:16px;">
+                <div style="display:flex; align-items:baseline; gap:8px; flex-wrap:wrap;">
+                  <span style="font-family:ui-monospace,Menlo,Consolas,monospace; font-size:12px; color:oklch(0.684 0.00275 159);">finding/8f21c0</span>
+                  <span style="font-family:ui-monospace,Menlo,Consolas,monospace; font-size:12px; color:oklch(0.684 0.00275 159);">·</span>
+                  <span style="font-family:ui-monospace,Menlo,Consolas,monospace; font-size:12px; color:oklch(0.684 0.00275 159);">detector param_removed</span>
+                </div>
+                <h2 style="margin:4px 0 8px; font-size:18px; line-height:28px; font-weight:600; letter-spacing:-0.02em; text-wrap:pretty;">OpenAI removed <span style="font-family:ui-monospace,Menlo,Consolas,monospace; font-weight:450;">max_tokens</span> from chat.completions.create; 14 call sites in this repository pass it.</h2>
+                <p style="margin:0; font-size:13px; line-height:20px; color:oklch(0.798 0.00275 159); max-width:80ch; text-wrap:pretty;">The replacement parameter is <span style="font-family:ui-monospace,Menlo,Consolas,monospace;">max_completion_tokens</span>. The vendor's own note says requests carrying the old name are rejected rather than coerced, so this is a compile-and-run break rather than a deprecation warning.</p>
+              </div>
+
+              <div style="border:1px solid oklch(0.95 0.001485 159 / 7.5125%); border-radius:8px; background:oklch(0.215 0.0025 159); padding:16px;">
+                <h3 style="margin:0 0 8px; font-size:12px; line-height:16px; text-transform:uppercase; letter-spacing:0.025em; color:oklch(0.798 0.00275 159);">Two rungs on this screen, and they answer different questions</h3>
+                <div style="display:grid; grid-template-columns:repeat(2, minmax(0,1fr)); gap:16px;">
+                  <div style="border-left:1px solid oklch(0.578 0.00275 159); padding-left:12px;">
+                    <div style="display:inline-flex; align-items:center; height:20px; padding:0 6px; border:1px solid oklch(0.95 0.001485 159 / 7.5125%); border-radius:6px; font-family:ui-monospace,Menlo,Consolas,monospace; font-size:12px; color:oklch(0.798 0.00275 159);">static</div>
+                    <div style="font-size:12px; line-height:16px; color:oklch(0.798 0.00275 159); margin-top:4px; text-wrap:pretty;">The binding this finding rests on — read out of the source. It describes the edge from the call site to the operation.</div>
+                  </div>
+                  <div style="border-left:1px solid oklch(0.578 0.00275 159); padding-left:12px;">
+                    <div style="display:inline-flex; align-items:center; height:20px; padding:0 6px; border:1px solid oklch(0.95 0.001485 159 / 7.5125%); border-radius:6px; font-family:ui-monospace,Menlo,Consolas,monospace; font-size:12px; color:oklch(0.798 0.00275 159);">resolved</div>
+                    <div style="font-size:12px; line-height:16px; color:oklch(0.798 0.00275 159); margin-top:4px; text-wrap:pretty;">The envelope's rung — what the whole answer rests on, after the client alias in <span style="font-family:ui-monospace,Menlo,Consolas,monospace;">lib/llm-client.ts</span> was resolved to the vendor SDK.</div>
+                  </div>
+                </div>
+              </div>
+
+              <div style="border:1px solid oklch(0.95 0.001485 159 / 7.5125%); border-radius:8px; background:oklch(0.215 0.0025 159); overflow-x:auto;">
+                <div style="padding:16px 16px 8px;">
+                  <h3 style="margin:0; font-size:18px; line-height:28px; font-weight:600; letter-spacing:-0.02em;">What this finding rests on</h3>
+                </div>
+                <sc-for list="{{ evidenceRows }}" as="row" hint-placeholder-count="4">
+                  <div style="display:grid; grid-template-columns:180px minmax(0,1fr); gap:16px; padding:10px 16px; border-top:1px solid oklch(0.95 0.001485 159 / 7.5125%);">
+                    <span style="font-size:12px; text-transform:uppercase; letter-spacing:0.025em; color:oklch(0.684 0.00275 159);">{{ row.label }}</span>
+                    <span style="font-family:ui-monospace,Menlo,Consolas,monospace; font-size:12px; color:oklch(0.95 0.00275 159); overflow-wrap:anywhere;">{{ row.value }}</span>
+                  </div>
+                </sc-for>
+              </div>
+            </div>
+
+            <div style="display:flex; flex-direction:column; gap:16px;">
+              <div style="border:1px solid oklch(0.95 0.001485 159 / 7.5125%); border-radius:8px; background:oklch(0.215 0.0025 159); padding:16px;">
+                <h3 style="margin:0 0 8px; font-size:12px; line-height:16px; text-transform:uppercase; letter-spacing:0.025em; color:oklch(0.798 0.00275 159);">Standing</h3>
+                <div style="display:flex; align-items:center; gap:8px;">
+                  <span style="font-family:ui-monospace,Menlo,Consolas,monospace; font-size:13px; color:hsl(154.9 59.5% 70%);">✓</span>
+                  <span style="font-size:15px; line-height:24px; font-weight:600; letter-spacing:-0.02em; color:hsl(154.9 59.5% 70%);">Patched — pull request open</span>
+                </div>
+                <p style="margin:4px 0 16px; font-size:12px; line-height:16px; color:oklch(0.798 0.00275 159); text-wrap:pretty;">Generation 2 of 2. The first generation abandoned at <span style="font-family:ui-monospace,Menlo,Consolas,monospace;">static_verify</span>; both are listed on the workflow.</p>
+                <div style="display:flex; flex-direction:column; gap:8px;">
+                  <button type="button" onClick="{{ goWorkflow }}" style="all:unset; cursor:pointer; height:32px; padding:0 12px; display:flex; align-items:center; border-radius:6px; border:1px solid oklch(0.578 0.00275 159); font-size:13px; transition:background .16s ease;" style-hover="background:oklch(0.95 0.00275 159 / 4.9342%);">Open the solution workflow</button>
+                  <button type="button" onClick="{{ goBinding }}" style="all:unset; cursor:pointer; height:32px; padding:0 12px; display:flex; align-items:center; border-radius:6px; border:1px solid oklch(0.95 0.001485 159 / 7.5125%); font-size:13px; color:oklch(0.798 0.00275 159); transition:background .16s ease;" style-hover="background:oklch(0.95 0.00275 159 / 4.9342%);">See all 14 call sites</button>
+                </div>
+              </div>
+
+              <div style="border:1px solid oklch(0.95 0.001485 159 / 7.5125%); border-radius:8px; background:oklch(0.215 0.0025 159); padding:16px;">
+                <h3 style="margin:0 0 8px; font-size:12px; line-height:16px; text-transform:uppercase; letter-spacing:0.025em; color:oklch(0.798 0.00275 159);">Attribution</h3>
+                <p style="margin:0; font-size:12px; line-height:16px; color:oklch(0.798 0.00275 159); text-wrap:pretty;">If this is a false positive, it is attributable to <span style="font-family:ui-monospace,Menlo,Consolas,monospace;">param_removed</span> at the <span style="font-family:ui-monospace,Menlo,Consolas,monospace;">static</span> rung. The detector's whole record is on the detectors screen — a rung is a class of evidence, not a position on a good-to-bad scale.</p>
+              </div>
+            </div>
+          </div>
+        </section>
+      </sc-if>
+
+      <sc-if value="{{ isWorkflow }}" hint-placeholder-val="{{ false }}">
+        <section style="padding:16px 40px 40px; animation:rise .28s cubic-bezier(.2,.7,.3,1) both;">
+          <div style="display:grid; grid-template-columns:300px minmax(0,1fr); gap:16px;">
+
+            <div style="border:1px solid oklch(0.95 0.001485 159 / 7.5125%); border-radius:8px; background:oklch(0.215 0.0025 159); padding:16px; align-self:start;">
+              <h2 style="margin:0 0 4px; font-size:18px; line-height:28px; font-weight:600; letter-spacing:-0.02em;">Node by node</h2>
+              <p style="margin:0 0 16px; font-size:12px; line-height:16px; color:oklch(0.684 0.00275 159); text-wrap:pretty;">Eight nodes, in the order the graph wires them. A standing is the checkpoint's own answer — nothing here says a node is executing.</p>
+              <div style="display:flex; flex-direction:column; gap:0;">
+                <sc-for list="{{ nodes }}" as="node" hint-placeholder-count="8">
+                  <button type="button" onClick="{{ node.drawer }}" style="all:unset; cursor:pointer; display:grid; grid-template-columns:16px minmax(0,1fr) auto; gap:8px; align-items:baseline; padding:8px; border-radius:6px; transition:background .16s ease, transform .16s ease;" style-hover="background:oklch(0.95 0.00275 159 / 4.9342%); transform:translateX(2px);">
+                    <span style="font-family:ui-monospace,Menlo,Consolas,monospace; font-size:12px; color:{{ node.tone }};">{{ node.glyph }}</span>
+                    <span style="font-family:ui-monospace,Menlo,Consolas,monospace; font-size:12px; color:oklch(0.95 0.00275 159);">{{ node.name }}</span>
+                    <span style="font-size:12px; color:{{ node.tone }};">{{ node.standing }}</span>
+                  </button>
+                </sc-for>
+              </div>
+              <div style="margin-top:16px; padding-top:16px; border-top:1px solid oklch(0.95 0.001485 159 / 7.5125%);">
+                <div style="font-size:12px; text-transform:uppercase; letter-spacing:0.025em; color:oklch(0.684 0.00275 159);">Outcome</div>
+                <div style="display:flex; align-items:center; gap:8px; margin-top:4px;">
+                  <span style="font-family:ui-monospace,Menlo,Consolas,monospace; font-size:13px; color:hsl(154.9 59.5% 70%);">✓</span>
+                  <span style="font-size:15px; line-height:24px; font-weight:600; letter-spacing:-0.02em; color:hsl(154.9 59.5% 70%);">opened</span>
+                </div>
+                <div style="font-family:ui-monospace,Menlo,Consolas,monospace; font-size:12px; line-height:16px; color:oklch(0.684 0.00275 159); margin-top:4px; overflow-wrap:anywhere;">thread 8f21c0:4127:2 · generation 2 of 2</div>
+              </div>
+            </div>
+
+            <div style="border:1px solid oklch(0.95 0.001485 159 / 7.5125%); border-radius:8px; background:oklch(0.215 0.0025 159); overflow-x:auto;">
+              <div style="padding:16px 16px 8px; display:flex; align-items:baseline; gap:8px;">
+                <h2 style="margin:0; font-size:18px; line-height:28px; font-weight:600; letter-spacing:-0.02em;">Activity</h2>
+                <span style="margin-left:auto; font-size:12px; color:oklch(0.684 0.00275 159);">Assembled at read time from four sources — nothing writes a timeline row.</span>
+              </div>
+              <div style="padding:0 16px 16px;">
+                <sc-for list="{{ timeline }}" as="ev" hint-placeholder-count="12">
+                  <div style="display:grid; grid-template-columns:72px 96px minmax(0,1fr); gap:16px; align-items:baseline; padding:8px 0; border-top:1px solid oklch(0.95 0.001485 159 / 7.5125%);">
+                    <span style="font-family:ui-monospace,Menlo,Consolas,monospace; font-size:12px; color:oklch(0.684 0.00275 159); font-variant-numeric:tabular-nums;">{{ ev.at }}</span>
+                    <span style="font-size:12px; text-transform:uppercase; letter-spacing:0.025em; color:oklch(0.684 0.00275 159);">{{ ev.source }}</span>
+                    <span style="min-width:0;">
+                      <span style="display:block; font-family:ui-monospace,Menlo,Consolas,monospace; font-size:12px; color:{{ ev.tone }};">{{ ev.kind }}</span>
+                      <span style="display:block; font-size:12px; line-height:16px; color:oklch(0.798 0.00275 159); text-wrap:pretty;">{{ ev.detail }}</span>
+                    </span>
+                  </div>
+                </sc-for>
+              </div>
+            </div>
+          </div>
+        </section>
+      </sc-if>
+
+      <sc-if value="{{ isPr }}" hint-placeholder-val="{{ false }}">
+        <section style="padding:16px 40px 40px; animation:rise .28s cubic-bezier(.2,.7,.3,1) both;">
+
+          <div style="display:flex; align-items:center; gap:16px; padding:12px 16px; border:1px solid oklch(0.95 0.001485 159 / 7.5125%); border-radius:8px; background:oklch(0.24 0.0025 159); margin-bottom:16px;">
+            <span style="font-family:ui-monospace,Menlo,Consolas,monospace; font-size:13px; color:hsl(154.9 59.5% 70%);">✓</span>
+            <span style="font-size:13px; line-height:20px; color:oklch(0.95 0.00275 159); text-wrap:pretty;">{{ policySentence }}</span>
+            <span style="margin-left:auto; display:flex; gap:8px; flex:0 0 auto;">
+              <button type="button" style="all:unset; cursor:pointer; height:32px; padding:0 12px; display:flex; align-items:center; border-radius:6px; border:1px solid oklch(0.95 0.001485 159 / 7.5125%); color:oklch(0.798 0.00275 159); font-size:13px; transition:background .16s ease;" style-hover="background:oklch(0.95 0.00275 159 / 4.9342%);">Abandon</button>
+              <button type="button" style="all:unset; cursor:pointer; height:32px; padding:0 12px; display:flex; align-items:center; border-radius:6px; border:1px solid oklch(0.578 0.00275 159); font-size:13px; transition:background .16s ease;" style-hover="background:oklch(0.95 0.00275 159 / 4.9342%);">Request changes</button>
+              <button type="button" style="all:unset; cursor:pointer; height:32px; padding:0 12px; display:flex; align-items:center; border-radius:6px; background:oklch(0.76 0.15 159); color:oklch(0.19 0.00225 159); font-size:13px; font-weight:600; transition:filter .16s ease, transform .12s ease;" style-hover="filter:brightness(1.08);" style-active="transform:translateY(1px);">Approve</button>
+            </span>
+          </div>
+
+          <div style="display:grid; grid-template-columns:minmax(0,1.6fr) minmax(0,1fr); gap:16px;">
+            <div style="border:1px solid oklch(0.95 0.001485 159 / 7.5125%); border-radius:8px; background:oklch(0.215 0.0025 159); overflow-x:auto;">
+              <div style="display:flex; align-items:baseline; gap:8px; padding:16px 16px 8px;">
+                <h2 style="margin:0; font-size:18px; line-height:28px; font-weight:600; letter-spacing:-0.02em;">The patch</h2>
+                <span style="font-family:ui-monospace,Menlo,Consolas,monospace; font-size:12px; color:oklch(0.684 0.00275 159);">#4127 · sync/openai-max-completion-tokens</span>
+                <span style="margin-left:auto; font-family:ui-monospace,Menlo,Consolas,monospace; font-size:12px; color:oklch(0.684 0.00275 159);">14 files · +18 −18</span>
+              </div>
+              <sc-for list="{{ hunks }}" as="hunk" hint-placeholder-count="2">
+                <div style="border-top:1px solid oklch(0.95 0.001485 159 / 7.5125%);">
+                  <div style="padding:8px 16px; background:oklch(0.95 0.00275 159 / 3.2895%); font-family:ui-monospace,Menlo,Consolas,monospace; font-size:12px; color:oklch(0.798 0.00275 159);">{{ hunk.file }}</div>
+                  <sc-for list="{{ hunk.lines }}" as="line" hint-placeholder-count="6">
+                    <div style="display:grid; grid-template-columns:48px 16px minmax(0,1fr); gap:8px; padding:0 16px; background:{{ line.bg }};">
+                      <span style="font-family:ui-monospace,Menlo,Consolas,monospace; font-size:12px; line-height:20px; color:oklch(0.684 0.00275 159); text-align:right; font-variant-numeric:tabular-nums;">{{ line.n }}</span>
+                      <span style="font-family:ui-monospace,Menlo,Consolas,monospace; font-size:12px; line-height:20px; color:{{ line.tone }};">{{ line.mark }}</span>
+                      <span style="font-family:ui-monospace,Menlo,Consolas,monospace; font-size:12px; line-height:20px; color:{{ line.tone }}; white-space:pre; overflow-x:auto;">{{ line.text }}</span>
+                    </div>
+                  </sc-for>
+                </div>
+              </sc-for>
+              <div style="padding:8px 16px; border-top:1px solid oklch(0.95 0.001485 159 / 7.5125%); font-size:12px; color:oklch(0.684 0.00275 159);">Two of fourteen files shown. Every other hunk is the same rename; none changes a value.</div>
+            </div>
+
+            <div style="display:flex; flex-direction:column; gap:16px;">
+              <div style="border:1px solid oklch(0.95 0.001485 159 / 7.5125%); border-radius:8px; background:oklch(0.215 0.0025 159); overflow-x:auto;">
+                <div style="padding:16px 16px 8px;">
+                  <h2 style="margin:0; font-size:18px; line-height:28px; font-weight:600; letter-spacing:-0.02em;">Evidence bundle</h2>
+                  <p style="margin:0; font-size:12px; line-height:16px; color:oklch(0.684 0.00275 159); text-wrap:pretty;">What the run can prove, bounded by what the graph exposes. An empty row is an absence, not a pass.</p>
+                </div>
+                <sc-for list="{{ checks }}" as="check" hint-placeholder-count="5">
+                  <div style="display:grid; grid-template-columns:16px minmax(0,1fr) auto; gap:8px; align-items:baseline; padding:10px 16px; border-top:1px solid oklch(0.95 0.001485 159 / 7.5125%);">
+                    <span style="font-family:ui-monospace,Menlo,Consolas,monospace; font-size:12px; color:{{ check.tone }};">{{ check.glyph }}</span>
+                    <span style="min-width:0;">
+                      <span style="display:block; font-size:13px; line-height:20px; color:{{ check.tone }};">{{ check.label }}</span>
+                      <span style="display:block; font-family:ui-monospace,Menlo,Consolas,monospace; font-size:12px; line-height:16px; color:oklch(0.798 0.00275 159); overflow-wrap:anywhere;">{{ check.evidence }}</span>
+                    </span>
+                    <span style="font-size:12px; color:oklch(0.684 0.00275 159); font-variant-numeric:tabular-nums;">{{ check.when }}</span>
+                  </div>
+                </sc-for>
+              </div>
+
+              <div style="border:1px solid oklch(0.95 0.001485 159 / 7.5125%); border-radius:8px; background:oklch(0.215 0.0025 159); padding:16px;">
+                <h3 style="margin:0 0 8px; font-size:12px; line-height:16px; text-transform:uppercase; letter-spacing:0.025em; color:oklch(0.798 0.00275 159);">What this bundle does not contain</h3>
+                <p style="margin:0; font-size:12px; line-height:16px; color:oklch(0.798 0.00275 159); text-wrap:pretty;">No runtime traffic was replayed against the vendor's live endpoint — the replay tier used three recorded exchanges. Two of the fourteen call sites sit in a directory the index skipped, so the patch does not touch them and this bundle makes no claim about them.</p>
+              </div>
+            </div>
+          </div>
+        </section>
+      </sc-if>
+
+      <sc-if value="{{ isDetectors }}" hint-placeholder-val="{{ false }}">
+        <section style="padding:16px 40px 40px; animation:rise .28s cubic-bezier(.2,.7,.3,1) both;">
+          <p style="margin:0 0 16px; font-size:13px; line-height:20px; color:oklch(0.798 0.00275 159); max-width:100ch; text-wrap:pretty;">Every detector's open findings, broken down by the rung of evidence behind its claims. The rung breakdown is the substance, and it is not a ranking: a rung is a class of evidence, not a position on a good-to-bad scale, so no colour is assigned to one.</p>
+
+          <div style="display:grid; grid-template-columns:repeat(auto-fill, minmax(320px, 1fr)); gap:16px;">
+            <sc-for list="{{ detectors }}" as="d" hint-placeholder-count="5">
+              <div style="border:1px solid oklch(0.95 0.001485 159 / 7.5125%); border-radius:8px; background:oklch(0.215 0.0025 159); padding:16px; transition:box-shadow .16s ease, transform .16s ease;" style-hover="box-shadow:0 0 0 1px oklch(0.578 0.00275 159); transform:translateY(-2px);">
+                <div style="display:flex; align-items:baseline; gap:8px;">
+                  <span style="font-family:ui-monospace,Menlo,Consolas,monospace; font-size:13px; font-weight:600;">{{ d.name }}</span>
+                  <span style="margin-left:auto; font-size:28px; line-height:36px; font-weight:600; letter-spacing:-0.04em; font-variant-numeric:tabular-nums;">{{ d.total }}</span>
+                </div>
+                <div style="font-size:12px; line-height:16px; color:oklch(0.684 0.00275 159); margin-bottom:8px;">open findings · {{ d.claim }}</div>
+                <div style="display:flex; flex-direction:column; gap:0;">
+                  <sc-for list="{{ d.rungs }}" as="r" hint-placeholder-count="5">
+                    <div style="display:grid; grid-template-columns:112px 40px minmax(0,1fr); gap:8px; align-items:center; padding:4px 0; border-top:1px solid oklch(0.95 0.001485 159 / 7.5125%);">
+                      <span style="font-family:ui-monospace,Menlo,Consolas,monospace; font-size:12px; color:oklch(0.798 0.00275 159);" title="{{ r.note }}">{{ r.rung }}</span>
+                      <span style="font-family:ui-monospace,Menlo,Consolas,monospace; font-size:12px; text-align:right; font-variant-numeric:tabular-nums; color:{{ r.ink }};">{{ r.n }}</span>
+                      <span style="height:6px; background:oklch(0.95 0.00275 159 / 4.9342%); border-radius:6px; overflow:hidden;">
+                        <span style="display:block; height:6px; width:{{ r.width }}; background:oklch(0.578 0.00275 159); border-radius:6px;"></span>
+                      </span>
+                    </div>
+                  </sc-for>
+                </div>
+              </div>
+            </sc-for>
+          </div>
+
+          <div style="margin-top:16px; border:1px solid oklch(0.95 0.001485 159 / 7.5125%); border-radius:8px; background:oklch(0.215 0.0025 159); padding:16px;">
+            <h3 style="margin:0 0 8px; font-size:12px; line-height:16px; text-transform:uppercase; letter-spacing:0.025em; color:oklch(0.798 0.00275 159);">By rung, across every detector</h3>
+            <div style="display:grid; grid-template-columns:repeat(5, minmax(0,1fr)); gap:16px;">
+              <sc-for list="{{ rungTally }}" as="t" hint-placeholder-count="5">
+                <div style="border-left:1px solid oklch(0.578 0.00275 159); padding-left:12px;">
+                  <div style="font-family:ui-monospace,Menlo,Consolas,monospace; font-size:12px; color:oklch(0.798 0.00275 159);">{{ t.rung }}</div>
+                  <div style="font-size:28px; line-height:36px; font-weight:600; letter-spacing:-0.04em; font-variant-numeric:tabular-nums; color:{{ t.ink }};">{{ t.n }}</div>
+                  <div style="font-size:12px; line-height:16px; color:oklch(0.684 0.00275 159); text-wrap:pretty;">{{ t.note }}</div>
+                </div>
+              </sc-for>
+            </div>
+            <p style="margin:16px 0 0; font-size:12px; line-height:16px; color:oklch(0.684 0.00275 159); text-wrap:pretty;">Counted over every open finding in this scope, once each, by the rung behind it — not by detector, so a finding two detectors agree on is still one row. Nothing here rests on <span style="font-family:ui-monospace,Menlo,Consolas,monospace;">unresolved</span>. That rung keeps its place and draws nothing, which is not the same fact as a rung this console does not have.</p>
+          </div>
+        </section>
+      </sc-if>
+
+      <sc-if value="{{ isSignals }}" hint-placeholder-val="{{ false }}">
+        <section style="padding:16px 40px 40px; animation:rise .28s cubic-bezier(.2,.7,.3,1) both;">
+          <div style="display:grid; grid-template-columns:repeat(3, minmax(0,1fr)); gap:16px;">
+            <sc-for list="{{ signalRoles }}" as="role" hint-placeholder-count="3">
+              <div style="border:1px solid oklch(0.95 0.001485 159 / 7.5125%); border-radius:8px; background:oklch(0.215 0.0025 159); overflow-x:auto; display:flex; flex-direction:column;">
+                <div style="padding:16px;">
+                  <div style="font-size:12px; line-height:16px; text-transform:uppercase; letter-spacing:0.025em; color:oklch(0.684 0.00275 159);">{{ role.role }}</div>
+                  <h2 style="margin:4px 0 0; font-size:18px; line-height:28px; font-weight:600; letter-spacing:-0.02em;">{{ role.name }}</h2>
+                  <p style="margin:0; font-size:12px; line-height:16px; color:oklch(0.798 0.00275 159); text-wrap:pretty;">{{ role.what }}</p>
+                </div>
+                <sc-for list="{{ role.reports }}" as="rep" hint-placeholder-count="4">
+                  <div style="display:grid; grid-template-columns:minmax(0,1fr) 88px; gap:8px; align-items:baseline; padding:8px 16px; border-top:1px solid oklch(0.95 0.001485 159 / 7.5125%);">
+                    <span style="font-family:ui-monospace,Menlo,Consolas,monospace; font-size:12px; color:oklch(0.95 0.00275 159); overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">{{ rep.what }}</span>
+                    <span style="font-size:12px; color:oklch(0.684 0.00275 159); text-align:right; font-variant-numeric:tabular-nums;">{{ rep.when }}</span>
+                  </div>
+                </sc-for>
+                <div style="margin-top:auto; padding:8px 16px; background:oklch(0.95 0.00275 159 / 3.2895%); font-size:12px; line-height:16px; color:oklch(0.798 0.00275 159); text-wrap:pretty;">{{ role.caveat }}</div>
+              </div>
+            </sc-for>
+          </div>
+        </section>
+      </sc-if>
+
+      <sc-if value="{{ isSettings }}" hint-placeholder-val="{{ false }}">
+        <section style="padding:16px 40px 40px; animation:rise .28s cubic-bezier(.2,.7,.3,1) both;">
+          <div style="display:grid; grid-template-columns:minmax(0,1.3fr) minmax(0,1fr); gap:16px;">
+            <div style="border:1px solid oklch(0.95 0.001485 159 / 7.5125%); border-radius:8px; background:oklch(0.215 0.0025 159); overflow-x:auto;">
+              <div style="padding:16px 16px 8px;">
+                <h2 style="margin:0; font-size:18px; line-height:28px; font-weight:600; letter-spacing:-0.02em;">Vendor adapters</h2>
+                <p style="margin:0; font-size:12px; line-height:16px; color:oklch(0.684 0.00275 159);">An adapter that declines a specification says why, and the refusal is recorded rather than retried silently.</p>
+              </div>
+              <div style="display:grid; grid-template-columns:minmax(140px,1fr) 120px 96px minmax(160px,1.2fr); gap:16px; min-width:660px; padding:0 16px; height:36px; align-items:center; border-bottom:1px solid oklch(0.95 0.001485 159 / 7.5125%); background:oklch(0.95 0.00275 159 / 3.2895%);">
+                <span style="font-size:12px; text-transform:uppercase; letter-spacing:0.025em; color:oklch(0.798 0.00275 159);">Adapter</span>
+                <span style="font-size:12px; text-transform:uppercase; letter-spacing:0.025em; color:oklch(0.798 0.00275 159);">Source</span>
+                <span style="font-size:12px; text-transform:uppercase; letter-spacing:0.025em; color:oklch(0.798 0.00275 159); text-align:right;">Ops</span>
+                <span style="font-size:12px; text-transform:uppercase; letter-spacing:0.025em; color:oklch(0.798 0.00275 159);">Last intake</span>
+              </div>
+              <sc-for list="{{ adapters }}" as="a" hint-placeholder-count="4">
+                <div style="display:grid; grid-template-columns:minmax(140px,1fr) 120px 96px minmax(160px,1.2fr); gap:16px; min-width:660px; align-items:baseline; padding:10px 16px; border-bottom:1px solid oklch(0.95 0.001485 159 / 7.5125%); transition:background .16s ease;" style-hover="background:oklch(0.95 0.00275 159 / 3.2895%);">
+                  <span style="font-family:ui-monospace,Menlo,Consolas,monospace; font-size:12px;">{{ a.name }}</span>
+                  <span style="font-size:12px; color:oklch(0.798 0.00275 159);">{{ a.source }}</span>
+                  <span style="font-family:ui-monospace,Menlo,Consolas,monospace; font-size:13px; text-align:right; font-variant-numeric:tabular-nums;">{{ a.ops }}</span>
+                  <span style="font-size:12px; color:{{ a.tone }}; text-wrap:pretty;">{{ a.last }}</span>
+                </div>
+              </sc-for>
+            </div>
+
+            <div style="display:flex; flex-direction:column; gap:16px;">
+              <div style="border:1px solid oklch(0.95 0.001485 159 / 7.5125%); border-radius:8px; background:oklch(0.215 0.0025 159); padding:16px;">
+                <h2 style="margin:0 0 8px; font-size:18px; line-height:28px; font-weight:600; letter-spacing:-0.02em;">Merge policy</h2>
+                <p style="margin:0 0 16px; font-size:13px; line-height:20px; color:oklch(0.798 0.00275 159); text-wrap:pretty;">{{ policySentence }}</p>
+                <div style="display:flex; flex-direction:column; gap:8px;">
+                  <sc-for list="{{ policyOptions }}" as="p" hint-placeholder-count="3">
+                    <div style="display:grid; grid-template-columns:16px minmax(0,1fr); gap:8px; align-items:baseline; padding:8px; border-radius:6px; border:1px solid {{ p.border }};">
+                      <span style="font-family:ui-monospace,Menlo,Consolas,monospace; font-size:12px; color:{{ p.ink }};">{{ p.mark }}</span>
+                      <span>
+                        <span style="display:block; font-size:13px; line-height:20px; color:{{ p.ink }};">{{ p.label }}</span>
+                        <span style="display:block; font-size:12px; line-height:16px; color:oklch(0.684 0.00275 159); text-wrap:pretty;">{{ p.note }}</span>
+                      </span>
+                    </div>
+                  </sc-for>
+                </div>
+              </div>
+
+              <div style="border:1px solid oklch(0.95 0.001485 159 / 7.5125%); border-radius:8px; background:oklch(0.215 0.0025 159); padding:16px;">
+                <h3 style="margin:0 0 8px; font-size:12px; line-height:16px; text-transform:uppercase; letter-spacing:0.025em; color:oklch(0.798 0.00275 159);">Repository overrides</h3>
+                <sc-for list="{{ overrides }}" as="o" hint-placeholder-count="3">
+                  <div style="display:grid; grid-template-columns:minmax(0,1fr) auto; gap:8px; align-items:baseline; padding:8px 0; border-top:1px solid oklch(0.95 0.001485 159 / 7.5125%);">
+                    <span style="font-family:ui-monospace,Menlo,Consolas,monospace; font-size:12px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">{{ o.repo }}</span>
+                    <span style="font-size:12px; color:oklch(0.798 0.00275 159);">{{ o.policy }}</span>
+                  </div>
+                </sc-for>
+              </div>
+            </div>
+          </div>
+        </section>
+      </sc-if>
+
+    </div>
+  </main>
+
+  <sc-if value="{{ drawerOpen }}" hint-placeholder-val="{{ false }}">
+    <aside style="position:fixed; top:0; right:0; bottom:0; width:480px; background:oklch(0.2275 0.0025 159); border-left:1px solid oklch(0.95 0.001375 159 / 13.3713%); box-shadow:0 0 0 1px oklch(0.95 0.001485 159 / 7.5125%), 0 12px 32px -12px oklch(0 0 0 / 0.72); z-index:40; display:flex; flex-direction:column; animation:slideIn .24s cubic-bezier(.2,.7,.3,1) both;">
+      <div style="display:flex; align-items:flex-start; gap:16px; padding:16px; border-bottom:1px solid oklch(0.95 0.001485 159 / 7.5125%);">
+        <div style="min-width:0;">
+          <div style="font-size:12px; line-height:16px; text-transform:uppercase; letter-spacing:0.025em; color:oklch(0.684 0.00275 159);">{{ drawerKicker }}</div>
+          <h2 style="margin:2px 0 0; font-size:18px; line-height:28px; font-weight:600; letter-spacing:-0.02em; text-wrap:pretty;">{{ drawerTitle }}</h2>
+        </div>
+        <button type="button" onClick="{{ closeDrawer }}" style="all:unset; cursor:pointer; margin-left:auto; width:28px; height:28px; display:flex; align-items:center; justify-content:center; border-radius:6px; color:oklch(0.798 0.00275 159); transition:background .16s ease;" style-hover="background:oklch(0.95 0.00275 159 / 4.9342%);">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M18 6L6 18M6 6l12 12"></path></svg>
+        </button>
+      </div>
+      <div style="flex:1; overflow:auto; padding:16px;">
+        <p style="margin:0 0 16px; font-size:13px; line-height:20px; color:oklch(0.798 0.00275 159); text-wrap:pretty;">{{ drawerLede }}</p>
+        <sc-for list="{{ drawerRows }}" as="row" hint-placeholder-count="5">
+          <div style="display:grid; grid-template-columns:132px minmax(0,1fr); gap:16px; padding:8px 0; border-top:1px solid oklch(0.95 0.001485 159 / 7.5125%);">
+            <span style="font-size:12px; line-height:16px; text-transform:uppercase; letter-spacing:0.025em; color:oklch(0.684 0.00275 159);">{{ row.label }}</span>
+            <span style="font-family:ui-monospace,Menlo,Consolas,monospace; font-size:12px; line-height:16px; color:oklch(0.95 0.00275 159); overflow-wrap:anywhere;">{{ row.value }}</span>
+          </div>
+        </sc-for>
+        <p style="margin:16px 0 0; font-size:12px; line-height:16px; color:oklch(0.684 0.00275 159); text-wrap:pretty;">{{ drawerFoot }}</p>
+      </div>
+      <div style="padding:16px; border-top:1px solid oklch(0.95 0.001485 159 / 7.5125%);">
+        <button type="button" onClick="{{ drawerGo }}" style="all:unset; cursor:pointer; height:32px; padding:0 12px; display:flex; align-items:center; border-radius:6px; border:1px solid oklch(0.578 0.00275 159); font-size:13px; width:fit-content; transition:background .16s ease;" style-hover="background:oklch(0.95 0.00275 159 / 4.9342%);">{{ drawerCta }}</button>
+      </div>
+    </aside>
+  </sc-if>
+
+  <sc-if value="{{ paletteOpen }}" hint-placeholder-val="{{ false }}">
+    <div style="position:fixed; inset:0; background:oklch(0.19 0.0025 159 / 0.72); z-index:50; display:flex; align-items:flex-start; justify-content:center; padding-top:12vh; animation:fadeIn .16s ease both;">
+      <div style="width:640px; max-width:calc(100vw - 80px); background:oklch(0.2275 0.0025 159); border:1px solid oklch(0.95 0.001375 159 / 13.3713%); border-radius:8px; box-shadow:0 0 0 1px oklch(0.95 0.001485 159 / 7.5125%), 0 12px 32px -12px oklch(0 0 0 / 0.72); overflow:hidden; animation:popIn .2s cubic-bezier(.2,.7,.3,1) both;">
+        <div style="display:flex; align-items:center; gap:8px; padding:12px 16px; border-bottom:1px solid oklch(0.95 0.001485 159 / 7.5125%);">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="oklch(0.684 0.00275 159)" stroke-width="1.5" stroke-linecap="round"><circle cx="11" cy="11" r="7"></circle><path d="M20 20l-3.5-3.5"></path></svg>
+          <span style="font-size:15px; line-height:24px; color:oklch(0.684 0.00275 159);">Go to a destination, a repository, or a vendor</span>
+          <button type="button" onClick="{{ closePalette }}" style="all:unset; cursor:pointer; margin-left:auto; font-size:12px; color:oklch(0.684 0.00275 159); border:1px solid oklch(0.95 0.001485 159 / 7.5125%); border-radius:6px; padding:0 6px;">Esc</button>
+        </div>
+        <div style="max-height:56vh; overflow:auto; padding:8px;">
+          <sc-for list="{{ paletteGroups }}" as="group" hint-placeholder-count="3">
+            <div style="padding:8px 8px 4px;">
+              <div style="font-size:12px; line-height:16px; text-transform:uppercase; letter-spacing:0.025em; color:oklch(0.684 0.00275 159); padding-bottom:4px;">{{ group.label }}</div>
+              <sc-for list="{{ group.items }}" as="item" hint-placeholder-count="3">
+                <button type="button" onClick="{{ item.go }}" style="all:unset; cursor:pointer; display:grid; grid-template-columns:minmax(0,1fr) auto; gap:16px; align-items:baseline; width:100%; padding:8px; border-radius:6px; transition:background .16s ease;" style-hover="background:oklch(0.95 0.00275 159 / 4.9342%);">
+                  <span style="min-width:0;">
+                    <span style="display:block; font-size:13px; line-height:20px;">{{ item.label }}</span>
+                    <span style="display:block; font-size:12px; line-height:16px; color:oklch(0.684 0.00275 159); overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">{{ item.hint }}</span>
+                  </span>
+                  <span style="font-family:ui-monospace,Menlo,Consolas,monospace; font-size:12px; color:oklch(0.684 0.00275 159);">{{ item.path }}</span>
+                </button>
+              </sc-for>
+            </div>
+          </sc-for>
+        </div>
+        <div style="padding:8px 16px; border-top:1px solid oklch(0.95 0.001485 159 / 7.5125%); font-size:12px; color:oklch(0.684 0.00275 159); text-wrap:pretty;">A destination that needs a subject is listed as a place to look one up, never as a link with an empty parameter in it.</div>
+      </div>
+    </div>
+  </sc-if>
+
+</div>
+
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:1440,&quot;height&quot;:900},&quot;mergePolicy&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;Merge when CI is green&quot;,&quot;Open the pull request only&quot;,&quot;Per repository&quot;],&quot;default&quot;:&quot;Merge when CI is green&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Product behaviour&quot;},&quot;rungMode&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;Column and drawer&quot;,&quot;Drawer only&quot;],&quot;default&quot;:&quot;Column and drawer&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Product behaviour&quot;},&quot;showPurpose&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;Shell&quot;}}">
+const INK = "oklch(0.95 0.00275 159)";
+const INK_MUTED = "oklch(0.798 0.00275 159)";
+const INK_SECOND = "oklch(0.684 0.00275 159)";
+const GOOD = "hsl(154.9 59.5% 70%)";
+const WARNING = "oklch(0.8 0.14 75)";
+const SERIOUS = "oklch(0.77 0.14 45)";
+const CRITICAL = "oklch(0.75 0.14 25)";
+
+const RUNG_NOTE = {
+  static: "read out of the source",
+  resolved: "read out of the source, then resolved",
+  observed: "correlated from watched traffic",
+  unresolved: "an observation that correlated to nothing",
+  unattributed: "recorded before the rung was tracked",
+};
+
+const SCREENS = {
+  fleet: { level: "Fleet", area: "fleet", title: "Fleet", question: "What has Sync been doing across every run, and is one stuck right now?", crumbs: [["Fleet", "fleet"]] },
+  codebase: { level: "Codebase", area: "codebase", title: "acme/payments-api", question: "Is this repository actually covered, and what does Sync not see in it?", crumbs: [["Fleet", "fleet"], ["acme/payments-api", "codebase"]] },
+  vendor: { level: "API Services", area: "api-services", title: "OpenAI", question: "What is at risk from this vendor, and what did it change?", crumbs: [["Fleet", "fleet"], ["OpenAI", "vendor"]] },
+  signals: { level: "Signals", area: "signals", title: "Attached signals", question: "What vendor, signal source and human surface does this repository have attached, and what has each reported?", crumbs: [["Fleet", "fleet"], ["acme/payments-api", "codebase"], ["Signals", "signals"]] },
+  binding: { level: "Binding surface", area: "observe", title: "chat.completions.create", question: "A vendor shipped a breaking change — what call sites does it hit?", crumbs: [["Fleet", "fleet"], ["OpenAI", "vendor"], ["chat.completions.create", "binding"]] },
+  detectors: { level: "Errors & Incidents", area: "observe", title: "Detector attribution", question: "Which detector is producing my false positives?", crumbs: [["Fleet", "fleet"], ["Detectors", "detectors"]] },
+  finding: { level: "Finding", area: "remediation", title: "max_tokens removed", question: "What is this finding, and what binding does it rest on?", crumbs: [["Fleet", "fleet"], ["OpenAI", "vendor"], ["chat.completions.create", "binding"], ["Finding", "finding"]] },
+  workflow: { level: "Solution Workflow", area: "remediation", title: "Solution workflow", question: "What did Sync's remediation graph do about this finding, node by node?", crumbs: [["Fleet", "fleet"], ["Finding", "finding"], ["Workflow", "workflow"]] },
+  pr: { level: "Pull Request", area: "remediation", title: "Pull request #4127", question: "Did Sync open a pull request for this finding, and what proof backs it?", crumbs: [["Fleet", "fleet"], ["Finding", "finding"], ["Workflow", "workflow"], ["#4127", "pr"]] },
+  settings: { level: "Not a level", area: "settings", title: "Settings & adapters", question: "Which adapters are attached, what did each last read, and what happens when a patch goes green?", crumbs: [["Fleet", "fleet"], ["Settings", "settings"]] },
+};
+
+const AREAS = [
+  { id: "fleet", label: "Fleet", purpose: "Every run across every repository, and whether one is stuck.", count: "6", screen: "fleet" },
+  { id: "codebase", label: "Codebase", purpose: "What the index found in one repository, and what it cannot see.", count: "12", screen: "codebase" },
+  { id: "api-services", label: "API services", purpose: "What a vendor changed, and what those changes put at risk.", count: "4", screen: "vendor" },
+  { id: "signals", label: "Signals", purpose: "What a repository has attached, and what each source has reported.", count: "3", screen: "signals" },
+  { id: "observe", label: "Observe", purpose: "Where a vendor change lands in the code, and which detector said so.", count: "5", screen: "binding" },
+  { id: "remediation", label: "Remediation", purpose: "What Sync did about a finding, node by node, including what it abandoned.", count: "9", screen: "finding" },
+];
+
+const UNITS = [
+  { vendor: "OpenAI", op: "chat.completions.create", change: "max_tokens removed — replaced by max_completion_tokens", repos: "3", sites: "14", rung: "static", standing: "PR open · CI green", tone: GOOD, glyph: "✓", when: "8m ago", screen: "binding",
+    drawer: { kicker: "Change unit", title: "OpenAI · chat.completions.create", lede: "Fourteen call sites across three repositories, collapsed into one unit because they share a vendor change. The finding grain is intact underneath — each call site is still its own row on the binding surface.",
+      rows: [["Change kind", "parameter_removed"], ["Repositories", "acme/payments-api · acme/agents · acme/digest-worker"], ["Rung", "static — read out of the source"], ["Detector", "param_removed"], ["Run", "opened · pull request #4127"], ["Generation", "2 of 2 — the first abandoned at static_verify"]],
+      foot: "The rung is this unit's own. Two call sites inside it carry a weaker rung and say so on their own rows.", cta: "Open the binding surface", go: "binding" } },
+  { vendor: "Anthropic", op: "messages.create", change: "model claude-3-sonnet-20240229 retired", repos: "4", sites: "21", rung: "resolved", standing: "await_ci · due", tone: WARNING, glyph: "!", when: "3m ago", screen: "workflow",
+    drawer: { kicker: "Change unit", title: "Anthropic · messages.create", lede: "The patch compiled and replayed. The run is parked at await_ci and will resume when the forge reports — a parked run is not ticked until something wakes it.",
+      rows: [["Change kind", "model_retired"], ["Rung", "resolved — read out of the source, then resolved"], ["Node standing", "await_ci · due"], ["CI attempts", "1"], ["Branch", "sync/anthropic-model-sunset"]],
+      foot: "No pull request has been opened yet, so there is no evidence bundle to read.", cta: "Open the solution workflow", go: "workflow" } },
+  { vendor: "Cloudflare", op: "ai.run", change: "model id renamed at the Workers AI gateway", repos: "2", sites: "9", rung: "observed", standing: "patch · due again", tone: WARNING, glyph: "!", when: "21m ago", screen: "workflow",
+    drawer: { kicker: "Change unit", title: "Cloudflare · ai.run", lede: "The graph owes patch a second visit. The evidence already on that node describes the attempt static_verify rejected — a retry rendered as progress would be a lie about the run.",
+      rows: [["Change kind", "identifier_renamed"], ["Rung", "observed — correlated from watched traffic"], ["Static attempts", "2"], ["Attempt strategy", "rename-literal"], ["What the compiler said", "TS2345: argument of type '\"@cf/meta/llama-2-7b\"' is not assignable"]],
+      foot: "This unit rests on observed traffic rather than the index, so a call site the traffic never exercised is not in the count.", cta: "Open the solution workflow", go: "workflow" } },
+  { vendor: "Stripe", op: "charges.create", change: "endpoint superseded by PaymentIntents", repos: "2", sites: "6", rung: "static", standing: "Abandoned · replay", tone: SERIOUS, glyph: "✕", when: "2h ago", screen: "workflow",
+    drawer: { kicker: "Change unit", title: "Stripe · charges.create", lede: "Sync tried and could not finish. The abandonment carries the node that gave up and the reason it wrote, because a bare failure teaches routing nothing.",
+      rows: [["Outcome", "abandoned"], ["Abandoned at", "replay"], ["Abandon reason", "replay: recorded exchange 2 of 4 returned 402; the migration changes the charge lifecycle, not one call"], ["Change kind", "endpoint_superseded"], ["Tier", "tier-3"]],
+      foot: "This is not a false positive. The finding is real and the patch is beyond what a call-site rewrite can do — which is a different fact, and routing records it separately.", cta: "Open the solution workflow", go: "workflow" } },
+  { vendor: "OpenAI", op: "embeddings.create", change: "engine parameter removed", repos: "1", sites: "2", rung: "unattributed", standing: "Reported · no patch attempted", tone: INK_MUTED, glyph: "—", when: "1d ago", screen: "finding",
+    drawer: { kicker: "Change unit", title: "OpenAI · embeddings.create", lede: "Recorded before the rung was tracked, so this unit can honestly claim no class of evidence at all. It was reported rather than patched.",
+      rows: [["Outcome", "reported"], ["Report reason", "no binding rung; a patch would rest on nothing"], ["Rung", "unattributed — recorded before the rung was tracked"], ["Detector", "vendor_change"]],
+      foot: "An absence, not a zero. Re-indexing the repository is what gives this unit a rung.", cta: "Open the finding", go: "finding" } },
+  { vendor: "Stripe", op: "webhooks.constructEvent", change: "signature scheme v2", repos: "1", sites: "3", rung: "unresolved", standing: "Not reached yet", tone: INK_SECOND, glyph: "·", when: "4h ago", screen: "finding",
+    drawer: { kicker: "Change unit", title: "Stripe · webhooks.constructEvent", lede: "An observation that correlated to nothing in the index. No run has been queued, so no node has a standing.",
+      rows: [["Rung", "unresolved — an observation that correlated to nothing"], ["Signal source", "OTel collector · acme-payments"], ["Detector", "status_rate"], ["Run", "—"]],
+      foot: "The console renders the absence rather than a zero, because \"no run yet\" and \"a run that found nothing\" are opposite facts.", cta: "Open the finding", go: "finding" } },
+];
+
+const NODES = [
+  { name: "locate", standing: "ran", tone: GOOD, glyph: "✓", rows: [["Tier", "tier-2"], ["Routing row", "openai/chat.completions/parameter_removed"]], lede: "The node that picked the tier this run would attempt, and the routing row that decided it." },
+  { name: "prepare", standing: "ran", tone: GOOD, glyph: "✓", rows: [["prepare_ok", "true"], ["verifiable", "true"], ["verify_gap", "—"]], lede: "Whether the repository could be put in a state a patch can be verified against." },
+  { name: "patch", standing: "ran", tone: GOOD, glyph: "✓", rows: [["Static attempts", "2"], ["Attempt strategy", "rename-param"], ["First attempt", "rejected by static_verify — TS2353 on an object literal"]], lede: "Two attempts. The first is kept because the reason it was rejected is what routing learns from." },
+  { name: "static_verify", standing: "ran", tone: GOOD, glyph: "✓", rows: [["verify_ok", "true"], ["What the compiler said", "—"]], lede: "The compiler's own answer. Once a typecheck passes, later nodes overwrite this channel, so an empty line here is correct rather than missing." },
+  { name: "replay", standing: "ran", tone: GOOD, glyph: "✓", rows: [["Replay outcome", "matched"], ["Recorded exchanges", "3"], ["Replay reason", "—"]], lede: "Three recorded exchanges replayed against the patched client. No live vendor traffic was involved." },
+  { name: "push_branch", standing: "ran", tone: GOOD, glyph: "✓", rows: [["Branch", "sync/openai-max-completion-tokens"]], lede: "The branch exists whether or not a pull request was opened against it." },
+  { name: "await_ci", standing: "ran", tone: GOOD, glyph: "✓", rows: [["CI attempts", "1"], ["Attempt result", "passed"], ["CI URL", "forge/acme/payments-api/actions/runs/91824"]], lede: "The run parked here until the forge reported. Parked is not failed." },
+  { name: "open_pr", standing: "ran", tone: GOOD, glyph: "✓", rows: [["Pull request", "#4127"], ["Opened", "14:05:03"]], lede: "The terminal node for this generation. Its outcome is opened." },
+];
+
+const TIMELINE = [
+  { at: "14:02:11", source: "event", kind: "run.queued", detail: "thread 8f21c0:4127:2 — generation 2, after generation 1 abandoned at static_verify", tone: INK },
+  { at: "14:02:14", source: "event", kind: "locate.ran", detail: "tier-2; routing row openai/chat.completions/parameter_removed", tone: INK },
+  { at: "14:02:31", source: "event", kind: "prepare.ran", detail: "verifiable — the repository typechecks before the patch", tone: INK },
+  { at: "14:03:02", source: "event", kind: "patch.attempt", detail: "attempt 1 rejected by static_verify: TS2353 on an object literal", tone: SERIOUS },
+  { at: "14:03:40", source: "event", kind: "patch.attempt", detail: "attempt 2, strategy rename-param — 14 call sites rewritten", tone: INK },
+  { at: "14:03:58", source: "event", kind: "static_verify.ok", detail: "tsc clean across the workspace", tone: GOOD },
+  { at: "14:04:20", source: "event", kind: "replay.matched", detail: "3 recorded exchanges replayed; response shapes unchanged", tone: GOOD },
+  { at: "14:04:41", source: "pull_request", kind: "branch.pushed", detail: "sync/openai-max-completion-tokens", tone: INK },
+  { at: "14:05:03", source: "pull_request", kind: "pr.opened", detail: "#4127 — 14 files, +18 −18", tone: INK },
+  { at: "14:11:52", source: "ci", kind: "check.completed", detail: "build — passed", tone: GOOD },
+  { at: "14:12:40", source: "ci", kind: "check.completed", detail: "contract-replay — passed", tone: GOOD },
+  { at: "14:13:05", source: "pull_request", kind: "review.requested", detail: "awaiting a human approval; the merge policy takes it from there", tone: INK },
+];
+
+const DETECTORS = [
+  { name: "param_removed", claim: "a required parameter this call site passes no longer exists", total: "31", rungs: [["static", 22], ["resolved", 6], ["observed", 3], ["unresolved", 0], ["unattributed", 0]] },
+  { name: "model_retired", claim: "a model identifier reached its retirement date", total: "24", rungs: [["static", 9], ["resolved", 12], ["observed", 3], ["unresolved", 0], ["unattributed", 0]] },
+  { name: "vendor_change", claim: "the vendor's specification changed against the pinned one", total: "18", rungs: [["static", 7], ["resolved", 2], ["observed", 4], ["unresolved", 0], ["unattributed", 5]] },
+  { name: "status_rate", claim: "an operation's error rate moved against its own baseline", total: "12", rungs: [["static", 0], ["resolved", 0], ["observed", 12], ["unresolved", 0], ["unattributed", 0]] },
+  { name: "efficiency", claim: "a call pattern costs more than an equivalent the vendor documents", total: "6", rungs: [["static", 4], ["resolved", 1], ["observed", 1], ["unresolved", 0], ["unattributed", 0]] },
+];
+
+class Component extends DCLogic {
+  state = { screen: "fleet", drawer: null, palette: false };
+
+  go = (screen) => () => this.setState({ screen, drawer: null, palette: false });
+
+  openDrawer = (drawer) => () => this.setState({ drawer });
+
+  renderVals() {
+    const screen = this.state.screen;
+    const meta = SCREENS[screen] || SCREENS.fleet;
+    const showPurpose = this.props.showPurpose ?? true;
+    const rungMode = this.props.rungMode ?? "Column and drawer";
+    const policy = this.props.mergePolicy ?? "Merge when CI is green";
+
+    const policySentence =
+      policy === "Merge when CI is green"
+        ? "Approval is a standing instruction: Sync merges this patch the moment CI reports green. Nothing waits for a second click."
+        : policy === "Open the pull request only"
+          ? "Sync stops at the door. Approval marks the patch reviewed; a human merges it on the forge."
+          : "Merge behaviour is set per repository. This repository's own setting is what governs, and it is named on the settings screen.";
+
+    const areas = AREAS.map((a) => {
+      const active = meta.area === a.id;
+      return {
+        ...a,
+        active,
+        bg: active ? "oklch(0.95 0.00275 159 / 4.9342%)" : "transparent",
+        ring: active ? "inset 2px 0 0 oklch(0.76 0.15 159)" : "none",
+        ink: active ? INK : INK_MUTED,
+        weight: active ? "600" : "450",
+        go: this.go(a.screen),
+      };
+    });
+
+    const crumbs = meta.crumbs.map((c, i) => ({
+      label: c[0],
+      sep: i === 0 ? "" : "/",
+      ink: i === meta.crumbs.length - 1 ? INK : INK_SECOND,
+      go: this.go(c[1]),
+    }));
+
+    const units = UNITS.map((u) => ({
+      ...u,
+      rungNote: RUNG_NOTE[u.rung],
+      go: this.go(u.screen),
+      drawer: this.openDrawer(u.drawer),
+    }));
+
+    const d = this.state.drawer;
+
+    const scopes = ["Every repository", "acme/payments-api", "Stuck runs"].map((label, i) => ({
+      label,
+      ink: i === 0 ? INK : INK_MUTED,
+      bg: i === 0 ? "oklch(0.95 0.00275 159 / 4.9342%)" : "transparent",
+      go: this.go("fleet"),
+    }));
+
+    const detectorMax = 22;
+    const detectors = DETECTORS.map((det) => ({
+      ...det,
+      rungs: det.rungs.map(([rung, n]) => ({
+        rung,
+        n: String(n),
+        note: RUNG_NOTE[rung],
+        ink: n === 0 ? INK_SECOND : INK,
+        width: (Math.round((n / detectorMax) * 100)) + "%",
+      })),
+    }));
+
+    const tally = [["static", 42], ["resolved", 21], ["observed", 23], ["unresolved", 0], ["unattributed", 5]];
+
+    return {
+      showPurpose,
+      rungColumnVisible: rungMode === "Column and drawer",
+      policySentence,
+      areas,
+      crumbs,
+      title: meta.title,
+      level: meta.level,
+      question: meta.question,
+      settingsInk: screen === "settings" ? INK : INK_MUTED,
+      goSettings: this.go("settings"),
+      goPr: this.go("pr"),
+      goWorkflow: this.go("workflow"),
+      goBinding: this.go("binding"),
+      openPalette: () => this.setState({ palette: true }),
+      closePalette: () => this.setState({ palette: false }),
+      paletteOpen: this.state.palette,
+
+      isFleet: screen === "fleet",
+      isCodebase: screen === "codebase",
+      isVendor: screen === "vendor",
+      isSignals: screen === "signals",
+      isBinding: screen === "binding",
+      isFinding: screen === "finding",
+      isWorkflow: screen === "workflow",
+      isPr: screen === "pr",
+      isDetectors: screen === "detectors",
+      isSettings: screen === "settings",
+
+      units,
+      scopes,
+
+      codebaseFacts: [
+        { label: "Files indexed", value: "1,284", evidence: "of 1,322 walked" },
+        { label: "Vendor clients", value: "6", evidence: "across 4 vendors" },
+        { label: "Operations bound", value: "21", evidence: "14 static, 7 resolved" },
+        { label: "Directories skipped", value: "3", evidence: "each with a recorded reason" },
+      ],
+      clients: [
+        { path: "src/lib/llm-client.ts", vendor: "OpenAI", ops: "9", rung: "resolved" },
+        { path: "src/vendor/openai.ts", vendor: "OpenAI", ops: "5", rung: "static" },
+        { path: "src/lib/anthropic.ts", vendor: "Anthropic", ops: "4", rung: "static" },
+        { path: "src/billing/stripe.ts", vendor: "Stripe", ops: "2", rung: "static" },
+        { path: "src/edge/ai.ts", vendor: "Cloudflare", ops: "1", rung: "observed" },
+      ],
+      blindSpots: [
+        { where: "src/generated/", reason: "Generated client — excluded by manifest. A finding here would name a file no human edits." },
+        { where: "src/legacy/dispatch.ts", reason: "Dynamic dispatch through a string map; the index could not resolve the callee, so nothing in this file is bound." },
+        { where: "scripts/*.py", reason: "No Python adapter is attached to this repository. The files were walked and not read." },
+        { where: "2 files", reason: "Parse failed — a syntax the indexer's grammar does not accept. Both are named in the intake report." },
+      ],
+
+      vendorChanges: [
+        { op: "chat.completions.create", kind: "parameter_removed", seen: "2d ago" },
+        { op: "embeddings.create", kind: "parameter_removed", seen: "9d ago" },
+        { op: "assistants.create", kind: "endpoint_superseded", seen: "14d ago" },
+        { op: "files.upload", kind: "response_shape", seen: "21d ago" },
+      ],
+      vendorSources: [
+        { name: "Deprecations page", locator: "platform.openai.com/docs/deprecations", when: "read 12m ago", note: "Parsed into dated rows. The vendor's own wording is kept verbatim on each change." },
+        { name: "Pinned specification", locator: "openapi/openai@2.3.1 → 2.4.0", when: "diffed 2d ago", note: "oasdiff against the pinned version. This is what produced the parameter_removed rows." },
+        { name: "Watched traffic", locator: "otel · acme-payments · 7d window", when: "last event 2m ago", note: "Correlation only. Nothing here reads your source, so nothing here can carry a static rung." },
+      ],
+      vendorFindings: [
+        { rung: "static", op: "chat.completions.create", sites: "14", repos: "3", detector: "param_removed", go: this.go("binding") },
+        { rung: "resolved", op: "chat.completions.stream", sites: "5", repos: "2", detector: "param_removed", go: this.go("binding") },
+        { rung: "unattributed", op: "embeddings.create", sites: "2", repos: "1", detector: "vendor_change", go: this.go("finding") },
+        { rung: "observed", op: "files.upload", sites: "3", repos: "1", detector: "status_rate", go: this.go("finding") },
+        { rung: "static", op: "assistants.create", sites: "1", repos: "1", detector: "vendor_change", go: this.go("finding") },
+      ],
+
+      bindingFacts: [
+        { label: "Call sites", value: "14", evidence: "in 3 repositories" },
+        { label: "Binding rung", value: "static", evidence: "read out of the source" },
+        { label: "Detector", value: "param_removed", evidence: "one finding per call site" },
+        { label: "Vendor change", value: "no rung", evidence: "evidence about the vendor, not your code" },
+      ],
+      callSites: [
+        { rung: "static", path: "openai/completions.ts:118", symbol: "createChat()", arg: "max_tokens: 1024" },
+        { rung: "static", path: "openai/completions.ts:204", symbol: "retryChat()", arg: "max_tokens: 512" },
+        { rung: "static", path: "agents/summarise.ts:63", symbol: "summarise()", arg: "max_tokens: 2048" },
+        { rung: "static", path: "agents/triage.ts:41", symbol: "triage()", arg: "max_tokens: 256" },
+        { rung: "resolved", path: "lib/llm-client.ts:29", symbol: "chat()", arg: "max_tokens: opts.cap" },
+        { rung: "static", path: "workers/digest.ts:88", symbol: "digestOne()", arg: "max_tokens: 4096" },
+        { rung: "observed", path: "workers/digest.ts:141", symbol: "digestBatch()", arg: "max_tokens: 4096" },
+        { rung: "unresolved", path: "workers/spillover.ts:52", symbol: "—", arg: "—" },
+      ].map((s) => ({
+        ...s,
+        rungNote: RUNG_NOTE[s.rung],
+        drawer: this.openDrawer({
+          kicker: "Call site",
+          title: s.path,
+          lede: "This call site binds to the operation on the " + s.rung + " rung: " + RUNG_NOTE[s.rung] + ". The rung is this row's own and says nothing about the other rows.",
+          rows: [["Path", "services/billing/src/" + s.path], ["Symbol", s.symbol], ["Argument", s.arg], ["Rung", s.rung], ["Established by", s.rung === "observed" ? "traffic correlation over a 7-day window" : "the static index"]],
+          foot: "The vendor changed the operation this row points at. That edge carries no rung, and the absence is the point.",
+          cta: "Open the finding",
+          go: "finding",
+        }),
+      })),
+
+      evidenceRows: [
+        { label: "Binding", value: "services/billing/src/openai/completions.ts:118 → chat.completions.create" },
+        { label: "Vendor change", value: "openai@2.4.0 · parameter_removed · max_tokens" },
+        { label: "Vendor's wording", value: "\"requests including max_tokens are rejected; use max_completion_tokens\"" },
+        { label: "Detector", value: "param_removed · attributable at the static rung" },
+      ],
+
+      nodes: NODES.map((n) => ({
+        ...n,
+        drawer: this.openDrawer({
+          kicker: "Node · " + n.standing,
+          title: n.name,
+          lede: n.lede,
+          rows: n.rows,
+          foot: "A standing is the checkpoint's own answer. Nothing in a checkpoint says a node is executing.",
+          cta: "Back to the workflow",
+          go: "workflow",
+        }),
+      })),
+      timeline: TIMELINE,
+
+      hunks: [
+        { file: "services/billing/src/openai/completions.ts", lines: [
+          { n: "116", mark: " ", text: "  const res = await client.chat.completions.create({", tone: INK_MUTED, bg: "transparent" },
+          { n: "117", mark: " ", text: "    model: MODEL,", tone: INK_MUTED, bg: "transparent" },
+          { n: "118", mark: "−", text: "    max_tokens: 1024,", tone: CRITICAL, bg: "hsl(6.7 60% 20.6% / 0.5)" },
+          { n: "118", mark: "+", text: "    max_completion_tokens: 1024,", tone: GOOD, bg: "hsl(155.5 100% 9.6% / 0.7)" },
+          { n: "119", mark: " ", text: "    messages,", tone: INK_MUTED, bg: "transparent" },
+          { n: "120", mark: " ", text: "  })", tone: INK_MUTED, bg: "transparent" },
+        ] },
+        { file: "services/billing/src/lib/llm-client.ts", lines: [
+          { n: "27", mark: " ", text: "export async function chat(opts: ChatOpts) {", tone: INK_MUTED, bg: "transparent" },
+          { n: "28", mark: " ", text: "  return openai.chat.completions.create({", tone: INK_MUTED, bg: "transparent" },
+          { n: "29", mark: "−", text: "    max_tokens: opts.cap,", tone: CRITICAL, bg: "hsl(6.7 60% 20.6% / 0.5)" },
+          { n: "29", mark: "+", text: "    max_completion_tokens: opts.cap,", tone: GOOD, bg: "hsl(155.5 100% 9.6% / 0.7)" },
+          { n: "30", mark: " ", text: "    ...rest,", tone: INK_MUTED, bg: "transparent" },
+        ] },
+      ],
+      checks: [
+        { glyph: "✓", label: "static_verify — the compiler accepted it", evidence: "tsc clean across the workspace", when: "14:03:58", tone: GOOD },
+        { glyph: "✓", label: "replay — recorded exchanges matched", evidence: "3 of 3 exchanges; response shapes unchanged", when: "14:04:20", tone: GOOD },
+        { glyph: "✓", label: "CI — build", evidence: "forge/actions/runs/91824", when: "14:11:52", tone: GOOD },
+        { glyph: "✓", label: "CI — contract-replay", evidence: "forge/actions/runs/91824", when: "14:12:40", tone: GOOD },
+        { glyph: "—", label: "Live vendor call — not attempted", evidence: "no credential is attached to this repository", when: "—", tone: INK_MUTED },
+      ],
+
+      detectors,
+      rungTally: tally.map(([rung, n]) => ({
+        rung,
+        n: String(n),
+        note: RUNG_NOTE[rung],
+        ink: n === 0 ? INK_SECOND : INK,
+      })),
+
+      signalRoles: [
+        { role: "Vendor", name: "OpenAI", what: "The specification and deprecation feed this repository is pinned against.",
+          reports: [{ what: "openapi 2.3.1 → 2.4.0", when: "2d ago" }, { what: "deprecations page read", when: "12m ago" }, { what: "4 changes recorded", when: "—" }],
+          caveat: "A vendor reports about itself. Nothing it says is evidence about your code." },
+        { role: "Signal source", name: "OTel collector", what: "Watched traffic from the acme-payments service, over a rolling 7-day window.",
+          reports: [{ what: "1.2M spans matched", when: "7d window" }, { what: "3 operations correlated", when: "2m ago" }, { what: "1 observation unresolved", when: "4h ago" }],
+          caveat: "Correlation only. An operation the traffic never exercised is absent here, which is not the same as unaffected." },
+        { role: "Human surface", name: "Forge issues · api-drift", what: "What people on this repository reported themselves.",
+          reports: [{ what: "#812 — 429s after model swap", when: "3d ago" }, { what: "#804 — charge webhook mismatch", when: "9d ago" }],
+          caveat: "Two reports, neither yet joined to a finding. A human report is a lead, not a binding." },
+      ],
+
+      adapters: [
+        { name: "openai", source: "OpenAPI + deprecations", ops: "142", last: "12m ago · 4 changes", tone: INK_MUTED },
+        { name: "anthropic", source: "Deprecations page", ops: "38", last: "18m ago · 1 change", tone: INK_MUTED },
+        { name: "stripe", source: "OpenAPI", ops: "410", last: "1h ago · 2 changes", tone: INK_MUTED },
+        { name: "cloudflare", source: "Model catalogue", ops: "27", last: "declined — catalogue served an HTML error page", tone: SERIOUS },
+      ],
+      policyOptions: [
+        { label: "Merge when CI is green", note: "Approval is a standing instruction; the merge happens without a second click.", mark: policy === "Merge when CI is green" ? "●" : "○", ink: policy === "Merge when CI is green" ? INK : INK_MUTED, border: policy === "Merge when CI is green" ? "oklch(0.578 0.00275 159)" : "oklch(0.95 0.001485 159 / 7.5125%)" },
+        { label: "Open the pull request only", note: "Sync stops at the door. A human merges on the forge.", mark: policy === "Open the pull request only" ? "●" : "○", ink: policy === "Open the pull request only" ? INK : INK_MUTED, border: policy === "Open the pull request only" ? "oklch(0.578 0.00275 159)" : "oklch(0.95 0.001485 159 / 7.5125%)" },
+        { label: "Per repository", note: "Each repository names its own; the pull request screen says which is in force.", mark: policy === "Per repository" ? "●" : "○", ink: policy === "Per repository" ? INK : INK_MUTED, border: policy === "Per repository" ? "oklch(0.578 0.00275 159)" : "oklch(0.95 0.001485 159 / 7.5125%)" },
+      ],
+      overrides: [
+        { repo: "acme/payments-api", policy: "merge when green" },
+        { repo: "acme/agents", policy: "open only — protected branch" },
+        { repo: "acme/digest-worker", policy: "merge when green" },
+      ],
+
+      drawerOpen: d !== null,
+      drawerKicker: d ? d.kicker : "",
+      drawerTitle: d ? d.title : "",
+      drawerLede: d ? d.lede : "",
+      drawerFoot: d ? d.foot : "",
+      drawerCta: d ? d.cta : "",
+      drawerRows: d ? d.rows.map((r) => ({ label: r[0], value: r[1] })) : [],
+      drawerGo: d ? this.go(d.go) : () => {},
+      closeDrawer: () => this.setState({ drawer: null }),
+
+      paletteGroups: [
+        { label: "Fleet · Codebase · API services", items: [
+          { label: "Fleet", hint: "Every run across every repository", path: "/", go: this.go("fleet") },
+          { label: "Codebase", hint: "Needs a repository — pick one on the fleet screen", path: "/repositories/:repoId", go: this.go("codebase") },
+          { label: "Vendor", hint: "Needs a vendor — pick one on the fleet screen", path: "/vendors/:vendorId", go: this.go("vendor") },
+        ] },
+        { label: "Signals · Observe", items: [
+          { label: "Signals", hint: "What a repository has attached", path: "/repositories/:repoId/observed", go: this.go("signals") },
+          { label: "Binding surface", hint: "Needs an operation on a vendor's findings table", path: "/bindings/…/operations/:operationId", go: this.go("binding") },
+          { label: "Detectors", hint: "Which detector is producing my false positives", path: "/detectors", go: this.go("detectors") },
+        ] },
+        { label: "Remediation", items: [
+          { label: "Finding", hint: "Needs a call site on a vendor or binding surface", path: "/findings/:findingId", go: this.go("finding") },
+          { label: "Solution workflow", hint: "Reached from the finding it remediates", path: "/findings/:findingId/workflow", go: this.go("workflow") },
+          { label: "Pull request", hint: "Reached from the workflow that opened it", path: "…/workflow/pull-request", go: this.go("pr") },
+        ] },
+      ],
+    };
+  }
+}
+</script>
+</body>
+</html>

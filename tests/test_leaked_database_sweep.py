@@ -29,14 +29,17 @@ import sys
 
 import psycopg
 import pytest
-from psycopg import sql
 from psycopg.conninfo import conninfo_to_dict
 
 from conftest import (
     ADMIN_DBNAME,
+    admin_connection,
+    create_database,
     database_for,
     DEFAULT_DSN,
     LEAKED_DATABASE_PATTERN,
+    drop_database,
+    drop_databases_best_effort,
     dsn_for,
     leaked_database_names,
     pid_is_running,
@@ -72,25 +75,29 @@ def dead_pid() -> int:
 
 @pytest.fixture()
 def made():
-    """Databases this test created, dropped afterwards whatever the test did to them."""
+    """Databases this test created, dropped afterwards whatever the test did to them.
+
+    Both halves go through `conftest.admin_connection`, so neither can wait forever on the
+    checkpoint every `DROP DATABASE` requests -- this teardown is one of the two places B132
+    caught a serial run blocked. The teardown is best-effort on top of that: a name it could
+    not drop is one the next run's sweep takes, and this file is where that sweep is tested.
+    """
     created: list[str] = []
 
     def make(name: str) -> str:
-        with psycopg.connect(ADMIN, autocommit=True) as conn:
-            conn.execute(sql.SQL("DROP DATABASE IF EXISTS {} WITH (FORCE)").format(sql.Identifier(name)))
-            conn.execute(sql.SQL("CREATE DATABASE {}").format(sql.Identifier(name)))
+        with admin_connection(ADMIN) as conn:
+            drop_database(conn, name)
+            create_database(conn, name)
         created.append(name)
         return name
 
     yield make
 
-    with psycopg.connect(ADMIN, autocommit=True) as conn:
-        for name in created:
-            conn.execute(sql.SQL("DROP DATABASE IF EXISTS {} WITH (FORCE)").format(sql.Identifier(name)))
+    drop_databases_best_effort(ADMIN, *created)
 
 
 def _exists(name: str) -> bool:
-    with psycopg.connect(ADMIN, autocommit=True) as conn:
+    with admin_connection(ADMIN) as conn:
         return conn.execute("SELECT 1 FROM pg_database WHERE datname = %s", (name,)).fetchone() is not None
 
 
@@ -158,7 +165,7 @@ def test_the_primary_database_is_never_matched_by_the_pattern():
     being asked about a name that is really there. Widening `LEAKED_DATABASE_PATTERN` to `sync%`
     turns this red.
     """
-    with psycopg.connect(ADMIN, autocommit=True) as conn:
+    with admin_connection(ADMIN) as conn:
         assert conn.execute("SELECT 1 FROM pg_database WHERE datname = 'sync'").fetchone(), (
             "the primary database must exist or this proves nothing"
         )

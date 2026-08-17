@@ -47,6 +47,7 @@ import { DetectorsPage } from "@/features/detectors/detectors-page"
 import { FindingPage } from "@/features/findings/finding-page"
 import { FleetPage } from "@/features/fleet/fleet-page"
 import { PullRequestPage } from "@/features/pullrequests/pull-request-page"
+import { SettingsPage } from "@/features/settings/settings-page"
 import { SignalsPage } from "@/features/signals/signals-page"
 import { VendorPage } from "@/features/vendors/vendor-page"
 import { WorkflowPage } from "@/features/workflows/workflow-page"
@@ -106,8 +107,8 @@ export interface AreaEntry {
 export const AREAS: readonly AreaEntry[] = [
   {
     id: "fleet",
-    label: "Fleet",
-    purpose: "Every run across every repository, and whether one is stuck.",
+    label: "Codebases",
+    purpose: "All repositories watched by Sync, their attached vendors, and active migrations.",
     levels: ["Fleet"],
     landing: "/",
   },
@@ -182,16 +183,16 @@ export const ROUTES: readonly RouteEntry[] = [
   {
     path: "/",
     reachedFrom: null,
-    label: "Fleet",
+    label: "Codebases",
     area: "fleet",
     level: "Fleet",
-    question: "What has Sync been doing across every run, and is one stuck right now?",
+    question: "All code repositories monitored by Sync, their attached API vendors, and active migrations.",
     params: [],
     element: FleetPage,
   },
   {
     path: "/repositories/:repoId",
-    reachedFrom: "a repository on the fleet screen",
+    reachedFrom: "a repository on the codebases screen",
     label: "Codebase",
     area: "codebase",
     level: "Codebase",
@@ -201,7 +202,7 @@ export const ROUTES: readonly RouteEntry[] = [
   },
   {
     path: "/vendors/:vendorId",
-    reachedFrom: "a vendor on the fleet screen",
+    reachedFrom: "a vendor on the codebases screen",
     label: "Vendor",
     area: "api-services",
     level: "API Services",
@@ -211,7 +212,7 @@ export const ROUTES: readonly RouteEntry[] = [
   },
   {
     path: "/repositories/:repoId/observed",
-    reachedFrom: "a repository on the fleet screen",
+    reachedFrom: "a repository on the codebases screen",
     label: "Signals",
     area: "signals",
     level: "Signals",
@@ -367,6 +368,39 @@ export function destinationHref(
     route.path
   )
 }
+
+/**
+ * A destination that is not a level.
+ *
+ * `.claude/rules/console-hierarchy.md` binds `GRAPH_LEVELS` to the design document: a level with
+ * no line in that document does not go in the array, and three plans invented four levels between
+ * them before the rule was written. Settings is drawn in the mock, specified nowhere, and is not a
+ * rung on the graph — it configures the system the graph describes.
+ *
+ * Rather than widen `RouteEntry.level` to accept `null` and weaken the guard on nine real levels,
+ * a destination is its own kind of entry. `App.tsx` serves both arrays, the rail renders this one
+ * in the slot it already reserved, and the palette lists it in a group of its own — so a screen
+ * that is not a level is still reachable three ways, which is the reachability guarantee
+ * `routes.test.tsx` exists to hold.
+ */
+export interface DestinationEntry {
+  path: string
+  label: string
+  /** What an operator opens this screen to find out, in one sentence. The header renders it. */
+  question: string
+  element: ComponentType
+}
+
+export const DESTINATIONS: readonly DestinationEntry[] = [
+  {
+    path: "/settings",
+    label: "Settings",
+    question:
+      "What does this deployment watch, what has each adapter actually delivered, and what " +
+      "policy is in force when a patch is ready?",
+    element: SettingsPage,
+  },
+] as const
 
 /** Every destination inside an area, in the specification's order. */
 function routesInArea(area: Area): readonly RouteEntry[] {

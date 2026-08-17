@@ -555,7 +555,7 @@ Tasks 1–6 of the dogfooding plan (`docs/superpowers/plans/2026-08-05-sync-dogf
 - `web/src/components/data-table.tsx`: `TableHeader` applies subtle background strip (`bg-surface-subtle`), `TableHead` uses `font-medium` (500) over UA 700 default, `TableRow` applies distinct `data-[state=selected]:bg-surface-emphasis` (diverging from hover collapse), `TableHeadTitle` supports optional suffix/provenance rung badge/bounded flag, and `<TableEmptyRow>` provides structure-preserving empty states.
 - `web/src/components/states.tsx`: `Panel` upgraded to 8px radius (`rounded-surface`).
 - `web/src/features/bindings/binding-surface-page.tsx`: table rows highlight with `data-state="selected"` when their detail drawer is open.
-- Created `docs/superpowers/plans/2026-08-08-console-mock-to-build.md` detailing the transition from demo mockups (`docs/superpowers/references/direction/`) to built console features.
+- Created `docs/superpowers/plans/2026-08-08-console-direction-parity.md` detailing the transition from demo mockups (`docs/superpowers/references/direction/`) to built console features.
 
 ### B123 is closed (`M7-W210`, `a8946fe`)
 
@@ -568,7 +568,7 @@ Tasks 1–6 of the dogfooding plan (`docs/superpowers/plans/2026-08-05-sync-dogf
 ### Mock-to-Build Execution & Evidence Code Headers Landed (`M7-W211`)
 
 - `web/src/features/workflows/evidence.tsx`: Added titled language headers (`DIAGNOSTICS`, `DIFF`, `JSON`, `OUTPUT`) on all multi-line evidence block cards across the Solution Workflow and Pull Request evidence bundles.
-- `docs/superpowers/plans/2026-08-08-console-mock-to-build.md`: All tasks across Phases 1, 2, 3, and 4 verified and tracked.
+- `docs/superpowers/plans/2026-08-08-console-direction-parity.md`: All tasks across Phases 1, 2, 3, and 4 verified and tracked.
 
 
 

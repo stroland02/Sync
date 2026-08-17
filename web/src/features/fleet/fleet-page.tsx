@@ -87,40 +87,103 @@
  * entry duplicates the row is furniture claiming a choice nobody has.
  */
 
+import { useState } from "react"
 import { Link } from "react-router"
 
-import { CorpusSummaryCard } from "@/features/fleet/corpus-summary"
-import { DetectorsSummaryCard } from "@/features/fleet/detectors-summary"
+import { Button } from "@/components/ui/button"
+import { CodebasesPanel, type CodebaseFilter } from "@/features/fleet/codebases-panel"
 import { FleetFacts } from "@/features/fleet/fleet-facts"
-import { RepositoriesCard } from "@/features/fleet/repositories-table"
-import { RunsCard } from "@/features/fleet/runs-table"
 import { ScreenLimitsCard } from "@/features/fleet/screen-limits"
 import { VendorDistributionCard } from "@/features/fleet/vendor-distribution"
 import { Breadcrumbs } from "@/layouts/breadcrumbs"
-import { ControlBar } from "@/layouts/control-bar"
-import { PageHeader } from "@/layouts/page-header"
 
 const DEFAULT_QUESTION =
-  "What has Sync been doing across every run, and is one stuck right now?"
+  "All code repositories monitored by Sync, their attached API vendors, and active migrations."
 
 export interface FleetPageProps {
   readonly question?: string
 }
 
 export function FleetPage({ question = DEFAULT_QUESTION }: FleetPageProps) {
+  const [filter, setFilter] = useState<CodebaseFilter>("ALL")
+
   return (
-    <section className="flex flex-col gap-8">
-      <PageHeaderRegion question={question} />
-      
-      {/* 4-card metric strip across the entire width, matching demo layout */}
+    <section className="flex flex-col gap-section">
+      {/* Top Header Region with Title, Tag, and Review Proposed Patch CTA */}
+      <div className="flex flex-col gap-row">
+        <Breadcrumbs trail={[{ label: "Repositories" }]} />
+        <div className="flex flex-wrap items-start justify-between gap-section">
+          <div className="flex flex-col gap-field">
+            <div className="flex items-center gap-row">
+              <h1 className="text-3xl font-semibold tracking-tight text-foreground">Repositories</h1>
+              <span className="font-mono text-meta uppercase tracking-wider text-muted-foreground bg-muted px-row py-field rounded border border-border">
+                CODEBASES
+              </span>
+            </div>
+            <p className="text-body text-muted-foreground">{question}</p>
+          </div>
+          <Button asChild className="bg-emerald-500 hover:bg-emerald-400 text-black font-semibold text-sm px-section py-row rounded-lg shadow-sm">
+            <Link to="/findings/2f725bb99f21301920809d07f388f53a/workflow/pull-request">
+              Review proposed patch
+            </Link>
+          </Button>
+        </div>
+      </div>
+
+      {/* Filter Tabs & Scope Description */}
+      <div className="flex flex-wrap items-center justify-between gap-section border-b border-border pb-row">
+        <div className="flex flex-wrap items-center gap-row">
+          <button
+            type="button"
+            onClick={() => setFilter("ALL")}
+            className={
+              filter === "ALL"
+                ? "bg-muted px-section py-field rounded text-meta font-medium text-foreground border border-border"
+                : "text-muted-foreground hover:text-foreground px-section py-field rounded text-meta font-medium"
+            }
+          >
+            All repositories
+          </button>
+          <button
+            type="button"
+            onClick={() => setFilter("NEEDS_REVIEW")}
+            className={
+              filter === "NEEDS_REVIEW"
+                ? "bg-muted px-section py-field rounded text-meta font-medium text-foreground border border-border"
+                : "text-muted-foreground hover:text-foreground px-section py-field rounded text-meta font-medium"
+            }
+          >
+            With active remediations
+          </button>
+          <button
+            type="button"
+            onClick={() => setFilter("CLEAN")}
+            className={
+              filter === "CLEAN"
+                ? "bg-muted px-section py-field rounded text-meta font-medium text-foreground border border-border"
+                : "text-muted-foreground hover:text-foreground px-section py-field rounded text-meta font-medium"
+            }
+          >
+            Clean repositories
+          </button>
+        </div>
+        <span className="text-meta text-muted-foreground">
+          Repositories monitored across the organization
+        </span>
+      </div>
+
+      {/* 4-card metric strip */}
       <FleetFacts />
 
-      <div className="grid gap-8 xl:grid-cols-3">
-        <div className="flex min-w-0 flex-col gap-8 xl:col-span-2">
+      {/* Primary Monitored Codebases Panel */}
+      <CodebasesPanel filter={filter} />
+
+      {/* Contextual cards in a clean 2-column grid */}
+      <div className="grid gap-section xl:grid-cols-3">
+        <div className="flex min-w-0 flex-col gap-section xl:col-span-2">
           <VendorDistributionCard />
-          <RunsCard />
         </div>
-        <div className="flex min-w-0 flex-col gap-8">
+        <div className="flex min-w-0 flex-col gap-section">
           <div className="flex flex-col gap-field rounded-surface border border-line bg-surface p-section text-body text-muted-foreground">
             <span className="furniture text-meta text-ink-muted">Health score policy</span>
             <p>
@@ -134,42 +197,19 @@ export function FleetPage({ question = DEFAULT_QUESTION }: FleetPageProps) {
           <ScreenLimitsCard />
         </div>
       </div>
-      <CorpusSummaryCard />
-      <div className="grid gap-8 lg:grid-cols-2">
-        <RepositoriesCard />
-        <DetectorsSummaryCard />
+
+      {/* Footnotes holding honesty requirements */}
+      <div className="flex flex-col gap-row text-meta text-muted-foreground max-w-5xl leading-relaxed pt-section border-t border-border">
+        <p>
+          A checkpoint age is staleness, not liveness — it says how old the evidence is not whether the run is still going. A change unit collapses findings sharing a vendor change against one repository set; the call-site grain is intact underneath and reachable from every row.
+        </p>
+        <p>
+          A repository the index never indexed has no row — absence is not zero: a repository configured but never indexed has no row in the repository list below, and the same absence as a repository nobody ever configured.
+        </p>
+        <p>
+          A finding retried three times writes three attempts here and counts once toward the corpus grain.
+        </p>
       </div>
     </section>
-  )
-}
-
-function PageHeaderRegion({ question }: { question: string }) {
-  return (
-    <div className="flex flex-col gap-section">
-      <PageHeader
-        title="Fleet"
-        question={question}
-        trail={<Breadcrumbs trail={[{ label: "Fleet" }]} />}
-      />
-      <ControlBar
-        action={
-          <Link
-            to="/detectors"
-            className="text-body underline underline-offset-2"
-          >
-            Detector attribution
-          </Link>
-        }
-      >
-        {/* One line. The longer form of this — that a single codebase's own figures live on that
-            repository's Codebase screen and are a different number rather than a different
-            rendering — is already in `VendorDistributionCard`'s description, and saying it twice
-            is a fact that will disagree with itself. */}
-        <div className="flex min-w-0 flex-col gap-field">
-          <span className="furniture text-meta text-ink-muted">Scope</span>
-          <span className="text-body">Every repository the index has seen.</span>
-        </div>
-      </ControlBar>
-    </div>
   )
 }

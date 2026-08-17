@@ -28,6 +28,17 @@ to change.
 
 The three hooks at the bottom wire `red_run_capture`, which keeps a failing run's
 output where the next run cannot overwrite it. Its own module carries why.
+
+**Every admin statement here is bounded, and B132 is why.** `DROP DATABASE` requests an
+immediate cluster-wide checkpoint and waits for it, and takes an object lock on the database
+while it does -- so several suites dropping databases at once serialise on the checkpointer,
+and an unbounded drop waits as long as that queue is. Measured 2026-08-16: `uv run pytest
+tests/ -q -n0` was killed after 70 minutes having printed nothing, blocked in the sweep below
+before pytest writes its own header; two other worktrees' runs were blocked in the same
+statement at the same moment. Nothing was deadlocked -- it was starved, which an operator
+cannot tell from stuck, so they kill it. `admin_connection` puts the bound on the server
+rather than on the client, because a client that gives up leaves the backend holding what it
+acquired.
 """
 
 from __future__ import annotations
@@ -36,6 +47,7 @@ import ctypes
 import os
 import re
 import subprocess
+import time
 import warnings
 from pathlib import Path
 from typing import Callable, Iterable
@@ -50,6 +62,43 @@ import red_run_capture
 
 DEFAULT_DSN = "postgresql://sync:sync@localhost:5433/sync"
 ADMIN_DBNAME = "postgres"
+
+ADMIN_CONNECT_TIMEOUT_SECONDS = 10
+ADMIN_STATEMENT_TIMEOUT_MS = 180_000
+ADMIN_LOCK_TIMEOUT_MS = 60_000
+"""How long an administrative statement may take before the server cancels it.
+
+Generous rather than tight, because the number that matters is the one no healthy run reaches.
+A `DROP DATABASE` costs 282 ms median against an idle stock server and was measured over 15 s
+against this machine's shared one with four suites running, so three minutes is far outside
+what contention alone produces and inside what an operator will wait through. `lock_timeout`
+is shorter than `statement_timeout` on purpose: waiting behind another session's drop of the
+same database is the one wait that never becomes progress, since whichever session wins does
+the work.
+"""
+
+SWEEP_STATEMENT_TIMEOUT_MS = 30_000
+"""The per-drop bound inside the sweep, shorter than an ordinary admin statement's.
+
+A drop the sweep cannot finish quickly is a drop that is contending with another run for the
+checkpointer, and the sweep's whole contract is that it may give up: the database it skipped is
+still there for the next run. Nothing else in this file can say that, which is why nothing else
+gets a bound this short.
+"""
+
+SWEEP_BUDGET_SECONDS = 30
+"""How long the sweep in `pytest_configure` may spend before leaving the rest for a later run.
+
+Passed at that one call site rather than defaulted into `sweep_leaked_databases`, because only
+that call runs before pytest has written a line -- an operator watching a blank terminal cannot
+tell it from a wedged run, and on 2026-08-16 killed it after 70 minutes. A sweep called from a
+test is inside a visible run and is bounded by `SWEEP_STATEMENT_TIMEOUT_MS` per drop instead, so
+it still attempts every candidate it selected and the tests that assert on that selection keep
+meaning what they say.
+"""
+
+DOCKER_MARKER = "docker"
+DOCKER_PROBE_TIMEOUT_SECONDS = 30
 
 LEAKED_DATABASE_PATTERN = r"sync\_test\_%"
 """The SQL `LIKE` pattern for databases this file creates, and nothing else.
@@ -97,6 +146,127 @@ _admin_dsn: str | None = None
 
 def dsn_for(dbname: str, template: str) -> str:
     return make_conninfo(**{**conninfo_to_dict(template), "dbname": dbname})
+
+
+def admin_connection(
+    admin_dsn: str,
+    *,
+    statement_timeout_ms: int = ADMIN_STATEMENT_TIMEOUT_MS,
+    lock_timeout_ms: int = ADMIN_LOCK_TIMEOUT_MS,
+) -> psycopg.Connection:
+    """An autocommit admin connection whose statements the server will not run forever.
+
+    Every `CREATE DATABASE` and `DROP DATABASE` this suite issues goes through here, so the
+    bound is one decision rather than a habit each caller has to remember. The timeouts are
+    server-side (`options`) rather than client-side deadlines because abandoning a client
+    connection does not stop the backend: it keeps its object lock and keeps waiting for the
+    checkpointer, and the next run's sweep then blocks behind a session nobody is reading.
+    """
+    return psycopg.connect(
+        admin_dsn,
+        autocommit=True,
+        connect_timeout=ADMIN_CONNECT_TIMEOUT_SECONDS,
+        options=f"-c statement_timeout={statement_timeout_ms} -c lock_timeout={lock_timeout_ms}",
+    )
+
+
+def drop_database(conn: psycopg.Connection, name: str, *, force: bool = True) -> None:
+    """Drop `name`, and on a cancelled statement say what the drop was waiting for.
+
+    The message is the deliverable. An operator meets this at the moment a gate they trusted
+    stopped, and `canceling statement due to statement timeout` names neither the database nor
+    anything they can act on. What a drop actually waits for is one of two things, both worth
+    naming: the immediate checkpoint `DROP DATABASE` requests and blocks on, or the object
+    lock another session dropping or creating the same database already holds.
+    """
+    statement = "DROP DATABASE IF EXISTS {}" + (" WITH (FORCE)" if force else "")
+    try:
+        conn.execute(sql.SQL(statement).format(sql.Identifier(name)))
+    except (psycopg.errors.QueryCanceled, psycopg.errors.LockNotAvailable) as exc:
+        raise TimeoutError(
+            f"DROP DATABASE {name} did not finish inside its bound. A drop waits on the "
+            "immediate checkpoint it requests, and on the object lock any other session "
+            "dropping or creating that same database holds. Look at pg_stat_activity for "
+            "backends whose wait_event is CheckpointStart, CheckpointDone or object."
+        ) from exc
+
+
+def create_database(conn: psycopg.Connection, name: str) -> None:
+    """Create `name`, and on a cancelled statement say what the creation was waiting for.
+
+    The mirror of `drop_database`, and it exists because the same server condition produces
+    both: `CREATE DATABASE` copies the template database while holding a lock on it, so two
+    runs starting at once serialise, and this is the statement whose failure aborts a run
+    before it has begun rather than failing one test inside it.
+    """
+    try:
+        conn.execute(sql.SQL("CREATE DATABASE {}").format(sql.Identifier(name)))
+    except (psycopg.errors.QueryCanceled, psycopg.errors.LockNotAvailable) as exc:
+        raise TimeoutError(
+            f"CREATE DATABASE {name} did not finish inside its bound. A creation copies the "
+            "template database and holds a lock on it, so it waits behind any other run "
+            "starting at the same moment, and behind the checkpointer that run's own drops "
+            "have queued work for."
+        ) from exc
+
+
+def drop_databases_best_effort(admin_dsn: str, *names: str) -> None:
+    """Drop `names` if the server can, and warn rather than raise when it cannot.
+
+    Every teardown in this suite wants this and none of them wants to fail over it. A drop that
+    exceeds its bound has not corrupted anything -- it has queued behind another run's
+    checkpoint -- and the database it left is picked up by the next run's sweep, which is the
+    mechanism that exists for runs killed before they could clean up at all. Failing a test that
+    passed, over cleanup, reports a defect in whatever that test covers.
+
+    The outer clause is `Exception` for the reason `sweep_leaked_databases` sets out at length:
+    under a dotted `--cov` that reaches psycopg, the connect generator lives in a C extension
+    that raises classes a re-executed `errors.py` has since replaced, so `psycopg.Error` is
+    absent from the MRO of what it raises.
+    """
+    try:
+        with admin_connection(admin_dsn) as conn:
+            for name in names:
+                try:
+                    drop_database(conn, name)
+                except (psycopg.Error, TimeoutError) as exc:
+                    warnings.warn(f"left {name} for a later run to sweep: {exc}", stacklevel=2)
+    except Exception as exc:
+        warnings.warn(f"left {', '.join(names)} for a later run to sweep: {exc}", stacklevel=2)
+
+
+def docker_unavailable_reason(env: dict[str, str] | None = None) -> str | None:
+    """Why the `docker`-marked tests cannot run on this machine, or None when they can.
+
+    Asked once per process at collection, and answered by talking to the daemon rather than by
+    checking whether the CLI exists: the interesting failure is Docker Desktop installed and
+    not running, which a `shutil.which` would call available. `env` exists so a test can point
+    the probe at an endpoint nothing answers without stopping the daemon that this suite's own
+    Postgres, and three other worktrees' runs, are living on.
+    """
+    try:
+        probe = subprocess.run(
+            ["docker", "version", "--format", "{{.Server.Os}}"],
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=DOCKER_PROBE_TIMEOUT_SECONDS,
+            env=env,
+        )
+    except FileNotFoundError:
+        return "the docker command is not on PATH"
+    except subprocess.TimeoutExpired:
+        return f"docker did not answer within {DOCKER_PROBE_TIMEOUT_SECONDS}s"
+
+    if probe.returncode != 0:
+        detail = (probe.stderr or probe.stdout).strip().splitlines()
+        return f"no docker daemon answered: {detail[0] if detail else f'exit {probe.returncode}'}"
+
+    server_os = probe.stdout.strip()
+    if server_os != "linux":
+        return f"docker is serving {server_os or 'unknown'} containers, and these need Linux ones"
+    return None
 
 
 def pid_is_running(pid: int) -> bool:
@@ -210,6 +380,7 @@ def sweep_leaked_databases(
     *,
     exclude: str | None = None,
     is_running: Callable[[int], bool] = pid_is_running,
+    budget_seconds: float | None = None,
 ) -> list[str]:
     """Drop the databases killed runs left behind, and return what was dropped.
 
@@ -228,10 +399,14 @@ def sweep_leaked_databases(
     drop -- and the test then fails on its own next connection with `database ... does not
     exist`, which is the failure this investigation started from.
 
-    **Nothing here may fail the run.** Cleanup that breaks a suite is worse than the leak it
-    fixes, so every drop is attempted on its own and a refusal is skipped rather than raised. An
-    unreachable server returns an empty list for the same reason `pytest_configure` warns and
-    carries on when Postgres is absent.
+    **Nothing here may fail the run, and nothing here may delay it without limit.** Cleanup that
+    breaks a suite is worse than the leak it fixes, so every drop is attempted on its own and a
+    refusal is skipped rather than raised. An unreachable server returns an empty list for the
+    same reason `pytest_configure` warns and carries on when Postgres is absent. `budget_seconds`
+    is the same argument applied to time, and B132 is why it is here: this runs from
+    `pytest_configure`, before pytest writes its first line, and fourteen leaked databases each
+    waiting on a contended checkpoint is a blank terminal for as long as that takes. A database
+    left behind costs nothing until a later run takes it.
 
     **The outer clause is `Exception` because class identity is not guaranteed across the
     connect.** A dotted `--cov=<module>` whose import reaches psycopg makes coverage evict every
@@ -244,10 +419,14 @@ def sweep_leaked_databases(
     The inner clause stays `psycopg.Error`, and the difference is measured rather than stylistic:
     a refused DROP is built from its SQLSTATE by the re-executed `errors.py`, so it belongs to
     the same set the handler names and is caught either way. Only what the C extension raises is
-    split.
+    split. `TimeoutError` joins it because `drop_database` raises that for a cancelled statement,
+    and a drop this could not finish is exactly the "in use, try again next run" case.
     """
+    deadline = None if budget_seconds is None else time.monotonic() + budget_seconds
     try:
-        with psycopg.connect(admin_dsn, autocommit=True, connect_timeout=10) as conn:
+        with admin_connection(
+            admin_dsn, statement_timeout_ms=SWEEP_STATEMENT_TIMEOUT_MS
+        ) as conn:
             candidates = [
                 row[0]
                 for row in conn.execute(
@@ -259,11 +438,11 @@ def sweep_leaked_databases(
             for name in leaked_database_names(
                 candidates, is_running=is_running, exclude=exclude
             ):
+                if deadline is not None and time.monotonic() >= deadline:
+                    break
                 try:
-                    conn.execute(
-                        sql.SQL("DROP DATABASE IF EXISTS {}").format(sql.Identifier(name))
-                    )
-                except psycopg.Error:
+                    drop_database(conn, name, force=False)
+                except (psycopg.Error, TimeoutError):
                     # In use, or dropped by another run's sweep between the query and here.
                     continue
                 dropped.append(name)
@@ -319,7 +498,7 @@ def pytest_configure(config) -> None:
     template = template_dsn(pinned, server=os.environ.get("SYNC_TEST_SERVER"))
     admin_dsn = dsn_for(ADMIN_DBNAME, template)
     try:
-        conn = psycopg.connect(admin_dsn, autocommit=True)
+        conn = admin_connection(admin_dsn)
     except psycopg.OperationalError as exc:
         # No server: the tests that need one were going to fail anyway, and the
         # ones that do not still run. Leaving SYNC_DSN unset keeps that exactly
@@ -331,15 +510,17 @@ def pytest_configure(config) -> None:
         # A run killed hard enough to skip the finalizer leaves its database
         # behind, and pids are reused. Dropping first cannot disturb a live run,
         # since no two live processes share a pid -- nor a pid and a worker id.
-        conn.execute(sql.SQL("DROP DATABASE IF EXISTS {} WITH (FORCE)").format(sql.Identifier(dbname)))
-        conn.execute(sql.SQL("CREATE DATABASE {}").format(sql.Identifier(dbname)))
+        drop_database(conn, dbname)
+        create_database(conn, dbname)
 
     # The same argument one line further: this run cleans up after the runs that were killed
     # before they could. Only in the controller, because a worker would repeat the whole sweep
     # once per process for nothing, and only after this process has created its own database, so
     # the name it is using exists and cannot be a candidate.
     if worker is None:
-        swept = sweep_leaked_databases(admin_dsn, exclude=dbname)
+        swept = sweep_leaked_databases(
+            admin_dsn, exclude=dbname, budget_seconds=SWEEP_BUDGET_SECONDS
+        )
         if swept:
             print(f"swept {len(swept)} leaked test database(s)")
 
@@ -368,14 +549,34 @@ def pytest_unconfigure(config) -> None:
     if _created_dbname is None:
         return
 
-    try:
-        with psycopg.connect(_admin_dsn, autocommit=True) as conn:
-            conn.execute(
-                sql.SQL("DROP DATABASE IF EXISTS {} WITH (FORCE)").format(sql.Identifier(_created_dbname))
-            )
-    except Exception:
-        pass
+    drop_databases_best_effort(_admin_dsn, _created_dbname)
     _created_dbname = None
+
+
+def pytest_collection_modifyitems(config, items) -> None:
+    """Turn an absent container runtime into a skip with a reason, once, at collection.
+
+    The same shape `pytest_configure` gives the Postgres precondition: ask the environment one
+    question in a session hook and let the answer govern the whole run, rather than each test
+    discovering it for itself. Before this, a machine with Docker Desktop closed got
+    `RuntimeError: docker create failed: error during connect` raised from inside
+    `sync.remediate.sandbox` -- a message that reads as a defect in the module under test
+    rather than as a toolchain nobody started.
+
+    The probe is asked only when a `docker`-marked test survived selection, so an ordinary
+    `-m 'not docker'` run never pays for it, and once per process rather than once per test.
+    """
+    marked = [item for item in items if item.get_closest_marker(DOCKER_MARKER)]
+    if not marked:
+        return
+
+    reason = docker_unavailable_reason()
+    if reason is None:
+        return
+
+    skip = pytest.mark.skip(reason=f"a local Docker daemon is absent: {reason}")
+    for item in marked:
+        item.add_marker(skip)
 
 
 GitRunner = Callable[[list[str], Path], None]

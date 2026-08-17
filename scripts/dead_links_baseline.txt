@@ -72,7 +72,6 @@ src/sync/remediate/sandbox.py:copy_between_containers
 # for tests and local simulation without model API calls. It is exported in `sync.runner` and
 # used across the test suite rather than wired into a production CLI path.
 src/sync/runner/static.py:StaticRunner
-
 # `validate_outcome_call` (M9) provides server-side schema and rubric validation for outcome tool calls
 # emitted during agent remediation runs, exported in `sync.runner` for model driving harnesses.
 src/sync/runner/outcome_tools.py:validate_outcome_call

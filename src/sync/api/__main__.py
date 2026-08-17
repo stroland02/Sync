@@ -3,7 +3,14 @@
 `python -m sync.api` starts a local server bound to the graph store the environment names, so
 the frontend has one process to talk to during development. The GraphStore and checkpointer
 DSNs come from environment variables rather than argv because a deployment already has them,
-and duplicating one for a flag would let the two drift apart silently.
+and duplicating one for a flag would let the two drift apart silently. Unset, they fall back to
+`sync.graph.store.DEFAULT_DSN` -- the same database every CLI subcommand defaults to, and read
+from the same constant rather than restated here.
+
+This is the one entry point that never applies the schema, and that is deliberate: every route
+is a read and no route mutates the graph, so a server that created tables would be the only
+writer of DDL in the product that nobody ran on purpose. `main` refuses an empty database
+instead, naming the commands that fill one.
 """
 
 from __future__ import annotations
@@ -16,8 +23,9 @@ from starlette.applications import Starlette
 from sync.api.app import create_app
 from sync.core.models import RepoContext
 from sync.dashboard import fleet, graph_views
+from sync.dashboard.adapters import adapter_inventory
 from sync.dashboard.queries import workflow_state
-from sync.graph.store import GraphStore
+from sync.graph.store import DEFAULT_DSN, GraphStore, describe_dsn
 from sync.mcp.tools import GraphSurface
 from sync.obs.log import configure as configure_logging
 
@@ -61,6 +69,31 @@ def _reload_enabled() -> bool:
     )
 
 
+def graph_dsn() -> str:
+    return os.environ.get("SYNC_GRAPH_DSN", DEFAULT_DSN)
+
+
+def require_schema(store: GraphStore, dsn: str) -> None:
+    """Refuse an empty database at start, naming the commands that fill one.
+
+    Without this the server starts, the console loads, and every route answers 500 with an
+    `UndefinedTable` in the log -- nine screens' worth of a failure whose remedy is one
+    command. A reader arriving at that has no way to tell it from a broken build.
+    """
+    missing = store.missing_tables()
+    if not missing:
+        return
+    raise SystemExit(
+        f"sync.api: {describe_dsn(dsn)} has no graph schema "
+        f"({len(missing)} tables absent, including {missing[0]}).\n"
+        f"The console API is read-only and never creates tables. Apply the schema with one of:\n"
+        f"  uv run python scripts/seed_console.py   # the schema, plus a fixture to look at\n"
+        f"  uv run sync run --vendor stripe --from-version v2320 --to-version v2330 \\\n"
+        f"      --repo https://github.com/<owner>/<name>\n"
+        f"Set SYNC_GRAPH_DSN if the graph lives somewhere other than the default."
+    )
+
+
 def app_factory() -> Starlette:
     """Build the console API app from the environment.
 
@@ -74,7 +107,7 @@ def app_factory() -> Starlette:
         level=os.environ.get("SYNC_LOG_LEVEL", DEFAULT_LOG_LEVEL),
         fmt=os.environ.get("SYNC_LOG_FORMAT", DEFAULT_LOG_FORMAT),
     )
-    dsn = os.environ["SYNC_GRAPH_DSN"]
+    dsn = graph_dsn()
     checkpointer_dsn = os.environ.get("SYNC_CHECKPOINTER_DSN", dsn)
     store = GraphStore(dsn=dsn)
     surface = GraphSurface(store)
@@ -158,6 +191,9 @@ def app_factory() -> Starlette:
             limit=limit, offset=offset,
         )
 
+    def adapters_reader():
+        return adapter_inventory(store)
+
     def context_reader(repo_id: str):
         return graph_views.repo_context(store, repo_id)
 
@@ -175,6 +211,7 @@ def app_factory() -> Starlette:
         coverage_reader=coverage_reader,
         observed_reader=observed_reader,
         detector_reader=detector_reader,
+        adapters_reader=adapters_reader,
         severity_reader=severity_reader,
         overview_reader=overview_reader,
         vendor_findings_reader=vendor_findings_reader,
@@ -184,6 +221,12 @@ def app_factory() -> Starlette:
 
 
 def main() -> None:
+    # Here rather than in `app_factory`: under `reload=True` the factory runs again in a
+    # reloader subprocess on every edit, and one refusal at start is the whole of what a
+    # reader needs.
+    dsn = graph_dsn()
+    require_schema(GraphStore(dsn=dsn), dsn)
+
     host = os.environ.get("SYNC_API_HOST", "127.0.0.1")
     port = int(os.environ.get("SYNC_API_PORT", DEFAULT_PORT))
     if _reload_enabled():

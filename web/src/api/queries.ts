@@ -9,6 +9,7 @@ import { useQuery } from "@tanstack/react-query"
 
 import {
   DEFAULT_LIMIT,
+  fetchAdapters,
   fetchBindingSurface,
   fetchCorpus,
   fetchDetectors,
@@ -255,5 +256,19 @@ export function useDetectors(repoId?: string) {
   return useQuery({
     queryKey: ["detectors", repoId ?? null],
     queryFn: ({ signal }) => fetchDetectors({ repoId }, signal),
+  })
+}
+
+/**
+ * Every adapter this deployment registers, and what each has ever delivered.
+ *
+ * Not polled. This view moves when a scan writes a `vendor_change` row or when somebody edits the
+ * deployment's vendor configuration, and neither is something this screen would learn about sooner
+ * than a manual refresh would — the same call `useRepositories` and `useCorpus` make.
+ */
+export function useAdapters() {
+  return useQuery({
+    queryKey: ["adapters"],
+    queryFn: ({ signal }) => fetchAdapters(signal),
   })
 }

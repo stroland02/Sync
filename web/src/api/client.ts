@@ -13,6 +13,7 @@ import {
   UnreachableApiError,
 } from "@/api/errors"
 import type {
+  AdapterInventoryResponse,
   BindingSurfaceResponse,
   CorpusSummary,
   DetectorAccountabilityResponse,
@@ -309,4 +310,15 @@ export function fetchDetectors(
     withQueryParams("/api/detectors", { repo_id: params.repoId }),
     signal,
   )
+}
+
+/**
+ * Every adapter this deployment registers, and what each has ever delivered.
+ *
+ * Takes no scope. An adapter is a property of the deployment rather than of a repository, and
+ * narrowing by one would answer a different question — which vendors a repository calls — that
+ * `fetchObservedTelemetry` already answers better.
+ */
+export function fetchAdapters(signal?: AbortSignal): Promise<AdapterInventoryResponse> {
+  return getJson<AdapterInventoryResponse>("/api/adapters", signal)
 }

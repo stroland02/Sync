@@ -317,6 +317,13 @@ class MigrationOutcome(BaseModel):
     ci_result: str | None = None
     terminal_status: str | None = None
     abandon_reason: str | None = None
+    # The coded companion beside the prose (B128): a member of
+    # `sync.remediate.state.ABANDON_REASON_CODES`, or `None` on a row from before this column
+    # existed or on a row that is not an abandonment at all. Kept as plain `str | None` rather
+    # than the `Literal` `nodes.py` writes from, the same reason `routing_row` is: a row read
+    # back may carry a value written under a vocabulary that has since changed, and a model
+    # that could not construct from its own table would be the worse defect.
+    abandon_reason_code: str | None = None
 
     # Outcome, arriving days later by webhook.
     pr_number: int | None = None

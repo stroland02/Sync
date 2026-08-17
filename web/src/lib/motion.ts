@@ -40,6 +40,16 @@ export const MOTION_USAGES = [
   // a time the graph actually holds. Guarded against its own mount and against an unchanged
   // refetch, so it washes only on a real transition — `node-sequence.test.tsx` holds that.
   "features/workflows/node-sequence.tsx",
+  // A request is in flight, and how long it has been in flight is the state change. This is the
+  // one surface where the claim motion makes is unarguable: the operator is waiting, the waiting
+  // has a duration, and the duration is elapsed wall clock rather than anything inferred.
+  //
+  // **It is a sweep and deliberately not a skeleton.** A skeleton claims a shape — this will be a
+  // table, these will be the rows, they will be this wide — and the answer may have no rows at
+  // all, which is one of the four kinds of nothing this file exists to keep apart. `B90`'s slice
+  // recorded that refusal and it still stands: the words say what is being waited for, the sweep
+  // says only that time is passing, and neither asserts what will arrive.
+  "components/states.tsx",
 ] as const
 
 export const EASE_STANDARD: [number, number, number, number] = [0.4, 0, 0.2, 1]
@@ -49,6 +59,25 @@ export const ERROR_SURFACE_DURATION = 0.12
 
 /** The changed-under-poll wash: a real checkpoint, not a re-render. */
 export const CHANGE_WASH_DURATION = 0.6
+
+/**
+ * One pass of the loading sweep.
+ *
+ * Slow enough to read as waiting rather than as progress: a fast sweep is read as a progress bar
+ * that has nearly finished, and this one knows nothing about how far along the request is. The
+ * honest reading is "still going", and a sweep at this rate is what produces it.
+ */
+export const LOADING_SWEEP_DURATION = 1.4
+
+/**
+ * How long a request may run before the screen starts saying how long.
+ *
+ * Under this, the number would appear and vanish on every navigation, which is noise rather than
+ * information. Over it, the operator has begun to wonder, and the elapsed count is the honest
+ * answer to what they are wondering — it is also the difference between a screen that is slow and
+ * a screen that is stuck, which nothing on this console could previously tell apart.
+ */
+export const LOADING_ELAPSED_THRESHOLD_MS = 2000
 
 /**
  * `prefers-reduced-motion: reduce` must remove every transition below, not shorten it.

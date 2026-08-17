@@ -64,9 +64,32 @@ from the same review were already answered and are recorded in the M12 plan rath
 the background has not been pure black since `W170`, and the type scale already carries 22px, 28px
 and a 48px display step, so the defect there was assignment rather than absence.
 
+### 2026-08-08 — the console has a drawn target, and no more built code than yesterday
+
+A ten-screen mock of the console landed in `docs/console-mock/` with its provenance, a 40-second
+tour and twelve stills, and `plans/2026-08-08-console-mock-to-build.md` splits it into six tasks.
+**No percentage below moves.** A drawing is not an implementation, and the one honest change is that
+two milestones now have a target instead of a description.
+
+- **It answers the two things the owner named on 2026-08-07 and nobody had scheduled** — *"the
+  layout is one vertical stack where it should be a grid"* and *"Fleet carries more prose than
+  data."* Every mock screen is a grid; its Fleet is one table of six change units above a single
+  paragraph. That makes M12 schedulable against something specific rather than against a complaint.
+- **Two of the six tasks are full-stack and belong to M12** — the Fleet change-unit grain and the
+  cross-detector rung tally both need aggregates `sync.dashboard` does not compute, which is exactly
+  the shape M12 was proposed as.
+- **One task is M4's** — Settings & adapters is drawn, has no route, and is where the write path
+  will land. The plan's ruling is that it ships read-only and stays a destination rather than
+  becoming a tenth level.
+- **The remaining three are M7's** and are console-only: a measurement pass, one shared drawer
+  extracted from three copies, and an honest command palette.
+- **What is not true:** nothing in the mock is built, none of its numbers is a measurement, and
+  Task 1 exists precisely because no one has yet put a mock screen and its shipped counterpart side
+  by side under `getComputedStyle`.
+
 | | Milestone | % | The one sentence that matters |
 |---|---|---|---|
-| **M0** | Walking skeleton, one real PR | **~90%** | Every component exists; **the proof is 1,073 commits stale** — measured 2026-08-07, not the "~200" this row claimed for a fortnight |
+| **M0** | Walking skeleton, one real PR | **~90%** | Every component exists; **the proof is 1,206 commits stale** — measured 2026-08-17 (`git rev-list --count`, the last commit to touch `tests/test_e2e_stripe.py`..`HEAD`), up from "1,073" on 2026-08-07. The gate is `B7`, still the user's call |
 | **M1** | Runtime signals, efficiency detector | **~85%** | Built; the dollar estimate is deliberately unbuilt |
 | **M2** | Production error detector | **~85%** | Built; never exercised against real telemetry |
 | **M3** | Multi-vendor, MCP, plugin SDK | **~95%** | Packaging closed 2026-07-30; nothing structural left |
@@ -74,9 +97,10 @@ and a 48px display step, so the defect there was assignment rather than absence.
 | **M4.5** | The console is worth looking at | **~90%** | W141-W145 all landed and merged; the conformance gaps it existed to close are closed, and what remains of "worth looking at" moved into M7 |
 | **M5** | Integration layer | **~35%** | Sentry feeds counts in now; still nothing correlates anything |
 | **M6** | Show it, rather than describe it | **0%** | Needs a UI worth filming. That is M7's line now, not M4.5's, and M7 is close enough that this is becoming schedulable |
-| **M7** | The console becomes a product | **~92%** | All nine levels are on the vendored Supabase substrate. Fidelity Tasks 1–6 of 6 landed; Mock-to-Build Phase 1 & B123 checkpointer timestamps landed |
+| **M7** | The console becomes a product | **~98%** | All nine levels on vendored Supabase substrate. Fidelity Tasks 1–6, Mock-to-Build Phases 1–5, ChangeUnitsTable, B123 checkpointer timestamps, and screen de-congestion landed |
 | **M8–M11** | The resolution loop | **0%** | Proposed 2026-08-06, nothing scheduled; Sync opens a pull request and stops watching it |
-| **M12** | Dashboards that earn their screen | **0%** | Proposed 2026-08-07 from the owner's review of our screens against the references; full-stack, because the useful panels need aggregates `sync.dashboard` does not compute |
+| **M12** | Dashboards that earn their screen | **~10%** | One of Phase 1's four aggregates landed (`M12-W195`–`W197`, `ee7a8dc`/`9395cfb`: abandonment by change kind and tier, the corpus's first read-back, plus the exemption-outlives-its-panel guard). Phases 2–4 (panels, grid composition, the honesty-sentence re-placement) unstarted |
+| **M13** | Dynamic visuals, Remotion & live telemetry | **0%** | Proposed 2026-08-16; live agent execution stream, thinking disclosures, dynamic node states inspired by DeepSeek Harness, and Remotion motion diffs |
 
 ### Implementation Plans Ledger (`docs/superpowers/plans/`)
 
@@ -99,8 +123,9 @@ Every plan in the repository mapped to its governing milestone, scope, and curre
 | [`2026-08-06-sync-m8-m11-resolution-loop.md`](plans/2026-08-06-sync-m8-m11-resolution-loop.md) | **M8–M11: Resolution Loop** | Proposed | Multi-attempt repair state machine, codemod tier cascade, replay sandboxing |
 | [`2026-08-06-sync-repo-context.md`](plans/2026-08-06-sync-repo-context.md) | **M0/M3: Repo Context & AST** | Landed | Multi-language tree-sitter AST extraction, call site binding, symbol maps |
 | [`2026-08-07-console-fidelity-pass.md`](plans/2026-08-07-console-fidelity-pass.md) | **M7: Fidelity Pass (Tasks 1–6)** | Landed (`M7-W183`–`W209`) | 48px top bar, type ramp middle, spanning headers, fed bars, rail hover, table anatomy |
-| [`2026-08-07-m12-dashboards-that-earn-their-screen.md`](plans/2026-08-07-m12-dashboards-that-earn-their-screen.md) | **M12: Dashboards That Earn Their Screen** | Proposed | Aggregation queries, multi-column card grids, time-at-node analytics |
-| [`2026-08-08-console-mock-to-build.md`](plans/2026-08-08-console-mock-to-build.md) | **M7: Console Mock-to-Build** | In Progress (Phase 1 & B123 landed) | Translating 28 direction screenshots into built features, fact rails, syntax headers |
+| [`2026-08-08-console-mock-to-build.md`](plans/2026-08-08-console-mock-to-build.md) | **M7/M12/M4: Ten-Screen Mock to Build** | Landed (Phases 1–6) | Six tasks turning the ten-screen artifact in `docs/console-mock/` into shipped console; ChangeUnitsTable, CodebasesPanel, and codebase-first hierarchy |
+| [`2026-08-08-console-direction-parity.md`](plans/2026-08-08-console-direction-parity.md) | **M7: Console Direction Parity** | In Progress (Phase 1 & B123 landed) | Translating 28 direction screenshots into built features, fact rails, syntax headers |
+| [`2026-08-16-sync-m13-dynamic-visuals-and-telemetry.md`](plans/2026-08-16-sync-m13-dynamic-visuals-and-telemetry.md) | **M13: Dynamic Visuals & Live Telemetry** | Active Plan | Dynamic agent execution stream, thinking disclosures, live node states inspired by DeepSeek Harness, and Remotion motion diffs |
 
 ### M0 — Walking skeleton, one real pull request · ~90%
 
@@ -288,7 +313,9 @@ confidently instead of refusing.
 
 ## Ready
 
-### B131 — a customer's repository could configure the patch agent, and the gate sat downstream of it — FIXED, and the entry stays for what it says about the gate
+### B135 — a customer's repository could configure the patch agent, and the gate sat downstream of it — FIXED, and the entry stays for what it says about the gate
+
+**B135, B133 and B134 were filed as B131, B129 and B130 and renumbered on landing.** Three live branches -- `b129-truncate-corpus`, `b130-day-one-path`, `b131-generated-vendors` -- plus `b132-gate-hang` already held 129 through 132 when these were written, and `main`'s copy of this file topped out at B128, so the numbers read as free from every view that could see them. That is the failure this file's own opening rule describes, and `git log --all --oneline --grep` does not catch it either when the competing claim is a branch name rather than a commit message. The cheap check that would have: `git worktree list` and `git branch -a`, read for the number rather than for the work.
 
 **Found 2026-08-16 while probing why a full-depth rehearsal abandoned. Fixed the same day in
 `M8-W217`; recorded here because the shape of the miss matters more than the fix.**
@@ -357,7 +384,7 @@ set, recording for each whether its default admits customer-controlled or operat
 input, in the same form as the measurement above — an experiment, not a reading. `sandbox`,
 `plugins`, `agents`, `system_prompt` and `permission_mode` are the ones to start from.
 
-### B129 — B79's natural key never reached any database that already existed, so every corpus write fails
+### B133 — B79's natural key never reached any database that already existed, so every corpus write fails
 
 **Found 2026-08-16 by running `sync rehearse --depth full`, which nothing had done since the
 pipeline changed underneath it.** Every `migration_outcome` write in that run raised:
@@ -383,23 +410,22 @@ write to the one table `build_graph` refuses a store without.
 write every benchmark axis reads from. Merge rate, routing accuracy and cost per merged patch
 have never had a sample, and this is a second reason why: even a run that reached a pull request
 would have recorded nothing. It also silently disarms B79's own fix — the rehearsal/production
-collision that entry closed is open again on every pre-B79 database, because the constraint that
-separates them is not there.
+is_rehearsal)`. `schema.sql` declares that unique constraint, and `apply_schema` executes `CREATE
+TABLE IF NOT EXISTS` -- which does nothing when the table already exists under the old
+single-column unique constraint. So every fresh database worked, and every database created before
+B79 failed every corpus write forever with no error in the log anyone saw.
 
-**No test catches it.** `tests/conftest.py` gives every run a fresh database, so the schema is
-always applied to an empty one and the widened constraint always lands. This is the exact shape
-`CLAUDE.md` names for the encoding defects: correct by construction in the fixture, wrong against
-anything real.
-
-**Evidence that closes this:** `apply_schema` reconciles the constraint on a database that
+**What closes it:** `GraphStore.apply_schema` checks whether `migration_outcome`'s unique constraint
+matches the schema and alters it when it does not -- `ALTER TABLE migration_outcome DROP CONSTRAINT
+...; ALTER TABLE migration_outcome ADD CONSTRAINT ...` in the same migration block. Tested against a database that
 already holds the old one, proved by a test that creates the table with the two-column key,
 applies the schema, and watches a write that previously raised succeed — and proved able to fail
 by running that test against the current `apply_schema` first. A fresh-database test proves
 nothing here; the fresh-database path is the one that already works.
 
-### B130 — a corpus write that fails leaves no queryable trace, so a systematic failure runs forever
+### B134 — a corpus write that fails leaves no queryable trace, so a systematic failure runs forever
 
-Filed from B129 rather than discovered separately: the reason B129 survived from the day B79
+Filed from B133 rather than discovered separately: the reason B133 survived from the day B79
 landed until somebody ran a rehearsal by hand is that nothing downstream of the failure knows it
 happened.
 
@@ -424,6 +450,30 @@ write side.
 recorded reason that a reader can join back to the run — and a run whose corpus writes all failed
 says so rather than exiting 0 silently. Whatever shape it takes must not make a corpus write able
 to fail a run, which is the property the current `except` exists to hold.
+
+### B136 — Nothing records that an adapter was asked, only what it answered
+
+`GET /api/adapters` can say what each adapter has delivered and cannot say whether it was reached.
+The two facts a Settings screen needs are *when did this adapter last run* and *why did it decline*,
+and neither is a column anywhere: `vendor_change` records results, so an adapter polled hourly that
+has found nothing new for a week is indistinguishable from one whose fetch has been 403ing for a
+week. Both render as an old `last_change_at`.
+
+`sync.dashboard.adapters.adapter_inventory` names the limit in its docstring and deliberately does
+**not** carry a `decline_reason` field. A column null on every row would read as "no adapter has
+ever declined", which nothing measured, and
+`tests/test_adapter_inventory.py::test_nothing_here_records_why_an_adapter_declined` asserts the
+absence so the gap stays visible rather than becoming a blank column nobody questions.
+
+**What closes it:** an intake attempt record — one row per adapter per attempt, carrying the outcome
+and, on a failure, the reason from a closed vocabulary rather than free text (the argument `B128`
+made for `abandon_reason_code`, and the same reason: a promise to learn from failures needs a schema
+that can be aggregated). The grain is one row per *attempt*, not per adapter, and `schema.sql` needs
+that stated as a comment before the first column lands — the rule `migration_outcome` exists to
+illustrate.
+
+The screen is built and honest without it. This is the row that lets it answer the question it was
+drawn to answer.
 
 ### B90 — The console is one idiom repeated eight times, and the resources to fix it are already installed
 
@@ -1353,14 +1403,20 @@ measured at 1440x900 and 1280x800 at **4.00:1**, with regions placed beside anot
 to two on each. The presence guard still cannot land — it goes red on whatever remains — and the
 count of routes it would fail is the only thing this entry needs updating for.
 
-### B126 — every remediation run starts cold, and the facts it rediscovers do not change
+### B126 — every remediation run starts cold, and the facts it rediscovers do not change - CLOSED
 
 **Renumbered from B122 on 2026-08-16, landing the console line.** Two items were both filed as
 B122 on separate branches — this one and "the Finding level cannot name its own severity" below —
 and merging them onto one `main` would have let the collision stand. B126 is the next free number.
 
-**Designed and planned, deliberately not started.** The console is the current focus and this is
-pipeline work; it sits at the bottom of Ready so a tick takes the console items first.
+**All seven tasks landed 2026-08-16** (merge `5276718` per `git reflog show main`), verified present
+on the current tree: `src/sync/context/` (`seed.py`, `prompt.py`), `GraphStore.repo_context`/
+`upsert_repo_context`, `build_patch_prompt`'s `repo_context` parameter, `sync context show`/`set`
+on the CLI, the console's `GET`/`POST /api/repos/{repo_id}/context` routes, and the MCP
+`sync://context/{repo_id}` resource template with `SERVER_INSTRUCTIONS`. This entry's own text had
+gone stale back to its pre-landing form — likely lost in the origin/main reconciliation — while the
+code itself stayed on `main` throughout; corrected here rather than trusted from memory, per this
+repository's own rule about verifying before recommending from memory.
 
 - Design: [`specs/2026-08-06-sync-repo-context-design.md`](specs/2026-08-06-sync-repo-context-design.md)
 - Plan: [`plans/2026-08-06-sync-repo-context.md`](plans/2026-08-06-sync-repo-context.md), seven tasks
@@ -1400,6 +1456,288 @@ plan asserts that so a third member is a deliberate edit rather than a quiet one
 repository with no context. The first two are assertions in the plan rather than review
 judgements.
 
+### B129 — a scan emptied the migration corpus and the context it had just written - CLOSED
+
+`cli.run` cleared the graph with `store.truncate_all(keep=("call_site",))`. `truncate_all` empties
+every table `schema.sql` declares, so that allow-list held one name against the seven it did not,
+and every `sync run` emptied all seven.
+
+Two of them nothing can rebuild. `migration_outcome` is the migration corpus: one row per repair
+attempt, the only durable record that a pull request was ever opened, the table `abandon_reason`
+lives in, and its own grain comment says it cannot be backfilled. `repo_context` is what B126
+shipped two commits earlier — the same `run()` seeds it from the checkout at `cli.py:943` and reads
+it back at `cli.py:1082`, with the truncate between them, so the patch agent's prompt carried an
+empty string and the comment above the read claimed the row had just been converged. Three more
+are telemetry a scan does not produce and cannot re-produce: `observed_shape`, `observed_call` and
+`observed_error_window`.
+
+**This is a strong candidate for the corpus holding three or four rows after more than a thousand
+commits**, which the M0 line above records without an explanation.
+
+**It also disabled the merge measurement, which is the one number that tests the product claim.**
+`set_merge_outcome` is an `UPDATE … WHERE finding_id = %s AND attempt_index = %s`, and the merge
+webhook arrives days after the run. Any scan in between deleted the row it was going to update, so
+the update matched nothing and said so to no one: `pr_merged` stayed null, and `merge_rate` was
+computed over whatever survived. `set_merge_outcome`'s own docstring says "a column that silently
+stays null destroys it" — the update path was there and the row was not.
+
+**It was seen and written down eighteen days before it was fixed.**
+[`reports/2026-07-29-a-blank-line-left-a-ghost-forever.md`](reports/2026-07-29-a-blank-line-left-a-ghost-forever.md),
+under *What is left, named rather than fixed*: "`sync run` still truncates `migration_outcome`
+… `CLAUDE.md` says abandoned runs are data, and a scan currently deletes them." That is the whole
+argument for filing a defect with a number rather than a paragraph in a report. The paragraph sat
+there while the B126 plan, at line 68, stated that `truncate_all` "derives its table list from
+`schema.sql`, so it needs no edit" — true of the wipe and beside the point about it — and shipped
+a sixth table into the wiped set on that basis.
+
+**What closed it.** A scan now names what it clears instead of what it spares:
+`GraphStore.truncate_signal_and_detect()` empties `vendor_change` and `finding` and nothing else.
+`truncate_all` keeps its whole-database meaning for the two callers that want one: a test fixture
+starting from nothing, and the benchmark harness, which `cli.score` already refuses to point at the
+corpus database. `keep` is deleted rather than left unused.
+
+**Decided against the fix the 2026-07-29 report proposed**, which was to read `keep` "as the
+mechanism that already exists" and widen it. Widening it would have been correct on the day and
+wrong on the next table: `repo_context` was added by B126 and joined the wiped set without anyone
+choosing that, and a widened allow-list would have let the table after it do the same. An
+allow-list is a list somebody has to remember at a call site, which is the failure mode
+`truncate_all`'s own docstring already said it was written to end. Naming the cleared set makes
+forgetting safe instead of expensive.
+
+The new method issues no `CASCADE`. `finding` holds the schema's only two foreign keys and both
+ends are accounted for, so the constraint is satisfied without one — and a `CASCADE` would reach
+silently into whatever table references these next, which is the shape of the defect itself.
+
+**Evidence:** `tests/test_scan_preserves_durable_rows.py`, five tests driving the real `sync.cli.run`
+against Postgres with everything outside the database stubbed. Four failed against the shipped code
+— `assert set() == {'f-1', 'f-2'}` for the corpus, `the scan deleted the context it had just
+seeded` for its own repository's context, the same for a second repository's, and `assert 0 == 1`
+for the observed shape — and the fifth is the guard in the other direction: a stale finding and a
+stale vendor change from a previous scan are both still gone afterwards, so the four above cannot
+be satisfied by a scan that simply stopped clearing anything.
+
+**What it does not do.** `finding` and `vendor_change` are still truncated across every repository
+and every vendor, so a scan of one customer still deletes another customer's findings. Narrowing
+them means giving each the treatment `replace_call_sites` gives `call_site`: a per-repository
+retraction pass for `finding`, keyed on `(detector, call_site_id, vendor_change_id, claim)`, and a
+per-vendor-and-version-range one for `vendor_change` — which has to survive the oasdiff exemption
+`CLAUDE.md` names, since those rows do not converge and a retraction pass over them would retract
+and re-assert the same change on alternate runs. That is a table-by-table grain argument with its
+own tests, not a line to change beside this one.
+### B130 — the documented first run could not be executed, and nothing was checking
+
+An audit walked `README.md`'s Quick start as a new user would, on 2026-08-16. Of the eight
+commands in it, three could not work and two prerequisites were named nowhere. Every one of the
+six defects was true when it was written; each stopped being true afterwards and nothing said so.
+
+**What was broken.**
+
+1. `scripts/bootstrap_tools.sh` downloaded `*windows_amd64.tar.gz` unconditionally and then
+   verified `./oasdiff.exe`. Every macOS and Linux checkout was blocked at the third command.
+2. `python -m sync.api` read `os.environ["SYNC_GRAPH_DSN"]` and died on a bare `KeyError`, while
+   every CLI subcommand defaulted `--dsn` to the docker-compose database. One fact, written
+   twice, disagreeing.
+3. The API was the one entry point that never applied the schema — confirmed, zero callers of
+   `apply_schema` under `src/sync/api/` — so against a fresh database it started and answered
+   500 from every route.
+4. `cd web && npm run dev` appeared with no `npm install` in `README.md`, `CONTRIBUTING.md` or
+   `ARCHITECTURE.md`.
+5. `--repo` was documented as a filesystem path while the flag's own help said git URL. `git
+   clone` accepts a path, so a run indexed and detected normally; `_repo_id` then reduced
+   `/path/to/your/checkout` to itself and `_owner_repo` took its last two segments, so every
+   `gh api` call addressed `your/checkout` and 404'd — after the run had paid for an agent turn.
+6. `gh` was documented as needed "if you want pull requests opened". It is needed for the first
+   run: `sync.signals.stripe.adapter.fetch_spec` shells out to `gh api`, and
+   `bootstrap_tools.sh` fetches oasdiff with `gh release download`. An authenticated `claude`
+   CLI is required by the cascade's last tier and was named nowhere in the repository's front
+   matter.
+
+**What closed it (M0-W218).** The platform mapping moved into `scripts/oasdiff_asset.sh`, a
+sourceable pair of shell functions, and the bootstrap script now names no platform of its own.
+`DEFAULT_DSN` and `describe_dsn` moved to `sync.graph.store`, which both entry points and
+`scripts/seed_console.py` read rather than restate — two copies of the literal and one entry
+point with no default at all became one constant, and `seed_console`'s private `_describe`
+became the redaction the API's refusal reuses.
+
+`sync.api.__main__.require_schema` refuses an empty database at start, naming
+`scripts/seed_console.py` and `sync run`, because a read-only surface must not be the one place
+that issues DDL. `sync.cli.remote_url` is `--repo`'s argparse type and refuses a value the forge
+cannot address, with the URL forms to pass instead. The README states the prerequisites with the
+`path:line` that produces each.
+
+**One placement was decided against the obvious one, and it is the judgement in this item.** The
+`--repo` refusal sits on the parser rather than inside `run`. `push_branch` genuinely serves a
+local origin — `test_two_findings_in_one_run_produce_branches_that_share_no_commits` drives the
+whole pipeline that way with the two `gh`-backed steps replaced — so a check inside `run` refuses
+a shape the pipeline supports, and it did, on the first pass. argv is the boundary; a `Namespace`
+a test builds is not.
+
+**Evidence that keeps it closed.** `tests/test_day_one_path.py` parses the Quick start block and
+holds every `uv run sync` command in it against the argparse surface `sync.cli.build_parser`
+returns — flags matched in full, so the README cannot go on relying on argparse's prefix
+matching, which is what let `--from v2320` run against `--from-version`. The same file pins that
+the API and the CLI resolve one default DSN, that the schema refusal names a command, that the
+console block installs and seeds before it starts anything, and that a local path is refused
+while argv is being read. `tests/test_bootstrap_tools.py` calls the asset mapping with nine
+`uname` pairs from whichever platform the suite is on.
+
+**What it does not close, deliberately.**
+
+- **`sync run` still cannot serve a local checkout.** Refusing is the honest third option of the
+  three the audit named; making it work needs a forge that is not `gh`, which is a different
+  item. What retires this is a `Forge` implementation with no remote, at which point the
+  refusal narrows rather than disappears.
+- **`.github/workflows/ci.yml` installs oasdiff by `curl` with a hardcoded `linux_amd64` URL, in
+  three jobs.** That is a fourth copy of the platform fact, deliberately left: CI's comment says
+  it copies the mechanism and not the number, and it runs on one known runner. It becomes wrong
+  the day a job moves to a macOS or arm runner.
+- **`tests/conftest.py` keeps its own `DEFAULT_DSN`.** It answers a different question — which
+  server to create a per-process database on — and is documented in place.
+### B131 — four of six vendors can bind no call site, and the run reported it as a clean scan
+
+**The reporting half landed on 2026-08-16 (M3-W219). The binding half is what is left, and it is
+what this entry stays open for.**
+
+**Which vendors bind, measured rather than assumed.** `available_vendors()` offers six.
+
+| Vendor | Adapter | Symbol map | Binds a call site |
+|---|---|---|---|
+| `stripe` | `StripeAdapter` | built by `_prepare_stripe` from the specification and the generator input | yes |
+| `twilio` | `TwilioAdapter` | built by `_prepare_twilio` across every configured product | yes |
+| `anthropic` | `GeneratedSpecAdapter` | **never constructed** | no |
+| `openai` | `GeneratedSpecAdapter` | **never constructed** | no |
+| `cloudflare` | `GeneratedSpecAdapter` | **never constructed** | no |
+| `vercel` | `GeneratedSpecAdapter` | **never constructed** | no |
+
+Never constructed rather than empty, and the difference matters when reading the code: the map is
+built by `_extracted_symbols`, which returns `None` on its first line when `sdk_source` is absent.
+Neither `_prepare_generated` nor `_load_generated` passes one, so no call site was ever compared
+against anything for those four. `sync run --vendor openai --repo <a repository that calls OpenAI>`
+printed `0 finding(s)` and exited 0, which is what a repository with no OpenAI calls in it prints.
+
+**What landed.** The gap is declared by the adapter and reported by the run, so the two zeroes are
+no longer one output. `GeneratedSpecAdapter.unbindable_reason` is a property derived from whether a
+checkout was staged; `McpServerAdapter.unbindable_reason` is a constant, because there the cause is
+the protocol rather than the staging — an MCP tool name arrives as a runtime string and no static
+chain addresses it. `cli._binding_lines` reads it through `getattr`, the way `sdk_bindings` and
+`unverifiable_reason` are read, and prints it *before* the finding count for the reason
+`_coverage_lines` states. No vendor id appears in `sync.core` or in `cli.py`.
+
+**What did not land, and the ruling behind it.** No `sdk_source` was wired into
+`generated-vendors.yaml`. The knob is eight lines and was deliberately not written:
+`reports/2026-07-29-extraction-report-contract.md` records that `_sources` is keyed by version
+while `sdk_source` is not, and that nothing maps a staged checkout to a manifest version — so a
+bare path in configuration would pair an extraction from one tag against a manifest from another
+and call the result a binding. Shipping that would replace a loud gap with a quiet wrong answer.
+A version-aware staging step is the real fix and it is a design, not a knob.
+
+**What retires this entry:** a staging step that puts a generated SDK checkout at a known version
+beside the manifests already read for that version, and passes it as `sdk_source`. When it lands,
+`test_the_unstaged_set_is_exactly_the_set_that_resolves_nothing` and
+`test_a_registered_vendor_that_binds_nothing_declares_why` in `tests/test_shipped_conformance.py`
+both move those vendors into the resolving set with no edit to either, because both sides of both
+assertions are derived. Until then the honest report is the deliverable.
+
+**Evidence that closed the reporting half:** `tests/test_unbindable_vendor_report.py` drives
+`cli.run()` twice over one adapter class — staged against the committed `anthropic_python`
+checkout, and unstaged — and asserts the outputs differ. Before the fix they were byte-identical
+(`assert '0 finding(s)\n' != '0 finding(s)\n'`).
+### B132 — The local gate could not finish, so every claim resting on it was unprovable
+
+**Mostly closed on 2026-08-16 (M0-W220). What remains is named at the bottom.**
+
+`uv run pytest tests/ -q -n0` is the command `CLAUDE.md` names as the authority over this
+repository's health, and on 2026-08-16 it was started on `main` at `5fb5515` and killed after
+**70 minutes having printed nothing**, against a recorded serial duration of about 137 seconds
+(`reports/ci-profile-2026-08-07.md`). One hundred and five commits had landed with CI gating none
+of them, so nothing else knew anything either.
+
+**The suspected cause was wrong and worth recording as wrong.** `tests/test_patch_sandbox.py`
+carries `@pytest.mark.docker` on three tests that create real containers, attach real networks and
+wait on a socket, and nothing deselects that marker. Run alone they pass in **48.01 s** — slow,
+never hung.
+
+**What it actually was: `DROP DATABASE`.** Postgres requests an immediate cluster-wide checkpoint
+on every `DROP DATABASE` and waits for it, holding an object lock on the database meanwhile. This
+suite issues around forty per run — `pytest_configure` creates and drops one, its sweep drops every
+database a killed run left, `test_schema_convergence.aged_dsn` and
+`test_leaked_database_sweep.made` create and drop one per test, and `test_serial_run_isolation`
+spawns a child pytest that does all of it again — and several worktrees run at once, so the drops
+queue on one checkpointer. **Not one of those statements was bounded:** no `connect_timeout`, no
+`statement_timeout`, no `lock_timeout`. Nothing was deadlocked. The run was starved, and a starved
+run is indistinguishable from a stuck one, so an operator kills it.
+
+Three measurements, each taken while the failure was live:
+
+- Two other worktrees' `-n0` runs were blocked in the same statement at the same moment, dumped
+  with `py-spy`: one in `test_schema_convergence.py:56` and one in `test_leaked_database_sweep.py:89`,
+  both inside `psycopg`'s `wait_select` under a fixture teardown's `DROP DATABASE ... WITH (FORCE)`.
+- `pg_stat_activity` showed `DROP DATABASE` backends stacked on `IPC/CheckpointStart`,
+  `IPC/CheckpointDone` and `Lock/object`, three of them racing for the same name, alongside
+  `TRUNCATE` on `IO/DataFileImmediateSync`.
+- A serial run under a 120 s per-test watchdog stopped at
+  `test_leaked_database_sweep.py::test_a_database_named_for_a_dead_pid_is_swept`, in
+  `conftest.sweep_leaked_databases` → `conn.execute` → `wait_select`. That is the same function
+  `pytest_configure` calls **before pytest writes its own header**, which is why the original
+  70 minutes produced no output at all rather than a partial progress line.
+
+**It is not a `-n0` defect.** The blocked drops seen on the server were against
+`sync_test_<controller>_gw<n>_p<worker>` names — xdist worker databases — with three backends
+stacked on one of them. A serial run stalls outright and gets killed; a parallel run loses one
+worker at a time and looks slow, which is why this survived on a suite whose `addopts` pins
+`-n auto`.
+
+**What closed it.** Every administrative statement now goes through `conftest.admin_connection`,
+which sets `connect_timeout` on the client and `statement_timeout` and `lock_timeout` on the
+server — server-side, because a client that gives up leaves the backend holding its lock and still
+waiting. `conftest.drop_database` turns a cancelled drop into a message naming the database and
+the two things a drop waits for. Cleanup drops go through `drop_databases_best_effort`, which warns
+and leaves the database to the next run's sweep rather than failing a test that passed. The
+`pytest_configure` sweep takes a 30 s budget, because it is the one that blocks a blank terminal.
+`pytest-timeout` is a dev dependency and `timeout = 900` is in `pyproject.toml`, so any future
+hang anywhere arrives as a named test with a stack. And `docker-compose.yml` now starts the test
+server with `fsync=off`, `full_page_writes=off` and `synchronous_commit=off`, which is what makes
+the churn affordable: **282 ms median per `DROP DATABASE` stock against 16 ms tuned**, over 15
+cycles on two otherwise identical idle `postgres:16` containers.
+
+Separately, a machine with no reachable Docker daemon got `RuntimeError: docker create failed:
+error during connect` raised from inside `sync.remediate.sandbox` — a message that reads as a
+defect in the module under test. `conftest.pytest_collection_modifyitems` asks
+`docker_unavailable_reason` once at collection and turns the three marked tests into skips naming
+the absent toolchain.
+
+**The docker marker stays in the default gate, and the alternative was argued rather than
+assumed.** Deselecting it is cheap and `e2e` is the precedent — but `e2e` is deselected because it
+calls real vendor and model APIs, opens a pull request and spends money, and none of that is true
+here. These three tests make no network call outside the local daemon, cost nothing, and are the
+**only** evidence B97's container boundary holds; B97's own close condition demands "a test that
+watches the attempt fail rather than ... a configuration file asserting it". The decisive point is
+that this suite already refuses to run most of itself without a container runtime: Postgres is a
+container on that same daemon. Deselecting the container tests while depending on a containerised
+database would be incoherent. They were also innocent of the hang.
+
+**Evidence that keeps it closed:** `tests/test_gate_is_bounded.py`. A blocked admin statement is
+cancelled and control returns (`pg_sleep(30)` against a 1 s bound); a drop that cannot finish
+raises naming the database; a spent sweep budget leaves a database it had selected; a dead
+`DOCKER_HOST` makes a child run report `3 skipped` with a reason instead of three errors, with a
+positive control asserting a reachable daemon reports nothing to skip; and the watchdog is
+asserted as both a declared bound and an installed plugin, since an ini key no plugin claims is
+ignored in silence.
+
+**What is left, and none of it blocks the gate:**
+
+- **The container tests have never run in CI and may not pass there.** They reach the host through
+  `host.docker.internal`, which Docker Desktop provides and a plain Linux daemon does not without
+  `--add-host=host.docker.internal:host-gateway`. `bc04f14` landed them at 22:17 UTC on
+  2026-08-16; the last CI run that actually executed anything was 04:18 UTC that day, and the three
+  since are B112's phantom failures with every job blank. Unknown, not broken — and adding the flag
+  touches `sync.remediate.sandbox`, which is B97's, so it wants its own change.
+- **The churn itself is untouched.** Forty `DROP DATABASE` per run is the cost that the tuning
+  makes affordable rather than removes; a suite that shared one aged database across
+  `test_schema_convergence` would issue far fewer.
+- **CI's Postgres keeps stock durability.** A GitHub Actions `services:` block cannot override a
+  container's command. CI runs one suite at a time in 137 s and is not where this bit.
+
 ## In flight
 
 **Rewritten 2026-08-07.** The section had gone stale in the way it warns against below: it described
@@ -1408,6 +1746,18 @@ gap as affecting one worktree. Two of those are now wrong and the third is wrong
 
 ### Actually in flight
 
+- **Surveyed 2026-08-17, from a session catching up after a gap.** `main` itself carries six live
+  terminals (`orca worktree ps`), and the M8-M11 resolution loop plan is being actively built out
+  across several worktrees: `m8-runner-seam` (M9-W219 outcome vocabulary just landed, an untracked
+  `tests/test_durable_runs.py` open for M10), `forge-pr-outcome` (M10-W226, asking GitHub what
+  became of an opened pull request, committed and clean), `m8-land` (an integration branch
+  reconciling the above with `origin/main`), and `console-motion` (M7-W227, unrelated console
+  polish, committed and clean). Three more — `b130-day-one-path`, `b131-generated-vendors`,
+  `b132-gate-hang` — all share one base commit (`5fb5515`, "the B97 sandbox integration design")
+  and each has real uncommitted work: `b131` is mid-edit on `cli.py`, `b132` on `docker-compose.yml`
+  and `.claude/rules/test-discipline.md`. **None of these six are safe to dispatch into or merge
+  from another session right now** — do not touch their files, do not assume a clean-looking branch
+  among them is actually finished without checking for a live terminal first.
 - **B78 — done, and worth one line here as a warning.** Gemini's `gemini-b78-rehearse` landed
   Tasks 1-6 (`75e5f17` through `eaa02a7`) via `428c953`, merging into `main`. That merge was not a
   real three-way merge -- a re-merge from the correct merge-base produces zero conflicts, so

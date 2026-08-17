@@ -10,6 +10,7 @@ from datetime import datetime
 from importlib import resources
 
 import psycopg
+from psycopg.conninfo import conninfo_to_dict
 from psycopg.rows import dict_row
 
 from sync.core import CallSite, Finding, FindingStatus, MigrationOutcome, RepoContext, VendorChange
@@ -21,6 +22,26 @@ from sync.core.models import (
     ObservedShape,
 )
 from sync.graph.sources import TRAFFIC_SOURCES
+
+
+DEFAULT_DSN = "postgresql://sync:sync@localhost:5433/sync"
+"""The graph `docker compose up -d` brings up, and the default of every entry point.
+
+Here rather than in `sync.cli` because two entry points resolve it and neither owns the other:
+the CLI defaults `--dsn` to it and `python -m sync.api` falls back to it when `SYNC_GRAPH_DSN`
+is unset. Written twice they disagreed -- the API had no default at all and died on a bare
+`KeyError`, so the console and the pipeline documented on one page pointed at different
+databases, one of which did not exist.
+"""
+
+
+def describe_dsn(dsn: str) -> str:
+    """A DSN as `host:port/dbname` -- enough to say which database, never the password."""
+    info = conninfo_to_dict(dsn)
+    host = info.get("host") or "localhost"
+    port = info.get("port") or "5432"
+    dbname = info.get("dbname") or info.get("user") or "?"
+    return f"{host}:{port}/{dbname}"
 
 
 def _stable_id(*parts: str) -> str:
@@ -452,8 +473,27 @@ class GraphStore:
             if statement.upper().startswith("CREATE TABLE")
         ]
 
-    def truncate_all(self, keep: Sequence[str] = ()) -> None:
-        """Empty every table the schema declares, except the ones named.
+    def missing_tables(self) -> list[str]:
+        """Which tables `schema.sql` declares that this database does not have.
+
+        For a reader that must not create them. `apply_schema` is the only writer of DDL here
+        and every caller of it is a command a person ran deliberately; the console API is
+        read-only, so it asks this instead and refuses with the answer rather than serving a
+        500 from every route.
+
+        Tables, not columns. A database whose schema is behind by a column is a different
+        condition with a different remedy -- `apply_schema` converges it -- and reporting it
+        here would send a reader to the wrong command.
+        """
+        declared = self._schema_tables()
+        rows = self._connect().execute(
+            "SELECT table_name FROM information_schema.tables WHERE table_schema = 'public'"
+        ).fetchall()
+        present = {row["table_name"] for row in rows}
+        return [table for table in declared if table not in present]
+
+    def truncate_all(self) -> None:
+        """Empty every table the schema declares.
 
         The list used to be written out here, and it was right -- but it was right the way
         `schema.sql` was complete: by somebody remembering. A table added later would have been
@@ -461,19 +501,38 @@ class GraphStore:
         consequence is quieter than a failed insert. Rows from one run survive into the next and
         the failure surfaces somewhere with no obvious connection to this method.
 
-        `keep` exists because a scan cannot use this method as written. It empties the whole
-        database, so a scan of one repository erases every other repository's rows -- `cli.run`
-        says a hosted control plane must never do it, and until `replace_call_sites` existed there
-        was nothing else that made a re-index converge. A scan now keeps `call_site` and converges
-        it per repository instead.
-
-        Keeping a parent while truncating its children is what the foreign keys already allow:
-        `finding` references `call_site`, and truncating the referencing table needs nothing from
-        the referenced one. Keeping a child while truncating its parent would need `CASCADE` to
-        reach back, which it does, so a caller cannot use this to leave a dangling row.
+        A whole-database wipe, and it means it. Its callers are a test fixture starting from
+        nothing and the benchmark harness, which scores into a scratch database `cli.score`
+        refuses to let anyone point at the corpus. A scan is not one of them: it calls
+        `truncate_signal_and_detect`, and B129 records what it cost while it called this with an
+        allow-list instead.
         """
-        tables = [table for table in self._schema_tables() if table not in set(keep)]
-        self._connect().execute(f"TRUNCATE {', '.join(tables)} CASCADE")
+        self._connect().execute(f"TRUNCATE {', '.join(self._schema_tables())} CASCADE")
+
+    def truncate_signal_and_detect(self) -> None:
+        """Empty what a scan rebuilds from scratch: SIGNAL's rows, then DETECT's.
+
+        A scan names what it clears rather than what it spares, and the inversion is the whole
+        fix. The allow-list this replaced held one table against the seven it did not name, so a
+        scan emptied the migration corpus, the repository context it had seeded eight lines
+        earlier, and three tables of telemetry it did not produce and cannot re-produce -- and a
+        table added to `schema.sql` afterwards would have joined the wiped set by saying nothing.
+        Naming the cleared set means a table nobody thought about survives, which is the
+        direction a mistake here should point.
+
+        `call_site` is rebuilt by a scan too and is deliberately absent: INDEX converges it per
+        repository through `replace_call_sites`, which retracts what a pass stopped finding
+        rather than deleting it. These two are not converged that way yet, so a scan of one
+        repository still clears every repository's findings and every vendor's changes. That is
+        a per-table grain argument rather than a line to change here, and B129 carries it.
+
+        Never `CASCADE`. `finding` holds the only foreign keys in the schema and both ends are
+        accounted for -- `vendor_change` is truncated with it and `call_site` is only referenced
+        -- so the constraint is satisfied without one. A `CASCADE` would instead reach silently
+        into whatever table references these next, which is the shape of the defect this method
+        exists to close.
+        """
+        self._connect().execute("TRUNCATE vendor_change, finding")
 
     def upsert_call_site(self, site: CallSite) -> str:
         # line and col are part of identity, not just data: two distinct call sites
@@ -891,6 +950,40 @@ class GraphStore:
         ).fetchall()
         return [VendorChange(**row) for row in rows]
 
+    def vendor_intake_rollup(self) -> dict[str, dict]:
+        """Per vendor id, what the graph has ever received: rows, distinct operations, the newest
+        `detected_at`, and the `source` values those rows carry.
+
+        Keyed by vendor id and grouped in SQL rather than returned as rows for a caller to fold,
+        because the caller is a screen listing one line per adapter and a fold in Python would be
+        the same GROUP BY written twice.
+
+        **A vendor absent from this mapping has never delivered, which is not the same as having
+        delivered nothing.** Nothing is invented for it here -- it simply is not a key, and
+        `sync.dashboard.adapters` is where that absence becomes the null the console renders as
+        never-measured.
+        """
+        rows = self._connect().execute(
+            """
+            SELECT vendor_id,
+                   count(*)                        AS changes,
+                   count(DISTINCT operation_id)    AS operations,
+                   max(detected_at)                AS last_change_at,
+                   array_agg(DISTINCT source)      AS sources
+            FROM vendor_change
+            GROUP BY vendor_id
+            """
+        ).fetchall()
+        return {
+            row["vendor_id"]: {
+                "changes": row["changes"],
+                "operations": row["operations"],
+                "last_change_at": row["last_change_at"].isoformat(),
+                "sources": sorted(row["sources"]),
+            }
+            for row in rows
+        }
+
     def vendor_changes_for_operation(
         self, vendor_id: str, operation_id: str, *, limit: int | None = None, offset: int = 0
     ) -> list[VendorChange]:
@@ -1240,6 +1333,7 @@ class GraphStore:
         "response_fields_touched_count", "strategy", "tier", "routing_row", "input_tokens",
         "output_tokens", "cache_read_input_tokens", "wall_ms", "static_verify_passed",
         "static_verify_error_class", "ci_result", "terminal_status", "abandon_reason",
+        "abandon_reason_code",
         "pr_number", "pr_merged", "pr_merged_at", "human_edits_before_merge",
     )
 
@@ -1307,21 +1401,30 @@ class GraphStore:
         return [dict(row) for row in rows]
 
     def migration_outcome_abandon_reasons_by_kind(self) -> list[dict]:
-        """`abandon_reason`, tallied per (`change_kind`, `tier`), over abandoned attempts only.
+        """`abandon_reason_code`, tallied per (`change_kind`, `tier`), over abandoned attempts
+        only.
 
-        `abandon_reason` is free text written by the abandoning node (`state.get("diagnostics")`
-        or exception text) rather than a coded vocabulary, so this reports whatever distinct
-        strings actually occurred -- a closed set *of what was observed*, not a promise the
-        column itself is bounded. `remediate-stage.md` requires `abandon_reason` non-null on an
-        abandoned run; a null here is a defect in the writer, not an expected case, and is
-        reported as `None` rather than silently folded into another bucket.
+        Groups on the closed vocabulary `sync.remediate.state.AbandonReasonCode` declares, not
+        on `abandon_reason`'s free text (B128): two runs that abandoned for the same reason
+        group together here even when their prose reads differently, which grouping on the
+        prose could never do -- "how often did tier 2 abandon because the compiler never
+        recovered" becomes `abandon_reason_code = 'static_verify_exhausted'` rather than a
+        substring match. `abandon_reason` stays free text and stays on the row
+        (`GraphStore.migration_outcomes`); this aggregate is not where it is deleted.
+
+        `remediate-stage.md` requires `abandon_reason` non-null on an abandoned run, and
+        `make_abandon` writes `abandon_reason_code` beside it on every abandonment (falling
+        back to `'unclassified'` rather than guessing), so a null code here is a row recorded
+        before this column existed, not an expected case -- reported as `None` rather than
+        folded into `'unclassified'`, which is a real member of the vocabulary and a different
+        fact.
         """
         rows = self._connect().execute(
             """
-            SELECT change_kind, tier, abandon_reason, count(*) AS n
+            SELECT change_kind, tier, abandon_reason_code, count(*) AS n
               FROM migration_outcome
              WHERE NOT is_rehearsal AND terminal_status = 'abandoned'
-             GROUP BY change_kind, tier, abandon_reason
+             GROUP BY change_kind, tier, abandon_reason_code
              ORDER BY change_kind, tier
             """
         ).fetchall()

@@ -232,9 +232,13 @@ def index_sources(
 ) -> list[CallSite]:
     """Index a tree into `store` and return its call sites carrying the ids the store assigned.
 
-    Truncates first. The detector reads every call site the graph holds, so a row left over from
-    another tree is a call site nobody labelled -- it emits findings that land in the unlabelled
-    bucket and quietly widens the exclusion count. `cli.py` truncates for the same reason.
+    Empties the database first. The detector reads every call site the graph holds, so a row left
+    over from another tree is a call site nobody labelled -- it emits findings that land in the
+    unlabelled bucket and quietly widens the exclusion count.
+
+    The whole database, unlike a scan, which clears only what it rebuilds. Scoring runs against a
+    scratch database `cli.score` refuses to let anyone point at the corpus, so here there is
+    nothing durable to spare and a narrower clear would be a weaker guarantee.
 
     `repo.repo_id` is part of a call site's identity and `repo.local_path` is not, so the mutated
     tree may be written anywhere as long as it keeps the repository id the original was indexed

@@ -262,11 +262,11 @@ export function ScopeTrail() {
     <nav aria-label="Scope" className="flex min-w-0 items-center gap-field">
       <Link
         to="/"
-        aria-label="Fleet"
+        aria-label="Repositories"
         className="flex shrink-0 items-center gap-field rounded-control px-field text-body text-foreground hover:bg-surface-subtle"
       >
         <Radar aria-hidden="true" className="size-4" />
-        <span>Fleet</span>
+        <span>Repositories</span>
       </Link>
 
       <Divider />

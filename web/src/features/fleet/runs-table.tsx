@@ -13,7 +13,7 @@
 import { Link } from "react-router"
 
 import { DEFAULT_LIMIT } from "@/api/client"
-import { useRuns } from "@/api/queries"
+import { hasLiveRun, useRuns } from "@/api/queries"
 import type { RunDisposition, RunRow, RunsPage } from "@/api/types"
 import {
   Table,
@@ -23,6 +23,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/data-table"
+import { FetchedAt } from "@/components/fetched-at"
 import { MetricPanel } from "@/components/metric-panel"
 import { EmptyState, ErrorState, LoadingState } from "@/components/states"
 import { Formatted } from "@/components/status"
@@ -187,6 +188,17 @@ export function RunsCard() {
               )}
             </>
           )}
+
+          {/* The console's own fetch time, which is a different claim from the run liveness the
+              paragraph below refuses to make: this says when we last asked, not whether anything
+              is alive. Without it the table cannot answer "when was this true?", and a reviewer
+              who cannot answer that will either distrust fresh rows or act on stale ones. */}
+          <FetchedAt
+            at={query.dataUpdatedAt}
+            polling={hasLiveRun(query.data)}
+            idleReason="Every run here has reached an outcome, so nothing is being polled."
+            className="mt-section"
+          />
 
           <p className="max-w-prose border-t border-line pt-section text-body text-muted-foreground">
             There is no heartbeat and no process registry — the only evidence a run exists

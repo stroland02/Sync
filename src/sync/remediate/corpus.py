@@ -215,6 +215,7 @@ class CorpusRecorder:
         *,
         terminal_status: str,
         abandon_reason: str | None = None,
+        abandon_reason_code: str | None = None,
         pr_number: int | None = None,
     ) -> bool:
         """`pr_number` is passed by the one node that opened a pull request, and by nothing else.
@@ -224,6 +225,10 @@ class CorpusRecorder:
         null because no call site gives it one, rather than because two writes happened to run
         in a helpful order. A merge recorded against every row of a run would inflate the
         numerator of the merge rate silently, which is worse than being wrong loudly.
+
+        `abandon_reason_code` is passed only by `make_abandon`, same as `abandon_reason` beside
+        it (B128): the closed vocabulary declared in `sync.remediate.state`, not a second
+        classification done here.
         """
         self.attempt_count += 1
         try:
@@ -233,6 +238,7 @@ class CorpusRecorder:
                 terminal_status,
                 abandon_reason,
                 pr_number,
+                abandon_reason_code=abandon_reason_code,
                 is_rehearsal=self._is_rehearsal,
             )
             if ok:
@@ -289,7 +295,8 @@ def make_recorder(store: CorpusWriter, *, is_rehearsal: bool = False) -> CorpusR
 
 def _record(
     store, state, terminal_status: str, abandon_reason: str | None,
-    pr_number: int | None = None, *, is_rehearsal: bool = False,
+    pr_number: int | None = None, *,
+    abandon_reason_code: str | None = None, is_rehearsal: bool = False,
 ) -> bool:
     # No lookup guard here: `make_recorder` established that this store can write before any
     # node ran. Re-checking per write would be a check that cannot be loud, since the caller
@@ -352,6 +359,7 @@ def _record(
             ci_result=state.get("attempt_ci_result"),
             terminal_status=terminal_status,
             abandon_reason=abandon_reason,
+            abandon_reason_code=abandon_reason_code,
             # The join a merge delivery arrives on. Null on every attempt but the one that
             # opened the pull request, which is the grain this table declares.
             pr_number=pr_number,

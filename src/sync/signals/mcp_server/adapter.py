@@ -82,6 +82,21 @@ adding the member needs no migration."""
 class McpServerAdapter:
     """Turns two captures of one server's `tools/list` into the changes that break a caller."""
 
+    unbindable_reason = (
+        "an MCP tool name arrives as a runtime string rather than an SDK method chain, so a "
+        "static call site addresses no tool and nothing binds"
+    )
+    """Why no call site binds to a watched server, stated where a run's report can read it.
+
+    A constant rather than a derived answer, because this one is a property of the protocol and
+    not of what a deployment happened to stage: see `operation_for_symbol`. Nothing an operator
+    configures retires it, which is the difference from `GeneratedSpecAdapter`, where the same
+    field is a property and staging a checkout answers `None`.
+
+    Read through `getattr` at the boundary the way `sdk_bindings` is, so `VendorAdapter` does not
+    widen for it.
+    """
+
     def __init__(self, snapshot_dir: Path, server_id: str) -> None:
         self._snapshot_dir = Path(snapshot_dir)
         self.vendor_id = VENDOR_ID_PREFIX + server_id

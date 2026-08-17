@@ -14,6 +14,18 @@
 
 </div>
 
+<div align="center">
+
+<img src="docs/console-mock/demo.gif" width="92%" alt="A tour of the Sync operator console: the fleet, a call-site drawer, the command palette, detector attribution, codebase, API service, signals, the binding surface, a finding, the solution workflow, a pull request and the adapter settings" />
+
+**The operator console — every screen in one pass.** Fleet → drawer → palette → detectors →
+codebase → vendor → signals → binding surface → finding → workflow → pull request → settings.
+
+*This is the design mock, not shipped code.* [What is built today](#the-operator-console) ·
+[the mock](docs/console-mock/) · [the plan that builds it](docs/superpowers/plans/2026-08-08-console-mock-to-build.md)
+
+</div>
+
 ```
 vendor ships a breaking change  →  Sync finds every call site that depends on it
                                 →  patches them
@@ -91,6 +103,41 @@ What *is* measured is measured properly — see [Quality gates](#quality-gates).
 Sync's position is that competing tools present a black box and a result, and ask a reviewer to
 trust it. The console exists to show the system's reasoning instead — nine levels, from the fleet
 down to a single pull request and its evidence.
+
+### Where it is going — the design mock
+
+A ten-screen mock, drawn in HTML/CSS/JS and committed so the build has a target it can be measured
+against rather than argued about from memory. **None of it is built yet.** The tour at the top of
+this page is this mock; the four screens below are stills from it.
+
+| | |
+|---|---|
+| <img src="docs/console-mock/screens/05-binding-surface.png" alt="The binding surface in the mock" /> | <img src="docs/console-mock/screens/07-workflow.png" alt="The solution workflow in the mock" /> |
+| **Binding surface** — every call site under one operation, each row carrying its own rung, over a shared directory prefix. | **Solution workflow** — eight nodes beside an activity timeline assembled at read time from four sources. |
+| <img src="docs/console-mock/screens/09-detectors.png" alt="Detector attribution in the mock" /> | <img src="docs/console-mock/screens/08-pull-request.png" alt="The pull request level in the mock" /> |
+| **Detector attribution** — every detector's open findings broken down by the rung behind them, with no colour assigned to any rung. | **Pull request** — the patch beside the evidence bundle, and a panel naming what the bundle does *not* contain. |
+
+| | |
+|---|---|
+| **Watch it** | [`docs/console-mock/demo.mp4`](docs/console-mock/demo.mp4) — 40s, 1440×900, no audio |
+| **Click it** | [the live mock](https://claude.ai/code/artifact/f321ac84-32d5-4181-a680-8bf2df671247) |
+| **Read it** | [`docs/console-mock/`](docs/console-mock/) — the source, twelve stills, and which of its facts are fixtures |
+| **Build it** | [`plans/2026-08-08-console-mock-to-build.md`](docs/superpowers/plans/2026-08-08-console-mock-to-build.md) — six tasks across M7, M12 and M4 |
+
+Two things make it worth committing rather than linking. It is drawn on **our own token contract** —
+its literal OKLCH values are the ones `web/src/index.css` already declares, so a colour in it that
+is *new* is conspicuous rather than invisible. And it applies the honesty discipline rather than
+decorating it: no composite score, no health figure, no green dot, no liveness pulse, and every
+status colour ships with a glyph and a word so the colour is never load-bearing.
+
+It is still the lowest authority in the room. Where it disagrees with the specification's hierarchy,
+with `DESIGN.md`, or with a protected sentence, the mock loses — and the plan says so in as many
+words.
+
+### What is running today
+
+Not the above. These are captures of the console as it actually is, at commit `25a4a10`, 1920×889,
+against `scripts/seed_console.py`'s fixture.
 
 <div align="center">
 
@@ -411,36 +458,65 @@ These are enforced rather than encouraged, because each one failed silently at l
 
 ## Quick start
 
-**Requirements:** Python 3.12, [uv](https://docs.astral.sh/uv/), Docker, Node (for `tsc` via
-`npx`), and the `gh` CLI authenticated if you want pull requests opened.
+### What you need before the first command
+
+- **Python 3.12** and [uv](https://docs.astral.sh/uv/). The interpreter is `python`.
+- **Docker**, for the Postgres 16 that holds the graph. It is published on port 5433.
+- **Node 22.22 or later**, for `npm` in `web/` and for `tsc` through `npx`. The floor is
+  react-router's own, and CI pins that version.
+- **The [`gh` CLI](https://cli.github.com/), authenticated before the *first run* rather than
+  before the first pull request.** Sync downloads a vendor's OpenAPI specification with
+  `gh api` (`src/sync/signals/stripe/adapter.py:57`) and `scripts/bootstrap_tools.sh` fetches
+  the pinned oasdiff release the same way, so an unauthenticated `gh` stops a run at its first
+  step and stops the checkout before that.
+- **The [`claude` CLI](https://claude.com/claude-code), authenticated.** The last tier of the
+  cascade is the Claude Agent SDK (`src/sync/remediate/agent_patch.py:56`), which runs that
+  binary as a subprocess. A finding a codemod resolves never reaches it; anything else abandons
+  without it.
+
+### Install the checkout
 
 ```bash
 git clone https://github.com/stroland02/sync.git
 cd sync
 
-uv sync                       # install dependencies
-docker compose up -d          # Postgres 16, on port 5433
-bash scripts/bootstrap_tools.sh   # the pinned oasdiff; once per checkout
+uv sync                            # install dependencies
+docker compose up -d               # Postgres 16, on port 5433
+bash scripts/bootstrap_tools.sh    # the pinned oasdiff; once per checkout
 
-uv run pytest                 # ~3400 tests, four to eleven minutes
+uv run pytest                      # ~3400 tests, four to eleven minutes
 ```
 
-Detect and remediate vendor changes against a checkout:
+`bootstrap_tools.sh` picks the release asset for your own platform and prints the version
+`.oasdiff-version` pins. It refuses rather than guesses on a platform oasdiff publishes no build
+for, and it never overwrites a build a checkout already holds.
+
+### Detect and remediate vendor changes in a repository
 
 ```bash
 uv run sync run \
   --vendor stripe \
-  --from v2320 --to v2330 \
-  --repo /path/to/your/checkout
+  --from-version v2320 --to-version v2330 \
+  --repo https://github.com/your-org/your-repo
 ```
 
-Run the operator console:
+**`--repo` takes a git remote URL, not a checkout on disk.** Sync clones it itself, and it
+addresses the same repository through `gh api` to read CI and open the pull request — a
+filesystem path carries no owner and name for that call. A path is refused while the arguments
+are read, before anything is downloaded, and the refusal names the URL forms to pass instead.
+
+### Run the operator console
 
 ```bash
+uv run python scripts/seed_console.py             # the schema, plus a fixture to look at
 SYNC_API_RELOAD=true uv run python -m sync.api    # :8787
-uv run python scripts/seed_console.py             # a fixture to look at
-cd web && npm run dev                             # :5173
+cd web && npm install && npm run dev              # :5173
 ```
+
+Seed before starting the API. Every console route is a read and none of them creates a table,
+so against an empty database the API refuses to start and names the command that applies the
+schema. Both processes read `SYNC_GRAPH_DSN`; unset, it resolves to the same `docker compose`
+database `--dsn` defaults to on every subcommand below.
 
 Other entry points:
 
