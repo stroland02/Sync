@@ -10,11 +10,17 @@
  * registry disappears from here in the same edit, not as a follow-up.
  *
  * A route whose `params` is non-empty needs a subject this palette cannot supply — a vendor
- * id, a repository id, a finding id — so it is left out rather than listed disabled. Wiring
- * the palette to accept a subject and jump straight to, say, a named vendor is a real feature
- * and a later slice; a disabled row that never becomes enabled is not a placeholder for it,
- * it is dead weight in the list. `AppFrame`'s sidebar makes the same call for the same reason,
- * and shows `reachedFrom` beside the destination rather than dropping it.
+ * id, a repository id, a finding id. **It is listed anyway, as a place to look one up.** This
+ * file used to filter those seven of nine routes out, which reads as honesty and is not: an
+ * operator who opens the console's own list of destinations and finds two of them learns that
+ * the console has two screens. Dropping the row hides a destination and linking it produces
+ * `/findings//workflow`; the row that names where to pick a subject is the only answer that is
+ * neither, and it is the rule the mock's footer states. `AppFrame`'s sidebar already made this
+ * call, and shows `reachedFrom` beside the destination for the same reason.
+ *
+ * Each row carries its route pattern, so the list doubles as the map of what exists. Wiring the
+ * palette to accept a subject and jump straight to a named vendor is a real feature and a later
+ * slice; until it exists, `reachedFrom` is what a reader can act on.
  *
  * **The open state lives here rather than in the chassis, and the trigger reads it through a
  * context.** The palette was a keybind with nothing on screen naming it — an affordance nobody can
@@ -36,10 +42,55 @@ import {
   CommandItem,
   CommandList,
 } from "@/components/ui/command"
-import { GRAPH_LEVELS, ROUTES } from "@/lib/routes"
+import { GRAPH_LEVELS, ROUTES, type GraphLevel, type RouteEntry } from "@/lib/routes"
 
 /** What the palette calls itself, in one place: the dialog's placeholder and the trigger agree. */
 const PALETTE_LABEL = "Jump to a destination"
+
+export interface PaletteRow {
+  path: string
+  /** The registry's path, shown to the reader. Equal to `path`; named for what it is on screen. */
+  pattern: string
+  label: string
+  question: string
+  /**
+   * `null` on a destination this palette can navigate to. Otherwise the operator's words for
+   * where a subject is picked — the row is listed and cannot be followed.
+   */
+  lookUpFrom: string | null
+}
+
+export interface PaletteGroup {
+  level: GraphLevel
+  rows: readonly PaletteRow[]
+}
+
+/**
+ * The registry, grouped for the list.
+ *
+ * Pure over its arguments so the rule it encodes is testable as a derivation rather than by
+ * driving a dialog — `.claude/rules/console-dev-loop.md` bounds the frontend suite to exactly
+ * that. A level with no route under it is dropped, so an unbuilt level costs nothing here.
+ */
+export function paletteGroups(
+  routes: readonly RouteEntry[],
+  levels: readonly GraphLevel[]
+): readonly PaletteGroup[] {
+  return levels
+    .map((level) => ({
+      level,
+      rows: routes
+        .filter((route) => route.level === level)
+        .map((route) => ({
+          path: route.path,
+          pattern: route.path,
+          label: route.label,
+          question: route.question,
+          lookUpFrom: route.params.length === 0 ? null : route.reachedFrom,
+        })),
+    }))
+    .filter((group) => group.rows.length > 0)
+}
 
 const OpenPalette = createContext<(() => void) | null>(null)
 
@@ -112,26 +163,30 @@ export function CommandPaletteProvider({ children }: { children: ReactNode }) {
           <CommandInput placeholder={`${PALETTE_LABEL}…`} />
           <CommandList>
             <CommandEmpty>No declared route matches.</CommandEmpty>
-            {GRAPH_LEVELS.map((level) => {
-              const routesAtLevel = ROUTES.filter(
-                (route) => route.level === level && route.params.length === 0
-              )
-              if (routesAtLevel.length === 0) return null
-
-              return (
-                <CommandGroup key={level} heading={level}>
-                  {routesAtLevel.map((route) => (
-                    <CommandItem
-                      key={route.path}
-                      value={`${route.label} ${route.question}`}
-                      onSelect={() => select(route.path)}
-                    >
-                      <span>{route.label}</span>
-                    </CommandItem>
-                  ))}
-                </CommandGroup>
-              )
-            })}
+            {paletteGroups(ROUTES, GRAPH_LEVELS).map((group) => (
+              <CommandGroup key={group.level} heading={group.level}>
+                {group.rows.map((row) => (
+                  <CommandItem
+                    key={row.path}
+                    value={`${row.label} ${row.question} ${row.pattern}`}
+                    disabled={row.lookUpFrom !== null}
+                    onSelect={row.lookUpFrom === null ? () => select(row.path) : undefined}
+                  >
+                    <span className="flex w-full items-baseline justify-between gap-row">
+                      <span className="flex items-baseline gap-row">
+                        <span>{row.label}</span>
+                        {row.lookUpFrom !== null && (
+                          <span className="text-meta text-ink-muted">
+                            reached from {row.lookUpFrom}
+                          </span>
+                        )}
+                      </span>
+                      <span className="font-mono text-meta text-ink-muted">{row.pattern}</span>
+                    </span>
+                  </CommandItem>
+                ))}
+              </CommandGroup>
+            ))}
           </CommandList>
         </Command>
       </CommandDialog>

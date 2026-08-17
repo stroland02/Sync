@@ -214,9 +214,17 @@ questions that block. The owner can reverse any of them at the cost of one fix r
   it is the honest behaviour for six of the nine routes.
 - Each row carries its route pattern, so the palette doubles as the map of what exists.
 
-- [ ] Step 1: Failing vitest — a subject-taking route renders as a lookup and not a dead link. RED.
-- [ ] Step 2: Implement; `ROUTES` stays the single source, so a new route appears here for free.
-- [ ] Step 3: Gate; WORKLOG; commit.
+- [x] Step 1: Failing vitest — a subject-taking route renders as a lookup and not a dead link. RED.
+- [x] Step 2: Implement; `ROUTES` stays the single source, so a new route appears here for free.
+- [x] Step 3: Gate; WORKLOG; commit.
+
+**Landed as `M7-W227`.** The palette listed two of nine destinations, not seven of nine as this task
+assumed: it filtered on `params.length === 0`, so every subject-taking route was dropped rather than
+rendered disabled. The ruling taken, against `command-palette.tsx`'s own docstring arguing the
+opposite: list it. That docstring's case — a disabled row that never becomes enabled is dead weight
+— holds for a row that says nothing, and the row now says `reachedFrom` and the route pattern, which
+is what `AppFrame`'s sidebar already decided for the same registry field. Reversing this costs one
+edit to `paletteGroups`.
 
 ---
 
