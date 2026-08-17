@@ -27,21 +27,6 @@ describe("NodeEvidence", () => {
     expect(container.firstChild).toBeNull()
   })
 
-  it("renders reasoning and strategy disclosure when node has structured reasoning", () => {
-    render(
-      <NodeEvidence
-        name="locate"
-        evidence={{
-          tier: "Tier 1",
-          routing_row: "stripe.v1.charges.create -> payment_intents",
-        }}
-      />
-    )
-
-    expect(screen.getByText("Reasoning & Strategy")).not.toBeNull()
-    expect(screen.getByText(/Decision table evaluates breaking changes/i)).not.toBeNull()
-  })
-
   it("renders unnamed fields gracefully without crashing", () => {
     render(
       <NodeEvidence

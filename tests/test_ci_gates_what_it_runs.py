@@ -18,6 +18,13 @@ is what the nightly did. Coverage still gates nothing, and nothing here asks it 
 `--cov-fail-under` is passed anywhere, so a number cannot fail a build. What may not be discarded
 is pytest's own verdict.
 
+**A run that died is not a result.** A crashed xdist worker prints `F` against every test it
+never got to, so a job can report a tally that counts absences as failures. B152 measured three
+runs of one tree reporting thirty, sixty and one failure; two had a dead worker in them. CI has
+the same blind spot the local gate had, and the answer is the same one: capture the output and
+ask `scripts/gate_verdict.py` whether the verdict can be believed, separately from whether the
+suite passed.
+
 **The nightly has to gate something.** A schedule whose every job is either excluded by an `if`
 or unable to fail is a green tick that asserts nothing, which is strictly worse than a red one --
 a red build is information.
@@ -121,6 +128,24 @@ def test_no_pytest_step_discards_its_exit_code():
                 "and every floor above 0 lets it through; this is the shape that made a hundred "
                 "nightlies green over a red suite"
             )
+            # An adversarial review of the commit that wrote the three assertions above mutated
+            # this workflow three ways and watched all four tests in this file stay green:
+            # `continue-on-error` on the step, `continue-on-error` on the job, and a script ending
+            # `exit 0`. Each reproduces the nightly defect exactly, and the first is the likely
+            # one -- it is GitHub's own idiom for "record but do not gate", which is what the old
+            # step's name claimed to be doing while it swallowed pytest's verdict too.
+            assert step.get("continue-on-error") is not True, (
+                f"{label} carries `continue-on-error`, so the job stays green over a failing "
+                "suite. Coverage not gating is a claim about a number; this discards the verdict"
+            )
+            assert not script.rstrip().endswith("exit 0"), (
+                f"{label} ends `exit 0`, which discards whatever pytest reported. `set +e` and an "
+                "unconditional success are the same defect as `|| true` written across two lines"
+            )
+        assert job.get("continue-on-error") is not True, (
+            f"job {name!r} runs pytest under `continue-on-error`, so no step in it can fail the "
+            "workflow. A job that cannot go red is not a gate, whatever its steps assert"
+        )
 
 
 def test_the_nightly_gates_the_suite():
@@ -136,3 +161,97 @@ def test_the_nightly_gates_the_suite():
         "without executing the suite. A green tick that asserts nothing is worse than a red "
         "build, because a red build is information"
     )
+
+
+VERDICT_CHECK = "scripts/gate_verdict.py"
+
+
+def _verdict_steps(job: dict) -> list[tuple[int, dict]]:
+    return [
+        (position, step)
+        for position, step in enumerate(job.get("steps", []))
+        if VERDICT_CHECK in _script(step)
+    ]
+
+
+def test_every_pytest_step_captures_its_output():
+    """A verdict cannot be read from output nobody kept.
+
+    `tee` rather than a plain redirect, because the run's own log is what a person reads while it
+    is happening, and a redirect makes a job that takes twenty minutes look hung.
+    """
+    for name, job in _jobs_running_pytest():
+        for _, step in _pytest_steps(job):
+            script = _script(step)
+            assert "tee" in script, (
+                f"step {step.get('name')!r} of job {name!r} runs pytest without capturing its "
+                "output, so no crashed-worker check can read it"
+            )
+
+
+def test_capturing_output_does_not_swallow_the_exit_code():
+    """`cmd | tee file` reports tee's status, not pytest's, unless pipefail is set.
+
+    This is the same defect as the nightly's discarded exit code, arriving by a different route:
+    the step would report success over a failing suite because the last process in the pipe
+    succeeded. Adding the capture without this line would have reintroduced exactly what
+    `test_no_pytest_step_discards_its_exit_code` exists to prevent.
+    """
+    for name, job in _jobs_running_pytest():
+        for _, step in _pytest_steps(job):
+            script = _script(step)
+            if "tee" not in script:
+                continue
+            assert "pipefail" in script, (
+                f"step {step.get('name')!r} of job {name!r} pipes pytest into tee without "
+                "`set -o pipefail`, so a failing suite reports as a passing step"
+            )
+
+
+def test_every_job_that_runs_pytest_checks_the_run_is_trustworthy():
+    for name, job in _jobs_running_pytest():
+        assert _verdict_steps(job), (
+            f"job {name!r} runs pytest but never runs {VERDICT_CHECK}, so a crashed worker's "
+            "phantom failures are indistinguishable from real ones"
+        )
+
+
+def test_the_trustworthiness_check_runs_after_the_suite_it_judges():
+    for name, job in _jobs_running_pytest():
+        last_pytest = max(position for position, _ in _pytest_steps(job))
+        assert any(position > last_pytest for position, _ in _verdict_steps(job)), (
+            f"job {name!r} runs {VERDICT_CHECK} before the suite it is supposed to judge"
+        )
+
+
+def test_the_trustworthiness_check_runs_even_when_the_suite_fails():
+    """The case it exists for. A failing suite is exactly when a reader needs to know whether the
+    tally can be believed, and a step with no condition is skipped once an earlier step fails."""
+    for name, job in _jobs_running_pytest():
+        for _, step in _verdict_steps(job):
+            assert "always()" in str(step.get("if", "")), (
+                f"step {step.get('name')!r} of job {name!r} runs {VERDICT_CHECK} without "
+                "`if: always()`, so it is skipped in the one case it exists for"
+            )
+
+
+def test_no_step_carries_a_literal_backslash_n_in_its_script():
+    """A two-character `\n` where a line continuation was meant.
+
+    YAML parses it happily — it is an ordinary character in a block scalar — and every
+    substring assertion in this file passed over it, because the words they look for were all
+    still present. `bash` would have met `\n` as a command and the step would have failed on
+    the runner for a reason with nothing to do with the suite.
+
+    Caught by hand in `cat -A` output while wiring the verdict check, which is not a method that
+    scales. Written down as a check so the next one is caught by the gate instead.
+    """
+    literal = chr(92) + "n"
+    offenders = [
+        f"{name}: {step.get('name')!r}"
+        for name, job in _workflow()["jobs"].items()
+        for step in job.get("steps", [])
+        if literal in _script(step)
+    ]
+
+    assert not offenders, "steps whose script carries a literal backslash-n: " + ", ".join(offenders)
