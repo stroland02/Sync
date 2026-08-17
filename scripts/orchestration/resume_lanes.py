@@ -36,6 +36,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import os
 import shutil
 import subprocess
@@ -139,6 +140,20 @@ def live_terminals(cli: str) -> dict[str, int]:
 # this is history rather than a live state -- without the bound, one exhausted afternoon would hold
 # a healthy lane for as long as the banner stayed in the buffer.
 BUDGET_NOTICE_WITHIN_LAST = 6
+
+
+def reset_seconds(notice: str) -> int | None:
+    """How long the agent said its outage would last, in seconds, or `None` if it did not say.
+
+    Reads the `Resets in 2h3m21s` / `resets 10:20am` shapes the agent CLIs print. Only the
+    duration form is parseable into a deadline; a wall-clock time would need the machine's timezone
+    to mean anything, and guessing that is how a hold ends an hour early.
+    """
+    match = re.search(r"resets?\s+in\s+(?:(\d+)h)?\s*(?:(\d+)m)?\s*(?:(\d+)s)?", notice, re.I)
+    if not match or not any(match.groups()):
+        return None
+    hours, minutes, seconds = (int(g) if g else 0 for g in match.groups())
+    return hours * 3600 + minutes * 60 + seconds
 
 
 def budget_held(cli: str, handle: str) -> str | None:
@@ -295,10 +310,22 @@ def main() -> int:
                 # is reported alongside how long ago that was. Printing a frozen "resets in 2h" an
                 # hour later reads as a live figure and overstates the outage by exactly the time
                 # already served.
-                quiet = int((int(time.time() * 1000) - terminals[handle]) / 60000)
-                print(f"HELD    {label}: out of budget, not retried "
-                      f"[{held}] -- captured {quiet} min ago")
-                continue
+                quiet_s = int((int(time.time() * 1000) - terminals[handle]) / 1000)
+                window = reset_seconds(held)
+
+                # **A hold must expire.** An exhausted agent produces no output, so its banner never
+                # scrolls out of the tail -- without a deadline the lane stays held forever, which
+                # is the outage made permanent by the very thing meant to survive it. When the
+                # agent's own stated window has elapsed since it printed the notice, stop believing
+                # the banner and try.
+                if window is not None and quiet_s > window:
+                    print(f"RESUME  {label}: stated window of {window // 60} min elapsed "
+                          f"({quiet_s // 60} min since the notice); retrying")
+                else:
+                    remaining = "unknown" if window is None else f"{max(0, (window - quiet_s)) // 60} min"
+                    print(f"HELD    {label}: out of budget, not retried "
+                          f"[{held}] -- captured {quiet_s // 60} min ago, {remaining} left")
+                    continue
 
         # Re-attach to the terminal the lane already owns when we still know it, so a lane keeps its
         # worktree and its conversation. Without a handle there is nothing to re-attach to, and
