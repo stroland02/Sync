@@ -663,8 +663,18 @@ def detector_accountability(store: GraphStore, *, repo_id: str | None = None) ->
         }
         for _, entry in sorted(by_detector.items())
     ]
+
+    # -- Grain: One count per distinct open finding across all detectors, broken down by binding_rung.
+    # Open findings are counted once each across the whole scope.
+    # Every known rung ('static', 'resolved', 'observed', 'unresolved', 'unattributed') is explicitly present in the tally.
+    known_rungs = ("static", "resolved", "observed", "unresolved", "unattributed")
+    rung_tally: dict[str, int] = {rung: 0 for rung in known_rungs}
+    for finding in findings:
+        rung_tally[finding.binding_rung] = rung_tally.get(finding.binding_rung, 0) + 1
+
     return {
         "repo_id": repo_id,
         "detectors": detectors,
+        "by_rung": rung_tally,
         "total_open_findings": len(findings),
     }
