@@ -50,6 +50,15 @@ recorded here so the next session does not re-litigate them.
 3. **Remotion is deferred.** No new animation dependency in this effort. Motion stays within the
    sanctioned mechanisms in `web/src/lib/motion.ts` and CSS/SVG. Remotion is evaluated as its own
    milestone once static parity is reached, if at all.
+4. **Open-source code is adopted openly, never disguised (owner instruction, 2026-08-17).** Where
+   an open-source project has already solved a component this effort needs, copy its code rather
+   than hand-rolling — under the pattern the Supabase carve-out established: the source is
+   permissively licensed (MIT/Apache-2.0), the license is checked before the first line is
+   copied, the code is vendored or adapted with attribution in `web/NOTICE`, and adaptation means
+   fitting our token contract and honesty rules — not obscuring origin. A slight alteration does
+   not discharge a license obligation; attribution does, and costs one NOTICE line. Sources whose
+   license cannot be verified are not copied from. `interface-originality.md` still governs
+   identity: no wordmarks, no marketing copy, no claims our data cannot support.
 
 ## Authorities
 
