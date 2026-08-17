@@ -55,8 +55,12 @@ from typing import Any, Callable, Mapping
 
 import yaml
 
-from sync.core.protocols import VendorAdapter
-from sync.signals.generated.adapter import DEFAULT_GENERATOR, GeneratedSpecAdapter, http_fetch
+from sync.signals.generated.adapter import (
+    DEFAULT_GENERATOR,
+    CorrelatingGeneratedSpecAdapter,
+    GeneratedSpecAdapter,
+    http_fetch,
+)
 from sync.signals.generated.manifest import SpecSource, parse_manifest
 from sync.signals.mcp_server.adapter import VENDOR_ID_PREFIX, McpServerAdapter
 from sync.signals.stripe.adapter import StripeAdapter, fetch_sdk_spec, fetch_spec
@@ -351,9 +355,10 @@ def _prepare_generated(vendor: GeneratedVendor, context: VendorContext) -> Prepa
     sdk_source_path = sdk_source if sdk_source.exists() else None
     generator_file = context.cache_dir / "sdk_generator.txt"
     generator = generator_file.read_text(encoding="utf-8").strip() if generator_file.exists() else DEFAULT_GENERATOR
+    adapter_cls = CorrelatingGeneratedSpecAdapter if sdk_source_path is not None else GeneratedSpecAdapter
 
     return PreparedVendor(
-        adapter=GeneratedSpecAdapter(
+        adapter=adapter_cls(
             vendor_id=vendor.vendor_id,
             sources=sources,
             fetch=fetch_specification,
@@ -366,21 +371,21 @@ def _prepare_generated(vendor: GeneratedVendor, context: VendorContext) -> Prepa
     )
 
 
-def _load_generated(vendor: GeneratedVendor, context: VendorContext) -> VendorAdapter:
+def _load_generated(vendor: GeneratedVendor, context: VendorContext) -> GeneratedSpecAdapter:
     """The same adapter with nothing read, because `load_vendor` promises to reach no network.
 
     It answers `fetch_changes` with nothing and says so in the log, which is the adapter's own
-    designed behaviour for a version it has no manifest for. That is the honest offline answer:
-    this vendor's changes cannot be known without reading its manifests, and `sync ingest` -- the
-    caller `load_vendor` exists for -- wants a request correlator, which this adapter does not
-    implement and is refused for at the entry point.
+    designed behaviour for a version it has no manifest for. When an SDK source checkout is staged,
+    it returns `CorrelatingGeneratedSpecAdapter` which satisfies `RequestCorrelator` and correlates
+    observed HTTP spans against extracted SDK routes.
     """
     sdk_source = context.cache_dir / "sdk_source"
     sdk_source_path = sdk_source if sdk_source.exists() else None
     generator_file = context.cache_dir / "sdk_generator.txt"
     generator = generator_file.read_text(encoding="utf-8").strip() if generator_file.exists() else DEFAULT_GENERATOR
+    adapter_cls = CorrelatingGeneratedSpecAdapter if sdk_source_path is not None else GeneratedSpecAdapter
 
-    return GeneratedSpecAdapter(
+    return adapter_cls(
         vendor_id=vendor.vendor_id,
         sources={},
         fetch=fetch_specification,

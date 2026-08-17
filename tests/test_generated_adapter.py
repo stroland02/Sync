@@ -17,15 +17,20 @@ No test touches the network. The fetch is injected, and what it returns is a com
 from __future__ import annotations
 
 import logging
+import shutil
 from pathlib import Path
 
 import pytest
 
 from sync.core import VendorAdapter
 from sync.signals.generated import STAINLESS_MANIFEST, SpecSource, parse_manifest
-from sync.signals.generated.adapter import GeneratedSpecAdapter
+from sync.signals.generated.adapter import (
+    CorrelatingGeneratedSpecAdapter,
+    GeneratedSpecAdapter,
+)
 
-SPECS = Path(__file__).parent / "fixtures" / "specs"
+FIXTURES = Path(__file__).parent / "fixtures"
+SPECS = FIXTURES / "specs"
 
 MIRROR_BASE = "https://storage.googleapis.com/stainless-sdk-openapi-specs/acme/base.json"
 MIRROR_HEAD = "https://storage.googleapis.com/stainless-sdk-openapi-specs/acme/head.json"
@@ -294,3 +299,46 @@ def test_a_failed_fetch_with_nothing_cached_raises_rather_than_reporting_no_chan
 
     with pytest.raises(RuntimeError):
         list(_adapter(tmp_path, _moved(), fetch=fetch).fetch_changes("v1", "v2"))
+
+
+def test_correlating_generated_spec_adapter_resolves_operation_for_request(tmp_path: Path):
+    sdk_dest = tmp_path / "sdk_source"
+    shutil.copytree(FIXTURES / "sdk_sources" / "anthropic_python", sdk_dest, dirs_exist_ok=True)
+    adapter = CorrelatingGeneratedSpecAdapter(
+        vendor_id="anthropic",
+        sources={},
+        fetch=_CountingFetch({}),
+        cache_dir=tmp_path / "cache",
+        sdk_source=sdk_dest,
+    )
+    assert adapter.uncorrelatable_reason is None
+
+    # Instance route with placeholder
+    op = adapter.operation_for_request("GET", "/v1/models/claude-3-5-sonnet-20241022")
+    assert op is not None
+    assert op.http_method == "get"
+    assert op.path == "/v1/models/{model_id}"
+    assert op.operation_id == "GET /v1/models/{model_id}"
+
+    # Collection route
+    op_list = adapter.operation_for_request("POST", "/v1/messages")
+    assert op_list is not None
+    assert op_list.http_method == "post"
+    assert op_list.path == "/v1/messages"
+
+    # Unknown route returns None
+    assert adapter.operation_for_request("DELETE", "/v1/unknown/resource") is None
+
+
+def test_unsupported_unstaged_generated_adapter_declares_uncorrelatable_reason(tmp_path: Path):
+    adapter = GeneratedSpecAdapter(
+        vendor_id="openai",
+        sources={},
+        fetch=_CountingFetch({}),
+        cache_dir=tmp_path / "cache",
+        sdk_source=None,
+    )
+    assert adapter.uncorrelatable_reason is not None
+    assert "no staged SDK source" in adapter.uncorrelatable_reason
+    assert not hasattr(adapter, "operation_for_request")
+
