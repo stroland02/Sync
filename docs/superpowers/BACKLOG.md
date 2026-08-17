@@ -419,7 +419,7 @@ Code CLI binary to establish the exact discovery order and what a container need
   2. **Option B (Mounted OAuth credentials)**: Host mounts `$CLAUDE_CONFIG_DIR/.credentials.json` into container user's `$HOME/.claude/.credentials.json`. Requires handling container UID permissions and token refresh lifetimes.
   3. **Option C (Credential-injecting forward auth proxy)**: Container runs with dummy credentials or no credentials pointing to a local forward proxy (`HTTPS_PROXY` / `ANTHROPIC_BASE_URL`), and the proxy attaches the real `x-api-key` / `Authorization` header before forwarding upstream. Keeps all secrets strictly outside the sandbox container.
 
-### B165 — a customer's own file writes unfenced text into the patch prompt — Lane A
+### B165 — a customer's own file writes unfenced text into the patch prompt — Lane A — CLOSED
 
 **Found 2026-08-17 auditing the threat model against the tree**
 (`docs/superpowers/reports/2026-08-17-threat-model-against-the-tree.md`). It is the largest open hole
@@ -481,6 +481,22 @@ time and that precedent is the cheaper one to follow.
 
 **Lane A.** `src/sync/remediate/agent_patch.py` assembles the prompt. `src/sync/context/` is in no
 lane in the current table; the fix belongs at the assembly point.
+
+**Closed.** Fixed at the assembly point exactly as scoped -- `src/sync/context/` untouched.
+`context_section` now goes through `fenced_block(REPOSITORY, ...)` beside every other section in
+`build_patch_prompt`. Both tests this entry's evidence bar named landed in
+`tests/test_patch_prompt_injection.py` rather than `test_agent_patch_context.py` -- that file
+already holds the VENDOR/REPOSITORY fenced/unfenced helpers and the identical mutation pattern the
+vendor-path equivalent uses, so the two untrusted-text tests stay in one file instead of splitting
+across two. `test_agent_patch_context.py`'s five existing tests, including
+`test_no_context_is_byte_identical_to_the_prompt_without_the_parameter`, pass unchanged.
+
+Mutation check run as asked: reverted the fix locally, watched both new tests redden (one
+`DID NOT RAISE UntrustedTextRefused`, one plain content assertion), restored it, watched both go
+green again. The seed-time-refusal open question is left open rather than ruled on here -- the
+entry itself says the vendor path's prompt-time precedent is the cheaper one to follow, and that is
+what this fix does; refusing at seed time is a different, larger change to `sync.context.seed` this
+entry did not ask for.
 
 ### B166 — the API has no authentication, and two of its routes write — Lane E
 
