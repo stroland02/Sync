@@ -19,7 +19,7 @@
  * shell owes exactly as much, and those are carried forward against the new tiers.
  */
 
-import { cleanup, fireEvent, render, screen, within } from "@testing-library/react"
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react"
 import { MemoryRouter, useNavigate } from "react-router"
 import { afterEach, describe, expect, it, vi } from "vitest"
 
@@ -577,5 +577,42 @@ describe("the console says whose data this is", () => {
     const note = screen.getByText(/one deployment/i).textContent ?? ""
     expect(note).toMatch(/filtered/i)
     expect(note).toMatch(/not another customer/i)
+  })
+})
+
+describe("focus follows the route", () => {
+  /**
+   * `react-router` does not move focus on navigation, so a keyboard or screen-reader user who
+   * activates a destination stays where they were and the new screen is announced to nobody.
+   * This console`s navigation hierarchy IS the API Dependency Graph, so focus that does not
+   * follow the route makes the hierarchy itself unavailable — the argument
+   * `references/notes/roadmap-frontend-skills.md` made and nothing had acted on.
+   *
+   * The main region takes focus rather than the heading, because the heading is a child of the
+   * routed content and a screen that has not rendered one yet would leave focus nowhere. Its
+   * tabIndex is -1: reachable programmatically, never a stop in the tab order.
+   */
+  it("gives the content region a programmatic focus target", () => {
+    renderAt("/")
+    const main = document.querySelector("main")
+    expect(main).not.toBeNull()
+    expect(main?.getAttribute("tabindex")).toBe("-1")
+  })
+
+  it("moves focus to the content when the route changes, and not on first paint", () => {
+    renderAt("/")
+    // Arriving at a screen is not a navigation: focus stays where the browser put it.
+    expect(document.activeElement).not.toBe(document.querySelector("main"))
+  })
+
+  it("moves focus to the content when the route actually changes", async () => {
+    renderAt("/")
+    expect(document.activeElement).not.toBe(document.querySelector("main"))
+
+    // The Observe rail item is a real link, because its area has a landing that needs no subject.
+    // Clicking it is an in-app navigation rather than a contrived route swap.
+    fireEvent.click(screen.getByRole("link", { name: /observe/i }))
+
+    await waitFor(() => expect(document.activeElement).toBe(document.querySelector("main")))
   })
 })

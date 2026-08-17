@@ -2,7 +2,7 @@
  * The frame every level renders inside: a fixed icon rail, a contextual sidebar, and the content.
  */
 
-import { useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import {
   FileWarning,
   FolderTree,
@@ -313,6 +313,34 @@ function ContextualSidebar({ area, pathname }: { area: AreaEntry; pathname: stri
 
 export function AppFrame() {
   const { pathname } = useLocation()
+  const contentRef = useRef<HTMLElement>(null)
+  const arrivedAt = useRef<string | null>(null)
+
+  /**
+   * Focus follows the route, because `react-router` does not move it and this console's navigation
+   * hierarchy *is* the API Dependency Graph — focus that stays behind makes the hierarchy itself
+   * unavailable to a keyboard or a screen reader, which is the argument
+   * `references/notes/roadmap-frontend-skills.md` made and nothing had acted on.
+   *
+   * The content region takes it rather than the page heading: the heading belongs to the routed
+   * screen, and a screen still loading has not rendered one, which would leave focus nowhere on
+   * exactly the slowest navigations. `tabIndex={-1}` makes it a programmatic target without adding
+   * a stop to the tab order.
+   *
+   * **First paint is not a navigation.** Arriving at a URL directly should leave focus where the
+   * browser put it, so the first pathname is recorded rather than acted on; only a change from it
+   * moves focus.
+   */
+  useEffect(() => {
+    if (arrivedAt.current === null) {
+      arrivedAt.current = pathname
+      return
+    }
+    if (arrivedAt.current === pathname) return
+    arrivedAt.current = pathname
+    contentRef.current?.focus()
+  }, [pathname])
+
   const [picked, setPicked] = useState<{ id: Area; at: string } | null>(null)
   if (picked !== null && picked.at !== pathname) setPicked(null)
 
@@ -339,7 +367,7 @@ export function AppFrame() {
           <ContextualSidebar area={area} pathname={pathname} />
 
           <div className="flex min-w-0 flex-1 flex-col">
-            <main className="flex flex-1 flex-col gap-8 p-frame">
+            <main ref={contentRef} tabIndex={-1} className="flex flex-1 flex-col gap-8 p-frame outline-none">
               <Outlet />
             </main>
           </div>
