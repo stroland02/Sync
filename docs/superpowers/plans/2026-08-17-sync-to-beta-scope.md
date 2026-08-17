@@ -80,7 +80,14 @@ happened.
 
 ## Measured, not asserted: `uv run python scripts/beta_gates.py`
 
-**As of 2026-08-17, 0 of 4 met, 2 cannot be told.** The gates stopped being a coordinator's prose
+**Gate 3 is MET as of 2026-08-17 -- the first to clear, and cleared by measurement rather than by
+assertion.** It took three attempts and the two failures are the interesting part: the first
+signature went stale within forty-four minutes, and the second was invisible because the meter had
+one report path compiled in, which made the gate unclearable by a lane doing exactly what it asked.
+Both were found by the lane being blocked, not by the coordinator, and the meter now names its own
+remedy when it cannot tell.
+
+**1 of 4 met, 1 cannot be told.** The gates stopped being a coordinator's prose
 the moment `CI-W289` landed, and the first thing the tool did was contradict this document.
 
 - **Gate 1 -- NOT MET.** Four real attempts in the corpus, none with a pull request that went green.
@@ -270,6 +277,25 @@ thing against a real repository with a real vendor change and a real CI run.
 
 The decision is still the owner's, for the reasons it always was -- a real pull request on a real
 repository, and real model spend.
+
+## The one console gap that would block a design-partner beta
+
+`reports/2026-08-17-console-beta-stock-take.md`, from the lane that has walked every screen twice
+with a measurement in hand and once through the production runtime.
+
+**Every walk this console has had ran against the seeded fixture. A design partner's first five
+minutes are the opposite state: configured, nothing indexed, every table empty.** That is the one
+screen state nobody has examined, and on a console whose entire argument is that absence is not
+zero, a screen reading zero where it means never-measured fails on the axis the product is sold on.
+
+The claim is carefully limited and worth repeating in its own words: *"I do not claim it does; I
+claim nobody has looked, and it is one seeded database away from being checkable."*
+
+Four smaller gaps sit under it, none blocking: a failed panel offers no way to re-ask, nothing on
+screen names which deployment the console is bound to, route changes do not move focus, and the
+abandoned-run workflow screen is unit-tested but has never been rendered. Two things are argued
+*against*: restyling, because every measured bar is clear and nothing is asking for it, and the
+second drawer, which still has one consumer.
 
 ## The three decisions that are the human's, named now
 
