@@ -625,6 +625,51 @@ test must run the pair together** — the reason this survived is that every exi
 or the other.
 
 
+### B188 — the container comes up empty, and indexing needs a decision nobody has made
+
+**Measured 2026-08-18 by `CI-W370`, against the running container from `CI-W368`.**
+`/api/repositories` returns `{"repo_ids":[]}`. The console renders correctly and has nothing in it,
+which the ship plan names as the biggest UI risk: *a screen with real data and plain styling
+survives the question; a beautifully composed empty state does not.*
+
+**There is no index entry point.** `sync` has `run`, `ingest`, `shapes`, `merge`, `publish`,
+`intake`, `benchmark`, `reconcile`, `rehearse` and `context`. It has no `index`. The pieces exist
+and the composition is already written inside `run` (`cli.py:1095-1101`):
+
+```python
+prepared = prepare_vendor(vendor_id, VendorContext(cache_dir=..., from_version=..., to_version=...))
+adapter  = select_language_adapter(repo, prepared.adapter)   # matches on the repo's own manifest
+sites    = list(adapter.index(repo)) + literal_sites
+store.replace_call_sites(repo.repo_id, sites)
+```
+
+**The blocking fact, and it is why this is a decision rather than a task.** Indexing is
+*per vendor* — a call site is a call to a named vendor's API — so it needs a vendor adapter, and
+building one needs that vendor's specification staged. Measured directly:
+
+- `prepare_vendor` **reaches the network and shells out to `gh`**: `_prepare_stripe` calls
+  `fetch_spec(context.from_version, ...)`, which failed here with
+  `gh: No commit found for the ref None (HTTP 404)` because it takes an explicit spec tag.
+- `load_vendor` is the offline twin and **reaches no network**, by design — but it builds over
+  artifacts something else already staged.
+
+**So a stranger's container cannot index anything as it stands**: it has no `gh`, no GitHub
+credential, and no staged spec. Three routes, and the choice is the owner's or the coordinator's
+because each trades something different:
+
+1. **Bake a pinned vendor spec into the image at build time.** First run is offline and instant;
+   the image carries a vendor snapshot that ages, and the pinned tags become a thing to maintain.
+2. **Fetch at first run over plain HTTPS**, not `gh`. Keeps the image small and current, adds a
+   network dependency to the demo and a failure mode in front of an audience.
+3. **Ship `--repo` indexing without a vendor**, recording call sites the language adapter can bind
+   from the manifest alone. Cheapest, and it is a different and smaller claim than the quickstart
+   makes.
+
+**Closes when** one command indexes a repository the user names and the console shows that
+repository's own call sites. **Not closed by seeding** — the plan is explicit that seed data is a
+fallback and that the console must never show somebody else's data where the user's should be.
+
+
 ### B174 — `extract_credential` cannot tell malformed base64 from non-UTF-8 credentials — Lane E
 
 **Accounted rather than broken, and filed rather than fixed.** `CI-W304` added this clause to
