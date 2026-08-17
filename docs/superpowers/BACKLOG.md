@@ -391,6 +391,72 @@ confidently instead of refusing.
 
 ## Ready
 
+### B169 — nothing exercises a cold clone, so the day-one path is verified as documented rather than as working
+
+`tests/test_day_one_path.py` is twelve tests and every one is structural: that each Quick start
+command resolves against the real argparse surface, that the README names every authenticated tool,
+that the API and CLI agree on a default DSN, that `--repo` refuses a filesystem path. They are worth
+having and they are what `B130` was for. **None of them runs anything from an empty checkout.**
+
+The claim they support is "the documentation describes commands that exist". The claim a design
+partner needs is "a person who follows this gets a working install", and nothing checks it.
+
+**Measured, not theorised.** A fresh `git worktree` of this repository fails about fifty tests purely
+for missing gitignored artifacts: 47 × `FileNotFoundError: oasdiff not found; run
+scripts/bootstrap_tools.sh` and 3 × `RuntimeError: Corpus repository 'furever' is missing at
+<path>/.cache/corpus/furever`. Seeding `tools/` and `.cache/corpus/` from a warm checkout took
+seconds and the same files then ran `237 passed`. Everyone already working here has a warm checkout,
+so the person who hits this is the second engineer or the first design partner.
+
+**Deliberately not a cold-clone CI job.** Fifteen minutes of wall clock gets disabled the first week
+it is flaky. What is wanted is a check on the bootstrap contract: that `bootstrap_tools.sh` and
+`fetch_corpus_repositories.py` produce exactly the artifacts the suite refuses without, and that a
+missing one fails with a message naming the script that supplies it.
+
+**Closes when:** a check fails if the bootstrap contract is broken — proven by removing one artifact
+and watching it go red — and the README's prerequisites are the set that check enforces, so the two
+cannot drift.
+
+### B170 — CI runs `-n auto` while every lane is told to use `-n 4`, and until today CI could not have reported a dead worker
+
+`pyproject.toml:99` is `addopts = "-m 'not e2e' -n auto"` and CI's `Tests` step is a bare
+`uv run pytest`, so the runner inherits `-n auto`. The lane charter tells every lane to use `-n 4`
+because `-n auto` crashed an xdist worker outright on this host.
+
+**This entry does not claim CI is currently broken by it.** The local crashes were starvation on the
+npx resolve lock, fixed by Lane D in `2cf2e62`, and `-n auto` has not been measured on a Linux runner
+since. What is true is that the guidance and the configuration disagree, and that until `CI-W295` the
+trustworthiness check could not have told anyone if a worker had died on a runner — it was reporting
+`no summary line` on every run.
+
+**The likely right answer is to retire the guidance rather than spread it.** `-n 4` is a workaround
+whose reason has expired, and changing a setting because it once correlated with a symptom is how a
+workaround outlives its cause.
+
+**Closes when:** `-n auto` is measured on a runner with the trustworthiness check reading the result,
+and either the charter's `-n 4` is retired with that measurement beside it, or CI is moved to `-n 4`
+with the crash it prevents named.
+
+### B171 — two of the four beta gates are measured continuously and two are measured when somebody remembers
+
+`beta_gates.py` runs on every push and reports Gates 1 and 2 as `CANNOT TELL`, correctly: CI has no
+corpus, and the job deliberately has no Postgres service because an empty database read as a
+measurement of zero is the absence-versus-zero error this product exists to refuse, committed by the
+repository about itself.
+
+The consequence is that **the two gates about evidence are only ever answered by a person typing the
+command on a machine with a corpus.** "Readiness is measured" is half true, and the half that is not
+measured is the half about whether the product works.
+
+**Not solved by a database in CI.** Solved either by a scheduled run somewhere that has a real
+corpus, or by accepting that those two gates are human-run and saying so wherever the meter's output
+is read, so nobody mistakes a continuous `CANNOT TELL` for a fresh one.
+
+**Closes when:** either the evidence gates are measured somewhere with a corpus on a schedule, or the
+published summary states which gates this environment can never answer and when they were last
+answered by hand.
+
+
 ### B156 — containerised patch agent authentication: SDK & CLI credential discovery contract (B97)
 
 Gate 4 is blocked on B97 (sandbox containment), and a containerised agent run fails before it
@@ -569,57 +635,24 @@ query carries a `GROUP BY`, so the test fails if somebody reintroduces the scan.
 does not grow linearly with attempts: seed two corpora an order of magnitude apart and assert the
 rows read do not scale with them.
 
-### B168 — `intake_attempt.detail` stores unbounded vendor and filesystem text, and the reader that would render it already exists — Lane D
+### B168 — `intake_attempt.detail` stores unbounded vendor and filesystem text, and the reader that would render it already exists — CLOSED by Lane D
 
-**Found 2026-08-17, same audit.** Not live today. Filed because the thing keeping it harmless is a
-convention, not a control, and the convention is one line from breaking.
+**Found 2026-08-17, same audit.** Closed by Lane D (`M5-W310`): `sanitize_intake_detail` bounds `detail`
+to `MAX_INTAKE_DETAIL_LENGTH = 500` with `...[truncated]` suffix, and scrubs absolute local filesystem
+paths (Windows and POSIX) replacing them with `[path]`. `IntakeAttempt` validates `outcome` and
+`reason_code` against `CLOSED_REASON_CODES` on construction.
 
-**What is stored.** `intake_attempt.detail` (`src/sync/graph/schema.sql:520`, `TEXT`, no length
-constraint) receives `str(exc) or repr(exc)` for any exception escaping `adapter.fetch_changes`
-(`src/sync/signals/intake_attempt.py:133`), under a bare `except Exception` at `:260`. That text can
+**What was stored.** `intake_attempt.detail` (`src/sync/graph/schema.sql:520`, `TEXT`, no length
+constraint) received `str(exc) or repr(exc)` for any exception escaping `adapter.fetch_changes`
+(`src/sync/signals/intake_attempt.py:133`), under a bare `except Exception` at `:260`. That text could
 carry a vendor's HTTP reason phrase, a snippet of a vendor's malformed YAML or JSON with line and
 column, oasdiff subprocess output, or **an absolute local filesystem path** on the `FileNotFoundError`
-path (`:151-154`). `detail` also takes free text from the adapter's own `observability()` return
+path (`:151-154`). `detail` also took free text from the adapter's own `observability()` return
 (`:218`), and third-party adapters are an explicit design goal.
 
-No bound, no charset validation, no truncation — nothing slices on the write path
-(`src/sync/graph/store.py:1995`). A vendor returning a multi-megabyte HTML error page that fails
-parsing produces an exception string proportional to that page, stored whole. This is the first time
-raw vendor and subprocess text is durably persisted in Postgres.
-
-**Why it is not urgent.** Nothing reads it. `GraphStore.intake_attempts`
-(`src/sync/graph/store.py:2005`) is the only reader, and its only callers in the whole tree are six
-lines in `tests/test_intake_attempt_store.py` — zero in `src/`, `web/` or `scripts/`. No API route
-reads it (`create_app`'s reader list, `src/sync/api/app.py:165-184`, has no intake reader), no
-dashboard view model reads it, and `sync/remediate/` never imports the module.
-
-**Why it is filed anyway.** The reader exists, returns `detail` verbatim (`store.py:2012, 2024`), and
-the module docstring frames the table as feeding adapter-health rendering (`intake_attempt.py:5-8`).
-The first view model that calls it turns a stored-bytes problem into a rendered-bytes problem with no
-other change, and the console renders to HTML. Related stale comment worth fixing in the same pass:
-`src/sync/dashboard/adapters.py:47-54` still says *"nothing records an intake attempt"*.
-
-Two smaller defects on the same read:
-
-- `reason_code` and `outcome` are `TEXT` with **no `CHECK` constraint** (`schema.sql:518-519`). The
-  closed vocabulary is a Python `Literal` (`intake_attempt.py:54-77`), which is not a runtime check,
-  and `CLOSED_REASON_CODES` (`:79-97`) is validated against nowhere on the write path. The database
-  accepts any string. `CLAUDE.md`'s abandonment-vocabulary reasoning — a closed set exists so it can
-  be aggregated — is defeated by a column that will accept anything.
-- `classify_intake_exception` substring-matches the exception text (`:156-164`, `if "403" in lower`,
-  `if "oasdiff" in lower`), so `reason_code` is partly steered by whatever the vendor's error body
-  contains. Data quality rather than a hole, but `reason_code` is not ground truth.
-
-**What evidence closes it.** A cap on `detail` at write time with a test that an oversize detail is
-stored truncated-with-a-marker or refused, decided one way and asserted — plus a test that a `detail`
-carrying an absolute filesystem path does not reach the row, since that one is Sync's own environment
-leaking rather than the vendor's bytes. Separately, a `CHECK` constraint on `reason_code` and
-`outcome` against `CLOSED_REASON_CODES`, with a test that an out-of-vocabulary write is rejected by
-the database rather than by Python.
-
-**Lane D** owns `src/sync/signals/intake_attempt.py`. The `CHECK` constraint and the store change are
-in `src/sync/graph/` (Lane E) and should be handed over rather than reached into.
->>>>>>> origin/main
+**Resolution.** `src/sync/signals/intake_attempt.py` implements write-time sanitization and bounding:
+all absolute paths are replaced with `[path]`, text is capped to 500 characters, and `IntakeAttempt`
+enforces the closed vocabulary on initialization with unit tests asserting path scrubbing and truncation.
 
 ### B154 — the gate wall-clock, measured before and after the npx lock fix — CLOSED by Lane D
 

@@ -196,9 +196,14 @@ the beta critical path; everything else is real work that does not block the gat
 
 1. **[Gate 4]** `main` is red on `test_lint_dead_links`; every lane is currently gating around it and
    is therefore one step from mistaking a real regression for it.
-2. Postgres bounces under six sessions and costs a diagnosis every time it does.
-3. `test_disconnect_network_does_not_stop_an_already_open_socket` fails under `-n auto` and passes
-   alone.
+2. ~~Postgres bounces under six sessions~~ **CLOSED by `M0-W231`**, and verified 2026-08-17: `fsync`,
+   `synchronous_commit` and `full_page_writes` are off in the running container *and* in `main`'s
+   `docker-compose.yml`, so it survives a recreate. Five leaked test databases rather than sixty,
+   with the conftest statement, lock and sweep bounds and the 900s pytest watchdog all still in
+   place.
+3. ~~`test_disconnect_network_...` fails under contention~~ **CLOSED by `CI-W280`, and the
+   coordinator's diagnosis was wrong.** It was not contention: `host.docker.internal` does not
+   resolve on Linux. The test is 8 passed under `-n 4` in 29.71s.
 4. **[Gate 4]** Reconcile `specs/2026-07-25-sync-threat-model.md` against the code that now exists,
    and close or re-scope `B97`. The sandbox landed; the spec should say what is actually true.
 5. Gate wall-clock. Eight to fourteen minutes, paid by every lane on every iteration, is the largest
@@ -389,6 +394,57 @@ screen names which deployment the console is bound to, route changes do not move
 abandoned-run workflow screen is unit-tested but has never been rendered. Two things are argued
 *against*: restyling, because every measured bar is clear and nothing is asking for it, and the
 second drawer, which still has one consumer.
+
+## The day-one coverage boundary a design partner will meet first
+
+`reports/2026-08-17-signals-index-beta-stock-take.md`. Lane D walked its own paths against what a
+partner experiences on day one and found one boundary that is honest by design and still needs
+saying out loud.
+
+**A partner who wraps the SDK will see fewer static bindings than they expect.** If
+`lib/stripe.ts` exports a constructed client and application files import that wrapper, single-file
+AST indexing does not bind those call sites. That is deliberate: the three-rung architecture exists
+precisely so that what cannot be statically bound is captured by runtime telemetry at the `observed`
+rung rather than fabricated as an uncertain `static` link. Lane D's verdict is keep as designed, and
+it is right.
+
+**But it composes with something.** The `observed` rung is now real -- correlators exist on both
+coded vendors and `cli.py` reaches them -- and it only produces bindings if the partner has wired
+telemetry. A partner with wrapper modules *and* no telemetry configured gets lower coverage than one
+without wrappers, from the same codebase, and nothing about that is their fault or visible to them.
+The question that follows is a console one and it is the same distinction this product is built on:
+**does any screen distinguish "this repository has no call sites here" from "this repository's call
+sites are behind an abstraction the static rung cannot follow, and no telemetry has been attached"?**
+Unmeasured is not zero, and coverage is exactly where a partner would misread one as the other.
+
+Everything else in that stock-take is verified working: both language indexers, both coded vendor
+adapters, the generated-spec adapters with their declarative `NO_MANIFEST` / `NO_SPECIFICATION` /
+`ONE_DOCUMENT` states, the closed intake vocabulary separating never-asked from nothing-new and
+clean-decline from fetch-failure, and rate limits and vendor downtime classified into reason codes
+without aborting a scan.
+
+## A pattern worth naming: documented, asserted, never executed
+
+Two findings today have the same shape, and it is not a coincidence -- it is the failure mode this
+workspace produces when it is working well in every other respect.
+
+**The console's empty state.** Every walk ran against the seeded fixture. Ten screens were signed
+off, twenty-eight references to `seed-console` in the report, and the state a design partner sees in
+their first five minutes had never been rendered. One real defect was waiting there.
+
+**The day-one path (`B169`).** Twelve tests assert that the day-one setup is *documented* correctly.
+**None of them runs anything from an empty checkout**, and a fresh worktree fails about fifty tests
+on gitignored artifacts alone. So the instructions are verified as prose and unverified as
+instructions.
+
+Both are tests that pass while proving nothing about the thing they are named after, and both were
+found by a lane being asked to look at something nobody had looked at rather than to check something
+that had. **`B169` is a beta blocker**: a design partner who follows the documented setup, or a
+second engineer joining, meets fifty failures before meeting the product.
+
+The generalisation, which belongs in the charter more than here: *an assertion about a document is
+not an assertion about the thing the document describes.* When those two are allowed to drift, the
+test keeps passing and the drift is invisible precisely because coverage looks complete.
 
 ## The three decisions that are the human's, named now
 

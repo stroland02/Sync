@@ -37,9 +37,16 @@ _INTERNAL_ERROR = re.compile(r"^INTERNALERROR>", re.MULTILINE)
 
 # pytest's final tally. Matched from the line start so a test name quoting the words in its own
 # body cannot be mistaken for the summary.
+#
+# The `=` padding is not cosmetic to this pattern: pytest prints the tally bare on a narrow
+# terminal and wrapped in `=` on a wide one, so every fixture written from a local run misses the
+# form a runner produces. Anchoring on the bare form made this check report "no summary line" on
+# every CI run -- against output that carried one -- and, because it runs as a step that may fail
+# its job, it failed `test` on every push and took the eight steps after it down with it. Measured
+# on run 32047325280.
 _SUMMARY = re.compile(
-    r"^(?P<summary>(?:\d+ (?:failed|passed|skipped|error|errors|xfailed|xpassed|deselected|warnings?)"
-    r"(?:, )?)+ in [\d.]+s.*)$",
+    r"^=*\s*(?P<summary>(?:\d+ (?:failed|passed|skipped|error|errors|xfailed|xpassed|deselected"
+    r"|warnings?)(?:, )?)+ in [\d.]+s[^=]*?)\s*=*$",
     re.MULTILINE,
 )
 

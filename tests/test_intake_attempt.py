@@ -321,3 +321,57 @@ def test_real_generated_spec_adapter_declined_intake_attempt(tmp_path: Path):
     assert attempt.reason_code == "spec_url_unconfigured"
     assert attempt.reason_code in CLOSED_REASON_CODES
     assert sink.attempts == [attempt]
+
+
+# --- B168: Detail Sanitization and Validation Tests ---
+
+
+def test_sanitize_intake_detail_truncates_oversize_detail():
+    long_text = "A" * 1000
+    attempt = IntakeAttempt(
+        vendor_id="stripe",
+        attempted_at=datetime.now(timezone.utc),
+        outcome="failed",
+        reason_code="unknown_error",
+        detail=long_text,
+    )
+    assert attempt.detail is not None
+    assert len(attempt.detail) <= 500
+    assert attempt.detail.endswith("...[truncated]")
+
+
+def test_sanitize_intake_detail_scrubs_absolute_paths():
+    win_path = r"C:\Users\strol\orca\Sync\Sync\spec.yaml failed to parse at line 10"
+    posix_path = "/home/runner/work/Sync/Sync/openapi.json not found"
+
+    attempt_win = IntakeAttempt(
+        vendor_id="stripe",
+        attempted_at=datetime.now(timezone.utc),
+        outcome="failed",
+        reason_code="spec_unparseable",
+        detail=win_path,
+    )
+    assert "[path]" in (attempt_win.detail or "")
+    assert "Users" not in (attempt_win.detail or "")
+    assert "strol" not in (attempt_win.detail or "")
+
+    attempt_posix = IntakeAttempt(
+        vendor_id="stripe",
+        attempted_at=datetime.now(timezone.utc),
+        outcome="failed",
+        reason_code="spec_missing",
+        detail=posix_path,
+    )
+    assert "[path]" in (attempt_posix.detail or "")
+    assert "home" not in (attempt_posix.detail or "")
+    assert "runner" not in (attempt_posix.detail or "")
+
+
+def test_intake_attempt_validates_closed_vocabulary():
+    now = datetime.now(timezone.utc)
+    with pytest.raises(ValueError, match="invalid intake outcome"):
+        IntakeAttempt(vendor_id="stripe", attempted_at=now, outcome="pending")  # type: ignore[arg-type]
+
+    with pytest.raises(ValueError, match="invalid intake reason_code"):
+        IntakeAttempt(vendor_id="stripe", attempted_at=now, outcome="failed", reason_code="invented_reason")  # type: ignore[arg-type]
+
