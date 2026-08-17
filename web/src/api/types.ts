@@ -433,6 +433,64 @@ export interface RunsPage {
 }
 
 /**
+ * `GET /api/change-units`: open findings grouped by the vendor change and operation that
+ * produced them, fleet-wide or narrowed to one repository.
+ *
+ * The grain is one row per `(vendor_id, operation_id, change_kind, from_version, to_version)`
+ * — `sync.dashboard.fleet.change_units`'s own grouping key — never one row per finding and
+ * never one row per repository. A change spanning four repositories and eleven call sites is
+ * one row here; `repository_count` and `call_site_count` are how many the grouping folded in,
+ * and `finding_ids` / `repo_ids` are the members themselves, for a caller that needs the
+ * individual findings rather than the count of them.
+ *
+ * `standing` and `last_checkpoint_at` arrive `null` together, and `null` is genuine absence —
+ * not a zero and not "no remediation needed". The checkpointer read behind this route only
+ * runs when `SYNC_CHECKPOINTER_DSN` is configured and a `checkpoints` table exists, so a null
+ * pair means either that no run has ever been attempted for any finding this unit groups, or
+ * that this deployment has no checkpointer to ask — the two are indistinguishable from this
+ * payload alone, and a render site that turns `null` into "not started" is claiming the second
+ * case never happens. `last_checkpoint_at`, once present, is staleness — how old the newest
+ * checkpoint behind this unit is — never liveness: nothing in this row says whether that run
+ * is still going or has died.
+ *
+ * `standing` carries one value `RunDisposition` does not: `"in_progress"`, written when the
+ * checkpointer holds a run for this unit whose outcome has not yet reached one of the three
+ * terminal values.
+ *
+ * `binding_rung` is a plain `string` rather than `BindingSource`: `_weaker_rung_summary` in
+ * `sync.dashboard.fleet` answers `"mixed"` when a unit's call sites disagree on rung, which is
+ * a real, deliberate value and not one of the five the graph's `binding_rung` column holds.
+ */
+export interface ChangeUnitRow {
+  change_unit_id: string
+  vendor_id: string
+  operation_id: string | null
+  change_kind: string
+  from_version: string | null
+  to_version: string | null
+  severity: string
+  repository_count: number
+  call_site_count: number
+  binding_rung: string
+  finding_ids: string[]
+  repo_ids: string[]
+  standing: RunDisposition | "in_progress" | null
+  last_checkpoint_at: string | null
+}
+
+/**
+ * `GET /api/change-units`. Bare `{items, total, next_offset}`, the same reasoning as
+ * `RunsPage`: this route reads open findings and the checkpointer, never `GraphSurface`, and
+ * carries no feed-fetch timestamp or context-savings figure to fill `Page<T>`'s `Provenance`
+ * half with.
+ */
+export interface ChangeUnitsPage {
+  items: ChangeUnitRow[]
+  total: number
+  next_offset: number | null
+}
+
+/**
  * One count per distinct value of a `migration_outcome` column.
  *
  * The key `"null"` is not the string form of an empty bucket — `sync.dashboard.fleet`
