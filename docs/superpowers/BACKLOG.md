@@ -391,6 +391,48 @@ confidently instead of refusing.
 
 ## Ready
 
+### B174 — `extract_credential` cannot tell malformed base64 from non-UTF-8 credentials — Lane E
+
+**Accounted rather than broken, and filed rather than fixed.** `CI-W304` added this clause to
+`SUBSUMING` under `_GUARDS_A_READ` because it genuinely guards a read; this is the narrowing that
+accounting concluded it wants. `src/sync/api/auth.py` is Lane E's file and the change is
+behaviour-adjacent, so it is written here rather than into their tree while they are mid-unit.
+
+```python
+if scheme == "basic":
+    try:
+        decoded = base64.b64decode(token).decode("utf-8")
+        _, _, password = decoded.partition(":")
+        return password
+    except Exception:
+        return None
+```
+
+**The current behaviour is correct and should not change.** Returning `None` denies the request,
+and a credential that is not text cannot match a configured password. Nothing here is a
+vulnerability.
+
+**What the clause loses is the ability to tell two different facts apart.** `except Exception`
+catches `binascii.Error` from malformed base64 and `UnicodeDecodeError` from well-formed base64
+carrying non-UTF-8 bytes, and those say different things about a caller — a broken client against
+a client sending bytes that are not a credential at all. This is the most attacker-controlled read
+in the tree: an `Authorization: Basic` header from an unauthenticated request, reached before any
+credential check.
+
+It also catches anything else that arm could ever raise, which is the ordinary cost of a bare
+`except Exception` over three statements rather than a specific complaint about this one.
+
+**Closes when:** the clause names what it means — `except (binascii.Error, UnicodeDecodeError)` is
+the whole change — or the entry is closed as declined with the reason, which is a defensible answer
+given nothing observable changes. If it is narrowed, `SUBSUMING` in `tests/test_decode_handlers.py`
+must lose the `sync/api/auth.py::extract_credential::Exception` key in the same commit, because
+`test_no_entry_in_the_subsuming_census_is_gone` fails on a census entry that describes nothing.
+
+**Numbering note.** Taken from `B174` rather than the `B150-B154` block the dispatch named: that
+block is fully used, and `B173` was reassigned to Lane B when its own block ran out at `B149`.
+`B174` is the last free number in Lane C's allocation.
+
+
 ### B172 — wire the visual eval into CI once Lane B settles the extraction mechanism
 
 **Not startable yet, deliberately.** Lane B is still deciding between the in-house script and
@@ -620,6 +662,42 @@ surface already assuming a proxy exists, per this entry's own B97 cross-referenc
 This ruling does not build the proxy -- that is still separate, undesigned work, and still item
 2 of B97's remaining four. What it retires is the ambiguity between three options; whoever
 designs the proxy next designs it to inject the credential rather than to pass one through.
+
+
+### B157 — Telemetry attachment contract: distinguishing never-measured from measured-zero at repository level — Lanes D, E, B
+
+**Context & Discovery (2026-08-17, M5-W311 stock-take & coordinator dispatch):**
+`CLAUDE.md` and the console architecture require that *never-measured* is rendered strictly apart from
+*measured-zero*. Today, `observed_call` in Postgres records only individual correlated OTLP spans.
+When a repository has never had telemetry attached or configured, `store.observed_calls_count(repo_id)`
+returns `0`. When a repository has telemetry actively configured and streaming, but experienced zero
+calls to a specific vendor (e.g. quiet service), `observed_calls` also returns `0` (or `None`).
+Without an explicit attachment state on repository context, the data model and API transport collapse
+"telemetry unattached / never measured" onto "measured zero calls", and `/api/codebases/:id` routes
+404 on unattached repositories (`B147`).
+
+**The Contract Definition:**
+
+1. **Schema & Field (`Lane E` ownership):**
+   - Column: `telemetry_attached_at: TIMESTAMPTZ | NULL` added to `repo_context` table in `schema.sql`.
+   - Python Model: `telemetry_attached_at: datetime | None = None` on `RepoContext` (`src/sync/core/models.py` / `sync.graph.store`).
+   - API Surface: Exposed in `/api/repositories` and `/api/codebases/:id` payloads as `telemetry_attached_at: string | null` (ISO 8601 UTC timestamp or `null`).
+
+2. **Writer & Lifecycle (`Lane E` / `Lane D`):**
+   - Written (`SET telemetry_attached_at = NOW()`) when an OTLP batch for `repo_id` is ingested via `sync.telemetry.ingest.ingest_payload` or when a customer repository attaches an active telemetry source/token in `sync.cli` / API.
+   - Remains `null` when a repository is indexed statically only and has never attached an OTLP telemetry pipeline.
+
+3. **Consumer & Rendering Contract (`Lane B` console ownership):**
+   - When `telemetry_attached_at` is `null`:
+     - The telemetry panels on Codebase and Fleet screens MUST NOT render "0 calls observed" or a bare zero count.
+     - MUST render the **never-measured** state: *"Telemetry unattached — No runtime traffic observed for this repository"* with guidance/link to attach OTLP telemetry.
+     - In reachability and coverage tables, `observed_calls` MUST be `null` (not `0`).
+   - When `telemetry_attached_at` is non-null (timestamp present) AND measured spans count is 0:
+     - MUST render the **measured-zero** state: *"Active — 0 calls observed since <last_attached_or_polled_at>"*.
+     - In reachability and coverage tables, `observed_calls` MUST be `0` (an honest, active measurement of zero traffic).
+   - Resolves `B147`: `/api/codebases/:id` returns 200 with `telemetry_attached_at: null` instead of 404ing for repositories without telemetry.
+
+
 
 ### B165 — a customer's own file writes unfenced text into the patch prompt — Lane A — CLOSED
 
@@ -4237,3 +4315,47 @@ collapses to one query, and `cardFacts` already takes a scoped answer per reposi
 
 **Not urgent for beta.** A design partner's deployment holds few repositories, which is exactly the
 case where N+1 is invisible.
+
+### B149 — Runs and repairs cannot be scoped to a repository, so the Codebase screen cannot show them
+
+The owner's instruction (2026-08-17) is that the Codebase screen — a repository's own landing — carry
+change units, findings, indexes, **runs and repairs**. Three of those five are already scopable and
+built. Two are not, and building them anyway would reintroduce a defect this console already fixed.
+
+**Runs.** `RunRow` carries `thread_id`, `finding_id`, `run_id`, `current_node`, `outcome`,
+`abandon_reason`, `last_checkpoint_at` — and **no `repo_id`**. Nothing in the transport says which
+repository a checkpoint thread belongs to. `M14-W265` removed a "Remediation active" line from the
+repository cards for exactly this reason: it was inventing an attribution the payload cannot
+support. A runs table on a repository page would be the same defect at a larger size — one
+repository's name over every repository's runs.
+
+**Repairs.** `corpus_summary(store)` takes no repository and `/api/corpus` accepts no query
+parameter, so the repair record is fleet-wide only. Same consequence.
+
+**What closes it:** `repo_id` on the run row, and a repository parameter on the corpus route — both
+`sync.dashboard` and `sync.api`, which are Lane E's. The console half is small once the payloads
+carry the scope: the Codebase screen already renders three scoped panels and would render two more
+the same way.
+
+**Related:** `B147` (a repository with no telemetry 404s) currently blocks the Codebase screen from
+being measured at all, and `B148` (Fleet's per-repository overview N+1) is the third payload-shape
+item on the same screen family. All three are one conversation with Lane E rather than three.
+
+### B173 — "Viewing the code" means call sites, because Sync does not store customer source
+
+*Renumbered from B150 by the coordinator, 2026-08-17. Lane B's block (B145-B149) was full and the next number taken landed on Lane C's B150, which is a different, already-fixed item. Lane B's block is extended to B173-B182; nothing about this item changed.*
+
+Recorded so the Codebase screen is not designed around a file browser that cannot exist.
+
+`call_site` holds `repo_id`, `path`, `line`, `col` and the symbol — **where** a call is, never the
+text of it. `CLAUDE.md`'s containment position is that Sync clones a customer repository to verify a
+patch and never holds their secrets; the graph keeps locations and bindings, not source.
+
+So a Codebase screen can honestly show: which files call which vendor operations, at which lines,
+grouped into the structure those paths imply, with the rung behind each binding — and it can link
+out to the file on the customer's forge. It cannot show a source viewer without either storing
+customer code or fetching it live with credentials, and both are decisions well outside a console
+change.
+
+**This is a design constraint rather than a defect**, and it is filed so the constraint is met
+deliberately rather than discovered halfway through building the screen.

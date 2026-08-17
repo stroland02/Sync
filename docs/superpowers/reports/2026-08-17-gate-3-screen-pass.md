@@ -11,12 +11,24 @@
 > production proxy, a 404 confirmed to pass through as a 404 rather than collapsing into an
 > absence, and the screens walked in Chrome on the built assets behind the gate.
 >
-> **This note is also the mechanism.** `scripts/beta_gates.py` dates a signature by the last commit
-> touching *this* file, so a re-sign written only to a neighbouring file leaves the meter reading
-> the original date and reporting `CANNOT TELL` — which is exactly what happened. A re-sign is
-> recorded here, in the file the meter reads. Verified before writing it: `web/src` has not changed
-> since `6b68397` at 11:54:54, so this signature covers the console as it stands rather than
-> claiming coverage of work that landed afterwards.
+> **Corrected by the coordinator 2026-08-17: the paragraph that stood here described a mechanism
+> that does not exist, and it contradicted a neighbouring report.** It said `scripts/beta_gates.py`
+> dates a signature by the last commit touching this file. It does not. `signature_date` reads a
+> `Signed:` line out of the document text, across *every* `*gate-3*.md` in the directory, and takes
+> the latest — `beta_gates.py:239` and its docstring say so explicitly, because a whitespace edit is
+> not a re-sign and git cannot tell those apart. Meanwhile `2026-08-17-gate-3-resign.md` states that
+> this file *deliberately* carries no `Signed:` line, being the historical record. Both cannot be
+> true, and one document asserting a false mechanism about the tool that reads it is worse than
+> either answer.
+>
+> **The resolution: this file is the historical record and carries no `Signed:` line**, as
+> `resign.md` says. A re-sign is recorded by adding or updating `Signed:` in the report that
+> describes the walk it signs.
+>
+> **And the substantive point the removed paragraph obscured: a re-sign is a walk, not a line.**
+> Whoever adds a `Signed:` date is asserting they checked the screens as they now stand. Editing the
+> line without walking is the precise failure this gate exists to detect, performed on the gate
+> itself.
 
 **2026-08-17.** Beta sign-off evidence, gathered during the closing measured walk (Task 15 of
 `2026-08-17-console-mock-parity.md`), against the console running live at 1440×900 over the seeded

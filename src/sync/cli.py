@@ -857,6 +857,25 @@ def _coverage_lines(unread: Sequence[str]) -> list[str]:
     ]
 
 
+def _adapter_unbound_imports(adapter: LanguageAdapter, repo: RepoRef) -> list[str]:
+    """The source paths that imported the vendor SDK but produced zero bound call sites.
+
+    Identifies internal wrapper modules or re-exports. Read via getattr for third-party adapters.
+    """
+    report = getattr(adapter, "unbound_import_paths", None)
+    return list(report(repo)) if report is not None else []
+
+
+def _unbound_import_lines(unbound: Sequence[str]) -> list[str]:
+    """Diagnostic lines when source files import the SDK without direct static call sites."""
+    if not unbound:
+        return []
+    return [
+        f"{len(unbound)} path(s) imported the vendor SDK without direct static call sites (internal wrappers):",
+        *[f"  {path}" for path in unbound],
+    ]
+
+
 def _binding_lines(vendor: Any) -> list[str]:
     """Why this run could bind no call site at all, or nothing when it could bind one.
 
@@ -1090,6 +1109,7 @@ def run(args: argparse.Namespace, today: date | None = None) -> int:
             # the language indexer and by the literal pass, and summing them would over-report --
             # a wrong number a reader would trust for being the larger one.
             unread = sorted(set(literal_unread) | set(_adapter_unread(adapter, repo)))
+            unbound_imports = _adapter_unbound_imports(adapter, repo)
 
             changes, _ = execute_intake_attempt(
                 vendor,
