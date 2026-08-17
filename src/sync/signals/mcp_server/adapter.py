@@ -86,7 +86,12 @@ class McpServerAdapter:
         "an MCP tool name arrives as a runtime string rather than an SDK method chain, so a "
         "static call site addresses no tool and nothing binds"
     )
-    """Why no call site binds to a watched server, stated where a run's report can read it.
+    uncorrelatable_reason = (
+        "an MCP server communicates over JSON-RPC rather than REST HTTP, so observed HTTP spans "
+        "cannot be correlated through a RequestCorrelator"
+    )
+    """Why no call site binds to a watched server, and why HTTP spans cannot correlate, stated
+    where a run's report can read it.
 
     A constant rather than a derived answer, because this one is a property of the protocol and
     not of what a deployment happened to stage: see `operation_for_symbol`. Nothing an operator
