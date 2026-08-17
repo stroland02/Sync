@@ -92,6 +92,7 @@ import { joinOrAbsent } from "@/features/bindings/call-site-fields"
 import { formatTimestamp, orAbsent, pathAfter } from "@/lib/format"
 import { Breadcrumbs } from "@/layouts/breadcrumbs"
 import { ControlBar } from "@/layouts/control-bar"
+import { DetailGrid } from "@/layouts/detail-grid"
 import { FooterBar } from "@/layouts/footer-bar"
 import { PageHeader } from "@/layouts/page-header"
 import { UnknownRoute } from "@/layouts/unknown-route"
@@ -364,32 +365,34 @@ function BindingSurfaceDetail({
       {/* The one place on this screen where a region sits beside another. `lg:` rather than `xl:`
           so both measured viewports get it, and `minmax(0,...)` on the facts column so a long
           repository id shrinks the column instead of widening the grid past the frame. */}
-      <div className="grid items-start gap-8 lg:grid-cols-[minmax(0,1fr)_minmax(0,22rem)]">
-        <div className="flex min-w-0 flex-col gap-section">
-          <PageHeader
-            // Fleet and the vendor are the top bar's, derived from this same address. The
-            // operation stays: it is deeper than the vendor, which is where that trail stops.
-            // M7-W195.
-            trail={<Breadcrumbs trail={[{ label: operationId }]} />}
-            title={
-              <span className="font-mono">
-                {vendorId} / {operationId}
-              </span>
-            }
-            question={question}
+      <DetailGrid
+        railSide="end"
+        rail={
+          <FactList
+            facts={operationFacts(
+              vendorId,
+              operationId,
+              repoId,
+              query.isSuccess ? query.data : null,
+              query.isError
+            )}
           />
-          <ScopeNote repoId={repoId} />
-        </div>
-        <FactList
-          facts={operationFacts(
-            vendorId,
-            operationId,
-            repoId,
-            query.isSuccess ? query.data : null,
-            query.isError
-          )}
+        }
+      >
+        <PageHeader
+          // Fleet and the vendor are the top bar's, derived from this same address. The
+          // operation stays: it is deeper than the vendor, which is where that trail stops.
+          // M7-W195.
+          trail={<Breadcrumbs trail={[{ label: operationId }]} />}
+          title={
+            <span className="font-mono">
+              {vendorId} / {operationId}
+            </span>
+          }
+          question={question}
         />
-      </div>
+        <ScopeNote repoId={repoId} />
+      </DetailGrid>
 
       {query.isPending && <LoadingState what={`bindings for ${vendorId}/${operationId}`} />}
       {query.isError && (

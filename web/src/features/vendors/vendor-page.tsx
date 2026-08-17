@@ -65,6 +65,7 @@ import {
   VendorFindingsCard,
   VendorFindingsControls,
 } from "@/features/vendors/vendor-findings-table"
+import { DetailGrid } from "@/layouts/detail-grid"
 import { PageHeader } from "@/layouts/page-header"
 import { UnknownRoute } from "@/layouts/unknown-route"
 
@@ -87,50 +88,52 @@ export function VendorPage({ question = DEFAULT_QUESTION }: VendorPageProps) {
           what they assumed, so they belong beside the question rather than under it. Measured at
           1280x800, stacking the header full width instead cost 105px above the first table row and
           bought nothing this arrangement does not already give. */}
-      <div className="grid items-start gap-8 lg:grid-cols-[minmax(0,1fr)_minmax(0,22rem)]">
-        <div className="flex min-w-0 flex-col gap-section">
-          <PageHeader
-            title={<span className="font-mono">{vendorId}</span>}
-            question={question}
+      <DetailGrid
+        railSide="end"
+        rail={
+          <FactList
+            facts={[
+              { label: "Vendor", value: <span className="font-mono">{vendorId}</span> },
+              {
+                label: "Repository scope",
+                value:
+                  repoId === null ? (
+                    "Nothing selected one on the way here"
+                  ) : (
+                    <span className="font-mono">{repoId}</span>
+                  ),
+              },
+              {
+                label: "Findings counted over",
+                value: repoId === null ? "Every repository the index has seen" : repoId,
+              },
+              {
+                label: "Changes counted over",
+                value: "The vendor, never a repository",
+              },
+            ]}
           />
-          {repoId === null ? (
-            <p className="max-w-prose text-body text-muted-foreground">
-              Every open finding and every published change for {vendorId}, across every
-              repository the index has seen. Nothing selected a repository on the way here, so
-              this page is in the fleet's scope rather than one codebase's — open it from a
-              repository to narrow the findings below.
-            </p>
-          ) : (
-            <p className="max-w-prose text-body text-muted-foreground">
-              Open findings for {vendorId} in <span className="font-mono">{repoId}</span> alone.
-              The vendor changes below are the exception and say so: what {vendorId} published is
-              a fact about the vendor, not about this repository.
-            </p>
-          )}
-        </div>
-        <FactList
-          facts={[
-            { label: "Vendor", value: <span className="font-mono">{vendorId}</span> },
-            {
-              label: "Repository scope",
-              value:
-                repoId === null ? (
-                  "Nothing selected one on the way here"
-                ) : (
-                  <span className="font-mono">{repoId}</span>
-                ),
-            },
-            {
-              label: "Findings counted over",
-              value: repoId === null ? "Every repository the index has seen" : repoId,
-            },
-            {
-              label: "Changes counted over",
-              value: "The vendor, never a repository",
-            },
-          ]}
+        }
+      >
+        <PageHeader
+          title={<span className="font-mono">{vendorId}</span>}
+          question={question}
         />
-      </div>
+        {repoId === null ? (
+          <p className="max-w-prose text-body text-muted-foreground">
+            Every open finding and every published change for {vendorId}, across every
+            repository the index has seen. Nothing selected a repository on the way here, so
+            this page is in the fleet's scope rather than one codebase's — open it from a
+            repository to narrow the findings below.
+          </p>
+        ) : (
+          <p className="max-w-prose text-body text-muted-foreground">
+            Open findings for {vendorId} in <span className="font-mono">{repoId}</span> alone.
+            The vendor changes below are the exception and say so: what {vendorId} published is
+            a fact about the vendor, not about this repository.
+          </p>
+        )}
+      </DetailGrid>
 
       {/* The bar itself is composed inside `VendorFindingsControls`, beside the state it sets and
           the sentence saying which of the two tables below it reaches. A page that assembled the

@@ -56,6 +56,7 @@ import { NodeSequence } from "@/features/workflows/node-sequence"
 import { RunOutcome, type BelowThisPanel } from "@/features/workflows/run-outcome"
 import { SupersededGenerations } from "@/features/workflows/superseded-generations"
 import { Breadcrumbs } from "@/layouts/breadcrumbs"
+import { DetailGrid } from "@/layouts/detail-grid"
 import { PageHeader } from "@/layouts/page-header"
 import { UnknownRoute } from "@/layouts/unknown-route"
 import { DetailTitleText, runTitle } from "@/lib/detail-title"
@@ -264,8 +265,8 @@ function Workflow({ findingId, question }: { findingId: string; question: string
     )
 
   return (
-    <div className="grid items-start gap-8 lg:grid-cols-[minmax(0,22.5rem)_minmax(0,1fr)]">
-      <div className="min-w-0 lg:col-span-2">
+    <DetailGrid
+      header={
         <PageHeader
           trail={
             <Breadcrumbs
@@ -279,96 +280,95 @@ function Workflow({ findingId, question }: { findingId: string; question: string
           title={title}
           question={question}
         />
-      </div>
+      }
+      rail={
+        <>
+          <FactList facts={runFacts(data, failure, findingId)} />
 
-      <div className="flex min-w-0 flex-col gap-section">
-        <FactList facts={runFacts(data, failure, findingId)} />
-
-        {data !== undefined && (
-          <p className="text-body text-muted-foreground">
-            <Link
-              to={`/findings/${encodeURIComponent(findingId)}/workflow/pull-request`}
-              className="underline underline-offset-2"
-            >
-              {/* The possessive asserted a pull request on every run, including the ones that
-                  never opened one. The link goes to the same place either way; what it says
-                  follows the outcome the payload already carries. */}
-              {data.outcome === "opened"
-                ? "See the pull request's evidence bundle"
-                : "See the evidence bundle for this run"}
-            </Link>{" "}
-            — the five nodes that answer whether this run earned a merge, at their own address a
-            reviewer can send on.
-          </p>
-        )}
-      </div>
-
-      <div className="flex min-w-0 flex-col gap-8">
-        {query.isPending && <LoadingState what={`the run for finding ${findingId}`} />}
-
-        {data === undefined &&
-          query.isError &&
-          (query.error instanceof NotFoundError ? (
-            <div className="flex flex-col items-start gap-section">
-              <NotFoundState
-                headline="No remediation run for this finding."
-                detail="The API answered, and the checkpointer holds no run under this identifier. Either remediation has not been started for this finding, or it has never been started for any finding on this database. This is an answer about the run, not a failure of the console — a finding can be perfectly real and have no attempt against it yet."
-                identifier={query.error.identifier}
-              />
-              <Button
-                variant="outline"
-                size="sm"
-                disabled={query.isFetching}
-                onClick={() => void query.refetch()}
+          {data !== undefined && (
+            <p className="text-body text-muted-foreground">
+              <Link
+                to={`/findings/${encodeURIComponent(findingId)}/workflow/pull-request`}
+                className="underline underline-offset-2"
               >
-                {query.isFetching ? "Asking…" : "Check again"}
-              </Button>
-            </div>
+                {/* The possessive asserted a pull request on every run, including the ones that
+                    never opened one. The link goes to the same place either way; what it says
+                    follows the outcome the payload already carries. */}
+                {data.outcome === "opened"
+                  ? "See the pull request's evidence bundle"
+                  : "See the evidence bundle for this run"}
+              </Link>{" "}
+              — the five nodes that answer whether this run earned a merge, at their own address a
+              reviewer can send on.
+            </p>
+          )}
+        </>
+      }
+    >
+      {query.isPending && <LoadingState what={`the run for finding ${findingId}`} />}
+
+      {data === undefined &&
+        query.isError &&
+        (query.error instanceof NotFoundError ? (
+          <div className="flex flex-col items-start gap-section">
+            <NotFoundState
+              headline="No remediation run for this finding."
+              detail="The API answered, and the checkpointer holds no run under this identifier. Either remediation has not been started for this finding, or it has never been started for any finding on this database. This is an answer about the run, not a failure of the console — a finding can be perfectly real and have no attempt against it yet."
+              identifier={query.error.identifier}
+            />
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={query.isFetching}
+              onClick={() => void query.refetch()}
+            >
+              {query.isFetching ? "Asking…" : "Check again"}
+            </Button>
+          </div>
+        ) : (
+          <ErrorState error={query.error} what={`the run for finding ${findingId}`} />
+        ))}
+
+      {data !== undefined && (
+        <>
+          {query.isError ? (
+            <StaleBanner
+              fetchedAt={query.dataUpdatedAt}
+              live={!terminal}
+              isFetching={query.isFetching}
+              onRetry={() => void query.refetch()}
+            />
           ) : (
-            <ErrorState error={query.error} what={`the run for finding ${findingId}`} />
-          ))}
-
-        {data !== undefined && (
-          <>
-            {query.isError ? (
-              <StaleBanner
-                fetchedAt={query.dataUpdatedAt}
-                live={!terminal}
-                isFetching={query.isFetching}
-                onRetry={() => void query.refetch()}
-              />
-            ) : (
-              /* The healthy counterpart to `StaleBanner`. That banner only appears once a refetch
-                 has failed, so until now a run being watched and a run whose screen had gone quiet
-                 for a terminal outcome looked identical — both just sat there. This says which. */
-              <FetchedAt
-                at={query.dataUpdatedAt}
-                polling={!terminal}
-                idleReason="This run has reached a terminal outcome, so nothing is being polled."
-              />
-            )}
-
-            <SupersededGenerations
-              generations={data.generations}
-              currentThreadId={data.thread_id}
+            /* The healthy counterpart to `StaleBanner`. That banner only appears once a refetch
+               has failed, so until now a run being watched and a run whose screen had gone quiet
+               for a terminal outcome looked identical — both just sat there. This says which. */
+            <FetchedAt
+              at={query.dataUpdatedAt}
+              polling={!terminal}
+              idleReason="This run has reached a terminal outcome, so nothing is being polled."
             />
+          )}
 
-            <NodeSequence
-              nodes={data.nodes}
-              opening={<Arrival findingId={findingId} />}
-              closing={
-                <RunOutcome
-                  outcome={data.outcome}
-                  abandonReason={data.abandon_reason}
-                  reportReason={data.report_reason}
-                  below={BELOW}
-                  frame="entry"
-                />
-              }
-            />
-          </>
-        )}
-      </div>
-    </div>
+          <SupersededGenerations
+            generations={data.generations}
+            currentThreadId={data.thread_id}
+          />
+
+          <NodeSequence
+            nodes={data.nodes}
+            opening={<Arrival findingId={findingId} />}
+            closing={
+              <RunOutcome
+                outcome={data.outcome}
+                abandonReason={data.abandon_reason}
+                reportReason={data.report_reason}
+                below={BELOW}
+                frame="entry"
+              />
+            }
+          />
+        </>
+      )}
+    </DetailGrid>
   )
 }

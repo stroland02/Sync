@@ -65,6 +65,7 @@ import {
 import { EvidenceBundle } from "@/features/pullrequests/evidence-bundle"
 import { RunOutcome, type BelowThisPanel } from "@/features/workflows/run-outcome"
 import { Breadcrumbs } from "@/layouts/breadcrumbs"
+import { DetailGrid } from "@/layouts/detail-grid"
 import { PageHeader } from "@/layouts/page-header"
 import { UnknownRoute } from "@/layouts/unknown-route"
 import { DetailTitleText, pullRequestTitle } from "@/lib/detail-title"
@@ -239,85 +240,84 @@ function PullRequest({ findingId, question }: { findingId: string; question: str
     )
 
   return (
-    <div className="grid items-start gap-8 lg:grid-cols-[minmax(0,22.5rem)_minmax(0,1fr)]">
-      <div className="min-w-0 lg:col-span-2">
+    <DetailGrid
+      header={
         <PageHeader
           trail={<Breadcrumbs trail={trail} />}
           title={title}
           question={question}
         />
-      </div>
+      }
+      rail={
+        <>
+          <FactList facts={railFacts(data, facts, failure, findingId)} />
 
-      <div className="flex min-w-0 flex-col gap-section">
-        <FactList facts={railFacts(data, facts, failure, findingId)} />
-
-        <p className="text-body text-muted-foreground">
-          Read from the checkpointer, the same source as{" "}
-          <Link
-            to={`/findings/${encodeURIComponent(findingId)}/workflow`}
-            className="underline underline-offset-2"
-          >
-            the solution workflow
-          </Link>
-          , which shows all eight nodes; this page shows the five that carry the evidence a pull
-          request rests on.
-        </p>
-
-        {facts.prUrl !== null && (
-          <p className="text-body">
-            <a
-              href={facts.prUrl}
-              target="_blank"
-              rel="noreferrer noopener"
+          <p className="text-body text-muted-foreground">
+            Read from the checkpointer, the same source as{" "}
+            <Link
+              to={`/findings/${encodeURIComponent(findingId)}/workflow`}
               className="underline underline-offset-2"
             >
-              Open the pull request
-            </a>{" "}
-            <span className="text-muted-foreground">
-              — leaves the console for the forge it was opened on.
-            </span>
+              the solution workflow
+            </Link>
+            , which shows all eight nodes; this page shows the five that carry the evidence a pull
+            request rests on.
           </p>
-        )}
-      </div>
 
-      <div className="flex min-w-0 flex-col gap-8">
-        {query.isPending && <LoadingState what={`the run for finding ${findingId}`} />}
-
-        {data === undefined &&
-          query.isError &&
-          (query.error instanceof NotFoundError ? (
-            <div className="flex flex-col items-start gap-section">
-              <NotFoundState
-                headline="No remediation run for this finding, so there is no pull request."
-                detail="The API answered, and the checkpointer holds no run under this identifier. Either remediation has not been started for this finding, or it has never been started for any finding on this database. This is an answer about the run, not a failure of the console — a finding can be perfectly real and have no attempt against it yet."
-                identifier={query.error.identifier}
-              />
-              <Button
-                variant="outline"
-                size="sm"
-                disabled={query.isFetching}
-                onClick={() => void query.refetch()}
+          {facts.prUrl !== null && (
+            <p className="text-body">
+              <a
+                href={facts.prUrl}
+                target="_blank"
+                rel="noreferrer noopener"
+                className="underline underline-offset-2"
               >
-                {query.isFetching ? "Asking…" : "Check again"}
-              </Button>
-            </div>
-          ) : (
-            <ErrorState error={query.error} what={`the run for finding ${findingId}`} />
-          ))}
+                Open the pull request
+              </a>{" "}
+              <span className="text-muted-foreground">
+                — leaves the console for the forge it was opened on.
+              </span>
+            </p>
+          )}
+        </>
+      }
+    >
+      {query.isPending && <LoadingState what={`the run for finding ${findingId}`} />}
 
-        {data !== undefined && (
-          <>
-            <RunOutcome
-              outcome={data.outcome}
-              abandonReason={data.abandon_reason}
-              reportReason={data.report_reason}
-              below={BELOW}
+      {data === undefined &&
+        query.isError &&
+        (query.error instanceof NotFoundError ? (
+          <div className="flex flex-col items-start gap-section">
+            <NotFoundState
+              headline="No remediation run for this finding, so there is no pull request."
+              detail="The API answered, and the checkpointer holds no run under this identifier. Either remediation has not been started for this finding, or it has never been started for any finding on this database. This is an answer about the run, not a failure of the console — a finding can be perfectly real and have no attempt against it yet."
+              identifier={query.error.identifier}
             />
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={query.isFetching}
+              onClick={() => void query.refetch()}
+            >
+              {query.isFetching ? "Asking…" : "Check again"}
+            </Button>
+          </div>
+        ) : (
+          <ErrorState error={query.error} what={`the run for finding ${findingId}`} />
+        ))}
 
-            <EvidenceBundle nodes={data.nodes} outcome={data.outcome} />
-          </>
-        )}
-      </div>
-    </div>
+      {data !== undefined && (
+        <>
+          <RunOutcome
+            outcome={data.outcome}
+            abandonReason={data.abandon_reason}
+            reportReason={data.report_reason}
+            below={BELOW}
+          />
+
+          <EvidenceBundle nodes={data.nodes} outcome={data.outcome} />
+        </>
+      )}
+    </DetailGrid>
   )
 }

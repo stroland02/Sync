@@ -68,6 +68,7 @@ import {
 import { DetailTitleText, findingTitle } from "@/lib/detail-title"
 import { formatFindingBadge, orAbsent } from "@/lib/format"
 import { Breadcrumbs } from "@/layouts/breadcrumbs"
+import { DetailGrid } from "@/layouts/detail-grid"
 import { PageHeader } from "@/layouts/page-header"
 import { UnknownRoute } from "@/layouts/unknown-route"
 
@@ -320,123 +321,122 @@ function FindingDetailPage({
   )
 
   return (
-    <div className="grid items-start gap-8 lg:grid-cols-[minmax(0,22.5rem)_minmax(0,1fr)]">
-      <div className="min-w-0 lg:col-span-2">
+    <DetailGrid
+      header={
         <PageHeader
           trail={<Breadcrumbs trail={trail} />}
           title={title}
           question={question}
         />
-      </div>
-
-      <div className="flex min-w-0 flex-col gap-section">
-        <FactList
-          facts={findingFacts(findingId, query.isSuccess ? query.data : null, failure, remediation)}
-        />
-        <p className="text-body text-ink-muted">
-          What this call site calls, and how the system knows it does.
-        </p>
-
-        {/* Outside the success branch on purpose. A finding that has been patched or
-            abandoned is no longer open, so this page 404s for it — and that is exactly the
-            finding whose run is most worth reading. The workflow lives in the checkpointer,
-            which does not care whether the graph still holds the finding, so both links below
-            can be live on a page whose finding is gone. */}
-        <div className="flex flex-col gap-field">
-          <p className="text-body">
-            <Link
-              to={`/findings/${encodeURIComponent(findingId)}/workflow`}
-              className="underline underline-offset-2"
-            >
-              Solution workflow
-            </Link>{" "}
-            <span className="text-muted-foreground">
-              — what Sync did about this finding, node by node.
-            </span>
+      }
+      rail={
+        <>
+          <FactList
+            facts={findingFacts(findingId, query.isSuccess ? query.data : null, failure, remediation)}
+          />
+          <p className="text-body text-ink-muted">
+            What this call site calls, and how the system knows it does.
           </p>
-          {reachedPullRequest(remediation) && (
+
+          {/* Outside the success branch on purpose. A finding that has been patched or
+              abandoned is no longer open, so this page 404s for it — and that is exactly the
+              finding whose run is most worth reading. The workflow lives in the checkpointer,
+              which does not care whether the graph still holds the finding, so both links below
+              can be live on a page whose finding is gone. */}
+          <div className="flex flex-col gap-field">
             <p className="text-body">
               <Link
-                to={`/findings/${encodeURIComponent(findingId)}/workflow/pull-request`}
+                to={`/findings/${encodeURIComponent(findingId)}/workflow`}
                 className="underline underline-offset-2"
               >
-                Pull request
+                Solution workflow
               </Link>{" "}
               <span className="text-muted-foreground">
-                — the evidence bundle behind the patch this run opened.
+                — what Sync did about this finding, node by node.
               </span>
             </p>
-          )}
-        </div>
-      </div>
+            {reachedPullRequest(remediation) && (
+              <p className="text-body">
+                <Link
+                  to={`/findings/${encodeURIComponent(findingId)}/workflow/pull-request`}
+                  className="underline underline-offset-2"
+                >
+                  Pull request
+                </Link>{" "}
+                <span className="text-muted-foreground">
+                  — the evidence bundle behind the patch this run opened.
+                </span>
+              </p>
+            )}
+          </div>
+        </>
+      }
+    >
+      {query.isPending && <LoadingState what={`finding ${findingId}`} />}
 
-      <div className="flex min-w-0 flex-col gap-8">
-        {query.isPending && <LoadingState what={`finding ${findingId}`} />}
+      {query.isError &&
+        (query.error instanceof NotFoundError ? (
+          <NotFoundState
+            headline="That finding is not open."
+            detail="The API answered, and the graph holds no open finding with this identifier. It may have been patched, abandoned, or it may never have existed. This is an answer about the finding, not a failure of the console."
+            identifier={query.error.identifier}
+          />
+        ) : (
+          <ErrorState error={query.error} what={`finding ${findingId}`} />
+        ))}
 
-        {query.isError &&
-          (query.error instanceof NotFoundError ? (
-            <NotFoundState
-              headline="That finding is not open."
-              detail="The API answered, and the graph holds no open finding with this identifier. It may have been patched, abandoned, or it may never have existed. This is an answer about the finding, not a failure of the console."
-              identifier={query.error.identifier}
-            />
-          ) : (
-            <ErrorState error={query.error} what={`finding ${findingId}`} />
-          ))}
-
-        {query.isSuccess && (
-          <>
-            <MetricPanel
-              label="Known changes"
-              caption="Vendor changes naming this call site, shallow. The full record is fetched by identifier."
-            >
-              {query.data.known_changes.length === 0 ? (
-                <EmptyState
-                  headline="No vendor change names this call site."
-                  detail="The finding was raised by something other than a spec diff."
-                />
-              ) : (
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Change</TableHead>
-                      <TableHead>Kind</TableHead>
-                      <TableHead>Severity</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {query.data.known_changes.map((change) => (
-                      <TableRow key={change.change_id}>
-                        <TableCell className="font-mono">{change.change_id}</TableCell>
-                        <TableCell>{change.kind}</TableCell>
-                        <TableCell>{change.severity}</TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              )}
-            </MetricPanel>
-
-            <MetricPanel
-              label="What the call site touches"
-              caption="The argument keys sent and the response fields read — the surface a change has to break for this finding to matter."
-            >
-              <FieldList label="Argument keys" values={query.data.args_keys} />
-              <FieldList label="Response fields read" values={query.data.response_fields_read} />
-            </MetricPanel>
-
-            <MetricPanel
-              label="Provenance"
-              caption="Where this answer came from. The rung in the facts beside this is the column on this one finding and always says something definite; the rung below describes the whole answer, which is built from every finding naming this call site."
-            >
-              <ProvenanceStrip
-                provenance={query.data}
-                bindingNullLabel="mixed: more than one detector names this call site and they disagree on the rung — this finding's own rung is in the facts beside this panel"
+      {query.isSuccess && (
+        <>
+          <MetricPanel
+            label="Known changes"
+            caption="Vendor changes naming this call site, shallow. The full record is fetched by identifier."
+          >
+            {query.data.known_changes.length === 0 ? (
+              <EmptyState
+                headline="No vendor change names this call site."
+                detail="The finding was raised by something other than a spec diff."
               />
-            </MetricPanel>
-          </>
-        )}
-      </div>
-    </div>
+            ) : (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Change</TableHead>
+                    <TableHead>Kind</TableHead>
+                    <TableHead>Severity</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {query.data.known_changes.map((change) => (
+                    <TableRow key={change.change_id}>
+                      <TableCell className="font-mono">{change.change_id}</TableCell>
+                      <TableCell>{change.kind}</TableCell>
+                      <TableCell>{change.severity}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            )}
+          </MetricPanel>
+
+          <MetricPanel
+            label="What the call site touches"
+            caption="The argument keys sent and the response fields read — the surface a change has to break for this finding to matter."
+          >
+            <FieldList label="Argument keys" values={query.data.args_keys} />
+            <FieldList label="Response fields read" values={query.data.response_fields_read} />
+          </MetricPanel>
+
+          <MetricPanel
+            label="Provenance"
+            caption="Where this answer came from. The rung in the facts beside this is the column on this one finding and always says something definite; the rung below describes the whole answer, which is built from every finding naming this call site."
+          >
+            <ProvenanceStrip
+              provenance={query.data}
+              bindingNullLabel="mixed: more than one detector names this call site and they disagree on the rung — this finding's own rung is in the facts beside this panel"
+            />
+          </MetricPanel>
+        </>
+      )}
+    </DetailGrid>
   )
 }
