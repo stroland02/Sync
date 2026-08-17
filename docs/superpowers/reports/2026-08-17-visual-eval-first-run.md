@@ -271,3 +271,103 @@ deleting one.
 
 Type range and heading differences remain deliberate and recorded above: the console clears a 3.4:1
 bar the mock does not, and says "Repositories" where the v1 mock still says "Fleet".
+
+---
+
+# Signals: the protected-content pass, and it is at parity
+
+**Audited with `web/scripts/prose-audit.mjs`**, which authenticates the way the eval does and
+**refuses to report** if any panel failed — the error-prose trap this lane fell into twice.
+
+Twelve paragraphs, 1571 characters. Classified against the four distinctions `CLAUDE.md` protects
+and the twenty-four sentences in *Establish 2*:
+
+| Class | Chars | What it is |
+|---|---|---|
+| **Protected** | **1083** | three sentences carrying *never-measured apart from nothing-here*, plus one absence statement |
+| Transient | 210 | two loading states, caught mid-fetch — not prose anyone can cut |
+| **Discretionary** | **278** | the route's own question and three one-line role descriptions |
+
+The protected block is not marginal. One paragraph reads *"a group with no rows in it is a quiet
+integration rather than a missing one… A role with nothing attached was never asked, because there is
+no adapter, no configuration table and no row here to ask — which is a different fact from an
+attached integration that was asked and had nothing to report."* That is the never-measured
+distinction stated outright, twice on this screen.
+
+**Discretionary prose is 278 characters against the mock's 308. Signals is already at parity, and
+slightly under it.** The 1663-against-308 figure that put this screen first in the queue is
+protected honesty prose, exactly as Fleet turned out to be.
+
+**No change made and none is warranted.** Cutting to move the total would mean cutting a
+distinction, which is forbidden as firmly as deleting one.
+
+The composition side stands: `regionsBeside` 0 against the mock's 1, behind by one pairing. That is
+a real but small gap, and smaller than `codebase`'s.
+
+**A caveat on this run, stated rather than buried.** Two panels were still loading when the audit
+fired, contributing 210 characters of "Loading…" text. That inflates the total and does not touch
+the discretionary figure, which is what the verdict rests on. A future run should wait for the panels
+rather than only for `main`.
+
+---
+
+# The instrument was not reproducible, and every number above it is superseded
+
+**This is the most important finding in this file and it invalidates my own earlier conclusions.**
+
+Running the eval twice in a row returned different answers. `api-services` read 4 regions on one run
+and 0 on the next; `remediation` read 1 and then 0. **A measurement that changes between identical
+runs cannot order work**, and I had already used it to tell the coordinator that Fleet was at parity
+and needed nothing.
+
+## The cause
+
+Panels fetch independently of the document. The probe waited for `main` to have laid-out text, which
+happens long before the panels resolve — so it measured whatever had rendered by then, and *which*
+panels had rendered varied run to run. A panel still loading has no heading, so it counted as no
+region. A panel that failed wrote error prose, which counted as console prose.
+
+Both failure modes return a plausible number rather than an error. That is the third time in this
+work that a defect survived because the output looked reasonable, and it is exactly the rule the
+coordinator wrote after the second: *a visual metric is checked against a screen whose answer is
+already known before it is allowed to order work.*
+
+## The fix, and the proof it worked
+
+Readiness now requires that no panel is still loading, and the probe **refuses outright** — throws,
+rather than returning numbers — if any panel is showing a fetch failure. Two consecutive runs are now
+byte-identical.
+
+## The stable numbers, which supersede every table above
+
+| page | mock regions | built regions | mock prose | built prose |
+|---|---|---|---|---|
+| fleet | 0 | **12** | 340 | 1777 |
+| codebase | 2 | 1 | 282 | 1015 |
+| api-services | 1 | **4** | 291 | 2236 |
+| signals | 1 | 0 | 308 | 1663 |
+| observe | 1 | 0 | 294 | 3085 |
+| remediation | 1 | 1 | 579 | 2945 |
+| settings | 1 | 1 | 324 | — |
+
+**Composition:** the console is *ahead* of the drawing on `fleet` (12 against 0) and `api-services`
+(4 against 1), level on `remediation` and `settings`, and behind by one pairing on `codebase`,
+`signals` and `observe`. The corrected picture is even less alarming than the corrected-but-unstable
+one, and the "one vertical stack" complaint is not supported anywhere.
+
+**Prose:** every screen carries substantially more prose than the drawing. That number cannot be
+acted on until each screen has a protected-content audit, because the two screens audited so far
+both turned out to be dominated by protected sentences.
+
+## What this means for the conclusions already reported
+
+- **"Fleet is at parity on prose" is withdrawn.** It rested on 915 characters measured mid-load; the
+  settled figure is 1777. The protected/discretionary split has to be re-taken.
+- **"Signals is at parity" is provisional.** Its audit used the same wait-for-`main` readiness, so
+  its 1571 total was probably also unsettled, even though its *classification* — 1083 characters
+  carrying the never-measured distinction — stands on its own and does not depend on the total.
+- **The composition conclusions strengthen rather than weaken.** Fleet needing no layout work was
+  right for a better reason than I gave.
+
+**No layout or prose work should be ordered off any number in this file taken before this section.**
+The instrument is trustworthy from here; the readings before it are not.
