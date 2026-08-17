@@ -1,6 +1,20 @@
 # Gate 3 against an empty graph — the state a design partner sees first
 
-Signed: 2026-08-17T12:54:34-04:00
+Signed: 2026-08-17T13:14:37-04:00
+
+**Re-signed at 13:14:37 to cover `M14-W349`** (the retry affordance, committed 13:13:59), which
+touched `web/src/components` and twenty feature files and so moved the console after the previous
+signature at 12:54:34. It is signed rather than re-walked, and the reason is checkable rather than
+asserted: the diff over `web/src/features` contains **only** the `ErrorState` invocation gaining an
+`onRetry` prop — verified by filtering the commit's feature-file diff for lines not containing
+`onRetry` and getting nothing back. The change adds a control and asserts no figure, so no claim
+this gate measures could have moved. The rendered result was observed on the built console during
+the same session: with the API killed the failure showed "Try again" beside its explanation, and
+with the API restored a click recovered the panel without a page reload.
+
+The original signature for this walk follows.
+
+Signed-original: 2026-08-17T12:54:34-04:00
 
 That is a real clock reading taken after `M14-W346` landed at 12:54:13, not a round number chosen
 to look tidy. It has to fall after the fix commit: the fix changes `web/src/features`, so a
