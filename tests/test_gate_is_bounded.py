@@ -209,6 +209,62 @@ def test_a_docker_endpoint_nothing_answers_reports_a_reason_naming_the_toolchain
     assert "docker" in reason.lower()
 
 
+def test_a_refused_connection_and_an_unanswered_one_are_told_apart():
+    """B184: the two ways of not answering are different facts, and only one is absence.
+
+    A machine with no daemon refuses immediately -- the daemon's own words are `error during
+    connect` -- and that is genuinely "Docker is not here". A daemon that exists and is buried
+    under load answers nothing until the budget expires, which is not the same statement and
+    must not be reported as though it were.
+    """
+    refused = conftest.probe_docker(env={**os.environ, "DOCKER_HOST": UNREACHABLE_DOCKER_HOST})
+
+    assert refused.reason is not None
+    assert not refused.timed_out, (
+        "a refused connection is an answer -- reporting it as a timeout would send whoever "
+        f"reads it looking for a busy daemon instead of an absent one: {refused.reason}"
+    )
+
+
+def test_a_daemon_that_never_answers_stops_the_run_instead_of_skipping_the_boundary_tests(
+    monkeypatch,
+):
+    """B184: an unanswered probe must not be quietly converted into "Docker is absent".
+
+    The collection hook turns an absent runtime into a skip, which is right. The hazard is
+    that it did so for *every* unavailability, including a probe that simply ran out of time.
+    That probe runs once per xdist worker at collection, so a full `-n auto` run puts sixteen
+    `docker version` calls on the daemon in the same instant -- and if that budget ever expired
+    the result was a silent mass skip of exactly the tests carrying B97's boundary claim.
+
+    A skip says "this does not apply here". "We could not tell" is a different sentence, and
+    collapsing the second onto the first is the failure this whole area exists to refuse.
+    """
+    monkeypatch.setattr(
+        conftest, "probe_docker",
+        lambda env=None: conftest.DockerProbe("docker did not answer within 30s", timed_out=True),
+    )
+
+    class _FakeItem:
+        def __init__(self):
+            self.markers = []
+
+        def get_closest_marker(self, name):
+            return object() if name == conftest.DOCKER_MARKER else None
+
+        def add_marker(self, marker):
+            self.markers.append(marker)
+
+    item = _FakeItem()
+    with pytest.raises(Exception) as raised:
+        conftest.pytest_collection_modifyitems(config=None, items=[item])
+
+    assert not item.markers, "a probe that timed out must not be reported as a skip"
+    assert "did not answer" in str(raised.value), (
+        f"the failure has to say the daemon was silent rather than absent: {raised.value}"
+    )
+
+
 def test_the_container_tests_skip_rather_than_error_when_no_daemon_answers():
     """The wiring, driven the way a developer without Docker Desktop meets it.
 
