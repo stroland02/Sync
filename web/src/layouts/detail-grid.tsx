@@ -33,7 +33,7 @@ export function DetailGrid({
 }) {
   return (
     <section className={`grid items-start gap-8 ${SHAPE[railSide]}`}>
-      {header !== undefined && <div className="lg:col-span-2">{header}</div>}
+      {header !== undefined && <div className="min-w-0 lg:col-span-2">{header}</div>}
       {railSide === "start" ? (
         <>
           {rail}
