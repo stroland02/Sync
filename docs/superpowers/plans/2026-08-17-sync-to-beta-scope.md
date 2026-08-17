@@ -310,6 +310,36 @@ The coordinator lesson is worth keeping: the meter said "reached from nowhere", 
 read it as "somebody forgot to call this", which was not. A gate saying *what* is missing does not
 tell you *why*, and the lane that owns the file had the answer the whole time.
 
+## Ruling 7: B97's proxy and its credential are one piece of work, not two
+
+**Decided 2026-08-17, on `B156`'s evidence.** Lane D established the CLI's credential discovery order
+empirically -- `ANTHROPIC_AUTH_TOKEN`, then `ANTHROPIC_API_KEY`, then on-disk OAuth at
+`.credentials.json`, then `apiKeyHelper`, then third-party providers, then failure with
+`authentication_failed` -- and confirmed that `build_container_env()` passes none of them, so an
+isolated container fails with *"Not logged in"* before a patch begins. **A forward proxy alone is
+therefore insufficient.** That was not known before; it was assumed the proxy was the whole of the
+network problem.
+
+Three container options exist and two of them defeat the thing the sandbox is for:
+
+- **`auth_env` injection** puts a live credential inside the container. The whole premise of B97 is
+  that the patch agent holds `Bash` and is not trusted with what is reachable from inside; handing
+  it a credential is the same mistake the mitigation exists to prevent, differing only in whose
+  secret is at risk.
+- **Mounted credentials** are the same objection plus a filesystem path to exfiltrate.
+- **A credential-injecting proxy** keeps the credential outside the container entirely. The
+  container gets no egress except through the proxy, and the proxy attaches authentication to
+  Anthropic-bound traffic that the container itself never holds.
+
+**The third is the design, and it means B97's item 2 and item 3 are one piece of work.** The proxy
+that restricts egress to Anthropic is the same component that supplies the credential; building it
+twice, or building the proxy first and discovering the credential problem afterwards, is the failure
+this ruling exists to prevent.
+
+**What is still the owner's:** which credential Sync's own runs authenticate with -- an operator
+OAuth session, a dedicated API key, or a third-party provider. That is an account and a spend, and
+it decides what the proxy holds.
+
 ## The one console gap that would block a design-partner beta
 
 `reports/2026-08-17-console-beta-stock-take.md`, from the lane that has walked every screen twice
