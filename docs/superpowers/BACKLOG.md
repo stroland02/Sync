@@ -461,6 +461,40 @@ before-and-after measurement — or they are made to serialise deliberately, wit
 recorded and the positive controls proven still able to fail. A skip is not a close: these two are
 the proof that B97's boundary tests assert anything.
 
+**CLOSED 2026-08-17 by `CI-W360`, and it was none of the three candidates.**
+`docs/superpowers/reports/2026-08-17-b183-a-deadline-anchored-to-the-wrong-event.md` carries the
+measurement. The container connected in **0.022s** and sent continuously; the host-side `accept()`
+had already raised `TimeoutError`, because its ten-second deadline started when the socket was bound
+and 11.359s of Docker setup ran next. **The defect is the anchor, not the load** — a deadline
+measured from the wrong event, where contention only decides whether the error is large enough to
+show. Name collision was eliminated from the source (`uuid4` container names); the leaked nine-hour
+container was eliminated by measurement (a full suite passed 3989/3989 while it was up on the
+bridge); `CI-W280`'s cause was eliminated by the evidence (`host.docker.internal` resolved to
+`192.168.65.254` and the connect succeeded). The fix is entirely in `tests/test_patch_sandbox.py`:
+the accept deadline is armed by `_exfiltrate_in_background`, the controls wait for a byte instead of
+sleeping 0.5s, and a failure now prints the container's own account so "connected and late" and
+"never connected" stop being indistinguishable. Both controls were proven still able to fail.
+
+
+### B184 — the docker skip probe is one budget away from silently skipping B97's boundary tests — Lane C
+
+**Found while closing `B183`, measured, and deliberately not fixed there.** `tests/conftest.py`
+skips every `docker`-marked test when `docker_unavailable_reason()` answers, on a
+`DOCKER_PROBE_TIMEOUT_SECONDS = 30` budget. Under a full `-n auto` run a bare `docker version` was
+measured at **432–2552ms**, against roughly 100–200ms idle, so there is ample headroom today and
+nothing is wrong right now.
+
+What makes it worth a number: the probe runs once per xdist worker at collection, so sixteen
+`docker version` calls land on the daemon in the same instant, and the failure mode if that budget
+ever did expire is a **silent mass skip** of exactly the tests carrying B97's boundary claim. A skip
+is neither an honest pass nor an honest failure — the same unreadable outcome `B183` was about, in a
+place where nothing would report it.
+
+**Closes when:** either the collection-time probe is measured under a full `-n auto` run and shown to
+keep real headroom (record the number), or the skip is made to distinguish "the daemon is absent"
+from "the daemon did not answer in time", so the second never reads as the first. Widening the
+timeout without a measurement is not a close.
+
 
 ### B174 — `extract_credential` cannot tell malformed base64 from non-UTF-8 credentials — Lane E
 
