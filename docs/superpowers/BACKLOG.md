@@ -1263,6 +1263,102 @@ plan asserts that so a third member is a deliberate edit rather than a quiet one
 repository with no context. The first two are assertions in the plan rather than review
 judgements.
 
+### B132 — The local gate could not finish, so every claim resting on it was unprovable
+
+**Mostly closed on 2026-08-16 (M0-W220). What remains is named at the bottom.**
+
+`uv run pytest tests/ -q -n0` is the command `CLAUDE.md` names as the authority over this
+repository's health, and on 2026-08-16 it was started on `main` at `5fb5515` and killed after
+**70 minutes having printed nothing**, against a recorded serial duration of about 137 seconds
+(`reports/ci-profile-2026-08-07.md`). One hundred and five commits had landed with CI gating none
+of them, so nothing else knew anything either.
+
+**The suspected cause was wrong and worth recording as wrong.** `tests/test_patch_sandbox.py`
+carries `@pytest.mark.docker` on three tests that create real containers, attach real networks and
+wait on a socket, and nothing deselects that marker. Run alone they pass in **48.01 s** — slow,
+never hung.
+
+**What it actually was: `DROP DATABASE`.** Postgres requests an immediate cluster-wide checkpoint
+on every `DROP DATABASE` and waits for it, holding an object lock on the database meanwhile. This
+suite issues around forty per run — `pytest_configure` creates and drops one, its sweep drops every
+database a killed run left, `test_schema_convergence.aged_dsn` and
+`test_leaked_database_sweep.made` create and drop one per test, and `test_serial_run_isolation`
+spawns a child pytest that does all of it again — and several worktrees run at once, so the drops
+queue on one checkpointer. **Not one of those statements was bounded:** no `connect_timeout`, no
+`statement_timeout`, no `lock_timeout`. Nothing was deadlocked. The run was starved, and a starved
+run is indistinguishable from a stuck one, so an operator kills it.
+
+Three measurements, each taken while the failure was live:
+
+- Two other worktrees' `-n0` runs were blocked in the same statement at the same moment, dumped
+  with `py-spy`: one in `test_schema_convergence.py:56` and one in `test_leaked_database_sweep.py:89`,
+  both inside `psycopg`'s `wait_select` under a fixture teardown's `DROP DATABASE ... WITH (FORCE)`.
+- `pg_stat_activity` showed `DROP DATABASE` backends stacked on `IPC/CheckpointStart`,
+  `IPC/CheckpointDone` and `Lock/object`, three of them racing for the same name, alongside
+  `TRUNCATE` on `IO/DataFileImmediateSync`.
+- A serial run under a 120 s per-test watchdog stopped at
+  `test_leaked_database_sweep.py::test_a_database_named_for_a_dead_pid_is_swept`, in
+  `conftest.sweep_leaked_databases` → `conn.execute` → `wait_select`. That is the same function
+  `pytest_configure` calls **before pytest writes its own header**, which is why the original
+  70 minutes produced no output at all rather than a partial progress line.
+
+**It is not a `-n0` defect.** The blocked drops seen on the server were against
+`sync_test_<controller>_gw<n>_p<worker>` names — xdist worker databases — with three backends
+stacked on one of them. A serial run stalls outright and gets killed; a parallel run loses one
+worker at a time and looks slow, which is why this survived on a suite whose `addopts` pins
+`-n auto`.
+
+**What closed it.** Every administrative statement now goes through `conftest.admin_connection`,
+which sets `connect_timeout` on the client and `statement_timeout` and `lock_timeout` on the
+server — server-side, because a client that gives up leaves the backend holding its lock and still
+waiting. `conftest.drop_database` turns a cancelled drop into a message naming the database and
+the two things a drop waits for. Cleanup drops go through `drop_databases_best_effort`, which warns
+and leaves the database to the next run's sweep rather than failing a test that passed. The
+`pytest_configure` sweep takes a 30 s budget, because it is the one that blocks a blank terminal.
+`pytest-timeout` is a dev dependency and `timeout = 900` is in `pyproject.toml`, so any future
+hang anywhere arrives as a named test with a stack. And `docker-compose.yml` now starts the test
+server with `fsync=off`, `full_page_writes=off` and `synchronous_commit=off`, which is what makes
+the churn affordable: **282 ms median per `DROP DATABASE` stock against 16 ms tuned**, over 15
+cycles on two otherwise identical idle `postgres:16` containers.
+
+Separately, a machine with no reachable Docker daemon got `RuntimeError: docker create failed:
+error during connect` raised from inside `sync.remediate.sandbox` — a message that reads as a
+defect in the module under test. `conftest.pytest_collection_modifyitems` asks
+`docker_unavailable_reason` once at collection and turns the three marked tests into skips naming
+the absent toolchain.
+
+**The docker marker stays in the default gate, and the alternative was argued rather than
+assumed.** Deselecting it is cheap and `e2e` is the precedent — but `e2e` is deselected because it
+calls real vendor and model APIs, opens a pull request and spends money, and none of that is true
+here. These three tests make no network call outside the local daemon, cost nothing, and are the
+**only** evidence B97's container boundary holds; B97's own close condition demands "a test that
+watches the attempt fail rather than ... a configuration file asserting it". The decisive point is
+that this suite already refuses to run most of itself without a container runtime: Postgres is a
+container on that same daemon. Deselecting the container tests while depending on a containerised
+database would be incoherent. They were also innocent of the hang.
+
+**Evidence that keeps it closed:** `tests/test_gate_is_bounded.py`. A blocked admin statement is
+cancelled and control returns (`pg_sleep(30)` against a 1 s bound); a drop that cannot finish
+raises naming the database; a spent sweep budget leaves a database it had selected; a dead
+`DOCKER_HOST` makes a child run report `3 skipped` with a reason instead of three errors, with a
+positive control asserting a reachable daemon reports nothing to skip; and the watchdog is
+asserted as both a declared bound and an installed plugin, since an ini key no plugin claims is
+ignored in silence.
+
+**What is left, and none of it blocks the gate:**
+
+- **The container tests have never run in CI and may not pass there.** They reach the host through
+  `host.docker.internal`, which Docker Desktop provides and a plain Linux daemon does not without
+  `--add-host=host.docker.internal:host-gateway`. `bc04f14` landed them at 22:17 UTC on
+  2026-08-16; the last CI run that actually executed anything was 04:18 UTC that day, and the three
+  since are B112's phantom failures with every job blank. Unknown, not broken — and adding the flag
+  touches `sync.remediate.sandbox`, which is B97's, so it wants its own change.
+- **The churn itself is untouched.** Forty `DROP DATABASE` per run is the cost that the tuning
+  makes affordable rather than removes; a suite that shared one aged database across
+  `test_schema_convergence` would issue far fewer.
+- **CI's Postgres keeps stock durability.** A GitHub Actions `services:` block cannot override a
+  container's command. CI runs one suite at a time in 137 s and is not where this bit.
+
 ## In flight
 
 **Rewritten 2026-08-07.** The section had gone stale in the way it warns against below: it described

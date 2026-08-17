@@ -31,7 +31,14 @@ from sync.graph.store import (
     _table_name,
 )
 
-from conftest import ADMIN_DBNAME, dsn_for
+from conftest import (
+    ADMIN_DBNAME,
+    admin_connection,
+    create_database,
+    drop_database,
+    drop_databases_best_effort,
+    dsn_for,
+)
 
 DSN = os.environ.get("SYNC_DSN", "postgresql://sync:sync@localhost:5433/sync")
 
@@ -43,17 +50,20 @@ def aged_dsn():
     `conftest` gives the run one database and every other test shares it. Dropping columns out
     of that one would leave a broken schema behind for whatever ran next, and the failures would
     land in tests that have nothing to do with this file.
+
+    Through `conftest.admin_connection` rather than a bare `psycopg.connect`, because this
+    teardown is one of the two places B132 caught a serial run blocked forever: `DROP DATABASE`
+    waits on an immediate checkpoint, and with several suites running there is a queue for it.
     """
     name = f"{psycopg.conninfo.conninfo_to_dict(DSN)['dbname']}_aged"
     admin = dsn_for(ADMIN_DBNAME, DSN)
-    with psycopg.connect(admin, autocommit=True) as conn:
-        conn.execute(f'DROP DATABASE IF EXISTS "{name}" WITH (FORCE)')
-        conn.execute(f'CREATE DATABASE "{name}"')
+    with admin_connection(admin) as conn:
+        drop_database(conn, name)
+        create_database(conn, name)
     try:
         yield dsn_for(name, DSN)
     finally:
-        with psycopg.connect(admin, autocommit=True) as conn:
-            conn.execute(f'DROP DATABASE IF EXISTS "{name}" WITH (FORCE)')
+        drop_databases_best_effort(admin, name)
 
 
 def _age(dsn: str, *drops: tuple[str, str]) -> None:
