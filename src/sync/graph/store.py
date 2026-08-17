@@ -1390,18 +1390,44 @@ class GraphStore:
             values,
         )
 
-    def migration_outcomes(self) -> list[MigrationOutcome]:
+    def migration_outcomes(self, *, repo_id: str | None = None) -> list[MigrationOutcome]:
         """Every production attempt, in corpus order.
 
         Filters `is_rehearsal` out rather than handing the dimension to every caller: a rehearsal
         row belongs in the table -- it still cost a repair attempt worth recording -- but nowhere
         a corpus-wide rate (`merge_rate`, `counts.pull_requests_opened`, ...) is computed. See the
         table's grain comment.
+
+        `repo_id` narrows to one repository's findings (B149).
         """
-        rows = self._connect().execute(
-            "SELECT * FROM migration_outcome WHERE NOT is_rehearsal ORDER BY finding_id, attempt_index"
-        ).fetchall()
+        if repo_id is None:
+            rows = self._connect().execute(
+                "SELECT * FROM migration_outcome WHERE NOT is_rehearsal ORDER BY finding_id, attempt_index"
+            ).fetchall()
+        else:
+            rows = self._connect().execute(
+                """
+                SELECT migration_outcome.*
+                  FROM migration_outcome
+                  JOIN finding ON finding.id = migration_outcome.finding_id
+                  JOIN call_site ON call_site.id = finding.call_site_id
+                 WHERE NOT migration_outcome.is_rehearsal AND call_site.repo_id = %s
+                 ORDER BY migration_outcome.finding_id, migration_outcome.attempt_index
+                """,
+                [repo_id],
+            ).fetchall()
         return [MigrationOutcome(**row) for row in rows]
+
+    def finding_repo_ids(self) -> dict[str, str]:
+        """Map every finding_id to its call_site.repo_id (B149)."""
+        rows = self._connect().execute(
+            """
+            SELECT finding.id AS finding_id, call_site.repo_id AS repo_id
+              FROM finding
+              JOIN call_site ON call_site.id = finding.call_site_id
+            """
+        ).fetchall()
+        return {row["finding_id"]: row["repo_id"] for row in rows}
 
     def migration_outcome_rollup_by_kind(self) -> list[dict]:
         """One row per (`change_kind`, `tier`) actually attempted -- a real SQL `GROUP BY` over

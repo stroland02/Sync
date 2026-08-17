@@ -96,11 +96,13 @@ def _web_source(relative: str) -> str:
     return path.read_text(encoding="utf-8")
 
 
-def _fake_runs_reader(*, limit: int, offset: int) -> dict[str, Any]:
+def _fake_runs_reader(
+    *, repo_id: str | None = None, limit: int = 50, offset: int = 0
+) -> dict[str, Any]:
     return {"items": [], "total": 0, "next_offset": None}
 
 
-def _fake_corpus_reader() -> dict[str, Any]:
+def _fake_corpus_reader(*, repo_id: str | None = None) -> dict[str, Any]:
     return {
         "attempts": 0,
         "distinct_findings": 0,
@@ -574,7 +576,7 @@ def test_runs_route_a_negative_offset_is_floored():
 
     client.get("/api/runs?offset=-3")
 
-    assert calls == [{"limit": DEFAULT_LIMIT, "offset": 0}]
+    assert calls == [{"repo_id": None, "limit": DEFAULT_LIMIT, "offset": 0}]
 
 
 def test_vendor_route_returns_empty_page_for_unknown_vendor():
@@ -745,7 +747,7 @@ def test_runs_route_returns_the_readers_payload_unaltered():
     }
     app = _build_app(
         surface=GraphSurface(FakeGraph(), feed_fetched_at=FETCHED),
-        runs_reader=lambda *, limit, offset: payload,
+        runs_reader=lambda *, limit, offset, **_: payload,
     )
     client = TestClient(app)
 
@@ -765,7 +767,7 @@ def test_corpus_route_returns_the_readers_payload_unaltered():
     }
     app = _build_app(
         surface=GraphSurface(FakeGraph(), feed_fetched_at=FETCHED),
-        corpus_reader=lambda: payload,
+        corpus_reader=lambda **_: payload,
     )
     client = TestClient(app)
 
@@ -790,10 +792,10 @@ def test_repositories_route_returns_the_readers_payload_unaltered():
 
 
 def _recording_runs_reader():
-    calls: list[dict[str, int]] = []
+    calls: list[dict[str, Any]] = []
 
-    def reader(*, limit: int, offset: int) -> dict[str, Any]:
-        calls.append({"limit": limit, "offset": offset})
+    def reader(*, repo_id: str | None = None, limit: int = 50, offset: int = 0) -> dict[str, Any]:
+        calls.append({"repo_id": repo_id, "limit": limit, "offset": offset})
         return {"items": [], "total": 0, "next_offset": None}
 
     return reader, calls
@@ -806,7 +808,17 @@ def test_runs_route_passes_limit_and_offset_to_its_reader():
 
     client.get("/api/runs?limit=7&offset=3")
 
-    assert calls == [{"limit": 7, "offset": 3}]
+    assert calls == [{"repo_id": None, "limit": 7, "offset": 3}]
+
+
+def test_runs_route_passes_repo_id_to_its_reader():
+    reader, calls = _recording_runs_reader()
+    app = _build_app(surface=GraphSurface(FakeGraph(), feed_fetched_at=FETCHED), runs_reader=reader)
+    client = TestClient(app)
+
+    client.get("/api/runs?repo_id=github.com/acme/storefront&limit=10&offset=0")
+
+    assert calls == [{"repo_id": "github.com/acme/storefront", "limit": 10, "offset": 0}]
 
 
 def test_runs_route_limit_above_the_ceiling_is_clamped():
@@ -816,7 +828,7 @@ def test_runs_route_limit_above_the_ceiling_is_clamped():
 
     client.get(f"/api/runs?limit={_MAX_LIMIT * 1000}")
 
-    assert calls == [{"limit": _MAX_LIMIT, "offset": 0}]
+    assert calls == [{"repo_id": None, "limit": _MAX_LIMIT, "offset": 0}]
 
 
 def test_runs_route_a_limit_under_the_ceiling_passes_through_untouched():
@@ -826,7 +838,7 @@ def test_runs_route_a_limit_under_the_ceiling_passes_through_untouched():
 
     client.get("/api/runs?limit=9")
 
-    assert calls == [{"limit": 9, "offset": 0}]
+    assert calls == [{"repo_id": None, "limit": 9, "offset": 0}]
 
 
 def test_runs_route_a_negative_limit_is_floored():
@@ -836,7 +848,7 @@ def test_runs_route_a_negative_limit_is_floored():
 
     client.get("/api/runs?limit=-1")
 
-    assert calls == [{"limit": 1, "offset": 0}]
+    assert calls == [{"repo_id": None, "limit": 1, "offset": 0}]
 
 
 def test_runs_route_a_zero_limit_is_floored():
@@ -846,22 +858,37 @@ def test_runs_route_a_zero_limit_is_floored():
 
     client.get("/api/runs?limit=0")
 
-    assert calls == [{"limit": 1, "offset": 0}]
+    assert calls == [{"repo_id": None, "limit": 1, "offset": 0}]
 
 
-def test_corpus_route_reaches_its_reader_exactly_once_with_no_arguments():
-    calls: list[None] = []
+def test_corpus_route_passes_repo_id_to_its_reader():
+    calls: list[dict[str, Any]] = []
 
-    def corpus_reader():
-        calls.append(None)
-        return _fake_corpus_reader()
+    def corpus_reader(*, repo_id: str | None = None):
+        calls.append({"repo_id": repo_id})
+        return _fake_corpus_reader(repo_id=repo_id)
+
+    app = _build_app(surface=GraphSurface(FakeGraph(), feed_fetched_at=FETCHED), corpus_reader=corpus_reader)
+    client = TestClient(app)
+
+    client.get("/api/corpus?repo_id=github.com/acme/storefront")
+
+    assert calls == [{"repo_id": "github.com/acme/storefront"}]
+
+
+def test_corpus_route_reaches_its_reader_with_none_when_unscoped():
+    calls: list[dict[str, Any]] = []
+
+    def corpus_reader(*, repo_id: str | None = None):
+        calls.append({"repo_id": repo_id})
+        return _fake_corpus_reader(repo_id=repo_id)
 
     app = _build_app(surface=GraphSurface(FakeGraph(), feed_fetched_at=FETCHED), corpus_reader=corpus_reader)
     client = TestClient(app)
 
     client.get("/api/corpus")
 
-    assert calls == [None]
+    assert calls == [{"repo_id": None}]
 
 
 def test_repositories_route_reaches_its_reader_exactly_once_with_no_arguments():
@@ -1372,13 +1399,13 @@ def _recording_client(**graph_kw) -> _RecordingClient:
         workflow_reads.append(finding_id)
         return {"nodes": [], "outcome": None, "abandon_reason": None}
 
-    def runs_reader(*, limit: int, offset: int):
-        runs_reads.append({"limit": limit, "offset": offset})
+    def runs_reader(*, repo_id: str | None = None, limit: int = 50, offset: int = 0):
+        runs_reads.append({"repo_id": repo_id, "limit": limit, "offset": offset})
         return {"items": [], "total": 0, "next_offset": None}
 
-    def corpus_reader():
-        corpus_reads.append(None)
-        return _fake_corpus_reader()
+    def corpus_reader(*, repo_id: str | None = None):
+        corpus_reads.append({"repo_id": repo_id})
+        return _fake_corpus_reader(repo_id=repo_id)
 
     def corpus_health_reader():
         corpus_health_reads.append(None)
@@ -1758,7 +1785,9 @@ def test_every_collection_route_accepts_limit_and_offset():
             "next_offset": consumed if consumed < len(items) else None,
         }
 
-    def runs_reader(*, limit: int, offset: int) -> dict[str, Any]:
+    def runs_reader(
+        *, repo_id: str | None = None, limit: int = 50, offset: int = 0
+    ) -> dict[str, Any]:
         return _paged(run_items, limit, offset)
 
     def vendor_findings_reader(vendor_id: str, *, limit: int, offset: int, **_) -> dict[str, Any]:

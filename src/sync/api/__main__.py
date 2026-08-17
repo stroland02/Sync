@@ -116,11 +116,13 @@ def app_factory() -> Starlette:
     def workflow_reader(finding_id: str):
         return workflow_state(checkpointer_dsn, finding_id)
 
-    def runs_reader(*, limit: int, offset: int):
-        return fleet.runs(checkpointer_dsn, limit=limit, offset=offset)
+    def runs_reader(*, repo_id: str | None = None, limit: int = 50, offset: int = 0):
+        return fleet.runs(
+            checkpointer_dsn, repo_id=repo_id, store=store, limit=limit, offset=offset
+        )
 
-    def corpus_reader():
-        return fleet.corpus_summary(store)
+    def corpus_reader(*, repo_id: str | None = None):
+        return fleet.corpus_summary(store, repo_id=repo_id)
 
     def corpus_health_reader():
         return fleet.corpus_health(store)

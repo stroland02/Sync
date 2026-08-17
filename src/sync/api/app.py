@@ -48,7 +48,7 @@ WorkflowReader = Callable[[str], Optional[dict[str, Any]]]
 # graph-surface questions, and folding them into the surface would ask one abstraction to speak
 # three databases' worth of shape.
 RunsReader = Callable[..., dict[str, Any]]
-CorpusReader = Callable[[], dict[str, Any]]
+CorpusReader = Callable[..., dict[str, Any]]
 CorpusHealthReader = Callable[[], dict[str, Any]]
 RepositoriesReader = Callable[[], dict[str, Any]]
 
@@ -298,12 +298,14 @@ def create_app(
         return JSONResponse(payload)
 
     async def runs(request: Request) -> JSONResponse:
+        repo_id = request.query_params.get("repo_id")
         limit = _limit_param(request)
         offset = _offset_param(request)
-        return JSONResponse(runs_reader(limit=limit, offset=offset))
+        return JSONResponse(runs_reader(repo_id=repo_id, limit=limit, offset=offset))
 
     async def corpus(request: Request) -> JSONResponse:
-        return JSONResponse(corpus_reader())
+        repo_id = request.query_params.get("repo_id")
+        return JSONResponse(corpus_reader(repo_id=repo_id))
 
     async def corpus_health_endpoint(request: Request) -> JSONResponse:
         return JSONResponse(corpus_health_reader())
