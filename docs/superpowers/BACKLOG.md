@@ -554,6 +554,39 @@ Code CLI binary to establish the exact discovery order and what a container need
   2. **Option B (Mounted OAuth credentials)**: Host mounts `$CLAUDE_CONFIG_DIR/.credentials.json` into container user's `$HOME/.claude/.credentials.json`. Requires handling container UID permissions and token refresh lifetimes.
   3. **Option C (Credential-injecting forward auth proxy)**: Container runs with dummy credentials or no credentials pointing to a local forward proxy (`HTTPS_PROXY` / `ANTHROPIC_BASE_URL`), and the proxy attaches the real `x-api-key` / `Authorization` header before forwarding upstream. Keeps all secrets strictly outside the sandbox container.
 
+**Ruling (Lane A, routed here per this entry).** Option C. Two independent reasons, not one.
+
+First, Option A does not match how this deployment actually authenticates. `sync.remediate
+.sandbox`'s own docstring already established this, verified against a real environment
+snapshot: no `ANTHROPIC_API_KEY` or `ANTHROPIC_AUTH_TOKEN` exists anywhere in this process's
+environment. `CLAUDE_CODE_EXECPATH` points at an already-authenticated `claude` binary --
+discovery order item 3, the on-disk OAuth session, not item 1 or 2. Choosing Option A would
+mean provisioning a credential type this deployment does not hold today, which is exactly the
+"a credential, an account, or a spend" exception `.claude/rules/autonomous-development.md`
+reserves for the human -- not a design choice this ruling can make.
+
+Second, and this is the one that would hold even if a static key did exist: Option B puts a
+live Anthropic session credential inside the filesystem of the container the model-driven agent
+controls. `sandbox.py`'s whole reason for existing is that the agent's own `Bash` tool is the
+untrusted actor -- CLAUDE.md's threat model ranks it first. A credential the sandboxed process
+can read is a credential the sandboxed process can exfiltrate, on the same `network="bridge"`
+window `disconnect_network`'s own docstring already measured as open for the better part of a
+second after teardown starts. Mounting `.credentials.json` into that container does not narrow
+the boundary this module exists to build; it hands the risky phase the one thing "we never hold
+customer secrets" was written to keep away from code running on a customer's behalf, except this
+time the secret is Sync's own rather than the customer's.
+
+Option C is the only one of the three where the answer to "what can a compromised or coerced
+agent turn read out of its own container" stays "nothing that reaches Anthropic on its own" --
+the proxy holds the credential, the container holds none, and the container's whole outbound
+reach is one proxy address a `network="none"`-adjacent container can still resolve. It is also
+the only option consistent with `ClaudeAgentOptions`' own `SandboxNetworkConfig.httpProxyPort`
+surface already assuming a proxy exists, per this entry's own B97 cross-reference.
+
+This ruling does not build the proxy -- that is still separate, undesigned work, and still item
+2 of B97's remaining four. What it retires is the ambiguity between three options; whoever
+designs the proxy next designs it to inject the credential rather than to pass one through.
+
 ### B165 — a customer's own file writes unfenced text into the patch prompt — Lane A — CLOSED
 
 **Found 2026-08-17 auditing the threat model against the tree**
