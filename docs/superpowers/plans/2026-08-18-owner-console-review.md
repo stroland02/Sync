@@ -32,6 +32,29 @@ fleet-wide views standing in for per-repository truth. **The owner's change achi
 strongly by deleting the level.** So this reads as the same intent taken further, not a reversal —
 but the spec block still has to say so, and the owner still has to be the one who says it.
 
+**Refined by the owner, and the refinement is sharper than the original framing.** *"The selection
+of the codebase should be completely within settings or the sidebar. There should not be a listing of
+all the different codebases in the overview."*
+
+**That resolves the question rather than restating it: selection is chrome, not content.** I had
+framed this as *delete the fleet root*, which left open what replaces it. The owner's version is
+precise — **choosing a codebase is a navigation act and belongs in the scope switcher; the Overview
+is about the codebase you have already chosen.** `interface-originality.md` already lists *a
+breadcrumb or scope switcher that says what contains what* among the conventions of the form, so the
+component exists in our own vocabulary and needs no invention.
+
+**Three consequences, and the second one contradicts work that landed an hour ago.**
+
+1. **The Overview is scoped.** It answers *what is true about this codebase*, never *here are your
+   codebases*. A repository directory on a landing screen is the fleet root wearing a different hat.
+2. **`M14-W372` placed the repository list and counts first on the Overview**, reasoning from value
+   before configuration. That placement is now wrong — **the argument was right and the container was
+   wrong.** Value-before-configuration survives: it just means the *selected* codebase's findings
+   appear before any setup prompt, not that a list of every codebase leads the page.
+3. **The scope switcher becomes load-bearing**, so it carries what the Overview list used to: which
+   codebase is selected, what else is available, and how to add one. Settings holds the same thing in
+   its longer form — the switcher is for changing scope, Settings is for managing what exists.
+
 **One consequence to check rather than assume:** several screens currently exist *only* fleet-wide.
 `M14-W365` already established that `/api/detectors` discards finding rows as it aggregates and that
 every findings view requires a vendor. **Deleting the fleet root may orphan screens that have no
