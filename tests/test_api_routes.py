@@ -254,6 +254,7 @@ def _build_app(
     change_units_reader=_fake_change_units_reader,
     context_reader=_fake_context_reader,
     context_writer=_fake_context_writer,
+    api_password: str | None = None,
 ) -> Starlette:
     """`create_app` with every reader defaulted to a fake, so a test naming one override is
     not forced to restate the other ten.
@@ -282,6 +283,7 @@ def _build_app(
         change_units_reader=change_units_reader,
         context_reader=context_reader,
         context_writer=context_writer,
+        api_password=api_password,
     )
 
 
