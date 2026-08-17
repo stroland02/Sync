@@ -156,19 +156,27 @@ def reset_seconds(notice: str) -> int | None:
     return hours * 3600 + minutes * 60 + seconds
 
 
-def budget_held(cli: str, handle: str) -> str | None:
+def budget_held(cli: str, handle: str, silent: bool = False) -> str | None:
     """The reset notice on a terminal that has stopped for budget, or `None`.
 
     Read from the terminal's own tail rather than inferred from silence, because silence is
     ambiguous -- a thinking agent and an exhausted one look identical from the outside, and only
     one of them should be left alone.
 
-    Only the last few lines are examined. A banner further back means the agent has produced output
-    since, which is proof it recovered.
+    While the terminal is still producing output, only the last few lines are examined: a banner
+    further back means the agent has written since, which is proof it recovered.
+
+    `silent` lifts that bound, and it has to. An outage that lands mid-tool-call leaves the agent's
+    own chrome drawn *underneath* the banner -- an in-flight tool line, a permissions footer, a
+    prompt -- and none of it is new output. The banner leaves the window pushed by furniture rather
+    than by writing, and the lane reads as dead. Measured on Lane E, 2026-08-17: fifty-five minutes
+    classified STALE, and the interrupt sent to unwedge it ended the session. When the tail has not
+    moved, everything in it describes now.
     """
     payload = call(cli, "terminal", "read", "--terminal", handle, "--json")
     terminal = (payload.get("result") or {}).get("terminal") or {}
-    recent = (terminal.get("tail") or [])[-BUDGET_NOTICE_WITHIN_LAST:]
+    lines = terminal.get("tail") or []
+    recent = lines if silent else lines[-BUDGET_NOTICE_WITHIN_LAST:]
     tail = " ".join(recent).lower()
     if not any(marker in tail for marker in BUDGET_EXHAUSTED):
         return None
@@ -232,17 +240,39 @@ def lane_name(spec: str) -> str:
     return head[:60] if head else "unnamed task"
 
 
-def verdict(dispatch: dict, terminals: dict[str, int], silence_ms: int) -> tuple[bool, str]:
-    """Whether this lane needs re-dispatching, and the reason to print either way."""
+def verdict(
+    dispatch: dict,
+    terminals: dict[str, int],
+    silence_ms: int,
+    fallback_handle: str | None = None,
+) -> tuple[bool, str]:
+    """Whether this lane needs re-dispatching, and the reason to print either way.
+
+    **A lane is stalled when its agent has stopped, not when Orca's record of it went bad**, and the
+    two come apart constantly: `worker-start` gives up after about a minute waiting for a busy TUI
+    and marks the dispatch failed while the agent it was attaching to works straight through.
+    Measured 2026-08-17 -- Lane C spent six minutes inside one `npm install` while every sweep read
+    its dispatch as failed and created another retry dispatch against a lane that needed nothing.
+
+    So a bad record is checked against the terminal before it is believed. The terminal is evidence;
+    the record is a hypothesis. `fallback_handle` is the lane's recorded terminal from
+    `lane_terminals.json`, which is the only handle available when the dispatch never carried one.
+    """
     status = dispatch.get("status")
     assignee = dispatch.get("assignee_handle")
+    record_is_bad = status in {"failed", "stopped"} or not assignee
 
-    if status in {"failed", "stopped"}:
-        return True, f"dispatch {status} ({dispatch.get('last_failure') or 'no reason recorded'})"
-    if not assignee:
-        # `dispatched` with no assignee is the common stall: worker-start timed out waiting for a
-        # busy TUI and the task list still reads as though the work is under way.
+    if record_is_bad:
+        handle = assignee or fallback_handle
+        # No terminal to check is not evidence of health: without one the record is all there is.
+        if handle and handle in terminals:
+            quiet_ms = int(time.time() * 1000) - terminals[handle]
+            if quiet_ms <= silence_ms:
+                return False, f"working ({quiet_ms // 1000}s since last output, despite the record)"
+        if status in {"failed", "stopped"}:
+            return True, f"dispatch {status} ({dispatch.get('last_failure') or 'no reason recorded'})"
         return True, f"never attached to a terminal (status {status})"
+
     if assignee not in terminals:
         return True, "assigned terminal is gone"
 
@@ -291,7 +321,7 @@ def main() -> int:
     for task in open_tasks:
         shown = call(cli, "orchestration", "dispatch-show", "--task", task["id"], "--json")
         dispatch = (shown.get("result") or {}).get("dispatch") or {}
-        needs, why = verdict(dispatch, terminals, silence_ms)
+        needs, why = verdict(dispatch, terminals, silence_ms, recorded.get(task["id"]))
         label = f"{task['id']} [{lane_name(task.get('spec', ''))}]"
 
         if not needs:
@@ -304,7 +334,10 @@ def main() -> int:
         # fact have held.
         handle = dispatch.get("assignee_handle") or recorded.get(task["id"])
         if handle and handle in terminals:
-            held = budget_held(cli, handle)
+            # A tail that has not moved is a tail describing now, so the whole of it is read rather
+            # than its last few lines. `why` already carries the distinction: only the silence
+            # branch says "silent for".
+            held = budget_held(cli, handle, silent=why.startswith("silent for"))
             if held:
                 # The countdown in the notice was captured when the agent stopped, not now, so it
                 # is reported alongside how long ago that was. Printing a frozen "resets in 2h" an

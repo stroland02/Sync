@@ -293,6 +293,47 @@ numbers rather than errors.
 cut: `signals` carries **1663 prose characters against 308**, the largest prose gap anywhere, and is
 behind by 1 pairing; `codebase` is behind by 2 pairings; `observe` by 1.
 
+### Third correction: the instrument was not reproducible, so the prose figures above are withdrawn too
+
+**Corrected again 2026-08-17, by the lane, against itself.** Two identical runs disagreed —
+`api-services` read 4 regions on one and 0 on the next. **A measurement that changes between
+identical runs cannot order work**, and this one had already been used to tell the coordinator Fleet
+was at parity and needed nothing.
+
+Cause: panels fetch independently of the document, and the probe waited only for `main` to carry
+text, so it measured whichever panels happened to have rendered. **A panel still loading has no
+heading and counts as no region; a panel that failed writes error prose that counts as console
+prose.** Both return a plausible number rather than an error — the third defect in this work to
+survive on plausibility, and precisely what the rule written after the second one predicts.
+
+The fix is a readiness condition rather than a longer wait: no panel may still be loading, and the
+probe **throws** rather than reporting if any panel shows a fetch failure. Two consecutive runs are
+now byte-identical, which is the evidence that anything measured from here can be acted on.
+
+**On stable numbers the composition finding gets stronger and the prose finding is withdrawn.**
+
+- **Composition.** The console is *ahead* of the drawing on `fleet` — 12 regions against 0 — and on
+  `api-services`, 4 against 1; level on `remediation` and `settings`; behind by **exactly one
+  pairing** on `codebase`, `signals` and `observe`. The original complaint of one vertical stack
+  everywhere is not supported anywhere, and this time it rests on an instrument that repeats.
+- **Prose. Withdrawn.** Fleet's parity verdict rested on 915 characters measured mid-load; the
+  settled figure is **1777**. The `signals` classification stands on its own evidence — 1083
+  characters carrying the never-measured distinction, quoted in the report — but its total was taken
+  the same unsettled way, so that verdict is provisional until re-measured.
+
+**No layout pass and no prose cut were made off the unstable numbers**, deliberately: ordering work
+off figures just shown to be unreliable repeats the mistake rather than fixes it. The next unit is a
+protected-versus-discretionary re-audit of every screen on the fixed instrument, for which
+`web/scripts/prose-audit.mjs` now exists — it classifies a screen's paragraphs and refuses on a
+failed panel.
+
+**Three reversals in one day, all the same shape.** A metric measuring markup technique, a harness
+authenticating differently from the product, and a probe reading a half-rendered page each returned a
+number a reader would accept. None returned an error. The standing consequence is that **a visual
+metric must repeat before it may order work, and must refuse rather than estimate when its subject is
+not in a measurable state** — reproducibility first, then agreement with a known screen, then
+routing.
+
 ## Sequence
 
 1. **Capture the built console now.** There is no current picture. Every screen, at a fixed viewport,

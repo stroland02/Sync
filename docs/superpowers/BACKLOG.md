@@ -4178,3 +4178,37 @@ one link per row in the console, which is Lane B's half and small once the addre
 **Not urgent for beta.** A partner's own abandoned run is served correctly the moment it is the
 newest attempt, which is the common case at the point where they are watching. This bites on the
 retry path.
+
+### B147 — A repository with no telemetry 404s, which reads as a repository that does not exist
+
+Found while re-auditing the console screen by screen (`M14-W359`).
+
+`GET /api/repositories` lists `github.com/stripe/stripe-connect-furever-demo`. Both of that
+repository's telemetry routes then answer `404 Not Found` with a bare body:
+
+```
+GET /api/repositories/{repo}/coverage   -> 404 Not Found
+GET /api/repositories/{repo}/observed   -> 404 Not Found
+```
+
+The repository exists. What it has none of is coverage rows and observed calls.
+
+**This is the absence-versus-zero distinction, violated one layer below the console.** A 404 is the
+transport saying *there is no such thing*. The truth here is *this thing exists and has nothing
+recorded against it*, which is a different fact, and telling them apart is the product's own
+argument — `CLAUDE.md` names it as one of the four distinctions every surface must render.
+
+The console handles its side correctly: it shows the failure rather than inventing a zero, and the
+retry control appears. But it cannot render a distinction the payload has already collapsed, so the
+screen reports *not found* where it should report *never measured*.
+
+**Consequences beyond the wording.** The codebase screen cannot currently be measured at all — the
+prose auditor refuses a screen with a failed panel, because error prose would be counted as console
+prose. So this defect also blocks the remaining visual-eval work on that route.
+
+**What closes it:** the routes answer `200` with an empty, well-formed payload when the repository is
+known and has no rows, and reserve `404` for a repository the index has never seen. The console
+already renders that case — the empty-state walk (`M14-W347`) proved every screen distinguishes
+never-indexed from zero when the payload lets it.
+
+`src/sync/api` and `src/sync/dashboard` are Lane E's files, so this is filed rather than taken.

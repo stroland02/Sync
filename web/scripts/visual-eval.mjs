@@ -116,8 +116,23 @@ const PROBE = `(() => {
   )
   const prose = [...main.querySelectorAll("p")].reduce((n, p) => n + p.textContent.trim().length, 0)
 
+  // A failed panel is not a measurable panel: its error prose counts as console prose and its
+  // missing content counts as missing composition. The caller refuses on this rather than
+  // reporting numbers that look plausible.
+  // Structural rather than phrase-matching: every failed panel renders ErrorState, and every
+  // ErrorState with a retry renders a "Try again" control, so the control is the marker. The phrase
+  // list stays for panels that predate the retry affordance. A "not found (/api/...)" panel slipped
+  // past a list of unreachable-style wordings and counted 302 characters of error prose as console
+  // prose on the codebase screen -- the fourth failure of this shape in this work.
+  const failed =
+    [...main.querySelectorAll("button")].some((b) => b.textContent.trim() === "Try again") ||
+    /never reached a server|did not answer|Could not reach the API|unreachable|not found [(][/]api[/]/i.test(
+      main.textContent
+    )
+
   const body = getComputedStyle(document.body)
   return {
+    failed,
     heading: document.querySelector("h1")?.textContent.trim() ?? null,
     typeMax: sizes.length ? Math.max(...sizes) : null,
     typeMin: sizes.length ? Math.min(...sizes) : null,
@@ -211,9 +226,17 @@ async function waitForRender(page, label, url) {
         if (main === null) return false
         const heading = document.querySelector("h1")?.textContent ?? ""
         if (heading.includes("{{")) return false
-        return [...main.querySelectorAll("*")].some(
+        const hasText = [...main.querySelectorAll("*")].some(
           (el) => el.offsetParent !== null && el.textContent.trim() !== ""
         )
+        if (!hasText) return false
+        // Panels fetch independently of the document, so a screen can have laid-out text while
+        // half its panels are still skeletons. Measuring then produced a different answer on every
+        // run -- api-services read 4 regions once and 0 the next -- because which panels had
+        // settled varied. A panel still loading has no heading, so it counts as no region; a panel
+        // that failed writes error prose that counts as console prose. Neither is measurable, so
+        // readiness means every panel has resolved one way or the other.
+        return !/Loading |Waiting for the API/i.test(main.textContent)
       })()`,
       returnByValue: true,
     })
@@ -251,7 +274,15 @@ async function measure(url, label) {
       returnByValue: true,
       awaitPromise: true,
     })
-    return { label, url, ...result.result.value }
+    const measured = result.result.value
+    if (measured.failed === true) {
+      throw new Error(
+        `${label} (${url}) has at least one panel showing a fetch failure. Refusing to measure: ` +
+          "error prose would be counted as console prose and a missing panel as missing " +
+          "composition. Check the API and the console's credential, then re-run."
+      )
+    }
+    return { label, url, ...measured }
   } finally {
     await page.send("Emulation.clearDeviceMetricsOverride").catch(() => {})
     page.close()

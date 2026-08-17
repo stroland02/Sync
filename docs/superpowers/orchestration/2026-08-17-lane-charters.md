@@ -197,6 +197,71 @@ arrive -- an arbitration, a stop-work, a regression another lane caused -- prefe
 `orca terminal send --terminal <handle> --enter`, which reaches a busy agent as its next input
 rather than waiting for it to ask for mail.
 
+## Reading mail: the queue does not advance unless you acknowledge, and there is no `ack` subcommand
+
+**`orca orchestration check` returns the oldest *unacknowledged* batch, and returns it again, and
+again.** The acknowledgement is a flag on `check` itself:
+
+```
+orca orchestration check --ack <delivery_id> --json
+```
+
+There is no `orca orchestration ack`. Calling one fails with `invalid_argument`, which reads as a bad
+argument rather than as a missing command, so the natural next move is to fix the arguments instead
+of the verb.
+
+Measured 2026-08-17, by the coordinator, on itself: a `worker_done` from Lane B was read, acted on
+and answered — and then returned unchanged on the next two sweeps, while a Lane C escalation and a
+Lane C `worker_done` sat behind it, unseen. The owner's prompt said *"you have 2 messages"* and then
+*"you have 3"* while `check` reported one, which is exactly the signal to look at. **A queue that
+only ever shows you the message you have already handled looks identical to a quiet queue.**
+
+Drain it in a loop, acking each batch by the id the previous call returned, until the delivery id
+comes back empty. And treat a mismatch between the notification count and what `check` shows as a
+defect in your own reading, not as a stale notification.
+
+**There are two inboxes, and draining one does not drain the other.** Bare `check` reads the Run's
+FIFO. `check --terminal <your handle> --all` reads the messages addressed to your terminal, and they
+are not the same set: on 2026-08-17 the coordinator's terminal mailbox held **52 non-heartbeat
+messages**, among them a Lane C `worker_done` reporting `CI-W299` and `CI-W300` that never appeared
+in the FIFO at all and was never answered. The FIFO had been drained to empty at the time.
+
+So a sweep reads both, and the terminal mailbox is the one that goes unread, because nothing prompts
+you to look at it:
+
+```
+orca orchestration check --json                              # the Run FIFO, ack in a loop
+orca orchestration check --terminal <handle> --all --json    # your own mailbox, sort by created_at
+```
+
+`--all` does not mark anything read, so `read_at` stays null there and cannot be used to tell handled
+from unhandled. Sort by `created_at` and compare against what you have actually acted on.
+
+**The same split is why a lane can be certain it is being ignored while you are certain you replied.**
+Lane A said so directly — *"nothing new is showing up in this dispatch's mailbox; if there are
+messages waiting somewhere else, they're not reaching me"* — and it was right: a ruling that unblocked
+a full day of its held work had been sent and never arrived. It took `orca terminal send --enter` to
+deliver. **When a lane reports it is not receiving mail, believe it and change channel.**
+
+## A `worker_done` can be rejected, and the lane is the only one who finds out
+
+**`orca orchestration worker-done` fails with `Dispatch <id> capability is revoked` once that
+dispatch has been superseded** — which is exactly what a re-dispatch does. The lane sees the
+rejection; the coordinator sees nothing at all, because a report that was never accepted is not a
+report that arrived late. Twice on 2026-08-17 Lane B finished a unit, filed it, was rejected, and
+the coordinator planned the next sweep believing the lane had gone quiet.
+
+Two rules follow.
+
+**For a lane:** if `worker-done` is rejected, do not discard the body. Resend it as an ordinary
+message to the coordinator's terminal handle, with the rejection quoted at the top. Lane B did this
+and it is why both reports exist. A finished unit that nobody hears about is indistinguishable from
+one that was never done.
+
+**For the coordinator:** silence from a lane that was recently re-dispatched is not evidence it is
+idle. Read its terminal or its branch before concluding anything, and prefer not to re-dispatch a
+lane that is mid-unit — the re-dispatch is what revokes the address its report is holding.
+
 ## When a lane keeps working outside its boundary
 
 Three times on 2026-08-17 one lane built inside another's files: the Fleet change-unit aggregate

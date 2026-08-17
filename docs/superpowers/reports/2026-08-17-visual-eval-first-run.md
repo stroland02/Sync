@@ -271,3 +271,193 @@ deleting one.
 
 Type range and heading differences remain deliberate and recorded above: the console clears a 3.4:1
 bar the mock does not, and says "Repositories" where the v1 mock still says "Fleet".
+
+---
+
+# Signals: the protected-content pass, and it is at parity
+
+**Audited with `web/scripts/prose-audit.mjs`**, which authenticates the way the eval does and
+**refuses to report** if any panel failed — the error-prose trap this lane fell into twice.
+
+Twelve paragraphs, 1571 characters. Classified against the four distinctions `CLAUDE.md` protects
+and the twenty-four sentences in *Establish 2*:
+
+| Class | Chars | What it is |
+|---|---|---|
+| **Protected** | **1083** | three sentences carrying *never-measured apart from nothing-here*, plus one absence statement |
+| Transient | 210 | two loading states, caught mid-fetch — not prose anyone can cut |
+| **Discretionary** | **278** | the route's own question and three one-line role descriptions |
+
+The protected block is not marginal. One paragraph reads *"a group with no rows in it is a quiet
+integration rather than a missing one… A role with nothing attached was never asked, because there is
+no adapter, no configuration table and no row here to ask — which is a different fact from an
+attached integration that was asked and had nothing to report."* That is the never-measured
+distinction stated outright, twice on this screen.
+
+**Discretionary prose is 278 characters against the mock's 308. Signals is already at parity, and
+slightly under it.** The 1663-against-308 figure that put this screen first in the queue is
+protected honesty prose, exactly as Fleet turned out to be.
+
+**No change made and none is warranted.** Cutting to move the total would mean cutting a
+distinction, which is forbidden as firmly as deleting one.
+
+The composition side stands: `regionsBeside` 0 against the mock's 1, behind by one pairing. That is
+a real but small gap, and smaller than `codebase`'s.
+
+**A caveat on this run, stated rather than buried.** Two panels were still loading when the audit
+fired, contributing 210 characters of "Loading…" text. That inflates the total and does not touch
+the discretionary figure, which is what the verdict rests on. A future run should wait for the panels
+rather than only for `main`.
+
+---
+
+# The instrument was not reproducible, and every number above it is superseded
+
+**This is the most important finding in this file and it invalidates my own earlier conclusions.**
+
+Running the eval twice in a row returned different answers. `api-services` read 4 regions on one run
+and 0 on the next; `remediation` read 1 and then 0. **A measurement that changes between identical
+runs cannot order work**, and I had already used it to tell the coordinator that Fleet was at parity
+and needed nothing.
+
+## The cause
+
+Panels fetch independently of the document. The probe waited for `main` to have laid-out text, which
+happens long before the panels resolve — so it measured whatever had rendered by then, and *which*
+panels had rendered varied run to run. A panel still loading has no heading, so it counted as no
+region. A panel that failed wrote error prose, which counted as console prose.
+
+Both failure modes return a plausible number rather than an error. That is the third time in this
+work that a defect survived because the output looked reasonable, and it is exactly the rule the
+coordinator wrote after the second: *a visual metric is checked against a screen whose answer is
+already known before it is allowed to order work.*
+
+## The fix, and the proof it worked
+
+Readiness now requires that no panel is still loading, and the probe **refuses outright** — throws,
+rather than returning numbers — if any panel is showing a fetch failure. Two consecutive runs are now
+byte-identical.
+
+## The stable numbers, which supersede every table above
+
+| page | mock regions | built regions | mock prose | built prose |
+|---|---|---|---|---|
+| fleet | 0 | **12** | 340 | 1777 |
+| codebase | 2 | 1 | 282 | 1015 |
+| api-services | 1 | **4** | 291 | 2236 |
+| signals | 1 | 0 | 308 | 1663 |
+| observe | 1 | 0 | 294 | 3085 |
+| remediation | 1 | 1 | 579 | 2945 |
+| settings | 1 | 1 | 324 | — |
+
+**Composition:** the console is *ahead* of the drawing on `fleet` (12 against 0) and `api-services`
+(4 against 1), level on `remediation` and `settings`, and behind by one pairing on `codebase`,
+`signals` and `observe`. The corrected picture is even less alarming than the corrected-but-unstable
+one, and the "one vertical stack" complaint is not supported anywhere.
+
+**Prose:** every screen carries substantially more prose than the drawing. That number cannot be
+acted on until each screen has a protected-content audit, because the two screens audited so far
+both turned out to be dominated by protected sentences.
+
+## What this means for the conclusions already reported
+
+- **"Fleet is at parity on prose" is withdrawn.** It rested on 915 characters measured mid-load; the
+  settled figure is 1777. The protected/discretionary split has to be re-taken.
+- **"Signals is at parity" is provisional.** Its audit used the same wait-for-`main` readiness, so
+  its 1571 total was probably also unsettled, even though its *classification* — 1083 characters
+  carrying the never-measured distinction — stands on its own and does not depend on the total.
+- **The composition conclusions strengthen rather than weaken.** Fleet needing no layout work was
+  right for a better reason than I gave.
+
+**No layout or prose work should be ordered off any number in this file taken before this section.**
+The instrument is trustworthy from here; the readings before it are not.
+
+---
+
+# Fleet, re-audited on the fixed instrument — and one cut made
+
+**`prose-audit.mjs` carried the same defect the eval had** and was fixed the same way before this
+run: it waited only for `main` to have text, so it could count a skeleton's "Loading…" as console
+prose. It now waits for every panel to settle and refuses if any shows a fetch failure.
+
+Fleet, settled: **1777 characters across 16 paragraphs.**
+
+| Class | Chars | What it is |
+|---|---|---|
+| **Protected** | **1327** | change-unit grain (twice), staleness-not-liveness, absence-is-not-zero, three-attempts-one-finding, the fleet-vs-codebase scope sentence, the standing-limits framing, and the completeness statement |
+| **Discretionary** | **450** | the route question, two figure labels, one panel description, and one string repeated once per card |
+
+Against the mock's 340, Fleet's discretionary prose was **450 — over by 110**, which is a real gap
+and the first one this work has found that survives a correct measurement.
+
+## The cut, and why it is the only one available
+
+`Git repository · Monitored by Sync` rendered on **every** repository card — 170 of those 450
+characters. It carries none of the four distinctions, and both halves are already established by
+context: a reader looking at the Sync console's own repository list knows the rows are repositories
+and knows Sync is watching them. **Deleting it removes no fact.**
+
+Removed, test-first. Verified by re-running the audit rather than by asserting:
+
+| | before | after |
+|---|---|---|
+| total | 1777 | **1607** |
+| paragraphs | 16 | 11 |
+| discretionary | 450 | **280** |
+
+**280 against the mock's 340 — Fleet is now under parity on discretionary prose**, and the four
+protected sentences were confirmed still present in the same run rather than assumed.
+
+Nothing else on Fleet is available to cut. The remaining 280 characters are the route's own question,
+two figure labels and one panel description, each of which says something the screen does not
+otherwise say.
+
+---
+
+# The re-audit, and a fourth instrument defect found by running it
+
+## The auditor was still wrong, and codebase found it
+
+`prose-audit.mjs` refused on *unreachable*-style wordings and did not know about a **not-found**
+panel. The codebase screen renders two — `/coverage` and `/observed` both 404 — so the auditor
+counted **302 characters of error prose as console prose** and reported a number that looked fine.
+
+That is the fourth defect of this exact shape in this work: markup technique, harness
+authentication, half-rendered pages, and now an incomplete refusal list. All four returned a
+plausible number rather than an error.
+
+**Fixed structurally rather than by adding another phrase.** Every failed panel renders `ErrorState`,
+and every `ErrorState` with a retry renders a `Try again` control, so the *control* is the marker.
+The phrase list stays for panels that predate the retry affordance. Both instruments now share it,
+and the auditor now refuses codebase outright rather than measuring it.
+
+## What the audit found, per screen
+
+**`fleet` — audited, one cut made, now under parity.** 1777 characters, 1327 protected, 450
+discretionary against the drawing's 340. The repeated card description was removed; discretionary is
+now 280. Recorded in full in the section above.
+
+**`observe` (`/detectors`) — 3085 characters, and roughly 80% of it is protected.** Eight paragraphs
+carry distinctions outright: the rung as a class of evidence rather than a position on a good-to-bad
+scale; the refusal to compute a precision figure with no labelled corpus behind it; the fleet-wide
+versus repository scope sentence; *"Every bar is the same length because it is a composition, not a
+quantity… drawing that as length would render the smaller ones as a sliver indistinguishable from
+nothing"*; the once-each counting grain; *"an absence, which is not the same fact as a rung this
+console does not have"*; and *"that absence is indistinguishable from a detector that does not
+exist"*. **≈2468 protected against ≈617 discretionary**, and the discretionary remainder is the
+route's own question plus figure labels that are the counts themselves. **No cut available.**
+
+**`codebase` — cannot be audited, and the reason is a defect worth more than the audit.** Both its
+telemetry routes 404 for a repository that `/api/repositories` lists. Filed as **B147**.
+
+**`signals` — classification stands, total to be re-taken.** Its 1083 characters carrying the
+never-measured distinction were classified by reading the sentences, which does not depend on the
+total; the total itself was measured before the readiness fix and should be re-run.
+
+**`api-services`, `remediation`, `settings` — not yet audited.** Deliberately not guessed at.
+
+## The composition gaps are unchanged and still small
+
+One pairing each on `codebase`, `signals` and `observe`. Not attempted in this unit: `codebase`
+cannot currently be measured at all, and changing a layout while its own screen refuses to report is
+how a proxy gets optimised.
