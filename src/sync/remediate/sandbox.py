@@ -167,7 +167,9 @@ def build_container_env(auth_env: dict[str, str] | None = None) -> dict[str, str
 
 
 @contextmanager
-def ephemeral_container(image: str, network: str = "bridge") -> Iterator[Container]:
+def ephemeral_container(
+    image: str, network: str = "bridge", *, add_host: str | None = None,
+) -> Iterator[Container]:
     """A running container for one phase of one patch attempt, always removed on
     exit.
 
@@ -185,6 +187,18 @@ def ephemeral_container(image: str, network: str = "bridge") -> Iterator[Contain
     process is `sleep infinity`; nothing customer-facing is its entrypoint, and
     everything this module does to it happens through `docker exec`.
 
+    `add_host`, passed straight to `docker create --add-host`, exists for one
+    caller: a container on `isolated_network.isolated_network`'s `--internal`
+    network carries no default gateway and no `host.docker.internal` resolution
+    at all -- measured, not assumed, in `tests/test_isolated_network.py`.
+    `--add-host=host.docker.internal:host-gateway` restores reachability to the
+    host specifically, without opening a route to anything else
+    (`tests/test_patch_sandbox.py::
+    test_add_host_reaches_the_docker_desktop_gateway_without_opening_the_internet`
+    proves both halves). `None` by default because every other caller of this
+    function has no host to reach and no reason to widen what the container can
+    resolve.
+
     Removal is unconditional (`finally`), so a probe or an assertion raising
     inside the `with` block still leaves no container behind for the next test
     or the next patch attempt to collide with. That same unconditional removal
@@ -192,7 +206,11 @@ def ephemeral_container(image: str, network: str = "bridge") -> Iterator[Contain
     ends every process running inside, not merely its route.
     """
     name = f"sync-patch-sandbox-{uuid.uuid4().hex[:12]}"
-    create = _docker("create", "--name", name, "--network", network, image, "sleep", "infinity")
+    args = ["create", "--name", name, "--network", network]
+    if add_host is not None:
+        args += ["--add-host", add_host]
+    args += [image, "sleep", "infinity"]
+    create = _docker(*args)
     if create.returncode != 0:
         raise RuntimeError(f"docker create failed: {create.stderr.strip()}")
     container_id = create.stdout.strip()

@@ -67,32 +67,45 @@ documented rather than merely present as a string:
 
 ## The shape this settles on
 
-A minimal HTTP(S) forward proxy, run by Sync on the host (or in its own container on the same
-Docker network), that:
+**Updated after the second slice's own measurement, not merely drafted from the first.** The
+original text here hedged between two options: the proxy as a bare host process, reached over
+`host.docker.internal`, or the proxy as its own container on a shared network. Only the second
+one is real. `--internal` on a Docker network (`sync.remediate.isolated_network`, built and
+tested) removes routing to anything outside the network's own local subnet — not merely to the
+internet, to *everything*, including a host process `--add-host` has made resolvable.
+`tests/test_isolated_network.py`'s own module docstring carries the measurement: DNS resolution
+and network reachability are two different facts, `--add-host` only grants the first, and a
+design that had shipped assuming otherwise would have discovered the gap the day a real patch
+attempt's agent turn could not reach its own proxy.
 
-1. Listens on an address the sandboxed container can reach — a custom Docker bridge network
-   (not the default `bridge`, so nothing else on the host's network is reachable from the
-   container) with the proxy as the only other member, or `host.docker.internal` if the proxy
-   runs on the host directly. Either way, the container's `network` argument to
-   `ephemeral_container` stops being `"none"` — it becomes "attached to a network whose only
-   other member is this proxy," which is a real narrowing from today's `"bridge"` default, not
-   a step back from `"none"`'s intent. `probe_connect` (already built, already tested) is the
-   tool that proves the container can reach the proxy and nothing else, the same way it already
-   proves reachability today.
-2. Sets `ANTHROPIC_BASE_URL` (via `build_container_env`'s existing `auth_env` parameter, which
+A minimal HTTP(S) forward proxy, run **as its own container**, that:
+
+1. Attaches to the same `isolated_network` the sandboxed container attaches to — reachable there
+   by construction, the way any two containers sharing one Docker network reach each other,
+   never by resolving a name that points somewhere the network cannot route to. The sandboxed
+   container's `network` argument to `ephemeral_container` stops being `"none"` — it becomes
+   this isolated network, whose only other member is the proxy container, which is a real
+   narrowing from today's `"bridge"` default, not a step back from `"none"`'s intent.
+   `probe_connect` (already built, already tested) is the tool that proves the container can
+   reach the proxy and nothing else, the same way it already proves reachability today.
+2. Carries a **second** network attachment of its own, into something that can actually leave —
+   the default `bridge`, or another network built for exactly this leg. This is the proxy
+   container's own egress, structurally separate from the sandboxed container's, which has none
+   of its own at all.
+3. Sets `ANTHROPIC_BASE_URL` (via `build_container_env`'s existing `auth_env` parameter, which
    is already the seam this needs — no new plumbing there) to point the container's `claude`
    invocation at itself, so the proxy is the request's real destination and can read the
    plaintext request rather than blindly relaying an opaque tunnel.
-3. Allowlists exactly `api.anthropic.com` (or whichever host the chosen credential's provider
+4. Allowlists exactly `api.anthropic.com` (or whichever host the chosen credential's provider
    actually uses — Bedrock and Vertex have their own base URLs, per the strings above, and
    Ruling 7 already puts *which* provider outside this design's scope) as the only forward
    target. Any other destination is refused at the proxy, which is the network half of the
    containment story finally closing.
-4. Attaches the real credential — whichever the owner has chosen the CLI authenticates with —
+5. Attaches the real credential — whichever the owner has chosen the CLI authenticates with —
    to the forwarded request, from a value the proxy process holds and the container process
    never does. `--bare` on the container side plus a dummy or absent `ANTHROPIC_API_KEY`
    removes the container's own paths to any *other* credential it might otherwise have found.
-5. Runs for the lifetime of one patch attempt and is torn down with it, the same lifecycle
+6. Runs for the lifetime of one patch attempt and is torn down with it, the same lifecycle
    discipline `ephemeral_container` already holds the container to — a proxy that outlives its
    one attempt is a second thing that can leak the credential it was built to protect.
 

@@ -49,6 +49,7 @@ import re
 import subprocess
 import time
 import warnings
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable, Iterable
 
@@ -235,8 +236,26 @@ def drop_databases_best_effort(admin_dsn: str, *names: str) -> None:
         warnings.warn(f"left {', '.join(names)} for a later run to sweep: {exc}", stacklevel=2)
 
 
-def docker_unavailable_reason(env: dict[str, str] | None = None) -> str | None:
-    """Why the `docker`-marked tests cannot run on this machine, or None when they can.
+@dataclass(frozen=True)
+class DockerProbe:
+    """What the daemon said, and whether it said anything at all.
+
+    `reason` is why the `docker`-marked tests cannot run, or None when they can.
+    `timed_out` separates the two ways of not answering, and B184 is that separation:
+    a machine with no daemon **refuses** the connection and does so immediately -- the
+    daemon's own words are `error during connect` -- while a daemon that exists and is
+    merely buried under load answers nothing until the budget expires. Those are
+    different facts. Calling the second one "absent" converts B97's boundary tests into
+    silent skips at exactly the moment the host is busiest, which is the moment the whole
+    suite is running and the only time anybody reads them.
+    """
+
+    reason: str | None
+    timed_out: bool = False
+
+
+def probe_docker(env: dict[str, str] | None = None) -> DockerProbe:
+    """Ask the daemon whether it is there, and distinguish silence from refusal.
 
     Asked once per process at collection, and answered by talking to the daemon rather than by
     checking whether the CLI exists: the interesting failure is Docker Desktop installed and
@@ -255,18 +274,29 @@ def docker_unavailable_reason(env: dict[str, str] | None = None) -> str | None:
             env=env,
         )
     except FileNotFoundError:
-        return "the docker command is not on PATH"
+        return DockerProbe("the docker command is not on PATH")
     except subprocess.TimeoutExpired:
-        return f"docker did not answer within {DOCKER_PROBE_TIMEOUT_SECONDS}s"
+        return DockerProbe(
+            f"docker did not answer within {DOCKER_PROBE_TIMEOUT_SECONDS}s", timed_out=True
+        )
 
     if probe.returncode != 0:
         detail = (probe.stderr or probe.stdout).strip().splitlines()
-        return f"no docker daemon answered: {detail[0] if detail else f'exit {probe.returncode}'}"
+        return DockerProbe(
+            f"no docker daemon answered: {detail[0] if detail else f'exit {probe.returncode}'}"
+        )
 
     server_os = probe.stdout.strip()
     if server_os != "linux":
-        return f"docker is serving {server_os or 'unknown'} containers, and these need Linux ones"
-    return None
+        return DockerProbe(
+            f"docker is serving {server_os or 'unknown'} containers, and these need Linux ones"
+        )
+    return DockerProbe(None)
+
+
+def docker_unavailable_reason(env: dict[str, str] | None = None) -> str | None:
+    """Why the `docker`-marked tests cannot run on this machine, or None when they can."""
+    return probe_docker(env).reason
 
 
 def pid_is_running(pid: int) -> bool:
@@ -570,11 +600,26 @@ def pytest_collection_modifyitems(config, items) -> None:
     if not marked:
         return
 
-    reason = docker_unavailable_reason()
-    if reason is None:
+    probe = probe_docker()
+    if probe.reason is None:
         return
 
-    skip = pytest.mark.skip(reason=f"a local Docker daemon is absent: {reason}")
+    # B184: a daemon that never answered is not a daemon that is absent, and only the
+    # second is a reason to skip. This probe runs once per xdist worker, so a full
+    # `-n auto` run asks sixteen times at the same instant; if that ever expired, the
+    # old code turned B97's boundary tests into skips and said nothing. "We could not
+    # tell" and "this does not apply here" are different sentences, and a run is better
+    # stopped than left reporting the quieter one.
+    if probe.timed_out:
+        raise pytest.UsageError(
+            f"the Docker daemon {probe.reason}. That is not the same as Docker being "
+            "absent, so these tests will not be skipped: a container boundary that "
+            "reports as 'not applicable' under load is unreadable exactly when it "
+            "matters. Re-run when the host is quieter, or raise "
+            "DOCKER_PROBE_TIMEOUT_SECONDS if this budget is genuinely too tight."
+        )
+
+    skip = pytest.mark.skip(reason=f"a local Docker daemon is absent: {probe.reason}")
     for item in marked:
         item.add_marker(skip)
 
