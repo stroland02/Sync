@@ -227,6 +227,101 @@ def _add_missing_columns(creates: list[str]) -> list[str]:
     ]
 
 
+def _table_unique_constraints(create: str) -> list[tuple[str, ...]]:
+    """The column tuples of table-level UNIQUE constraints declared in a CREATE TABLE.
+
+    Derived from the CREATE TABLE body so `apply_schema` can reconcile constraints on
+    an existing database when a natural key is widened (such as B79 adding `is_rehearsal`
+    to `migration_outcome`'s natural key, which B129 caught).
+    """
+    body = create[create.index("(") + 1 : create.rindex(")")]
+    entries, depth, start = [], 0, 0
+    for index, character in enumerate(body):
+        if character == "(":
+            depth += 1
+        elif character == ")":
+            depth -= 1
+        elif character == "," and depth == 0:
+            entries.append(body[start:index])
+            start = index + 1
+    entries.append(body[start:])
+
+    uniques = []
+    for entry in entries:
+        collapsed = " ".join(entry.split())
+        if collapsed.upper().startswith("UNIQUE"):
+            inside = collapsed[collapsed.index("(") + 1 : collapsed.rindex(")")]
+            cols = tuple(c.strip() for c in inside.split(",") if c.strip())
+            if cols:
+                uniques.append(cols)
+    return uniques
+
+
+def _reconcile_unique_constraints(connection: psycopg.Connection, creates: list[str]) -> None:
+    """Reconcile table-level UNIQUE constraints on a database that already exists.
+
+    `CREATE TABLE IF NOT EXISTS` leaves an existing table's constraints untouched, so a
+    natural key widened in `schema.sql` (e.g. B79 adding `is_rehearsal` to `migration_outcome`)
+    is never created on a database from before the change, causing ON CONFLICT upserts to fail.
+
+    This queries `pg_constraint` for existing unique constraints on each table and compares
+    them against the declarations in `creates`. If a declared UNIQUE constraint is missing,
+    any superseded constraint covering a subset of those columns is dropped, and the declared
+    constraint is added.
+    """
+    declared_by_table: dict[str, list[tuple[str, ...]]] = {}
+    for create in creates:
+        table = _table_name(create)
+        uniques = _table_unique_constraints(create)
+        if uniques:
+            declared_by_table[table] = uniques
+
+    if not declared_by_table:
+        return
+
+    rows = connection.execute(
+        """
+        SELECT c.relname AS table_name,
+               con.conname AS constraint_name,
+               ARRAY(
+                   SELECT a.attname
+                   FROM pg_attribute a
+                   WHERE a.attrelid = con.conrelid
+                     AND a.attnum = ANY(con.conkey)
+                   ORDER BY array_position(con.conkey, a.attnum)
+               ) AS columns
+        FROM pg_constraint con
+        JOIN pg_class c ON c.oid = con.conrelid
+        JOIN pg_namespace n ON n.oid = c.relnamespace
+        WHERE n.nspname = 'public'
+          AND con.contype = 'u'
+        """
+    ).fetchall()
+
+    existing_by_table: dict[str, dict[str, tuple[str, ...]]] = {}
+    for row in rows:
+        existing_by_table.setdefault(row["table_name"], {})[row["constraint_name"]] = tuple(
+            row["columns"]
+        )
+
+    for table, declared_uniques in declared_by_table.items():
+        existing_constraints = existing_by_table.get(table, {})
+        existing_tuples = set(existing_constraints.values())
+
+        for required_cols in declared_uniques:
+            if required_cols in existing_tuples:
+                continue
+
+            req_set = set(required_cols)
+            for conname, existing_cols in existing_constraints.items():
+                if set(existing_cols).issubset(req_set) and len(existing_cols) < len(required_cols):
+                    connection.execute(f"ALTER TABLE {table} DROP CONSTRAINT {conname}")
+
+            cols_sql = ", ".join(required_cols)
+            connection.execute(f"ALTER TABLE {table} ADD UNIQUE ({cols_sql})")
+
+
+
 class GraphStore:
     """One store instance owns one connection, opened on first use.
 
@@ -313,17 +408,16 @@ class GraphStore:
         in three passes rather than one: tables first, then the columns, then the indexes --
         because an index over a column added later cannot be created until the column is.
 
-        **What this does not express.** Added columns, and nothing else. It cannot rename a
-        column, change a type, add or drop a constraint, or backfill a value, and it does not
-        restore a table-level `UNIQUE` that a dropped column took with it. Adding a `NOT NULL`
-        column to a table that already has rows fails, correctly -- there is no value to give
-        them, and inventing one is a backfill decision rather than a schema application. Any of
-        those needs a real migration: a version table, an ordered history and a workflow. Not
-        built, because this is a single-tenant local pipeline whose only databases are a
-        developer's and a test run's, and the hosted control plane that makes migration history
-        load-bearing is M4 and unbuilt. A framework bought now is carried for a year before it
-        is needed. When the first rename or backfill arrives, this is the thing to replace
-        rather than the thing to extend -- it converges forward and keeps no history to
+        **What this does not express.** Added columns and widened unique constraints are
+        reconciled forward. It cannot rename a column, change a type, or backfill a value.
+        Adding a `NOT NULL` column to a table that already has rows fails, correctly -- there is
+        no value to give them, and inventing one is a backfill decision rather than a schema
+        application. Any of those needs a real migration: a version table, an ordered history
+        and a workflow. Not built, because this is a single-tenant local pipeline whose only
+        databases are a developer's and a test run's, and the hosted control plane that makes
+        migration history load-bearing is M4 and unbuilt. A framework bought now is carried for a
+        year before it is needed. When the first rename or backfill arrives, this is the thing to
+        replace rather than the thing to extend -- it converges forward and keeps no history to
         reconcile, so replacing it costs nothing that has to be unwound.
         """
         ddl = resources.files("sync.graph").joinpath("schema.sql").read_text(encoding="utf-8")
@@ -341,9 +435,14 @@ class GraphStore:
 
         # One round trip per pass rather than one per statement. Issuing them separately cost
         # the better part of a minute across the suite for nothing -- measured at 128s.
-        passes = [creates, _add_missing_columns(creates), rest] if existing else [creates, rest]
-        for statements_in_pass in passes:
-            connection.execute(";\n".join(statements_in_pass))
+        if existing:
+            for statements_in_pass in [creates, _add_missing_columns(creates)]:
+                connection.execute(";\n".join(statements_in_pass))
+            _reconcile_unique_constraints(connection, creates)
+            connection.execute(";\n".join(rest))
+        else:
+            for statements_in_pass in [creates, rest]:
+                connection.execute(";\n".join(statements_in_pass))
 
     def _schema_tables(self) -> list[str]:
         ddl = resources.files("sync.graph").joinpath("schema.sql").read_text(encoding="utf-8")

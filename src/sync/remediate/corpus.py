@@ -193,10 +193,74 @@ class CorpusWriter(Protocol):
     def record_migration_outcome(self, outcome: MigrationOutcome) -> None: ...
 
 
-def make_recorder(store: CorpusWriter, *, is_rehearsal: bool = False):
-    """A `record(state, terminal_status, ...)` bound to one store.
+class CorpusRecorder:
+    """A callable recorder with queryable attempt and error metrics.
 
-    Built in `build_graph` from the store it already receives, so no caller has to learn a
+    B130: a recording failure must never crash a run, but swallowing errors silently makes
+    systematic failures invisible. Tracking attempt counts and error messages on the recorder
+    makes failed writes queryable without raising.
+    """
+
+    def __init__(self, store: CorpusWriter, *, is_rehearsal: bool = False) -> None:
+        self._store = store
+        self._is_rehearsal = is_rehearsal
+        self.attempt_count: int = 0
+        self.success_count: int = 0
+        self.failure_count: int = 0
+        self.errors: list[str] = []
+
+    def __call__(
+        self,
+        state,
+        *,
+        terminal_status: str,
+        abandon_reason: str | None = None,
+        pr_number: int | None = None,
+    ) -> bool:
+        """`pr_number` is passed by the one node that opened a pull request, and by nothing else.
+
+        That is what holds the grain. One row is one attempt and a run can make several, but
+        only the attempt that opened the pull request has a number; a retried attempt keeps a
+        null because no call site gives it one, rather than because two writes happened to run
+        in a helpful order. A merge recorded against every row of a run would inflate the
+        numerator of the merge rate silently, which is worse than being wrong loudly.
+        """
+        self.attempt_count += 1
+        try:
+            ok = _record(
+                self._store,
+                state,
+                terminal_status,
+                abandon_reason,
+                pr_number,
+                is_rehearsal=self._is_rehearsal,
+            )
+            if ok:
+                self.success_count += 1
+            return ok
+        except Exception as exc:
+            self.failure_count += 1
+            finding_id = getattr(state.get("finding"), "id", None)
+            attempt = state.get("static_attempts")
+            err_msg = f"finding {finding_id} attempt {attempt}: {exc}"
+            self.errors.append(err_msg)
+            # Never propagates. The pull request is the product; the row is bookkeeping,
+            # and bookkeeping that can fail a run is worse than bookkeeping that is missing.
+            log.warning(
+                "could not record a migration_outcome row for finding %s attempt %s",
+                finding_id,
+                attempt,
+                exc_info=True,
+            )
+            return False
+
+
+def make_recorder(store: CorpusWriter, *, is_rehearsal: bool = False) -> CorpusRecorder:
+    """The callable closed over `store` that every terminal and retried node records through.
+
+    `is_rehearsal` is bound once at construction rather than threaded through every caller.
+    The graph's nodes record with `record(state, terminal_status=...)` and know nothing about
+    whether the run is rehearsal or production -- `make_locate` and `make_abandon` need no
     new argument and no run can be configured with the recording silently absent.
 
     `is_rehearsal` is not read off `store` or derived from whether a forge is present --
@@ -220,38 +284,7 @@ def make_recorder(store: CorpusWriter, *, is_rehearsal: bool = False):
             f"axis reads from"
         )
 
-    def record(
-        state,
-        *,
-        terminal_status: str,
-        abandon_reason: str | None = None,
-        pr_number: int | None = None,
-    ) -> bool:
-        """`pr_number` is passed by the one node that opened a pull request, and by nothing else.
-
-        That is what holds the grain. One row is one attempt and a run can make several, but
-        only the attempt that opened the pull request has a number; a retried attempt keeps a
-        null because no call site gives it one, rather than because two writes happened to run
-        in a helpful order. A merge recorded against every row of a run would inflate the
-        numerator of the merge rate silently, which is worse than being wrong loudly.
-        """
-        try:
-            return _record(
-                store, state, terminal_status, abandon_reason, pr_number,
-                is_rehearsal=is_rehearsal,
-            )
-        except Exception:
-            # Never propagates. The pull request is the product; the row is bookkeeping,
-            # and bookkeeping that can fail a run is worse than bookkeeping that is missing.
-            log.warning(
-                "could not record a migration_outcome row for finding %s attempt %s",
-                getattr(state.get("finding"), "id", None),
-                state.get("static_attempts"),
-                exc_info=True,
-            )
-            return False
-
-    return record
+    return CorpusRecorder(store, is_rehearsal=is_rehearsal)
 
 
 def _record(
