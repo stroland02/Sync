@@ -62,6 +62,7 @@ def build_graph(store, adapter, remediator, forge, checkpointer, catalogue=None,
         builder.add_node("await_ci", nodes.make_await_ci(forge))
         builder.add_node("open_pr", nodes.make_open_pr(forge, record))
     builder.add_node("report", nodes.make_report(None if remote else _NO_FORGE, record))
+    builder.add_node("external_cause", nodes.make_external_cause(store, forge, record))
     # `abandon` is built with whatever forge there is, which with none is none. It deletes a
     # branch only when the state carries one, and only `push_branch` writes that -- so with
     # no push node there is no branch and nothing to delete.
@@ -84,7 +85,12 @@ def build_graph(store, adapter, remediator, forge, checkpointer, catalogue=None,
     builder.add_conditional_edges(
         "patch",
         nodes.route_after_patch,
-        {"static_verify": "static_verify", "patch": "patch", "abandon": "abandon"},
+        {
+            "static_verify": "static_verify",
+            "patch": "patch",
+            "abandon": "abandon",
+            "external_cause": "external_cause",
+        },
     )
 
     # The one place a router's decision and its destination differ, and deliberately. A passing
@@ -135,6 +141,7 @@ def build_graph(store, adapter, remediator, forge, checkpointer, catalogue=None,
         )
 
     builder.add_edge("report", END)
+    builder.add_edge("external_cause", END)
     builder.add_edge("abandon", END)
 
     # Callers build the saver, so this is the one place every one of them passes

@@ -368,10 +368,13 @@ def pytest_unconfigure(config) -> None:
     if _created_dbname is None:
         return
 
-    with psycopg.connect(_admin_dsn, autocommit=True) as conn:
-        conn.execute(
-            sql.SQL("DROP DATABASE IF EXISTS {} WITH (FORCE)").format(sql.Identifier(_created_dbname))
-        )
+    try:
+        with psycopg.connect(_admin_dsn, autocommit=True) as conn:
+            conn.execute(
+                sql.SQL("DROP DATABASE IF EXISTS {} WITH (FORCE)").format(sql.Identifier(_created_dbname))
+            )
+    except Exception:
+        pass
     _created_dbname = None
 
 

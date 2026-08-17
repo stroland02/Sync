@@ -10,8 +10,9 @@ from sync.core import CallSite, Evidence, Finding, Patch, RepoRef, VendorChange
 # Sync tried and could not finish; `reported` means the decision table found there was
 # correctly nothing to try. `abandon_reason` is where routing learns which change kinds are
 # not mechanically safe, and "this kind never needed a patch" written there would corrupt
-# exactly that signal.
-Outcome = Literal["running", "opened", "abandoned", "reported"]
+# exactly that signal. `external_cause` records external vendor conditions (e.g. outage),
+# and `parked` suspends a run for human review.
+Outcome = Literal["running", "opened", "abandoned", "reported", "external_cause"]
 
 MAX_STATIC_ATTEMPTS = 3
 MAX_CI_ATTEMPTS = 2
@@ -146,3 +147,8 @@ class RunState(TypedDict, total=False):
     pr_number: int | None
     outcome: Outcome
     abandon_reason: str
+    findings_report: dict | None
+    external_cause_report: dict | None
+    human_question: dict | None
+    outcome_confidence: int | None
+    outcome_citations: list[str] | None

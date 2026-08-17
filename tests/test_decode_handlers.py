@@ -986,6 +986,7 @@ _DECODES_NOTHING = (
     # names the run and what was refused, and the SDK's replacement text names neither. Nothing
     # is read or decoded in the clause itself.
     "sync/runner/claude_sdk.py::ClaudeSdkRunner._drive::Exception",
+    "sync/runner/outcome_tools.py::OutcomeToolValidator._validate_citations::ValueError",
     "sync/signals/datadog/shapes.py::DatadogShapeReader._seen_at::ValueError",
     "sync/signals/deprecations/catalogue.py::_parse_date::ValueError",
     "sync/signals/feed/consumer.py::parse_feed::TypeError+ValueError",
@@ -1021,6 +1022,7 @@ _WHOLE_STAGE_CATCH_ALL = (
     "sync/remediate/nodes.py::_observed::Exception",
     "sync/remediate/nodes.py::make_abandon.abandon::Exception",
     "sync/remediate/nodes.py::make_await_ci.await_ci::Exception",
+    "sync/remediate/nodes.py::make_external_cause.external_cause::Exception",
     "sync/remediate/nodes.py::make_locate.locate::Exception",
     "sync/remediate/nodes.py::make_open_pr.open_pr::Exception",
     "sync/remediate/nodes.py::make_patch.patch::Exception",
