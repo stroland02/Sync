@@ -253,6 +253,46 @@ So the owner's original complaint — *one vertical stack where it should be a g
 more prose than data* — is now **countable**, and the gap is structural rather than a palette
 problem. Palette problems are a rewrite. Composition problems are a layout pass.
 
+### That finding is withdrawn. Both of its numbers were artifacts, and the second one is instructive
+
+**Corrected 2026-08-17 when the eval was extended from one page to seven. The ruling above is wrong
+and the coordinator's routing off it was wrong with it** — Fleet was dispatched for a layout pass it
+did not need, on the strength of a table nobody had audited.
+
+**The console under measurement was half broken.** The harness authenticated by embedding
+credentials in the URL. Chrome does not attach those to a page's *own* `fetch` calls, so three panels
+rendered their never-reached-a-server state and the eval counted error copy as console prose and a
+failed panel as absent composition. Observe read 1 region where it has 6; remediation read 4 where it
+has 18. The fix is `Network.setExtraHTTPHeaders`. **A measurement harness that authenticates
+differently from the product measures a different product** — and this one reported a plausible
+number rather than an error, which is why it survived a full run.
+
+**`sideBySide` was counting markup technique, not composition.** The mock holds **zero** `<table>`
+elements and **thirty-three** `grid-template-columns` — verified in `Sync Console.dc.html`: 0 tables,
+0 `<tr>`, 33 grid declarations. It draws every table as grid rows, so each *data row* scored as a
+side-by-side placement, while our semantic `<tr>` scored nothing at all. **17-against-4 was almost
+entirely that.** Chasing it meant abandoning table semantics — worse for assistive technology, on a
+console that landed focus management the same day — to move a number no human reads. That is
+optimising a proxy, which `M0-W269` warns against in this same document.
+
+The replacement is `regionsBeside`: panels beside panels, table rows excluded by construction. On it
+the mock places 0–2 regions per screen and the console places 0–4. **The premise that the build is
+far less composed than the drawing is not supported.**
+
+Fleet needed no work and none was done: `regionsBeside` 2 against the mock's 0, and of its 915 prose
+characters **580 are protected honesty sentences** — the twenty-four `CLAUDE.md` protects by name —
+leaving 335 discretionary against the mock's 340. A five-character difference. Prose may only be cut
+from prose carrying no distinction, and there is none left here.
+
+**The rule this leaves behind: a visual metric must be checked against a screen whose answer is
+already known before it is allowed to order work.** Both defects would have been caught by asking
+"does this number match what I see" once. Neither was caught by a green run, because both produced
+numbers rather than errors.
+
+**Real remaining gaps, by measurement**, and each is checked for protected content before anything is
+cut: `signals` carries **1663 prose characters against 308**, the largest prose gap anywhere, and is
+behind by 1 pairing; `codebase` is behind by 2 pairings; `observe` by 1.
+
 ## Sequence
 
 1. **Capture the built console now.** There is no current picture. Every screen, at a fixed viewport,
