@@ -1,0 +1,773 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Sync — operator console</title>
+<link rel="stylesheet" href="_ds/industry-deba61ef-e5ed-4138-90b5-c5b94523ff90/styles.css" />
+<script src="_ds/industry-deba61ef-e5ed-4138-90b5-c5b94523ff90/_ds_bundle.js"></script>
+<style>
+  html, body { margin:0; padding:0; background:var(--color-bg); color:var(--color-text); font-family:var(--font-body); }
+  * { box-sizing:border-box; }
+  a { color:var(--color-accent-700); text-decoration:none; }
+  a:hover { color:var(--color-accent-800); text-decoration:underline; text-underline-offset:2px; }
+  :focus-visible { outline:2px solid var(--color-accent); outline-offset:2px; }
+  ::selection { background:var(--color-accent-200); }
+  ::-webkit-scrollbar { width:10px; height:10px; }
+  ::-webkit-scrollbar-thumb { background:var(--color-neutral-300); border:3px solid var(--color-bg); }
+  @keyframes rise { from { opacity:0; transform:translateY(6px); } to { opacity:1; transform:none; } }
+  @keyframes slideIn { from { opacity:0; transform:translateX(20px); } to { opacity:1; transform:none; } }
+  @keyframes fadeIn { from { opacity:0; } to { opacity:1; } }
+  @keyframes popIn { from { opacity:0; transform:translateY(-6px) scale(.99); } to { opacity:1; transform:none; } }
+  @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration:0s !important; transition-duration:0s !important; } }
+</style>
+</helmet>
+
+<div style="display:flex; flex-direction:column; height:100vh; min-height:720px; overflow:hidden; font-size:14px;">
+
+  <header style="flex:0 0 auto; display:flex; align-items:stretch; gap:var(--space-6); border-bottom:1px solid var(--color-divider); background:var(--color-bg); height:60px;">
+    <div style="display:flex; align-items:center; gap:var(--space-4); padding-left:var(--space-6); flex:0 0 auto;">
+      <span style="font-family:var(--font-heading); font-weight:600; font-size:22px; letter-spacing:0.06em; text-transform:uppercase;">Sync</span>
+      <span style="width:1px; height:24px; background:var(--color-divider);"></span>
+      <span style="display:flex; align-items:baseline; gap:var(--space-3); min-width:0;">
+        <h1 style="margin:0; font-family:var(--font-heading); font-weight:600; font-size:22px; line-height:1.1; white-space:nowrap;">{{ title }}</h1>
+        <span class="tag tag-outline" style="flex:0 0 auto;">{{ scopeLabel }}</span>
+      </span>
+    </div>
+
+    <sc-if value="{{ showDirectorFeed }}" hint-placeholder-val="{{ true }}">
+      <div style="flex:1; min-width:0; display:flex; align-items:center; gap:var(--space-4); border-left:1px solid var(--color-divider); padding:0 var(--space-6);">
+        <span style="flex:0 0 auto; font-size:10px; letter-spacing:0.1em; text-transform:uppercase; color:var(--color-accent-700);">Director feed</span>
+        <div style="flex:1; min-width:0; display:flex; align-items:center; gap:var(--space-6); overflow-x:auto; padding:var(--space-2) 0;">
+          <sc-for list="{{ feed }}" as="ev" hint-placeholder-count="6">
+            <button type="button" onClick="{{ ev.go }}" style="all:unset; cursor:pointer; flex:0 0 auto; display:flex; align-items:baseline; gap:var(--space-2); white-space:nowrap; padding:var(--space-1) 0; border-bottom:1px solid transparent; transition:border-color .16s ease;" style-hover="border-color:var(--color-accent);">
+              <span style="font-family:ui-monospace,Menlo,Consolas,monospace; font-size:11px; color:var(--color-neutral-600);">{{ ev.at }}</span>
+              <span style="font-family:ui-monospace,Menlo,Consolas,monospace; font-size:11px; color:var(--color-accent-700);">{{ ev.codebase }}</span>
+              <span style="font-size:13px;">{{ ev.text }}</span>
+            </button>
+          </sc-for>
+        </div>
+        <button type="button" onClick="{{ openPalette }}" class="btn btn-secondary" style="flex:0 0 auto; height:32px; font-size:13px;">⌘K</button>
+      </div>
+    </sc-if>
+  </header>
+
+  <div style="flex:1; min-height:0; display:flex;">
+
+    <nav style="flex:0 0 auto; width:{{ railWidth }}; border-right:1px solid var(--color-divider); display:flex; flex-direction:column; overflow:hidden; transition:width .2s cubic-bezier(.2,.7,.3,1);">
+      <div style="display:flex; align-items:center; gap:var(--space-2); padding:var(--space-3) var(--space-3); border-bottom:1px solid var(--color-divider);">
+        <sc-if value="{{ railOpen }}" hint-placeholder-val="{{ true }}">
+          <span style="font-size:10px; letter-spacing:0.1em; text-transform:uppercase; color:var(--color-neutral-600); padding-left:var(--space-2);">Control unit — codebase</span>
+        </sc-if>
+        <button type="button" onClick="{{ toggleRail }}" class="btn btn-secondary btn-icon" title="Expand or minimize" style="margin-left:auto; width:28px; height:28px;">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5h16M4 12h16M4 19h16"></path></svg>
+        </button>
+      </div>
+
+      <div style="flex:1; min-height:0; overflow-y:auto; overflow-x:hidden; padding:var(--space-2) 0;">
+        <sc-for list="{{ codebases }}" as="cb" hint-placeholder-count="3">
+          <div style="border-bottom:1px solid var(--color-divider);">
+            <div style="display:flex; align-items:center; gap:var(--space-2); padding:var(--space-2) var(--space-3); background:{{ cb.bg }};">
+              <button type="button" onClick="{{ cb.toggle }}" title="Expand or minimize" style="all:unset; cursor:pointer; flex:0 0 auto; width:20px; height:20px; display:flex; align-items:center; justify-content:center; color:var(--color-neutral-600); transform:{{ cb.caret }}; transition:transform .18s ease;">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"></path></svg>
+              </button>
+              <button type="button" onClick="{{ cb.go }}" style="all:unset; cursor:pointer; flex:1; min-width:0; display:flex; align-items:baseline; gap:var(--space-2);">
+                <sc-if value="{{ railOpen }}" hint-placeholder-val="{{ true }}">
+                  <span style="font-family:var(--font-heading); font-weight:600; font-size:15px; letter-spacing:0.01em; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; color:{{ cb.ink }};">{{ cb.name }}</span>
+                </sc-if>
+                <sc-if value="{{ railClosed }}" hint-placeholder-val="{{ false }}">
+                  <span style="font-family:ui-monospace,Menlo,Consolas,monospace; font-size:11px; color:{{ cb.ink }};">{{ cb.initials }}</span>
+                </sc-if>
+                <span style="margin-left:auto; font-family:ui-monospace,Menlo,Consolas,monospace; font-size:11px; color:var(--color-neutral-600);">{{ cb.open }}</span>
+              </button>
+            </div>
+            <sc-if value="{{ cb.expanded }}" hint-placeholder-val="{{ true }}">
+              <div style="display:flex; flex-direction:column; padding-bottom:var(--space-2); animation:fadeIn .18s ease both;">
+                <sc-for list="{{ cb.children }}" as="child" hint-placeholder-count="6">
+                  <button type="button" onClick="{{ child.go }}" style="all:unset; cursor:pointer; display:flex; align-items:center; gap:var(--space-2); padding:var(--space-2) var(--space-3) var(--space-2) 34px; border-left:2px solid {{ child.mark }}; background:{{ child.bg }}; transition:background .16s ease;" style-hover="background:var(--color-neutral-200);">
+                    <span style="font-size:13px; color:{{ child.ink }}; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">{{ child.label }}</span>
+                    <span style="margin-left:auto; font-family:ui-monospace,Menlo,Consolas,monospace; font-size:11px; color:var(--color-neutral-600);">{{ child.n }}</span>
+                  </button>
+                </sc-for>
+              </div>
+            </sc-if>
+          </div>
+        </sc-for>
+
+        <div style="padding:var(--space-3) var(--space-3) var(--space-2);">
+          <sc-if value="{{ railOpen }}" hint-placeholder-val="{{ true }}">
+            <div style="font-size:10px; letter-spacing:0.1em; text-transform:uppercase; color:var(--color-neutral-600); padding-bottom:var(--space-2);">Across every codebase</div>
+          </sc-if>
+          <sc-for list="{{ fleetLinks }}" as="link" hint-placeholder-count="3">
+            <button type="button" onClick="{{ link.go }}" style="all:unset; cursor:pointer; display:flex; align-items:center; gap:var(--space-2); padding:var(--space-2); background:{{ link.bg }}; transition:background .16s ease;" style-hover="background:var(--color-neutral-200);">
+              <span style="font-size:13px; color:{{ link.ink }}; white-space:nowrap;">{{ link.label }}</span>
+            </button>
+          </sc-for>
+        </div>
+      </div>
+    </nav>
+
+    <main style="flex:1; min-width:0; display:flex; flex-direction:column;">
+
+      <div style="flex:0 0 auto; display:flex; align-items:center; gap:var(--space-4); padding:var(--space-3) var(--space-6); border-bottom:1px solid var(--color-divider);">
+        <p style="margin:0; font-size:13px; color:var(--color-neutral-700); max-width:78ch; text-wrap:pretty;">{{ question }}</p>
+        <span style="margin-left:auto; display:flex; align-items:center; gap:var(--space-2); flex:0 0 auto;">
+          <button type="button" onClick="{{ goPr }}" class="btn btn-primary blueprint" style="height:34px; font-size:13px;">
+            <i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>
+            Review proposed patch
+          </button>
+        </span>
+      </div>
+
+      <sc-if value="{{ isOverview }}" hint-placeholder-val="{{ false }}">
+        <div style="flex:0 0 auto; display:grid; grid-template-columns:repeat(auto-fit, minmax(180px,1fr)); gap:var(--space-6); padding:var(--space-6) var(--space-6) var(--space-4);">
+          <sc-for list="{{ plates }}" as="plate" hint-placeholder-count="5">
+            <div class="blueprint" style="padding:var(--space-3) var(--space-4);">
+              <i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>
+              <div style="font-size:10px; letter-spacing:0.1em; text-transform:uppercase; color:var(--color-accent-700);">{{ plate.label }}</div>
+              <div style="font-family:var(--font-heading); font-weight:600; font-size:34px; line-height:1.1; font-variant-numeric:tabular-nums;">{{ plate.value }}</div>
+              <div style="font-size:12px; color:var(--color-neutral-700); text-wrap:pretty;">{{ plate.evidence }}</div>
+            </div>
+          </sc-for>
+        </div>
+      </sc-if>
+
+      <sc-if value="{{ isWorkflow }}" hint-placeholder-val="{{ false }}">
+        <div style="flex:1; min-height:0; display:grid; grid-template-columns:minmax(280px,320px) minmax(0,1fr); animation:rise .24s cubic-bezier(.2,.7,.3,1) both;">
+          <div style="border-right:1px solid var(--color-divider); overflow-y:auto; padding:var(--space-4) 0;">
+            <div style="padding:0 var(--space-6) var(--space-3); font-size:10px; letter-spacing:0.1em; text-transform:uppercase; color:var(--color-neutral-600);">Node by node</div>
+            <sc-for list="{{ nodes }}" as="node" hint-placeholder-count="8">
+              <button type="button" onClick="{{ node.drawer }}" style="all:unset; cursor:pointer; display:grid; grid-template-columns:16px minmax(0,1fr) auto; gap:var(--space-2); align-items:baseline; padding:var(--space-2) var(--space-6); border-bottom:1px solid color-mix(in srgb, var(--color-text) 8%, transparent); transition:background .16s ease;" style-hover="background:var(--color-neutral-200);">
+                <span style="font-family:ui-monospace,Menlo,Consolas,monospace; font-size:12px; color:{{ node.ink }};">{{ node.glyph }}</span>
+                <span style="font-family:ui-monospace,Menlo,Consolas,monospace; font-size:12px;">{{ node.name }}</span>
+                <span style="font-size:12px; color:{{ node.ink }};">{{ node.standing }}</span>
+              </button>
+            </sc-for>
+            <div style="padding:var(--space-4) var(--space-6);">
+              <div style="font-size:10px; letter-spacing:0.1em; text-transform:uppercase; color:var(--color-neutral-600);">Outcome</div>
+              <div style="font-family:var(--font-heading); font-weight:600; font-size:24px; line-height:1.2;">opened</div>
+              <div style="font-family:ui-monospace,Menlo,Consolas,monospace; font-size:11px; color:var(--color-neutral-600); overflow-wrap:anywhere;">thread 8f21c0:4127:2 · generation 2 of 2</div>
+            </div>
+          </div>
+          <div style="overflow-y:auto; padding:var(--space-4) 0;">
+            <div style="display:flex; align-items:baseline; gap:var(--space-4); padding:0 var(--space-6) var(--space-3);">
+              <span style="font-size:10px; letter-spacing:0.1em; text-transform:uppercase; color:var(--color-neutral-600);">Activity</span>
+              <span style="font-size:12px; color:var(--color-neutral-600);">Assembled at read time from four sources — nothing writes a timeline row.</span>
+            </div>
+            <sc-for list="{{ timeline }}" as="ev" hint-placeholder-count="12">
+              <div style="display:grid; grid-template-columns:76px 104px minmax(200px,1fr); gap:var(--space-4); align-items:baseline; padding:var(--space-2) var(--space-6); border-bottom:1px solid color-mix(in srgb, var(--color-text) 8%, transparent);">
+                <span style="font-family:ui-monospace,Menlo,Consolas,monospace; font-size:11px; color:var(--color-neutral-600); font-variant-numeric:tabular-nums;">{{ ev.at }}</span>
+                <span style="font-size:10px; letter-spacing:0.08em; text-transform:uppercase; color:var(--color-neutral-600);">{{ ev.source }}</span>
+                <span style="min-width:0;">
+                  <span style="display:block; font-family:ui-monospace,Menlo,Consolas,monospace; font-size:12px; color:{{ ev.ink }};">{{ ev.kind }}</span>
+                  <span style="display:block; font-size:13px; color:var(--color-neutral-700); text-wrap:pretty;">{{ ev.detail }}</span>
+                </span>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+      </sc-if>
+
+      <sc-if value="{{ isPr }}" hint-placeholder-val="{{ false }}">
+        <div style="flex:1; min-height:0; overflow-y:auto; animation:rise .24s cubic-bezier(.2,.7,.3,1) both;">
+          <div style="display:flex; align-items:center; gap:var(--space-4); padding:var(--space-3) var(--space-6); border-bottom:1px solid var(--color-divider); background:var(--color-accent-100);">
+            <span style="font-size:13px; color:var(--color-accent-900); text-wrap:pretty;">{{ policySentence }}</span>
+            <span style="margin-left:auto; display:flex; gap:var(--space-2); flex:0 0 auto;">
+              <button type="button" class="btn btn-secondary" style="height:32px; font-size:13px;">Abandon</button>
+              <button type="button" class="btn btn-secondary" style="height:32px; font-size:13px;">Request changes</button>
+              <button type="button" class="btn btn-primary" style="height:32px; font-size:13px;">Approve</button>
+            </span>
+          </div>
+          <div style="display:grid; grid-template-columns:minmax(0,1.5fr) minmax(300px,1fr);">
+            <div style="border-right:1px solid var(--color-divider);">
+              <div style="display:flex; align-items:baseline; gap:var(--space-4); padding:var(--space-4) var(--space-6) var(--space-2);">
+                <span style="font-family:var(--font-heading); font-weight:600; font-size:18px;">The patch</span>
+                <span style="font-family:ui-monospace,Menlo,Consolas,monospace; font-size:11px; color:var(--color-neutral-600);">#4127 · sync/openai-max-completion-tokens</span>
+                <span style="margin-left:auto; font-family:ui-monospace,Menlo,Consolas,monospace; font-size:11px; color:var(--color-neutral-600);">14 files · +18 −18</span>
+              </div>
+              <sc-for list="{{ hunks }}" as="hunk" hint-placeholder-count="2">
+                <div>
+                  <div style="padding:var(--space-2) var(--space-6); border-top:1px solid var(--color-divider); border-bottom:1px solid var(--color-divider); font-family:ui-monospace,Menlo,Consolas,monospace; font-size:11px; color:var(--color-neutral-700);">{{ hunk.file }}</div>
+                  <sc-for list="{{ hunk.lines }}" as="line" hint-placeholder-count="6">
+                    <div style="display:grid; grid-template-columns:44px 16px minmax(0,1fr); gap:var(--space-2); padding:0 var(--space-6); background:{{ line.bg }};">
+                      <span style="font-family:ui-monospace,Menlo,Consolas,monospace; font-size:12px; line-height:22px; color:var(--color-neutral-500); text-align:right; font-variant-numeric:tabular-nums;">{{ line.n }}</span>
+                      <span style="font-family:ui-monospace,Menlo,Consolas,monospace; font-size:12px; line-height:22px; color:{{ line.ink }};">{{ line.mark }}</span>
+                      <span style="font-family:ui-monospace,Menlo,Consolas,monospace; font-size:12px; line-height:22px; color:{{ line.ink }}; white-space:pre; overflow-x:auto;">{{ line.text }}</span>
+                    </div>
+                  </sc-for>
+                </div>
+              </sc-for>
+              <div style="padding:var(--space-3) var(--space-6); border-top:1px solid var(--color-divider); font-size:12px; color:var(--color-neutral-700);">Two of fourteen files shown. Every other hunk is the same rename; none changes a value.</div>
+            </div>
+            <div>
+              <div style="padding:var(--space-4) var(--space-6) var(--space-2);">
+                <div style="font-family:var(--font-heading); font-weight:600; font-size:18px;">Evidence bundle</div>
+                <div style="font-size:12px; color:var(--color-neutral-700); text-wrap:pretty;">What the run can prove, bounded by what the graph exposes. An empty row is an absence, not a pass.</div>
+              </div>
+              <sc-for list="{{ checks }}" as="check" hint-placeholder-count="5">
+                <div style="display:grid; grid-template-columns:16px minmax(0,1fr) auto; gap:var(--space-2); align-items:baseline; padding:var(--space-2) var(--space-6); border-top:1px solid color-mix(in srgb, var(--color-text) 8%, transparent);">
+                  <span style="font-family:ui-monospace,Menlo,Consolas,monospace; font-size:12px; color:{{ check.ink }};">{{ check.glyph }}</span>
+                  <span style="min-width:0;">
+                    <span style="display:block; font-size:13px; color:{{ check.ink }};">{{ check.label }}</span>
+                    <span style="display:block; font-family:ui-monospace,Menlo,Consolas,monospace; font-size:11px; color:var(--color-neutral-600); overflow-wrap:anywhere;">{{ check.evidence }}</span>
+                  </span>
+                  <span style="font-size:11px; color:var(--color-neutral-600); font-variant-numeric:tabular-nums;">{{ check.when }}</span>
+                </div>
+              </sc-for>
+              <div style="padding:var(--space-4) var(--space-6); border-top:1px solid var(--color-divider);">
+                <div style="font-size:10px; letter-spacing:0.1em; text-transform:uppercase; color:var(--color-neutral-600);">What this bundle does not contain</div>
+                <p style="margin:var(--space-2) 0 0; font-size:13px; color:var(--color-neutral-700); text-wrap:pretty;">No runtime traffic was replayed against the vendor's live endpoint — the replay tier used three recorded exchanges. Two of the fourteen call sites sit in a directory the index skipped, so the patch does not touch them and this bundle makes no claim about them.</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </sc-if>
+
+      <sc-if value="{{ hasTable }}" hint-placeholder-val="{{ true }}">
+        <div style="flex:1; min-height:0; overflow:auto; animation:rise .24s cubic-bezier(.2,.7,.3,1) both;">
+          <div style="min-width:{{ tableMin }};">
+            <div style="position:sticky; top:0; z-index:2; display:grid; grid-template-columns:{{ tableGrid }}; gap:var(--space-4); align-items:center; padding:var(--space-2) var(--space-6); background:var(--color-bg); border-bottom:1px solid var(--color-divider);">
+              <sc-for list="{{ tableCols }}" as="col" hint-placeholder-count="6">
+                <span style="font-size:11px; letter-spacing:0.08em; text-transform:uppercase; color:color-mix(in srgb, var(--color-text) 60%, transparent); text-align:{{ col.align }};">{{ col.label }}</span>
+              </sc-for>
+            </div>
+            <sc-for list="{{ tableRows }}" as="row" hint-placeholder-count="8">
+              <div style="display:grid; grid-template-columns:{{ tableGrid }}; gap:var(--space-4); align-items:center; padding:var(--space-2) var(--space-6); border-bottom:1px solid color-mix(in srgb, var(--color-text) 8%, transparent); cursor:pointer; transition:background .14s ease;" style-hover="background:color-mix(in srgb, var(--color-text) 4%, transparent);" onClick="{{ row.go }}">
+                <sc-for list="{{ row.cells }}" as="cell" hint-placeholder-count="6">
+                  <span style="min-width:0; text-align:{{ cell.align }};">
+                    <span class="{{ cell.cls }}" style="{{ cell.style }}">{{ cell.text }}</span>
+                    <span style="display:block; font-size:12px; color:var(--color-neutral-600); overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">{{ cell.sub }}</span>
+                  </span>
+                </sc-for>
+              </div>
+            </sc-for>
+            <div style="display:flex; align-items:center; gap:var(--space-4); padding:var(--space-3) var(--space-6);">
+              <span style="font-size:12px; color:var(--color-neutral-700); font-variant-numeric:tabular-nums;">{{ tableRange }}</span>
+              <span style="font-size:12px; color:var(--color-neutral-600); text-wrap:pretty;">{{ tableCaption }}</span>
+            </div>
+          </div>
+        </div>
+      </sc-if>
+
+      <sc-if value="{{ isSettings }}" hint-placeholder-val="{{ false }}">
+        <div style="flex:0 0 auto; display:grid; grid-template-columns:repeat(auto-fit, minmax(260px,1fr)); gap:var(--space-6); padding:var(--space-4) var(--space-6) var(--space-6); border-top:1px solid var(--color-divider);">
+          <sc-for list="{{ policyOptions }}" as="p" hint-placeholder-count="3">
+            <div class="blueprint" style="padding:var(--space-3) var(--space-4); border-color:{{ p.border }};">
+              <i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>
+              <div style="display:flex; align-items:baseline; gap:var(--space-2);">
+                <span style="font-family:ui-monospace,Menlo,Consolas,monospace; font-size:12px; color:{{ p.ink }};">{{ p.mark }}</span>
+                <span style="font-family:var(--font-heading); font-weight:600; font-size:16px; color:{{ p.ink }};">{{ p.label }}</span>
+              </div>
+              <div style="font-size:12px; color:var(--color-neutral-700); text-wrap:pretty;">{{ p.note }}</div>
+            </div>
+          </sc-for>
+        </div>
+      </sc-if>
+
+    </main>
+  </div>
+
+  <sc-if value="{{ drawerOpen }}" hint-placeholder-val="{{ false }}">
+    <aside style="position:fixed; top:0; right:0; bottom:0; width:460px; background:var(--color-bg); border-left:1px solid var(--color-divider); box-shadow:var(--shadow-lg); z-index:40; display:flex; flex-direction:column; animation:slideIn .22s cubic-bezier(.2,.7,.3,1) both;">
+      <div style="display:flex; align-items:flex-start; gap:var(--space-4); padding:var(--space-4) var(--space-6); border-bottom:1px solid var(--color-divider);">
+        <div style="min-width:0;">
+          <div style="font-size:10px; letter-spacing:0.1em; text-transform:uppercase; color:var(--color-accent-700);">{{ drawerKicker }}</div>
+          <h2 style="margin:var(--space-1) 0 0; font-family:var(--font-heading); font-weight:600; font-size:20px; line-height:1.2; text-wrap:pretty;">{{ drawerTitle }}</h2>
+        </div>
+        <button type="button" onClick="{{ closeDrawer }}" class="btn btn-secondary btn-icon" style="margin-left:auto; width:28px; height:28px;">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M18 6L6 18M6 6l12 12"></path></svg>
+        </button>
+      </div>
+      <div style="flex:1; overflow:auto; padding:var(--space-4) var(--space-6);">
+        <p style="margin:0 0 var(--space-4); font-size:13px; color:var(--color-neutral-700); text-wrap:pretty;">{{ drawerLede }}</p>
+        <sc-for list="{{ drawerRows }}" as="row" hint-placeholder-count="5">
+          <div style="display:grid; grid-template-columns:120px minmax(0,1fr); gap:var(--space-4); padding:var(--space-2) 0; border-top:1px solid color-mix(in srgb, var(--color-text) 8%, transparent);">
+            <span style="font-size:10px; letter-spacing:0.08em; text-transform:uppercase; color:var(--color-neutral-600);">{{ row.label }}</span>
+            <span style="font-family:ui-monospace,Menlo,Consolas,monospace; font-size:12px; overflow-wrap:anywhere;">{{ row.value }}</span>
+          </div>
+        </sc-for>
+        <p style="margin:var(--space-4) 0 0; font-size:12px; color:var(--color-neutral-600); text-wrap:pretty;">{{ drawerFoot }}</p>
+      </div>
+      <div style="padding:var(--space-4) var(--space-6); border-top:1px solid var(--color-divider);">
+        <button type="button" onClick="{{ drawerGo }}" class="btn btn-secondary" style="height:34px; font-size:13px;">{{ drawerCta }}</button>
+      </div>
+    </aside>
+  </sc-if>
+
+  <sc-if value="{{ paletteOpen }}" hint-placeholder-val="{{ false }}">
+    <div style="position:fixed; inset:0; background:color-mix(in srgb, var(--color-neutral-900) 42%, transparent); z-index:50; display:flex; align-items:flex-start; justify-content:center; padding-top:12vh; animation:fadeIn .16s ease both;">
+      <div class="blueprint" style="width:620px; max-width:calc(100vw - 80px); background:var(--color-bg); box-shadow:var(--shadow-lg); animation:popIn .2s cubic-bezier(.2,.7,.3,1) both;">
+        <i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>
+        <div style="display:flex; align-items:center; gap:var(--space-3); padding:var(--space-3) var(--space-4); border-bottom:1px solid var(--color-divider);">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><circle cx="11" cy="11" r="7"></circle><path d="M20 20l-3.5-3.5"></path></svg>
+          <span style="font-size:15px; color:var(--color-neutral-600);">Go to a codebase, or to anything grouped under one</span>
+          <button type="button" onClick="{{ closePalette }}" class="btn btn-secondary" style="margin-left:auto; height:26px; font-size:11px;">Esc</button>
+        </div>
+        <div style="max-height:56vh; overflow:auto; padding:var(--space-2) 0;">
+          <sc-for list="{{ paletteGroups }}" as="group" hint-placeholder-count="3">
+            <div style="padding:var(--space-2) 0;">
+              <div style="font-size:10px; letter-spacing:0.1em; text-transform:uppercase; color:var(--color-neutral-600); padding:0 var(--space-4) var(--space-1);">{{ group.label }}</div>
+              <sc-for list="{{ group.items }}" as="item" hint-placeholder-count="3">
+                <button type="button" onClick="{{ item.go }}" style="all:unset; cursor:pointer; display:grid; grid-template-columns:minmax(0,1fr) auto; gap:var(--space-4); align-items:baseline; width:100%; padding:var(--space-2) var(--space-4); transition:background .14s ease;" style-hover="background:var(--color-neutral-200);">
+                  <span style="min-width:0;">
+                    <span style="display:block; font-size:14px;">{{ item.label }}</span>
+                    <span style="display:block; font-size:12px; color:var(--color-neutral-600); overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">{{ item.hint }}</span>
+                  </span>
+                  <span style="font-family:ui-monospace,Menlo,Consolas,monospace; font-size:11px; color:var(--color-neutral-600);">{{ item.path }}</span>
+                </button>
+              </sc-for>
+            </div>
+          </sc-for>
+        </div>
+        <div style="padding:var(--space-2) var(--space-4); border-top:1px solid var(--color-divider); font-size:12px; color:var(--color-neutral-600); text-wrap:pretty;">A destination that needs a subject is listed as a place to look one up, never as a link with an empty parameter in it.</div>
+      </div>
+    </div>
+  </sc-if>
+
+</div>
+
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:1440,&quot;height&quot;:900},&quot;findingGrain&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;Change unit&quot;,&quot;Call site&quot;],&quot;default&quot;:&quot;Change unit&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Product behaviour&quot;},&quot;mergePolicy&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;Merge when CI is green&quot;,&quot;Open the pull request only&quot;,&quot;Per codebase&quot;],&quot;default&quot;:&quot;Merge when CI is green&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Product behaviour&quot;},&quot;showDirectorFeed&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;Shell&quot;}}">
+const ACCENT = "var(--color-accent-700)";
+const INK = "var(--color-text)";
+const MUTED = "var(--color-neutral-700)";
+const FAINT = "var(--color-neutral-600)";
+const MONO = "font-family:ui-monospace,Menlo,Consolas,monospace; font-size:12px;";
+
+const RUNG_NOTE = {
+  static: "read out of the source",
+  resolved: "read out of the source, then resolved",
+  observed: "correlated from watched traffic",
+  unresolved: "an observation that correlated to nothing",
+  unattributed: "recorded before the rung was tracked",
+};
+
+const CODEBASES = [
+  { id: "payments", name: "acme/payments-api", initials: "PA", open: "14", lang: "TypeScript",
+    counts: { integrations: "6", signals: "3", incidents: "9", tickets: "2", findings: "14" } },
+  { id: "agents", name: "acme/agents", initials: "AG", open: "21", lang: "TypeScript",
+    counts: { integrations: "4", signals: "2", incidents: "5", tickets: "1", findings: "21" } },
+  { id: "digest", name: "acme/digest-worker", initials: "DW", open: "9", lang: "Python",
+    counts: { integrations: "3", signals: "2", incidents: "2", tickets: "0", findings: "9" } },
+];
+
+const CHILDREN = [
+  ["overview", "Overview", null],
+  ["integrations", "Integrations", "integrations"],
+  ["signals", "Signals", "signals"],
+  ["incidents", "Incidents & errors", "incidents"],
+  ["tickets", "Tickets", "tickets"],
+  ["findings", "Findings", "findings"],
+];
+
+const FEED = [
+  { at: "14:13", codebase: "payments-api", text: "review requested on #4127", screen: "pr" },
+  { at: "14:12", codebase: "payments-api", text: "CI contract-replay passed", screen: "pr" },
+  { at: "14:05", codebase: "payments-api", text: "pull request opened", screen: "workflow" },
+  { at: "13:58", codebase: "agents", text: "await_ci parked — anthropic model sunset", screen: "findings" },
+  { at: "13:41", codebase: "digest-worker", text: "patch due again after static_verify", screen: "findings" },
+  { at: "13:02", codebase: "payments-api", text: "index skipped src/generated/", screen: "overview" },
+  { at: "12:40", codebase: "agents", text: "stripe adapter declined — HTML error page", screen: "settings" },
+];
+
+const NODES = [
+  { name: "locate", standing: "ran", glyph: "✓", rows: [["Tier", "tier-2"], ["Routing row", "openai/chat.completions/parameter_removed"]], lede: "The node that picked the tier this run would attempt, and the routing row that decided it." },
+  { name: "prepare", standing: "ran", glyph: "✓", rows: [["prepare_ok", "true"], ["verifiable", "true"], ["verify_gap", "—"]], lede: "Whether the repository could be put in a state a patch can be verified against." },
+  { name: "patch", standing: "ran", glyph: "✓", rows: [["Static attempts", "2"], ["Attempt strategy", "rename-param"], ["First attempt", "rejected by static_verify — TS2353"]], lede: "Two attempts. The first is kept because the reason it was rejected is what routing learns from." },
+  { name: "static_verify", standing: "ran", glyph: "✓", rows: [["verify_ok", "true"], ["What the compiler said", "—"]], lede: "The compiler's own answer. Once a typecheck passes later nodes overwrite this channel, so an empty line here is correct rather than missing." },
+  { name: "replay", standing: "ran", glyph: "✓", rows: [["Replay outcome", "matched"], ["Recorded exchanges", "3"], ["Replay reason", "—"]], lede: "Three recorded exchanges replayed against the patched client. No live vendor traffic was involved." },
+  { name: "push_branch", standing: "ran", glyph: "✓", rows: [["Branch", "sync/openai-max-completion-tokens"]], lede: "The branch exists whether or not a pull request was opened against it." },
+  { name: "await_ci", standing: "ran", glyph: "✓", rows: [["CI attempts", "1"], ["Attempt result", "passed"], ["CI URL", "forge/acme/payments-api/actions/runs/91824"]], lede: "The run parked here until the forge reported. Parked is not failed." },
+  { name: "open_pr", standing: "ran", glyph: "✓", rows: [["Pull request", "#4127"], ["Opened", "14:05:03"]], lede: "The terminal node for this generation. Its outcome is opened." },
+];
+
+const TIMELINE = [
+  { at: "14:02:11", source: "event", kind: "run.queued", detail: "thread 8f21c0:4127:2 — generation 2, after generation 1 abandoned at static_verify" },
+  { at: "14:02:14", source: "event", kind: "locate.ran", detail: "tier-2; routing row openai/chat.completions/parameter_removed" },
+  { at: "14:02:31", source: "event", kind: "prepare.ran", detail: "verifiable — the repository typechecks before the patch" },
+  { at: "14:03:02", source: "event", kind: "patch.attempt", detail: "attempt 1 rejected by static_verify: TS2353 on an object literal" },
+  { at: "14:03:40", source: "event", kind: "patch.attempt", detail: "attempt 2, strategy rename-param — 14 call sites rewritten" },
+  { at: "14:03:58", source: "event", kind: "static_verify.ok", detail: "tsc clean across the workspace" },
+  { at: "14:04:20", source: "event", kind: "replay.matched", detail: "3 recorded exchanges replayed; response shapes unchanged" },
+  { at: "14:04:41", source: "pull_request", kind: "branch.pushed", detail: "sync/openai-max-completion-tokens" },
+  { at: "14:05:03", source: "pull_request", kind: "pr.opened", detail: "#4127 — 14 files, +18 −18" },
+  { at: "14:11:52", source: "ci", kind: "check.completed", detail: "build — passed" },
+  { at: "14:12:40", source: "ci", kind: "check.completed", detail: "contract-replay — passed" },
+  { at: "14:13:05", source: "pull_request", kind: "review.requested", detail: "awaiting a human approval; the merge policy takes it from there" },
+];
+
+function cell(text, opts) {
+  const o = opts || {};
+  let style = "display:inline-block; max-width:100%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; vertical-align:bottom;";
+  if (o.mono) style += MONO;
+  else style += "font-size:14px;";
+  if (o.heading) style += "font-family:var(--font-heading); font-weight:600; font-size:16px;";
+  if (o.color) style += "color:" + o.color + ";";
+  if (o.num) style += "font-variant-numeric:tabular-nums;";
+  return { text, sub: o.sub || "", align: o.align || "left", cls: o.cls || "", style };
+}
+
+class Component extends DCLogic {
+  state = { screen: "codebases", codebase: "payments", expanded: { payments: true, agents: false, digest: false }, drawer: null, palette: false, rail: true };
+
+  go = (screen, codebase) => () =>
+    this.setState((s) => ({ screen, codebase: codebase || s.codebase, drawer: null, palette: false }));
+
+  openDrawer = (drawer) => (e) => { if (e && e.stopPropagation) e.stopPropagation(); this.setState({ drawer }); };
+
+  toggleCodebase = (id) => (e) => {
+    if (e && e.stopPropagation) e.stopPropagation();
+    this.setState((s) => ({ expanded: { ...s.expanded, [id]: !s.expanded[id] } }));
+  };
+
+  table(cols, grid, min, rows, range, caption) {
+    return { tableCols: cols, tableGrid: grid, tableMin: min, tableRows: rows, tableRange: range, tableCaption: caption };
+  }
+
+  renderVals() {
+    const s = this.state;
+    const cb = CODEBASES.find((c) => c.id === s.codebase) || CODEBASES[0];
+    const policy = this.props.mergePolicy ?? "Merge when CI is green";
+    const groupBy = this.props.findingGrain ?? "Change unit";
+    const showDirectorFeed = this.props.showDirectorFeed ?? true;
+
+    const policySentence =
+      policy === "Merge when CI is green"
+        ? "Approval is a standing instruction: Sync merges this patch the moment CI reports green. Nothing waits for a second click."
+        : policy === "Open the pull request only"
+          ? "Sync stops at the door. Approval marks the patch reviewed; a human merges it on the forge."
+          : "Merge behaviour is set per codebase. This codebase's own setting is what governs, and it is named below.";
+
+    const META = {
+      codebases: { title: "Codebases", scope: "Every codebase", question: "Which codebase is carrying the most exposure right now, and where is a run stuck?" },
+      overview: { title: "Overview", scope: cb.name, question: "What is attached to this codebase, what has it reported, and what does the index not see?" },
+      integrations: { title: "Integrations", scope: cb.name, question: "Which API services does this codebase call, and what did each vendor change?" },
+      signals: { title: "Signals", scope: cb.name, question: "What vendor, signal source and human surface does this codebase have attached, and what has each reported?" },
+      incidents: { title: "Incidents & errors", scope: cb.name, question: "What has gone wrong in this codebase, and which detector attributed it?" },
+      tickets: { title: "Tickets", scope: cb.name, question: "What did people on this codebase report themselves, and is any of it joined to a finding?" },
+      findings: { title: "Findings", scope: cb.name, question: "What is at risk in this codebase, and what did Sync do about it?" },
+      binding: { title: "chat.completions.create", scope: cb.name, question: "A vendor shipped a breaking change — what call sites does it hit?" },
+      workflow: { title: "Solution workflow", scope: cb.name, question: "What did Sync's remediation graph do about this finding, node by node?" },
+      pr: { title: "Pull request #4127", scope: cb.name, question: "Did Sync open a pull request for this finding, and what proof backs it?" },
+      detectors: { title: "Detector attribution", scope: "Every codebase", question: "Which detector is producing my false positives?" },
+      settings: { title: "Settings & adapters", scope: "Every codebase", question: "Which adapters are attached, what did each last read, and what happens when a patch goes green?" },
+    };
+    const meta = META[s.screen] || META.codebases;
+
+    const codebases = CODEBASES.map((c) => {
+      const current = c.id === s.codebase;
+      const expanded = !!s.expanded[c.id];
+      return {
+        ...c,
+        expanded,
+        bg: current ? "var(--color-accent-100)" : "transparent",
+        ink: current ? "var(--color-accent-900)" : INK,
+        caret: expanded ? "rotate(90deg)" : "rotate(0deg)",
+        toggle: this.toggleCodebase(c.id),
+        go: this.go("overview", c.id),
+        children: CHILDREN.map(([id, label, key]) => {
+          const active = current && s.screen === id;
+          return {
+            label,
+            n: key ? c.counts[key] : "",
+            go: this.go(id, c.id),
+            bg: active ? "var(--color-accent-100)" : "transparent",
+            ink: active ? "var(--color-accent-900)" : MUTED,
+            mark: active ? "var(--color-accent)" : "transparent",
+          };
+        }),
+      };
+    });
+
+    const fleetLinks = [
+      { label: "Detectors", screen: "detectors" },
+      { label: "Settings & adapters", screen: "settings" },
+    ].map((l) => ({
+      label: l.label,
+      go: this.go(l.screen),
+      bg: s.screen === l.screen ? "var(--color-accent-100)" : "transparent",
+      ink: s.screen === l.screen ? "var(--color-accent-900)" : MUTED,
+    }));
+
+    let t = null;
+
+    if (s.screen === "codebases") {
+      t = this.table(
+        [{ label: "Codebase", align: "left" }, { label: "Language", align: "left" }, { label: "Integrations", align: "right" }, { label: "Open findings", align: "right" }, { label: "Incidents", align: "right" }, { label: "Tickets", align: "right" }, { label: "Standing", align: "left" }, { label: "Last index", align: "right" }],
+        "minmax(220px,2fr) 110px 110px 120px 100px 90px minmax(200px,1.2fr) 110px",
+        "1180px",
+        [
+          { go: this.go("overview", "payments"), cells: [cell("acme/payments-api", { heading: true, sub: "services/billing · 1,284 files indexed" }), cell("TypeScript", { color: MUTED }), cell("6", { mono: true, align: "right", num: true }), cell("14", { mono: true, align: "right", num: true }), cell("9", { mono: true, align: "right", num: true }), cell("2", { mono: true, align: "right", num: true }), cell("✓ PR open · CI green", { color: ACCENT }), cell("8m ago", { color: FAINT, align: "right" })] },
+          { go: this.go("overview", "agents"), cells: [cell("acme/agents", { heading: true, sub: "src/agents · 612 files indexed" }), cell("TypeScript", { color: MUTED }), cell("4", { mono: true, align: "right", num: true }), cell("21", { mono: true, align: "right", num: true }), cell("5", { mono: true, align: "right", num: true }), cell("1", { mono: true, align: "right", num: true }), cell("! await_ci · due", { color: INK }), cell("3m ago", { color: FAINT, align: "right" })] },
+          { go: this.go("overview", "digest"), cells: [cell("acme/digest-worker", { heading: true, sub: "workers/ · 208 files indexed" }), cell("Python", { color: MUTED }), cell("3", { mono: true, align: "right", num: true }), cell("9", { mono: true, align: "right", num: true }), cell("2", { mono: true, align: "right", num: true }), cell("0", { mono: true, align: "right", num: true }), cell("✕ Abandoned · replay", { color: INK }), cell("2h ago", { color: FAINT, align: "right" })] },
+        ],
+        "1–3 of 3",
+        "The codebase is the control unit. Every integration, signal, incident, ticket and finding below is grouped under one of these three."
+      );
+    } else if (s.screen === "overview" || s.screen === "integrations") {
+      t = this.table(
+        [{ label: "Integration", align: "left" }, { label: "Client", align: "left" }, { label: "Operations", align: "right" }, { label: "Rung", align: "left" }, { label: "Vendor changed", align: "left" }, { label: "At risk", align: "right" }],
+        "minmax(160px,1fr) minmax(200px,1.4fr) 110px 130px minmax(200px,1.4fr) 100px",
+        "1060px",
+        [
+          { go: this.go("findings"), cells: [cell("OpenAI", { heading: true }), cell("src/lib/llm-client.ts", { mono: true }), cell("9", { mono: true, align: "right", num: true }), cell("resolved", { cls: "tag tag-neutral" }), cell("max_tokens removed", { sub: "openai@2.4.0 · 2d ago" }), cell("14", { mono: true, align: "right", num: true })] },
+          { go: this.go("findings"), cells: [cell("OpenAI", { heading: true }), cell("src/vendor/openai.ts", { mono: true }), cell("5", { mono: true, align: "right", num: true }), cell("static", { cls: "tag tag-neutral" }), cell("engine parameter removed", { sub: "openai@2.4.0 · 9d ago" }), cell("2", { mono: true, align: "right", num: true })] },
+          { go: this.go("findings"), cells: [cell("Anthropic", { heading: true }), cell("src/lib/anthropic.ts", { mono: true }), cell("4", { mono: true, align: "right", num: true }), cell("static", { cls: "tag tag-neutral" }), cell("claude-3-sonnet retired", { sub: "deprecations page · 18m ago" }), cell("21", { mono: true, align: "right", num: true })] },
+          { go: this.go("findings"), cells: [cell("Stripe", { heading: true }), cell("src/billing/stripe.ts", { mono: true }), cell("2", { mono: true, align: "right", num: true }), cell("static", { cls: "tag tag-neutral" }), cell("charges superseded by PaymentIntents", { sub: "stripe openapi · 1h ago" }), cell("6", { mono: true, align: "right", num: true })] },
+          { go: this.go("findings"), cells: [cell("Cloudflare", { heading: true }), cell("src/edge/ai.ts", { mono: true }), cell("1", { mono: true, align: "right", num: true }), cell("observed", { cls: "tag tag-neutral" }), cell("model id renamed", { sub: "model catalogue · declined 12m ago" }), cell("9", { mono: true, align: "right", num: true })] },
+        ],
+        "1–5 of 6",
+        "Every integration this codebase calls. A vendor change carries no rung — it is evidence about the vendor, not about your source."
+      );
+    } else if (s.screen === "signals") {
+      t = this.table(
+        [{ label: "Role", align: "left" }, { label: "Source", align: "left" }, { label: "What it reported", align: "left" }, { label: "Volume", align: "right" }, { label: "Last read", align: "right" }],
+        "150px minmax(200px,1fr) minmax(280px,1.8fr) 120px 120px",
+        "1020px",
+        [
+          { go: this.go("integrations"), cells: [cell("Vendor", { cls: "tag tag-outline" }), cell("OpenAI specification", { sub: "openapi 2.3.1 → 2.4.0" }), cell("4 changes recorded, 2 breaking"), cell("142 ops", { mono: true, align: "right" }), cell("12m ago", { color: FAINT, align: "right" })] },
+          { go: this.go("integrations"), cells: [cell("Vendor", { cls: "tag tag-outline" }), cell("Anthropic deprecations", { sub: "deprecations page, parsed to dated rows" }), cell("1 model retirement"), cell("38 ops", { mono: true, align: "right" }), cell("18m ago", { color: FAINT, align: "right" })] },
+          { go: this.go("incidents"), cells: [cell("Signal source", { cls: "tag tag-outline" }), cell("OTel collector", { sub: "acme-payments · rolling 7-day window" }), cell("3 operations correlated, 1 observation unresolved"), cell("1.2M spans", { mono: true, align: "right" }), cell("2m ago", { color: FAINT, align: "right" })] },
+          { go: this.go("tickets"), cells: [cell("Human surface", { cls: "tag tag-outline" }), cell("Forge issues · api-drift", { sub: "label-scoped, not full-text" }), cell("2 reports, neither joined to a finding"), cell("2 open", { mono: true, align: "right" }), cell("3d ago", { color: FAINT, align: "right" })] },
+        ],
+        "1–4 of 4",
+        "Correlation only, on the signal source: an operation the traffic never exercised is absent here, which is not the same as unaffected."
+      );
+    } else if (s.screen === "incidents") {
+      t = this.table(
+        [{ label: "Incident", align: "left" }, { label: "Operation", align: "left" }, { label: "Detector", align: "left" }, { label: "Rung", align: "left" }, { label: "Occurrences", align: "right" }, { label: "Joined to", align: "left" }, { label: "First seen", align: "right" }],
+        "minmax(220px,1.6fr) minmax(200px,1.2fr) 150px 130px 120px 150px 110px",
+        "1240px",
+        [
+          { go: this.go("findings"), cells: [cell("429s after model swap", { heading: true }), cell("chat.completions.create", { mono: true }), cell("status_rate", { mono: true }), cell("observed", { cls: "tag tag-neutral" }), cell("1,204", { mono: true, align: "right", num: true }), cell("finding/8f21c0", { mono: true, color: ACCENT }), cell("3d ago", { color: FAINT, align: "right" })] },
+          { go: this.go("findings"), cells: [cell("400 invalid_request_error", { heading: true }), cell("chat.completions.create", { mono: true }), cell("param_removed", { mono: true }), cell("static", { cls: "tag tag-neutral" }), cell("318", { mono: true, align: "right", num: true }), cell("finding/8f21c0", { mono: true, color: ACCENT }), cell("2d ago", { color: FAINT, align: "right" })] },
+          { go: this.go("findings"), cells: [cell("Charge webhook mismatch", { heading: true }), cell("webhooks.constructEvent", { mono: true }), cell("status_rate", { mono: true }), cell("unresolved", { cls: "tag tag-neutral" }), cell("47", { mono: true, align: "right", num: true }), cell("—", { color: FAINT }), cell("9d ago", { color: FAINT, align: "right" })] },
+          { go: this.go("findings"), cells: [cell("Embedding latency step change", { heading: true }), cell("embeddings.create", { mono: true }), cell("efficiency", { mono: true }), cell("unattributed", { cls: "tag tag-neutral" }), cell("—", { color: FAINT, align: "right" }), cell("—", { color: FAINT }), cell("14d ago", { color: FAINT, align: "right" })] },
+        ],
+        "1–4 of 9",
+        "An incident with no finding is not a finding with no incident. The join column says which of the two this row is, and an em dash is an absence rather than a zero."
+      );
+    } else if (s.screen === "tickets") {
+      t = this.table(
+        [{ label: "Ticket", align: "left" }, { label: "Reporter", align: "left" }, { label: "Names an operation", align: "left" }, { label: "Joined to", align: "left" }, { label: "Opened", align: "right" }],
+        "minmax(260px,1.8fr) 160px minmax(200px,1.2fr) 170px 110px",
+        "1080px",
+        [
+          { go: this.go("incidents"), cells: [cell("#812 — 429s after model swap", { heading: true }), cell("r.okafor", { mono: true }), cell("chat.completions.create", { mono: true }), cell("incident, not a finding", { color: MUTED }), cell("3d ago", { color: FAINT, align: "right" })] },
+          { go: this.go("incidents"), cells: [cell("#804 — charge webhook mismatch", { heading: true }), cell("j.silva", { mono: true }), cell("webhooks.constructEvent", { mono: true }), cell("—", { color: FAINT }), cell("9d ago", { color: FAINT, align: "right" })] },
+        ],
+        "1–2 of 2",
+        "A human report is a lead, not a binding. Neither of these has been joined to a finding, and the console says so rather than inferring one."
+      );
+    } else if (s.screen === "findings") {
+      const byUnit = [
+        { go: this.go("binding"), cells: [cell("OpenAI · chat.completions.create", { heading: true, sub: "max_tokens removed — replaced by max_completion_tokens" }), cell("static", { cls: "tag tag-neutral" }), cell("14", { mono: true, align: "right", num: true }), cell("param_removed", { mono: true }), cell("✓ PR open · CI green", { color: ACCENT }), cell("8m ago", { color: FAINT, align: "right" })] },
+        { go: this.go("workflow"), cells: [cell("Anthropic · messages.create", { heading: true, sub: "claude-3-sonnet-20240229 retired" }), cell("resolved", { cls: "tag tag-neutral" }), cell("21", { mono: true, align: "right", num: true }), cell("model_retired", { mono: true }), cell("! await_ci · due", { color: INK }), cell("3m ago", { color: FAINT, align: "right" })] },
+        { go: this.go("workflow"), cells: [cell("Cloudflare · ai.run", { heading: true, sub: "model id renamed at the Workers AI gateway" }), cell("observed", { cls: "tag tag-neutral" }), cell("9", { mono: true, align: "right", num: true }), cell("vendor_change", { mono: true }), cell("! patch · due again", { color: INK }), cell("21m ago", { color: FAINT, align: "right" })] },
+        { go: this.go("workflow"), cells: [cell("Stripe · charges.create", { heading: true, sub: "endpoint superseded by PaymentIntents" }), cell("static", { cls: "tag tag-neutral" }), cell("6", { mono: true, align: "right", num: true }), cell("vendor_change", { mono: true }), cell("✕ Abandoned · replay", { color: INK }), cell("2h ago", { color: FAINT, align: "right" })] },
+        { go: this.go("binding"), cells: [cell("OpenAI · embeddings.create", { heading: true, sub: "engine parameter removed" }), cell("unattributed", { cls: "tag tag-neutral" }), cell("2", { mono: true, align: "right", num: true }), cell("vendor_change", { mono: true }), cell("— Reported · no patch", { color: MUTED }), cell("1d ago", { color: FAINT, align: "right" })] },
+      ];
+      const bySite = [
+        { go: this.go("binding"), cells: [cell("openai/completions.ts:118", { mono: true, sub: "createChat() · max_tokens: 1024" }), cell("static", { cls: "tag tag-neutral" }), cell("1", { mono: true, align: "right", num: true }), cell("param_removed", { mono: true }), cell("✓ patched", { color: ACCENT }), cell("8m ago", { color: FAINT, align: "right" })] },
+        { go: this.go("binding"), cells: [cell("openai/completions.ts:204", { mono: true, sub: "retryChat() · max_tokens: 512" }), cell("static", { cls: "tag tag-neutral" }), cell("1", { mono: true, align: "right", num: true }), cell("param_removed", { mono: true }), cell("✓ patched", { color: ACCENT }), cell("8m ago", { color: FAINT, align: "right" })] },
+        { go: this.go("binding"), cells: [cell("agents/summarise.ts:63", { mono: true, sub: "summarise() · max_tokens: 2048" }), cell("static", { cls: "tag tag-neutral" }), cell("1", { mono: true, align: "right", num: true }), cell("param_removed", { mono: true }), cell("✓ patched", { color: ACCENT }), cell("8m ago", { color: FAINT, align: "right" })] },
+        { go: this.go("binding"), cells: [cell("lib/llm-client.ts:29", { mono: true, sub: "chat() · max_tokens: opts.cap" }), cell("resolved", { cls: "tag tag-neutral" }), cell("1", { mono: true, align: "right", num: true }), cell("param_removed", { mono: true }), cell("✓ patched", { color: ACCENT }), cell("8m ago", { color: FAINT, align: "right" })] },
+        { go: this.go("binding"), cells: [cell("workers/spillover.ts:52", { mono: true, sub: "— · —" }), cell("unresolved", { cls: "tag tag-neutral" }), cell("1", { mono: true, align: "right", num: true }), cell("status_rate", { mono: true }), cell("— not reached", { color: MUTED }), cell("4h ago", { color: FAINT, align: "right" })] },
+      ];
+      const isUnit = groupBy === "Change unit";
+      t = this.table(
+        [{ label: isUnit ? "Change unit" : "Call site", align: "left" }, { label: "Rung", align: "left" }, { label: "Call sites", align: "right" }, { label: "Detector", align: "left" }, { label: "Standing", align: "left" }, { label: "Checkpoint", align: "right" }],
+        "minmax(280px,2fr) 130px 110px 150px minmax(180px,1.2fr) 110px",
+        "1160px",
+        isUnit ? byUnit : bySite,
+        isUnit ? "1–5 of 5" : "1–5 of 14",
+        isUnit
+          ? "One row per vendor change against this codebase. The call-site grain is intact underneath and reachable from every row."
+          : "One row per claim per call site — the graph's own grain, ungrouped."
+      );
+    } else if (s.screen === "binding") {
+      t = this.table(
+        [{ label: "Rung", align: "left" }, { label: "Call site", align: "left" }, { label: "Symbol", align: "left" }, { label: "Argument", align: "left" }, { label: "Established by", align: "left" }],
+        "130px minmax(240px,1.4fr) minmax(180px,1fr) 170px minmax(200px,1.2fr)",
+        "1140px",
+        [
+          ["static", "openai/completions.ts:118", "createChat()", "max_tokens: 1024"],
+          ["static", "openai/completions.ts:204", "retryChat()", "max_tokens: 512"],
+          ["static", "agents/summarise.ts:63", "summarise()", "max_tokens: 2048"],
+          ["static", "agents/triage.ts:41", "triage()", "max_tokens: 256"],
+          ["resolved", "lib/llm-client.ts:29", "chat()", "max_tokens: opts.cap"],
+          ["static", "workers/digest.ts:88", "digestOne()", "max_tokens: 4096"],
+          ["observed", "workers/digest.ts:141", "digestBatch()", "max_tokens: 4096"],
+          ["unresolved", "workers/spillover.ts:52", "—", "—"],
+        ].map(([rung, path, symbol, arg]) => ({
+          go: this.openDrawer({
+            kicker: "Call site",
+            title: path,
+            lede: "This call site binds to the operation on the " + rung + " rung: " + RUNG_NOTE[rung] + ". The rung is this row's own and says nothing about the other rows.",
+            rows: [["Path", "services/billing/src/" + path], ["Symbol", symbol], ["Argument", arg], ["Rung", rung], ["Established by", rung === "observed" ? "traffic correlation over a 7-day window" : "the static index"]],
+            foot: "The vendor changed the operation this row points at. That edge carries no rung, and the absence is the point.",
+            cta: "Open the solution workflow",
+            go: "workflow",
+          }),
+          cells: [cell(rung, { cls: "tag tag-neutral" }), cell(path, { mono: true }), cell(symbol, { mono: true, color: MUTED }), cell(arg, { mono: true, color: MUTED }), cell(rung === "observed" ? "traffic correlation" : rung === "unresolved" ? "nothing — the observation correlated to no symbol" : "the static index", { color: MUTED })],
+        })),
+        "1–8 of 14",
+        "Shared directory services/billing/src/ — each row renders what follows it, so the whole path is the prefix plus the cell. Every row rests on its own rung; a stronger rung would come from a different detector, and none has run here."
+      );
+    } else if (s.screen === "detectors") {
+      t = this.table(
+        [{ label: "Detector", align: "left" }, { label: "Claim", align: "left" }, { label: "Open", align: "right" }, { label: "static", align: "right" }, { label: "resolved", align: "right" }, { label: "observed", align: "right" }, { label: "unresolved", align: "right" }, { label: "unattributed", align: "right" }],
+        "minmax(160px,1fr) minmax(280px,2fr) 90px 90px 100px 100px 110px 120px",
+        "1300px",
+        [
+          ["param_removed", "a required parameter this call site passes no longer exists", "31", "22", "6", "3", "0", "0"],
+          ["model_retired", "a model identifier reached its retirement date", "24", "9", "12", "3", "0", "0"],
+          ["vendor_change", "the vendor's specification changed against the pinned one", "18", "7", "2", "4", "0", "5"],
+          ["status_rate", "an operation's error rate moved against its own baseline", "12", "0", "0", "12", "0", "0"],
+          ["efficiency", "a call pattern costs more than an equivalent the vendor documents", "6", "4", "1", "1", "0", "0"],
+        ].map((r) => ({
+          go: this.go("findings"),
+          cells: [
+            cell(r[0], { mono: true, heading: false }),
+            cell(r[1], { color: MUTED }),
+            cell(r[2], { mono: true, align: "right", num: true }),
+            cell(r[3], { mono: true, align: "right", num: true, color: r[3] === "0" ? FAINT : INK }),
+            cell(r[4], { mono: true, align: "right", num: true, color: r[4] === "0" ? FAINT : INK }),
+            cell(r[5], { mono: true, align: "right", num: true, color: r[5] === "0" ? FAINT : INK }),
+            cell(r[6], { mono: true, align: "right", num: true, color: FAINT }),
+            cell(r[7], { mono: true, align: "right", num: true, color: r[7] === "0" ? FAINT : INK }),
+          ],
+        })),
+        "1–5 of 5",
+        "The rung breakdown is not a ranking — a rung is a class of evidence, not a position on a good-to-bad scale, so no colour is assigned to one. Nothing here rests on unresolved; that column keeps its place and shows zero, which is not the same fact as a rung this console does not have."
+      );
+    } else if (s.screen === "settings") {
+      t = this.table(
+        [{ label: "Adapter", align: "left" }, { label: "Source", align: "left" }, { label: "Operations", align: "right" }, { label: "Codebases", align: "right" }, { label: "Last intake", align: "left" }],
+        "minmax(160px,1fr) minmax(220px,1.4fr) 120px 120px minmax(260px,1.6fr)",
+        "1100px",
+        [
+          ["openai", "OpenAPI + deprecations page", "142", "3", "12m ago · 4 changes", MUTED],
+          ["anthropic", "Deprecations page", "38", "2", "18m ago · 1 change", MUTED],
+          ["stripe", "OpenAPI", "410", "1", "1h ago · 2 changes", MUTED],
+          ["cloudflare", "Model catalogue", "27", "1", "declined — the catalogue served an HTML error page", INK],
+        ].map((r) => ({
+          go: this.go("settings"),
+          cells: [cell(r[0], { mono: true }), cell(r[1], { color: MUTED }), cell(r[2], { mono: true, align: "right", num: true }), cell(r[3], { mono: true, align: "right", num: true }), cell(r[4], { color: r[5] })],
+        })),
+        "1–4 of 4",
+        "An adapter that declines a specification says why, and the refusal is recorded rather than retried silently."
+      );
+    }
+
+    const d = s.drawer;
+
+    return {
+      showDirectorFeed,
+      policySentence,
+      title: meta.title,
+      scopeLabel: meta.scope,
+      question: meta.question,
+      railOpen: s.rail,
+      railClosed: !s.rail,
+      railWidth: s.rail ? "264px" : "68px",
+      toggleRail: () => this.setState((p) => ({ rail: !p.rail })),
+      codebases,
+      fleetLinks,
+      feed: FEED.map((f) => ({ ...f, go: this.go(f.screen) })),
+      goPr: this.go("pr"),
+      openPalette: () => this.setState({ palette: true }),
+      closePalette: () => this.setState({ palette: false }),
+      paletteOpen: s.palette,
+
+      isOverview: s.screen === "overview",
+      isWorkflow: s.screen === "workflow",
+      isPr: s.screen === "pr",
+      isSettings: s.screen === "settings",
+      hasTable: t !== null,
+      ...(t || { tableCols: [], tableRows: [], tableGrid: "1fr", tableMin: "auto", tableRange: "", tableCaption: "" }),
+
+      plates: [
+        { label: "Files indexed", value: "1,284", evidence: "of 1,322 walked; 3 directories skipped with a recorded reason" },
+        { label: "Integrations", value: "6", evidence: "across 4 vendors, 21 operations bound" },
+        { label: "Open findings", value: "14", evidence: "one change unit patched, one abandoned" },
+        { label: "Incidents", value: "9", evidence: "4 joined to a finding, 5 standing alone" },
+        { label: "Cannot see", value: "3", evidence: "generated clients, one dynamic dispatch, 2 parse failures" },
+      ],
+
+      nodes: NODES.map((n) => ({
+        ...n,
+        ink: ACCENT,
+        drawer: this.openDrawer({
+          kicker: "Node · " + n.standing,
+          title: n.name,
+          lede: n.lede,
+          rows: n.rows,
+          foot: "A standing is the checkpoint's own answer. Nothing in a checkpoint says a node is executing.",
+          cta: "Back to the workflow",
+          go: "workflow",
+        }),
+      })),
+      timeline: TIMELINE.map((e) => ({ ...e, ink: e.kind === "patch.attempt" ? INK : ACCENT })),
+
+      hunks: [
+        { file: "services/billing/src/openai/completions.ts", lines: [
+          { n: "116", mark: " ", text: "  const res = await client.chat.completions.create({", ink: MUTED, bg: "transparent" },
+          { n: "117", mark: " ", text: "    model: MODEL,", ink: MUTED, bg: "transparent" },
+          { n: "118", mark: "−", text: "    max_tokens: 1024,", ink: "var(--color-neutral-700)", bg: "var(--color-neutral-200)" },
+          { n: "118", mark: "+", text: "    max_completion_tokens: 1024,", ink: "var(--color-accent-900)", bg: "var(--color-accent-100)" },
+          { n: "119", mark: " ", text: "    messages,", ink: MUTED, bg: "transparent" },
+          { n: "120", mark: " ", text: "  })", ink: MUTED, bg: "transparent" },
+        ] },
+        { file: "services/billing/src/lib/llm-client.ts", lines: [
+          { n: "27", mark: " ", text: "export async function chat(opts: ChatOpts) {", ink: MUTED, bg: "transparent" },
+          { n: "28", mark: " ", text: "  return openai.chat.completions.create({", ink: MUTED, bg: "transparent" },
+          { n: "29", mark: "−", text: "    max_tokens: opts.cap,", ink: "var(--color-neutral-700)", bg: "var(--color-neutral-200)" },
+          { n: "29", mark: "+", text: "    max_completion_tokens: opts.cap,", ink: "var(--color-accent-900)", bg: "var(--color-accent-100)" },
+          { n: "30", mark: " ", text: "    ...rest,", ink: MUTED, bg: "transparent" },
+        ] },
+      ],
+      checks: [
+        { glyph: "✓", label: "static_verify — the compiler accepted it", evidence: "tsc clean across the workspace", when: "14:03:58", ink: ACCENT },
+        { glyph: "✓", label: "replay — recorded exchanges matched", evidence: "3 of 3 exchanges; response shapes unchanged", when: "14:04:20", ink: ACCENT },
+        { glyph: "✓", label: "CI — build", evidence: "forge/actions/runs/91824", when: "14:11:52", ink: ACCENT },
+        { glyph: "✓", label: "CI — contract-replay", evidence: "forge/actions/runs/91824", when: "14:12:40", ink: ACCENT },
+        { glyph: "—", label: "Live vendor call — not attempted", evidence: "no credential is attached to this codebase", when: "—", ink: MUTED },
+      ],
+
+      policyOptions: [
+        { label: "Merge when CI is green", note: "Approval is a standing instruction; the merge happens without a second click.", mark: policy === "Merge when CI is green" ? "●" : "○", ink: policy === "Merge when CI is green" ? "var(--color-accent-900)" : MUTED, border: policy === "Merge when CI is green" ? "var(--color-accent)" : "var(--color-divider)" },
+        { label: "Open the pull request only", note: "Sync stops at the door. A human merges on the forge.", mark: policy === "Open the pull request only" ? "●" : "○", ink: policy === "Open the pull request only" ? "var(--color-accent-900)" : MUTED, border: policy === "Open the pull request only" ? "var(--color-accent)" : "var(--color-divider)" },
+        { label: "Per codebase", note: "Each codebase names its own; the pull request screen says which is in force.", mark: policy === "Per codebase" ? "●" : "○", ink: policy === "Per codebase" ? "var(--color-accent-900)" : MUTED, border: policy === "Per codebase" ? "var(--color-accent)" : "var(--color-divider)" },
+      ],
+
+      drawerOpen: d !== null && d !== undefined,
+      drawerKicker: d ? d.kicker : "",
+      drawerTitle: d ? d.title : "",
+      drawerLede: d ? d.lede : "",
+      drawerFoot: d ? d.foot : "",
+      drawerCta: d ? d.cta : "",
+      drawerRows: d ? d.rows.map((r) => ({ label: r[0], value: r[1] })) : [],
+      drawerGo: d ? this.go(d.go) : () => {},
+      closeDrawer: () => this.setState({ drawer: null }),
+
+      paletteGroups: [
+        { label: "Codebases — the control unit", items: CODEBASES.map((c) => ({ label: c.name, hint: c.lang + " · " + c.open + " open findings", path: "/codebases/" + c.id, go: this.go("overview", c.id) })) },
+        { label: "Grouped under " + cb.name, items: CHILDREN.slice(1).map(([id, label, key]) => ({ label, hint: cb.counts[key] + " under this codebase", path: "/codebases/" + cb.id + "/" + id, go: this.go(id) })) },
+        { label: "Across every codebase", items: [
+          { label: "Detectors", hint: "Which detector is producing my false positives", path: "/detectors", go: this.go("detectors") },
+          { label: "Settings & adapters", hint: "What each adapter last read", path: "/settings", go: this.go("settings") },
+        ] },
+      ],
+    };
+  }
+}
+</script>
+</body>
+</html>

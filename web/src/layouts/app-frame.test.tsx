@@ -289,7 +289,7 @@ describe("the rail carries the product's areas", () => {
     // is icon-only, so without `aria-label` the rail is a column of unnamed buttons.
     renderAt("/")
 
-    expect(within(rail()).getByRole("link", { name: /fleet/i })).toBeTruthy()
+    expect(within(rail()).getByRole("link", { name: /codebases|repositories|fleet/i })).toBeTruthy()
     for (const area of AREAS) {
       expect(railNames()).toContain(area.label)
     }
@@ -375,7 +375,7 @@ describe("the rail carries the product's areas", () => {
         <BackButton />
       </MemoryRouter>
     )
-    expect(railCurrent()).toEqual(["Fleet"])
+    expect(railCurrent()).toEqual(["Codebases"])
 
     fireEvent.click(within(rail()).getByLabelText("Codebase"))
     expect(railCurrent()).toEqual(["Codebase"])
@@ -386,9 +386,9 @@ describe("the rail carries the product's areas", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "go back" }))
 
-    // Back at `/`, where the Fleet screen renders. The rail says Fleet, not the area browsed here
+    // Back at `/`, where the Codebases screen renders. The rail says Codebases, not the area browsed here
     // three clicks ago.
-    expect(railCurrent()).toEqual(["Fleet"])
+    expect(railCurrent()).toEqual(["Codebases"])
   })
 })
 

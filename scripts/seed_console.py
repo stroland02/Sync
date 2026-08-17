@@ -492,6 +492,8 @@ def _seed_checkpoints(checkpointer_dsn: str, f_a: str, f_b: str, f_c: str) -> tu
     with PostgresSaver.from_conn_string(checkpointer_dsn) as saver:
         saver.setup()
 
+    with PostgresSaver.from_conn_string(checkpointer_dsn) as saver:
+
         _put(
             saver, thread_a0, 0, "2026-08-03T09:00:00.000000+00:00", step=6,
             channel_values={

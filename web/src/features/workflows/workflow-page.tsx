@@ -58,6 +58,7 @@ import { Breadcrumbs } from "@/layouts/breadcrumbs"
 import { PageHeader } from "@/layouts/page-header"
 import { UnknownRoute } from "@/layouts/unknown-route"
 import { DetailTitleText, runTitle } from "@/lib/detail-title"
+import { formatFindingBadge } from "@/lib/format"
 import { formatTimestamp } from "@/lib/format"
 
 const DEFAULT_QUESTION =
@@ -268,8 +269,8 @@ function Workflow({ findingId, question }: { findingId: string; question: string
           trail={
             <Breadcrumbs
               trail={[
-                { label: "Fleet", to: "/" },
-                { label: findingId, to: `/findings/${encodeURIComponent(findingId)}` },
+                { label: "Repositories", to: "/" },
+                { label: formatFindingBadge(findingId), to: `/findings/${encodeURIComponent(findingId)}` },
                 { label: "Solution workflow" },
               ]}
             />
