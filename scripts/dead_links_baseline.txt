@@ -97,6 +97,11 @@ src/sync/remediate/sandbox_image.py:ensure_image_built
 # port, and auth boundary are operational decisions this repository has not made anywhere else
 # yet, not a lint fix. Building one is real, separate, security-relevant work
 # (`docs/superpowers/specs/2026-07-25-sync-threat-model.md` is binding on anything that accepts
-# external input), not something to wire in as a side effect of closing a dead-link entry.
 src/sync/forge/webhook.py:dispatch_webhook_event
+
+# `GraphStore.intake_attempts` (B136 / M12-W322) queries recorded intake attempts from the store.
+# Finished and tested in `tests/test_intake_attempt_store.py`; the consumer view model / route
+# will be wired in Lane E's subsequent intake status dashboard work item.
+src/sync/graph/store.py:GraphStore.intake_attempts
+
 
