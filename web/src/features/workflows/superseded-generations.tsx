@@ -23,7 +23,7 @@ export function SupersededGenerations({
   return (
     <section
       aria-label="Superseded remediation generations"
-      className="flex flex-col gap-section rounded border border-border bg-card p-card"
+      className="flex flex-col gap-section rounded-surface border border-border bg-card p-card"
     >
       <div>
         <h3 className="text-body font-medium text-foreground">

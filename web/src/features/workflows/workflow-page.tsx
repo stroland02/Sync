@@ -100,7 +100,7 @@ function StaleBanner({
   return (
     <div
       role="status"
-      className="rounded border border-border bg-muted p-section text-body text-muted-foreground"
+      className="rounded-surface border border-border bg-muted p-section text-body text-muted-foreground"
     >
       <p className="max-w-prose">
         Could not refresh. Showing the run as of{" "}

@@ -31,19 +31,19 @@ export interface ChangeUnitRowData {
 
 function deriveStanding(run: RunRow): { label: string; symbol: string; tone: string } {
   if (run.outcome === "opened") {
-    return { label: "PR open — CI green", symbol: "✓", tone: "text-emerald-400" }
+    return { label: "PR open — CI green", symbol: "✓", tone: "text-good-ink" }
   }
   if (run.outcome === "abandoned") {
     const reason = run.abandon_reason ? ` — ${run.abandon_reason}` : ""
-    return { label: `Abandoned${reason}`, symbol: "✗", tone: "text-rose-400" }
+    return { label: `Abandoned${reason}`, symbol: "✗", tone: "text-critical-ink" }
   }
   if (run.outcome === "reported") {
     return { label: "Reported — no patch attempted", symbol: "—", tone: "text-muted-foreground" }
   }
   if (run.current_node) {
-    return { label: `${run.current_node} in progress`, symbol: "!", tone: "text-amber-400" }
+    return { label: `${run.current_node} in progress`, symbol: "!", tone: "text-warning-ink" }
   }
-  return { label: "await_ci due", symbol: "!", tone: "text-amber-400" }
+  return { label: "await_ci due", symbol: "!", tone: "text-warning-ink" }
 }
 
 export function ChangeUnitsTable() {
@@ -83,7 +83,7 @@ export function ChangeUnitsTable() {
   })
 
   return (
-    <div className="flex flex-col rounded-lg border border-border bg-card overflow-hidden">
+    <div className="flex flex-col rounded-surface border border-border bg-card overflow-hidden">
       <Table>
         <TableHeader className="bg-surface-subtle">
           <TableRow className="border-b border-border hover:bg-transparent">
@@ -141,7 +141,7 @@ export function ChangeUnitsTable() {
                   {row.callSitesCount}
                 </TableCell>
                 <TableCell className="py-row px-section">
-                  <span className="font-mono text-meta text-muted-foreground bg-muted px-field py-field rounded border border-border">
+                  <span className="font-mono text-meta text-muted-foreground bg-muted px-field py-field rounded-control border border-border">
                     {row.rung}
                   </span>
                 </TableCell>

@@ -94,7 +94,7 @@ function FieldList({ label, values }: { label: string; values: string[] }) {
           {values.map((value) => (
             <li
               key={value}
-              className="rounded-control border border-line px-field py-0.5 font-mono text-meta"
+              className="rounded-control border border-line px-field py-field font-mono text-meta"
             >
               {value}
             </li>

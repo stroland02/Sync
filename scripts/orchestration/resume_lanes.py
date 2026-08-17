@@ -134,19 +134,30 @@ def live_terminals(cli: str) -> dict[str, int]:
     }
 
 
+# How close to the end of the tail a budget notice must sit to still count. A recovered agent
+# pushes its banner up the scrollback as it produces output, so a notice buried further back than
+# this is history rather than a live state -- without the bound, one exhausted afternoon would hold
+# a healthy lane for as long as the banner stayed in the buffer.
+BUDGET_NOTICE_WITHIN_LAST = 6
+
+
 def budget_held(cli: str, handle: str) -> str | None:
     """The reset notice on a terminal that has stopped for budget, or `None`.
 
     Read from the terminal's own tail rather than inferred from silence, because silence is
     ambiguous -- a thinking agent and an exhausted one look identical from the outside, and only
     one of them should be left alone.
+
+    Only the last few lines are examined. A banner further back means the agent has produced output
+    since, which is proof it recovered.
     """
     payload = call(cli, "terminal", "read", "--terminal", handle, "--json")
     terminal = (payload.get("result") or {}).get("terminal") or {}
-    tail = " ".join(terminal.get("tail") or []).lower()
+    recent = (terminal.get("tail") or [])[-BUDGET_NOTICE_WITHIN_LAST:]
+    tail = " ".join(recent).lower()
     if not any(marker in tail for marker in BUDGET_EXHAUSTED):
         return None
-    for line in reversed(terminal.get("tail") or []):
+    for line in reversed(recent):
         if "resets" in line.lower():
             # ASCII-folded before it is ever printed. A terminal tail carries box-drawing and
             # spinner glyphs, and stdout on this machine is cp1252, so returning the raw line
@@ -280,7 +291,13 @@ def main() -> int:
         if handle and handle in terminals:
             held = budget_held(cli, handle)
             if held:
-                print(f"HELD    {label}: out of budget, not retried ({held})")
+                # The countdown in the notice was captured when the agent stopped, not now, so it
+                # is reported alongside how long ago that was. Printing a frozen "resets in 2h" an
+                # hour later reads as a live figure and overstates the outage by exactly the time
+                # already served.
+                quiet = int((int(time.time() * 1000) - terminals[handle]) / 60000)
+                print(f"HELD    {label}: out of budget, not retried "
+                      f"[{held}] -- captured {quiet} min ago")
                 continue
 
         # Re-attach to the terminal the lane already owns when we still know it, so a lane keeps its
