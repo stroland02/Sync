@@ -417,6 +417,41 @@ confidently instead of refusing.
 
 ## Ready
 
+### B183 — the B97 container tests fail under `-n auto` and pass alone, and a nine-hour container is sitting there
+
+**Measured 2026-08-17.** `tests/test_patch_sandbox.py` is `8 passed in 12.36s` run alone, and two
+of those eight fail inside a full `-n auto` suite:
+
+- `test_disconnect_network_does_not_stop_an_already_open_socket`
+- `test_never_networked_container_receives_nothing_after_install_container_is_torn_down`
+
+Both are B97's positive controls — the ones that exist so the boundary tests cannot pass by
+accident — so this is not a cosmetic flake. A positive control that fails under contention makes
+the boundary claim unreadable exactly when the whole suite runs, which is the only time anybody
+reads it.
+
+**Why it matters beyond the two tests.** `CI-W306` gave Gate 4 a durable suite verdict, and the
+first record it wrote says `passed: false` at `7b9f89a` on the strength of these two. That record
+is *accurate about its run* and is not a statement about `main`, which is the precise distinction
+Gate 4 was built to protect — a verdict that describes something other than the tree it claims to
+describe. Here it survived the commit check because the commit was right and the run was
+environmental.
+
+**What is known, and what is not.** A leaked `sync-patch-sandbox-f3def5d5859c` has been up nine
+hours on this host, alongside several `Created` postgres containers from other worktrees. The
+attacker listener binds `0.0.0.0:0`, so a fixed host port is *not* the cause and that hypothesis is
+already eliminated. What has not been established is whether the failure is container-name
+collision between concurrent tests, Docker daemon contention, or the leaked container holding a
+network. **Do not assume contention: `CI-W280` closed a nearly identical-looking symptom whose
+real cause was `host.docker.internal` not resolving on Linux, and the contention framing was
+wrong then.**
+
+**Closes when:** the two tests pass inside a full `-n auto` run, with the cause named and a
+before-and-after measurement — or they are made to serialise deliberately, with the reason
+recorded and the positive controls proven still able to fail. A skip is not a close: these two are
+the proof that B97's boundary tests assert anything.
+
+
 ### B174 — `extract_credential` cannot tell malformed base64 from non-UTF-8 credentials — Lane E
 
 **Accounted rather than broken, and filed rather than fixed.** `CI-W304` added this clause to

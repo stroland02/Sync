@@ -19,9 +19,9 @@ const LIMITS: readonly { headline: string; detail: string }[] = [
     detail:
       "Three abandonment classes never write a migration_outcome row: an abandonment " +
       "before any attempt, one with no tier applied, and one whose state was missing its " +
-      "finding, site or change. Those runs are real — the runs table above still names " +
-      "them through an abandon reason — but they leave no attempt for the repair record " +
-      "to count.",
+      "finding, site or change. Those runs are real — each one still names why it gave " +
+      "up through an abandon reason, wherever it is listed — but they leave no attempt " +
+      "for the repair record to count.",
   },
   {
     headline: "“Last checkpoint” is staleness, not liveness.",
@@ -34,8 +34,9 @@ const LIMITS: readonly { headline: string; detail: string }[] = [
     headline: "Findings cannot be ordered by severity across every vendor yet.",
     detail:
       "GET /api/overview counts open findings per vendor; no route yet accepts the " +
-      "severity filter the frozen surface already offers. Until one does, the vendor " +
-      "panel above orders by open finding count, not by how severe those findings are.",
+      "severity filter the frozen surface already offers. Until one does, every vendor " +
+      "ordering in this console is by open finding count, not by how severe those " +
+      "findings are.",
   },
 ]
 

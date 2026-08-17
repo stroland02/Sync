@@ -91,6 +91,29 @@ describe("the overview screen", () => {
     expect(text).toContain("There is no composite health figure here on purpose")
   })
 
+  it("puts the limits panel beside the health-refusal tile, because a protected sentence says it is there", () => {
+    const { container } = renderOverview()
+
+    // The health-refusal sentence ends "the panel beside them names what none of these figures can
+    // tell you at all". W362 collapsed a three-column band to one column and left both panels
+    // stacked inside a single wrapper, which made that clause false while the sentence still read
+    // as true. Asserting the text alone could not catch it — that is what this guard adds.
+    const section = container.querySelector("section")
+    expect(section).not.toBeNull()
+
+    const band = Array.from(section!.children).find(
+      (child) =>
+        child.textContent?.includes("There is no composite health figure here on purpose") &&
+        child.textContent?.includes("What this screen cannot tell you")
+    )
+    expect(band).toBeDefined()
+
+    // Two children of the band, not one wrapper holding a stack. jsdom has no layout, so the
+    // arrangement itself is measured in Chrome; what is held here is the structural precondition
+    // without which "beside" cannot be true at any viewport.
+    expect(band!.childElementCount).toBe(2)
+  })
+
   it("still says the repository list is the thing absence is measured against", () => {
     const { container } = renderOverview()
 

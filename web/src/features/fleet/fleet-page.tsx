@@ -109,8 +109,12 @@ export function FleetPage({ question = DEFAULT_QUESTION }: FleetPageProps) {
           repository and therefore actionable, and the vendor distribution with it. */}
       <CodebasesPanel filter={filter} />
 
+      {/* Two columns, and the second one is load-bearing rather than decorative. The health-refusal
+          sentence ends "the panel beside them names what none of these figures can tell you at
+          all"; W362 left both panels stacked inside one wrapper, so that clause described a layout
+          that did not exist. The band is what makes it true again. */}
       <div className="grid gap-section xl:grid-cols-2">
-        <div className="flex min-w-0 flex-col gap-section">
+        <div className="min-w-0">
           <FactTile
             label="Health score policy"
             value={
@@ -123,6 +127,8 @@ export function FleetPage({ question = DEFAULT_QUESTION }: FleetPageProps) {
               </>
             }
           />
+        </div>
+        <div className="min-w-0">
           <ScreenLimitsCard />
         </div>
       </div>

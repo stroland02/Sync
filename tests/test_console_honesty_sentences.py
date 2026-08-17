@@ -24,6 +24,7 @@ a reformat rather than on a deletion — a guard that fires on `prettier` is a g
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 import pytest
@@ -111,6 +112,54 @@ PROTECTED: tuple[tuple[str, str], ...] = (
 )
 
 
+_IMPORT = re.compile(r"""(?:from|import)\s+["']([^"']+)["']""")
+
+
+def _resolve(spec: str, importer: Path) -> Path | None:
+    """Resolve one import specifier to a file under `web/src`, or `None` for a package."""
+    if spec.startswith("@/"):
+        base = WEB_SRC / spec[2:]
+    elif spec.startswith("."):
+        base = (importer.parent / spec).resolve()
+    else:
+        return None
+    for candidate in (
+        base.with_suffix(".ts"),
+        base.with_suffix(".tsx"),
+        base / "index.ts",
+        base / "index.tsx",
+    ):
+        if candidate.is_file():
+            return candidate
+    return base if base.is_file() else None
+
+
+def _modules_reachable_from_entry() -> set[Path]:
+    """Every module the running console actually pulls in, walked from `main.tsx`.
+
+    The guard this replaces searched every `.ts`/`.tsx` under `web/src`, which made it unable to
+    fail in the two ways that have actually happened. It excluded `.test.ts` but not `.test.tsx`,
+    so a sentence surviving only in one of twenty-five test files passed; and it counted modules no
+    route mounts, so a sentence in an orphaned component passed while rendering nowhere. A test
+    named `..._is_still_on_screen` has to mean the screen.
+    """
+    entry = WEB_SRC / "main.tsx"
+    assert entry.is_file(), f"console entry {entry} is missing; this guard cannot walk the app"
+
+    seen: set[Path] = set()
+    queue = [entry]
+    while queue:
+        module = queue.pop()
+        if module in seen:
+            continue
+        seen.add(module)
+        for spec in _IMPORT.findall(module.read_text(encoding="utf-8")):
+            target = _resolve(spec, module)
+            if target is not None and target not in seen:
+                queue.append(target)
+    return seen
+
+
 @pytest.mark.skipif(not WEB_SRC.is_dir(), reason="web/src is absent; this checkout carries no console")
 @pytest.mark.parametrize("fragment,purpose", PROTECTED, ids=[f for f, _ in PROTECTED])
 def test_a_protected_honesty_sentence_is_still_on_screen(fragment: str, purpose: str) -> None:
@@ -119,11 +168,7 @@ def test_a_protected_honesty_sentence_is_still_on_screen(fragment: str, purpose:
     Not asserted against a file. A sentence that moves is fine and M7 requires it; a sentence that
     disappears is the product losing an argument it makes on screen.
     """
-    sources = [
-        path
-        for path in WEB_SRC.rglob("*")
-        if path.suffix in {".ts", ".tsx"} and not path.name.endswith(".test.ts")
-    ]
+    sources = sorted(_modules_reachable_from_entry())
     assert sources, "no console source found to search"
 
     holders = [
