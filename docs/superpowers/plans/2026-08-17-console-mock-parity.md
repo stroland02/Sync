@@ -732,6 +732,23 @@ Mock screen 07's shape: left card "Node by node" (compact sequence, outcome at i
 
 ### Task 13: `/settings` as a destination, not a tenth level
 
+> **Landed independently as `a4a0fd4` (M4-W231), conformance-checked 2026-08-17. Do not rebuild.**
+> Every structural requirement below holds: `DESTINATIONS` is its own array in `lib/routes.ts:394`
+> with no `level` field, `GRAPH_LEVELS` stays at nine, and `tests/test_console_hierarchy.py` passes
+> untouched (4 passed) — which is the proof the task asked for.
+>
+> **One requirement was superseded rather than met, and the supersession is an improvement.** This
+> task specified two `EmptyState` panels stating absence, on the premise that the read surface had
+> no adapter registry. That premise stopped being true: `a4a0fd4` built the surface — `registered_adapters`
+> (configuration read, nothing constructed), `GraphStore.vendor_intake_rollup`, `adapter_inventory`,
+> and `GET /api/adapters` — so the screen renders measured intake instead of an apology for having
+> none. **Ruling:** a task that says "state absence because the data does not exist" is answered
+> better by making the data exist, provided the honesty rule survives the change. It did: the
+> adapter table's governing sentence is "null is not zero" (`adapter-table.tsx:8`), so an adapter
+> the graph holds no `vendor_change` row for reads as never-delivered rather than as a measured
+> zero — the same distinction this plan protects everywhere else. The absence-panel wording in the
+> paragraph below is retained as the record of what was planned, not as an instruction.
+
 **Files:**
 - Create: `web/src/features/settings/settings-page.tsx`
 - Modify: `web/src/lib/routes.ts` (add `DESTINATION_ROUTES`), `web/src/App.tsx`, `web/src/layouts/app-frame.tsx` (the existing "Settings & adapters" footer entry becomes a link), `web/src/layouts/command-palette.tsx` (destinations group)
@@ -747,6 +764,18 @@ Mock screen 07's shape: left card "Node by node" (compact sequence, outcome at i
 - [ ] **Step 5: Commit:** `feat: M14-W<n> /settings exists as a destination and says what it cannot see`
 
 ### Task 14: The palette lists subject-taking routes as lookups
+
+> **Landed independently as `ab5514d` (M7-W230), conformance-checked 2026-08-17. Do not rebuild.**
+> Every requirement below holds. All nine levels plus the `/settings` destination are listed rather
+> than the two zero-param routes the palette used to show; a subject-taking route renders as a
+> lookup carrying `reachedFrom` (`command-palette.tsx:107`) and its route pattern in mono (`:127`,
+> `:225`), never as a link with an empty parameter; `ROUTES` remains the single source, so a new
+> route appears for free. `command-palette.test.tsx` exists and covers it.
+>
+> The only deviation from the text below is naming: this plan called the array `DESTINATION_ROUTES`
+> and the shipped one is `DESTINATIONS`. **Ruling:** the shipped name is kept and this plan is
+> wrong, not the code — renaming a landed export to match a plan is churn with no reader on the
+> other side of it.
 
 **Files:**
 - Modify: `web/src/layouts/command-palette.tsx`
