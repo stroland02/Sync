@@ -86,7 +86,7 @@ export function SignalSourcePanel({ repoId }: { repoId: string }) {
 
   if (query.isPending) return <LoadingState what={`observed telemetry for ${repoId}`} />
   if (query.isError) {
-    return <ErrorState error={query.error} what={`observed telemetry for ${repoId}`} />
+    return <ErrorState error={query.error} what={`observed telemetry for ${repoId}`} onRetry={() => void query.refetch()} />
   }
 
   const { calls, shapes, error_windows } = query.data

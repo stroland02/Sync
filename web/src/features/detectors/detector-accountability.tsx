@@ -372,7 +372,7 @@ export function DetectorAccountability({ repoId = null }: { repoId?: string | nu
   const query = useDetectors(repoId ?? undefined)
 
   if (query.isPending) return <LoadingState what="detector accountability" />
-  if (query.isError) return <ErrorState error={query.error} what="detector accountability" />
+  if (query.isError) return <ErrorState error={query.error} what="detector accountability" onRetry={() => void query.refetch()} />
 
   const { detectors, total_open_findings } = query.data
 

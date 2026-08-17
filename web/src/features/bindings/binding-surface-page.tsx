@@ -398,7 +398,7 @@ function BindingSurfaceDetail({
 
       {query.isPending && <LoadingState what={`bindings for ${vendorId}/${operationId}`} />}
       {query.isError && (
-        <ErrorState error={query.error} what={`bindings for ${vendorId}/${operationId}`} />
+        <ErrorState error={query.error} what={`bindings for ${vendorId}/${operationId}`} onRetry={() => void query.refetch()} />
       )}
 
       {query.isSuccess && (

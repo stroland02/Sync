@@ -100,7 +100,7 @@ export function VendorDistributionCard() {
   return (
     <div className="flex flex-col gap-section">
       {query.isPending && <LoadingState what="the open findings" />}
-      {query.isError && <ErrorState error={query.error} what="the open findings" />}
+      {query.isError && <ErrorState error={query.error} what="the open findings" onRetry={() => void query.refetch()} />}
 
       {query.isSuccess && (
         <MetricPanel

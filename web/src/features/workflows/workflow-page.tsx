@@ -356,7 +356,7 @@ function Workflow({ findingId, question }: { findingId: string; question: string
               </Button>
             </div>
           ) : (
-            <ErrorState error={query.error} what={`the run for finding ${findingId}`} />
+            <ErrorState error={query.error} what={`the run for finding ${findingId}`} onRetry={() => void query.refetch()} />
           ))}
 
         {data !== undefined && (

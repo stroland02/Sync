@@ -47,7 +47,7 @@ export function DetectorsSummaryCard() {
   return (
     <div className="flex flex-col gap-section">
       {query.isPending && <LoadingState what="the detector attribution" />}
-      {query.isError && <ErrorState error={query.error} what="the detector attribution" />}
+      {query.isError && <ErrorState error={query.error} what="the detector attribution" onRetry={() => void query.refetch()} />}
 
       {query.isSuccess && (
         <MetricPanel

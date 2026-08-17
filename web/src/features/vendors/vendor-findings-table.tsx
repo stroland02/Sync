@@ -305,7 +305,7 @@ export function VendorFindingsCard({
 
   if (query.isPending) return <LoadingState what={`open findings for ${vendorId}`} />
   if (query.isError) {
-    return <ErrorState error={query.error} what={`open findings for ${vendorId}`} />
+    return <ErrorState error={query.error} what={`open findings for ${vendorId}`} onRetry={() => void query.refetch()} />
   }
 
   const page = query.data

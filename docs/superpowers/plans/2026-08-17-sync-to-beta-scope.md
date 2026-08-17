@@ -395,6 +395,100 @@ abandoned-run workflow screen is unit-tested but has never been rendered. Two th
 *against*: restyling, because every measured bar is clear and nothing is asking for it, and the
 second drawer, which still has one consumer.
 
+## The day-one coverage boundary a design partner will meet first
+
+`reports/2026-08-17-signals-index-beta-stock-take.md`. Lane D walked its own paths against what a
+partner experiences on day one and found one boundary that is honest by design and still needs
+saying out loud.
+
+**A partner who wraps the SDK will see fewer static bindings than they expect.** If
+`lib/stripe.ts` exports a constructed client and application files import that wrapper, single-file
+AST indexing does not bind those call sites. That is deliberate: the three-rung architecture exists
+precisely so that what cannot be statically bound is captured by runtime telemetry at the `observed`
+rung rather than fabricated as an uncertain `static` link. Lane D's verdict is keep as designed, and
+it is right.
+
+**But it composes with something.** The `observed` rung is now real -- correlators exist on both
+coded vendors and `cli.py` reaches them -- and it only produces bindings if the partner has wired
+telemetry. A partner with wrapper modules *and* no telemetry configured gets lower coverage than one
+without wrappers, from the same codebase, and nothing about that is their fault or visible to them.
+The question that follows is a console one and it is the same distinction this product is built on:
+**does any screen distinguish "this repository has no call sites here" from "this repository's call
+sites are behind an abstraction the static rung cannot follow, and no telemetry has been attached"?**
+Unmeasured is not zero, and coverage is exactly where a partner would misread one as the other.
+
+Everything else in that stock-take is verified working: both language indexers, both coded vendor
+adapters, the generated-spec adapters with their declarative `NO_MANIFEST` / `NO_SPECIFICATION` /
+`ONE_DOCUMENT` states, the closed intake vocabulary separating never-asked from nothing-new and
+clean-decline from fetch-failure, and rate limits and vendor downtime classified into reason codes
+without aborting a scan.
+
+## Why a fully unit-tested screen goes unseen, and the gap under it
+
+The abandoned-run screen renders correctly -- the outcome sits inside the sequence immediately after
+`static_verify`, the last node the run reached, above four nodes reading *never ran* rather than
+*not yet*; the reason appears in the closing bracket and again in the timeline; and `static_verify`
+carries the real compiler diagnostic, so a reviewer sees **why** Sync gave up rather than being told
+that it did.
+
+**Why nobody had ever rendered it is the finding.** The workflow route serves the *newest*
+generation, and the seeded fixture pairs an abandoned generation 0 with an opened generation 1 --
+**so no URL in the fixture produces that screen.** A fully unit-tested screen went unseen not
+because anyone skipped it but because the data made it unreachable. That is a distinct failure from
+the empty-state one, and it generalises: a screen reachable only from data nobody seeds is a screen
+nobody looks at, and its tests will keep passing.
+
+**`B146`, filed rather than built, and it is a real product gap.** A superseded generation has no
+address. `superseded-generations.tsx` renders no link and *cannot* -- the route takes a finding and
+returns the newest attempt, with no generation parameter to ask for an older one. So for a finding
+that abandoned and was then retried, the abandon **reason** stays visible and the **evidence beneath
+it is unreachable**. Stated exactly: the product claim that abandoned attempts stay visible with
+their reason is true as written; what is unreachable is the evidence under the reason. The fix needs
+a route and a view model, both Lane E's files.
+
+## A pattern worth naming: documented, asserted, never executed
+
+Two findings today have the same shape, and it is not a coincidence -- it is the failure mode this
+workspace produces when it is working well in every other respect.
+
+**The console's empty state.** Every walk ran against the seeded fixture. Ten screens were signed
+off, twenty-eight references to `seed-console` in the report, and the state a design partner sees in
+their first five minutes had never been rendered. One real defect was waiting there.
+
+**`B169` is now closed, and the answer refines the pattern rather than merely confirming it.** The
+documentation was not wrong. `scripts/fetch_corpus_repositories.py` was named in **no document in
+this repository** -- not `README.md`, not `CONTRIBUTING.md`, nothing under `docs/` -- so what was
+written was *correct and incomplete*, and no assertion about the prose could ever have caught it.
+Somebody following the setup exactly still met the failures.
+
+The fix made the instructions true rather than the test pass: both setup blocks now name the corpus
+step ahead of `uv run pytest`, with a note on why both steps are once per *checkout* rather than once
+per machine, since the artifacts are gitignored and a second worktree needs them again.
+`tests/test_gate_setup_contract.py` keeps them true by **executing** -- it runs both refusal paths
+with the artifact genuinely absent, reads the script each message names, and asserts that script
+appears in the setup documents *before* the suite command. That is the assertion that fails when a
+step is added to the code and not to the instructions, and it was proved able to fail by removing
+the step and watching it go red. Sufficiency was measured rather than assumed: seeding exactly those
+artifacts into a fresh worktree turned about fifty failures into 237 passed.
+
+A cold-clone CI job was deliberately **not** built, on the grounds that fifteen minutes of wall clock
+gets disabled the first flaky week and would prove in fifteen minutes what this proves in under a
+second.
+
+**The original framing (`B169`).** Twelve tests assert that the day-one setup is *documented* correctly.
+**None of them runs anything from an empty checkout**, and a fresh worktree fails about fifty tests
+on gitignored artifacts alone. So the instructions are verified as prose and unverified as
+instructions.
+
+Both are tests that pass while proving nothing about the thing they are named after, and both were
+found by a lane being asked to look at something nobody had looked at rather than to check something
+that had. **`B169` is a beta blocker**: a design partner who follows the documented setup, or a
+second engineer joining, meets fifty failures before meeting the product.
+
+The generalisation, which belongs in the charter more than here: *an assertion about a document is
+not an assertion about the thing the document describes.* When those two are allowed to drift, the
+test keeps passing and the drift is invisible precisely because coverage looks complete.
+
 ## The three decisions that are the human's, named now
 
 None of these blocks a lane today. Each will block a gate, and naming them now means nobody

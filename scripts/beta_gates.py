@@ -442,7 +442,11 @@ def _suite_green() -> tuple[bool | None, str]:
     log.parent.mkdir(parents=True, exist_ok=True)
     try:
         result = subprocess.run(
-            ["uv", "run", "pytest", "tests/", "-q", "-n", "4"],
+            # `-n auto`, measured rather than assumed: 125s here and 185s on a Linux runner,
+            # both TRUSTWORTHY with no worker lost. `-n 4` was a workaround for starvation on the
+            # npx resolve lock, which Lane D fixed in `2cf2e62`, and it now costs 233s for the
+            # same tree -- the workaround outliving its cause and charging for it.
+            ["uv", "run", "pytest", "tests/", "-q", "-n", "auto"],
             cwd=REPO_ROOT,
             capture_output=True,
             text=True,
@@ -508,6 +512,16 @@ def render_markdown(verdicts: Sequence[Verdict]) -> str:
         "❔ means the environment could not answer, not that the answer is zero. A gate that "
         "needs the corpus cannot be measured where there is no corpus."
     )
+    corpus_gates = [v.gate for v in verdicts if v.status == CANNOT_TELL and v.gate in ("1", "2")]
+    if corpus_gates:
+        lines.append("")
+        lines.append(
+            f"Gate{'s' if len(corpus_gates) > 1 else ''} {', '.join(corpus_gates)} "
+            f"cannot be answered anywhere without a corpus, so a `CANNOT TELL` here is structural "
+            "rather than news — it will read the same on every run until this is measured somewhere "
+            "that has one. To answer it, run `uv run python scripts/beta_gates.py` against a "
+            "database with real migration outcomes in it."
+        )
     return "\n".join(lines)
 
 

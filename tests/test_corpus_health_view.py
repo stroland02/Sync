@@ -194,3 +194,71 @@ def test_corpus_health_api_route(store: GraphStore):
         assert "provenance" in a
         assert a["provenance"] == "production"
 
+
+def test_corpus_health_sql_aggregates_match_python_computation(store: GraphStore):
+    from sync.benchmark.axes import compute_axes
+
+    # Populate a rich set of attempts: rehearsals, prod runs, mixed outcomes, token counts
+    attempt1 = _outcome(
+        finding_id="f-1",
+        attempt_index=1,
+        tier=0,
+        static_verify_passed=True,
+        terminal_status="pr_opened",
+        pr_number=101,
+        pr_merged=True,
+        input_tokens=800,
+        output_tokens=200,
+        wall_ms=4500,
+    )
+    attempt2 = _outcome(
+        finding_id="f-2",
+        attempt_index=1,
+        tier=0,
+        static_verify_passed=False,
+        terminal_status="retried",
+        pr_number=None,
+    )
+    attempt3 = _outcome(
+        finding_id="f-2",
+        attempt_index=2,
+        tier=2,
+        static_verify_passed=True,
+        terminal_status="pr_opened",
+        pr_number=102,
+        pr_merged=False,
+        wall_ms=6000,
+    )
+    attempt_rehearsal = _outcome(
+        finding_id="f-3",
+        attempt_index=1,
+        tier=0,
+        static_verify_passed=True,
+        terminal_status="pr_opened",
+        pr_number=103,
+        pr_merged=True,
+        is_rehearsal=True,
+    )
+    for a in [attempt1, attempt2, attempt3, attempt_rehearsal]:
+        store.record_migration_outcome(a)
+
+    sql_axes = store.corpus_health_aggregates()
+    py_axes = compute_axes(store.migration_outcomes())
+
+    assert sql_axes.counts.attempts == 4
+    assert sql_axes.counts.findings == 3
+    assert sql_axes.counts.pull_requests_opened == py_axes.counts.pull_requests_opened
+    assert sql_axes.counts.pull_requests_merged == py_axes.counts.pull_requests_merged
+    assert sql_axes.counts.production_attempts == 3
+    assert sql_axes.counts.rehearsal_attempts == 1
+
+    assert sql_axes.routing_accuracy.value == py_axes.routing_accuracy.value
+    assert sql_axes.routing_accuracy.n == py_axes.routing_accuracy.n
+
+    assert sql_axes.tokens_per_merged_patch.value == py_axes.tokens_per_merged_patch.value
+    assert sql_axes.tokens_per_merged_patch.n == py_axes.tokens_per_merged_patch.n
+
+    assert sql_axes.wall_ms_per_merged_patch.value == py_axes.wall_ms_per_merged_patch.value
+    assert sql_axes.wall_ms_per_merged_patch.n == py_axes.wall_ms_per_merged_patch.n
+
+

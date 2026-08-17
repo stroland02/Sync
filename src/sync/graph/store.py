@@ -1431,6 +1431,137 @@ class GraphStore:
         ).fetchall()
         return [dict(row) for row in rows]
 
+    def corpus_health_aggregates(self):
+        """Compute the benchmark quality axes directly in Postgres via SQL aggregation.
+
+        Avoids O(n) table scans in Python over the append-only `migration_outcome` table (B167).
+        """
+        from sync.benchmark.axes import Axis, BenchmarkAxes, Counts
+
+        counts_row = self._connect().execute(
+            """
+            SELECT
+                count(*) AS attempts,
+                count(DISTINCT finding_id) AS findings,
+                count(*) FILTER (WHERE NOT is_rehearsal AND pr_number IS NOT NULL) AS pull_requests_opened,
+                count(DISTINCT finding_id) FILTER (WHERE NOT is_rehearsal AND pr_number IS NOT NULL AND pr_merged = true) AS pull_requests_merged,
+                count(DISTINCT finding_id) FILTER (WHERE NOT is_rehearsal AND terminal_status = 'abandoned') AS findings_abandoned,
+                count(*) FILTER (WHERE NOT is_rehearsal) AS production_attempts,
+                count(*) FILTER (WHERE is_rehearsal) AS rehearsal_attempts
+            FROM migration_outcome
+            """
+        ).fetchone()
+
+        counts = Counts(
+            attempts=(counts_row["attempts"] if counts_row else 0) or 0,
+            findings=(counts_row["findings"] if counts_row else 0) or 0,
+            pull_requests_opened=(counts_row["pull_requests_opened"] if counts_row else 0) or 0,
+            pull_requests_merged=(counts_row["pull_requests_merged"] if counts_row else 0) or 0,
+            findings_abandoned=(counts_row["findings_abandoned"] if counts_row else 0) or 0,
+            production_attempts=(counts_row["production_attempts"] if counts_row else 0) or 0,
+            rehearsal_attempts=(counts_row["rehearsal_attempts"] if counts_row else 0) or 0,
+        )
+
+        kind_rows = self._connect().execute(
+            """
+            SELECT
+                change_kind,
+                count(*) AS total,
+                count(*) FILTER (WHERE pr_merged = true) AS merged,
+                bool_or(is_rehearsal) AS has_rehearsal,
+                bool_or(NOT is_rehearsal) AS has_prod
+            FROM migration_outcome
+            WHERE NOT is_rehearsal AND pr_number IS NOT NULL AND pr_merged IS NOT NULL
+            GROUP BY change_kind
+            """
+        ).fetchall()
+        kind_rates = {}
+        for r in kind_rows:
+            prov = "rehearsal" if r["has_rehearsal"] and not r["has_prod"] else ("mixed" if r["has_rehearsal"] and r["has_prod"] else "production")
+            kind_rates[r["change_kind"]] = Axis.over(r["merged"], r["total"], provenance=prov)
+
+        tier_rows = self._connect().execute(
+            """
+            SELECT
+                tier,
+                count(*) AS total,
+                count(*) FILTER (WHERE pr_merged = true) AS merged,
+                bool_or(is_rehearsal) AS has_rehearsal,
+                bool_or(NOT is_rehearsal) AS has_prod
+            FROM migration_outcome
+            WHERE NOT is_rehearsal AND pr_number IS NOT NULL AND pr_merged IS NOT NULL
+            GROUP BY tier
+            """
+        ).fetchall()
+        tier_rates = {}
+        for r in tier_rows:
+            prov = "rehearsal" if r["has_rehearsal"] and not r["has_prod"] else ("mixed" if r["has_rehearsal"] and r["has_prod"] else "production")
+            tier_rates[r["tier"]] = Axis.over(r["merged"], r["total"], provenance=prov)
+
+        t0_row = self._connect().execute(
+            """
+            WITH tier_zero_findings AS (
+                SELECT
+                    finding_id,
+                    bool_or(tier > 0) AS any_fallback,
+                    bool_or(tier = 0 AND static_verify_passed = true) AS any_t0_passed,
+                    bool_or(is_rehearsal) AS has_rehearsal,
+                    bool_or(NOT is_rehearsal) AS has_prod
+                FROM migration_outcome
+                WHERE NOT is_rehearsal
+                GROUP BY finding_id
+                HAVING bool_or(tier = 0)
+            )
+            SELECT
+                count(*) AS denominator,
+                count(*) FILTER (WHERE NOT any_fallback AND any_t0_passed) AS numerator,
+                bool_or(has_rehearsal) AS has_rehearsal,
+                bool_or(has_prod) AS has_prod
+            FROM tier_zero_findings
+            """
+        ).fetchone()
+        if t0_row and t0_row["denominator"] and t0_row["denominator"] > 0:
+            prov = "rehearsal" if t0_row["has_rehearsal"] and not t0_row["has_prod"] else ("mixed" if t0_row["has_rehearsal"] and t0_row["has_prod"] else "production")
+            routing_acc = Axis.over(t0_row["numerator"], t0_row["denominator"], provenance=prov)
+        else:
+            routing_acc = Axis.over(0, 0, provenance="unmeasured")
+
+        merged_row = self._connect().execute(
+            """
+            WITH merged_findings AS (
+                SELECT DISTINCT finding_id
+                FROM migration_outcome
+                WHERE NOT is_rehearsal AND pr_number IS NOT NULL AND pr_merged = true
+            )
+            SELECT
+                count(DISTINCT m.finding_id) AS denominator,
+                coalesce(sum(coalesce(m.input_tokens, 0) + coalesce(m.output_tokens, 0)), 0) AS total_tokens,
+                coalesce(sum(m.wall_ms), 0) AS total_wall_ms,
+                bool_or(m.is_rehearsal) AS has_rehearsal,
+                bool_or(NOT m.is_rehearsal) AS has_prod
+            FROM migration_outcome m
+            JOIN merged_findings f ON m.finding_id = f.finding_id
+            WHERE NOT m.is_rehearsal
+            """
+        ).fetchone()
+
+        if merged_row and merged_row["denominator"] and merged_row["denominator"] > 0:
+            prov = "rehearsal" if merged_row["has_rehearsal"] and not merged_row["has_prod"] else ("mixed" if merged_row["has_rehearsal"] and merged_row["has_prod"] else "production")
+            tokens_axis = Axis.over(int(merged_row["total_tokens"]), merged_row["denominator"], provenance=prov)
+            wall_ms_axis = Axis.over(int(merged_row["total_wall_ms"]), merged_row["denominator"], provenance=prov)
+        else:
+            tokens_axis = Axis.over(0, 0, provenance="unmeasured")
+            wall_ms_axis = Axis.over(0, 0, provenance="unmeasured")
+
+        return BenchmarkAxes(
+            merge_rate_by_change_kind=kind_rates,
+            merge_rate_by_tier=tier_rates,
+            routing_accuracy=routing_acc,
+            tokens_per_merged_patch=tokens_axis,
+            wall_ms_per_merged_patch=wall_ms_axis,
+            counts=counts,
+        )
+
     def repo_id_for_finding(self, finding_id: str) -> str | None:
         """The repository ID of the call site a finding was raised against, or None."""
         row = self._connect().execute(

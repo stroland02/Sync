@@ -391,6 +391,141 @@ confidently instead of refusing.
 
 ## Ready
 
+### B169 — nothing exercises a cold clone, so the day-one path is verified as documented rather than as working — FIXED
+
+`tests/test_day_one_path.py` is twelve tests and every one is structural: that each Quick start
+command resolves against the real argparse surface, that the README names every authenticated tool,
+that the API and CLI agree on a default DSN, that `--repo` refuses a filesystem path. They are worth
+having and they are what `B130` was for. **None of them runs anything from an empty checkout.**
+
+The claim they support is "the documentation describes commands that exist". The claim a design
+partner needs is "a person who follows this gets a working install", and nothing checks it.
+
+**Measured, not theorised.** A fresh `git worktree` of this repository fails about fifty tests purely
+for missing gitignored artifacts: 47 × `FileNotFoundError: oasdiff not found; run
+scripts/bootstrap_tools.sh` and 3 × `RuntimeError: Corpus repository 'furever' is missing at
+<path>/.cache/corpus/furever`. Seeding `tools/` and `.cache/corpus/` from a warm checkout took
+seconds and the same files then ran `237 passed`. Everyone already working here has a warm checkout,
+so the person who hits this is the second engineer or the first design partner.
+
+**Deliberately not a cold-clone CI job.** Fifteen minutes of wall clock gets disabled the first week
+it is flaky. What is wanted is a check on the bootstrap contract: that `bootstrap_tools.sh` and
+`fetch_corpus_repositories.py` produce exactly the artifacts the suite refuses without, and that a
+missing one fails with a message naming the script that supplies it.
+
+**Fixed 2026-08-17 (`CI-W297`), and the instructions were wrong rather than merely unchecked.**
+`scripts/fetch_corpus_repositories.py` was named in no document in this repository — not
+`README.md`, not `CONTRIBUTING.md`, not anything under `docs/`. So somebody following the setup
+exactly still met the three corpus failures, and no amount of asserting that the documented
+commands exist would have found it: what was documented was correct and incomplete.
+
+The instructions are now true — both setup blocks name the corpus step, in order, before
+`uv run pytest`, and the README says why both are "once per checkout" rather than once per machine.
+That was preferred over changing a test, because a test that passes against wrong instructions is
+the defect rather than the fix.
+
+`tests/test_gate_setup_contract.py` keeps them true by executing rather than reading: it runs both
+refusal paths with the artifact genuinely absent, reads the script each message names, and asserts
+that script appears in the setup documents before the suite command. That is the assertion that
+fails when a step is added to the code and not to the instructions, which is the direction the
+drift actually goes — nobody forgets to write the refusal, because the refusal is what they hit
+while building the thing.
+
+Proved able to fail: removing the step from both documents turns it red naming the script, and
+restoring it turns it green. The sufficiency of the two steps is measured rather than assumed —
+seeding exactly those two artifacts into a fresh worktree earlier the same day turned about fifty
+failures into `237 passed`.
+
+**Closes when:** a check fails if the bootstrap contract is broken — proven by removing one artifact
+and watching it go red — and the README's prerequisites are the set that check enforces, so the two
+cannot drift.
+
+### B170 — CI runs `-n auto` while every lane is told to use `-n 4`, and until today CI could not have reported a dead worker — MEASURED, and the guidance is the thing to retire
+
+`pyproject.toml:99` is `addopts = "-m 'not e2e' -n auto"` and CI's `Tests` step is a bare
+`uv run pytest`, so the runner inherits `-n auto`. The lane charter tells every lane to use `-n 4`
+because `-n auto` crashed an xdist worker outright on this host.
+
+**This entry does not claim CI is currently broken by it.** The local crashes were starvation on the
+npx resolve lock, fixed by Lane D in `2cf2e62`, and `-n auto` has not been measured on a Linux runner
+since. What is true is that the guidance and the configuration disagree, and that until `CI-W295` the
+trustworthiness check could not have told anyone if a worker had died on a runner — it was reporting
+`no summary line` on every run.
+
+**The likely right answer is to retire the guidance rather than spread it.** `-n 4` is a workaround
+whose reason has expired, and changing a setting because it once correlated with a symptom is how a
+workaround outlives its cause.
+
+**Measured 2026-08-17 (`CI-W298`), both environments, with `gate_verdict` reading the result --
+which is only possible since `CI-W295`, because before it every CI run reported `no summary line`.**
+
+| Where | Setting | Wall clock | Verdict |
+|---|---|---:|---|
+| Linux runner, run `32049200654` | `-n auto` | 185s | TRUSTWORTHY, 1 failed 3906 passed |
+| This Windows host | `-n auto` | **125s** | TRUSTWORTHY, 1 failed 3914 passed |
+| This Windows host, earlier | `-n 4` | 233s | TRUSTWORTHY |
+
+No worker was lost in either `-n auto` run. The single failure is
+`test_decode_handlers.py::test_no_subsuming_chain_in_src_is_unaccounted_for`, which was already
+failing under `-n 4` and is not this.
+
+**So the answer is the one the entry predicted, and the cost is larger than it guessed.** `-n 4`
+is not a neutral safety margin: it is a workaround for starvation on the npx resolve lock, that
+cause was fixed in `2cf2e62`, and it now charges every lane **108 seconds per run** to prevent a
+crash that no longer happens. The charter's guidance is the thing to retire, not the configuration
+to change.
+
+One check the measurement also validated: a run cancelled by concurrency (`32049551015`) reports
+`UNTRUSTWORTHY: the run printed no summary line`, which is correct -- a cancelled run is not a
+result -- and confirms `CI-W295`'s pattern is not simply matching everything.
+
+**The charter edit is not this lane's to make**, so it is proposed rather than applied.
+`scripts/beta_gates.py` moves to `-n auto` because that file is Lane C's.
+
+**Closes when:** `-n auto` is measured on a runner with the trustworthiness check reading the result,
+and either the charter's `-n 4` is retired with that measurement beside it, or CI is moved to `-n 4`
+with the crash it prevents named.
+
+### B171 — two of the four beta gates are measured continuously and two are measured when somebody remembers — FIXED, and smaller than filed
+
+`beta_gates.py` runs on every push and reports Gates 1 and 2 as `CANNOT TELL`, correctly: CI has no
+corpus, and the job deliberately has no Postgres service because an empty database read as a
+measurement of zero is the absence-versus-zero error this product exists to refuse, committed by the
+repository about itself.
+
+The consequence is that **the two gates about evidence are only ever answered by a person typing the
+command on a machine with a corpus.** "Readiness is measured" is half true, and the half that is not
+measured is the half about whether the product works.
+
+**Not solved by a database in CI.** Solved either by a scheduled run somewhere that has a real
+corpus, or by accepting that those two gates are human-run and saying so wherever the meter's output
+is read, so nobody mistakes a continuous `CANNOT TELL` for a fresh one.
+
+**Fixed 2026-08-17 (`CI-W298`), and inspection made it smaller than the entry claimed.** The
+published summary already closed most of it: its footer said `❔ means the environment could not
+answer, not that the answer is zero`, so absence was never being rendered as zero.
+
+What was actually missing is narrower and worth naming separately, because it is a different
+failure. A reader could not tell a `CANNOT TELL` that might resolve on the next run from one that
+is structural to the environment. In CI, gates 1 and 2 read `CANNOT TELL` on every push forever --
+CI has no corpus and deliberately gets no database -- and an unqualified forever-unknown is
+indistinguishable from a fresh unknown. A reader eventually stops looking at it, which is the same
+way a gate that fires on a CSS tweak teaches a lane to stop clearing it.
+
+The summary now says which gates cannot be answered in this environment at all, that a
+`CANNOT TELL` for them is structural rather than news, and what to run to get a real answer. A run
+that did answer carries none of that, because silence is the ordinary case.
+
+**The larger half of the original entry is deliberately not done.** Measuring the evidence gates on
+a schedule needs somewhere with a real corpus, which does not exist yet and is not this lane's to
+create -- it arrives with `B7`, and until a real run has happened there is nothing for a schedule
+to measure.
+
+**Closes when:** either the evidence gates are measured somewhere with a corpus on a schedule, or the
+published summary states which gates this environment can never answer and when they were last
+answered by hand.
+
+
 ### B156 — containerised patch agent authentication: SDK & CLI credential discovery contract (B97)
 
 Gate 4 is blocked on B97 (sandbox containment), and a containerised agent run fails before it
@@ -3947,3 +4082,32 @@ does — that the figure is derived from a count and a per-read constant rather 
 tokens. The wording is a judgement for whoever takes it; the constant should be nameable from the
 screen. Alternatively the field stops being expressed in tokens and is expressed as what it
 actually is, a count of avoided reads, which needs no qualification at all and is the stronger fix.
+
+### B146 — A superseded remediation attempt has no address, so its evidence is unreachable
+
+Found while rendering the abandoned-run workflow screen for the first time
+(`reports/2026-08-17-abandoned-run-walk.md`, `M14-W348`).
+
+`GET /api/workflows/{finding_id}` answers with the **newest** generation for that finding. A finding
+that abandoned and was then retried successfully therefore serves the retry, and the abandoned
+attempt survives only as a one-line entry under *Superseded generations*: number, thread id,
+outcome, reason. `web/src/features/workflows/superseded-generations.tsx` renders no link, and it
+cannot render one — there is no generation parameter on the route, so the older attempt has no
+address to link to.
+
+**What is and is not true.** The product's claim that abandoned attempts stay visible with their
+reason holds: the reason renders. What is unreachable is the evidence *under* the reason — which
+nodes ran, and the compiler output or replay result that stopped the run. That evidence is the most
+instructive thing the console holds about a failure, and today it is only visible while the
+abandoned generation happens to be the newest one.
+
+It also means the screen had never been rendered before this walk: with the seeded fixture there is
+no URL that produces it, which is how a fully unit-tested screen went unseen.
+
+**What closes it:** an address for a generation. The shape is Lane E's decision — a query parameter
+on the existing route, or a generation segment in the path — plus the matching view model, and then
+one link per row in the console, which is Lane B's half and small once the address exists.
+
+**Not urgent for beta.** A partner's own abandoned run is served correctly the moment it is the
+newest attempt, which is the common case at the point where they are watching. This bites on the
+retry path.

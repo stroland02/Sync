@@ -61,7 +61,7 @@ export function VendorChangesCard({
 
   if (query.isPending) return <LoadingState what={`vendor changes for ${vendorId}`} />
   if (query.isError) {
-    return <ErrorState error={query.error} what={`vendor changes for ${vendorId}`} />
+    return <ErrorState error={query.error} what={`vendor changes for ${vendorId}`} onRetry={() => void query.refetch()} />
   }
 
   const page = query.data
