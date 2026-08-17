@@ -34,6 +34,8 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 PIN = REPO_ROOT / ".oasdiff-version"
 WORKFLOW = REPO_ROOT / ".github" / "workflows" / "ci.yml"
 BOOTSTRAP = REPO_ROOT / "scripts" / "bootstrap_tools.sh"
+ASSET_MAP = REPO_ROOT / "scripts" / "oasdiff_asset.sh"
+"""Sourced by the bootstrap script, so a checkout without it cannot run one."""
 
 SEMVER = re.compile(r"^\d+\.\d+\.\d+$")
 
@@ -241,6 +243,7 @@ def checkout(
     (root / "scripts").mkdir(parents=True)
     write_pin(root / ".oasdiff-version", version=pin, newline=newline)
     shutil.copy(BOOTSTRAP, root / "scripts" / "bootstrap_tools.sh")
+    shutil.copy(ASSET_MAP, root / "scripts" / "oasdiff_asset.sh")
     if holds is not None:
         fake_oasdiff(root / "tools" / "oasdiff.exe", version=holds)
     return root

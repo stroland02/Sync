@@ -82,6 +82,7 @@ dev = [
     "pytest>=9.1.1",
     "pytest-asyncio>=1.4.0",
     "pytest-cov>=7.0",
+    "pytest-timeout>=2.5.0",
     "pytest-xdist>=3.6",
 ]
 
@@ -96,6 +97,16 @@ pythonpath = ["."]
 # and `--dist loadfile` is 78s because three files hold 79% of the wall clock.
 # Spinning up workers costs about 4s flat, so use `-n0` for a focused run.
 addopts = "-m 'not e2e' -n auto"
+# The watchdog B132 bought, kept because it is what found B132. A single unbounded wait makes
+# the whole gate unreadable: an operator cannot tell a starved run from a stuck one, so they
+# kill it, and then nothing is known about the other 1800 tests either. This turns any future
+# hang into a named test, a stack and a failure. The bound is deliberately far above anything
+# healthy -- the slowest test here spawns a child pytest with its own 600 s ceiling -- so it
+# fires on a defect and never on a loaded host.
+timeout = 900
+# `thread` is not a preference: `signal` needs SIGALRM, which Windows does not have, and this
+# is the machine the local gate runs on.
+timeout_method = "thread"
 markers = [
     "e2e: end-to-end test; makes network and model calls",
     "docker: requires a working local Docker Desktop with Linux containers",
@@ -103,6 +114,9 @@ markers = [
 
 [tool.importlinter]
 root_package = "sync"
+# Required for the model-SDK contract below: without it the graph stops at Sync's own
+# packages, and a forbidden module outside them cannot be named at all.
+include_external_packages = true
 
 [[tool.importlinter.contracts]]
 name = "sync.core depends on nothing"
@@ -126,6 +140,7 @@ forbidden_modules = [
     "sync.verify",
     "sync.rehearse",
     "sync.context",
+    "sync.runner",
 ]
 
 [[tool.importlinter.contracts]]
@@ -133,4 +148,19 @@ name = "sync.rehearse cannot import sync.forge"
 type = "forbidden"
 source_modules = ["sync.rehearse"]
 forbidden_modules = ["sync.forge"]
+
+# M8's seam, stated as the property it defends rather than as a layering preference: the
+# remediation pipeline runs without a model. `sync.runner` owns every line that knows a model
+# SDK exists, so a test can drive `locate -> patch -> verify` against a runner that returns a
+# fixed result and needs no key and no network.
+[[tool.importlinter.contracts]]
+name = "sync.remediate cannot import a model SDK"
+type = "forbidden"
+source_modules = ["sync.remediate"]
+forbidden_modules = ["claude_agent_sdk"]
+# The chain `agent_patch -> sync.runner -> claude_agent_sdk` is the seam, not a violation of
+# it: what this defends is that no module in `sync.remediate` names the SDK itself, so
+# substituting a runner substitutes every line that knows a model exists. Forbidding the
+# chain would forbid the arrangement the contract was written to require.
+allow_indirect_imports = true
 

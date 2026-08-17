@@ -18,7 +18,8 @@ from pathlib import Path
 
 import pytest
 
-from sync.core import VendorAdapter
+from sync.core import RequestCorrelator, VendorAdapter
+from sync.core.conformance import check_request_correlator
 from sync.signals.stripe.symbols import build_symbol_map as build_stripe_symbol_map
 from sync.signals.twilio.adapter import ProductDocument, TwilioAdapter
 from sync.signals.twilio.symbols import SymbolCollision, build_symbol_map
@@ -413,3 +414,112 @@ def test_a_node_spelling_resolves_only_when_the_language_says_node(tmp_path):
     assert adapter.operation_for_symbol(node_symbol, language="typescript") is not None
     assert adapter.operation_for_symbol(node_symbol, language="python") is None
     assert adapter.operation_for_symbol(python_symbol, language="typescript") is None
+
+
+# --- RequestCorrelator protocol ----------------------------------------------------
+
+
+def test_the_adapter_satisfies_the_correlator_protocol(tmp_path):
+    """The protocol is what `sync.telemetry` and `sync sentry-errors` depend on. If the
+    adapter drifts out of it, the ingest silently correlates nothing."""
+    adapter = TwilioAdapter(
+        spec_dir=FIXTURES, symbol_map_path=_written_map(tmp_path), documents=(INSIGHTS_V1,)
+    )
+    assert isinstance(adapter, RequestCorrelator)
+
+
+def test_an_instance_path_resolves_through_its_template(tmp_path):
+    """`/v1/Voice/{Sid}` is the template. `CA1234567890abcdef1234567890abcdef` is an identifier
+    the specification never names. Matching it is the entire correlation."""
+    adapter = TwilioAdapter(
+        spec_dir=FIXTURES, symbol_map_path=_written_map(tmp_path), documents=(INSIGHTS_V1,)
+    )
+    operation = adapter.operation_for_request(
+        "GET", "/v1/Voice/CA1234567890abcdef1234567890abcdef"
+    )
+
+    assert operation is not None
+    assert operation.operation_id == "FetchCall"
+    assert operation.http_method == "get"
+    assert operation.path == "/v1/Voice/{Sid}"
+
+
+def test_a_nested_subresource_path_resolves_through_its_template(tmp_path):
+    """Sub-resources like conferences participants have multiple placeholders in the path."""
+    adapter = TwilioAdapter(
+        spec_dir=FIXTURES, symbol_map_path=_written_map(tmp_path), documents=(INSIGHTS_V1,)
+    )
+    operation = adapter.operation_for_request(
+        "GET", "/v1/Conferences/CF1234567890abcdef/Participants/PA1234567890abcdef"
+    )
+
+    assert operation is not None
+    assert operation.operation_id == "FetchConferenceParticipant"
+    assert operation.path == "/v1/Conferences/{ConferenceSid}/Participants/{ParticipantSid}"
+
+
+def test_the_returned_path_is_the_published_template_not_the_request(tmp_path):
+    """What gets stored. The template is Twilio's own published string and carries no customer
+    data; the request path carries a call SID. This is the privacy boundary."""
+    adapter = TwilioAdapter(
+        spec_dir=FIXTURES, symbol_map_path=_written_map(tmp_path), documents=(INSIGHTS_V1,)
+    )
+    sid = "CA1234567890abcdef1234567890abcdef"
+    operation = adapter.operation_for_request("GET", f"/v1/Voice/{sid}")
+
+    assert operation is not None
+    assert operation.path == "/v1/Voice/{Sid}"
+    assert sid not in operation.path
+    assert sid not in operation.operation_id
+
+
+def test_the_method_selects_between_operations_on_one_path(tmp_path):
+    """`/v1/Voice/Settings` has both GET (FetchAccountSettings) and POST (UpdateAccountSettings)."""
+    adapter = TwilioAdapter(
+        spec_dir=FIXTURES, symbol_map_path=_written_map(tmp_path), documents=(INSIGHTS_V1,)
+    )
+    get_op = adapter.operation_for_request("GET", "/v1/Voice/Settings")
+    post_op = adapter.operation_for_request("POST", "/v1/Voice/Settings")
+
+    assert get_op is not None and get_op.operation_id == "FetchAccountSettings"
+    assert post_op is not None and post_op.operation_id == "UpdateAccountSettings"
+
+
+def test_the_method_is_matched_case_insensitively(tmp_path):
+    adapter = TwilioAdapter(
+        spec_dir=FIXTURES, symbol_map_path=_written_map(tmp_path), documents=(INSIGHTS_V1,)
+    )
+    assert adapter.operation_for_request("get", "/v1/Voice/Settings").operation_id == "FetchAccountSettings"
+
+
+def test_a_trailing_slash_does_not_prevent_a_match(tmp_path):
+    adapter = TwilioAdapter(
+        spec_dir=FIXTURES, symbol_map_path=_written_map(tmp_path), documents=(INSIGHTS_V1,)
+    )
+    assert adapter.operation_for_request("GET", "/v1/Voice/Settings/").operation_id == "FetchAccountSettings"
+
+
+def test_an_unknown_path_correlates_to_nothing(tmp_path):
+    adapter = TwilioAdapter(
+        spec_dir=FIXTURES, symbol_map_path=_written_map(tmp_path), documents=(INSIGHTS_V1,)
+    )
+    assert adapter.operation_for_request("GET", "/v1/Unknown/Resource") is None
+
+
+def test_a_method_the_operation_does_not_support_correlates_to_nothing(tmp_path):
+    adapter = TwilioAdapter(
+        spec_dir=FIXTURES, symbol_map_path=_written_map(tmp_path), documents=(INSIGHTS_V1,)
+    )
+    assert adapter.operation_for_request("DELETE", "/v1/Voice/Settings") is None
+
+
+def test_the_adapter_passes_the_correlator_conformance_kit(tmp_path):
+    adapter = TwilioAdapter(
+        spec_dir=FIXTURES, symbol_map_path=_written_map(tmp_path), documents=(INSIGHTS_V1,)
+    )
+    check_request_correlator(
+        adapter,
+        known_request=("GET", "/v1/Voice/CA1234567890abcdef1234567890abcdef"),
+        identifier="CA1234567890abcdef1234567890abcdef",
+    )
+

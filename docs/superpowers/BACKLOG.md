@@ -313,6 +313,168 @@ confidently instead of refusing.
 
 ## Ready
 
+### B135 — a customer's repository could configure the patch agent, and the gate sat downstream of it — FIXED, and the entry stays for what it says about the gate
+
+**B135, B133 and B134 were filed as B131, B129 and B130 and renumbered on landing.** Three live branches -- `b129-truncate-corpus`, `b130-day-one-path`, `b131-generated-vendors` -- plus `b132-gate-hang` already held 129 through 132 when these were written, and `main`'s copy of this file topped out at B128, so the numbers read as free from every view that could see them. That is the failure this file's own opening rule describes, and `git log --all --oneline --grep` does not catch it either when the competing claim is a branch name rather than a commit message. The cheap check that would have: `git worktree list` and `git branch -a`, read for the number rather than for the work.
+
+**Found 2026-08-16 while probing why a full-depth rehearsal abandoned. Fixed the same day in
+`M8-W217`; recorded here because the shape of the miss matters more than the fix.**
+
+`ClaudeAgentOptions.setting_sources` defaults to `None`, which the SDK's own docstring defines
+as *"all sources are loaded (matches CLI defaults)"* — user, project and local. Sync sets `cwd`
+to a clone of a customer's repository and passed no `setting_sources`, so the clone's
+`.claude/settings.json` was configuration Sync obeyed.
+
+**Measured against the real SDK rather than argued from the docstring.** A `.claude/settings.json`
+written into the working directory, carrying a `SessionStart` hook whose command was `echo`:
+
+```
+HOOK FIRED: hook_name='SessionStart:startup', stdout='CUSTOMER-CONTROLLED-HOOK-EXECUTED'
+VERDICT customer_hook_executed=True
+```
+
+With `setting_sources=[]` the same experiment reported `customer_hook_executed=False`. Both runs
+are in the same script, so the negative is a control rather than an absence.
+
+**Why this was worse than the `curl` attack B97 ranks first.** `sync.remediate.tool_gate` is a
+`PreToolUse` hook. A `SessionStart` hook runs *before the first tool call*, so the gate never saw
+it — not "the gate allowed it", the gate was not on the path. And B97 already established that
+`ClaudeAgentOptions.env` merges onto `os.environ` rather than replacing it, so the process
+running that command holds `SYNC_GRAPH_DSN` and every other credential the control plane has.
+Arbitrary code execution, control-plane credentials, no gate, from a file the attacker commits.
+
+The same defect had a second half with no security story and a real cost: **the patch agent was
+inheriting the operator's own Claude Code installation.** The probe's `init` message listed this
+host's entire tool roster — `Task`, `PowerShell`, `CronCreate`, `Monitor`, `RemoteTrigger` —
+rather than the six names in `ALLOWED_TOOLS`, and this machine's `SessionStart` hooks fired
+inside the patch run, injecting a skills mandate and an output-style directive into a production
+prompt. `tool_gate` refuses anything outside its six, so the roster was contained; nothing
+contained the hooks.
+
+**The fix is `setting_sources=[]` in `sync.runner.claude_sdk`, with a test that reads the
+options the runner builds.** `[]` rather than `["user"]`: the operator's settings are no more
+part of a patch run than the customer's. Sync's own hooks are unaffected — they are passed
+programmatically through `hooks=`, which is not a filesystem source, and the test asserts both
+events still reach the run so an isolation flag cannot silently disarm the gate.
+
+**That the gate survives isolation mode is measured, not assumed.** A fix that turned off every
+settings source and took the hook mechanism with it would have removed `tool_gate` while reading
+as hardening — so a third probe ran the real SDK with `setting_sources=[]`, a programmatic
+`PreToolUse` hook, and a prompt asking for a shell command, and reported
+`hook_consulted_for=['Bash']`. Note what that does and does not establish: the hook was
+*consulted*, which is the half `CLAUDE.md` currently records as unobserved. Whether the CLI then
+honours a `deny` is still taken from the SDK's contract.
+
+**Turning filesystem settings off costs nothing the pipeline needed, because B126 landed first.**
+`"project"` is also what loads a `CLAUDE.md`, and a patch agent does have a legitimate need for
+the conventions a repository keeps — which is the need B126 built `sync.context` and the prompt's
+context section to serve, from a store Sync controls, inside the cacheable prefix. The
+customer-authored route to the same facts is `.sync/context.md`, which Sync *reads* as data
+rather than *obeys* as configuration. Had the two landed in the other order this would have been
+a fix with a real cost attached.
+
+**What this says about the gate, which is the part worth keeping.** `tool_gate` was built as
+*the* answer to "what can the patch agent do", and it is a good answer to the question it asks —
+what the agent may *request*. It says nothing about what the SDK does on the agent's behalf
+before the agent exists. Every future option added to `ClaudeAgentOptions` is a surface of the
+same kind, and 45 fields are declared today against the seven `CLAUDE.md` used to list.
+
+**Evidence that closes this:** a review of every `ClaudeAgentOptions` field the runner does not
+set, recording for each whether its default admits customer-controlled or operator-controlled
+input, in the same form as the measurement above — an experiment, not a reading. `sandbox`,
+`plugins`, `agents`, `system_prompt` and `permission_mode` are the ones to start from.
+
+### B133 — B79's natural key never reached any database that already existed, so every corpus write fails
+
+**Found 2026-08-16 by running `sync rehearse --depth full`, which nothing had done since the
+pipeline changed underneath it.** Every `migration_outcome` write in that run raised:
+
+```
+psycopg.errors.InvalidColumnReference: there is no unique or exclusion constraint
+matching the ON CONFLICT specification
+```
+
+`GraphStore.record_migration_outcome` upserts on `ON CONFLICT (finding_id, attempt_index,
+is_rehearsal)`. `schema.sql` declares `UNIQUE (finding_id, attempt_index, is_rehearsal)`. The
+database on 5433 carries `migration_outcome_finding_id_attempt_index_key UNIQUE CONSTRAINT,
+btree (finding_id, attempt_index)` — the two-column key from before B79.
+
+**The schema file predicted this in its own comment and nothing acted on it:** *"widening this
+constraint is not something `GraphStore.apply_schema` can carry to a database that already has
+the old one."* `CREATE TABLE IF NOT EXISTS` does not alter an existing table, so B79 (`M4-W204`)
+applies to a database created after it and to no other. Every database that existed on
+2026-08-16 — this one, and any a customer or a deployment already had — still refuses every
+write to the one table `build_graph` refuses a store without.
+
+**Why it matters more than a schema drift usually does.** `migration_outcome` is the single
+write every benchmark axis reads from. Merge rate, routing accuracy and cost per merged patch
+have never had a sample, and this is a second reason why: even a run that reached a pull request
+would have recorded nothing. It also silently disarms B79's own fix — the rehearsal/production
+is_rehearsal)`. `schema.sql` declares that unique constraint, and `apply_schema` executes `CREATE
+TABLE IF NOT EXISTS` -- which does nothing when the table already exists under the old
+single-column unique constraint. So every fresh database worked, and every database created before
+B79 failed every corpus write forever with no error in the log anyone saw.
+
+**What closes it:** `GraphStore.apply_schema` checks whether `migration_outcome`'s unique constraint
+matches the schema and alters it when it does not -- `ALTER TABLE migration_outcome DROP CONSTRAINT
+...; ALTER TABLE migration_outcome ADD CONSTRAINT ...` in the same migration block. Tested against a database that
+already holds the old one, proved by a test that creates the table with the two-column key,
+applies the schema, and watches a write that previously raised succeed — and proved able to fail
+by running that test against the current `apply_schema` first. A fresh-database test proves
+nothing here; the fresh-database path is the one that already works.
+
+### B134 — a corpus write that fails leaves no queryable trace, so a systematic failure runs forever
+
+Filed from B133 rather than discovered separately: the reason B133 survived from the day B79
+landed until somebody ran a rehearsal by hand is that nothing downstream of the failure knows it
+happened.
+
+`corpus.record` catches every exception from `_record`, logs a warning with the traceback, and
+returns `False` (`src/sync/remediate/corpus.py:238-252`). The comment argues the case and the
+argument is right as far as it goes: *"the pull request is the product; the row is bookkeeping,
+and bookkeeping that can fail a run is worse than bookkeeping that is missing."* A run should not
+die because a row did not land.
+
+**What the argument does not cover is the difference between one failure and all of them.** A
+single dropped row is bookkeeping. Every row dropped, on every run, for as long as a database has
+the wrong constraint, is the measurement substrate being absent while the run reports success and
+exits 0 — which is what happened here. Nothing counts the drops, nothing surfaces them on the
+console's detector accountability level, and `abandon_reason` never sees them because the run did
+not abandon.
+
+This is the same defect class the console spent six findings closing: a surface that cannot say
+"I could not measure this" reports it as "nothing to measure". The corpus has the same gap on the
+write side.
+
+**Evidence that closes this:** a failed corpus write is queryable — a counter, a row, or a
+recorded reason that a reader can join back to the run — and a run whose corpus writes all failed
+says so rather than exiting 0 silently. Whatever shape it takes must not make a corpus write able
+to fail a run, which is the property the current `except` exists to hold.
+
+### B136 — Nothing records that an adapter was asked, only what it answered
+
+`GET /api/adapters` can say what each adapter has delivered and cannot say whether it was reached.
+The two facts a Settings screen needs are *when did this adapter last run* and *why did it decline*,
+and neither is a column anywhere: `vendor_change` records results, so an adapter polled hourly that
+has found nothing new for a week is indistinguishable from one whose fetch has been 403ing for a
+week. Both render as an old `last_change_at`.
+
+`sync.dashboard.adapters.adapter_inventory` names the limit in its docstring and deliberately does
+**not** carry a `decline_reason` field. A column null on every row would read as "no adapter has
+ever declined", which nothing measured, and
+`tests/test_adapter_inventory.py::test_nothing_here_records_why_an_adapter_declined` asserts the
+absence so the gap stays visible rather than becoming a blank column nobody questions.
+
+**What closes it:** an intake attempt record — one row per adapter per attempt, carrying the outcome
+and, on a failure, the reason from a closed vocabulary rather than free text (the argument `B128`
+made for `abandon_reason_code`, and the same reason: a promise to learn from failures needs a schema
+that can be aggregated). The grain is one row per *attempt*, not per adapter, and `schema.sql` needs
+that stated as a comment before the first column lands — the rule `migration_outcome` exists to
+illustrate.
+
+The screen is built and honest without it. This is the row that lets it answer the question it was
+drawn to answer.
+
 ### B90 — The console is one idiom repeated eight times, and the resources to fix it are already installed
 
 Measured on 2026-08-05 across `web/src`: **21 `<Card>`, 17 `<Table>`, 1 chart, 5,781 lines.** The
@@ -1362,6 +1524,219 @@ per-vendor-and-version-range one for `vendor_change` — which has to survive th
 `CLAUDE.md` names, since those rows do not converge and a retraction pass over them would retract
 and re-assert the same change on alternate runs. That is a table-by-table grain argument with its
 own tests, not a line to change beside this one.
+### B130 — the documented first run could not be executed, and nothing was checking
+
+An audit walked `README.md`'s Quick start as a new user would, on 2026-08-16. Of the eight
+commands in it, three could not work and two prerequisites were named nowhere. Every one of the
+six defects was true when it was written; each stopped being true afterwards and nothing said so.
+
+**What was broken.**
+
+1. `scripts/bootstrap_tools.sh` downloaded `*windows_amd64.tar.gz` unconditionally and then
+   verified `./oasdiff.exe`. Every macOS and Linux checkout was blocked at the third command.
+2. `python -m sync.api` read `os.environ["SYNC_GRAPH_DSN"]` and died on a bare `KeyError`, while
+   every CLI subcommand defaulted `--dsn` to the docker-compose database. One fact, written
+   twice, disagreeing.
+3. The API was the one entry point that never applied the schema — confirmed, zero callers of
+   `apply_schema` under `src/sync/api/` — so against a fresh database it started and answered
+   500 from every route.
+4. `cd web && npm run dev` appeared with no `npm install` in `README.md`, `CONTRIBUTING.md` or
+   `ARCHITECTURE.md`.
+5. `--repo` was documented as a filesystem path while the flag's own help said git URL. `git
+   clone` accepts a path, so a run indexed and detected normally; `_repo_id` then reduced
+   `/path/to/your/checkout` to itself and `_owner_repo` took its last two segments, so every
+   `gh api` call addressed `your/checkout` and 404'd — after the run had paid for an agent turn.
+6. `gh` was documented as needed "if you want pull requests opened". It is needed for the first
+   run: `sync.signals.stripe.adapter.fetch_spec` shells out to `gh api`, and
+   `bootstrap_tools.sh` fetches oasdiff with `gh release download`. An authenticated `claude`
+   CLI is required by the cascade's last tier and was named nowhere in the repository's front
+   matter.
+
+**What closed it (M0-W218).** The platform mapping moved into `scripts/oasdiff_asset.sh`, a
+sourceable pair of shell functions, and the bootstrap script now names no platform of its own.
+`DEFAULT_DSN` and `describe_dsn` moved to `sync.graph.store`, which both entry points and
+`scripts/seed_console.py` read rather than restate — two copies of the literal and one entry
+point with no default at all became one constant, and `seed_console`'s private `_describe`
+became the redaction the API's refusal reuses.
+
+`sync.api.__main__.require_schema` refuses an empty database at start, naming
+`scripts/seed_console.py` and `sync run`, because a read-only surface must not be the one place
+that issues DDL. `sync.cli.remote_url` is `--repo`'s argparse type and refuses a value the forge
+cannot address, with the URL forms to pass instead. The README states the prerequisites with the
+`path:line` that produces each.
+
+**One placement was decided against the obvious one, and it is the judgement in this item.** The
+`--repo` refusal sits on the parser rather than inside `run`. `push_branch` genuinely serves a
+local origin — `test_two_findings_in_one_run_produce_branches_that_share_no_commits` drives the
+whole pipeline that way with the two `gh`-backed steps replaced — so a check inside `run` refuses
+a shape the pipeline supports, and it did, on the first pass. argv is the boundary; a `Namespace`
+a test builds is not.
+
+**Evidence that keeps it closed.** `tests/test_day_one_path.py` parses the Quick start block and
+holds every `uv run sync` command in it against the argparse surface `sync.cli.build_parser`
+returns — flags matched in full, so the README cannot go on relying on argparse's prefix
+matching, which is what let `--from v2320` run against `--from-version`. The same file pins that
+the API and the CLI resolve one default DSN, that the schema refusal names a command, that the
+console block installs and seeds before it starts anything, and that a local path is refused
+while argv is being read. `tests/test_bootstrap_tools.py` calls the asset mapping with nine
+`uname` pairs from whichever platform the suite is on.
+
+**What it does not close, deliberately.**
+
+- **`sync run` still cannot serve a local checkout.** Refusing is the honest third option of the
+  three the audit named; making it work needs a forge that is not `gh`, which is a different
+  item. What retires this is a `Forge` implementation with no remote, at which point the
+  refusal narrows rather than disappears.
+- **`.github/workflows/ci.yml` installs oasdiff by `curl` with a hardcoded `linux_amd64` URL, in
+  three jobs.** That is a fourth copy of the platform fact, deliberately left: CI's comment says
+  it copies the mechanism and not the number, and it runs on one known runner. It becomes wrong
+  the day a job moves to a macOS or arm runner.
+- **`tests/conftest.py` keeps its own `DEFAULT_DSN`.** It answers a different question — which
+  server to create a per-process database on — and is documented in place.
+### B131 — four of six vendors can bind no call site, and the run reported it as a clean scan
+
+**The reporting half landed on 2026-08-16 (M3-W219). The binding half is what is left, and it is
+what this entry stays open for.**
+
+**Which vendors bind, measured rather than assumed.** `available_vendors()` offers six.
+
+| Vendor | Adapter | Symbol map | Binds a call site |
+|---|---|---|---|
+| `stripe` | `StripeAdapter` | built by `_prepare_stripe` from the specification and the generator input | yes |
+| `twilio` | `TwilioAdapter` | built by `_prepare_twilio` across every configured product | yes |
+| `anthropic` | `GeneratedSpecAdapter` | **never constructed** | no |
+| `openai` | `GeneratedSpecAdapter` | **never constructed** | no |
+| `cloudflare` | `GeneratedSpecAdapter` | **never constructed** | no |
+| `vercel` | `GeneratedSpecAdapter` | **never constructed** | no |
+
+Never constructed rather than empty, and the difference matters when reading the code: the map is
+built by `_extracted_symbols`, which returns `None` on its first line when `sdk_source` is absent.
+Neither `_prepare_generated` nor `_load_generated` passes one, so no call site was ever compared
+against anything for those four. `sync run --vendor openai --repo <a repository that calls OpenAI>`
+printed `0 finding(s)` and exited 0, which is what a repository with no OpenAI calls in it prints.
+
+**What landed.** The gap is declared by the adapter and reported by the run, so the two zeroes are
+no longer one output. `GeneratedSpecAdapter.unbindable_reason` is a property derived from whether a
+checkout was staged; `McpServerAdapter.unbindable_reason` is a constant, because there the cause is
+the protocol rather than the staging — an MCP tool name arrives as a runtime string and no static
+chain addresses it. `cli._binding_lines` reads it through `getattr`, the way `sdk_bindings` and
+`unverifiable_reason` are read, and prints it *before* the finding count for the reason
+`_coverage_lines` states. No vendor id appears in `sync.core` or in `cli.py`.
+
+**What did not land, and the ruling behind it.** No `sdk_source` was wired into
+`generated-vendors.yaml`. The knob is eight lines and was deliberately not written:
+`reports/2026-07-29-extraction-report-contract.md` records that `_sources` is keyed by version
+while `sdk_source` is not, and that nothing maps a staged checkout to a manifest version — so a
+bare path in configuration would pair an extraction from one tag against a manifest from another
+and call the result a binding. Shipping that would replace a loud gap with a quiet wrong answer.
+A version-aware staging step is the real fix and it is a design, not a knob.
+
+**What retires this entry:** a staging step that puts a generated SDK checkout at a known version
+beside the manifests already read for that version, and passes it as `sdk_source`. When it lands,
+`test_the_unstaged_set_is_exactly_the_set_that_resolves_nothing` and
+`test_a_registered_vendor_that_binds_nothing_declares_why` in `tests/test_shipped_conformance.py`
+both move those vendors into the resolving set with no edit to either, because both sides of both
+assertions are derived. Until then the honest report is the deliverable.
+
+**Evidence that closed the reporting half:** `tests/test_unbindable_vendor_report.py` drives
+`cli.run()` twice over one adapter class — staged against the committed `anthropic_python`
+checkout, and unstaged — and asserts the outputs differ. Before the fix they were byte-identical
+(`assert '0 finding(s)\n' != '0 finding(s)\n'`).
+### B132 — The local gate could not finish, so every claim resting on it was unprovable
+
+**Mostly closed on 2026-08-16 (M0-W220). What remains is named at the bottom.**
+
+`uv run pytest tests/ -q -n0` is the command `CLAUDE.md` names as the authority over this
+repository's health, and on 2026-08-16 it was started on `main` at `5fb5515` and killed after
+**70 minutes having printed nothing**, against a recorded serial duration of about 137 seconds
+(`reports/ci-profile-2026-08-07.md`). One hundred and five commits had landed with CI gating none
+of them, so nothing else knew anything either.
+
+**The suspected cause was wrong and worth recording as wrong.** `tests/test_patch_sandbox.py`
+carries `@pytest.mark.docker` on three tests that create real containers, attach real networks and
+wait on a socket, and nothing deselects that marker. Run alone they pass in **48.01 s** — slow,
+never hung.
+
+**What it actually was: `DROP DATABASE`.** Postgres requests an immediate cluster-wide checkpoint
+on every `DROP DATABASE` and waits for it, holding an object lock on the database meanwhile. This
+suite issues around forty per run — `pytest_configure` creates and drops one, its sweep drops every
+database a killed run left, `test_schema_convergence.aged_dsn` and
+`test_leaked_database_sweep.made` create and drop one per test, and `test_serial_run_isolation`
+spawns a child pytest that does all of it again — and several worktrees run at once, so the drops
+queue on one checkpointer. **Not one of those statements was bounded:** no `connect_timeout`, no
+`statement_timeout`, no `lock_timeout`. Nothing was deadlocked. The run was starved, and a starved
+run is indistinguishable from a stuck one, so an operator kills it.
+
+Three measurements, each taken while the failure was live:
+
+- Two other worktrees' `-n0` runs were blocked in the same statement at the same moment, dumped
+  with `py-spy`: one in `test_schema_convergence.py:56` and one in `test_leaked_database_sweep.py:89`,
+  both inside `psycopg`'s `wait_select` under a fixture teardown's `DROP DATABASE ... WITH (FORCE)`.
+- `pg_stat_activity` showed `DROP DATABASE` backends stacked on `IPC/CheckpointStart`,
+  `IPC/CheckpointDone` and `Lock/object`, three of them racing for the same name, alongside
+  `TRUNCATE` on `IO/DataFileImmediateSync`.
+- A serial run under a 120 s per-test watchdog stopped at
+  `test_leaked_database_sweep.py::test_a_database_named_for_a_dead_pid_is_swept`, in
+  `conftest.sweep_leaked_databases` → `conn.execute` → `wait_select`. That is the same function
+  `pytest_configure` calls **before pytest writes its own header**, which is why the original
+  70 minutes produced no output at all rather than a partial progress line.
+
+**It is not a `-n0` defect.** The blocked drops seen on the server were against
+`sync_test_<controller>_gw<n>_p<worker>` names — xdist worker databases — with three backends
+stacked on one of them. A serial run stalls outright and gets killed; a parallel run loses one
+worker at a time and looks slow, which is why this survived on a suite whose `addopts` pins
+`-n auto`.
+
+**What closed it.** Every administrative statement now goes through `conftest.admin_connection`,
+which sets `connect_timeout` on the client and `statement_timeout` and `lock_timeout` on the
+server — server-side, because a client that gives up leaves the backend holding its lock and still
+waiting. `conftest.drop_database` turns a cancelled drop into a message naming the database and
+the two things a drop waits for. Cleanup drops go through `drop_databases_best_effort`, which warns
+and leaves the database to the next run's sweep rather than failing a test that passed. The
+`pytest_configure` sweep takes a 30 s budget, because it is the one that blocks a blank terminal.
+`pytest-timeout` is a dev dependency and `timeout = 900` is in `pyproject.toml`, so any future
+hang anywhere arrives as a named test with a stack. And `docker-compose.yml` now starts the test
+server with `fsync=off`, `full_page_writes=off` and `synchronous_commit=off`, which is what makes
+the churn affordable: **282 ms median per `DROP DATABASE` stock against 16 ms tuned**, over 15
+cycles on two otherwise identical idle `postgres:16` containers.
+
+Separately, a machine with no reachable Docker daemon got `RuntimeError: docker create failed:
+error during connect` raised from inside `sync.remediate.sandbox` — a message that reads as a
+defect in the module under test. `conftest.pytest_collection_modifyitems` asks
+`docker_unavailable_reason` once at collection and turns the three marked tests into skips naming
+the absent toolchain.
+
+**The docker marker stays in the default gate, and the alternative was argued rather than
+assumed.** Deselecting it is cheap and `e2e` is the precedent — but `e2e` is deselected because it
+calls real vendor and model APIs, opens a pull request and spends money, and none of that is true
+here. These three tests make no network call outside the local daemon, cost nothing, and are the
+**only** evidence B97's container boundary holds; B97's own close condition demands "a test that
+watches the attempt fail rather than ... a configuration file asserting it". The decisive point is
+that this suite already refuses to run most of itself without a container runtime: Postgres is a
+container on that same daemon. Deselecting the container tests while depending on a containerised
+database would be incoherent. They were also innocent of the hang.
+
+**Evidence that keeps it closed:** `tests/test_gate_is_bounded.py`. A blocked admin statement is
+cancelled and control returns (`pg_sleep(30)` against a 1 s bound); a drop that cannot finish
+raises naming the database; a spent sweep budget leaves a database it had selected; a dead
+`DOCKER_HOST` makes a child run report `3 skipped` with a reason instead of three errors, with a
+positive control asserting a reachable daemon reports nothing to skip; and the watchdog is
+asserted as both a declared bound and an installed plugin, since an ini key no plugin claims is
+ignored in silence.
+
+**What is left, and none of it blocks the gate:**
+
+- **The container tests have never run in CI and may not pass there.** They reach the host through
+  `host.docker.internal`, which Docker Desktop provides and a plain Linux daemon does not without
+  `--add-host=host.docker.internal:host-gateway`. `bc04f14` landed them at 22:17 UTC on
+  2026-08-16; the last CI run that actually executed anything was 04:18 UTC that day, and the three
+  since are B112's phantom failures with every job blank. Unknown, not broken — and adding the flag
+  touches `sync.remediate.sandbox`, which is B97's, so it wants its own change.
+- **The churn itself is untouched.** Forty `DROP DATABASE` per run is the cost that the tuning
+  makes affordable rather than removes; a suite that shared one aged database across
+  `test_schema_convergence` would issue far fewer.
+- **CI's Postgres keeps stock durability.** A GitHub Actions `services:` block cannot override a
+  container's command. CI runs one suite at a time in 137 s and is not where this bit.
 
 ## In flight
 
@@ -2864,4 +3239,29 @@ a bucket.
 `migration_outcome` rows across 3 `(change_kind, tier)` groups, with **one** abandonment. There is
 no signal to learn from yet whatever the schema does, so this ranks behind getting attempts on the
 board.
+
+
+### B129 - `apply_schema` cannot carry a widened `UNIQUE` constraint to an existing database, so `ON CONFLICT` fails
+
+`schema.sql:255` declares `UNIQUE (finding_id, attempt_index, is_rehearsal)` on `migration_outcome`.
+`GraphStore.apply_schema` applies `CREATE TABLE IF NOT EXISTS` and derives `ADD COLUMN IF NOT EXISTS`
+for newly declared columns. However, against a database created before B79 widened the table's
+natural key, `CREATE TABLE IF NOT EXISTS` skips the table and leaves the existing 2-column unique
+constraint `UNIQUE (finding_id, attempt_index)` untouched.
+
+Every subsequent `INSERT INTO migration_outcome ... ON CONFLICT (finding_id, attempt_index, is_rehearsal)`
+fails with `psycopg.errors.InvalidColumnReference: there is no unique or exclusion constraint matching the ON CONFLICT specification`.
+
+**Closed in `M8-W218`**: `_reconcile_unique_constraints` added to `src/sync/graph/store.py`, deriving table-level `UNIQUE` constraints from CREATE TABLE bodies and querying `pg_constraint`. Superseded partial unique constraints are dropped and declared unique constraints added during `apply_schema` on existing databases. Tested on an existing database in `tests/test_migration_corpus.py`.
+
+
+### B130 - `corpus.record` swallows write failures silently, so systematic corpus drops run forever
+
+`corpus.record` catches every exception from `_record`, logs a warning, and returns `False`
+(`src/sync/remediate/corpus.py`). While a bookkeeping write failure must not crash an in-flight
+remediation run, swallowing the exception left no queryable failure state or counter for an operator
+or driver when every write systematically failed (as occurred with B129).
+
+**Closed in `M8-W218`**: `make_recorder` now returns `CorpusRecorder`, tracking `.attempt_count`, `.success_count`, `.failure_count`, and `.errors` without raising or breaking customer runs. Tested in `tests/test_migration_recording.py`.
+
 

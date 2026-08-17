@@ -7,7 +7,30 @@ services:
     # default of 100. Over the ceiling the failure is a psycopg.OperationalError on connect, which
     # lands on whichever database-touching test was running -- so it moves between runs and reads
     # as a flaky test rather than as exhausted connections. Two of us lost hours to that today.
-    command: ["postgres", "-c", "max_connections=300"]
+    #
+    # `fsync=off` and its two companions are what make the suite's database churn affordable,
+    # and B132 is the measurement. `DROP DATABASE` requests an immediate cluster-wide checkpoint
+    # and waits for it; one suite issues around forty of them, and several worktrees run at once,
+    # so the drops queue on the checkpointer. Timed over 15 create/drop cycles against two
+    # otherwise identical idle `postgres:16` containers: 282 ms median stock, 16 ms with these
+    # three -- 18x, and that is the floor, since the loaded case was measured over 15 s and once
+    # over 180 s on the shared server.
+    #
+    # Durability is what is being traded, and this container has none worth keeping: every
+    # database on it is created by `tests/conftest.py` or pinned by hand for a worktree, and an
+    # unclean host shutdown means recreating the container rather than losing anything. Nothing
+    # about the application under test can observe the difference -- these change when bytes
+    # reach the platter, not what any transaction reads.
+    command:
+      - "postgres"
+      - "-c"
+      - "max_connections=300"
+      - "-c"
+      - "fsync=off"
+      - "-c"
+      - "full_page_writes=off"
+      - "-c"
+      - "synchronous_commit=off"
     environment:
       POSTGRES_USER: sync
       POSTGRES_PASSWORD: sync

@@ -203,3 +203,160 @@ def repositories(store: GraphStore) -> dict:
     a repository configured but never indexed has no row here.
     """
     return {"repo_ids": store.repo_ids()}
+
+
+def _weaker_rung_summary(rungs: set[str]) -> str:
+    """Derive a summary rung from a set of rungs across call sites.
+
+    If all call sites agree on one rung, that rung is returned.
+    If multiple distinct rungs are present, 'mixed' or the weakest rung is returned.
+    """
+    if not rungs:
+        return "unattributed"
+    if len(rungs) == 1:
+        return next(iter(rungs))
+    for candidate in ("unattributed", "unresolved", "static", "resolved", "observed"):
+        if candidate in rungs:
+            return candidate
+    return "mixed"
+
+
+def change_units(
+    store: GraphStore,
+    checkpointer_dsn: str | None = None,
+    *,
+    repo_id: str | None = None,
+    limit: int = 50,
+    offset: int = 0,
+) -> dict:
+    """The Fleet change-unit roll-up: open findings grouped by vendor change and operation.
+
+    -- Grain: One ChangeUnit is one distinct vendor change (vendor_id, operation_id, from_version, to_version, change_kind)
+    -- across open findings in the watched repositories.
+
+    A vendor change affecting multiple repositories and call sites is one ChangeUnit here,
+    with distinct counts for repositories (`repository_count`) and call sites (`call_site_count`).
+
+    `binding_rung` is the weakest rung among the constituent findings (or the unified rung if all agree),
+    and each unit carries `finding_ids`, `repo_ids`, and `severities`.
+
+    If `checkpointer_dsn` is provided, latest checkpointer checkpoint timestamps and standings
+    are joined for the constituent findings.
+    """
+    limit = max(limit, 1)
+
+    raw_rows = store._connect().execute(
+        """
+        SELECT finding.id AS finding_id,
+               finding.severity AS severity,
+               finding.binding_rung AS binding_rung,
+               finding.detector AS detector,
+               finding.created_at AS created_at,
+               call_site.id AS call_site_id,
+               call_site.repo_id AS repo_id,
+               call_site.path AS path,
+               call_site.line AS line,
+               call_site.symbol AS symbol,
+               call_site.vendor_id AS call_site_vendor_id,
+               call_site.operation_id AS call_site_operation_id,
+               vendor_change.id AS vendor_change_id,
+               vendor_change.vendor_id AS vendor_change_vendor_id,
+               vendor_change.operation_id AS vendor_change_operation_id,
+               vendor_change.from_version AS from_version,
+               vendor_change.to_version AS to_version,
+               vendor_change.kind AS change_kind
+          FROM finding
+          JOIN call_site ON call_site.id = finding.call_site_id
+          LEFT JOIN vendor_change ON vendor_change.id = finding.vendor_change_id
+         WHERE finding.status = 'open'
+           AND call_site.retracted_at IS NULL
+         ORDER BY finding.created_at DESC
+        """
+    ).fetchall()
+
+    if repo_id is not None:
+        raw_rows = [r for r in raw_rows if r["repo_id"] == repo_id]
+
+    if not raw_rows:
+        return {"items": [], "total": 0, "next_offset": None}
+
+    groups: dict[tuple, list[dict]] = {}
+    for row in raw_rows:
+        v_id = row["vendor_change_vendor_id"] or row["call_site_vendor_id"] or "unknown"
+        op_id = row["vendor_change_operation_id"] or row["call_site_operation_id"]
+        c_kind = row["change_kind"] or row["detector"] or "unknown"
+        f_ver = row["from_version"]
+        t_ver = row["to_version"]
+        key = (v_id, op_id, c_kind, f_ver, t_ver)
+        groups.setdefault(key, []).append(row)
+
+    units = []
+    for (v_id, op_id, c_kind, f_ver, t_ver), group_rows in groups.items():
+        finding_ids = [r["finding_id"] for r in group_rows]
+        repo_ids = sorted(list({r["repo_id"] for r in group_rows if r["repo_id"]}))
+        call_site_ids = {r["call_site_id"] for r in group_rows if r["call_site_id"]}
+        severities = [r["severity"] for r in group_rows]
+        rungs = {r["binding_rung"] for r in group_rows if r["binding_rung"]}
+
+        sev_priority = {"breaking": 4, "deprecation": 3, "warning": 2, "info": 1}
+        dominant_sev = max(severities, key=lambda s: sev_priority.get(s, 0)) if severities else "warning"
+
+        unit = {
+            "change_unit_id": f"{v_id}:{op_id or 'all'}:{c_kind}",
+            "vendor_id": v_id,
+            "operation_id": op_id,
+            "change_kind": c_kind,
+            "from_version": f_ver,
+            "to_version": t_ver,
+            "severity": dominant_sev,
+            "repository_count": len(repo_ids),
+            "call_site_count": len(call_site_ids),
+            "binding_rung": _weaker_rung_summary(rungs),
+            "finding_ids": finding_ids,
+            "repo_ids": repo_ids,
+            "standing": None,
+            "last_checkpoint_at": None,
+        }
+        units.append(unit)
+
+    if checkpointer_dsn is not None and units:
+        try:
+            with psycopg.connect(checkpointer_dsn, row_factory=dict_row) as conn:
+                if conn.execute("SELECT to_regclass('checkpoints') AS t").fetchone()["t"] is not None:
+                    for u in units:
+                        f_ids = u["finding_ids"]
+                        placeholders = ", ".join(["%s"] * len(f_ids))
+                        cp_rows = conn.execute(
+                            f"""
+                            SELECT thread_id, checkpoint, ts FROM (
+                                SELECT DISTINCT ON (thread_id) thread_id, checkpoint_id, checkpoint, ts
+                                  FROM checkpoints
+                                 WHERE checkpoint_ns = ''
+                                 ORDER BY thread_id, checkpoint_id DESC
+                            ) AS newest
+                            WHERE split_part(thread_id, ':', 1) IN ({placeholders})
+                            ORDER BY ts DESC
+                            LIMIT 1
+                            """,
+                            f_ids,
+                        ).fetchall()
+                        if cp_rows:
+                            latest_cp = cp_rows[0]
+                            val = (latest_cp.get("checkpoint") or {}).get("channel_values") or {}
+                            outcome = val.get("outcome") if val.get("outcome") in _FINISHED else None
+                            u["standing"] = outcome or "in_progress"
+                            ts_val = latest_cp.get("ts")
+                            u["last_checkpoint_at"] = ts_val.isoformat() if hasattr(ts_val, "isoformat") else str(ts_val) if ts_val else None
+        except psycopg.Error:
+            pass
+
+    total = len(units)
+    paged_items = units[offset : offset + limit] if limit > 0 else units
+    consumed = offset + len(paged_items)
+    next_offset = consumed if consumed < total else None
+
+    return {
+        "items": paged_items,
+        "total": total,
+        "next_offset": next_offset,
+    }

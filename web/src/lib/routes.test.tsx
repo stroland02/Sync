@@ -20,6 +20,7 @@ import { afterEach, describe, expect, it } from "vitest"
 import App from "@/App"
 import {
   AREAS,
+  DESTINATIONS,
   GRAPH_LEVELS,
   ROUTES,
   boundParams,
@@ -265,5 +266,34 @@ describe("the router serves exactly the registry", () => {
     renderAt("/a-screen-nobody-declared")
 
     expect(screen.getByText("No screen at this address.")).toBeTruthy()
+  })
+})
+
+describe("a destination that is not a level", () => {
+  /**
+   * `/settings` is drawn in the mock and specified nowhere. `.claude/rules/console-hierarchy.md`
+   * binds `GRAPH_LEVELS` to the design document: a level with no line there does not go in that
+   * array, and a screen that aggregates over levels — or, here, configures the system behind them
+   * — is not a rung on the ladder. Three plans invented four levels between them, so the guard is
+   * a count rather than a reviewer.
+   */
+
+  it("keeps GRAPH_LEVELS at the nine the specification declares", () => {
+    expect(GRAPH_LEVELS).toHaveLength(9)
+  })
+
+  it("declares settings outside the level registry", () => {
+    expect(DESTINATIONS.map((entry) => entry.path)).toContain("/settings")
+    expect(ROUTES.map((route) => route.path)).not.toContain("/settings")
+  })
+
+  it("shares no path with a level route, so the router has one element per address", () => {
+    const levelPaths = new Set(ROUTES.map((route) => route.path))
+
+    for (const entry of DESTINATIONS) expect(levelPaths.has(entry.path)).toBe(false)
+  })
+
+  it("carries a question, the same as a level does, because the header renders one either way", () => {
+    for (const entry of DESTINATIONS) expect(entry.question.length).toBeGreaterThan(0)
   })
 })

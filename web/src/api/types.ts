@@ -662,3 +662,46 @@ export interface DetectorAccountabilityResponse {
   detectors: DetectorRow[]
   total_open_findings: number
 }
+
+/**
+ * One adapter's row in `GET /api/adapters`.
+ *
+ * **Every count is nullable, and null is not zero.** `null` means the graph holds no
+ * `vendor_change` row for this vendor at all — the adapter has never delivered — while `0` would
+ * mean Sync read the vendor's specification and found nothing to say. Both are legitimate and only
+ * one is a problem, so a renderer that prints `0` for a null hides the case this screen exists to
+ * show. `sync/dashboard/adapters.py` decides it; nothing between there and the cell may soften it.
+ *
+ * There is deliberately no `decline_reason`. Nothing in Sync records why an adapter declined, and a
+ * column null on every row would read as "no adapter has ever declined" — a claim nothing measured.
+ */
+export interface AdapterRow {
+  vendor_id: string
+  /**
+   * `coded` — an adapter written in this repository. `generated` — served from a manifest the
+   * vendor's SDK repository commits. `mcp` — a watched MCP server. `unregistered` — the graph
+   * holds history keyed by this vendor and no adapter serves it any more.
+   */
+  kind: "coded" | "generated" | "mcp" | "unregistered"
+  /** The SDK repository or capture directory behind this adapter; `null` for a coded one. */
+  source: string | null
+  /** Rows the graph holds. `null` when the adapter has never delivered. */
+  changes: number | null
+  /** Distinct operations those rows name. `null` when the adapter has never delivered. */
+  operations: number | null
+  /**
+   * The newest `detected_at` the graph holds for this vendor, ISO-8601, or `null`.
+   *
+   * **Not the last time the adapter was asked.** Nothing records an intake attempt, only its
+   * result, so an adapter polled hourly that has found nothing new for a week reports last week.
+   * The field is named for what it is and the screen must not relabel it.
+   */
+  last_change_at: string | null
+  /** The `source` values those rows carry, sorted. `null` when the adapter has never delivered. */
+  sources: string[] | null
+}
+
+/** `GET /api/adapters`. Registered adapters and historical vendors alike, ordered by vendor id. */
+export interface AdapterInventoryResponse {
+  adapters: AdapterRow[]
+}

@@ -303,6 +303,8 @@ def route_after_patch(state: RunState) -> str:
     Neither may reach `push_branch`: a no-op branch passes CI and would open a
     pull request that claims to fix something and does not.
     """
+    if state.get("outcome") == "external_cause":
+        return "external_cause"
     if state.get("patch") is not None:
         return "static_verify"
     if state.get("static_attempts", 0) >= MAX_STATIC_ATTEMPTS:
@@ -655,7 +657,28 @@ def route_after_open_pr(state: RunState) -> str:
     """
     if state.get("fatal"):
         return "abandon"
+    if state.get("durable"):
+        return "park"
     return "end"
+
+
+def make_park(store=None, record=None):
+    """The run opened a pull request or reached a turn boundary and parks for review.
+
+    Distinguished from abandon and report:
+    - Suspends execution with outcome='parked'.
+    - Stores parked_reason (default: 'awaiting_review').
+    """
+    def park(state: RunState) -> RunState:
+        reason = state.get("parked_reason") or "awaiting_review"
+        return {
+            "outcome": "parked",
+            "parked_reason": reason,
+        }
+
+    return park
+
+
 
 
 def make_report(halt_reason: str | None = None, record=None):
@@ -771,3 +794,34 @@ def make_abandon(store, forge, record=None):
         }
 
     return abandon
+
+
+def make_external_cause(store, forge, record=None):
+    """The resolution run concluded the root cause is external (e.g. vendor outage).
+
+    Distinguished from abandon:
+    - Does not mark finding as abandoned in store (the code finding remains valid/open).
+    - Records migration_outcome with terminal_status='external_cause'.
+    - Performs branch cleanup if a branch was created.
+    """
+    def external_cause(state: RunState) -> RunState:
+        report = state.get("external_cause_report") or {}
+        summary = report.get("summary") or state.get("diagnostics") or "External vendor cause"
+        if record is not None:
+            record(state, terminal_status="external_cause", abandon_reason=summary)
+
+        branch = state.get("branch")
+        if branch:
+            try:
+                forge.delete_branch(state["repo"], branch)
+            except Exception:
+                pass
+
+        return {
+            "outcome": "external_cause",
+            "report_reason": summary,
+            "pr_url": None,
+        }
+
+    return external_cause
+

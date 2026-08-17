@@ -260,9 +260,39 @@ class GeneratedSpecAdapter:
         does not make a call site resolve: `operation_for_symbol` answers `None` by design, and
         both indexers skip a call whose symbol resolves to nothing. A configured vendor still
         needs a symbol scheme from somewhere before it yields a finding, and that is the next
-        gap rather than this one.
+        gap rather than this one -- `unbindable_reason` is where it is declared, so a run that
+        can bind nothing reports it instead of counting zero.
         """
         return self._sdk_bindings
+
+    @property
+    def unbindable_reason(self) -> str | None:
+        """Why no call site in any repository can bind to this vendor, or `None` if one can.
+
+        `operation_for_symbol` answering `None` is per symbol and is an ordinary answer -- a
+        chain the SDK does not state resolves to nothing and should. This is the other quantity:
+        whether *any* symbol could have resolved. Without a staged checkout the map is never
+        built, so every call site declines, and a repository that calls this vendor produces the
+        same output as one that has never heard of it. The caller reporting a count needs the
+        difference, and holding only the count it cannot recover it.
+
+        Derived from what this instance was given rather than from which vendor it serves. The
+        four vendors `generated-vendors.yaml` configures are in this state today and none of them
+        is named here or anywhere upstream; staging a checkout for one of them retires it for that
+        one, with no edit to this property.
+
+        Read through `getattr` at the boundary the way `sdk_bindings` and
+        `LanguageAdapter.unverifiable_reason` are, so `VendorAdapter` does not widen and a third
+        party's adapter written before this existed goes on running unqualified. Silence is the
+        ordinary case in the same direction those take: an adapter that binds says nothing, and a
+        gap is something an adapter asserts.
+        """
+        if self._sdk_source is not None:
+            return None
+        return (
+            "no checkout of this vendor's generated SDK is staged, so no symbol map was built "
+            "and every call site resolves to nothing"
+        )
 
     def operation_for_symbol(
         self, symbol: str, *, language: str | None = None

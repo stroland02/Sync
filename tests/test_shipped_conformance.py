@@ -171,6 +171,7 @@ VENDOR_CASES: dict[str, VendorCase] = {
     "twilio": VendorCase(
         stage=_stage_twilio,
         known_symbol="twilio.insights.v1.calls.fetch",
+        correlation=(("GET", "/v1/Voice/CA1234567890abcdef1234567890abcdef"), "CA1234567890abcdef1234567890abcdef"),
     ),
     "anthropic": VendorCase(stage=_stage_nothing, known_symbol="anthropic.messages.create"),
     "openai": VendorCase(stage=_stage_nothing, known_symbol="openai.responses.create"),
@@ -217,15 +218,16 @@ def _built(vendor_id: str, cache_dir: Path):
 # directions until then, so this cannot outlive the gap or quietly grow to cover a real defect.
 #
 # That question -- whether a generated vendor resolves in a real run -- is answered, and the
-# answer is why this entry is a staging gap rather than a substrate that cannot bind. The two
-# loaders are a deliberate pair: `_prepare_generated` (`registry.py:319`) passes `sources=sources`
-# and is what a `sync run` goes through, while `_load_generated` (`registry.py:362`) passes
-# `sources={}` and exists for `sync ingest`, which wants a request correlator and no symbols.
-# The kit is handed the second one. So what is unexercised here is the offline shape of an
-# adapter, and the shape a customer's run actually uses is the other one.
+# answer is no, on both paths. The two loaders differ in what they hold and not in this: neither
+# `_prepare_generated` (`registry.py:319`) nor `_load_generated` (`registry.py:362`) passes
+# `sdk_source`, so the map is never built for either, and a `sync run` declines every symbol
+# exactly as this suite does. An earlier version of this note said the shape a customer meets was
+# the other one; it is the same one, and the correction is the point. B131 is the entry.
 #
-# The honest limit worth stating rather than burying: this suite certifies an adapter shape no
-# customer ever meets. Closing that needs a staged fixture, not a bug fix.
+# What that costs the product is reported rather than absorbed: the adapter declares
+# `unbindable_reason`, `cli._binding_lines` prints it before the finding count, and
+# `test_a_registered_vendor_that_binds_nothing_declares_why` below holds the two sides in step.
+# Reporting the gap is not closing it -- closing it needs a staged checkout.
 UNSTAGED_SDK_SOURCE = {"anthropic", "cloudflare", "openai", "vercel"}
 
 _UNRESOLVED_RULE = "the adapter did not resolve the symbol the kit was given."
@@ -298,6 +300,37 @@ def test_the_unstaged_set_is_exactly_the_set_that_resolves_nothing(tmp_path):
         f"resolving means its SDK source is now staged and its entry should be deleted; a vendor "
         f"that stopped is a regression in an adapter this repository ships"
     )
+
+
+def test_a_registered_vendor_that_binds_nothing_declares_why(tmp_path):
+    """Every registered adapter that resolves no symbol says so, and no other one claims to.
+
+    The half of the gap above that a caller can act on. `test_the_unstaged_set_...` establishes
+    which adapters resolve nothing; this establishes that each of them *reports* it, so a run
+    can tell "we looked and found no call sites" from "nothing here could have been looked at".
+    Without it those two are one output -- no call sites, no findings, exit 0 -- and the second
+    reads as the first, which is a clean bill of health the data does not support.
+
+    Both directions, and derived on both sides. An adapter that resolves and declares a reason
+    anyway would qualify a real measurement and teach a reader to skip the qualification; an
+    adapter that resolves nothing and declares nothing is the silent zero this closes. Neither
+    side is a list of vendor ids, so a vendor registered tomorrow is checked on the commit that
+    registers it.
+    """
+    for vendor_id in available_vendors():
+        adapter = _built(vendor_id, tmp_path / vendor_id)
+        resolves = adapter.operation_for_symbol(
+            _vendor_case(vendor_id).known_symbol, language=None
+        ) is not None
+        declared = getattr(adapter, "unbindable_reason", None)
+
+        assert (declared is None) == resolves, (
+            f"'{vendor_id}' resolves its known symbol: {resolves}, and declares "
+            f"unbindable_reason: {declared!r}. An adapter that binds nothing has to say why, or "
+            f"a run reports the same zero for a repository that calls the vendor and one that "
+            f"does not; an adapter that binds must stay silent, or the qualification appears "
+            f"over a real measurement"
+        )
 
 
 # --- RequestCorrelator ---------------------------------------------------------------

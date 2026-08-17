@@ -16,13 +16,14 @@ import {
   Wrench,
   type LucideIcon,
 } from "lucide-react"
-import { Link, Outlet, useLocation } from "react-router"
+import { Link, NavLink, Outlet, useLocation } from "react-router"
 
 import { ErrorSurface } from "@/components/error-surface"
 import { CommandPaletteProvider, CommandPaletteTrigger } from "@/layouts/command-palette"
 import { ScopeTrail } from "@/layouts/scope-switchers"
 import {
   AREAS,
+  DESTINATIONS,
   ROUTES,
   areaForPathname,
   boundParams,
@@ -71,7 +72,14 @@ const AREA_ICON: Record<Area, LucideIcon> = {
 }
 
 const RAIL_ITEM = "flex size-8 items-center justify-center rounded-control"
-const SETTINGS_NOTE = "Settings arrives with the write path"
+/**
+ * The rail slot was a disabled button reading "Settings arrives with the write path" for as
+ * long as no screen existed. The screen exists now and is read-only, so the note says which of
+ * those two things is true rather than continuing to promise the other.
+ */
+const SETTINGS_NOTE = "Settings — read-only until the write path lands"
+
+const SETTINGS = DESTINATIONS.find((entry) => entry.path === "/settings")!
 
 function RailItem({
   area,
@@ -153,15 +161,16 @@ function AreaRail({
         <li className="mt-auto">
           <Tooltip>
             <TooltipTrigger asChild>
-              <button
-                type="button"
-                aria-disabled="true"
-                aria-label="Settings"
+              <NavLink
+                to={SETTINGS.path}
+                aria-label={SETTINGS.label}
                 title={SETTINGS_NOTE}
-                className={cn(RAIL_ITEM, "cursor-not-allowed text-graphics")}
+                className={({ isActive }) =>
+                  cn(RAIL_ITEM, isActive ? "bg-surface-subtle text-foreground" : "text-graphics")
+                }
               >
                 <Settings aria-hidden="true" className="size-5" />
-              </button>
+              </NavLink>
             </TooltipTrigger>
             <TooltipContent side="right">{SETTINGS_NOTE}</TooltipContent>
           </Tooltip>

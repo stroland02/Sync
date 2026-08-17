@@ -403,6 +403,28 @@ def _drive_webhook(_: Path) -> None:
         parse_pull_request_event(UTF16)
 
 
+def _drive_webhook_review(_: Path) -> None:
+    from sync.forge.webhook import WebhookFormatError, parse_review_event
+
+    with pytest.raises(WebhookFormatError):
+        parse_review_event(UTF16)
+
+
+def _drive_webhook_review_comment(_: Path) -> None:
+    from sync.forge.webhook import WebhookFormatError, parse_review_comment_event
+
+    with pytest.raises(WebhookFormatError):
+        parse_review_comment_event(UTF16)
+
+
+def _drive_webhook_check_run(_: Path) -> None:
+    from sync.forge.webhook import WebhookFormatError, parse_check_run_event
+
+    with pytest.raises(WebhookFormatError):
+        parse_check_run_event(UTF16)
+
+
+
 def _drive_feed(_: Path) -> None:
     from sync.signals.feed.consumer import FeedFormatError, parse_feed
 
@@ -775,8 +797,14 @@ DRIVERS: dict[str, Callable[[Path], None]] = {
         _drive_python_sources,
     "sync/index/typescript.py::TypeScriptAdapter._readable_sources::UnicodeDecodeError":
         _drive_typescript_sources,
+    "sync/forge/webhook.py::parse_check_run_event::JSONDecodeError+UnicodeDecodeError":
+        _drive_webhook_check_run,
     "sync/forge/webhook.py::parse_pull_request_event::JSONDecodeError+UnicodeDecodeError":
         _drive_webhook,
+    "sync/forge/webhook.py::parse_review_comment_event::JSONDecodeError+UnicodeDecodeError":
+        _drive_webhook_review_comment,
+    "sync/forge/webhook.py::parse_review_event::JSONDecodeError+UnicodeDecodeError":
+        _drive_webhook_review,
     "sync/index/python_lang.py::PythonAdapter._read_manifests::TOMLDecodeError+UnicodeDecodeError":
         _drive_requirement_lines_pyproject,
     "sync/index/python_lang.py::PythonAdapter._read_manifests::UnicodeDecodeError":
@@ -979,6 +1007,14 @@ _DECODES_NOTHING = (
     # memory. Nothing is read and nothing is decoded here -- the bytes became a string before
     # the gate ever saw them.
     "sync/remediate/tool_gate.py::_bash_refusal::ValueError",
+    # The only clause here that catches `Exception`, and it belongs in this group rather than
+    # with the whole-stage catch-alls because nothing is swallowed: with no refusal recorded it
+    # re-raises unchanged, so a decode failure out of the SDK still reaches its caller. What it
+    # exists for is priority, not suppression -- a refusal the hook took the trouble to record
+    # names the run and what was refused, and the SDK's replacement text names neither. Nothing
+    # is read or decoded in the clause itself.
+    "sync/runner/claude_sdk.py::ClaudeSdkRunner._drive::Exception",
+    "sync/runner/outcome_tools.py::OutcomeToolValidator._validate_citations::ValueError",
     "sync/signals/datadog/shapes.py::DatadogShapeReader._seen_at::ValueError",
     "sync/signals/deprecations/catalogue.py::_parse_date::ValueError",
     "sync/signals/feed/consumer.py::parse_feed::TypeError+ValueError",
@@ -1010,10 +1046,11 @@ _WHOLE_STAGE_CATCH_ALL = (
     "sync/index/literals.py::index_operation_literals::Exception",
     "sync/mcp/server.py::_call::Exception",
     "sync/rehearse/driver.py::_scan::Exception",
-    "sync/remediate/corpus.py::make_recorder.record::Exception",
+    "sync/remediate/corpus.py::CorpusRecorder.__call__::Exception",
     "sync/remediate/nodes.py::_observed::Exception",
     "sync/remediate/nodes.py::make_abandon.abandon::Exception",
     "sync/remediate/nodes.py::make_await_ci.await_ci::Exception",
+    "sync/remediate/nodes.py::make_external_cause.external_cause::Exception",
     "sync/remediate/nodes.py::make_locate.locate::Exception",
     "sync/remediate/nodes.py::make_open_pr.open_pr::Exception",
     "sync/remediate/nodes.py::make_patch.patch::Exception",

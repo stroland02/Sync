@@ -21,28 +21,48 @@ from sync.core.models import (
     VendorChange,
     VerifyResult,
 )
+from sync.core.outcomes import (
+    CONFIDENCE_RUBRIC,
+    Abandonment,
+    Citation,
+    ExternalCauseReport,
+    FindingsReport,
+    HumanQuestion,
+    PatchProposal,
+    parse_citation,
+    validate_confidence,
+)
 from sync.core.protocols import (
     Detector,
     LanguageAdapter,
+    PatchRunner,
     Remediator,
     RequestCorrelator,
     VendorAdapter,
 )
 
 __all__ = [
+    "Abandonment",
     "BindingRung",
     "FindingRung",
     "CallSite",
     "ChangeSource",
+    "Citation",
     "ClientSpan",
+    "CONFIDENCE_RUBRIC",
     "DEVELOPMENT_FEED_PUBLIC_KEY",
     "Detector",
     "Evidence",
+    "ExternalCauseReport",
     "Finding",
+    "FindingsReport",
     "FindingStatus",
+    "HumanQuestion",
     "LanguageAdapter",
     "OperationRef",
     "Patch",
+    "PatchProposal",
+    "PatchRunner",
     "PatchStrategy",
     "Remediator",
     "RepoContext",
@@ -56,4 +76,7 @@ __all__ = [
     "VendorAdapter",
     "VendorChange",
     "VerifyResult",
+    "parse_citation",
+    "validate_confidence",
 ]
+

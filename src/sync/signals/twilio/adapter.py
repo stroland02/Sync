@@ -94,6 +94,27 @@ def _spelled(symbol: str, language: str | None) -> str | None:
     return _CAMEL_BOUNDARY.sub(lambda m: "_" + m.group(0).lower(), symbol)
 
 
+def _segments(path: str) -> tuple[str, ...]:
+    return tuple(path.strip("/").split("/")) if path.strip("/") else ()
+
+
+def _build_routes(
+    symbols: dict[str, dict[str, str]],
+) -> dict[tuple[str, int], list[tuple[tuple[str, ...], dict[str, str]]]]:
+    routes: dict[tuple[str, int], list[tuple[tuple[str, ...], dict[str, str]]]] = {}
+    for entry in symbols.values():
+        template = _segments(entry["path"])
+        routes.setdefault((entry["http_method"].lower(), len(template)), []).append((template, entry))
+    return routes
+
+
+def _matches(template: tuple[str, ...], request: tuple[str, ...]) -> bool:
+    return all(
+        (literal.startswith("{") and literal.endswith("}")) or literal == observed
+        for literal, observed in zip(template, request)
+    )
+
+
 class TwilioAdapter:
     """Turns two pinned tags of Twilio's specification repository into VendorChange rows."""
 
@@ -129,6 +150,7 @@ class TwilioAdapter:
         self._symbols: dict[str, dict[str, str]] = (
             json.loads(Path(symbol_map_path).read_text(encoding="utf-8")) if symbol_map_path else {}
         )
+        self._routes = _build_routes(self._symbols)
 
     def fetch_changes(self, from_version: str, to_version: str) -> Iterable[VendorChange]:
         """Every breaking change across every registered document, between two tags.
@@ -182,3 +204,25 @@ class TwilioAdapter:
             http_method=entry["http_method"],
             path=entry["path"],
         )
+
+    def operation_for_request(self, http_method: str, path: str) -> OperationRef | None:
+        """The operation an observed request addressed, or None if nothing here can say.
+
+        The inverse of `operation_for_symbol`, and what makes a telemetry span or error
+        tracker event bind back to an operation.
+        """
+        request = _segments(path)
+        candidates = self._routes.get((http_method.lower(), len(request)), ())
+        if any(not segment for segment in request):
+            return None
+
+        matched = [entry for template, entry in candidates if _matches(template, request)]
+        if not matched:
+            return None
+        entry = min(matched, key=lambda e: e["path"].count("{"))
+        return OperationRef(
+            operation_id=entry["operation_id"],
+            http_method=entry["http_method"],
+            path=entry["path"],
+        )
+

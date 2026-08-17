@@ -10,8 +10,9 @@ from sync.core import CallSite, Evidence, Finding, Patch, RepoRef, VendorChange
 # Sync tried and could not finish; `reported` means the decision table found there was
 # correctly nothing to try. `abandon_reason` is where routing learns which change kinds are
 # not mechanically safe, and "this kind never needed a patch" written there would corrupt
-# exactly that signal.
-Outcome = Literal["running", "opened", "abandoned", "reported"]
+# exactly that signal. `external_cause` records external vendor conditions (e.g. outage),
+# and `parked` suspends a run for human review.
+Outcome = Literal["running", "opened", "abandoned", "reported", "external_cause", "parked"]
 
 MAX_STATIC_ATTEMPTS = 3
 MAX_CI_ATTEMPTS = 2
@@ -176,13 +177,30 @@ class RunState(TypedDict, total=False):
     routing_row: str | None
     # One line for an operator on a run that produced no pull request and was not a
     # failure. Deliberately not `diagnostics`: that one becomes `abandon_reason`.
-    report_reason: str
-    static_attempts: int
-    ci_attempts: int
-    # Corpus bookkeeping, at the grain of one `migration_outcome` row per attempt.
-    # `static_attempts` is the attempt index: it increments once per `make_patch` call and
-    # `route_after_ci` already treats it as the bound on total patch attempts for the whole
-    # run. `ci_attempts` counts CI polls, and a run can spend its whole budget without ever
+    # Attempt-level facts the corpus writer reads from `RunState`.
+    #
+    # An attempt is one `locate -> patch -> static_verify [-> replay] [-> push -> await_ci]` cycle.
+    # The outcome row is written when the attempt finishes -- on static failure, replay failure,
+    # or CI result. `attempt_index` starts at 1 and increments every time `locate` runs.
+    #
+    # LangGraph does not give nodes their own loop index, so the state carries it.
+    # `static_attempts` and `ci_attempts` track retry limits for routing, but neither counts
+    # total attempts across all gates: a run that fails static twice and CI once has
+    # `static_attempts=2, ci_attempts=1`, which is 3 attempts, but `ci_attempts` alone resets
+    # on each static pass. `attempt_index` is monotonic across the entire graph execution.
+    attempt_index: int
+    # Attempt-level facts recorded into `migration_outcome` at the attempt boundary.
+    # `attempt_started_at` is set by `locate` when the attempt begins.
+    # `attempt_strategy` is set by `patch` from the proposed patch strategy.
+    # `attempt_static_passed` is set by `static_verify` (True if ok, False if failed, None if not reached).
+    # `attempt_ci_result` is set by `await_ci` ("passed", "failed", "timed_out", None if not reached).
+    #
+    # The row is written by `make_locate` on attempt 2+ (recording the prior attempt),
+    # by `make_open_pr` on success (recording the final attempt), and by `make_abandon`
+    # on abandonment (recording the failed attempt). `make_report` also writes when a patch
+    # verified but was not pushed (e.g. no forge configured).
+    #
+    # A run that abandons at `locate` (e.g. unsupported change kind) wrote 0 attempts before
     # reaching CI, so it cannot number attempts.
     #
     # These are cleared when an attempt starts and read when it ends. They are deliberately
@@ -203,6 +221,17 @@ class RunState(TypedDict, total=False):
     pr_number: int | None
     outcome: Outcome
     abandon_reason: str
+    findings_report: dict | None
+    external_cause_report: dict | None
+    human_question: dict | None
+    outcome_confidence: int | None
+    outcome_citations: list[str] | None
+    parked_reason: str
+    review_feedback: str
+    review_comments: list[dict]
+    human_reply: str | None
+    durable: bool
+    turn: int
     # The coded companion set beside it, from the closed vocabulary above -- `None` until a
     # node sets it, and cleared back to `None` on that node's own success so a stale code from
     # an earlier, retried attempt cannot outlive the attempt it described. B128: grouping this

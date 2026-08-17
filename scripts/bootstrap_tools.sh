@@ -13,6 +13,13 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 PIN="$ROOT/.oasdiff-version"
 
+# shellcheck source=scripts/oasdiff_asset.sh
+. "$ROOT/scripts/oasdiff_asset.sh"
+
+SYSTEM="$(uname -s)"
+ASSET="$(oasdiff_asset "$SYSTEM" "$(uname -m)")"
+BINARY="$(oasdiff_binary "$SYSTEM")"
+
 # First line that is neither blank nor a comment, with every space stripped. Windows grep
 # already drops the CR that core.autocrlf leaves on every line here; what it does not drop is
 # a trailing space somebody left after the version, which builds a tag no release answers to.
@@ -62,14 +69,15 @@ for exe in ./oasdiff.exe ./oasdiff; do
   exit 1
 done
 
-gh release download "v$WANT" --repo oasdiff/oasdiff --pattern '*windows_amd64.tar.gz' --clobber
-tar -xzf ./*windows_amd64.tar.gz
-rm -f ./*windows_amd64.tar.gz
+gh release download "v$WANT" --repo oasdiff/oasdiff --pattern "$ASSET" --clobber
+# Unquoted so the shell expands the same glob `gh` matched the asset with.
+tar -xzf ./$ASSET
+rm -f ./$ASSET
 
 # A tag and the bytes published under it can disagree. What this run downloaded is this run's
 # to remove, unlike anything it found already here.
-if ! GOT="$(./oasdiff.exe --version)" || [ "$GOT" != "$EXPECT" ]; then
-  rm -f ./oasdiff.exe
+if ! GOT="$("./$BINARY" --version)" || [ "$GOT" != "$EXPECT" ]; then
+  rm -f "./$BINARY"
   echo "bootstrap: asked for v$WANT and got '${GOT-}'; removed it" >&2
   exit 1
 fi

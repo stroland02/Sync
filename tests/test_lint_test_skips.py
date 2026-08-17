@@ -115,10 +115,10 @@ def test_repository_is_clean() -> None:
 
 
 def test_current_skip_sites_are_a_pinned_baseline() -> None:
-    """Thirteen skip sites exist in this tree today, and every one is accepted on purpose.
+    """Fourteen skip sites exist in this tree today, and every one is accepted on purpose.
 
-    A count rather than a name-by-name list, because the point is not which twelve -- it is
-    that a thirteenth arriving silently is impossible: this test goes red until whoever
+    A count rather than a name-by-name list, because the point is not which fourteen -- it is
+    that a fifteenth arriving silently is impossible: this test goes red until whoever
     added it either states a qualifying reason or takes the count up deliberately.
 
     Ten held before `tests/test_console_design_tokens.py`; that file added two, both naming
@@ -131,6 +131,11 @@ def test_current_skip_sites_are_a_pinned_baseline() -> None:
     of this file were red on `console-identity`: the reason failed and the count was never taken
     up. Reworded to the phrasing the other three already use, and the count raised deliberately —
     which is exactly the pair of steps this baseline exists to force.
+
+    The fourteenth is `tests/test_bootstrap_tools.py`, added by B130 with the platform mapping it
+    covers. `scripts/` is written for bash, so on a machine without one the file has nothing to
+    assert against rather than something failing — the same shape as the four console skips above,
+    naming an absent tool instead of an absent checkout.
     """
     from scripts.lint_test_skips import find_skip_sites
 
@@ -138,7 +143,7 @@ def test_current_skip_sites_are_a_pinned_baseline() -> None:
     for path in sorted((REPO_ROOT / "tests").rglob("test_*.py")):
         sites.extend(find_skip_sites(path.read_text(encoding="utf-8"), str(path)))
 
-    assert len(sites) == 13, [f"{s.filename}:{s.line}" for s in sites]
+    assert len(sites) == 14, [f"{s.filename}:{s.line}" for s in sites]
     assert all(s.permitted for s in sites)
 
 
