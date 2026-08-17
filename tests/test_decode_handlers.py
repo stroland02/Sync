@@ -979,6 +979,13 @@ _DECODES_NOTHING = (
     # memory. Nothing is read and nothing is decoded here -- the bytes became a string before
     # the gate ever saw them.
     "sync/remediate/tool_gate.py::_bash_refusal::ValueError",
+    # The only clause here that catches `Exception`, and it belongs in this group rather than
+    # with the whole-stage catch-alls because nothing is swallowed: with no refusal recorded it
+    # re-raises unchanged, so a decode failure out of the SDK still reaches its caller. What it
+    # exists for is priority, not suppression -- a refusal the hook took the trouble to record
+    # names the run and what was refused, and the SDK's replacement text names neither. Nothing
+    # is read or decoded in the clause itself.
+    "sync/runner/claude_sdk.py::ClaudeSdkRunner._drive::Exception",
     "sync/signals/datadog/shapes.py::DatadogShapeReader._seen_at::ValueError",
     "sync/signals/deprecations/catalogue.py::_parse_date::ValueError",
     "sync/signals/feed/consumer.py::parse_feed::TypeError+ValueError",

@@ -313,6 +313,145 @@ confidently instead of refusing.
 
 ## Ready
 
+### B135 — a customer's repository could configure the patch agent, and the gate sat downstream of it — FIXED, and the entry stays for what it says about the gate
+
+**B135, B133 and B134 were filed as B131, B129 and B130 and renumbered on landing.** Three live branches -- `b129-truncate-corpus`, `b130-day-one-path`, `b131-generated-vendors` -- plus `b132-gate-hang` already held 129 through 132 when these were written, and `main`'s copy of this file topped out at B128, so the numbers read as free from every view that could see them. That is the failure this file's own opening rule describes, and `git log --all --oneline --grep` does not catch it either when the competing claim is a branch name rather than a commit message. The cheap check that would have: `git worktree list` and `git branch -a`, read for the number rather than for the work.
+
+**Found 2026-08-16 while probing why a full-depth rehearsal abandoned. Fixed the same day in
+`M8-W217`; recorded here because the shape of the miss matters more than the fix.**
+
+`ClaudeAgentOptions.setting_sources` defaults to `None`, which the SDK's own docstring defines
+as *"all sources are loaded (matches CLI defaults)"* — user, project and local. Sync sets `cwd`
+to a clone of a customer's repository and passed no `setting_sources`, so the clone's
+`.claude/settings.json` was configuration Sync obeyed.
+
+**Measured against the real SDK rather than argued from the docstring.** A `.claude/settings.json`
+written into the working directory, carrying a `SessionStart` hook whose command was `echo`:
+
+```
+HOOK FIRED: hook_name='SessionStart:startup', stdout='CUSTOMER-CONTROLLED-HOOK-EXECUTED'
+VERDICT customer_hook_executed=True
+```
+
+With `setting_sources=[]` the same experiment reported `customer_hook_executed=False`. Both runs
+are in the same script, so the negative is a control rather than an absence.
+
+**Why this was worse than the `curl` attack B97 ranks first.** `sync.remediate.tool_gate` is a
+`PreToolUse` hook. A `SessionStart` hook runs *before the first tool call*, so the gate never saw
+it — not "the gate allowed it", the gate was not on the path. And B97 already established that
+`ClaudeAgentOptions.env` merges onto `os.environ` rather than replacing it, so the process
+running that command holds `SYNC_GRAPH_DSN` and every other credential the control plane has.
+Arbitrary code execution, control-plane credentials, no gate, from a file the attacker commits.
+
+The same defect had a second half with no security story and a real cost: **the patch agent was
+inheriting the operator's own Claude Code installation.** The probe's `init` message listed this
+host's entire tool roster — `Task`, `PowerShell`, `CronCreate`, `Monitor`, `RemoteTrigger` —
+rather than the six names in `ALLOWED_TOOLS`, and this machine's `SessionStart` hooks fired
+inside the patch run, injecting a skills mandate and an output-style directive into a production
+prompt. `tool_gate` refuses anything outside its six, so the roster was contained; nothing
+contained the hooks.
+
+**The fix is `setting_sources=[]` in `sync.runner.claude_sdk`, with a test that reads the
+options the runner builds.** `[]` rather than `["user"]`: the operator's settings are no more
+part of a patch run than the customer's. Sync's own hooks are unaffected — they are passed
+programmatically through `hooks=`, which is not a filesystem source, and the test asserts both
+events still reach the run so an isolation flag cannot silently disarm the gate.
+
+**That the gate survives isolation mode is measured, not assumed.** A fix that turned off every
+settings source and took the hook mechanism with it would have removed `tool_gate` while reading
+as hardening — so a third probe ran the real SDK with `setting_sources=[]`, a programmatic
+`PreToolUse` hook, and a prompt asking for a shell command, and reported
+`hook_consulted_for=['Bash']`. Note what that does and does not establish: the hook was
+*consulted*, which is the half `CLAUDE.md` currently records as unobserved. Whether the CLI then
+honours a `deny` is still taken from the SDK's contract.
+
+**Turning filesystem settings off costs nothing the pipeline needed, because B126 landed first.**
+`"project"` is also what loads a `CLAUDE.md`, and a patch agent does have a legitimate need for
+the conventions a repository keeps — which is the need B126 built `sync.context` and the prompt's
+context section to serve, from a store Sync controls, inside the cacheable prefix. The
+customer-authored route to the same facts is `.sync/context.md`, which Sync *reads* as data
+rather than *obeys* as configuration. Had the two landed in the other order this would have been
+a fix with a real cost attached.
+
+**What this says about the gate, which is the part worth keeping.** `tool_gate` was built as
+*the* answer to "what can the patch agent do", and it is a good answer to the question it asks —
+what the agent may *request*. It says nothing about what the SDK does on the agent's behalf
+before the agent exists. Every future option added to `ClaudeAgentOptions` is a surface of the
+same kind, and 45 fields are declared today against the seven `CLAUDE.md` used to list.
+
+**Evidence that closes this:** a review of every `ClaudeAgentOptions` field the runner does not
+set, recording for each whether its default admits customer-controlled or operator-controlled
+input, in the same form as the measurement above — an experiment, not a reading. `sandbox`,
+`plugins`, `agents`, `system_prompt` and `permission_mode` are the ones to start from.
+
+### B133 — B79's natural key never reached any database that already existed, so every corpus write fails
+
+**Found 2026-08-16 by running `sync rehearse --depth full`, which nothing had done since the
+pipeline changed underneath it.** Every `migration_outcome` write in that run raised:
+
+```
+psycopg.errors.InvalidColumnReference: there is no unique or exclusion constraint
+matching the ON CONFLICT specification
+```
+
+`GraphStore.record_migration_outcome` upserts on `ON CONFLICT (finding_id, attempt_index,
+is_rehearsal)`. `schema.sql` declares `UNIQUE (finding_id, attempt_index, is_rehearsal)`. The
+database on 5433 carries `migration_outcome_finding_id_attempt_index_key UNIQUE CONSTRAINT,
+btree (finding_id, attempt_index)` — the two-column key from before B79.
+
+**The schema file predicted this in its own comment and nothing acted on it:** *"widening this
+constraint is not something `GraphStore.apply_schema` can carry to a database that already has
+the old one."* `CREATE TABLE IF NOT EXISTS` does not alter an existing table, so B79 (`M4-W204`)
+applies to a database created after it and to no other. Every database that existed on
+2026-08-16 — this one, and any a customer or a deployment already had — still refuses every
+write to the one table `build_graph` refuses a store without.
+
+**Why it matters more than a schema drift usually does.** `migration_outcome` is the single
+write every benchmark axis reads from. Merge rate, routing accuracy and cost per merged patch
+have never had a sample, and this is a second reason why: even a run that reached a pull request
+would have recorded nothing. It also silently disarms B79's own fix — the rehearsal/production
+collision that entry closed is open again on every pre-B79 database, because the constraint that
+separates them is not there.
+
+**No test catches it.** `tests/conftest.py` gives every run a fresh database, so the schema is
+always applied to an empty one and the widened constraint always lands. This is the exact shape
+`CLAUDE.md` names for the encoding defects: correct by construction in the fixture, wrong against
+anything real.
+
+**Evidence that closes this:** `apply_schema` reconciles the constraint on a database that
+already holds the old one, proved by a test that creates the table with the two-column key,
+applies the schema, and watches a write that previously raised succeed — and proved able to fail
+by running that test against the current `apply_schema` first. A fresh-database test proves
+nothing here; the fresh-database path is the one that already works.
+
+### B134 — a corpus write that fails leaves no queryable trace, so a systematic failure runs forever
+
+Filed from B133 rather than discovered separately: the reason B133 survived from the day B79
+landed until somebody ran a rehearsal by hand is that nothing downstream of the failure knows it
+happened.
+
+`corpus.record` catches every exception from `_record`, logs a warning with the traceback, and
+returns `False` (`src/sync/remediate/corpus.py:238-252`). The comment argues the case and the
+argument is right as far as it goes: *"the pull request is the product; the row is bookkeeping,
+and bookkeeping that can fail a run is worse than bookkeeping that is missing."* A run should not
+die because a row did not land.
+
+**What the argument does not cover is the difference between one failure and all of them.** A
+single dropped row is bookkeeping. Every row dropped, on every run, for as long as a database has
+the wrong constraint, is the measurement substrate being absent while the run reports success and
+exits 0 — which is what happened here. Nothing counts the drops, nothing surfaces them on the
+console's detector accountability level, and `abandon_reason` never sees them because the run did
+not abandon.
+
+This is the same defect class the console spent six findings closing: a surface that cannot say
+"I could not measure this" reports it as "nothing to measure". The corpus has the same gap on the
+write side.
+
+**Evidence that closes this:** a failed corpus write is queryable — a counter, a row, or a
+recorded reason that a reader can join back to the run — and a run whose corpus writes all failed
+says so rather than exiting 0 silently. Whatever shape it takes must not make a corpus write able
+to fail a run, which is the property the current `except` exists to hold.
+
 ### B90 — The console is one idiom repeated eight times, and the resources to fix it are already installed
 
 Measured on 2026-08-05 across `web/src`: **21 `<Card>`, 17 `<Table>`, 1 chart, 5,781 lines.** The

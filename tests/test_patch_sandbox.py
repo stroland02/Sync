@@ -170,7 +170,7 @@ def test_patch_agent_execution_context_inherits_the_full_parent_environment_toda
     """RED for B97: today's execution context carries every credential the
     control plane holds, not only the ones the patch needs.
 
-    `AgentRemediator._drive_agent` builds `ClaudeAgentOptions` with no `env=`
+    `sync.runner.claude_sdk.ClaudeSdkRunner._drive` builds `ClaudeAgentOptions` with no `env=`
     argument, so the CLI subprocess it spawns inherits `os.environ` in full --
     `SYNC_GRAPH_DSN`, a webhook secret, a feed-signing key, all reachable from
     inside the clone's `Bash` today. This reproduces that inheritance directly
