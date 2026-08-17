@@ -48,10 +48,12 @@ import { NotFoundError } from "@/api/errors"
 import { WORKFLOW_POLL_MS, isRunTerminal, useWorkflow } from "@/api/queries"
 import type { WorkflowState } from "@/api/types"
 import { type Fact, FactList } from "@/components/fact-list"
+import { MetricPanel } from "@/components/metric-panel"
 import { Skeleton } from "@/components/skeleton"
 import { ErrorState, LoadingState, NotFoundState } from "@/components/states"
 import { Absent, Formatted } from "@/components/status"
 import { Button } from "@/components/ui/button"
+import { ActivityTimeline } from "@/features/workflows/activity-timeline"
 import { NodeSequence } from "@/features/workflows/node-sequence"
 import { RunOutcome, type BelowThisPanel } from "@/features/workflows/run-outcome"
 import { SupersededGenerations } from "@/features/workflows/superseded-generations"
@@ -65,6 +67,14 @@ import { formatTimestamp } from "@/lib/format"
 
 const DEFAULT_QUESTION =
   "What did Sync's remediation graph do about this finding, node by node?"
+
+/**
+ * The rail's "Node by node" panel, stated before the sequence it wraps rather than left implicit
+ * in the eight rows themselves — a reader meeting a `▶` glyph should already know it means the
+ * checkpointer's own last word on that node, not a claim that the node is running right now.
+ */
+const NODE_BY_NODE_INTRO =
+  "Eight nodes, in the order the graph wires them. A standing is the checkpoint's own answer — nothing here says a node is executing."
 
 export interface WorkflowPageProps {
   readonly question?: string
@@ -286,21 +296,40 @@ function Workflow({ findingId, question }: { findingId: string; question: string
           <FactList facts={runFacts(data, failure, findingId)} />
 
           {data !== undefined && (
-            <p className="text-body text-muted-foreground">
-              <Link
-                to={`/findings/${encodeURIComponent(findingId)}/workflow/pull-request`}
-                className="underline underline-offset-2"
-              >
-                {/* The possessive asserted a pull request on every run, including the ones that
-                    never opened one. The link goes to the same place either way; what it says
-                    follows the outcome the payload already carries. */}
-                {data.outcome === "opened"
-                  ? "See the pull request's evidence bundle"
-                  : "See the evidence bundle for this run"}
-              </Link>{" "}
-              — the five nodes that answer whether this run earned a merge, at their own address a
-              reviewer can send on.
-            </p>
+            <>
+              <p className="text-body text-muted-foreground">
+                <Link
+                  to={`/findings/${encodeURIComponent(findingId)}/workflow/pull-request`}
+                  className="underline underline-offset-2"
+                >
+                  {/* The possessive asserted a pull request on every run, including the ones that
+                      never opened one. The link goes to the same place either way; what it says
+                      follows the outcome the payload already carries. */}
+                  {data.outcome === "opened"
+                    ? "See the pull request's evidence bundle"
+                    : "See the evidence bundle for this run"}
+                </Link>{" "}
+                — the five nodes that answer whether this run earned a merge, at their own address
+                a reviewer can send on.
+              </p>
+
+              <MetricPanel label="Node by node" caption={NODE_BY_NODE_INTRO}>
+                <NodeSequence
+                  nodes={data.nodes}
+                  outcome={data.outcome}
+                  opening={<Arrival findingId={findingId} />}
+                  closing={
+                    <RunOutcome
+                      outcome={data.outcome}
+                      abandonReason={data.abandon_reason}
+                      reportReason={data.report_reason}
+                      below={BELOW}
+                      frame="entry"
+                    />
+                  }
+                />
+              </MetricPanel>
+            </>
           )}
         </div>
       }
@@ -350,23 +379,11 @@ function Workflow({ findingId, question }: { findingId: string; question: string
               />
             )}
 
+            <ActivityTimeline state={data} />
+
             <SupersededGenerations
               generations={data.generations}
               currentThreadId={data.thread_id}
-            />
-
-            <NodeSequence
-              nodes={data.nodes}
-              opening={<Arrival findingId={findingId} />}
-              closing={
-                <RunOutcome
-                  outcome={data.outcome}
-                  abandonReason={data.abandon_reason}
-                  reportReason={data.report_reason}
-                  below={BELOW}
-                  frame="entry"
-                />
-              }
             />
           </>
         )}
