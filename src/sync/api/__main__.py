@@ -121,6 +121,9 @@ def app_factory() -> Starlette:
     def corpus_reader():
         return fleet.corpus_summary(store)
 
+    def corpus_health_reader():
+        return fleet.corpus_health(store)
+
     def repositories_reader():
         return fleet.repositories(store)
 
@@ -208,6 +211,7 @@ def app_factory() -> Starlette:
         workflow_reader=workflow_reader,
         runs_reader=runs_reader,
         corpus_reader=corpus_reader,
+        corpus_health_reader=corpus_health_reader,
         repositories_reader=repositories_reader,
         abandonment_reader=abandonment_reader,
         binding_reader=binding_reader,
