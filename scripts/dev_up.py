@@ -26,6 +26,7 @@ import argparse
 import inspect
 import os
 import re
+import shutil
 import subprocess
 import sys
 from dataclasses import dataclass
@@ -159,6 +160,28 @@ def check_api_entrypoint() -> Check:
     return Check("api entrypoint", OK, "python -m sync.api resolves every name main() calls")
 
 
+def npm_executable() -> str | None:
+    """`npm` as Windows can actually execute it.
+
+    On this platform npm is `npm.cmd`, and `subprocess.run(["npm", ...])` without a shell raises
+    `FileNotFoundError: [WinError 2]` -- a traceback rather than a precondition, from a launcher
+    whose whole purpose is to turn missing preconditions into sentences. `shutil.which` resolves
+    the `.CMD` form, which is the same fix `CLAUDE.md` already records for the corepack shims.
+    """
+    return shutil.which("npm")
+
+
+def check_npm() -> Check:
+    if npm_executable() is None:
+        return Check(
+            "npm",
+            MISSING,
+            "npm is not on PATH, so the console dev server cannot be started",
+            "install Node.js, which supplies npm",
+        )
+    return Check("npm", OK, f"resolved to {npm_executable()}")
+
+
 def check_console_dependencies() -> Check:
     if not (REPO_ROOT / "web" / "node_modules").is_dir():
         return Check(
@@ -175,6 +198,7 @@ CHECKS: tuple[Callable[[], Check], ...] = (
     check_schema,
     check_seeded,
     check_api_entrypoint,
+    check_npm,
     check_console_dependencies,
 )
 
@@ -227,7 +251,9 @@ def main(argv: Sequence[str]) -> int:
     print("\nstarting the API and the console dev server; stop them with Ctrl-C")
     api = subprocess.Popen([sys.executable, "-m", "sync.api"], cwd=REPO_ROOT)
     try:
-        subprocess.run(["npm", "run", "dev", "--prefix", "web"], cwd=REPO_ROOT, check=False)
+        subprocess.run(
+            [npm_executable(), "run", "dev", "--prefix", "web"], cwd=REPO_ROOT, check=False
+        )
     finally:
         api.terminate()
     return 0
