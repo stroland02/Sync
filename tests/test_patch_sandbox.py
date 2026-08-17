@@ -79,6 +79,7 @@ import subprocess
 import sys
 import threading
 import time
+from dataclasses import dataclass
 
 import pytest
 
@@ -163,6 +164,19 @@ def _host_addresses(container) -> list[str]:
         f"carries no default gateway:\n{route.stdout}"
     )
     return addresses
+
+
+@dataclass(frozen=True)
+class _FakeProbe:
+    """A `sandbox.ProbeResult` stand-in, so the retry above is pinned without a daemon.
+
+    Structural rather than imported: what `_probe_until_reachable` consumes is `reachable` and
+    `detail`, and a test that had to start a container to prove a retry loop retries would be
+    the slow, load-sensitive thing this whole area is trying to stop being.
+    """
+
+    reachable: bool
+    detail: str
 
 
 # How long the listener waits for the container's connection, measured from the
@@ -427,6 +441,164 @@ def test_the_listener_waits_from_the_moment_exfiltration_starts_not_from_the_bin
         server.close()
 
 
+def _probe_until_reachable(container, host: str, port: int, *, timeout: float = 90.0, probe=None):
+    """A positive control that a slow daemon cannot turn into a failure.
+
+    `sandbox.probe_connect` reports `reachable=False` when its own `docker exec` times out --
+    a deliberate choice for a caller asking "is this blocked", where a hung connect and a
+    refused one mean the same thing. **For a positive control it is the opposite of harmless:**
+    the assertion is that the container *can* reach the host, so a `docker exec` that ran out
+    of time manufactures "positive control failed" out of a container that was reachable all
+    along. This host was measured serving a bare `docker version` in 432-2552ms under a full
+    `-n auto` run, against roughly 100-200ms idle, so a 15s exec budget is not the margin it
+    looks like.
+
+    Retrying does not weaken the control. A container that genuinely cannot reach `host:port`
+    reports unreachable on every attempt and still fails at the deadline, carrying the last
+    `detail` -- which names the timeout when that is what happened, so the failure stays
+    diagnosable rather than becoming a shrug.
+
+    This is B183's lesson in a second place: the measurement is "can it reach", and anything
+    that reports "I could not find out" must not be recorded as "no".
+    """
+    if probe is None:
+        from sync.remediate import sandbox
+
+        probe = sandbox.probe_connect
+
+    deadline = time.monotonic() + timeout
+    result = probe(container, host, port)
+    while not result.reachable and time.monotonic() < deadline:
+        time.sleep(0.5)
+        result = probe(container, host, port)
+    return result
+
+
+def test_a_positive_control_survives_a_probe_that_timed_out_rather_than_refused():
+    """B183's class, met again in `probe_connect`: a timeout reported as a definite negative.
+
+    Two probes that ran out of time and then one that answered. The control has to reach the
+    answer, because "I could not find out" twice is not evidence that the container is cut off.
+    """
+    answers = [
+        _FakeProbe(False, "docker exec timed out after 15s"),
+        _FakeProbe(False, "docker exec timed out after 15s"),
+        _FakeProbe(True, "REACHABLE"),
+    ]
+    calls = []
+
+    def probe(_container, _host, _port):
+        calls.append(1)
+        return answers[len(calls) - 1]
+
+    result = _probe_until_reachable(None, "1.1.1.1", 443, timeout=30, probe=probe)
+
+    assert result.reachable
+    assert len(calls) == 3
+
+
+def test_a_container_that_really_cannot_reach_still_fails_the_control():
+    """The guard, so the retry above cannot become "wait until it passes".
+
+    Something genuinely unreachable must still report unreachable, bounded, carrying the detail
+    that says why -- otherwise the positive control could never fail and the boundary tests it
+    guards would assert nothing.
+    """
+    def probe(_container, _host, _port):
+        return _FakeProbe(False, "UNREACHABLE: [Errno 101] Network is unreachable")
+
+    started = time.monotonic()
+    result = _probe_until_reachable(None, "1.1.1.1", 443, timeout=2, probe=probe)
+
+    assert not result.reachable
+    assert "unreachable" in result.detail.lower()
+    assert time.monotonic() - started < 20, "the control has to give up on its own budget"
+
+
+def _quiesced_byte_count(received: dict, *, quiet_for: float = 1.5, timeout: float = 30.0) -> int:
+    """The listener's byte count once it has stopped moving, or an error saying it never did.
+
+    **The teardown assertion had a race and it accused the wrong thing.** `received["bytes"]` is
+    incremented by the drain thread, not by the test, and that thread reads from a socket buffer
+    the kernel filled independently. Sampling the counter the instant `docker rm -f` returns
+    therefore samples *how far the drain thread has got*, not how much was sent -- so under load,
+    where that thread is starved by twelve xdist workers and five other sessions, bytes that were
+    sent well **before** teardown get counted **after** it. The test then failed with "the
+    structural fix did not close the window", which would be a false statement about the boundary:
+    the window was closed, and the counter was merely behind.
+
+    Waiting for a fixed point measures the property the test actually claims. Once the container is
+    destroyed its process cannot send again, so the count must converge; anything still arriving
+    after it has been quiet for `quiet_for` is genuinely new. A count that never settles inside
+    `timeout` is the real leak this test exists to catch, and it is raised as exactly that rather
+    than being allowed to look like drain lag.
+    """
+    deadline = time.monotonic() + timeout
+    last = received["bytes"]
+    quiet_since = time.monotonic()
+    while time.monotonic() < deadline:
+        time.sleep(0.1)
+        current = received["bytes"]
+        if current != last:
+            last = current
+            quiet_since = time.monotonic()
+        elif time.monotonic() - quiet_since >= quiet_for:
+            return current
+    raise AssertionError(
+        f"the listener never stopped receiving after teardown: still at {received['bytes']} "
+        f"bytes and rising after {timeout}s. A destroyed container has no process left to send, "
+        "so a count that keeps climbing is the leak this test exists to catch."
+    )
+
+
+def test_a_counter_the_drain_thread_is_still_catching_up_on_is_waited_out():
+    """The race the teardown assertion had, pinned without Docker.
+
+    A counter that is still climbing when it is first read, and then stops. That is drain lag --
+    bytes sent before teardown and counted after it -- and it must be waited out rather than
+    reported as data arriving after the container died.
+    """
+    received = {"bytes": 0}
+
+    def climb():
+        for _ in range(10):
+            received["bytes"] += 1024
+            time.sleep(0.05)
+
+    thread = threading.Thread(target=climb, daemon=True)
+    thread.start()
+
+    settled = _quiesced_byte_count(received, quiet_for=0.5, timeout=15)
+
+    assert settled == 10 * 1024, "the count has to settle on everything the drain thread had"
+    time.sleep(0.5)
+    assert received["bytes"] == settled, "and stay there once it has"
+
+
+def test_a_counter_that_never_settles_is_reported_as_the_leak_it_is():
+    """The guard, so waiting for quiet cannot become waiting forever.
+
+    If bytes really do keep arriving after teardown, the structural fix did not hold, and that has
+    to fail rather than be absorbed by a longer wait.
+    """
+    received = {"bytes": 0}
+    stop = threading.Event()
+
+    def never_stops():
+        while not stop.is_set():
+            received["bytes"] += 1024
+            time.sleep(0.02)
+
+    thread = threading.Thread(target=never_stops, daemon=True)
+    thread.start()
+    try:
+        with pytest.raises(AssertionError) as raised:
+            _quiesced_byte_count(received, quiet_for=0.5, timeout=3)
+        assert "never stopped receiving" in str(raised.value)
+    finally:
+        stop.set()
+
+
 def test_patch_agent_execution_context_reaches_arbitrary_host_today(tmp_path):
     """RED for B97: today's execution context has no network boundary.
 
@@ -496,7 +668,7 @@ def test_container_network_cutoff_blocks_arbitrary_egress():
     from sync.remediate import sandbox
 
     with sandbox.ephemeral_container(image="python:3.12-slim") as container:
-        before = sandbox.probe_connect(container, "1.1.1.1", 443)
+        before = _probe_until_reachable(container, "1.1.1.1", 443)
         assert before.reachable, f"positive control failed: {before.detail}"
 
         sandbox.disconnect_network(container)
@@ -616,7 +788,10 @@ def test_never_networked_container_receives_nothing_after_install_container_is_t
 
         # install_container's `docker rm -f` has now completed (ephemeral_container's
         # own `finally`), which is the cutoff this test declares done.
-        at_teardown = received["bytes"]
+        # Not `received["bytes"]` directly: that samples how far the drain thread has got, and
+        # under load it is still counting bytes the container sent before it was destroyed.
+        # See `_quiesced_byte_count` -- this is the fixed point, and it is what the claim needs.
+        at_teardown = _quiesced_byte_count(received)
         time.sleep(2)  # several times the earlier test's window, on the same gap
         after_wait = received["bytes"]
 
