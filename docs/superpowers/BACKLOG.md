@@ -391,6 +391,40 @@ confidently instead of refusing.
 
 ## Ready
 
+### B172 — wire the visual eval into CI once Lane B settles the extraction mechanism
+
+**Not startable yet, deliberately.** Lane B is still deciding between the in-house script and
+`d-extract`, and that decision is the whole of the CI wiring — it determines what the harness
+invokes and what it installs. A harness built around an unsettled shape is a harness built twice.
+
+Requirements established ahead of it, in
+`reports/2026-08-17-visual-eval-what-ci-needs.md`:
+
+- **It goes in the `web` job, beside `beta-gates` and not inside it.** `beta-gates` carries
+  `--exit-zero` because a readiness verdict must never fail a build; an eval that is to be a gate
+  needs the opposite. One job cannot hold both without a `continue-on-error` carve-out that would
+  swallow a crashed script too. `web` already has Node, the console and the build.
+- **Three to five minutes**, affordable only on `web`'s existing schedule. Its own runner, browser
+  install and build makes it a nightly rather than a per-push gate.
+- **Token-derived properties may gate; counts may not.** Colour and radius matched the mock exactly
+  on the first run and can be asserted. Side-by-side regions, prose characters and density move with
+  content, and gating them makes this a snapshot test — which this repository has already ruled
+  fails on every correct change and gets deleted within a week.
+- **It must distinguish "differs" from "could not measure."** A font absent on a runner changes
+  computed metrics and fails every type assertion for an environmental reason; that is the shape
+  that disarmed both B97 positive controls for a day. A browser that did not load the mock must say
+  so rather than report a difference of everything.
+- **The exceptions file must be read and each entry must carry a reason**, or it is a suppression
+  list nobody can audit.
+- **The gateable properties need a stability measurement first** — several runs, one on a runner —
+  before any of them fails a build.
+
+**Closes when:** the eval runs in CI on `web`, gates only properties measured stable across repeated
+runs, reports the rest per-property with the mock value beside the built value, and reports
+`could not measure` distinctly from `differs` — proven by breaking the harness deliberately and
+watching it say which.
+
+
 ### B169 — nothing exercises a cold clone, so the day-one path is verified as documented rather than as working — FIXED
 
 `tests/test_day_one_path.py` is twelve tests and every one is structural: that each Quick start
