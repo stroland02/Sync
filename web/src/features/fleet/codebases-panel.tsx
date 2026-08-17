@@ -143,7 +143,7 @@ export function CodebasesPanel({ filter = "ALL" }: CodebasesPanelProps) {
   }
 
   if (reposQuery.isError) {
-    return <ErrorState error={reposQuery.error} what="monitored codebases" />
+    return <ErrorState error={reposQuery.error} what="monitored codebases" onRetry={() => void reposQuery.refetch()} />
   }
 
   // NEEDS_REVIEW and CLEAN both read `openFindings`, so filtering against a scope whose answer

@@ -39,7 +39,7 @@ export function RepositoriesCard() {
   return (
     <div className="flex flex-col gap-section">
       {query.isPending && <LoadingState what="the indexed repositories" />}
-      {query.isError && <ErrorState error={query.error} what="the indexed repositories" />}
+      {query.isError && <ErrorState error={query.error} what="the indexed repositories" onRetry={() => void query.refetch()} />}
 
       {query.isSuccess && (
         <MetricPanel

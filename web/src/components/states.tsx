@@ -210,12 +210,44 @@ function explain(error: unknown, what: string): Explanation {
   }
 }
 
-/** Something went wrong between here and the graph. Says which something. */
-export function ErrorState({ error, what }: { error: unknown; what: string }) {
+/**
+ * Something went wrong between here and the graph. Says which something, and offers a way back.
+ *
+ * **`onRetry` is optional and its absence renders no control**, rather than a button that reloads
+ * the page. A caller with a query in hand passes that query's `refetch`; a caller without one has
+ * nothing honest to offer, and a dead control that appears to retry and does not is worse than no
+ * control at all.
+ *
+ * The button is an addition to the explanation and never a replacement for it. The reader still
+ * needs to know what failed — `reports/2026-08-17-gate-3-empty-state.md` measured that the console
+ * already distinguishes a failed fetch from an empty answer, and that distinction lives in this
+ * headline. What was missing was only the recourse: without it the sole option is a full page
+ * reload, which re-fetches every other panel and discards the reader's scroll position and filters.
+ */
+export function ErrorState({
+  error,
+  what,
+  onRetry,
+}: {
+  error: unknown
+  what: string
+  onRetry?: () => void
+}) {
   const { headline, detail } = explain(error, what)
   return (
     <Panel status="critical" headline={headline}>
       <p>{detail}</p>
+      {onRetry !== undefined && (
+        <p>
+          <button
+            type="button"
+            onClick={onRetry}
+            className="text-body underline underline-offset-2 hover:text-foreground"
+          >
+            Try again
+          </button>
+        </p>
+      )}
     </Panel>
   )
 }

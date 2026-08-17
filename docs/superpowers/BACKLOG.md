@@ -4017,3 +4017,32 @@ does — that the figure is derived from a count and a per-read constant rather 
 tokens. The wording is a judgement for whoever takes it; the constant should be nameable from the
 screen. Alternatively the field stops being expressed in tokens and is expressed as what it
 actually is, a count of avoided reads, which needs no qualification at all and is the stronger fix.
+
+### B146 — A superseded remediation attempt has no address, so its evidence is unreachable
+
+Found while rendering the abandoned-run workflow screen for the first time
+(`reports/2026-08-17-abandoned-run-walk.md`, `M14-W348`).
+
+`GET /api/workflows/{finding_id}` answers with the **newest** generation for that finding. A finding
+that abandoned and was then retried successfully therefore serves the retry, and the abandoned
+attempt survives only as a one-line entry under *Superseded generations*: number, thread id,
+outcome, reason. `web/src/features/workflows/superseded-generations.tsx` renders no link, and it
+cannot render one — there is no generation parameter on the route, so the older attempt has no
+address to link to.
+
+**What is and is not true.** The product's claim that abandoned attempts stay visible with their
+reason holds: the reason renders. What is unreachable is the evidence *under* the reason — which
+nodes ran, and the compiler output or replay result that stopped the run. That evidence is the most
+instructive thing the console holds about a failure, and today it is only visible while the
+abandoned generation happens to be the newest one.
+
+It also means the screen had never been rendered before this walk: with the seeded fixture there is
+no URL that produces it, which is how a fully unit-tested screen went unseen.
+
+**What closes it:** an address for a generation. The shape is Lane E's decision — a query parameter
+on the existing route, or a generation segment in the path — plus the matching view model, and then
+one link per row in the console, which is Lane B's half and small once the address exists.
+
+**Not urgent for beta.** A partner's own abandoned run is served correctly the moment it is the
+newest attempt, which is the common case at the point where they are watching. This bites on the
+retry path.

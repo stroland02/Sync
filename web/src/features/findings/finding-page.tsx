@@ -383,7 +383,7 @@ function FindingDetailPage({
               identifier={query.error.identifier}
             />
           ) : (
-            <ErrorState error={query.error} what={`finding ${findingId}`} />
+            <ErrorState error={query.error} what={`finding ${findingId}`} onRetry={() => void query.refetch()} />
           ))}
 
         {query.isSuccess && (

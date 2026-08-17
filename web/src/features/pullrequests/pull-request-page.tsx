@@ -304,7 +304,7 @@ function PullRequest({ findingId, question }: { findingId: string; question: str
               </Button>
             </div>
           ) : (
-            <ErrorState error={query.error} what={`the run for finding ${findingId}`} />
+            <ErrorState error={query.error} what={`the run for finding ${findingId}`} onRetry={() => void query.refetch()} />
           ))}
 
         {data !== undefined && (
