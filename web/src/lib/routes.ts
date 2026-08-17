@@ -106,8 +106,8 @@ export interface AreaEntry {
 export const AREAS: readonly AreaEntry[] = [
   {
     id: "fleet",
-    label: "Fleet",
-    purpose: "Every run across every repository, and whether one is stuck.",
+    label: "Codebases",
+    purpose: "All repositories watched by Sync, their attached vendors, and active migrations.",
     levels: ["Fleet"],
     landing: "/",
   },
@@ -182,16 +182,16 @@ export const ROUTES: readonly RouteEntry[] = [
   {
     path: "/",
     reachedFrom: null,
-    label: "Fleet",
+    label: "Codebases",
     area: "fleet",
     level: "Fleet",
-    question: "What has Sync been doing across every run, and is one stuck right now?",
+    question: "All code repositories monitored by Sync, their attached API vendors, and active migrations.",
     params: [],
     element: FleetPage,
   },
   {
     path: "/repositories/:repoId",
-    reachedFrom: "a repository on the fleet screen",
+    reachedFrom: "a repository on the codebases screen",
     label: "Codebase",
     area: "codebase",
     level: "Codebase",
@@ -201,7 +201,7 @@ export const ROUTES: readonly RouteEntry[] = [
   },
   {
     path: "/vendors/:vendorId",
-    reachedFrom: "a vendor on the fleet screen",
+    reachedFrom: "a vendor on the codebases screen",
     label: "Vendor",
     area: "api-services",
     level: "API Services",
@@ -211,7 +211,7 @@ export const ROUTES: readonly RouteEntry[] = [
   },
   {
     path: "/repositories/:repoId/observed",
-    reachedFrom: "a repository on the fleet screen",
+    reachedFrom: "a repository on the codebases screen",
     label: "Signals",
     area: "signals",
     level: "Signals",

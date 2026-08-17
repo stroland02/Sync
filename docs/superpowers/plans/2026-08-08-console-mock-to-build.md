@@ -248,3 +248,66 @@ resemblance into a measurement.
 - **It does not touch `docs/console-mock/` after this.** The mock is a dated artifact. If it is
   redrawn, the new one lands beside it with its own date rather than overwriting the record the
   gap report was measured against.
+
+---
+
+### Phase 1: Global Invariants & Design Token Contracts
+
+- [x] **Task 1.1: Token Contract & Color Audit**
+- [x] **Task 1.2: Contrast & Typography Verification**
+- [x] **Task 1.3: Table Anatomy & Furniture Registers**
+- [x] **Task 1.4: Empty State Cards (8px Radius & Centered Layout)**
+
+---
+
+### Phase 2: Fleet & Overview Layout Composition (Demo Matching)
+
+- [x] **Task 2.1: Top-Level Fact Tile Grid**
+- [x] **Task 2.2: Two-Column Responsive Band**
+- [x] **Task 2.3: Rehearsal vs Live Badging & Footer Counters**
+
+---
+
+### Phase 3: Detail Pages (Finding, Workflow, Pull Request)
+
+- [x] **Task 3.1: Spanning Page Header & Readable Titles**
+- [x] **Task 3.2: 360px Fact Rail & Code Block Headers**
+- [x] **Task 3.3: Solution Workflow Narrative & Superseded Generations**
+- [x] **Task 3.4: B123 Checkpointer Clock & Per-Node Duration**
+
+---
+
+### Phase 4: Verification, Gate Checks, & Live Polish
+
+- [x] **Task 4.1: Cross-Language & Python Test Verification**
+- [x] **Task 4.2: Frontend Suite & Bundle Verification**
+- [x] **Task 4.3: Live Verification in Localhost**
+
+---
+
+### Phase 5: Screen De-congestion & Real-Data Fidelity (Ground Truth vs Demo)
+
+- [x] **Task 5.1: Fleet Screen De-congestion & Real-Data ChangeUnitsTable**
+- [x] **Task 5.2: Codebase Screen Intake/Skip Reason Polish**
+- [x] **Task 5.3: Vendor & Signals Telemetry Streamlining**
+- [x] **Task 5.4: Binding Surface & Finding/Workflow/PR Detail Screens**
+
+---
+
+### Phase 6: Codebase-First Hierarchy & Fleet Elimination
+
+- [x] **Task 6.1: Eliminate "Fleet" Terminology Across Platform**
+  - **Files:** `web/src/lib/routes.ts`, `web/src/layouts/app-frame.tsx`, `web/src/features/fleet/fleet-page.tsx`, `web/src/layouts/breadcrumbs.tsx`
+  - **Details:** Replace all "Fleet" references with intuitive "Repositories" / "Codebases" / "Sync Overview". The root destination `/` represents watched repositories.
+
+- [x] **Task 6.2: Front Page Codebases / Repositories Panel**
+  - **Files:** `web/src/features/fleet/codebases-panel.tsx`, `web/src/features/fleet/fleet-page.tsx`
+  - **Details:** Rework front page (`/`) to lead with a clean Codebases panel (showing monitored repositories, file index counts, attached vendors, open findings, and active remediations) rather than loose change units. Change units are nested inside their respective Codebase and Finding contexts.
+
+- [x] **Task 6.3: Human-Friendly Finding IDs & Clean Labels**
+  - **Files:** `web/src/lib/format.ts`, `web/src/features/findings/`
+  - **Details:** Implement `formatFindingBadge` (`f-2f725b`) and human-readable vendor+operation titles, eliminating raw 32-character jumbled hex hashes across table rows, cards, and breadcrumbs.
+
+- [x] **Task 6.4: Codebase-Scoped Hierarchy in Sidebar & Routing**
+  - **Files:** `web/src/lib/routes.ts`, `web/src/layouts/app-frame.tsx`
+  - **Details:** Group the 6 areas systematically from Codebase to API Services, Signals, Observe, and Remediation without overlap.

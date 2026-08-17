@@ -66,7 +66,7 @@ import {
   type RemediationState,
 } from "@/features/findings/remediation"
 import { DetailTitleText, findingTitle } from "@/lib/detail-title"
-import { orAbsent } from "@/lib/format"
+import { formatFindingBadge, orAbsent } from "@/lib/format"
 import { Breadcrumbs } from "@/layouts/breadcrumbs"
 import { PageHeader } from "@/layouts/page-header"
 import { UnknownRoute } from "@/layouts/unknown-route"
@@ -299,7 +299,7 @@ function FindingDetailPage({
   ) : null
 
   const trail = [
-    { label: "Fleet", to: "/" },
+    { label: "Repositories", to: "/" },
     ...(query.isSuccess
       ? [
           {
@@ -308,7 +308,7 @@ function FindingDetailPage({
           },
         ]
       : []),
-    { label: findingId },
+    { label: formatFindingBadge(findingId) },
   ]
 
   const title = query.isSuccess ? (

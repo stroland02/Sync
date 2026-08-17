@@ -89,3 +89,18 @@ export function pathAfter(commonDirectory: string, path: string): string {
   const rest = path.slice(commonDirectory.length)
   return rest === "" ? path : rest
 }
+
+/** Human-friendly short badge for a finding ID (e.g. "f-2f725b"), avoiding jumbled hex strings. */
+export function formatFindingBadge(findingId: string | null | undefined): string {
+  if (!findingId) return "f-unknown"
+  if (findingId.startsWith("f-")) return findingId
+  return `f-${findingId.slice(0, 7)}`
+}
+
+/** Human-friendly short badge for a thread ID (e.g. "thread-8f21c0"). */
+export function formatThreadBadge(threadId: string | null | undefined): string {
+  if (!threadId) return "thread-unknown"
+  if (threadId.startsWith("thread-")) return threadId
+  return `thread-${threadId.slice(0, 6)}`
+}
+
