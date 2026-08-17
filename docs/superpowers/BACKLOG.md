@@ -595,9 +595,41 @@ block is fully used, and `B173` was reassigned to Lane B when its own block ran 
 
 ### B172 — wire the visual eval into CI once Lane B settles the extraction mechanism
 
-**Not startable yet, deliberately.** Lane B is still deciding between the in-house script and
-`d-extract`, and that decision is the whole of the CI wiring — it determines what the harness
-invokes and what it installs. A harness built around an unsettled shape is a harness built twice.
+**Re-measured 2026-08-17 by `CI-W364`. The original blocker is gone and a different one is now
+load-bearing, so this is half-startable rather than startable.**
+
+**Settled:** the extraction mechanism. `web/scripts/visual-eval.mjs` won the trial, speaks CDP over
+Node 22's global `WebSocket`, installs nothing, and takes every URL and port as an environment
+variable. Landed across `M14-W355`, `M14-W357` and `M14-W359`.
+
+**Still blocking, and it is Lane B's to clear because the file is `web/**`:**
+
+- **The eval cannot fail.** There is no `process.exit(1)` and no gate predicate anywhere in
+  `visual-eval.mjs` — it prints per-property deltas and returns success whatever it measured.
+  Wiring CI around it today would produce a job that always passes, which is exactly the shape
+  `.claude/rules/test-discipline.md` calls a test that cannot fail, and it would report the console
+  as measured while asserting nothing. **The gate-versus-report split below has to exist in the
+  script before there is anything for CI to wire.**
+- **The console under test needs a live API.** `web/scripts/serve-console.mjs` proxies `/api` to
+  `SYNC_API_ORIGIN` (default `127.0.0.1:8787`), so a CI run needs Postgres, the Sync API and seeded
+  data before a single property can be read — which is most of the three-to-five minutes estimated
+  below, and the part most likely to make the job flaky.
+
+**Worth measuring before building any of it, and cheap:** whether the properties that may gate —
+colour, radius, font-size, font-weight — can be read with the API absent. `serve-console.mjs` says a
+dead API must not read as a console defect, so panels should render their empty states; if the token
+-derived properties survive that, the whole Postgres-and-API half of the CI cost disappears and this
+becomes a small job rather than a large one. Nobody has checked, and it is cheap to: measured
+2026-08-17, `uv run python scripts/dev_up.py --check` reports Postgres reachable, schema present, 72
+call sites seeded, the API entrypoint resolving and port 8787 free, with `npm install --prefix web`
+the single missing precondition. The measurement is one command away from runnable for whoever takes
+this.
+
+**It is not taken here because clearing it would not unblock the item.** The gate predicate is the
+binding constraint and it lives in `web/**`, so this stays Lane B's until the eval can fail.
+
+Original framing, kept because the requirements below still stand: Lane B was deciding between the
+in-house script and `d-extract`, and that decision was the whole of the CI wiring.
 
 Requirements established ahead of it, in
 `reports/2026-08-17-visual-eval-what-ci-needs.md`:
