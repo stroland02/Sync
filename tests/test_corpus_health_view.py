@@ -125,13 +125,16 @@ def test_corpus_health_distinguishes_zero_from_absence(store: GraphStore):
     assert routing["has_samples"] is True
     assert routing["sample_count"] == 1
     assert routing["value"] == 0.0
+    assert routing["provenance"] == "production"
 
     # Merge rate by change kind: n = 1, value = 0.0 -> measured!
     mr_kind = axes["merge_rate_by_change_kind"]
     assert mr_kind["status"] == "measured"
     assert mr_kind["has_samples"] is True
     assert mr_kind["sample_count"] == 1
+    assert mr_kind["provenance"] == "production"
     assert mr_kind["groups"]["request-property-removed"]["value"] == 0.0
+    assert mr_kind["groups"]["request-property-removed"]["provenance"] == "production"
 
     # Tokens per merged patch: 0 merged PRs -> n = 0, value = None -> unmeasured!
     tokens = axes["tokens_per_merged_patch"]
@@ -139,6 +142,7 @@ def test_corpus_health_distinguishes_zero_from_absence(store: GraphStore):
     assert tokens["has_samples"] is False
     assert tokens["sample_count"] == 0
     assert tokens["value"] is None
+    assert tokens["provenance"] == "unmeasured"
 
     # Wall ms per merged patch: 0 merged PRs -> n = 0, value = None -> unmeasured!
     wall_ms = axes["wall_ms_per_merged_patch"]
@@ -146,9 +150,12 @@ def test_corpus_health_distinguishes_zero_from_absence(store: GraphStore):
     assert wall_ms["has_samples"] is False
     assert wall_ms["sample_count"] == 0
     assert wall_ms["value"] is None
+    assert wall_ms["provenance"] == "unmeasured"
 
     assert health["summary"]["axes_measured_count"] == 3  # merge_rate_by_change_kind, merge_rate_by_tier, routing_accuracy
     assert health["summary"]["axes_unmeasured_count"] == 2  # tokens, wall_ms
+    assert health["summary"]["production_attempts"] == 2
+    assert health["summary"]["rehearsal_attempts"] == 0
 
 
 def test_corpus_health_api_route(store: GraphStore):
@@ -183,3 +190,7 @@ def test_corpus_health_api_route(store: GraphStore):
     assert data["summary"]["axes_measured_count"] == 5
     assert data["summary"]["axes_unmeasured_count"] == 0
     assert len(data["axes"]) == 5
+    for a in data["axes"]:
+        assert "provenance" in a
+        assert a["provenance"] == "production"
+

@@ -104,7 +104,7 @@ def test_the_axes_serialise_to_json():
     on."""
     payload = json.loads(compute_axes([]).model_dump_json())
 
-    assert payload["routing_accuracy"] == {"value": None, "n": 0}
+    assert payload["routing_accuracy"] == {"value": None, "n": 0, "provenance": "unmeasured"}
 
 
 # --- merge rate: split, because unsplit it says nothing ---------------------------
@@ -121,8 +121,8 @@ def test_the_merge_rate_splits_by_change_kind():
 
     by_kind = compute_axes(rows).merge_rate_by_change_kind
 
-    assert by_kind["easy"] == Axis(value=1.0, n=2)
-    assert by_kind["hard"] == Axis(value=0.0, n=1)
+    assert by_kind["easy"] == Axis(value=1.0, n=2, provenance="production")
+    assert by_kind["hard"] == Axis(value=0.0, n=1, provenance="production")
 
 
 def test_the_merge_rate_splits_by_tier():
@@ -133,8 +133,8 @@ def test_the_merge_rate_splits_by_tier():
 
     by_tier = compute_axes(rows).merge_rate_by_tier
 
-    assert by_tier[0] == Axis(value=1.0, n=1)
-    assert by_tier[2] == Axis(value=0.0, n=1)
+    assert by_tier[0] == Axis(value=1.0, n=1, provenance="production")
+    assert by_tier[2] == Axis(value=0.0, n=1, provenance="production")
 
 
 def test_an_attempt_that_opened_no_pull_request_is_not_in_the_denominator():
@@ -146,7 +146,9 @@ def test_an_attempt_that_opened_no_pull_request_is_not_in_the_denominator():
         _attempt(finding_id="f-2", pr_number=None, pr_merged=None, terminal_status="abandoned"),
     ]
 
-    assert compute_axes(rows).merge_rate_by_change_kind["response-property-removed"] == Axis(value=1.0, n=1)
+    assert compute_axes(rows).merge_rate_by_change_kind["response-property-removed"] == Axis(
+        value=1.0, n=1, provenance="production"
+    )
 
 
 def test_a_pull_request_awaiting_its_webhook_is_not_counted_as_unmerged():
@@ -158,7 +160,9 @@ def test_a_pull_request_awaiting_its_webhook_is_not_counted_as_unmerged():
         _attempt(finding_id="f-2", pr_number=2, pr_merged=None),
     ]
 
-    assert compute_axes(rows).merge_rate_by_change_kind["response-property-removed"] == Axis(value=1.0, n=1)
+    assert compute_axes(rows).merge_rate_by_change_kind["response-property-removed"] == Axis(
+        value=1.0, n=1, provenance="production"
+    )
 
 
 # --- the grain is one row per attempt --------------------------------------------
@@ -176,7 +180,7 @@ def test_routing_accuracy_counts_findings_rather_than_attempts():
         _attempt(finding_id="f-2", attempt_index=0, tier=0, static_verify_passed=True),
     ]
 
-    assert compute_axes(rows).routing_accuracy == Axis(value=0.5, n=2)
+    assert compute_axes(rows).routing_accuracy == Axis(value=0.5, n=2, provenance="production")
 
 
 def test_a_tier_zero_route_that_fell_back_is_not_accurate():
@@ -187,7 +191,7 @@ def test_a_tier_zero_route_that_fell_back_is_not_accurate():
         _attempt(finding_id="f-1", attempt_index=1, tier=2, static_verify_passed=True),
     ]
 
-    assert compute_axes(rows).routing_accuracy == Axis(value=0.0, n=1)
+    assert compute_axes(rows).routing_accuracy == Axis(value=0.0, n=1, provenance="production")
 
 
 def test_a_finding_never_routed_to_tier_zero_is_outside_the_axis():
@@ -195,7 +199,7 @@ def test_a_finding_never_routed_to_tier_zero_is_outside_the_axis():
     about whether tier 0 routes well."""
     rows = [_attempt(finding_id="f-1", tier=2, static_verify_passed=True)]
 
-    assert compute_axes(rows).routing_accuracy == Axis(value=None, n=0)
+    assert compute_axes(rows).routing_accuracy == Axis(value=None, n=0, provenance="unmeasured")
 
 
 def test_cost_per_merged_patch_charges_the_failed_attempts_too():
@@ -203,16 +207,30 @@ def test_cost_per_merged_patch_charges_the_failed_attempts_too():
     tokens by the merge count would report a margin the pipeline never achieved, which is the
     number that makes the margin assumed rather than real."""
     rows = [
-        _attempt(finding_id="f-1", attempt_index=0, input_tokens=100, output_tokens=0,
-                 wall_ms=1000, pr_number=None, pr_merged=None),
-        _attempt(finding_id="f-1", attempt_index=1, input_tokens=200, output_tokens=100,
-                 wall_ms=2000, pr_number=1, pr_merged=True),
+        _attempt(
+            finding_id="f-1",
+            attempt_index=0,
+            input_tokens=100,
+            output_tokens=0,
+            wall_ms=1000,
+            pr_number=None,
+            pr_merged=None,
+        ),
+        _attempt(
+            finding_id="f-1",
+            attempt_index=1,
+            input_tokens=200,
+            output_tokens=100,
+            wall_ms=2000,
+            pr_number=1,
+            pr_merged=True,
+        ),
     ]
 
     axes = compute_axes(rows)
 
-    assert axes.tokens_per_merged_patch == Axis(value=400.0, n=1)
-    assert axes.wall_ms_per_merged_patch == Axis(value=3000.0, n=1)
+    assert axes.tokens_per_merged_patch == Axis(value=400.0, n=1, provenance="production")
+    assert axes.wall_ms_per_merged_patch == Axis(value=3000.0, n=1, provenance="production")
 
 
 def test_an_unmerged_finding_contributes_no_cost_and_no_denominator():
@@ -220,11 +238,19 @@ def test_an_unmerged_finding_contributes_no_cost_and_no_denominator():
     denominator would make the number grow every time the pipeline failed."""
     rows = [
         _attempt(finding_id="f-1", input_tokens=100, output_tokens=0, wall_ms=1000, pr_merged=True),
-        _attempt(finding_id="f-2", input_tokens=900, output_tokens=0, wall_ms=9000,
-                 pr_number=2, pr_merged=False),
+        _attempt(
+            finding_id="f-2",
+            input_tokens=900,
+            output_tokens=0,
+            wall_ms=9000,
+            pr_number=2,
+            pr_merged=False,
+        ),
     ]
 
-    assert compute_axes(rows).tokens_per_merged_patch == Axis(value=100.0, n=1)
+    assert compute_axes(rows).tokens_per_merged_patch == Axis(
+        value=100.0, n=1, provenance="production"
+    )
 
 
 def test_attempts_and_findings_are_counted_separately():
@@ -276,6 +302,58 @@ def test_no_axis_is_computed_from_the_salted_argument_hashes():
     assert "aaaa" not in compute_axes(ours).model_dump_json()
 
 
+# --- provenance tracking across quality axes -------------------------------------
+
+
+def test_provenance_distinguishes_production_from_rehearsal_across_axes():
+    """Rehearsal rows (is_rehearsal=True) are tagged with provenance='rehearsal',
+    and production rows (is_rehearsal=False) are tagged with provenance='production'.
+    A reader can never quote an axis without seeing what kind of rows produced it."""
+    rehearsal_rows = [
+        _attempt(finding_id="f-1", is_rehearsal=True, change_kind="kind-a", tier=0,
+                 pr_number=101, pr_merged=True, input_tokens=100, output_tokens=50, wall_ms=1200),
+        _attempt(finding_id="f-2", is_rehearsal=True, change_kind="kind-a", tier=0,
+                 pr_number=102, pr_merged=False),
+    ]
+
+    rehearsal_axes = compute_axes(rehearsal_rows)
+    assert rehearsal_axes.merge_rate_by_change_kind["kind-a"].provenance == "rehearsal"
+    assert rehearsal_axes.merge_rate_by_tier[0].provenance == "rehearsal"
+    assert rehearsal_axes.routing_accuracy.provenance == "rehearsal"
+    assert rehearsal_axes.tokens_per_merged_patch.provenance == "rehearsal"
+    assert rehearsal_axes.wall_ms_per_merged_patch.provenance == "rehearsal"
+    assert rehearsal_axes.counts.rehearsal_attempts == 2
+    assert rehearsal_axes.counts.production_attempts == 0
+
+    prod_rows = [
+        _attempt(finding_id="f-1", is_rehearsal=False, change_kind="kind-a", tier=0,
+                 pr_number=101, pr_merged=True, input_tokens=100, output_tokens=50, wall_ms=1200),
+    ]
+    prod_axes = compute_axes(prod_rows)
+    assert prod_axes.merge_rate_by_change_kind["kind-a"].provenance == "production"
+    assert prod_axes.routing_accuracy.provenance == "production"
+    assert prod_axes.tokens_per_merged_patch.provenance == "production"
+    assert prod_axes.counts.production_attempts == 1
+    assert prod_axes.counts.rehearsal_attempts == 0
+
+
+def test_provenance_identifies_mixed_rows():
+    """When both production and rehearsal rows contribute to an axis, provenance is 'mixed'."""
+    mixed_rows = [
+        _attempt(finding_id="f-1", is_rehearsal=False, change_kind="kind-a", tier=0,
+                 pr_number=101, pr_merged=True, input_tokens=100, output_tokens=50, wall_ms=1200),
+        _attempt(finding_id="f-2", is_rehearsal=True, change_kind="kind-a", tier=0,
+                 pr_number=102, pr_merged=True, input_tokens=200, output_tokens=100, wall_ms=2400),
+    ]
+
+    axes = compute_axes(mixed_rows)
+    assert axes.merge_rate_by_change_kind["kind-a"].provenance == "mixed"
+    assert axes.merge_rate_by_change_kind["kind-a"].n == 2
+    assert axes.tokens_per_merged_patch.provenance == "mixed"
+    assert axes.counts.production_attempts == 1
+    assert axes.counts.rehearsal_attempts == 1
+
+
 # --- against the real reader ------------------------------------------------------
 
 
@@ -299,7 +377,9 @@ def test_the_axes_compute_over_rows_read_back_from_the_corpus(store: GraphStore)
     axes = compute_axes(store.migration_outcomes())
 
     assert axes.counts.attempts == 2
-    assert axes.merge_rate_by_change_kind["response-property-removed"] == Axis(value=0.5, n=2)
+    assert axes.merge_rate_by_change_kind["response-property-removed"] == Axis(
+        value=0.5, n=2, provenance="production"
+    )
 
 
 def test_an_empty_corpus_read_from_the_store_is_unmeasured(store: GraphStore):
@@ -308,3 +388,28 @@ def test_an_empty_corpus_read_from_the_store_is_unmeasured(store: GraphStore):
 
     assert axes.counts.attempts == 0
     assert axes.routing_accuracy.value is None
+    assert axes.routing_accuracy.provenance == "unmeasured"
+
+
+def test_rehearsal_rows_in_store_never_pollute_production_corpus(store: GraphStore):
+    """Rehearsal rows written to the store are excluded from store.migration_outcomes(),
+    protecting production quality axes from rehearsal contamination."""
+    # Write 1 rehearsal attempt and 1 production attempt
+    store.record_migration_outcome(
+        _attempt(finding_id="f-rehearsal", is_rehearsal=True, pr_number=999, pr_merged=True)
+    )
+    store.record_migration_outcome(
+        _attempt(finding_id="f-prod", is_rehearsal=False, pr_number=1, pr_merged=True)
+    )
+
+    outcomes = store.migration_outcomes()
+    assert len(outcomes) == 1
+    assert outcomes[0].finding_id == "f-prod"
+    assert outcomes[0].is_rehearsal is False
+
+    axes = compute_axes(outcomes)
+    assert axes.counts.attempts == 1
+    assert axes.counts.production_attempts == 1
+    assert axes.counts.rehearsal_attempts == 0
+    assert axes.tokens_per_merged_patch.provenance == "production"
+
