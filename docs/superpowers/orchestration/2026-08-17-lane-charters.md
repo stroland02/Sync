@@ -124,11 +124,20 @@ Escalate to the coordinator, not to the human, when the blocker is another lane.
 - **A fresh worktree fails about 50 tests for missing gitignored tooling.** Run
   `bash scripts/bootstrap_tools.sh` and `uv run python scripts/fetch_corpus_repositories.py` once
   per checkout. Do this before you believe any failure.
-- **Postgres is shared, on port 5433, and it bounces.** A run that fails in the hundreds with
-  `the database system is starting up`, `is in recovery mode`, or `connection failed` is
-  environmental. Wait for `docker exec sync-postgres-1 pg_isready -U sync`, then re-run. Do not
-  debug it and do not restart the container -- five other agents are using it.
+- **Postgres is shared, on port 5433, and it bounces -- but read the failure text, never the
+  count.** This note used to say a run failing in the hundreds is environmental, and that phrasing
+  was itself a hazard: on 2026-08-17 `main` was 60 tests red for a real reason while Postgres
+  accepted connections throughout, using one connection of three hundred, and the count alone would
+  have sent every lane to the wrong conclusion. **Environmental** means the failures carry
+  `the database system is starting up`, `is in recovery mode`, or `connection failed`; then wait for
+  `docker exec sync-postgres-1 pg_isready -U sync` and re-run. Anything else -- a `KeyError`, a
+  `GraphRecursionError`, an `IndexError` -- is a real regression wearing a large number.
+  Do not restart the container: five other agents are using it.
 - **`python3` does not exist here.** The interpreter is `python`. `uv` only; never Poetry.
+- **A crashed xdist worker prints `F` against tests that never ran, at any `-n`.** Measured at
+  `-n 4` on 2026-08-17: about thirty phantom failures in a run cut off before its summary, reading
+  as a catastrophic regression that did not exist. `-n 4` is the better default but it is not a cure
+  for this, so a run without a summary line is not a result -- re-run it before reporting anything.
 - **Use `-n 4`, not `-n auto`, for the full suite.** `-n0` is unusable here -- it takes long enough that nobody runs it -- but `-n auto` is not the safe opposite: it has crashed an xdist worker outright on this machine (`INTERNALERROR ... KeyError: <WorkerController gw7>`) and Lane C measured the same thing independently. A crashed worker aborts the run, which reads as a catastrophic failure and is not one. `-n 4` is the working default; a single test file is fine with `-n0`.
 - **Never `git stash`.** `refs/stash` is one stack shared by every worktree of this repository, so
   a pop in your tree can take another agent's work.
@@ -138,11 +147,75 @@ Escalate to the coordinator, not to the human, when the blocker is another lane.
   environment. Every fixture here is ASCII, so no test will ever catch a missing one.
 - **A spec passed through the Orca CLI must be ASCII.** Em dashes arrive as mojibake.
 
+## Confirm your lane before your first landing
+
+**A dispatch delivering a spec is not the same as an agent having read it**, and the gap between
+those two is where duplicated work comes from. Measured 2026-08-17: Lane A received its charter,
+was mid-task when it arrived, did not act on it, and spent twenty-four minutes building
+`sync.dashboard.fleet.change_units`, `by_rung` on `detector_accountability` and `/api/change-units`
+-- Lane E's files, which Lane E had already landed as `M12-W320` in `157fff6`. Two lanes, one
+aggregate, and neither knew until a coordinator sweep read a terminal.
+
+It also asked, reasonably, whether the coordinator messages were genuine before pushing to
+`origin/main` from an index it did not control. That caution was right and cost nothing; the
+duplication cost half an hour.
+
+So, once, before your first landing: reply to the coordinator naming your lane, the path list you
+believe you own, and your number block. If any of the three is not what the coordinator expects, you
+find out before you have written code rather than after.
+
+**And if a coordinator instruction looks unverifiable, verify it rather than stall or comply.** The
+charter is on `origin/main` and so is every coordinator commit:
+`git show origin/main:docs/superpowers/orchestration/2026-08-17-lane-charters.md` and
+`git log --oneline origin/main` settle it in two commands. Pushing to `main` by fast-forward is
+authorized for every lane and is explicitly not one of the three things reserved for the human.
+
+## Addressing a worker: resolve the dispatch id immediately before sending
+
+**A dispatch id is not a stable address for a lane.** It changes every time a lane is re-dispatched,
+and a coordinator that caches one sends into a dead mailbox with a cheerful `ok=true` and no
+delivery. Measured 2026-08-17: a high-priority broadcast about a 60-test regression was addressed to
+`ctx_2c000ad0eae9` after the sweep had already replaced it with `ctx_f76066ef0571`, and the lane
+reported `count: 0` while the coordinator believed it had been told.
+
+So resolve it fresh, in the same breath as the send:
+
+```
+orca orchestration dispatch-show --task <task_id> --json    # read .dispatch.id
+orca orchestration send --to dispatch:<that id> ...
+```
+
+The terminal handle is the durable identity; the dispatch id is not. When a message genuinely must
+arrive -- an arbitration, a stop-work, a regression another lane caused -- prefer
+`orca terminal send --terminal <handle> --enter`, which reaches a busy agent as its next input
+rather than waiting for it to ask for mail.
+
 ## Standing arbitrations
 
 Recorded here when one is made, so no lane has to ask the same question twice.
 
-**2026-08-17, the dead-link red on `main`.** `ensure_image_built` in
+**2026-08-17, the dead-link red now has three causes and one owner each.** Re-measured against
+`main` after the afternoon's landings: `test_lint_dead_links` reports three unreachable symbols, not
+one, and every one of them is the same shape -- a primitive landed without the consumer that would
+call it.
+
+- `sync/forge/github.py:631`, `GitHubForge.pull_request_outcome`. **The coordinator's, landed as
+  `M10-W229`.** Lane E is wiring it to the corpus right now and that landing closes this.
+- `sync/forge/webhook.py:263`, `dispatch_webhook_event`. Lane A's, from M10's event ingress. Closes
+  when the resume-on-pull-request-event path is wired.
+- `src/sync/remediate/sandbox_image.py:113`, `ensure_image_built`. Lane A's, from B97. Still open.
+
+Until all three close, any lane may exclude that one test from its own run **provided it says so
+when reporting**. Nobody should re-diagnose it.
+
+**The rule this is teaching, and it is not new -- `CLAUDE.md` already says a workaround ships with
+the backlog entry that retires it.** Do not land a producer with no consumer. If a primitive must
+land ahead of its caller, baseline it in the same commit and name the work item that removes the
+baseline. Three of these accumulated in one afternoon because each author reasonably judged their
+own piece complete, and the cost lands on the four lanes that then gate around a red they did not
+cause.
+
+**2026-08-17, the original dead-link ruling.** `ensure_image_built` in
 `src/sync/remediate/sandbox_image.py` is reached from nowhere and fails
 `test_lint_dead_links`. Lane C is right that baselining it would hide another session's in-progress
 work, and reached that on its own. **Ruling: leave the red, name `21b99f6` when reporting it, and do

@@ -36,7 +36,7 @@
  * are later simplified.
  */
 
-import { cleanup, render } from "@testing-library/react"
+import { cleanup, fireEvent, render, screen } from "@testing-library/react"
 import { afterEach, describe, expect, it } from "vitest"
 
 import type { WorkflowNode } from "@/api/types"
@@ -225,5 +225,135 @@ describe("the narrative's bracket entries", () => {
 
     const timeEl = container.querySelector("time")
     expect(timeEl).toBeNull()
+  })
+})
+
+/**
+ * The evidence disclosure, Task 11: only the last-reached node opens by default; every earlier
+ * node with evidence is a click away rather than either hidden for good or dumped on screen.
+ */
+describe("the evidence disclosure", () => {
+  it("hides a non-default node's evidence until its button is clicked", () => {
+    render(
+      <NodeSequence
+        nodes={[
+          node({ name: "locate", standing: "ran", evidence: { tier: "Tier 1" } }),
+          node({ name: "patch", standing: "due", evidence: {} }),
+        ]}
+      />
+    )
+
+    // "patch" is the last reached node (due counts as reached) and carries no evidence, so the
+    // only button on screen belongs to "locate" — reached, but not last, and closed by default.
+    expect(screen.queryByText("Tier 1")).toBeNull()
+
+    const button = screen.getByRole("button", { name: /evidence/i })
+    expect(button.getAttribute("aria-expanded")).toBe("false")
+
+    fireEvent.click(button)
+
+    expect(screen.getByText("Tier 1")).not.toBeNull()
+    expect(button.getAttribute("aria-expanded")).toBe("true")
+  })
+
+  it("opens the last reached node's evidence without a click", () => {
+    render(
+      <NodeSequence
+        nodes={[
+          node({ name: "locate", standing: "ran", evidence: {} }),
+          node({ name: "static_verify", standing: "ran", evidence: { verify_ok: true } }),
+        ]}
+      />
+    )
+
+    expect(screen.getByText(/PASS/)).not.toBeNull()
+  })
+})
+
+/**
+ * The evidence-age figure, Task 11: staleness, never liveness, and only when there is both an
+ * unfinished run and a timestamp to measure it from.
+ */
+describe("the evidence age", () => {
+  it("renders beside the due node when the run is unfinished and something is stamped", () => {
+    render(
+      <NodeSequence
+        nodes={[
+          node({
+            name: "locate",
+            standing: "ran",
+            first_seen_at: "2026-08-17T14:00:00.000000+00:00",
+            last_seen_at: "2026-08-17T14:00:05.000000+00:00",
+          }),
+          node({ name: "patch", standing: "due" }),
+        ]}
+        outcome={null}
+      />
+    )
+
+    expect(screen.getByText(/since last evidence/i)).not.toBeNull()
+  })
+
+  it("renders nothing when nothing has been stamped yet", () => {
+    render(
+      <NodeSequence
+        nodes={[node({ name: "locate", standing: "due", first_seen_at: null, last_seen_at: null })]}
+        outcome={null}
+      />
+    )
+
+    expect(screen.queryByText(/since last evidence/i)).toBeNull()
+  })
+
+  it("renders nothing once the run has an outcome, even with a due node and a stamp", () => {
+    render(
+      <NodeSequence
+        nodes={[
+          node({
+            name: "locate",
+            standing: "ran",
+            first_seen_at: "2026-08-17T14:00:00.000000+00:00",
+            last_seen_at: "2026-08-17T14:00:05.000000+00:00",
+          }),
+          node({ name: "patch", standing: "due" }),
+        ]}
+        outcome="opened"
+      />
+    )
+
+    expect(screen.queryByText(/since last evidence/i)).toBeNull()
+  })
+})
+
+describe("the node mechanics disclosure", () => {
+  /**
+   * M13-W227 put this text inside `NodeEvidence` under the title "Reasoning & Strategy", where
+   * it read as reasoning the run recorded. It is static -- the same words for every run of that
+   * node -- so it was rehomed beside the purpose sentence and retitled. This asserts the part
+   * that matters: it is a sibling of the evidence disclosure and never inside it, so opening it
+   * cannot be mistaken for opening what the run actually produced.
+   */
+  it("stays visible while the evidence it sits beside is still collapsed", () => {
+    render(
+      <NodeSequence
+        nodes={[node({ name: "locate", standing: "ran", evidence: { tier: "Tier 1" } })]}
+      />
+    )
+
+    const toggle = screen.getByRole("button", { name: /evidence/i })
+    const panelId = toggle.getAttribute("aria-controls")
+    const panel = panelId === null ? null : document.getElementById(panelId)
+    const mechanics = screen.getByText("How this node works")
+
+    // The panel holds what this run produced. The mechanics text describes how the node works in
+    // general and is true whether or not the run produced anything, so it must sit outside.
+    expect(panel).not.toBeNull()
+    expect(panel!.contains(mechanics)).toBe(false)
+  })
+
+  it("says nothing for a node it does not name, rather than inventing a description", () => {
+    render(<NodeSequence nodes={[node({ name: "some_future_node", standing: "ran" })]} />)
+
+    expect(screen.queryByText("How this node works")).toBeNull()
   })
 })

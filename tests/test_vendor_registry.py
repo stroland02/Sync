@@ -270,12 +270,28 @@ def test_loading_a_staged_vendor_fetches_nothing(monkeypatch, tmp_path):
 
 
 def test_the_ingest_refuses_a_vendor_that_cannot_correlate_a_request(tmp_path, capsys):
-    """A real divergence between the two adapters, surfaced rather than crashed on.
+    """A real divergence between adapters, surfaced rather than crashed on.
     `RequestCorrelator` is deliberately separate from `VendorAdapter` -- its own docstring says
-    a vendor whose traffic nobody instruments has no reason to implement it -- and `TwilioAdapter`
-    does not. An ingest that discovered that as an `AttributeError` mid-fold would report a
+    a vendor whose traffic nobody instruments has no reason to implement it -- and generated
+    adapters do not. An ingest that discovered that as an `AttributeError` mid-fold would report a
     missing method where the answer is that this vendor has no correlation story yet.
     """
+    cache = tmp_path / "cache"
+    cache.mkdir(parents=True, exist_ok=True)
+    (cache / "symbols.json").write_text("{}", encoding="utf-8")
+    payload = tmp_path / "spans.json"
+    payload.write_text(json.dumps({"resourceSpans": []}), encoding="utf-8")
+
+    code = ingest(argparse.Namespace(
+        vendor="anthropic", payload=str(payload), repo_id="r", dsn=DSN, cache=str(cache),
+    ))
+
+    assert code == 2
+    assert "anthropic" in capsys.readouterr().err
+
+
+def test_the_ingest_accepts_twilio_as_correlator(tmp_path, capsys):
+    """TwilioAdapter implements RequestCorrelator, so ingest proceeds over its staged symbols."""
     cache = tmp_path / "cache"
     _stage_twilio(cache)
     (cache / "symbols.json").write_text("{}", encoding="utf-8")
@@ -286,5 +302,5 @@ def test_the_ingest_refuses_a_vendor_that_cannot_correlate_a_request(tmp_path, c
         vendor="twilio", payload=str(payload), repo_id="r", dsn=DSN, cache=str(cache),
     ))
 
-    assert code == 2
-    assert "twilio" in capsys.readouterr().err
+    assert code == 0
+

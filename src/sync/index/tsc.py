@@ -193,6 +193,21 @@ def run_tsc(repo_path: Path, timeout: float = _TSC_TIMEOUT_SECONDS) -> VerifyRes
     return VerifyResult(ok=False, diagnostics=(result.stdout + result.stderr).strip())
 
 
+_NPX_RESOLVE_MARKER = "sync-npx-typescript-resolved.marker"
+
+
+def _marker_path() -> Path:
+    if "FAKE_NPX_CACHE_DIR" in os.environ:
+        return Path(os.environ["FAKE_NPX_CACHE_DIR"]) / _NPX_RESOLVE_MARKER
+    return Path(tempfile.gettempdir()) / _NPX_RESOLVE_MARKER
+
+
+def _lock_path() -> Path:
+    if "FAKE_NPX_CACHE_DIR" in os.environ:
+        return Path(os.environ["FAKE_NPX_CACHE_DIR"]) / "sync-npx-typescript-resolve.lock"
+    return _NPX_RESOLVE_LOCK_PATH
+
+
 def _ensure_typescript_resolved(npx: str, timeout: float) -> None:
     """Force `npx --package=typescript@latest` to exist in the shared cache,
     under a lock, before any caller execs the compiler out of it. This is
@@ -201,17 +216,16 @@ def _ensure_typescript_resolved(npx: str, timeout: float) -> None:
     `resolve_lock` makes at most one process on this host resolve the
     package at a time. The command run under it is a bare `tsc --version`,
     not the real `--noEmit` invocation -- forcing the resolve is all this
-    step is for, and it costs about a second once the cache is warm.
-    Everything after this call runs unlocked: a warm cache only checks that
-    the package is there and execs it, which is safe from any number of
-    processes at once.
-
-    Its own outcome is not checked. If the resolve genuinely fails -- a real
-    network problem, not a race -- the real compile command right after this
-    call hits the same failure and reports it through the ordinary
-    non-zero-exit path below; checking twice would only duplicate that.
+    step is for. Once warm, callers skip the lock entirely so parallel
+    verifications never serialize or starve on it.
     """
-    with resolve_lock(_NPX_RESOLVE_LOCK_PATH, timeout=timeout):
+    marker = _marker_path()
+    if marker.exists():
+        return
+
+    with resolve_lock(_lock_path(), timeout=timeout):
+        if marker.exists():
+            return
         subprocess.run(
             [npx, "--yes", "--silent", "--package=typescript@latest", "tsc", "--version"],
             capture_output=True,
@@ -220,6 +234,11 @@ def _ensure_typescript_resolved(npx: str, timeout: float) -> None:
             errors="replace",
             timeout=timeout,
         )
+        try:
+            marker.write_text("1", encoding="utf-8")
+        except OSError:
+            pass
+
 
 
 def _on_windows() -> bool:

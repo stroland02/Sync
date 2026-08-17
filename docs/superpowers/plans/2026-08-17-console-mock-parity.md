@@ -13,7 +13,7 @@
 ## Global Constraints
 
 - **Integration branch: `console-parity`.** Workers branch from it, gate on it, push their own branch; the coordinator merges. A worker never opens a PR and never pushes `main`.
-- **Work item register:** before starting a task, take the next number in `docs/superpowers/WORKLOG.md` (the series continues from M7-W225; the milestone prefix for this plan is `M14`). Add the row before the first commit; carry the identifier on every commit for the task.
+- **Work item register:** before starting a task, take the next free number from **Lane B's allocated block W260-W279** (`docs/superpowers/orchestration/2026-08-17-lane-charters.md`); the milestone prefix for this plan is `M14`. Add the row before the first commit; carry the identifier on every commit for the task. (Amended 2026-08-17: the plan originally said "continue from W225", which collided with numbers other lanes had landed; W228-W233 were renumbered to W260-W265.)
 - Python is `python`, never `python3`. Packages via `uv` only. Postgres is on port 5433.
 - **Always pass `encoding="utf-8"`** to every `read_text`, `write_text`, `open`, and `subprocess.run(..., text=True)`.
 - `DESIGN.md` is the token authority. No new token, spacing value, or type step without an argued amendment there. Contrast floor 5.05:1.
@@ -538,6 +538,33 @@ export function matchesFilter(facts: CodebaseCardFacts, filter: CodebaseFilter):
 
 ### Task 9: The disposition chart stops spending hue on a categorical axis
 
+> **Refused on inspection, 2026-08-17. No code change. This task is closed as a ruling.**
+>
+> The task inherits M12's invariant — *a chart's colour may not carry a fact its length or position
+> already carries* — and applies it to two charts. **The invariant is right and its precondition is
+> false for both**, which is only visible by reading the charts rather than the plan.
+>
+> `corpus-chart.tsx` draws **one** horizontal stacked bar. Its `yAxis` holds a single category
+> (`["Attempts"]`) with `axisLabel: { show: false }`, so there is no per-category axis and no
+> position that says which disposition a segment is. Length carries how many attempts; hue carries
+> which disposition. Those are two different facts, so collapsing the segments to one colour would
+> delete the second rather than remove a redundancy — the chart would show four indistinguishable
+> runs of one bar.
+>
+> `rung-composition-chart.tsx` is the same shape per detector, and it was flagged by the Task 3
+> measurement walk as an apparent breach of `console-surface.md`'s *the provenance rung stays
+> monochrome*. **Checked rather than assumed:** that rule governs the rung as prose furniture — the
+> badge and the column, where a hue would grade a class of evidence on a good-to-bad scale it does
+> not sit on. The chart's fill is categorical identity, and the "colour never travels alone" bar is
+> met three times over, verified in `rung-composition-option.ts` rather than taken from the
+> docstring: a legend naming every rung (`:36`), per-detector axis labels (`:87`), inline segment
+> labels (`:124-127`), and `absentRungs` stating in words which rungs a detector has none of.
+>
+> **What would have been the defect is already absent from both:** neither takes the green or red
+> series slot for `opened`/`abandoned`, precisely so identity is not read as verdict.
+>
+> Cost if this ruling is wrong: one option-builder change and a test, in either chart, at any time.
+
 **Files:**
 - Modify: `web/src/features/fleet/corpus-chart.tsx` (option builder near `:151`)
 - Test: `web/src/features/fleet/corpus-chart-option.test.ts` (new; mirror the pattern of `web/src/features/detectors/rung-composition-option.test.ts`)
@@ -732,6 +759,23 @@ Mock screen 07's shape: left card "Node by node" (compact sequence, outcome at i
 
 ### Task 13: `/settings` as a destination, not a tenth level
 
+> **Landed independently as `a4a0fd4` (M4-W231), conformance-checked 2026-08-17. Do not rebuild.**
+> Every structural requirement below holds: `DESTINATIONS` is its own array in `lib/routes.ts:394`
+> with no `level` field, `GRAPH_LEVELS` stays at nine, and `tests/test_console_hierarchy.py` passes
+> untouched (4 passed) — which is the proof the task asked for.
+>
+> **One requirement was superseded rather than met, and the supersession is an improvement.** This
+> task specified two `EmptyState` panels stating absence, on the premise that the read surface had
+> no adapter registry. That premise stopped being true: `a4a0fd4` built the surface — `registered_adapters`
+> (configuration read, nothing constructed), `GraphStore.vendor_intake_rollup`, `adapter_inventory`,
+> and `GET /api/adapters` — so the screen renders measured intake instead of an apology for having
+> none. **Ruling:** a task that says "state absence because the data does not exist" is answered
+> better by making the data exist, provided the honesty rule survives the change. It did: the
+> adapter table's governing sentence is "null is not zero" (`adapter-table.tsx:8`), so an adapter
+> the graph holds no `vendor_change` row for reads as never-delivered rather than as a measured
+> zero — the same distinction this plan protects everywhere else. The absence-panel wording in the
+> paragraph below is retained as the record of what was planned, not as an instruction.
+
 **Files:**
 - Create: `web/src/features/settings/settings-page.tsx`
 - Modify: `web/src/lib/routes.ts` (add `DESTINATION_ROUTES`), `web/src/App.tsx`, `web/src/layouts/app-frame.tsx` (the existing "Settings & adapters" footer entry becomes a link), `web/src/layouts/command-palette.tsx` (destinations group)
@@ -747,6 +791,18 @@ Mock screen 07's shape: left card "Node by node" (compact sequence, outcome at i
 - [ ] **Step 5: Commit:** `feat: M14-W<n> /settings exists as a destination and says what it cannot see`
 
 ### Task 14: The palette lists subject-taking routes as lookups
+
+> **Landed independently as `ab5514d` (M7-W230), conformance-checked 2026-08-17. Do not rebuild.**
+> Every requirement below holds. All nine levels plus the `/settings` destination are listed rather
+> than the two zero-param routes the palette used to show; a subject-taking route renders as a
+> lookup carrying `reachedFrom` (`command-palette.tsx:107`) and its route pattern in mono (`:127`,
+> `:225`), never as a link with an empty parameter; `ROUTES` remains the single source, so a new
+> route appears for free. `command-palette.test.tsx` exists and covers it.
+>
+> The only deviation from the text below is naming: this plan called the array `DESTINATION_ROUTES`
+> and the shipped one is `DESTINATIONS`. **Ruling:** the shipped name is kept and this plan is
+> wrong, not the code — renaming a landed export to match a plan is churn with no reader on the
+> other side of it.
 
 **Files:**
 - Modify: `web/src/layouts/command-palette.tsx`

@@ -92,7 +92,7 @@ function names(roles: readonly SignalRole[]): string {
  */
 function AttachmentChip({ attached }: { attached: boolean }) {
   return (
-    <span className="furniture shrink-0 rounded-control border border-line px-field py-0.5 text-meta text-ink-muted">
+    <span className="furniture shrink-0 rounded-control border border-line px-field py-field text-meta text-ink-muted">
       {attached ? "Attached" : "Not attached"}
     </span>
   )

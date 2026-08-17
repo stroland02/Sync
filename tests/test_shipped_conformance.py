@@ -153,12 +153,23 @@ def _stage_twilio(cache_dir: Path) -> None:
     )
 
 
+def _stage_anthropic(cache_dir: Path) -> None:
+    sdk_dest = cache_dir / "sdk_source"
+    shutil.copytree(FIXTURES / "sdk_sources" / "anthropic_python", sdk_dest, dirs_exist_ok=True)
+
+
+def _stage_vercel(cache_dir: Path) -> None:
+    sdk_dest = cache_dir / "sdk_source"
+    shutil.copytree(FIXTURES / "sdk_sources" / "vercel_typescript", sdk_dest, dirs_exist_ok=True)
+    (cache_dir / "sdk_generator.txt").write_text("speakeasy-typescript", encoding="utf-8")
+
+
 # Keyed the way `sync.signals.registry` keys a vendor, and consulted by a lookup that raises
 # rather than by `.get`. A vendor registered without an entry here fails the parametrised test
 # below naming itself; it is never skipped, because a registered adapter that is quietly not
 # checked is the defect this file exists to close.
 #
-# The four configured vendors share `_stage_nothing` and a plausible customer symbol. Their
+# The remaining configured vendors share `_stage_nothing` and a plausible customer symbol. Their
 # adapter answers `operation_for_symbol` with None for every symbol, because `load_vendor`
 # builds it with no staged SDK source -- see `test_which_registered_vendors_actually_resolve`,
 # which records that rather than leaving it to be inferred from a check that passed.
@@ -173,10 +184,10 @@ VENDOR_CASES: dict[str, VendorCase] = {
         known_symbol="twilio.insights.v1.calls.fetch",
         correlation=(("GET", "/v1/Voice/CA1234567890abcdef1234567890abcdef"), "CA1234567890abcdef1234567890abcdef"),
     ),
-    "anthropic": VendorCase(stage=_stage_nothing, known_symbol="anthropic.messages.create"),
+    "anthropic": VendorCase(stage=_stage_anthropic, known_symbol="anthropic.messages.create"),
     "openai": VendorCase(stage=_stage_nothing, known_symbol="openai.responses.create"),
     "cloudflare": VendorCase(stage=_stage_nothing, known_symbol="cloudflare.zones.list"),
-    "vercel": VendorCase(stage=_stage_nothing, known_symbol="vercel.projects.getProjects"),
+    "vercel": VendorCase(stage=_stage_vercel, known_symbol="vercel.aliases.getAlias"),
 }
 
 
@@ -228,7 +239,7 @@ def _built(vendor_id: str, cache_dir: Path):
 # `unbindable_reason`, `cli._binding_lines` prints it before the finding count, and
 # `test_a_registered_vendor_that_binds_nothing_declares_why` below holds the two sides in step.
 # Reporting the gap is not closing it -- closing it needs a staged checkout.
-UNSTAGED_SDK_SOURCE = {"anthropic", "cloudflare", "openai", "vercel"}
+UNSTAGED_SDK_SOURCE = {"cloudflare", "openai"}
 
 _UNRESOLVED_RULE = "the adapter did not resolve the symbol the kit was given."
 

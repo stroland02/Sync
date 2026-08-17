@@ -123,9 +123,9 @@ Every plan in the repository mapped to its governing milestone, scope, and curre
 | [`2026-08-06-sync-m8-m11-resolution-loop.md`](plans/2026-08-06-sync-m8-m11-resolution-loop.md) | **M8–M11: Resolution Loop** | Proposed | Multi-attempt repair state machine, codemod tier cascade, replay sandboxing |
 | [`2026-08-06-sync-repo-context.md`](plans/2026-08-06-sync-repo-context.md) | **M0/M3: Repo Context & AST** | Landed | Multi-language tree-sitter AST extraction, call site binding, symbol maps |
 | [`2026-08-07-console-fidelity-pass.md`](plans/2026-08-07-console-fidelity-pass.md) | **M7: Fidelity Pass (Tasks 1–6)** | Landed (`M7-W183`–`W209`) | 48px top bar, type ramp middle, spanning headers, fed bars, rail hover, table anatomy |
-| [`2026-08-08-console-mock-to-build.md`](plans/2026-08-08-console-mock-to-build.md) | **M7/M12/M4: Ten-Screen Mock to Build** | Landed (Phases 1–6) | Six tasks turning the ten-screen artifact in `docs/console-mock/` into shipped console; ChangeUnitsTable, CodebasesPanel, and codebase-first hierarchy |
-| [`2026-08-08-console-direction-parity.md`](plans/2026-08-08-console-direction-parity.md) | **M7: Console Direction Parity** | In Progress (Phase 1 & B123 landed) | Translating 28 direction screenshots into built features, fact rails, syntax headers |
-| [`2026-08-16-sync-m13-dynamic-visuals-and-telemetry.md`](plans/2026-08-16-sync-m13-dynamic-visuals-and-telemetry.md) | **M13: Dynamic Visuals & Live Telemetry** | Active Plan | Dynamic agent execution stream, thinking disclosures, live node states inspired by DeepSeek Harness, and Remotion motion diffs |
+| [`2026-08-08-console-mock-to-build.md`](plans/2026-08-08-console-mock-to-build.md) | **M7/M12/M4: Ten-Screen Mock to Build** | Partially landed — appended Phases 1-6 only; Tasks 1, 3, 5, 6 open, absorbed by `2026-08-17-console-mock-parity.md` | Six tasks turning the ten-screen artifact in `docs/console-mock/` into shipped console; ChangeUnitsTable, CodebasesPanel, and codebase-first hierarchy |
+| [`2026-08-08-console-direction-parity.md`](plans/2026-08-08-console-direction-parity.md) | **M7: Console Direction Parity** | In Progress (Phase 1 & B123 landed); checkboxes predate reconciliation — tree is authority | Translating 28 direction screenshots into built features, fact rails, syntax headers |
+| [`2026-08-16-sync-m13-dynamic-visuals-and-telemetry.md`](plans/2026-08-16-sync-m13-dynamic-visuals-and-telemetry.md) | **M13: Dynamic Visuals & Live Telemetry** | Superseded in phasing by `2026-08-17-console-mock-parity.md` per spec ruling 2 (no pulse) and 3 (Remotion deferred) | Dynamic agent execution stream, thinking disclosures, live node states inspired by DeepSeek Harness, and Remotion motion diffs |
 
 ### M0 — Walking skeleton, one real pull request · ~90%
 
@@ -313,6 +313,92 @@ confidently instead of refusing.
 
 ## Ready
 
+### B152 — a crashed xdist worker reads as failing tests, and nothing told a lane otherwise — FIXED
+
+**Measured 2026-08-17, twice, on the same tree.** One run reported roughly thirty `F` marks and no
+summary after `[gw0] node down: Not properly terminated`; the same tree run to completion reported
+`1 failed, 3742 passed`. A third reported `60 failed` with two dead workers inside it. The three
+are not distinguishable by counting, and the first two describe the same code.
+
+Every mark printed after a worker dies belongs to a test that never reached a verdict. pytest
+prints it as `F` regardless, so an absence wears a failure's glyph — the exact distinction this
+project refuses to lose anywhere else. A finding carries the rung it came from; absence renders
+apart from zero; a vendor that can bind nothing says so rather than reporting no findings. A run
+whose tally cannot be attributed belongs in the same set, and now is.
+
+`scripts/gate_verdict.py` reads a captured pytest output and answers whether its verdict can be
+believed at all — a prior question to whether the suite passed, and deliberately separate from it.
+A failing suite is still exit 0 here; a run that died is exit 2.
+
+It reads the text rather than hooking pytest, and that is the ruling rather than an omission: the
+runs this exists to catch are the ones that died, and a plugin inside a dead worker reports
+nothing. The output file is the only artifact that survives both shapes.
+
+Three shapes are caught, each measured from a real run rather than imagined: `[gwN] node down`,
+which is the common one and now names the test the worker was running; `INTERNALERROR>` from
+xdist's own bookkeeping, which ends in `no tests ran` and reads as nothing-to-see to anybody
+skimming the last line; and a run with no summary line at all, which is what a killed run leaves.
+
+**Evidence it works rather than merely runs.** The nine tests were shown red before the module
+existed and red again against a sabotaged implementation that ignored the crash. Then it was run
+against the four real captures from this day's gating: the clean run classified `TRUSTWORTHY`, two
+crashed runs `UNTRUSTWORTHY` naming `gw0` and `gw1, gw4`, and the truncated run reported as never
+reaching a verdict. Pointed at a path that does not exist it exits 64 rather than reporting
+success, which is the refusal `lint_dead_links` and `lint_test_skips` already make.
+
+**What it does not do.** It does not stop workers crashing. The cause measured today is starvation
+on the host-wide npx resolve lock (`src/sync/index/npx_lock.py`, Lane D's path, escalated as
+`msg_34a9fc7a0bcd`), and a run of 3,270 seconds against 262 on a quiet host. This makes the lie
+legible; it does not make the run fast.
+
+
+### B151 — `main` is 60 tests red, the remediation graph does not terminate, and a crashed worker hides it
+
+**Filed by Lane C against Lane A's path, not fixed here.** `src/sync/remediate/**` is Lane A's,
+and a lane that owns neither the file nor the milestone should not be the one deciding what the
+graph's stop condition ought to be. Escalated as `msg_5650a184e975`.
+
+**Measured on `origin/main` at `acc0617`**, full suite, `-n 4`:
+`60 failed, 3744 passed, 4 skipped in 991.35s`.
+
+**It is not environmental, which is the first thing anybody meeting it will assume.** Postgres was
+healthy for the whole run — `pg_isready` accepting, ten test databases, one connection of three
+hundred. The charter's own trap note says a run failing in the hundreds is environmental; this one
+is not, and the distinguishing evidence is the failure text rather than the count:
+
+| Count | Failure |
+|---:|---|
+| 23 | `langgraph.errors.GraphRecursionError: Recursion limit of 10007 reached without hitting a stop condition` |
+| 12 | `IndexError: list index out of range` |
+| 3 | `KeyError: 'report_reason'` |
+
+Across `test_migration_recording.py` (26), `test_remediation_graph.py` (19),
+`test_pr_number_recorded.py` (9), `test_replay_stage.py` (3), `test_pipeline_composes.py` (1) and
+`test_python_repository.py` (1).
+
+**Attributed to `12e416a` "M10: durable runs and the human turn".** That commit removes
+`report_reason: str` from `RunState` in `src/sync/remediate/state.py` and rewrites attempt
+accounting: `attempt_index` becomes the monotonic counter while `static_attempts` and `ci_attempts`
+keep the routing bounds. The `KeyError` names the removed key directly. The recursion is the same
+change seen from the routing side — the graph's terminal conditions are read from counters that no
+longer mean what the routers assume.
+
+**Two gate defects the same run exposed, and these two are Lane C's own.**
+
+A crashed xdist worker reads as mass failure. `worker 'gw0' crashed while running
+tests/test_remediation_graph.py::test_a_patch_that_only_typechecks_with_untracked_files_never_reaches_push_branch`
+emitted a cascade of `F` marks that are not failures of the tests they are printed against. An
+earlier run of the same tree, cut off at 96%, showed roughly thirty such marks and no summary,
+which read as a catastrophic regression and was not one. This is the symptom the charter attributes
+to `-n auto`, now measured at `-n 4`, so the recommended setting is not a cure.
+
+The same test alone exceeds **600 seconds**. The full suite is 991s against the eight-to-fourteen
+minutes the charter already calls the largest tax in the workspace.
+
+**Closes when:** the graph reaches a stop condition and those 60 tests pass on `main` (Lane A), and
+a crashed worker is reported as a crashed worker rather than as failing tests (Lane C).
+
+
 ### B135 — a customer's repository could configure the patch agent, and the gate sat downstream of it — FIXED, and the entry stays for what it says about the gate
 
 **B135, B133 and B134 were filed as B131, B129 and B130 and renumbered on landing.** Three live branches -- `b129-truncate-corpus`, `b130-day-one-path`, `b131-generated-vendors` -- plus `b132-gate-hang` already held 129 through 132 when these were written, and `main`'s copy of this file topped out at B128, so the numbers read as free from every view that could see them. That is the failure this file's own opening rule describes, and `git log --all --oneline --grep` does not catch it either when the competing claim is a branch name rather than a commit message. The cheap check that would have: `git worktree list` and `git branch -a`, read for the number rather than for the work.
@@ -474,6 +560,125 @@ illustrate.
 
 The screen is built and honest without it. This is the row that lets it answer the question it was
 drawn to answer.
+
+### B150 — CI was red on `main`, and the one run on a schedule reported success over a failing suite — FIXED
+
+**Filed as B133, then B137, and renumbered twice.** `docs/superpowers/BACKLOG.md` already held B133
+through B136, exactly the collision B135's own opening note describes, so this was written as B137 —
+the next free number by `git log --all --oneline --grep` and by this file. That was the old rule and
+it was the wrong one: the lane charters landed the same day pre-allocate B137-B139 to the
+coordinator, and a number that is free today is not a number nobody else is going to take. Renumbered
+into Lane C's own block, where nothing else can claim it. Its work item moved from `CI-W233` to
+`CI-W280` for the same reason, and that one had already collided with the coordinator's `M0-W233`.
+
+**What was red.** Run `32024607194` on `04ece58`: `test` failed, `serial` failed, `web` passed,
+`coverage` skipped. Steps ran, so this is not B112's "job never acquired" signature.
+
+The `test` job last succeeded on 2026-08-08 21:49 (`97273e6b`, run `31280233194`), and **156 commits
+separate that sha from `04ece58`**. No push run touched `main` at all between then and 2026-08-17
+02:38 — the fast-forward `main` is supposed to take at least daily did not happen for eight days —
+and every one of the eleven push runs since has stopped at `Dead links`, which is step four of
+seventeen. So the suite, the corpus score and the binding floors have not run in that job since
+2026-08-08. What did run in that window was the nightly, and cause 5 below is what the nightly was
+worth.
+
+Five causes, and the last of them is the one that made the other four invisible.
+
+**1. A `gh` stub that ignored the flag the script depends on.** `M0-W230` made
+`scripts/bootstrap_tools.sh` choose its release asset per platform through `scripts/oasdiff_asset.sh`.
+That fix is correct and stays. What it exposed is that `tests/test_oasdiff_pin.py` stubbed
+`gh release download` with a recorder that copied one fixed, Windows-named archive and never read
+`--pattern`. On Windows the requested asset and the fixture's filename agree, so all three
+parametrisations passed here and every one failed on Linux with
+`tar (child): ./*_linux_amd64.tar.gz: Cannot open`. **This is the defect class B130 existed to
+close, reproduced one layer down: a test whose fixture hardcodes one platform is not testing the
+platform mapping, it is testing that platform.** Closed by a stub that reads `--pattern` out of its
+own argv, glob-matches it against a release directory publishing all five assets, and fails when
+none match — which is what real `gh` does. The bootstrap test now asserts the pattern that reached
+`gh` and the binary name that landed in `tools/`, both read from `oasdiff_asset.sh` rather than
+spelled out, so the mapping is exercised on whatever platform runs it.
+
+**2. The corpus was fetched after the suite that reads it.** `scripts/fetch_corpus_repositories.py`
+sat four steps below `Tests` in the `test` job and was absent from `serial` and `coverage` entirely,
+so `sync.rehearse.fixture` refused by name on every runner —
+`Corpus repository 'furever' is missing at /home/runner/work/Sync/Sync/.cache/corpus/furever`.
+Closed by moving the fetch above the suite and adding it, with an `actions/cache` entry keyed on
+`benchmark/corpus/repositories.yaml`, to all three jobs that run pytest. The cache saves the network
+round trip and nothing else: the script still materialises every tree and still checks it against
+the digest the manifest pins, so a hit is verified rather than trusted. `sync rehearse` is the only
+end-to-end exercise of the pipeline that opens no pull request, so skipping these was not an option.
+
+**3. A checkpointer migration ledger left behind by a module that never uses the checkpointer.**
+`tests/test_rehearse_smoke.py` stands its own `checkpoints` table up by hand and dropped three
+tables on teardown — `checkpoints`, `checkpoint_blobs`, `checkpoint_writes` — leaving
+`checkpoint_migrations`. `PostgresSaver.setup()` reads the highest version recorded there and
+applies only the migrations above it, so every later `setup()` on that database reported success and
+did nothing. The module sorts before `tests/test_seed_console.py` and shares its database, so under
+`-n0` all fourteen of that file's tests met
+`psycopg.errors.UndefinedTable: relation "checkpoints" does not exist` on the first INSERT. **The
+`serial` job is what caught this, which is exactly what `2026-07-30-ci-does-not-run-serial.md` built
+it for**: one test breaking a later test in the same process, invisible to `-n auto` unless the
+scheduler happens to put both files in one worker. Closed by dropping the fourth table, and pinned
+by a test that asserts a later `setup()` can rebuild what the helper drops.
+
+**4. Both B97 positive controls were disarmed on Linux, and a disarmed positive control proves
+nothing.** `tests/test_patch_sandbox.py` reached the host's listener at the literal
+`host.docker.internal`. Docker Desktop publishes that name; a plain Linux Docker Engine does not,
+unless a container is created with `--add-host=...:host-gateway`. So on a GitHub runner the
+exfiltration process connected to nothing, no byte reached the listener, and both tests failed with
+`assert 0 > 0` — **neither passing honestly nor failing honestly. The two tests that are the only
+evidence Sync's container network boundary holds were, on Linux, measuring nothing at all.** Closed
+in the test rather than in `src/sync/remediate/sandbox.py`: adding `--add-host` to
+`ephemeral_container` would have given a sandboxed install phase a name for the host, and widening
+the thing under measurement to make the measurement work is the wrong direction on a security
+boundary. `host_addresses` is a pure function over `socket.gethostbyname('host.docker.internal')`
+and the container's own `/proc/net/route`, returning the resolved name first and the default gateway
+second — ordered, because under Docker Desktop the gateway is the virtual machine and not the host
+the listener is bound on. It is unit-tested with both backends' inputs for the reason
+`scripts/oasdiff_asset.sh` is a function: this machine can only ever execute one branch. The
+never-networked probe now refuses **every** candidate rather than one name, which is a stronger
+claim than it made before: unreachable because there is no route, not unreachable because a name did
+not resolve.
+
+**5. The nightly could not fail, and it was the only run on a schedule.** `test` and `web` both
+carry `if: github.event_name != 'schedule'` and `serial` runs only on a push, so a scheduled run
+executes `coverage` alone. That job captured pytest's exit code and re-raised only when it exceeded
+1 — and a failing test is exactly 1. **Measured, not inferred: the nightly of 2026-08-17
+(`31994303030`, on `80f193c`) is recorded `success` and its own log ends
+`5 failed, 3632 passed, 7 skipped`** — the three corpus refusals of cause 2 and both disarmed
+positive controls of cause 4, reported as a green tick. Closed by letting pytest's exit code stand.
+**The coverage number is still not gated and nothing here asks it to be**: no `--cov-fail-under` is
+passed anywhere, so coverage cannot produce an exit code of its own; what may not be discarded is
+the suite's own verdict, which is not a quality threshold.
+`2026-07-27-sync-benchmark-gates.md`'s refusal is intact.
+
+**What the nightly covers now:** the Python suite under `-n auto` against the service database, with
+coverage recorded. Not the lints, not the corpus score and its floors, not `web` — each of those
+runs on the push that put `main` where the nightly found it, and that division is deliberate and
+unchanged.
+
+**What keeps it closed.** `tests/test_ci_gates_what_it_runs.py` parses the workflow and asserts
+three things of every job that runs pytest: it fetches the corpus at an earlier step index, it does
+not put pytest behind `||` or compare its exit code against a floor, and at least one such job is
+selected on `schedule`. Positions rather than presence, for the reason
+`tests/test_ci_stages_the_corpus_inputs.py` already gives: a step that exists in the wrong place
+reads as a step that is there. The `if` reading is a substring match over the three shapes this
+workflow uses, not a GitHub expression evaluator, and a fourth shape would need it widened.
+
+**What is still red, deliberately.** Two dead-link violations —
+`src/sync/forge/github.py:631` (`GitHubForge.pull_request_outcome`) and
+`src/sync/remediate/sandbox_image.py:113` (`ensure_image_built`, landed in `21b99f6`). Both belong to
+a session that is mid-way through wiring them. Neither was baselined: `scripts/dead_links_baseline.txt`
+exists to record what is *accepted* as unreachable, and baselining half-wired work in progress hides
+it, which is the opposite of what the baseline is for. **A truthful red is the correct outcome
+here** — it closes when the callers land, not when the list grows.
+
+**One structural observation, filed rather than fixed.** Steps in a GitHub job stop at the first
+failure, so `Dead links` failing at step four is why the suite, the corpus score and the binding
+floors have not run in the `test` job since 2026-08-08. That ordering is deliberate — a lint failure
+is a fact about the source and needs no database — but it means one unreachable symbol hides every
+other signal the job carries. Splitting the lints into a job of their own would decouple them; that
+is a change to the workflow's shape and is not made here.
 
 ### B90 — The console is one idiom repeated eight times, and the resources to fix it are already installed
 
@@ -1726,12 +1931,16 @@ ignored in silence.
 
 **What is left, and none of it blocks the gate:**
 
-- **The container tests have never run in CI and may not pass there.** They reach the host through
-  `host.docker.internal`, which Docker Desktop provides and a plain Linux daemon does not without
-  `--add-host=host.docker.internal:host-gateway`. `bc04f14` landed them at 22:17 UTC on
-  2026-08-16; the last CI run that actually executed anything was 04:18 UTC that day, and the three
-  since are B112's phantom failures with every job blank. Unknown, not broken — and adding the flag
-  touches `sync.remediate.sandbox`, which is B97's, so it wants its own change.
+- ~~**The container tests have never run in CI and may not pass there.**~~ **Answered by B150, and
+  all three clauses were wrong.** They did run, they did not pass, and the fix needed no change to
+  `sync.remediate.sandbox` at all. The prediction about `host.docker.internal` was right — a plain
+  Linux daemon does not provide it — but the consequence was worse than "may not pass": both
+  positive controls failed, so the tests were proving *nothing* on Linux rather than failing
+  honestly. The fix is in the test: it now tries the resolved name and then the container's own
+  default gateway, and the never-networked probe refuses every candidate rather than one name,
+  which is a stronger claim than the original made. Kept struck through rather than deleted
+  because the reasoning that produced a wrong prediction is worth reading beside the measurement
+  that corrected it.
 - **The churn itself is untouched.** Forty `DROP DATABASE` per run is the cost that the tuning
   makes affordable rather than removes; a suite that shared one aged database across
   `test_schema_convergence` would issue far fewer.
@@ -3265,3 +3474,27 @@ or driver when every write systematically failed (as occurred with B129).
 **Closed in `M8-W218`**: `make_recorder` now returns `CorpusRecorder`, tracking `.attempt_count`, `.success_count`, `.failure_count`, and `.errors` without raising or breaking customer runs. Tested in `tests/test_migration_recording.py`.
 
 
+
+### B145 — Context savings is a model presented as a measurement, on one branch only
+
+Found by the Gate 3 screen pass (`reports/2026-08-17-gate-3-screen-pass.md`, `M14-W275`), which
+cleared every screen on the question it asks — does anything here assert a number nothing computed —
+and surfaced this beside it.
+
+`context_savings` is computed rather than invented, so it is not a Gate 3 failure:
+`sync.dashboard.graph_views` derives it as `len(rows) * _TOKENS_PER_AVOIDED_READ` (`:467`) and
+`total * _TOKENS_PER_AVOIDED_READ` (`:585`). But no tokens are ever counted. The figure is a row
+count multiplied by a fixed per-read constant, and the console discloses that on one branch and not
+the other: when the count behind it stopped early, `web/src/components/provenance.tsx:99-104` says
+in full that the figure is a floor rather than the true savings; when the count completed, the
+reader gets a bare `1,200 tokens` with the constant and the modelling invisible.
+
+The asymmetry is the defect. A reader who never triggers a bounded scan has no way to learn that
+this figure is modelled at all, and "tokens" reads as a measured quantity in a console whose whole
+argument is that it distinguishes what was measured from what was inferred.
+
+**What closes it:** the unbounded branch states the same qualification the bounded one already
+does — that the figure is derived from a count and a per-read constant rather than from counted
+tokens. The wording is a judgement for whoever takes it; the constant should be nameable from the
+screen. Alternatively the field stops being expressed in tokens and is expressed as what it
+actually is, a count of avoided reads, which needs no qualification at all and is the stronger fix.

