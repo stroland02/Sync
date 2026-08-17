@@ -100,3 +100,8 @@ src/sync/remediate/sandbox_image.py:ensure_image_built
 # external input), not something to wire in as a side effect of closing a dead-link entry.
 src/sync/forge/webhook.py:dispatch_webhook_event
 
+# `reconcile_pull_request_outcomes` (M11) evaluates benchmark PR outcomes against ground truth.
+src/sync/benchmark/reconcile.py:reconcile_pull_request_outcomes
+
+# `GraphStore.intake_attempts` (B136) query method for intake attempt audit records.
+src/sync/graph/store.py:GraphStore.intake_attempts
