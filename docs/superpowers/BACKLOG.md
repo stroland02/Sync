@@ -621,6 +621,42 @@ This ruling does not build the proxy -- that is still separate, undesigned work,
 2 of B97's remaining four. What it retires is the ambiguity between three options; whoever
 designs the proxy next designs it to inject the credential rather than to pass one through.
 
+
+### B157 — Telemetry attachment contract: distinguishing never-measured from measured-zero at repository level — Lanes D, E, B
+
+**Context & Discovery (2026-08-17, M5-W311 stock-take & coordinator dispatch):**
+`CLAUDE.md` and the console architecture require that *never-measured* is rendered strictly apart from
+*measured-zero*. Today, `observed_call` in Postgres records only individual correlated OTLP spans.
+When a repository has never had telemetry attached or configured, `store.observed_calls_count(repo_id)`
+returns `0`. When a repository has telemetry actively configured and streaming, but experienced zero
+calls to a specific vendor (e.g. quiet service), `observed_calls` also returns `0` (or `None`).
+Without an explicit attachment state on repository context, the data model and API transport collapse
+"telemetry unattached / never measured" onto "measured zero calls", and `/api/codebases/:id` routes
+404 on unattached repositories (`B147`).
+
+**The Contract Definition:**
+
+1. **Schema & Field (`Lane E` ownership):**
+   - Column: `telemetry_attached_at: TIMESTAMPTZ | NULL` added to `repo_context` table in `schema.sql`.
+   - Python Model: `telemetry_attached_at: datetime | None = None` on `RepoContext` (`src/sync/core/models.py` / `sync.graph.store`).
+   - API Surface: Exposed in `/api/repositories` and `/api/codebases/:id` payloads as `telemetry_attached_at: string | null` (ISO 8601 UTC timestamp or `null`).
+
+2. **Writer & Lifecycle (`Lane E` / `Lane D`):**
+   - Written (`SET telemetry_attached_at = NOW()`) when an OTLP batch for `repo_id` is ingested via `sync.telemetry.ingest.ingest_payload` or when a customer repository attaches an active telemetry source/token in `sync.cli` / API.
+   - Remains `null` when a repository is indexed statically only and has never attached an OTLP telemetry pipeline.
+
+3. **Consumer & Rendering Contract (`Lane B` console ownership):**
+   - When `telemetry_attached_at` is `null`:
+     - The telemetry panels on Codebase and Fleet screens MUST NOT render "0 calls observed" or a bare zero count.
+     - MUST render the **never-measured** state: *"Telemetry unattached — No runtime traffic observed for this repository"* with guidance/link to attach OTLP telemetry.
+     - In reachability and coverage tables, `observed_calls` MUST be `null` (not `0`).
+   - When `telemetry_attached_at` is non-null (timestamp present) AND measured spans count is 0:
+     - MUST render the **measured-zero** state: *"Active — 0 calls observed since <last_attached_or_polled_at>"*.
+     - In reachability and coverage tables, `observed_calls` MUST be `0` (an honest, active measurement of zero traffic).
+   - Resolves `B147`: `/api/codebases/:id` returns 200 with `telemetry_attached_at: null` instead of 404ing for repositories without telemetry.
+
+
+
 ### B165 — a customer's own file writes unfenced text into the patch prompt — Lane A — CLOSED
 
 **Found 2026-08-17 auditing the threat model against the tree**
