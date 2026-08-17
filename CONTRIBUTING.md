@@ -99,6 +99,17 @@ uv run python scripts/fetch_corpus_repositories.py   # the frozen corpus; once p
 uv run pytest                                 # run it once before committing
 ```
 
+### Bringing the console up against real data
+
+```bash
+uv run python scripts/dev_up.py            # checks every precondition, then starts the loop
+uv run python scripts/dev_up.py --check    # report only, start nothing
+```
+
+It refuses to start anything until every precondition holds, which is deliberate: a dev server
+pointed at an API that never came up presents as a console bug, and the person debugging it is
+debugging the wrong component. Each missing precondition names the command that supplies it.
+
 Python is 3.12 and the interpreter is `python`, never `python3`.
 
 The console is a second toolchain and it installs separately. Run `npm install` in `web/` before
