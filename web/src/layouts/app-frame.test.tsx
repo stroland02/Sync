@@ -372,11 +372,17 @@ describe("the sidebar carries the destinations", () => {
       (el) => el.textContent
     )
     // Every level, grouped by region in registry order.
+    // Deduped WITHIN a region, not across them. A level can legitimately appear in both: a vendor's
+    // detail is reachable fleet-wide while the vendors list is scoped to a repository, so
+    // "API Services" heads a group in each region. Deduping globally would assert the sidebar drops
+    // the second one, which would make a whole region's screen unreachable.
     const expected: string[] = []
     for (const region of REGIONS) {
+      const inRegion: string[] = []
       for (const route of routesOf(region)) {
-        if (!expected.includes(route.level)) expected.push(route.level)
+        if (!inRegion.includes(route.level)) inRegion.push(route.level)
       }
+      expected.push(...inRegion)
     }
     expect(labels).toEqual(expected)
   })
