@@ -395,6 +395,34 @@ abandoned-run workflow screen is unit-tested but has never been rendered. Two th
 *against*: restyling, because every measured bar is clear and nothing is asking for it, and the
 second drawer, which still has one consumer.
 
+## The day-one coverage boundary a design partner will meet first
+
+`reports/2026-08-17-signals-index-beta-stock-take.md`. Lane D walked its own paths against what a
+partner experiences on day one and found one boundary that is honest by design and still needs
+saying out loud.
+
+**A partner who wraps the SDK will see fewer static bindings than they expect.** If
+`lib/stripe.ts` exports a constructed client and application files import that wrapper, single-file
+AST indexing does not bind those call sites. That is deliberate: the three-rung architecture exists
+precisely so that what cannot be statically bound is captured by runtime telemetry at the `observed`
+rung rather than fabricated as an uncertain `static` link. Lane D's verdict is keep as designed, and
+it is right.
+
+**But it composes with something.** The `observed` rung is now real -- correlators exist on both
+coded vendors and `cli.py` reaches them -- and it only produces bindings if the partner has wired
+telemetry. A partner with wrapper modules *and* no telemetry configured gets lower coverage than one
+without wrappers, from the same codebase, and nothing about that is their fault or visible to them.
+The question that follows is a console one and it is the same distinction this product is built on:
+**does any screen distinguish "this repository has no call sites here" from "this repository's call
+sites are behind an abstraction the static rung cannot follow, and no telemetry has been attached"?**
+Unmeasured is not zero, and coverage is exactly where a partner would misread one as the other.
+
+Everything else in that stock-take is verified working: both language indexers, both coded vendor
+adapters, the generated-spec adapters with their declarative `NO_MANIFEST` / `NO_SPECIFICATION` /
+`ONE_DOCUMENT` states, the closed intake vocabulary separating never-asked from nothing-new and
+clean-decline from fetch-failure, and rate limits and vendor downtime classified into reason codes
+without aborting a scan.
+
 ## The three decisions that are the human's, named now
 
 None of these blocks a lane today. Each will block a gate, and naming them now means nobody
