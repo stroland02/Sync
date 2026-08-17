@@ -105,6 +105,14 @@ records that v1 was chosen over v2 precisely because its literal values are the 
 `web/src/index.css` declares. The token contract holds across the drawing and the build, which
 means the remaining differences are about *composition*, not about palette.
 
+### The finding as first written — **superseded by the second run below, and left for the record**
+
+> The two sections that follow reported Fleet as far less composed and far wordier than the mock.
+> **Both conclusions were wrong**, for two measurement reasons found by extending the eval to every
+> page: the console under test had three failed panels, and `sideBySide` was comparing markup
+> technique rather than composition. The corrected numbers are at the end of this file. They are
+> kept rather than deleted because the wrong version is the intuitive one.
+
 ### The finding: Fleet is four side-by-side regions against the mock's seventeen
 
 This is the owner's original complaint — *"the layout is one vertical stack where it should be a
@@ -177,3 +185,89 @@ the app through `create_app` rather than executing `main()`.
 
 The eval proceeded by starting the app through `uvicorn sync.api.__main__:app_factory --factory`,
 which bypasses the broken function without touching the file.
+
+---
+
+# Second run: page by page, and two corrections that change the conclusion
+
+**Appended 2026-08-17 after extending the eval to walk all seven screens.** The first run compared
+one page. The plan asks for page-by-page, and doing it surfaced two measurement defects whose
+correction reverses the headline finding. Both are recorded because the wrong version is the
+intuitive one and somebody will re-derive it otherwise.
+
+## Correction 1: the console under test was half broken, and the numbers said so
+
+`serve-console.mjs` gates everything including `/api`. Chrome uses credentials embedded in a
+navigation URL for the document but **does not attach them to the page's own `fetch` calls**, so
+three panels rendered "the request never reached a server" and the eval measured that.
+
+The effect was large and in both directions — error prose counted as console prose, and failed
+panels counted as missing composition:
+
+| page | before (unauthenticated) | after |
+|---|---|---|
+| observe `sideBySide` | 1 | 6 |
+| observe `cells` | 0 | 50 |
+| remediation `sideBySide` | 4 | **18** |
+| settings `cells` | 0 | 41 |
+
+The eval now sends `Authorization` through `Network.setExtraHTTPHeaders` and re-navigates. **This is
+the second false result this script produced before being trusted**, after the mid-compile one, and
+both were caught by a number looking implausible rather than by the script noticing.
+
+## Correction 2: `sideBySide` compares markup technique, not composition
+
+The mock contains **zero `<table>` elements and 33 `grid-template-columns`** — it draws every table
+as CSS-grid rows. The built console uses semantic `<table>`, whose `<tr>` is neither grid nor flex.
+So each mock data row counts as a "side-by-side placement" and each of ours counts as nothing.
+
+**Fleet's 17-against-4 was almost entirely that.** Chasing it would mean abandoning table semantics
+— worse for assistive technology, on a console that landed focus management this same day — to move
+a number nobody reads. That is optimising a proxy, which `M0-W269` warns about in the same document
+that commissioned this eval.
+
+`regionsBeside` is the honest form: how many *panels* sit beside another panel, with table-internal
+rows excluded by construction. A child counts as a region when it is a landmark, carries its own
+heading, or is drawn as a card.
+
+| page | mock | built | |
+|---|---|---|---|
+| fleet | 0 | **2** | built is more composed |
+| codebase | 2 | 0 | **built is behind by 2** |
+| api-services | 1 | **4** | built is more composed |
+| signals | 1 | 0 | built is behind by 1 |
+| observe | 1 | 0 | built is behind by 1 |
+| remediation | 1 | 1 | same |
+| settings | 1 | 1 | same |
+
+**The premise that the built console is far less composed than the drawing is not supported.** At
+panel level the mock places between zero and two regions beside each other; the console places
+between zero and four. The real gaps are three pages behind by one or two pairings.
+
+## Fleet: both halves of the assigned fix are already closed, measured
+
+The dispatch asked to close Fleet's composition and prose gaps against v1. Measured, there is
+nothing to close:
+
+- **Composition.** Fleet `regionsBeside` is 2 against the mock's 0. The console already exceeds the
+  drawing at panel level.
+- **Prose.** Fleet renders 915 characters against the mock's 340 — but **580 of those are the
+  protected honesty sentences** (the staleness-not-liveness sentence, absence-is-not-zero, the
+  three-attempts-one-finding grain, and the composite-health-figure refusal). Non-protected prose is
+  **335 characters against the mock's 340.**
+
+So Fleet's *discretionary* prose already matches the drawing to within five characters, and the
+entire remaining difference is sentences that may not be shortened. **No change made, and none is
+warranted.** Cutting to reach 340 would mean cutting a distinction, which is forbidden as firmly as
+deleting one.
+
+## What the eval says to do next, by measured gap
+
+1. **`codebase`** — behind by 2 panel pairings, the largest real composition gap.
+2. **`signals`** — behind by 1, and carrying 1663 characters of prose against 308, the largest prose
+   gap on any page. Worth checking how much of that is protected before touching it, exactly as
+   Fleet turned out to be.
+3. **`observe`** — behind by 1.
+
+Type range and heading differences remain deliberate and recorded above: the console clears a 3.4:1
+bar the mock does not, and says "Repositories" where the v1 mock still says "Fleet".
