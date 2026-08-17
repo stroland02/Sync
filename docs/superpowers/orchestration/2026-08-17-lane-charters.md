@@ -43,10 +43,17 @@ Take your numbers from your own block. Nobody else will.
 |---|---|---|
 | A -- remediation loop | W240-W259 | B140-B144 |
 | B -- console | W260-W279, W340-W359 | B145-B149, B173-B182 |
-| C -- pipeline health | W280-W299 | B150-B154 |
+| C -- pipeline health | W280-W299, W360-W379 | B150-B154, B183-B192 |
 | D -- signals and adapters | W300-W319 | B155-B159 |
 | E -- graph, dashboard, API | W320-W339 | B160-B164 |
 | Coordinator | W233-W239 | B137-B139 |
+
+**A block that can run out has a collision scheduled in it.** Five backlog numbers per lane was
+too few by the middle of the first day: Lane B exhausted `B145-B149` and its next number landed
+on Lane C's `B150`, and Lane C exhausted `B150-B154` a few hours later and had to stop and ask.
+Extensions are granted in tens, not fives. **When you are two numbers from the end of a block,
+ask for the next one before you need it** -- running out mid-unit costs an iteration, and taking
+the next number anyway costs a renumber and everything that cites it.
 
 Use them in order. The milestone prefix is whatever the work actually belongs to, so `M10-W241` and
 `M11-W242` from one lane is normal and correct.
