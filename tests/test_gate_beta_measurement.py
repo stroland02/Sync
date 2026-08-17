@@ -152,6 +152,62 @@ def test_a_green_pull_request_meets_the_first_half_but_not_the_gate_without_resu
     assert any("resume" in line.lower() for line in verdict.evidence)
 
 
+def test_a_resume_path_that_could_not_be_read_is_not_a_resume_path_that_is_absent() -> None:
+    """`CI-W365`: the fourth instance of the class `B183`, `B184` and `B185` each turned out to be.
+
+    `_resume_path_exists` read two source files and returned `False` on `OSError`, so a file it
+    could not open reported the resume path as **missing**. Gate 1 then failed with the evidence
+    line "no resume path, so a review comment leaves the run parked forever" -- a specific claim
+    about the code, made on the strength of not having read it.
+
+    This script already argues the opposite of itself six hundred lines earlier, for the database:
+    "an unreachable database says nothing about whether a run ever closed the loop." The same
+    sentence is true of an unreadable file.
+    """
+    verdict = gate_one_loop_closes(
+        _Store([_outcome(pr_number=41, ci_result="passed")]), resume_built=None
+    )
+
+    assert verdict.status is CANNOT_TELL
+    assert any("could not" in line.lower() for line in verdict.evidence), (
+        f"the verdict has to say it failed to look, not that it looked and found nothing: "
+        f"{verdict.evidence}"
+    )
+
+
+def test_an_unreadable_source_file_reports_unknown_rather_than_absent(tmp_path, monkeypatch) -> None:
+    """The probe itself, asked about a tree whose files it cannot read.
+
+    Pointed at a directory where neither file exists, which is the `OSError` the handler was
+    written for. `None` is the honest answer; `False` is a statement about the code.
+    """
+    import scripts.beta_gates as beta_gates
+
+    monkeypatch.setattr(beta_gates, "REPO_ROOT", tmp_path)
+
+    assert beta_gates._resume_path_exists() is None
+
+
+def test_a_source_file_that_is_read_and_lacks_the_path_still_reports_absent(
+    tmp_path, monkeypatch
+) -> None:
+    """The guard, so the fix above cannot become "never say no".
+
+    A tree whose files exist and genuinely do not carry the resume path must still report
+    `False` -- otherwise the gate could never fail on this half and the change would have
+    replaced a wrong answer with no answer.
+    """
+    import scripts.beta_gates as beta_gates
+
+    (tmp_path / "src" / "sync" / "remediate").mkdir(parents=True)
+    (tmp_path / "src" / "sync" / "forge").mkdir(parents=True)
+    (tmp_path / "src" / "sync" / "remediate" / "durable.py").write_text("", encoding="utf-8")
+    (tmp_path / "src" / "sync" / "forge" / "webhook.py").write_text("", encoding="utf-8")
+    monkeypatch.setattr(beta_gates, "REPO_ROOT", tmp_path)
+
+    assert beta_gates._resume_path_exists() is False
+
+
 def test_a_green_pull_request_and_a_resume_path_meets_gate_one() -> None:
     verdict = gate_one_loop_closes(
         _Store([_outcome(pr_number=41, ci_result="passed")]), resume_built=True

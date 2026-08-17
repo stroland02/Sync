@@ -550,6 +550,8 @@ measured 2.74s, and still fails immediately on the first.
 the wrong event) and `B184` (a silent daemon read as an absent one): **"we could not check yet"
 collapsed onto "there is nothing here."** Worth carrying as a class, not three separate fixes.
 
+**A fourth was then found by looking for it, and that is the argument for treating it as a class.** `CI-W365` audited this lane's surface for the same shape and found `scripts/beta_gates.py::_resume_path_exists` returning `False` on `OSError` -- an unreadable file reported as a missing resume path, which made Gate 1 fail with a specific claim about code it had not read. The same script argues the opposite of itself six hundred lines earlier for the database it cannot reach. Fixed there; the audit's other candidates were each checked and found deliberate.
+
 
 ### B174 — `extract_credential` cannot tell malformed base64 from non-UTF-8 credentials — Lane E
 

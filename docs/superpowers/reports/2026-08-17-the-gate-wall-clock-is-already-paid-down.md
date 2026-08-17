@@ -28,6 +28,20 @@ against a host running six concurrent agent sessions.
 Median about 175s for roughly 4000 tests. The spread is host load from the other five sessions, not
 the suite.
 
+**Amended the same day, by a ninth run that does not fit: 411.98s, 4002 passed.** Same tree, same
+command, same worktree — roughly 2.4 times the median and nearly double the range's top. Recorded
+here rather than left out, because a range quoted to correct somebody else's figure has to survive
+its own counterexample.
+
+It does not change the conclusion and it sharpens it. Nothing about the suite changed between the
+eighth run and the ninth; what changed is how many of the six sessions were running at once, and
+the same contention this lane measured directly elsewhere today — `docker version` at 432–2552ms
+against roughly 100–200ms idle. **So the honest statement is that the suite costs about three
+minutes and the host can multiply that by two or three when every lane runs at once.** Still far
+from the eight-to-fourteen minutes the charter carried, still throughput-bound, and still with no
+hotspot to attack — but a lane that sees seven minutes is not seeing a regression, and this
+paragraph exists so nobody diagnoses one.
+
 ## Why there is no single fix left, and this is the part that decides the item
 
 `os.cpu_count()` is 12, so `-n auto` runs twelve workers. At 167s wall clock that is roughly **2000
