@@ -78,7 +78,31 @@ fixtures, for merge rate and at least three of the five quality axes. Merge rate
 `pull_request_outcome` wired to something that updates the corpus; the rest need runs to have
 happened.
 
-**Gate 3 -- SIGNED 2026-08-17.** Evidence:
+## Measured, not asserted: `uv run python scripts/beta_gates.py`
+
+**As of 2026-08-17, 0 of 4 met, 2 cannot be told.** The gates stopped being a coordinator's prose
+the moment `CI-W289` landed, and the first thing the tool did was contradict this document.
+
+- **Gate 1 -- NOT MET.** Four real attempts in the corpus, none with a pull request that went green.
+  The resume-on-review-comment path *is* built; what has never happened is `B7`.
+- **Gate 2 -- CANNOT TELL.** Zero of five axes carry samples; one pull request opened, none merged.
+  The tool refuses to call that a failure, correctly: unmeasured is absence rather than a value of
+  zero, so there is nothing here to pass or fail yet.
+- **Gate 3 -- CANNOT TELL.** The pass was signed at 11:10 and the console changed at 11:54, so the
+  signature describes an earlier tree. **This document recorded it as signed and that was stale
+  within forty-four minutes.** Re-signing is Lane B's call, not the tool's and not the
+  coordinator's.
+- **Gate 4 -- NOT MET, and this is the finding of the day.** There are no unbaselined dead links --
+  and `ephemeral_container`, `copy_between_containers` and `ensure_image_built` are *baselined* as
+  reached from nowhere. **The sandbox is built and unwired, so no patch run is contained.** `B97` is
+  the threat model's ranked-first item, and the baseline mechanism -- which this document sanctions
+  for a producer landing ahead of its consumer -- is what let it sit that way while the gate read
+  green.
+
+The lesson is the one the product is built on, turned inward: a green check that was never wired to
+anything is worse than a red one, because it is trusted.
+
+**Gate 3 -- signed 2026-08-17, superseded by the measurement above.** Evidence:
 `docs/superpowers/reports/2026-08-17-gate-3-screen-pass.md`. Ten of ten screens, every number traced
 to a named payload field or a named derivation, read live off the API and compared against what the
 screen renders; a number seen in only one of the two is not sourced. No product code changed to
@@ -200,6 +224,52 @@ the beta critical path; everything else is real work that does not block the gat
 2. Arbitrate cross-lane requests; they are the only thing that can deadlock this workspace.
 3. Track the four gates and say plainly which are met.
 4. Surface the three human decisions below at the moment they become blocking, not before.
+
+## Gate 2's machinery is proven; only its data is missing
+
+`M5-W308` separated the two questions hiding inside "Gate 2 CANNOT TELL", and the answer to the
+dangerous one is the good one.
+
+**Rehearsal rows cannot reach Gate 2's metrics.** `is_rehearsal` is recorded on every rehearsal row
+and `GraphStore.migration_outcomes` filters `WHERE NOT is_rehearsal` -- confirmed in the source, not
+taken from a report: the conflict clause is keyed on it at `store.py:1355`, and `:1363` states the
+reason it is filtered there rather than handed to every caller. This was the finding that would have
+been serious. Had a rehearsal row been indistinguishable from a customer run, every axis would have
+been quotable as evidence it had not earned, and the first person to notice would have been a design
+partner reading a number we gave them.
+
+**All five axes compute correctly** over a wide population -- `merge_rate_by_change_kind`,
+`merge_rate_by_tier`, `routing_accuracy`, `tokens_per_merged_patch`, `wall_ms_per_merged_patch` --
+and `corpus_health` and `beta_gates`' Gate 2 evaluate with zero computational defects.
+
+So Gate 2 is no longer "we do not know whether this works." It is "this works and has no data yet,"
+and the only thing that produces the data is real runs -- which is `B7`, which is the owner's call.
+The gate correctly still reads CANNOT TELL, because a proven calculation over zero rows is still
+zero rows.
+
+## `B7`'s risk changed materially on 2026-08-17, and the decision is now better informed
+
+`B7` was frightening for one stated reason: the acceptance run had not executed since the pipeline
+gained four graph nodes, so authorising it meant possibly discovering a months-old break while
+spending a real pull request and `xhigh` model time on somebody's repository.
+
+**Both halves have now been exercised without spending either.**
+
+- `M5-W306` drove INDEX and SIGNAL end to end -- both coded vendors' change extraction, TypeScript
+  and Python AST indexing, OpenAPI symbol resolution, intake assessment, finding creation. Zero
+  defects.
+- `M5-W307` drove all twelve remediation nodes individually *and* across compiled `StateGraph`
+  routing paths -- the rehearsal path, remote CI passing through to a pull request being opened, and
+  remote CI failing through retry to abandonment -- over the zero-remote rehearsal fixture against a
+  real pinned corpus repository. Transition conditions and retry budgets behave. Zero regressions.
+
+That does not make `B7` pass; only `B7` passing does that, and the gate meter still reads
+`0 with a pull request that went green`. What it removes is the specific fear that authorising it
+would be an experiment on unknown code. The nodes work. What has never been tested is the whole
+thing against a real repository with a real vendor change and a real CI run.
+
+The decision is still the owner's, for the reasons it always was -- a real pull request on a real
+repository, and real model spend.
 
 ## The three decisions that are the human's, named now
 

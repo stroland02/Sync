@@ -279,3 +279,60 @@ def test_no_step_carries_a_literal_backslash_n_in_its_script():
     ]
 
     assert not offenders, "steps whose script carries a literal backslash-n: " + ", ".join(offenders)
+
+
+BETA_GATES = "scripts/beta_gates.py"
+
+
+def _beta_gate_jobs() -> list[tuple[str, dict]]:
+    return [
+        (name, job)
+        for name, job in _workflow()["jobs"].items()
+        if any(BETA_GATES in _script(step) for step in job.get("steps", []))
+    ]
+
+
+def test_the_beta_gates_are_measured_in_ci():
+    """Between one person typing a command and the next, readiness is unmeasured and the last
+    figure quietly ages -- which is the staleness the meter itself caught the coordinator in."""
+    assert _beta_gate_jobs(), f"no job runs {BETA_GATES}, so readiness is measured only by hand"
+
+
+def test_the_beta_gates_run_on_every_push_to_main():
+    for name, job in _beta_gate_jobs():
+        condition = str(job.get("if", ""))
+        assert "push" in condition, (
+            f"job {name!r} runs {BETA_GATES} but not on a push, so main's readiness is not "
+            "measured where main changes"
+        )
+
+
+def test_the_beta_gates_never_fail_the_build():
+    """The constraint that keeps this from becoming the thing Lane C spent a day removing.
+
+    Gates are a readiness report. A red build on a gate nobody promised to have met today teaches
+    every lane to ignore CI, and an ignored CI is worse than none -- that is the whole of B150 and
+    B137 restated. `--exit-zero` is how the step says so; a crash still exits non-zero, so the
+    script breaking is still a failure.
+    """
+    for name, job in _beta_gate_jobs():
+        for step in job.get("steps", []):
+            script = _script(step)
+            if BETA_GATES not in script:
+                continue
+            assert "--exit-zero" in script, (
+                f"step {step.get('name')!r} of job {name!r} lets a NOT MET gate fail the build"
+            )
+            assert step.get("continue-on-error") is not True, (
+                f"step {step.get('name')!r} of job {name!r} uses continue-on-error, which would "
+                "also swallow the script crashing; --exit-zero is the narrower instrument"
+            )
+
+
+def test_the_beta_gates_publish_where_they_can_be_read_without_cloning():
+    for name, job in _beta_gate_jobs():
+        scripts = " ".join(_script(step) for step in job.get("steps", []))
+        assert "GITHUB_STEP_SUMMARY" in scripts, (
+            f"job {name!r} measures the gates and publishes nothing, so the answer lives only in "
+            "a log nobody opens"
+        )

@@ -1,0 +1,524 @@
+"""The four beta gates, measured against this repository.
+
+`docs/superpowers/plans/2026-08-17-sync-to-beta-scope.md` defines four gates and says beta is ready
+when all four are "true and demonstrable, not when a milestone list is ticked". Until this script
+existed they were demonstrated by a coordinator writing prose, which is the black box this product
+exists to replace, pointed at our own readiness.
+
+**`CANNOT TELL` is a first-class verdict and most of the care here goes into it.** A gate that
+reported `MET` because it found no rows would be the worst available instance of the defect the
+console spends six screens refusing: absence read as zero. So an unreachable database, a missing
+report and an empty table each produce `CANNOT TELL`, and only a source that actually answered
+produces `MET` or `NOT MET`.
+
+The empty-corpus case is not hypothetical. `B129` found that every scan truncated
+`migration_outcome` for weeks, so an empty corpus here cannot distinguish "no run ever opened a
+pull request" from "a bug deleted the rows". Saying `NOT MET` there would be inventing a
+measurement.
+
+Run it: `uv run python scripts/beta_gates.py`. Add `--run-suite` to measure Gate 4's
+green-`main` component, which costs about four minutes; without it that component reports
+`CANNOT TELL` rather than assuming either answer.
+
+Exit code is 0 when every gate is `MET`, 1 otherwise. `CANNOT TELL` is not a pass.
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+import subprocess
+import sys
+from dataclasses import dataclass, field
+from pathlib import Path
+from typing import Any, Callable, Protocol, Sequence
+
+REPO_ROOT = Path(__file__).resolve().parents[1]
+
+MET = "MET"
+NOT_MET = "NOT_MET"
+CANNOT_TELL = "CANNOT_TELL"
+
+_LABEL = {MET: "MET", NOT_MET: "NOT MET", CANNOT_TELL: "CANNOT TELL"}
+
+
+class _Store(Protocol):
+    def migration_outcomes(self) -> Sequence[Any]: ...
+
+
+@dataclass(frozen=True)
+class Verdict:
+    """One gate's answer, and why.
+
+    `evidence` is required rather than optional. A verdict without it is the prose this script
+    replaces, in a fixed-width font, and the whole point is that a reader who doubts the answer can
+    check it without asking anybody.
+    """
+
+    gate: str
+    name: str
+    status: str
+    evidence: list[str] = field(default_factory=list)
+
+    def __post_init__(self) -> None:
+        if not self.evidence:
+            raise ValueError(f"gate {self.gate} has a verdict with no evidence behind it")
+
+
+def _field(row: Any, name: str) -> Any:
+    """Read a field from a row that may be a model or a mapping.
+
+    The store hands back `MigrationOutcome` objects; the tests hand dicts. Accepting both keeps
+    the gate logic testable without a database, which matters because the cases worth pinning here
+    are the ones a database cannot easily be put into -- an outage, and an empty corpus.
+    """
+    if isinstance(row, dict):
+        return row.get(name)
+    return getattr(row, name, None)
+
+
+def _real_runs(outcomes: Sequence[Any]) -> list[Any]:
+    """Rows written by a real run.
+
+    `sync rehearse` opens no pull request and marks its rows `is_rehearsal`. Counting one as
+    evidence would be a fixture standing in for a measurement, which is exactly what Gate 2 was
+    written to refuse.
+    """
+    return [row for row in outcomes if not _field(row, "is_rehearsal")]
+
+
+def gate_one_loop_closes(store: _Store, *, resume_built: bool) -> Verdict:
+    """Gate 1: one run produces a CI-green pull request, and a review comment resumes a run.
+
+    Two claims, both required. B7 alone is half the gate: without the resume half Sync opens a
+    pull request and stops watching, which the scope plan's Ruling 3 calls worse than not having
+    patched.
+    """
+    name = "the loop closes"
+    try:
+        outcomes = list(store.migration_outcomes())
+    except Exception as exc:  # noqa: BLE001 -- any failure to read is the same answer
+        return Verdict(
+            gate="1",
+            name=name,
+            status=CANNOT_TELL,
+            evidence=[
+                f"the corpus could not be read: {exc}",
+                "an unreachable database says nothing about whether a run ever closed the loop",
+            ],
+        )
+
+    real = _real_runs(outcomes)
+    if not real:
+        return Verdict(
+            gate="1",
+            name=name,
+            status=CANNOT_TELL,
+            evidence=[
+                f"migration_outcome holds {len(outcomes)} row(s), {len(real)} of them from real runs",
+                "an empty corpus cannot distinguish a loop that never closed from rows a bug "
+                "removed: B129 truncated this table on every scan until it was fixed",
+                "re-run this after one real run to get a measurement rather than an absence",
+            ],
+        )
+
+    green = [
+        row
+        for row in real
+        if _field(row, "pr_number") is not None and _field(row, "ci_result") == "passed"
+    ]
+    evidence = [
+        f"{len(real)} real attempt(s) in the corpus, {len(green)} with a pull request that went green",
+        f"resume-on-review-comment built: {resume_built}",
+    ]
+    if not green:
+        evidence.append("no attempt has produced a CI-green pull request, so B7 has never passed")
+        return Verdict(gate="1", name=name, status=NOT_MET, evidence=evidence)
+    if not resume_built:
+        evidence.append(
+            "the first half holds and the second does not: no resume path, so a review comment "
+            "leaves the run parked forever"
+        )
+        return Verdict(gate="1", name=name, status=NOT_MET, evidence=evidence)
+    return Verdict(gate="1", name=name, status=MET, evidence=evidence)
+
+
+def gate_two_evidence_exists(
+    store: _Store, *, health_reader: Callable[[_Store], dict]
+) -> Verdict:
+    """Gate 2: the corpus carries real samples for merge rate and three of five axes.
+
+    Reads `sync.dashboard.fleet.corpus_health` rather than recomputing the axes. That function
+    already draws the distinction this script depends on -- `status` is `measured` or `unmeasured`
+    and `value` is `None` rather than `0.0` when nothing was sampled -- and a second implementation
+    of it here would be a fact written twice, which CLAUDE.md calls the most expensive debt in this
+    repository because the disagreement is silent.
+    """
+    name = "the evidence exists"
+    try:
+        health = health_reader(store)
+    except Exception as exc:  # noqa: BLE001
+        return Verdict(
+            gate="2",
+            name=name,
+            status=CANNOT_TELL,
+            evidence=[
+                f"corpus_health could not be read: {exc}",
+                "no reading is not the same as a reading of zero",
+            ],
+        )
+
+    summary = health.get("summary", {})
+    measured = summary.get("axes_measured_count")
+    total = summary.get("total_axes")
+    merged = summary.get("pull_requests_merged")
+    opened = summary.get("pull_requests_opened")
+
+    if not summary.get("has_any_samples"):
+        return Verdict(
+            gate="2",
+            name=name,
+            status=CANNOT_TELL,
+            evidence=[
+                f"{measured} of {total} quality axes measured; every axis reports no samples",
+                "unmeasured is absence rather than a value of zero, so there is nothing here to "
+                "pass or fail yet",
+                f"pull requests opened: {opened}, merged: {merged}",
+            ],
+        )
+
+    evidence = [
+        f"{measured} of {total} quality axes carry samples",
+        f"pull requests opened: {opened}, merged: {merged}",
+    ]
+    if (measured or 0) < 3:
+        evidence.append("the gate asks for merge rate plus at least three of the five axes")
+        return Verdict(gate="2", name=name, status=NOT_MET, evidence=evidence)
+    if not merged:
+        evidence.append("merge rate has no numerator: no pull request has been recorded merged")
+        return Verdict(gate="2", name=name, status=NOT_MET, evidence=evidence)
+    return Verdict(gate="2", name=name, status=MET, evidence=evidence)
+
+
+def gate_three_console_truth(report: Path, console_dir: Path) -> Verdict:
+    """Gate 3: signed. Confirm the signature still corresponds to the tree.
+
+    The scope plan records this gate as signed on 2026-08-17 with a named report, so this does not
+    re-derive it -- re-deriving a signed gate would be asserting the right to overrule a sign-off
+    this lane did not make. What it checks is whether the thing signed is still the thing here: a
+    console changed after the pass was written is a pass describing a screen nobody is looking at.
+    """
+    name = "the console tells the truth about that evidence"
+    if not report.exists():
+        return Verdict(
+            gate="3",
+            name=name,
+            status=CANNOT_TELL,
+            evidence=[
+                f"the sign-off report is missing: {report.relative_to(REPO_ROOT)}",
+                "the scope plan records this gate as signed; without the report the signature "
+                "cannot be checked and is not assumed",
+            ],
+        )
+
+    evidence = [f"signed, evidence at {report.relative_to(REPO_ROOT)}"]
+    signed_at = _last_commit_touching(report)
+    console_at = _last_commit_touching(console_dir)
+    if signed_at is None or console_at is None:
+        evidence.append("could not read git history for the report or the console")
+        return Verdict(gate="3", name=name, status=CANNOT_TELL, evidence=evidence)
+
+    evidence.append(f"report last written {signed_at}, console last changed {console_at}")
+    if console_at > signed_at:
+        evidence.append(
+            "the console changed after the pass was signed, so the signature describes an "
+            "earlier tree; re-signing is Lane B's call rather than this script's"
+        )
+        return Verdict(gate="3", name=name, status=CANNOT_TELL, evidence=evidence)
+    return Verdict(gate="3", name=name, status=MET, evidence=evidence)
+
+
+def gate_four_containment_true(*, run_suite: bool) -> Verdict:
+    """Gate 4: nothing reaches a pull request unverified and the threat model matches the code.
+
+    Three components. The suite is measured only when asked for, because it costs about four
+    minutes and a script nobody runs measures nothing; unasked, that component is `CANNOT TELL`
+    rather than an assumption in either direction.
+    """
+    name = "the containment story is true as written"
+    evidence: list[str] = []
+    verdicts: list[str] = []
+
+    links_ok, links_note = _dead_links_clean()
+    evidence.append(links_note)
+    verdicts.append(MET if links_ok is True else (CANNOT_TELL if links_ok is None else NOT_MET))
+
+    wired, wiring_note = _sandbox_wired()
+    evidence.append(wiring_note)
+    verdicts.append(MET if wired is True else (CANNOT_TELL if wired is None else NOT_MET))
+
+    if run_suite:
+        suite_ok, suite_note = _suite_green()
+        evidence.append(suite_note)
+        verdicts.append(MET if suite_ok is True else (CANNOT_TELL if suite_ok is None else NOT_MET))
+    else:
+        evidence.append("main-is-green not measured: pass --run-suite to spend the ~4 minutes")
+        verdicts.append(CANNOT_TELL)
+
+    if NOT_MET in verdicts:
+        return Verdict(gate="4", name=name, status=NOT_MET, evidence=evidence)
+    if CANNOT_TELL in verdicts:
+        return Verdict(gate="4", name=name, status=CANNOT_TELL, evidence=evidence)
+    return Verdict(gate="4", name=name, status=MET, evidence=evidence)
+
+
+def _last_commit_touching(path: Path) -> str | None:
+    try:
+        result = subprocess.run(
+            ["git", "log", "-1", "--format=%cI", "--", str(path)],
+            cwd=REPO_ROOT,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=60,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return None
+    stamp = (result.stdout or "").strip()
+    return stamp or None
+
+
+def _dead_links_clean() -> tuple[bool | None, str]:
+    baseline = REPO_ROOT / "scripts" / "dead_links_baseline.txt"
+    try:
+        result = subprocess.run(
+            [sys.executable, str(REPO_ROOT / "scripts" / "lint_dead_links.py"),
+             "src", "--baseline", str(baseline)],
+            cwd=REPO_ROOT,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=300,
+        )
+    except (OSError, subprocess.SubprocessError) as exc:
+        return None, f"dead-link lint could not run: {exc}"
+    if result.returncode == 0:
+        return True, "no unbaselined dead links in src/"
+    offenders = [line.strip() for line in (result.stdout or "").splitlines() if line.strip()]
+    return False, "unbaselined dead links: " + "; ".join(offenders[:4])
+
+
+def _sandbox_wired() -> tuple[bool | None, str]:
+    """Whether anything routes a patch attempt through the container primitives.
+
+    B97's close condition is a patch run that cannot open a socket to a host Sync did not name.
+    The mechanism is proven; what has never been true is that anything calls it. This asks the
+    question the same way the repository already answers it -- the dead-link baseline accepts
+    those symbols as reached from nothing, which is the machine-checkable form of "unwired".
+    """
+    baseline = REPO_ROOT / "scripts" / "dead_links_baseline.txt"
+    try:
+        text = baseline.read_text(encoding="utf-8")
+    except OSError as exc:
+        return None, f"could not read the dead-link baseline: {exc}"
+    unwired = [
+        symbol
+        for symbol in ("ephemeral_container", "copy_between_containers", "ensure_image_built")
+        if symbol in text
+    ]
+    if unwired:
+        return False, (
+            "the sandbox is built and unwired: " + ", ".join(unwired)
+            + " are baselined as reached from nowhere, so no patch run is contained (B97)"
+        )
+    return True, "no sandbox primitive is baselined as unreachable"
+
+
+def _suite_green() -> tuple[bool | None, str]:
+    """Run the suite and judge it with `gate_verdict`, which is the point of that script.
+
+    A tally from a run that died counts absences as failures, so "is main green" cannot be read
+    off an exit code alone.
+    """
+    from scripts.gate_verdict import read_verdict
+
+    log = REPO_ROOT / ".cache" / "beta-gates-suite.log"
+    log.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        result = subprocess.run(
+            ["uv", "run", "pytest", "tests/", "-q", "-n", "4"],
+            cwd=REPO_ROOT,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=3600,
+        )
+    except (OSError, subprocess.SubprocessError) as exc:
+        return None, f"the suite could not be run: {exc}"
+    output = (result.stdout or "") + (result.stderr or "")
+    log.write_text(output, encoding="utf-8")
+    verdict = read_verdict(output)
+    if not verdict.trustworthy:
+        return None, f"the suite ran but its verdict cannot be believed: {verdict.reason}"
+    return result.returncode == 0, f"suite: {verdict.summary}"
+
+
+def render(verdicts: Sequence[Verdict]) -> str:
+    lines = ["Beta gates, measured against this repository", ""]
+    for verdict in verdicts:
+        lines.append(f"Gate {verdict.gate} -- {verdict.name}: {_LABEL[verdict.status]}")
+        for item in verdict.evidence:
+            lines.append(f"    {item}")
+        lines.append("")
+    met = sum(1 for v in verdicts if v.status == MET)
+    unknown = sum(1 for v in verdicts if v.status == CANNOT_TELL)
+    lines.append(f"{met} of {len(verdicts)} met; {unknown} cannot be told from here")
+    return "\n".join(lines)
+
+
+_MARK = {MET: "✅", NOT_MET: "❌", CANNOT_TELL: "❔"}
+
+
+def render_markdown(verdicts: Sequence[Verdict]) -> str:
+    """The same verdicts, for a reader who has not cloned the repository.
+
+    A reader skims glyphs and bold text before words, so `CANNOT TELL` and `NOT MET` are given
+    different marks as well as different words. Rendering them alike here would re-introduce the
+    absence-versus-zero collapse the script refuses internally, at the one place anybody actually
+    looks — which is how a meter starts lying without a single wrong number in it.
+    """
+    met = sum(1 for v in verdicts if v.status == MET)
+    unknown = sum(1 for v in verdicts if v.status == CANNOT_TELL)
+
+    lines = [
+        "## Beta gates",
+        "",
+        f"**{met} of {len(verdicts)} met**, {unknown} cannot be told from this environment.",
+        "",
+        "This is a readiness report, not a test. It does not fail the build: a gate nobody "
+        "promised to have met today going red teaches everyone to ignore CI.",
+        "",
+    ]
+    for verdict in verdicts:
+        lines.append(
+            f"{_MARK[verdict.status]} **{_LABEL[verdict.status]}** — Gate {verdict.gate}: {verdict.name}"
+        )
+        lines.append("")
+        for item in verdict.evidence:
+            lines.append(f"- {item}")
+        lines.append("")
+    lines.append(
+        "❔ means the environment could not answer, not that the answer is zero. A gate that "
+        "needs the corpus cannot be measured where there is no corpus."
+    )
+    return "\n".join(lines)
+
+
+def measure(*, run_suite: bool) -> list[Verdict]:
+    store, store_error = _open_store()
+    health_reader = _health_reader(store_error)
+    resume_built = _resume_path_exists()
+
+    return [
+        gate_one_loop_closes(store, resume_built=resume_built),
+        gate_two_evidence_exists(store, health_reader=health_reader),
+        gate_three_console_truth(
+            REPO_ROOT / "docs" / "superpowers" / "reports" / "2026-08-17-gate-3-screen-pass.md",
+            REPO_ROOT / "web" / "src",
+        ),
+        gate_four_containment_true(run_suite=run_suite),
+    ]
+
+
+class _DeadStore:
+    """Stands in when the database cannot be opened, so every gate reports the same reason."""
+
+    def __init__(self, error: Exception) -> None:
+        self._error = error
+
+    def migration_outcomes(self):
+        raise self._error
+
+
+def _open_store():
+    try:
+        from sync.graph.store import DEFAULT_DSN, GraphStore
+
+        import os
+
+        store = GraphStore(dsn=os.environ.get("SYNC_GRAPH_DSN", DEFAULT_DSN))
+        store.migration_outcomes()
+        return store, None
+    except Exception as exc:  # noqa: BLE001
+        return _DeadStore(exc), exc
+
+
+def _health_reader(store_error: Exception | None):
+    if store_error is not None:
+        def refuse(_store):
+            raise store_error
+        return refuse
+
+    from sync.dashboard.fleet import corpus_health
+
+    return corpus_health
+
+
+def _resume_path_exists() -> bool:
+    """Gate 1's second half, asked of the code rather than of a run.
+
+    A real answer needs a pull request receiving a review comment and a follow-up commit appearing
+    with nobody re-running anything, which this script cannot stage. What it can say is whether the
+    path exists at all, and that is reported as what it is rather than as the gate.
+    """
+    durable = REPO_ROOT / "src" / "sync" / "remediate" / "durable.py"
+    webhook = REPO_ROOT / "src" / "sync" / "forge" / "webhook.py"
+    try:
+        return (
+            "def resume_durable_run" in durable.read_text(encoding="utf-8")
+            and "pull_request_review_comment" in webhook.read_text(encoding="utf-8")
+        )
+    except OSError:
+        return False
+
+
+def main(argv: Sequence[str]) -> int:
+    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    parser.add_argument(
+        "--run-suite",
+        action="store_true",
+        help="measure Gate 4's green-main component by running the suite (~4 minutes)",
+    )
+    parser.add_argument("--json", action="store_true", help="emit the verdicts as JSON")
+    parser.add_argument(
+        "--summary",
+        metavar="PATH",
+        help="also write the report as markdown to PATH (use $GITHUB_STEP_SUMMARY in CI)",
+    )
+    parser.add_argument(
+        "--exit-zero",
+        action="store_true",
+        help=(
+            "exit 0 whatever the verdicts are. For CI, where this is a readiness report rather "
+            "than a test; a crash still exits non-zero"
+        ),
+    )
+    args = parser.parse_args(list(argv[1:]))
+
+    verdicts = measure(run_suite=args.run_suite)
+    if args.json:
+        print(json.dumps([v.__dict__ for v in verdicts], indent=2))
+    else:
+        print(render(verdicts))
+    if args.summary:
+        Path(args.summary).write_text(render_markdown(verdicts) + "\n", encoding="utf-8")
+    if args.exit_zero:
+        return 0
+    return 0 if all(v.status == MET for v in verdicts) else 1
+
+
+if __name__ == "__main__":
+    raise SystemExit(main(sys.argv))
