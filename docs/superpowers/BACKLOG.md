@@ -391,7 +391,7 @@ confidently instead of refusing.
 
 ## Ready
 
-### B169 — nothing exercises a cold clone, so the day-one path is verified as documented rather than as working
+### B169 — nothing exercises a cold clone, so the day-one path is verified as documented rather than as working — FIXED
 
 `tests/test_day_one_path.py` is twelve tests and every one is structural: that each Quick start
 command resolves against the real argparse surface, that the README names every authenticated tool,
@@ -412,6 +412,29 @@ so the person who hits this is the second engineer or the first design partner.
 it is flaky. What is wanted is a check on the bootstrap contract: that `bootstrap_tools.sh` and
 `fetch_corpus_repositories.py` produce exactly the artifacts the suite refuses without, and that a
 missing one fails with a message naming the script that supplies it.
+
+**Fixed 2026-08-17 (`CI-W297`), and the instructions were wrong rather than merely unchecked.**
+`scripts/fetch_corpus_repositories.py` was named in no document in this repository — not
+`README.md`, not `CONTRIBUTING.md`, not anything under `docs/`. So somebody following the setup
+exactly still met the three corpus failures, and no amount of asserting that the documented
+commands exist would have found it: what was documented was correct and incomplete.
+
+The instructions are now true — both setup blocks name the corpus step, in order, before
+`uv run pytest`, and the README says why both are "once per checkout" rather than once per machine.
+That was preferred over changing a test, because a test that passes against wrong instructions is
+the defect rather than the fix.
+
+`tests/test_gate_setup_contract.py` keeps them true by executing rather than reading: it runs both
+refusal paths with the artifact genuinely absent, reads the script each message names, and asserts
+that script appears in the setup documents before the suite command. That is the assertion that
+fails when a step is added to the code and not to the instructions, which is the direction the
+drift actually goes — nobody forgets to write the refusal, because the refusal is what they hit
+while building the thing.
+
+Proved able to fail: removing the step from both documents turns it red naming the script, and
+restoring it turns it green. The sufficiency of the two steps is measured rather than assumed —
+seeding exactly those two artifacts into a fresh worktree earlier the same day turned about fifty
+failures into `237 passed`.
 
 **Closes when:** a check fails if the bootstrap contract is broken — proven by removing one artifact
 and watching it go red — and the README's prerequisites are the set that check enforces, so the two

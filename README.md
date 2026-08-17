@@ -480,9 +480,10 @@ These are enforced rather than encouraged, because each one failed silently at l
 git clone https://github.com/stroland02/sync.git
 cd sync
 
-uv sync                            # install dependencies
-docker compose up -d               # Postgres 16, on port 5433
-bash scripts/bootstrap_tools.sh    # the pinned oasdiff; once per checkout
+uv sync                                       # install dependencies
+docker compose up -d                          # Postgres 16, on port 5433
+bash scripts/bootstrap_tools.sh               # the pinned oasdiff; once per checkout
+uv run python scripts/fetch_corpus_repositories.py   # the frozen corpus; once per checkout
 
 uv run pytest                      # ~3400 tests, four to eleven minutes
 ```
@@ -490,6 +491,12 @@ uv run pytest                      # ~3400 tests, four to eleven minutes
 `bootstrap_tools.sh` picks the release asset for your own platform and prints the version
 `.oasdiff-version` pins. It refuses rather than guesses on a platform oasdiff publishes no build
 for, and it never overwrites a build a checkout already holds.
+
+`fetch_corpus_repositories.py` materialises five repositories pinned by commit into gitignored
+`.cache/corpus/`. Both steps are `once per checkout` rather than once per machine: the artifacts
+are gitignored, so a second worktree of this repository needs them again. Skip either and the
+suite fails on the missing artifact rather than on anything you changed — about fifty tests, each
+naming the script that supplies what it wanted.
 
 ### Detect and remediate vendor changes in a repository
 

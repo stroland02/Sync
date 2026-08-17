@@ -92,10 +92,11 @@ the moment the pull request merges.
 ## Getting set up
 
 ```bash
-uv sync                            # dependencies; uv only, never pip or poetry
-docker compose up -d               # Postgres 16 on port 5433, not 5432
-bash scripts/bootstrap_tools.sh    # the pinned oasdiff; once per checkout
-uv run pytest                      # run it once before committing
+uv sync                                       # dependencies; uv only, never pip or poetry
+docker compose up -d                          # Postgres 16 on port 5433, not 5432
+bash scripts/bootstrap_tools.sh               # the pinned oasdiff; once per checkout
+uv run python scripts/fetch_corpus_repositories.py   # the frozen corpus; once per checkout
+uv run pytest                                 # run it once before committing
 ```
 
 Python is 3.12 and the interpreter is `python`, never `python3`.
