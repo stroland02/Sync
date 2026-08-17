@@ -121,6 +121,15 @@ Escalate to the coordinator, not to the human, when the blocker is another lane.
 
 ## Traps that have each cost this project an hour
 
+- **A handoff described in a report has not been handed off.** Three times on 2026-08-17 a lane
+  finished a unit and told the coordinator it had defined something for another lane -- Lane C
+  "filed for Lane E" an `auth.py` narrowing that existed only in a code comment, and Lane D
+  "defined the telemetry attachment shape (`telemetry_attached_at`)" for Lanes E and B, which
+  appeared nowhere in `src/` or `docs/`. Both arguments were correct and neither was findable.
+  **A cross-lane contract goes in `BACKLOG.md` with a number from your block, or it did not
+  happen** -- and it names the field, where it sits, what writes it, what `null` means, and what
+  a consumer must render differently for `null` versus zero. Without that last sentence the
+  receiving lanes each infer one, and you get two answers to one question.
 - **A stale worktree makes you rebuild what already landed, and the rebuild looks like progress.**
   Step 1 of the loop is `git fetch origin && git merge origin/main --no-edit`, and it is first for
   this reason rather than for tidiness. Measured twice on 2026-08-17: Lane A gated a merge and held
