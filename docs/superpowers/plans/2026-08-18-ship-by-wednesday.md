@@ -105,6 +105,45 @@ The honest form of the promise: **one command to type, one screen of output, and
 is running or you know exactly what to install.** Not: one command that silently installs a language
 runtime.
 
+## The quickstart, designed from Sync's own data
+
+**A competitor's onboarding was supplied as reference on 2026-08-18 and is treated under
+`.claude/rules/interface-originality.md`: the arrangement is learnable, the rendering is not.** What
+transfers is the shape of the journey. What does not transfer is their copy, their step order, their
+key-first posture, or anything their product needs and ours does not.
+
+**The problem, restated before it becomes a design.** A person with a codebase has to get from
+*nothing* to *seeing their own data* without assembling anything. Every step between those two points
+is attrition, and a step that produces an empty screen is worse than no step at all.
+
+**Sync's answer differs from a telemetry product's, and the difference is the strongest thing we
+have.** A telemetry tool's dashboard is empty until traces arrive, so its onboarding must be about
+instrumentation: install an SDK, get a key, wire an exporter, wait for an event. **Sync needs none of
+that to show you something true.** The API dependency graph's first rung is *static* — call sites
+read out of the code itself. So:
+
+**Point Sync at a repository and it shows you real findings before you have configured anything. No
+key, no SDK, no signup, no instrumentation.**
+
+That inverts the usual order — **value before configuration** — and it is not a trick, because the
+provenance rung means the console can say exactly how much that free answer is worth. Which produces
+Sync's own second step, and it is one a telemetry product cannot offer:
+
+1. **Index.** One command. Your repository, your call sites, your vendors, your findings — every
+   binding marked `static`, and the console saying plainly that `static` is what it is.
+2. **Attach telemetry, optionally, and watch bindings move from `static` to `observed`.** The screen
+   shows the upgrade. **You can see precisely what the instrumentation bought you**, which is an
+   argument for instrumenting rather than a precondition to being allowed in.
+3. **Let it open a pull request, when you trust it.** Not first. After you have seen its reasoning on
+   your own code.
+
+**The measurable claim to put in front of an investor:** the local path is *one* command. The
+reference product's is five. That is checkable in front of them, and `dev_up.py` already does it.
+
+**What this means for the docs by Wednesday.** A `README` quickstart that is this journey and nothing
+else, written against what the product actually does — no placeholder keys, no steps that do not
+apply, and no claim the meter cannot support.
+
 ## Priority order to Wednesday
 
 **P0 — must be true or there is no product.**
