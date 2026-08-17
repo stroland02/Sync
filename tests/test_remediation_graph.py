@@ -8,6 +8,7 @@ from sync.core import CallSite, Finding, Patch, RepoRef, VendorChange, VerifyRes
 from sync.forge.github import PullRequest
 from sync.remediate import nodes
 from sync.remediate.graph import build_graph
+from sync.remediate.state import ABANDON_REASON_CODES
 from sync.route.matrix import NO_PATCH
 
 SITE = CallSite(
@@ -159,6 +160,7 @@ def test_three_static_failures_abandon_without_pushing():
     assert forge.pr_url is None
     assert remediator.calls == 3
     assert store.status_calls == [("f1", "abandoned")]
+    assert result["abandon_reason_code"] == "static_verify_exhausted"
 
 
 def test_a_red_ci_run_retries_the_patch_once():
@@ -176,6 +178,7 @@ def test_two_red_ci_runs_abandon_and_record_why():
     assert forge.pr_url is None
     assert "CI" in result["abandon_reason"]
     assert store.status == "abandoned"
+    assert result["abandon_reason_code"] == "ci_attempts_exhausted"
 
 
 def test_a_red_ci_run_does_not_repatch_once_the_static_budget_is_spent():
@@ -192,6 +195,10 @@ def test_a_red_ci_run_does_not_repatch_once_the_static_budget_is_spent():
     assert result["outcome"] == "abandoned"
     assert forge.pr_url is None
     assert "CI" in result["abandon_reason"]
+    # Distinct from `test_two_red_ci_runs_abandon_and_record_why`: there `ci_attempts` is what
+    # runs out, and here it is `static_attempts` -- the run abandons one CI poll earlier than
+    # its own CI-attempt budget allows, so the two must not share a code.
+    assert result["abandon_reason_code"] == "ci_feedback_patch_budget_exhausted"
 
 
 def test_a_failed_verification_with_empty_diagnostics_never_pushes():
@@ -206,6 +213,7 @@ def test_a_failed_verification_with_empty_diagnostics_never_pushes():
     assert forge.pushes == 0
     assert result["outcome"] == "abandoned"
     assert forge.pr_url is None
+    assert result["abandon_reason_code"] == "static_verify_exhausted"
 
 
 @dataclass
@@ -284,6 +292,7 @@ def test_an_agent_run_that_fails_is_abandoned_rather_than_crashing_the_graph():
     assert remediator.calls == 3
     assert "agent run failed" in result["abandon_reason"]
     assert store.status == "abandoned"
+    assert result["abandon_reason_code"] == "patch_attempts_exhausted"
 
 
 def test_a_patch_that_changes_nothing_is_never_pushed():
@@ -300,6 +309,7 @@ def test_a_patch_that_changes_nothing_is_never_pushed():
     assert forge.pushes == 0
     assert forge.pr_url is None
     assert store.status == "abandoned"
+    assert result["abandon_reason_code"] == "patch_attempts_exhausted"
 
 
 def test_a_bare_exception_still_records_a_useful_abandon_reason():
@@ -319,6 +329,7 @@ def test_a_bare_exception_still_records_a_useful_abandon_reason():
     assert result["outcome"] == "abandoned"
     assert "KeyError" in result["abandon_reason"]
     assert "apiKey" in result["abandon_reason"]
+    assert result["abandon_reason_code"] == "patch_attempts_exhausted"
 
 
 def test_an_exception_with_no_message_still_produces_a_useful_abandon_reason():
@@ -336,6 +347,7 @@ def test_an_exception_with_no_message_still_produces_a_useful_abandon_reason():
     result = _run(StubAdapter(), remediator, StubForge())
     assert result["outcome"] == "abandoned"
     assert "TimeoutError" in result["abandon_reason"]
+    assert result["abandon_reason_code"] == "patch_attempts_exhausted"
 
 
 def test_prepare_runs_before_the_first_patch_attempt():
@@ -383,6 +395,7 @@ def test_a_failed_prepare_abandons_without_attempting_a_patch():
     assert forge.pr_url is None
     assert "registry unreachable" in result["abandon_reason"]
     assert store.status == "abandoned"
+    assert result["abandon_reason_code"] == "prepare_failed"
 
 
 def test_a_fatal_static_verify_abandons_immediately_without_spending_the_retry_budget():
@@ -410,6 +423,9 @@ def test_a_fatal_static_verify_abandons_immediately_without_spending_the_retry_b
     assert forge.pr_url is None
     assert "registry unreachable" in result["abandon_reason"]
     assert store.status == "abandoned"
+    # Distinct from `test_a_failed_prepare_abandons_without_attempting_a_patch`: the same
+    # message reaches `diagnostics` from two nodes, and only the code says which one raised.
+    assert result["abandon_reason_code"] == "static_verify_fault"
 
 
 def test_a_vendor_change_that_cannot_be_looked_up_abandons_before_preparing():
@@ -436,6 +452,7 @@ def test_a_vendor_change_that_cannot_be_looked_up_abandons_before_preparing():
     assert forge.pr_url is None
     assert "KeyError" in result["abandon_reason"]
     assert store.status == "abandoned"
+    assert result["abandon_reason_code"] == "locate_failed"
 
 
 def test_a_rejected_push_abandons_without_spending_the_patch_budget():
@@ -460,6 +477,7 @@ def test_a_rejected_push_abandons_without_spending_the_patch_budget():
     assert forge.pr_url is None
     assert "protected branch" in result["abandon_reason"]
     assert store.status == "abandoned"
+    assert result["abandon_reason_code"] == "push_failed"
 
 
 def test_a_ci_poll_that_raises_abandons_rather_than_retrying_the_patch():
@@ -484,6 +502,7 @@ def test_a_ci_poll_that_raises_abandons_rather_than_retrying_the_patch():
     assert forge.pr_url is None
     assert "Bad credentials" in result["abandon_reason"]
     assert store.status == "abandoned"
+    assert result["abandon_reason_code"] == "ci_poll_failed"
 
 
 def test_a_pull_request_that_cannot_be_opened_abandons_and_leaves_no_pr_url():
@@ -507,6 +526,48 @@ def test_a_pull_request_that_cannot_be_opened_abandons_and_leaves_no_pr_url():
     assert forge.pushes == 1
     assert "too quickly" in result["abandon_reason"]
     assert store.status == "abandoned"
+    assert result["abandon_reason_code"] == "open_pr_failed"
+
+
+# --- the coded vocabulary beside the prose (B128) ----------------------------------
+
+
+def test_the_coded_vocabulary_is_exactly_the_routing_decisions_that_reach_abandon():
+    """One member per place in `nodes.py` that routes a run to `abandon`, plus the fallback
+    for whatever the classifier does not recognise. Pinned so a routing decision added later
+    without a matching code fails here rather than merging into an aggregate silently.
+    """
+    assert ABANDON_REASON_CODES == {
+        "locate_failed",
+        "prepare_failed",
+        "patch_attempts_exhausted",
+        "static_verify_fault",
+        "static_verify_exhausted",
+        "replay_exhausted",
+        "push_failed",
+        "ci_poll_failed",
+        "ci_attempts_exhausted",
+        "ci_feedback_patch_budget_exhausted",
+        "open_pr_failed",
+        "unclassified",
+    }
+
+
+def test_an_abandonment_the_classifier_never_labelled_reports_unclassified_not_a_guess():
+    """`make_abandon` reads whatever the last node to fail left on `abandon_reason_code`.
+
+    A state that reaches `abandon` carrying no code at all -- a routing path this vocabulary
+    does not yet cover -- must not be forced into an existing bucket it does not describe.
+    `unclassified` is the honest answer, matching the prose fallback (`"unknown"`) it sits
+    beside.
+    """
+    store = StubStore()
+    abandon = nodes.make_abandon(store, StubForge())
+
+    result = abandon({"finding": FINDING, "repo": REPO, "diagnostics": "something new failed"})
+
+    assert result["abandon_reason_code"] == "unclassified"
+    assert result["abandon_reason"] == "something new failed"
 
 
 def test_a_static_retry_names_the_typechecker_as_what_rejected_the_attempt():
@@ -553,6 +614,7 @@ def test_what_the_patch_agent_is_told_is_not_what_the_operator_is_told():
     assert len(reason.splitlines()) == 1
     # ...while the agent still got the long form on the retry.
     assert "--- a\n+++ b\n" in remediator.seen[1]
+    assert result["abandon_reason_code"] == "ci_attempts_exhausted"
 
 
 def test_a_patch_that_only_typechecks_with_untracked_files_never_reaches_push_branch(
@@ -589,6 +651,7 @@ def test_a_patch_that_only_typechecks_with_untracked_files_never_reaches_push_br
     assert forge.pushes == 0
     assert result["outcome"] == "abandoned"
     assert "TS2304" in result["abandon_reason"]
+    assert result["abandon_reason_code"] == "static_verify_exhausted"
 
 
 class DeletingForge(StubForge):
@@ -613,6 +676,7 @@ def test_abandoning_after_a_push_deletes_the_branch_it_left_behind():
 
     assert result["outcome"] == "abandoned"
     assert forge.deleted == ["sync/fix-1"]
+    assert result["abandon_reason_code"] == "ci_attempts_exhausted"
 
 
 def test_abandoning_before_a_push_deletes_nothing():
@@ -628,6 +692,7 @@ def test_abandoning_before_a_push_deletes_nothing():
 
     assert result["outcome"] == "abandoned"
     assert forge.deleted == []
+    assert result["abandon_reason_code"] == "patch_attempts_exhausted"
 
 
 def test_a_failed_cleanup_does_not_replace_the_reason_the_finding_abandoned():
@@ -644,6 +709,7 @@ def test_a_failed_cleanup_does_not_replace_the_reason_the_finding_abandoned():
     assert result["outcome"] == "abandoned"
     assert "CI" in result["abandon_reason"]
     assert "hung up" not in result["abandon_reason"]
+    assert result["abandon_reason_code"] == "ci_attempts_exhausted"
 
 
 # --- the graph that ships, pinned, and the graph that cannot push -------------------
