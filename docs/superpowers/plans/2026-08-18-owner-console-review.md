@@ -43,6 +43,37 @@ is about the codebase you have already chosen.** `interface-originality.md` alre
 breadcrumb or scope switcher that says what contains what* among the conventions of the form, so the
 component exists in our own vocabulary and needs no invention.
 
+**And the positive definition, which the owner gave next and which is the part that changes the
+most:** *"the overview should be all the findings dashboards and pertinent information to that
+specific codebase … this changes a lot of what you'll see but this is very important."*
+
+**That collapses a level.** The spec's ladder is `Fleet → Codebase (the selected repository) → API
+Services → …`. With selection moved into the switcher and the Overview defined as *this codebase's
+findings and everything pertaining to it*, **the Overview and the Codebase level are the same
+screen**. The ladder becomes:
+
+```
+[scope switcher]  which codebase, and what else exists — chrome, not a level
+   └── Overview   this codebase: its findings, and what pertains to it
+         └── API Services   vendors the indexer found in this repository
+               ├── Signals
+               ├── Binding surface
+               └── Errors & Incidents
+                     └── Finding
+                           └── Solution Workflow
+                                 └── Pull Request
+```
+
+**Two levels become one and the root disappears into chrome.** That is a simpler hierarchy than the
+one the spec records, and simpler in the direction the spec was already arguing for — it said Fleet
+must never substitute for the codebase level, and this removes the possibility entirely.
+
+**The dependency this creates, which is not Lane B's to solve.** The Overview now needs findings
+scoped to one repository as its primary content. Probed 2026-08-18 against the running API:
+`/api/findings` returns **404** at the top level, and `M14-W365` records that every findings view
+currently requires a vendor. **So the screen the owner has just made central does not yet have a
+route that serves it.** That is Lane E's, it sits beside `B147`, and it is now P0.
+
 **Three consequences, and the second one contradicts work that landed an hour ago.**
 
 1. **The Overview is scoped.** It answers *what is true about this codebase*, never *here are your
