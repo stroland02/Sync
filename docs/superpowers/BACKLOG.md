@@ -513,6 +513,20 @@ keep real headroom (record the number), or the skip is made to distinguish "the 
 from "the daemon did not answer in time", so the second never reads as the first. Widening the
 timeout without a measurement is not a close.
 
+**CLOSED 2026-08-17 by `CI-W361`, taking the second route.** The budget was left where it was —
+30s against a measured worst case of 2552ms is not the problem, and widening it without evidence is
+the move this entry was filed to avoid. What changed is that the two ways of not answering are now
+different facts. `probe_docker` returns `DockerProbe(reason, timed_out)`: a machine with no daemon
+**refuses** and does so immediately, in the daemon's own words `error during connect`, and that is
+genuinely absence; a daemon buried under load answers nothing until the budget expires, and that is
+not. The collection hook skips only for the first and raises `pytest.UsageError` for the second,
+naming the daemon as silent rather than missing. `docker_unavailable_reason` survives unchanged as a
+thin wrapper, so nothing that read it had to move.
+
+The rule underneath it is the console's, applied to a test run: **"we could not check" must not
+collapse onto "we checked and it does not apply."** A skip is the second sentence. A probe that ran
+out of time is the first.
+
 
 ### B174 — `extract_credential` cannot tell malformed base64 from non-UTF-8 credentials — Lane E
 
