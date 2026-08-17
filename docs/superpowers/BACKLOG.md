@@ -475,11 +475,15 @@ illustrate.
 The screen is built and honest without it. This is the row that lets it answer the question it was
 drawn to answer.
 
-### B137 — CI was red on `main`, and the one run on a schedule reported success over a failing suite — FIXED
+### B150 — CI was red on `main`, and the one run on a schedule reported success over a failing suite — FIXED
 
-**Filed as B133 and renumbered before it was written.** `docs/superpowers/BACKLOG.md` already held
-B133 through B136, exactly the collision B135's own opening note describes; B137 was the next free
-number by `git log --all --oneline --grep` and by this file.
+**Filed as B133, then B137, and renumbered twice.** `docs/superpowers/BACKLOG.md` already held B133
+through B136, exactly the collision B135's own opening note describes, so this was written as B137 —
+the next free number by `git log --all --oneline --grep` and by this file. That was the old rule and
+it was the wrong one: the lane charters landed the same day pre-allocate B137-B139 to the
+coordinator, and a number that is free today is not a number nobody else is going to take. Renumbered
+into Lane C's own block, where nothing else can claim it. Its work item moved from `CI-W233` to
+`CI-W280` for the same reason, and that one had already collided with the coordinator's `M0-W233`.
 
 **What was red.** Run `32024607194` on `04ece58`: `test` failed, `serial` failed, `web` passed,
 `coverage` skipped. Steps ran, so this is not B112's "job never acquired" signature.
