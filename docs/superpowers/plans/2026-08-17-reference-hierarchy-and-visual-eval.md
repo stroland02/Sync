@@ -151,6 +151,22 @@ the mock's 8px"* — assignable, fixable, and re-runnable.
 - density — data cells and figures per screen, the ratio the Fleet work already moved from 125.2 to
   25.0
 
+**Which properties may gate, and which may not.** This is the load-bearing constraint and it comes
+from `CI-W300`. **Token-derived properties may gate; content counts may not.** Colour and radius
+matched the mock exactly on the first run, so they can be asserted — they move only when somebody
+changes a token, which is exactly when a gate should fire. Side-by-side regions, prose characters
+and density move on **every copy edit**, and gating those turns the eval into a snapshot test, which
+this repository has already ruled fails on every correct change and gets deleted within a week.
+
+So the eval reports all twelve properties and gates on the token half only. The content half is a
+measurement a human reads and acts on, which is how the Fleet numbers -- 4 regions against 17, 915
+prose characters against 340 -- did their job without anyone needing a build to go red.
+
+**Where it runs.** The `web` job, not `beta-gates`. `beta-gates` carries `--exit-zero` precisely so a
+readiness verdict can never fail a build; an eval intended to gate needs the opposite, and one job
+cannot hold both without a `continue-on-error` carve-out that would swallow a crashed script too.
+Three to five minutes on `web`'s existing schedule.
+
 **What it must not do.** It must not score. A single similarity number over these properties would
 be exactly the composite figure this console refuses everywhere else, and it would hide which of the
 five moved. It reports per-property, per-page, with the mock value and the built value side by side.
