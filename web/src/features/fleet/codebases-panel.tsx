@@ -1,5 +1,5 @@
 /**
- * Codebases Panel: one card per repository the index holds, claiming only what an answer
+ * The repository list: one row per repository the index holds, claiming only what an answer
  * scoped to that repository has actually said.
  *
  * `/api/overview` echoes the scope it was computed for (`repo_id`) precisely so a caller
@@ -33,17 +33,22 @@
  */
 
 import { useQueries } from "@tanstack/react-query"
-import { FolderGit2, ArrowRight } from "lucide-react"
 import { Link } from "react-router"
 
 import { fetchOverview } from "@/api/client"
 import { useRepositories } from "@/api/queries"
 import type { OverviewResponse } from "@/api/types"
 import { Badge } from "@/vendor/supabase/ui/badge"
-import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardHeader, CardTitle } from "@/vendor/supabase/ui/card"
 import { Absent } from "@/components/status"
 import { EmptyState, ErrorState, LoadingState } from "@/components/states"
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/data-table"
 import { cardFacts, matchesFilter, type CodebaseCardFacts, type CodebaseFilter } from "@/features/fleet/codebase-cards"
 
 export type { CodebaseFilter } from "@/features/fleet/codebase-cards"
@@ -83,56 +88,6 @@ function FindingsBadge({ facts }: { facts: CodebaseCardFacts }) {
     )
   }
   return <Badge>{facts.openFindings === 0 ? "No open findings" : `${facts.openFindings} open findings`}</Badge>
-}
-
-function CodebaseCard({ facts }: { facts: CodebaseCardFacts }) {
-  return (
-    <Card className="group relative flex flex-col justify-between border-line bg-surface hover:border-border transition-colors duration-150">
-      <CardHeader className="gap-field pb-row">
-        <div className="flex items-start justify-between gap-row">
-          <div className="flex items-center gap-field">
-            <div className="flex size-8 items-center justify-center rounded-control bg-muted border border-border text-foreground">
-              <FolderGit2 className="size-4" />
-            </div>
-            <div>
-              <CardTitle className="font-mono text-emphasis font-semibold group-hover:text-primary transition-colors">
-                <Link to={`/repositories/${encodeURIComponent(facts.repoId)}`} className="focus:outline-none">
-                  {facts.repoId}
-                </Link>
-              </CardTitle>
-              {/* No description. It read "Git repository · Monitored by Sync" on every card, and a
-                  reader looking at the Sync console's own repository list already knows both
-                  halves. Measured as 170 of Fleet's 450 discretionary characters against the drawn
-                  console's 340 — the largest prose on the screen carrying none of the four
-                  protected distinctions, and the only piece whose deletion removes no fact. */}
-            </div>
-          </div>
-
-          <FindingsBadge facts={facts} />
-        </div>
-      </CardHeader>
-
-      <CardContent className="flex flex-col gap-row pt-0">
-        {facts.vendors.length > 0 ? (
-          <div className="flex flex-wrap items-center gap-field text-meta">
-            <span className="text-muted-foreground font-medium">Attached Vendors:</span>
-            {facts.vendors.map((vendorId) => (
-              <VendorBadge key={vendorId} vendorId={vendorId} />
-            ))}
-          </div>
-        ) : null}
-
-        <div className="flex items-center justify-end pt-field border-t border-border mt-auto">
-          <Button asChild size="sm" variant="ghost" className="gap-field text-meta group-hover:text-primary">
-            <Link to={`/repositories/${encodeURIComponent(facts.repoId)}`}>
-              <span>Open Codebase</span>
-              <ArrowRight className="size-3.5 transition-colors" />
-            </Link>
-          </Button>
-        </div>
-      </CardContent>
-    </Card>
-  )
 }
 
 export function CodebasesPanel({ filter = "ALL" }: CodebasesPanelProps) {
@@ -183,11 +138,48 @@ export function CodebasesPanel({ filter = "ALL" }: CodebasesPanelProps) {
           detail="No repositories match the chosen filter criteria. Switch back to 'All repositories' to view all watched codebases."
         />
       ) : (
-        <div className="grid gap-row md:grid-cols-2">
-          {filteredCards.map((facts) => (
-            <CodebaseCard key={facts.repoId} facts={facts} />
-          ))}
-        </div>
+        /* Rows rather than cards. A card spends a whole tile on one repository and its name, and
+           five of them filled the overview while answering one question — which repository do I
+           open. A row answers it in a line and lets a reader compare down a column, which a grid of
+           cards cannot do. The scoped-answer discipline is unchanged: `openFindings` is still null
+           until that repository's own answer arrives, and still renders the absence marker. */
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Repository</TableHead>
+              <TableHead>Attached vendors</TableHead>
+              <TableHead>Open findings</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {filteredCards.map((facts) => (
+              <TableRow key={facts.repoId}>
+                <TableCell>
+                  <Link
+                    to={`/repositories/${encodeURIComponent(facts.repoId)}`}
+                    className="font-mono underline underline-offset-2"
+                  >
+                    {facts.repoId}
+                  </Link>
+                </TableCell>
+                <TableCell>
+                  {facts.vendors.length === 0 ? (
+                    <Absent>no vendor attached to this repository</Absent>
+                  ) : (
+                    <span className="flex flex-wrap gap-field">
+                      {facts.vendors.map((vendorId) => (
+                        <VendorBadge key={vendorId} vendorId={vendorId} />
+                      ))}
+                    </span>
+                  )}
+                </TableCell>
+                <TableCell>
+                  <FindingsBadge facts={facts} />
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
       )}
     </div>
   )

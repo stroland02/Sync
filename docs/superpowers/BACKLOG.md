@@ -4237,3 +4237,45 @@ collapses to one query, and `cardFacts` already takes a scoped answer per reposi
 
 **Not urgent for beta.** A design partner's deployment holds few repositories, which is exactly the
 case where N+1 is invisible.
+
+### B149 — Runs and repairs cannot be scoped to a repository, so the Codebase screen cannot show them
+
+The owner's instruction (2026-08-17) is that the Codebase screen — a repository's own landing — carry
+change units, findings, indexes, **runs and repairs**. Three of those five are already scopable and
+built. Two are not, and building them anyway would reintroduce a defect this console already fixed.
+
+**Runs.** `RunRow` carries `thread_id`, `finding_id`, `run_id`, `current_node`, `outcome`,
+`abandon_reason`, `last_checkpoint_at` — and **no `repo_id`**. Nothing in the transport says which
+repository a checkpoint thread belongs to. `M14-W265` removed a "Remediation active" line from the
+repository cards for exactly this reason: it was inventing an attribution the payload cannot
+support. A runs table on a repository page would be the same defect at a larger size — one
+repository's name over every repository's runs.
+
+**Repairs.** `corpus_summary(store)` takes no repository and `/api/corpus` accepts no query
+parameter, so the repair record is fleet-wide only. Same consequence.
+
+**What closes it:** `repo_id` on the run row, and a repository parameter on the corpus route — both
+`sync.dashboard` and `sync.api`, which are Lane E's. The console half is small once the payloads
+carry the scope: the Codebase screen already renders three scoped panels and would render two more
+the same way.
+
+**Related:** `B147` (a repository with no telemetry 404s) currently blocks the Codebase screen from
+being measured at all, and `B148` (Fleet's per-repository overview N+1) is the third payload-shape
+item on the same screen family. All three are one conversation with Lane E rather than three.
+
+### B150 — "Viewing the code" means call sites, because Sync does not store customer source
+
+Recorded so the Codebase screen is not designed around a file browser that cannot exist.
+
+`call_site` holds `repo_id`, `path`, `line`, `col` and the symbol — **where** a call is, never the
+text of it. `CLAUDE.md`'s containment position is that Sync clones a customer repository to verify a
+patch and never holds their secrets; the graph keeps locations and bindings, not source.
+
+So a Codebase screen can honestly show: which files call which vendor operations, at which lines,
+grouped into the structure those paths imply, with the rung behind each binding — and it can link
+out to the file on the customer's forge. It cannot show a source viewer without either storing
+customer code or fetching it live with credentials, and both are decisions well outside a console
+change.
+
+**This is a design constraint rather than a defect**, and it is filed so the constraint is met
+deliberately rather than discovered halfway through building the screen.
