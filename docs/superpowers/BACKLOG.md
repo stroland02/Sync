@@ -69,6 +69,13 @@ walk, sign, land the signature, then resume — which is exactly how `M14-W364` 
 console-changed timestamp had climbed 14:36 → 15:32 → 16:40 while a lane tried to sign a console it
 was still changing.
 
+**The operational consequence, ruled 2026-08-17: do not re-sign per landing.** Gate 3 returned to
+`CANNOT TELL` twenty minutes after it was met, when `M14-W366` landed. Chasing it would mean the
+console lane walking screens instead of improving them, or freezing the console to hold a green
+meter — **which is optimising the proxy, the exact trap `M0-W269` names.** Re-sign when console work
+*pauses*: at a milestone, or when the board is about to be read. A gate that is expensive to hold
+and cheap to re-establish should be established when it is needed, not defended continuously.
+
 | Gate | Verdict | Why |
 |---|---|---|
 | 1 -- the loop closes | **NOT MET** | 4 real attempts, 0 with a pull request that went green. Resume-on-review-comment *is* built. The blocker is `B7`, the owner's call |
