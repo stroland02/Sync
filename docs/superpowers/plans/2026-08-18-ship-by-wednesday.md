@@ -74,6 +74,15 @@ types, check every precondition, and say precisely which one is missing and how 
 `scripts/dev_up.py` already does exactly this (`CI-W302`, `CI-W303`), and it refuses rather than
 dying. The `npx` entry point wraps that and surfaces its messages rather than hiding them.
 
+**Read the Superlog command as a *method*, not a feature list — owner clarification, 2026-08-18.**
+The point is not that it happens to index. The point is **no assembly required**: one command sets up
+*everything the product needs to work*, and the user is never left holding a list of steps. For Sync
+that is the toolchain and its shims, the database and its schema, whatever harnesses and skills the
+product depends on, the console build, the running services, and the index of the target codebase.
+
+**The test is not "does the command exist". It is: after this one command, is there anything a person
+still has to figure out?** Every remaining step is a defect in the command, not a note for the README.
+
 **What the one command actually does, per the owner 2026-08-18: all setup, launch localhost, and
 index the codebase.** That third step is the one that matters and it is the one nobody had scoped.
 It means first-run is not *bring up a product with seed data* — it is **point Sync at a repository
