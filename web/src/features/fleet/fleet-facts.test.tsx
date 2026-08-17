@@ -161,3 +161,42 @@ describe("a bounded count is never rendered as if it were exact", () => {
     expect(container.querySelectorAll('[role="presentation"]')).toHaveLength(1)
   })
 })
+
+describe("the open-findings tile against a graph that has never been indexed", () => {
+  /**
+   * A design partner`s first five minutes are this state: configured, nothing indexed, every
+   * table empty. `0 open findings across every vendor, every repository` is then a measured-
+   * sounding clean bill of health for code nobody has read, which is absence rendered as zero on
+   * the exact axis this console argues about. The count is true; the note has to stop implying
+   * a search happened.
+   */
+  it("says nothing has been indexed rather than implying a search found nothing", () => {
+    setAll(() => settled({}))
+    mockState.overview = settled({ ...OVERVIEW, total_findings: 0 })
+    mockState.repositories = settled({ repo_ids: [] })
+    mockState.runs = settled({ items: [], total: 0 })
+    mockState.detectors = settled({ detectors: [] })
+    mockState.corpus = settled({ attempts: 0, distinct_findings: 0 })
+
+    const { container } = renderRail()
+    const text = container.textContent ?? ""
+
+    expect(text).toContain("No repository has been indexed")
+    expect(text).not.toContain("Across every vendor, every repository.")
+  })
+
+  it("keeps the ordinary scope note once something has been indexed", () => {
+    setAll(() => settled({}))
+    mockState.overview = settled({ ...OVERVIEW, total_findings: 0 })
+    mockState.repositories = settled({ repo_ids: ["org/repo"] })
+    mockState.runs = settled({ items: [], total: 0 })
+    mockState.detectors = settled({ detectors: [] })
+    mockState.corpus = settled({ attempts: 0, distinct_findings: 0 })
+
+    const { container } = renderRail()
+    const text = container.textContent ?? ""
+
+    expect(text).toContain("Across every vendor, every repository.")
+    expect(text).not.toContain("No repository has been indexed")
+  })
+})

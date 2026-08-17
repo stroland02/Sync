@@ -57,6 +57,36 @@ function CountValue({
   return <>{text}</>
 }
 
+/**
+ * What qualifies the open-findings count, which depends on whether anything was ever searched.
+ *
+ * A count of zero has two readings and the tile cannot carry both. When the index holds at least
+ * one repository, zero open findings is a measurement — Sync read the code and flagged nothing —
+ * and the note names the scope that measurement covers. When the index holds nothing, the same
+ * zero is not a measurement at all: no call site has been read, so nothing could have been found,
+ * and "across every vendor, every repository" describes a search that never ran.
+ *
+ * That second case is a design partner's first five minutes, and it is the one this console must
+ * not get wrong: a clean bill of health for code nobody has opened is absence rendered as zero on
+ * the exact axis the product argues about. Measured against an empty graph on 2026-08-17 and
+ * recorded in `reports/2026-08-17-gate-3-empty-state.md`.
+ *
+ * The bounded-scan qualification still wins where it applies, because a count that stopped early
+ * is a floor whatever the index holds.
+ */
+function openFindingsNote(
+  overview: ReturnType<typeof useOverview>,
+  repositories: ReturnType<typeof useRepositories>
+): string {
+  if (overview.isSuccess && overview.data.total_findings_bound_reached) {
+    return `At least this many: counting stopped at ${overview.data.total_findings_bound.toLocaleString()}.`
+  }
+  if (repositories.isSuccess && repositories.data.repo_ids.length === 0) {
+    return "No repository has been indexed, so nothing has been searched — this is not a measurement that found nothing."
+  }
+  return "Across every vendor, every repository."
+}
+
 export function FleetFacts() {
   // The same offset the runs panel reads, so both share one query rather than issuing two.
   const [offset] = useOffsetParam("runs_offset")
@@ -86,11 +116,7 @@ export function FleetFacts() {
             }
           />
         }
-        note={
-          overview.isSuccess && overview.data.total_findings_bound_reached
-            ? `At least this many: counting stopped at ${overview.data.total_findings_bound.toLocaleString()}.`
-            : "Across every vendor, every repository."
-        }
+        note={openFindingsNote(overview, repositories)}
       />
       <FactTile
         label="Runs"
