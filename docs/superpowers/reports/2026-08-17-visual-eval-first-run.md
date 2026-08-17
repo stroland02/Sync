@@ -371,3 +371,43 @@ both turned out to be dominated by protected sentences.
 
 **No layout or prose work should be ordered off any number in this file taken before this section.**
 The instrument is trustworthy from here; the readings before it are not.
+
+---
+
+# Fleet, re-audited on the fixed instrument — and one cut made
+
+**`prose-audit.mjs` carried the same defect the eval had** and was fixed the same way before this
+run: it waited only for `main` to have text, so it could count a skeleton's "Loading…" as console
+prose. It now waits for every panel to settle and refuses if any shows a fetch failure.
+
+Fleet, settled: **1777 characters across 16 paragraphs.**
+
+| Class | Chars | What it is |
+|---|---|---|
+| **Protected** | **1327** | change-unit grain (twice), staleness-not-liveness, absence-is-not-zero, three-attempts-one-finding, the fleet-vs-codebase scope sentence, the standing-limits framing, and the completeness statement |
+| **Discretionary** | **450** | the route question, two figure labels, one panel description, and one string repeated once per card |
+
+Against the mock's 340, Fleet's discretionary prose was **450 — over by 110**, which is a real gap
+and the first one this work has found that survives a correct measurement.
+
+## The cut, and why it is the only one available
+
+`Git repository · Monitored by Sync` rendered on **every** repository card — 170 of those 450
+characters. It carries none of the four distinctions, and both halves are already established by
+context: a reader looking at the Sync console's own repository list knows the rows are repositories
+and knows Sync is watching them. **Deleting it removes no fact.**
+
+Removed, test-first. Verified by re-running the audit rather than by asserting:
+
+| | before | after |
+|---|---|---|
+| total | 1777 | **1607** |
+| paragraphs | 16 | 11 |
+| discretionary | 450 | **280** |
+
+**280 against the mock's 340 — Fleet is now under parity on discretionary prose**, and the four
+protected sentences were confirmed still present in the same run rather than assumed.
+
+Nothing else on Fleet is available to cut. The remaining 280 characters are the route's own question,
+two figure labels and one panel description, each of which says something the screen does not
+otherwise say.
