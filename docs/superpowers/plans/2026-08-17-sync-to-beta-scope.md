@@ -206,8 +206,9 @@ the beta critical path; everything else is real work that does not block the gat
    resolve on Linux. The test is 8 passed under `-n 4` in 29.71s.
 4. **[Gate 4]** Reconcile `specs/2026-07-25-sync-threat-model.md` against the code that now exists,
    and close or re-scope `B97`. The sandbox landed; the spec should say what is actually true.
-5. Gate wall-clock. Eight to fourteen minutes, paid by every lane on every iteration, is the largest
-   single tax on this workspace.
+5. ~~Gate wall-clock. Eight to fourteen minutes, paid by every lane on every iteration, is the
+   largest single tax on this workspace.~~ **Closed as measured, `CI-W363`: 152-230s, median about
+   175s across eight runs. The figure this item rested on was about four times the truth.**
 
 ### Lane D -- signals and adapters
 
