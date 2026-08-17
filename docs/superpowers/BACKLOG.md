@@ -384,7 +384,7 @@ set, recording for each whether its default admits customer-controlled or operat
 input, in the same form as the measurement above — an experiment, not a reading. `sandbox`,
 `plugins`, `agents`, `system_prompt` and `permission_mode` are the ones to start from.
 
-### B133 — B79's natural key never reached any database that already existed, so every corpus write fails
+### B133 — B79's natural key never reached any database that already existed, so every corpus write fails - CLOSED
 
 **Found 2026-08-16 by running `sync rehearse --depth full`, which nothing had done since the
 pipeline changed underneath it.** Every `migration_outcome` write in that run raised:
@@ -422,6 +422,15 @@ already holds the old one, proved by a test that creates the table with the two-
 applies the schema, and watches a write that previously raised succeed — and proved able to fail
 by running that test against the current `apply_schema` first. A fresh-database test proves
 nothing here; the fresh-database path is the one that already works.
+
+**Closed.** `GraphStore.apply_schema` (`src/sync/graph/store.py:255-339`) now reconciles a widened
+unique constraint on an existing database — it detects the old constraint by its columns, drops it
+and adds the one `schema.sql` declares. `tests/test_migration_corpus.py::
+test_apply_schema_reconciles_widened_unique_constraint_on_existing_database` proves it the way this
+entry asked: creates `migration_outcome` under the old two-column key, applies the schema, and
+watches a write that would have raised under B133 succeed. Verified against the live dev database
+2026-08-17: `migration_outcome`'s constraint is `UNIQUE (finding_id, attempt_index, is_rehearsal)`,
+not the two-column key this entry describes.
 
 ### B134 — a corpus write that fails leaves no queryable trace, so a systematic failure runs forever
 
