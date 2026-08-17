@@ -57,6 +57,19 @@ DEFAULT_SILENCE_MINUTES = 10
 # survives one being deleted.
 LANE_TERMINALS = Path(__file__).resolve().parent / "lane_terminals.json"
 
+# An agent out of budget cannot answer, and retrying it is worse than doing nothing: Orca
+# circuit-breaks a task after three consecutive dispatch failures, so a sweep running every
+# twenty minutes would permanently fail a healthy lane about an hour into an outage that
+# resolves itself. Measured 2026-08-17, when two lanes hit their limit at once with a two-hour
+# reset ahead of them. These are the substrings the agent CLIs print when they stop for budget.
+BUDGET_EXHAUSTED = (
+    "hit your session limit",
+    "usage limit",
+    "rate limit",
+    "quota exceeded",
+    "insufficient credit",
+)
+
 _WINDOWS_INSTALL = Path(
     os.environ.get("LOCALAPPDATA", "")
 ) / "Programs" / "orca" / "resources" / "bin" / "orca"
@@ -117,6 +130,29 @@ def live_terminals(cli: str) -> dict[str, int]:
         for t in terminals
         if t.get("connected") and not t.get("orphaned")
     }
+
+
+def budget_held(cli: str, handle: str) -> str | None:
+    """The reset notice on a terminal that has stopped for budget, or `None`.
+
+    Read from the terminal's own tail rather than inferred from silence, because silence is
+    ambiguous -- a thinking agent and an exhausted one look identical from the outside, and only
+    one of them should be left alone.
+    """
+    payload = call(cli, "terminal", "read", "--terminal", handle, "--json")
+    terminal = (payload.get("result") or {}).get("terminal") or {}
+    tail = " ".join(terminal.get("tail") or []).lower()
+    if not any(marker in tail for marker in BUDGET_EXHAUSTED):
+        return None
+    for line in reversed(terminal.get("tail") or []):
+        if "resets" in line.lower():
+            # ASCII-folded before it is ever printed. A terminal tail carries box-drawing and
+            # spinner glyphs, and stdout on this machine is cp1252, so returning the raw line
+            # crashes the sweep on the one path that exists for an outage -- the failure would
+            # arrive precisely when nobody is watching and the lane most needs to be held.
+            folded = "".join(c if 32 <= ord(c) < 127 else " " for c in line)
+            return " ".join(folded.split())[:120]
+    return "no reset time printed"
 
 
 def recorded_terminals() -> dict[str, str]:
@@ -197,6 +233,18 @@ def main() -> int:
         if not needs:
             print(f"OK      {label}: {why}")
             continue
+
+        # Asked before the dry-run branch on purpose: a dry run has to report the verdict a real
+        # run would reach, or it is not a preview of anything. An earlier version checked budget
+        # only on the mutating path, so `--dry-run` claimed it would restart a lane it would in
+        # fact have held.
+        handle = dispatch.get("assignee_handle") or recorded.get(task["id"])
+        if handle and handle in terminals:
+            held = budget_held(cli, handle)
+            if held:
+                print(f"HELD    {label}: out of budget, not retried ({held})")
+                continue
+
         if args.dry_run:
             print(f"WOULD   {label}: {why}")
             restarted += 1
@@ -205,7 +253,6 @@ def main() -> int:
         # Re-attach to the terminal the lane already owns when we still know it, so a lane keeps its
         # worktree and its conversation. Without a handle there is nothing to re-attach to, and
         # choosing a new placement is a coordinator decision rather than this script's.
-        handle = dispatch.get("assignee_handle") or recorded.get(task["id"])
         if not handle or handle not in terminals:
             print(f"MANUAL  {label}: {why}; no live terminal to re-attach, coordinator must place it")
             continue
