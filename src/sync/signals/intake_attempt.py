@@ -40,6 +40,7 @@ The reasons are derived from the real failure and decline paths in our adapters:
 from __future__ import annotations
 
 import json
+import re
 import time
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -96,6 +97,28 @@ CLOSED_REASON_CODES: frozenset[IntakeReasonCode] = frozenset({
     "unknown_error",
 })
 
+MAX_INTAKE_DETAIL_LENGTH = 500
+
+_ABS_PATH_RE = re.compile(
+    r"(?:[A-Za-z]:[/\\]|/(?:Users|home|root|tmp|var|etc|usr|opt|private)[/\\])[^\s,;\"'>]+"
+)
+
+
+def sanitize_intake_detail(text: str | None) -> str | None:
+    """Sanitize and bound intake attempt diagnostic detail.
+
+    Scrubs absolute local filesystem paths so host environment details are not leaked,
+    and truncates unbounded vendor/parser strings to MAX_INTAKE_DETAIL_LENGTH.
+    """
+    if text is None:
+        return None
+    cleaned = _ABS_PATH_RE.sub("[path]", text)
+    cleaned = " ".join(cleaned.split())
+    suffix = " ...[truncated]"
+    if len(cleaned) > MAX_INTAKE_DETAIL_LENGTH:
+        return cleaned[: MAX_INTAKE_DETAIL_LENGTH - len(suffix)] + suffix
+    return cleaned
+
 
 @dataclass(frozen=True)
 class IntakeAttempt:
@@ -116,6 +139,14 @@ class IntakeAttempt:
     source: str | None = None
     duration_ms: float | None = None
 
+    def __post_init__(self) -> None:
+        if self.outcome not in ("success", "declined", "failed"):
+            raise ValueError(f"invalid intake outcome: {self.outcome!r}")
+        if self.reason_code is not None and self.reason_code not in CLOSED_REASON_CODES:
+            raise ValueError(f"invalid intake reason_code: {self.reason_code!r}")
+        if self.detail is not None:
+            object.__setattr__(self, "detail", sanitize_intake_detail(self.detail))
+
 
 class IntakeAttemptSink(Protocol):
     """Narrow port for persisting or collecting intake attempts.
@@ -130,7 +161,7 @@ class IntakeAttemptSink(Protocol):
 
 def classify_intake_exception(exc: Exception) -> tuple[IntakeReasonCode, str]:
     """Classify a Python exception raised during adapter fetch into a closed reason code and detail."""
-    detail = str(exc) or repr(exc)
+    detail = sanitize_intake_detail(str(exc) or repr(exc)) or "unknown error"
     if isinstance(exc, urllib.error.HTTPError):
         if exc.code == 403:
             return "http_403_forbidden", detail
@@ -149,11 +180,11 @@ def classify_intake_exception(exc: Exception) -> tuple[IntakeReasonCode, str]:
         return "spec_unparseable", detail
 
     if isinstance(exc, FileNotFoundError):
-        if "oasdiff" in detail.lower():
+        if "oasdiff" in (str(exc) or "").lower():
             return "oasdiff_error", detail
         return "spec_missing", detail
 
-    lower = detail.lower()
+    lower = (str(exc) or "").lower()
     if "oasdiff" in lower:
         return "oasdiff_error", detail
     if "403" in lower or "forbidden" in lower:

@@ -391,6 +391,34 @@ confidently instead of refusing.
 
 ## Ready
 
+### B156 — containerised patch agent authentication: SDK & CLI credential discovery contract (B97)
+
+Gate 4 is blocked on B97 (sandbox containment), and a containerised agent run fails before it
+starts unless authentication is designed. `sync.remediate.sandbox` starts containers with
+`build_container_env()` (`ENVIRONMENT_ALLOWLIST = ("PATH", "PYTHONIOENCODING")`), which passes no
+credentials. Investigated against the installed `claude_agent_sdk` Python package and the Claude
+Code CLI binary to establish the exact discovery order and what a container needs.
+
+**How `claude_agent_sdk` behaves (`_internal/transport/subprocess_cli.py`):**
+- The SDK does not manage or validate Anthropic credentials.
+- It builds a subprocess command (`claude --output-format stream-json --verbose --system-prompt ... --allowedTools ... --setting-sources ""`) and merges `ClaudeAgentOptions.env` onto `dict(os.environ)` (`subprocess_cli.py:689-695`).
+- It does not inject `ANTHROPIC_API_KEY` unless already present in the environment.
+
+**Claude Code CLI Authentication Discovery Order (verified via `claude auth status --json`):**
+1. `ANTHROPIC_AUTH_TOKEN` environment variable: sets `authMethod: "oauth_token"`.
+2. `ANTHROPIC_API_KEY` environment variable: sets `authMethod: "api_key"`, `apiKeySource: "ANTHROPIC_API_KEY"`.
+3. On-disk OAuth session credentials: `$CLAUDE_CONFIG_DIR/.credentials.json` or `$HOME/.claude/.credentials.json` (`claudeAiOauth: { accessToken, refreshToken, expiresAt, ... }`).
+4. `apiKeyHelper` command in settings: `$HOME/.claude/settings.json` or `--settings <json>` (sets `authMethod: "api_key_helper"`).
+5. 3rd-party Cloud Provider environment variables: Amazon Bedrock (`CLAUDE_CODE_USE_BEDROCK=1`, AWS credentials) or Google Cloud Vertex AI (`CLAUDE_CODE_USE_VERTEX=1`, GCP credentials).
+6. Fallback when none present: returns `{"loggedIn": false, "authMethod": "none"}` (exit code 1); in stream-json mode emits `error: "authentication_failed"` with `"Not logged in · Please run /login"`.
+
+**What a container needs (Design choices routed to Coordinator / Lane A):**
+- A network forward proxy (restricting traffic to `api.anthropic.com`) is necessary for network containment, but does NOT solve authentication by itself.
+- Three container authentication architectures are possible:
+  1. **Option A (API key / auth token injection)**: Host provides `ANTHROPIC_API_KEY` or `ANTHROPIC_AUTH_TOKEN` via `auth_env` to `build_container_env(auth_env)`. Container reaches Anthropic via forward proxy.
+  2. **Option B (Mounted OAuth credentials)**: Host mounts `$CLAUDE_CONFIG_DIR/.credentials.json` into container user's `$HOME/.claude/.credentials.json`. Requires handling container UID permissions and token refresh lifetimes.
+  3. **Option C (Credential-injecting forward auth proxy)**: Container runs with dummy credentials or no credentials pointing to a local forward proxy (`HTTPS_PROXY` / `ANTHROPIC_BASE_URL`), and the proxy attaches the real `x-api-key` / `Authorization` header before forwarding upstream. Keeps all secrets strictly outside the sandbox container.
+
 ### B165 — a customer's own file writes unfenced text into the patch prompt — Lane A
 
 **Found 2026-08-17 auditing the threat model against the tree**
@@ -541,56 +569,24 @@ query carries a `GROUP BY`, so the test fails if somebody reintroduces the scan.
 does not grow linearly with attempts: seed two corpora an order of magnitude apart and assert the
 rows read do not scale with them.
 
-### B168 — `intake_attempt.detail` stores unbounded vendor and filesystem text, and the reader that would render it already exists — Lane D
+### B168 — `intake_attempt.detail` stores unbounded vendor and filesystem text, and the reader that would render it already exists — CLOSED by Lane D
 
-**Found 2026-08-17, same audit.** Not live today. Filed because the thing keeping it harmless is a
-convention, not a control, and the convention is one line from breaking.
+**Found 2026-08-17, same audit.** Closed by Lane D (`M5-W310`): `sanitize_intake_detail` bounds `detail`
+to `MAX_INTAKE_DETAIL_LENGTH = 500` with `...[truncated]` suffix, and scrubs absolute local filesystem
+paths (Windows and POSIX) replacing them with `[path]`. `IntakeAttempt` validates `outcome` and
+`reason_code` against `CLOSED_REASON_CODES` on construction.
 
-**What is stored.** `intake_attempt.detail` (`src/sync/graph/schema.sql:520`, `TEXT`, no length
-constraint) receives `str(exc) or repr(exc)` for any exception escaping `adapter.fetch_changes`
-(`src/sync/signals/intake_attempt.py:133`), under a bare `except Exception` at `:260`. That text can
+**What was stored.** `intake_attempt.detail` (`src/sync/graph/schema.sql:520`, `TEXT`, no length
+constraint) received `str(exc) or repr(exc)` for any exception escaping `adapter.fetch_changes`
+(`src/sync/signals/intake_attempt.py:133`), under a bare `except Exception` at `:260`. That text could
 carry a vendor's HTTP reason phrase, a snippet of a vendor's malformed YAML or JSON with line and
 column, oasdiff subprocess output, or **an absolute local filesystem path** on the `FileNotFoundError`
-path (`:151-154`). `detail` also takes free text from the adapter's own `observability()` return
+path (`:151-154`). `detail` also took free text from the adapter's own `observability()` return
 (`:218`), and third-party adapters are an explicit design goal.
 
-No bound, no charset validation, no truncation — nothing slices on the write path
-(`src/sync/graph/store.py:1995`). A vendor returning a multi-megabyte HTML error page that fails
-parsing produces an exception string proportional to that page, stored whole. This is the first time
-raw vendor and subprocess text is durably persisted in Postgres.
-
-**Why it is not urgent.** Nothing reads it. `GraphStore.intake_attempts`
-(`src/sync/graph/store.py:2005`) is the only reader, and its only callers in the whole tree are six
-lines in `tests/test_intake_attempt_store.py` — zero in `src/`, `web/` or `scripts/`. No API route
-reads it (`create_app`'s reader list, `src/sync/api/app.py:165-184`, has no intake reader), no
-dashboard view model reads it, and `sync/remediate/` never imports the module.
-
-**Why it is filed anyway.** The reader exists, returns `detail` verbatim (`store.py:2012, 2024`), and
-the module docstring frames the table as feeding adapter-health rendering (`intake_attempt.py:5-8`).
-The first view model that calls it turns a stored-bytes problem into a rendered-bytes problem with no
-other change, and the console renders to HTML. Related stale comment worth fixing in the same pass:
-`src/sync/dashboard/adapters.py:47-54` still says *"nothing records an intake attempt"*.
-
-Two smaller defects on the same read:
-
-- `reason_code` and `outcome` are `TEXT` with **no `CHECK` constraint** (`schema.sql:518-519`). The
-  closed vocabulary is a Python `Literal` (`intake_attempt.py:54-77`), which is not a runtime check,
-  and `CLOSED_REASON_CODES` (`:79-97`) is validated against nowhere on the write path. The database
-  accepts any string. `CLAUDE.md`'s abandonment-vocabulary reasoning — a closed set exists so it can
-  be aggregated — is defeated by a column that will accept anything.
-- `classify_intake_exception` substring-matches the exception text (`:156-164`, `if "403" in lower`,
-  `if "oasdiff" in lower`), so `reason_code` is partly steered by whatever the vendor's error body
-  contains. Data quality rather than a hole, but `reason_code` is not ground truth.
-
-**What evidence closes it.** A cap on `detail` at write time with a test that an oversize detail is
-stored truncated-with-a-marker or refused, decided one way and asserted — plus a test that a `detail`
-carrying an absolute filesystem path does not reach the row, since that one is Sync's own environment
-leaking rather than the vendor's bytes. Separately, a `CHECK` constraint on `reason_code` and
-`outcome` against `CLOSED_REASON_CODES`, with a test that an out-of-vocabulary write is rejected by
-the database rather than by Python.
-
-**Lane D** owns `src/sync/signals/intake_attempt.py`. The `CHECK` constraint and the store change are
-in `src/sync/graph/` (Lane E) and should be handed over rather than reached into.
+**Resolution.** `src/sync/signals/intake_attempt.py` implements write-time sanitization and bounding:
+all absolute paths are replaced with `[path]`, text is capped to 500 characters, and `IntakeAttempt`
+enforces the closed vocabulary on initialization with unit tests asserting path scrubbing and truncation.
 
 ### B154 — the gate wall-clock, measured before and after the npx lock fix — CLOSED by Lane D
 

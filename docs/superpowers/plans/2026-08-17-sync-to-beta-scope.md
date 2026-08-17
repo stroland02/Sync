@@ -196,9 +196,14 @@ the beta critical path; everything else is real work that does not block the gat
 
 1. **[Gate 4]** `main` is red on `test_lint_dead_links`; every lane is currently gating around it and
    is therefore one step from mistaking a real regression for it.
-2. Postgres bounces under six sessions and costs a diagnosis every time it does.
-3. `test_disconnect_network_does_not_stop_an_already_open_socket` fails under `-n auto` and passes
-   alone.
+2. ~~Postgres bounces under six sessions~~ **CLOSED by `M0-W231`**, and verified 2026-08-17: `fsync`,
+   `synchronous_commit` and `full_page_writes` are off in the running container *and* in `main`'s
+   `docker-compose.yml`, so it survives a recreate. Five leaked test databases rather than sixty,
+   with the conftest statement, lock and sweep bounds and the 900s pytest watchdog all still in
+   place.
+3. ~~`test_disconnect_network_...` fails under contention~~ **CLOSED by `CI-W280`, and the
+   coordinator's diagnosis was wrong.** It was not contention: `host.docker.internal` does not
+   resolve on Linux. The test is 8 passed under `-n 4` in 29.71s.
 4. **[Gate 4]** Reconcile `specs/2026-07-25-sync-threat-model.md` against the code that now exists,
    and close or re-scope `B97`. The sandbox landed; the spec should say what is actually true.
 5. Gate wall-clock. Eight to fourteen minutes, paid by every lane on every iteration, is the largest
@@ -310,6 +315,67 @@ The coordinator lesson is worth keeping: the meter said "reached from nowhere", 
 read it as "somebody forgot to call this", which was not. A gate saying *what* is missing does not
 tell you *why*, and the lane that owns the file had the answer the whole time.
 
+## Ruling 7: B97's proxy and its credential are one piece of work, not two
+
+**Decided 2026-08-17, on `B156`'s evidence.** Lane D established the CLI's credential discovery order
+empirically -- `ANTHROPIC_AUTH_TOKEN`, then `ANTHROPIC_API_KEY`, then on-disk OAuth at
+`.credentials.json`, then `apiKeyHelper`, then third-party providers, then failure with
+`authentication_failed` -- and confirmed that `build_container_env()` passes none of them, so an
+isolated container fails with *"Not logged in"* before a patch begins. **A forward proxy alone is
+therefore insufficient.** That was not known before; it was assumed the proxy was the whole of the
+network problem.
+
+Three container options exist and two of them defeat the thing the sandbox is for:
+
+- **`auth_env` injection** puts a live credential inside the container. The whole premise of B97 is
+  that the patch agent holds `Bash` and is not trusted with what is reachable from inside; handing
+  it a credential is the same mistake the mitigation exists to prevent, differing only in whose
+  secret is at risk.
+- **Mounted credentials** are the same objection plus a filesystem path to exfiltrate.
+- **A credential-injecting proxy** keeps the credential outside the container entirely. The
+  container gets no egress except through the proxy, and the proxy attaches authentication to
+  Anthropic-bound traffic that the container itself never holds.
+
+**The third is the design, and it means B97's item 2 and item 3 are one piece of work.** The proxy
+that restricts egress to Anthropic is the same component that supplies the credential; building it
+twice, or building the proxy first and discovering the credential problem afterwards, is the failure
+this ruling exists to prevent.
+
+**What is still the owner's:** which credential Sync's own runs authenticate with -- an operator
+OAuth session, a dedicated API key, or a third-party provider. That is an account and a spend, and
+it decides what the proxy holds.
+
+## The empty-state gap is closed, and it found exactly one defect
+
+**Walked 2026-08-17 and the blocker is resolved.** The lane stood up a separate schema-applied
+zero-row database -- nine tables, zero rows verified before walking and dropped after -- rather than
+truncating the graph five other lanes were using, and walked it on the production runtime behind the
+credential gate.
+
+**One real defect.** Fleet rendered `Open findings 0` under its note across every vendor and every
+repository, which describes a search that never ran when nothing has been indexed. Fixed test-first
+as `M14-W346`: the note now says nothing has been searched, and that this is not a measurement that
+found nothing, reverting to the ordinary scope note the moment one repository is indexed.
+
+**Three of the rail's four zeros were already honest** and were left alone -- runs and repair
+attempts count events that genuinely did not occur, and repositories-indexed already carried the
+distinction. **Two screens were already right, quoted rather than reported as an absence of
+complaints:** detectors says *"The API answered, and the graph holds no open findings in this scope
+right now. That is an answer, not a failure"*; Settings renders *"Nothing received"* over a heading
+saying that nothing received has never delivered, which is not the same as having delivered nothing.
+
+**A hypothesis was disproved rather than confirmed.** The coordinator suggested the failed-fetch gap
+and the empty-graph gap might be one defect wearing two hats. They are not: with the API killed and
+the console still running, Fleet renders *"the API did not answer"* in the figure slot itself, with
+no bare zeros anywhere. The console already distinguishes them where it matters, so that stock-take
+item survives but shrinks from honesty to **affordance** -- it says which state it is in, it just
+offers no way to recover from the failed one.
+
+The Gate 3 signature now covers the empty graph as well as the seeded one, and was deliberately
+dated *after* the fix commit -- 12:54:34 against 12:54:13 -- because a signature dated before it
+would describe a console one commit older than the one it claims to cover, which is the staleness
+this gate exists to catch, self-inflicted.
+
 ## The one console gap that would block a design-partner beta
 
 `reports/2026-08-17-console-beta-stock-take.md`, from the lane that has walked every screen twice
@@ -328,6 +394,34 @@ screen names which deployment the console is bound to, route changes do not move
 abandoned-run workflow screen is unit-tested but has never been rendered. Two things are argued
 *against*: restyling, because every measured bar is clear and nothing is asking for it, and the
 second drawer, which still has one consumer.
+
+## The day-one coverage boundary a design partner will meet first
+
+`reports/2026-08-17-signals-index-beta-stock-take.md`. Lane D walked its own paths against what a
+partner experiences on day one and found one boundary that is honest by design and still needs
+saying out loud.
+
+**A partner who wraps the SDK will see fewer static bindings than they expect.** If
+`lib/stripe.ts` exports a constructed client and application files import that wrapper, single-file
+AST indexing does not bind those call sites. That is deliberate: the three-rung architecture exists
+precisely so that what cannot be statically bound is captured by runtime telemetry at the `observed`
+rung rather than fabricated as an uncertain `static` link. Lane D's verdict is keep as designed, and
+it is right.
+
+**But it composes with something.** The `observed` rung is now real -- correlators exist on both
+coded vendors and `cli.py` reaches them -- and it only produces bindings if the partner has wired
+telemetry. A partner with wrapper modules *and* no telemetry configured gets lower coverage than one
+without wrappers, from the same codebase, and nothing about that is their fault or visible to them.
+The question that follows is a console one and it is the same distinction this product is built on:
+**does any screen distinguish "this repository has no call sites here" from "this repository's call
+sites are behind an abstraction the static rung cannot follow, and no telemetry has been attached"?**
+Unmeasured is not zero, and coverage is exactly where a partner would misread one as the other.
+
+Everything else in that stock-take is verified working: both language indexers, both coded vendor
+adapters, the generated-spec adapters with their declarative `NO_MANIFEST` / `NO_SPECIFICATION` /
+`ONE_DOCUMENT` states, the closed intake vocabulary separating never-asked from nothing-new and
+clean-decline from fetch-failure, and rate limits and vendor downtime classified into reason codes
+without aborting a scan.
 
 ## The three decisions that are the human's, named now
 
