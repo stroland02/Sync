@@ -18,6 +18,7 @@ reaches GitHub.
 
 from __future__ import annotations
 
+import functools
 import os
 import re
 import shlex
@@ -227,13 +228,112 @@ def executable(info: tarfile.TarInfo) -> tarfile.TarInfo:
     return info
 
 
-def tarball(tmp_path: Path, *, version: str) -> Path:
-    """A `*windows_amd64.tar.gz` the real `tar` can extract, so only `gh` is stubbed."""
-    payload = fake_oasdiff(tmp_path / "payload.exe", version=version)
-    archive = tmp_path / f"oasdiff_{version}_windows_amd64.tar.gz"
-    with tarfile.open(archive, "w:gz", encoding="utf-8") as bundle:
-        bundle.add(payload, arcname="oasdiff.exe", filter=executable)
-    return archive
+# Every asset shape `scripts/oasdiff_asset.sh` can name. The release below publishes all of them,
+# the way the real one does, so the pattern the script sends is the only thing deciding which
+# archive arrives -- on whatever platform this run happens to be.
+ASSET_SUFFIXES = (
+    "windows_amd64", "windows_arm64", "linux_amd64", "linux_arm64", "darwin_all",
+)
+
+
+@functools.lru_cache(maxsize=1)
+def platform_selection() -> tuple[str, str]:
+    """This machine's asset pattern and extracted binary name, read from the mapping itself.
+
+    Restating either one here would agree with `oasdiff_asset.sh` on the machine this file was
+    written on and nowhere else, which is precisely the defect these tests exist to catch: a
+    fixture hardcoded to one platform makes every assertion below a tautology on that platform
+    and a false report everywhere else.
+    """
+    probe = subprocess.run(
+        [
+            git_bash(), "--noprofile", "--norc", "-c",
+            f". '{ASSET_MAP.as_posix()}'; "
+            'oasdiff_asset "$(uname -s)" "$(uname -m)"; oasdiff_binary "$(uname -s)"',
+        ],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        env={**os.environ},
+    )
+    assert probe.returncode == 0, probe.stdout + probe.stderr
+    asset, binary = probe.stdout.split()
+    return asset, binary
+
+
+def platform_asset() -> str:
+    return platform_selection()[0]
+
+
+def platform_binary() -> str:
+    return platform_selection()[1]
+
+
+def foreign_suffix() -> str:
+    """One asset suffix this machine's pattern does not match, whichever machine that is."""
+    ours = platform_asset().removeprefix("*_").removesuffix(".tar.gz")
+    return next(suffix for suffix in ASSET_SUFFIXES if suffix != ours)
+
+
+def release(tmp_path: Path, *, version: str, suffixes: tuple[str, ...] = ASSET_SUFFIXES) -> Path:
+    """A directory of published assets, one per platform, that the real `tar` can extract.
+
+    The archives are real and only `gh` is stubbed. Every one carries the binary name its own
+    platform's release carries, so an archive delivered for the wrong platform unpacks to a name
+    the script will not find -- which is what a stub answering every pattern with one Windows
+    archive hid until a Linux runner met it.
+    """
+    assets = tmp_path / "release"
+    assets.mkdir(exist_ok=True)
+    for suffix in suffixes:
+        member = "oasdiff.exe" if suffix.startswith("windows") else "oasdiff"
+        payload = fake_oasdiff(tmp_path / f"payload-{suffix}", version=version)
+        archive = assets / f"oasdiff_{version}_{suffix}.tar.gz"
+        with tarfile.open(archive, "w:gz", encoding="utf-8") as bundle:
+            bundle.add(payload, arcname=member, filter=executable)
+    return assets
+
+
+def fake_gh(path: Path, *, log: Path, assets: Path | None, exit_code: int = 0) -> Path:
+    """`gh release download`, stubbed as far as the pattern.
+
+    It reads `--pattern` out of its own argv and delivers exactly the assets matching it, and it
+    fails when none match -- the two behaviours `bootstrap_tools.sh` depends on. A stub that
+    copies whatever the test handed it regardless of the pattern asserts that the script asked
+    for *something*, which passes on the one platform whose asset the fixture happens to be
+    named for and fails everywhere else.
+
+    `case "$name" in $pattern)` is deliberately unquoted: that is the shell's own glob match,
+    and `gh`'s `--pattern` is a glob over asset names.
+    """
+    deliver = ""
+    if assets is not None:
+        deliver = (
+            f"for asset in {shlex.quote(assets.as_posix())}/*; do\n"
+            '  name="${asset##*/}"\n'
+            "  case \"$name\" in\n"
+            '    $pattern) cp "$asset" "./$name"; matched=1 ;;\n'
+            "  esac\n"
+            "done\n"
+        )
+    body = (
+        "#!/bin/sh\n"
+        f'printf "%s\\n" "$*" >> {shlex.quote(log.as_posix())}\n'
+        f"[ {exit_code} -eq 0 ] || exit {exit_code}\n"
+        "pattern=''\n"
+        "while [ $# -gt 0 ]; do\n"
+        '  if [ "$1" = --pattern ]; then pattern="$2"; shift 2; else shift; fi\n'
+        "done\n"
+        "if [ -z \"$pattern\" ]; then echo 'gh: no --pattern was given' >&2; exit 2; fi\n"
+        "matched=0\n"
+        f"{deliver}"
+        'if [ "$matched" -eq 0 ]; then\n'
+        '  echo "gh: no assets match the file pattern \\"$pattern\\"" >&2\n'
+        "  exit 1\n"
+        "fi\n"
+        "exit 0\n"
+    )
+    return write_script(path, body)
 
 
 def checkout(
@@ -245,37 +345,118 @@ def checkout(
     shutil.copy(BOOTSTRAP, root / "scripts" / "bootstrap_tools.sh")
     shutil.copy(ASSET_MAP, root / "scripts" / "oasdiff_asset.sh")
     if holds is not None:
-        fake_oasdiff(root / "tools" / "oasdiff.exe", version=holds)
+        fake_oasdiff(root / "tools" / platform_binary(), version=holds)
     return root
 
 
 def run_bootstrap(
-    root: Path, *, tmp_path: Path, release: Path | None, gh_exit: int = 0
+    root: Path, *, tmp_path: Path, assets: Path | None, gh_exit: int = 0
 ) -> tuple[subprocess.CompletedProcess[str], list[str]]:
     stubs = tmp_path / "bin"
     stubs.mkdir(exist_ok=True)
     log = tmp_path / "gh.log"
-    drop = f"cp {shlex.quote(release.as_posix())} ./{release.name}\n" if release else ""
-    recorder(stubs / "gh", log=log, then=drop, exit_code=gh_exit)
+    fake_gh(stubs / "gh", log=log, assets=assets, exit_code=gh_exit)
 
     result = run("bash scripts/bootstrap_tools.sh", cwd=root, stubs=stubs)
     called = log.read_text(encoding="utf-8").splitlines() if log.exists() else []
     return result, called
 
 
+def run_gh(stub: Path, *args: str, cwd: Path, stubs: Path) -> subprocess.CompletedProcess[str]:
+    return run(f"{shlex.quote(stub.as_posix())} {shlex.join(args)}", cwd=cwd, stubs=stubs)
+
+
+def test_the_gh_stub_delivers_only_what_the_pattern_names(tmp_path: Path) -> None:
+    """The stub is the platform mapping's only witness, so its fidelity is the test.
+
+    `gh release download --pattern` takes a glob over asset names. A stub ignoring that flag
+    turns every assertion below into "the script asked for something", and the script's answer
+    is right on exactly one platform -- the one whose archive the fixture was named for. That is
+    how `M0-W230`'s per-platform selection shipped correct and its tests still passed only on
+    Windows.
+    """
+    assets = release(tmp_path, version="9.9.9")
+    stubs = tmp_path / "bin"
+    stubs.mkdir(exist_ok=True)
+    into = tmp_path / "downloads"
+    into.mkdir()
+    stub = fake_gh(stubs / "gh", log=tmp_path / "gh.log", assets=assets)
+
+    result = run_gh(
+        stub, "release", "download", "v9.9.9", "--pattern", "*_linux_arm64.tar.gz",
+        cwd=into, stubs=stubs,
+    )
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert [path.name for path in sorted(into.iterdir())] == ["oasdiff_9.9.9_linux_arm64.tar.gz"]
+
+
+def test_the_gh_stub_fails_when_the_release_publishes_nothing_matching(tmp_path: Path) -> None:
+    """Real `gh` exits non-zero and downloads nothing when no asset matches; so must this.
+
+    Without it a release missing this machine's asset would look like a successful download of
+    an empty directory, and the script's next failure would be `tar` complaining about a file
+    nobody can find -- which is the message a Linux runner printed for a fortnight.
+    """
+    assets = release(tmp_path, version="9.9.9", suffixes=("darwin_all",))
+    stubs = tmp_path / "bin"
+    stubs.mkdir(exist_ok=True)
+    into = tmp_path / "downloads"
+    into.mkdir()
+    stub = fake_gh(stubs / "gh", log=tmp_path / "gh.log", assets=assets)
+
+    result = run_gh(
+        stub, "release", "download", "v9.9.9", "--pattern", "*_linux_amd64.tar.gz",
+        cwd=into, stubs=stubs,
+    )
+
+    assert result.returncode != 0, result.stdout + result.stderr
+    assert list(into.iterdir()) == []
+
+
 @pytest.mark.parametrize("written,newline", WRITTEN_PINS, ids=PIN_IDS)
 def test_the_bootstrap_downloads_the_release_the_pin_names(
     tmp_path: Path, written: str, newline: str
 ) -> None:
+    """The release publishes every platform's asset and the script picks one, on any platform.
+
+    Both halves of the selection are asserted: the pattern that reached `gh`, and the binary
+    name that ended up in `tools/`. Neither is spelled out here -- both come from
+    `oasdiff_asset.sh`, so a mapping that changed and a test that agreed with the old one cannot
+    both stay green.
+    """
     root = checkout(tmp_path, pin=written, newline=newline)
     result, called = run_bootstrap(
-        root, tmp_path=tmp_path, release=tarball(tmp_path, version="9.9.9")
+        root, tmp_path=tmp_path, assets=release(tmp_path, version="9.9.9")
     )
 
     assert result.returncode == 0, result.stdout + result.stderr
     assert len(called) == 1, called
     assert "v9.9.9" in called[0]
-    assert (root / "tools" / "oasdiff.exe").is_file()
+    assert platform_asset() in called[0], called[0]
+    assert (root / "tools" / platform_binary()).is_file()
+
+
+def test_the_bootstrap_refuses_a_release_that_publishes_nothing_for_this_platform(
+    tmp_path: Path,
+) -> None:
+    """A tag whose assets do not include this machine's is a refusal, not a silent wrong build.
+
+    This is the case a stub answering every pattern with one archive could never reach: it
+    always had something to hand over, so the bootstrap always got a file and the mapping was
+    never consulted for anything.
+    """
+    root = checkout(tmp_path, pin="9.9.9")
+
+    result, called = run_bootstrap(
+        root,
+        tmp_path=tmp_path,
+        assets=release(tmp_path, version="9.9.9", suffixes=(foreign_suffix(),)),
+    )
+
+    assert result.returncode != 0, result.stdout + result.stderr
+    assert len(called) == 1, called
+    assert not (root / "tools" / platform_binary()).exists()
 
 
 def test_a_checkout_holding_an_unpinned_build_is_refused_and_left_untouched(
@@ -283,15 +464,15 @@ def test_a_checkout_holding_an_unpinned_build_is_refused_and_left_untouched(
 ) -> None:
     """The defect this task closes. The old script exited 0 here and changed nothing."""
     root = checkout(tmp_path, pin="9.9.9", holds="1.26.0")
-    before = (root / "tools" / "oasdiff.exe").read_bytes()
+    before = (root / "tools" / platform_binary()).read_bytes()
 
     result, called = run_bootstrap(
-        root, tmp_path=tmp_path, release=tarball(tmp_path, version="9.9.9")
+        root, tmp_path=tmp_path, assets=release(tmp_path, version="9.9.9")
     )
 
     assert result.returncode != 0, result.stdout + result.stderr
     assert called == [], "a refusal must not download anything"
-    assert (root / "tools" / "oasdiff.exe").read_bytes() == before
+    assert (root / "tools" / platform_binary()).read_bytes() == before
     complaint = result.stdout + result.stderr
     assert "1.26.0" in complaint and "9.9.9" in complaint
 
@@ -302,7 +483,7 @@ def test_a_checkout_holding_the_pinned_build_succeeds_without_downloading(
     root = checkout(tmp_path, pin="9.9.9", holds="9.9.9")
 
     result, called = run_bootstrap(
-        root, tmp_path=tmp_path, release=tarball(tmp_path, version="9.9.9")
+        root, tmp_path=tmp_path, assets=release(tmp_path, version="9.9.9")
     )
 
     assert result.returncode == 0, result.stdout + result.stderr
@@ -313,10 +494,10 @@ def test_a_binary_that_cannot_run_is_refused_rather_than_treated_as_absent(
     tmp_path: Path,
 ) -> None:
     root = checkout(tmp_path, pin="9.9.9")
-    fake_oasdiff(root / "tools" / "oasdiff.exe", version="", exit_code=3)
+    fake_oasdiff(root / "tools" / platform_binary(), version="", exit_code=3)
 
     result, called = run_bootstrap(
-        root, tmp_path=tmp_path, release=tarball(tmp_path, version="9.9.9")
+        root, tmp_path=tmp_path, assets=release(tmp_path, version="9.9.9")
     )
 
     assert result.returncode != 0, result.stdout + result.stderr
@@ -330,20 +511,20 @@ def test_a_binary_that_cannot_run_is_refused_rather_than_treated_as_absent(
 def test_the_bootstrap_fails_when_the_download_fails(tmp_path: Path) -> None:
     root = checkout(tmp_path, pin="9.9.9")
 
-    result, _ = run_bootstrap(root, tmp_path=tmp_path, release=None, gh_exit=1)
+    result, _ = run_bootstrap(root, tmp_path=tmp_path, assets=None, gh_exit=1)
 
     assert result.returncode != 0, result.stdout + result.stderr
-    assert not (root / "tools" / "oasdiff.exe").exists()
+    assert not (root / "tools" / platform_binary()).exists()
 
 
 def test_the_bootstrap_fails_when_the_download_produces_nothing(tmp_path: Path) -> None:
     """`gh` exiting 0 without writing a tarball. `set -e` has to carry this one."""
     root = checkout(tmp_path, pin="9.9.9")
 
-    result, _ = run_bootstrap(root, tmp_path=tmp_path, release=None, gh_exit=0)
+    result, _ = run_bootstrap(root, tmp_path=tmp_path, assets=None, gh_exit=0)
 
     assert result.returncode != 0, result.stdout + result.stderr
-    assert not (root / "tools" / "oasdiff.exe").exists()
+    assert not (root / "tools" / platform_binary()).exists()
 
 
 def test_the_bootstrap_refuses_a_download_that_is_not_the_release_it_asked_for(
@@ -353,11 +534,11 @@ def test_the_bootstrap_refuses_a_download_that_is_not_the_release_it_asked_for(
     root = checkout(tmp_path, pin="9.9.9")
 
     result, _ = run_bootstrap(
-        root, tmp_path=tmp_path, release=tarball(tmp_path, version="1.26.0")
+        root, tmp_path=tmp_path, assets=release(tmp_path, version="1.26.0")
     )
 
     assert result.returncode != 0, result.stdout + result.stderr
-    assert not (root / "tools" / "oasdiff.exe").exists(), (
+    assert not (root / "tools" / platform_binary()).exists(), (
         "a wrong binary this run downloaded is this run's to remove"
     )
 

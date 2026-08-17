@@ -120,20 +120,23 @@ jobs:
       - name: Warm the TypeScript npx cache
         run: npx --yes --silent --package=typescript@latest tsc --version
 
-      - name: Tests
-        run: uv run pytest
+      # Before the suite, not after it. `sync.rehearse.fixture` refuses without `.cache/corpus`
+      # and names this script in the refusal, so a fetch that runs later is a step a reader sees
+      # and a resource the suite never had -- five rehearsal tests failed on every run for
+      # exactly that reason. The cache saves the network round trip and nothing else: the script
+      # still materialises every tree and still checks it against the digest
+      # `repositories.yaml` pins, so a cache hit is verified rather than trusted.
+      - name: Cache the frozen corpus
+        uses: actions/cache@v4
+        with:
+          path: .cache/corpus
+          key: corpus-${{ hashFiles('benchmark/corpus/repositories.yaml') }}
 
-      # The first gate on a quality number rather than on correctness, and the only one
-      # `2026-07-27-sync-benchmark-gates.md` allows today: a directional floor on a
-      # deterministic axis. The floors are not here. They are in `scripts/gate_corpus.py`,
-      # beside the figure each one guards and the argument for guarding it, because a floor in
-      # a workflow file is a string a reader meets without the number it came from and lowering
-      # one is a config tweak rather than a reviewable act.
-      #
-      # No `|| true`. The coverage step above is recorded and this is gated, and the difference
-      # between them is the whole of what this step adds.
       - name: Fetch the frozen corpus
         run: uv run python scripts/fetch_corpus_repositories.py
+
+      - name: Tests
+        run: uv run pytest
 
       # The corpus has two frozen inputs and this job used to stage one of them. `repositories.yaml`
       # pins the trees; `symbol_map.yaml` pins the map that decides which call sites resolve at
@@ -170,6 +173,12 @@ jobs:
             --score-dsn postgresql://sync:sync@localhost:5432/sync_benchmark \
             --json corpus-score.json
 
+      # The first gate on a quality number rather than on correctness, and the only one
+      # `2026-07-27-sync-benchmark-gates.md` allows today: a directional floor on a
+      # deterministic axis. The floors are not here. They are in `scripts/gate_corpus.py`,
+      # beside the figure each one guards and the argument for guarding it, because a floor in
+      # a workflow file is a string a reader meets without the number it came from and lowering
+      # one is a config tweak rather than a reviewable act.
       - name: Binding floors over the frozen corpus (gated)
         run: uv run python scripts/gate_corpus.py --score corpus-score.json
 
@@ -274,9 +283,24 @@ jobs:
       - name: Sync dependencies
         run: uv sync --all-extras --dev
 
-      # Gated, and the only gate here. No lints and no corpus: those are facts about the source
-      # and about a frozen input, neither of which a scheduler can change, and running them twice
-      # buys a second copy of the same answer.
+      # Duplicated from `test` for the reason the oasdiff install above is duplicated: what is
+      # copied is the mechanism, and the pin it reads is one file. This job runs the whole suite,
+      # so it needs every resource the suite needs -- and it had none of this, which is why three
+      # rehearsal tests failed here on every push to `main`. No corpus *gate* here: the score and
+      # its floors are a fact about a frozen input that a scheduler cannot change, and running
+      # them twice buys a second copy of one answer. The trees are not the gate; they are what
+      # the suite reads.
+      - name: Cache the frozen corpus
+        uses: actions/cache@v4
+        with:
+          path: .cache/corpus
+          key: corpus-${{ hashFiles('benchmark/corpus/repositories.yaml') }}
+
+      - name: Fetch the frozen corpus
+        run: uv run python scripts/fetch_corpus_repositories.py
+
+      # Gated, and the only gate here. No lints: those are facts about the source, and running
+      # them twice buys a second copy of the same answer.
       - name: Tests, serial scheduler
         run: uv run pytest -q -n0
 
@@ -352,24 +376,39 @@ jobs:
       - name: Warm the TypeScript npx cache
         run: npx --yes --silent --package=typescript@latest tsc --version
 
-      # The not-gating is deliberate rather than defensive and it stays: a coverage number must
-      # not turn a green suite red. What the `|| true` that used to carry it could not
-      # distinguish is a number that moved from a run that never produced one, and the exit code
-      # it discarded is the only place that distinction lives. No `--cov-fail-under` is passed
-      # here, so coverage cannot produce an exit code of its own at all -- every non-zero value
-      # is pytest's, and 2 through 5 all mean no number was measured.
-      - name: Coverage (recorded, not gated)
-        run: |
-          status=0
-          uv run pytest -q --cov=sync --cov-report=term-missing:skip-covered || status=$?
-          # 0 is a clean run and 1 is a failing test. Neither is this step's business: the
-          # `test` job's `Tests` step is the gate on the suite, and a dotted `--cov`
-          # legitimately changes behaviour in this repository
-          # (`2026-07-29-psycopg-error-identity.md`).
-          if [ "$status" -gt 1 ]; then
-            echo "the coverage run did not complete: pytest exited $status" >&2
-            exit "$status"
-          fi
+      # Duplicated from `test` for the same reason as the oasdiff install: this job runs the
+      # whole suite, so it needs what the suite reads.
+      - name: Cache the frozen corpus
+        uses: actions/cache@v4
+        with:
+          path: .cache/corpus
+          key: corpus-${{ hashFiles('benchmark/corpus/repositories.yaml') }}
+
+      - name: Fetch the frozen corpus
+        run: uv run python scripts/fetch_corpus_repositories.py
+
+      # **The coverage number is still not gated, and the suite now is.** Those are different
+      # claims and the step used to collapse them. No `--cov-fail-under` is passed here, so
+      # coverage cannot produce an exit code of its own and cannot fail this job -- that part of
+      # `2026-07-27-sync-benchmark-gates.md`'s refusal is intact and is the part that matters.
+      # What the step also discarded was pytest's own verdict: it captured the status and
+      # re-raised only above 1, and a failing test is exactly 1. Since `test` and `web` both
+      # exclude the nightly and `serial` runs only on a push, this job is the whole of what a
+      # scheduled run executes -- so nothing on a schedule could report anything but success.
+      # Measured rather than argued: the nightly of 2026-08-17 (`31994303030`) is recorded
+      # `success` and its own log ends `5 failed, 3632 passed, 7 skipped`. A green tick that
+      # cannot go red is not a check.
+      #
+      # A dotted `--cov=sync` does legitimately change behaviour here
+      # (`2026-07-29-psycopg-error-identity.md`), which is what the discarded exit code used to
+      # be defended with. That is a difference worth seeing rather than swallowing, and
+      # `tests/test_psycopg_error_identity.py` is where it is pinned.
+      #
+      # What the nightly covers now: the Python suite under `-n auto` against the service
+      # database, with coverage recorded. Not the lints, not the corpus score and its floors,
+      # not `web` -- each of those runs on the push that put `main` where the nightly found it.
+      - name: Coverage (recorded) and the suite (gated)
+        run: uv run pytest -q --cov=sync --cov-report=term-missing:skip-covered
 
   # No Postgres and no Python: `web/` is a standalone Vite + React console, not part of the
   # graph pipeline `test` and `serial` exercise, so coupling it into either job would fail
