@@ -513,7 +513,13 @@ jobs:
   # and it would be this repository making it about itself.
   beta-gates:
     runs-on: ubuntu-latest
-    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+    # `needs` plus `always()` so this reports whatever `serial` did, including when it failed --
+    # a readiness report that only runs on a green tree measures the easy case. The suite verdict
+    # is read from that job rather than re-run here: `--run-suite` would spend four more minutes
+    # on an answer this workflow already has, which is the duplication B111 closed, and two runs
+    # that disagree leave the report carrying two verdicts about one tree.
+    needs: [serial]
+    if: always() && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
     steps:
       - uses: actions/checkout@v4
         with:
@@ -530,4 +536,7 @@ jobs:
       # Written to the step summary so the answer is readable from the run page without cloning
       # anything. Printed to the log as well, because a summary is easy to miss in a failing run.
       - name: Measure the beta gates
-        run: uv run python scripts/beta_gates.py --exit-zero --summary "$GITHUB_STEP_SUMMARY"
+        run: >-
+          uv run python scripts/beta_gates.py --exit-zero
+          --suite-result "${{ needs.serial.result }}"
+          --summary "$GITHUB_STEP_SUMMARY"

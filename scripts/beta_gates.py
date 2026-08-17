@@ -238,7 +238,25 @@ def gate_three_console_truth(report: Path, console_dir: Path) -> Verdict:
     return Verdict(gate="3", name=name, status=MET, evidence=evidence)
 
 
-def gate_four_containment_true(*, run_suite: bool) -> Verdict:
+def _reported_suite(result: str) -> tuple[bool | None, str]:
+    """Read a suite verdict CI already produced, rather than producing a second one.
+
+    The nightly's `coverage` job runs the whole suite and gates on it, and on a push `serial`
+    does. Running it again here would spend four minutes on a duplicate answer -- the waste B111
+    closed when it stopped one pull request running the suite three times -- and two runs that
+    disagree leave the report carrying two verdicts about one tree with nothing to choose between.
+
+    `skipped` and `cancelled` are not results. A job that did not run says nothing about the tree,
+    and reading either as success would be the same fabrication as an empty table read as zero.
+    """
+    if result == "success":
+        return True, "suite: the job CI already ran reported success"
+    if result == "failure":
+        return False, "suite: the job CI already ran reported failure"
+    return None, f"suite: the job CI ran reported '{result}', which is not a result about the tree"
+
+
+def gate_four_containment_true(*, run_suite: bool, suite_result: str | None = None) -> Verdict:
     """Gate 4: nothing reaches a pull request unverified and the threat model matches the code.
 
     Three components. The suite is measured only when asked for, because it costs about four
@@ -257,13 +275,18 @@ def gate_four_containment_true(*, run_suite: bool) -> Verdict:
     evidence.append(wiring_note)
     verdicts.append(MET if wired is True else (CANNOT_TELL if wired is None else NOT_MET))
 
-    if run_suite:
+    if suite_result is not None:
+        suite_ok, suite_note = _reported_suite(suite_result)
+    elif run_suite:
         suite_ok, suite_note = _suite_green()
-        evidence.append(suite_note)
-        verdicts.append(MET if suite_ok is True else (CANNOT_TELL if suite_ok is None else NOT_MET))
     else:
-        evidence.append("main-is-green not measured: pass --run-suite to spend the ~4 minutes")
-        verdicts.append(CANNOT_TELL)
+        suite_ok, suite_note = (
+            None,
+            "main-is-green not measured: pass --run-suite, or --suite-result to read a verdict "
+            "CI already produced",
+        )
+    evidence.append(suite_note)
+    verdicts.append(MET if suite_ok is True else (CANNOT_TELL if suite_ok is None else NOT_MET))
 
     if NOT_MET in verdicts:
         return Verdict(gate="4", name=name, status=NOT_MET, evidence=evidence)
@@ -417,7 +440,7 @@ def render_markdown(verdicts: Sequence[Verdict]) -> str:
     return "\n".join(lines)
 
 
-def measure(*, run_suite: bool) -> list[Verdict]:
+def measure(*, run_suite: bool, suite_result: str | None = None) -> list[Verdict]:
     store, store_error = _open_store()
     health_reader = _health_reader(store_error)
     resume_built = _resume_path_exists()
@@ -429,7 +452,7 @@ def measure(*, run_suite: bool) -> list[Verdict]:
             REPO_ROOT / "docs" / "superpowers" / "reports" / "2026-08-17-gate-3-screen-pass.md",
             REPO_ROOT / "web" / "src",
         ),
-        gate_four_containment_true(run_suite=run_suite),
+        gate_four_containment_true(run_suite=run_suite, suite_result=suite_result),
     ]
 
 
@@ -499,6 +522,14 @@ def main(argv: Sequence[str]) -> int:
         help="also write the report as markdown to PATH (use $GITHUB_STEP_SUMMARY in CI)",
     )
     parser.add_argument(
+        "--suite-result",
+        metavar="RESULT",
+        help=(
+            "a suite verdict CI already produced (success|failure|skipped|cancelled), read "
+            "instead of running the suite a second time"
+        ),
+    )
+    parser.add_argument(
         "--exit-zero",
         action="store_true",
         help=(
@@ -508,7 +539,7 @@ def main(argv: Sequence[str]) -> int:
     )
     args = parser.parse_args(list(argv[1:]))
 
-    verdicts = measure(run_suite=args.run_suite)
+    verdicts = measure(run_suite=args.run_suite, suite_result=args.suite_result)
     if args.json:
         print(json.dumps([v.__dict__ for v in verdicts], indent=2))
     else:

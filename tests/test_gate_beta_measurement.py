@@ -25,6 +25,7 @@ from scripts.beta_gates import (
     Verdict,
     gate_one_loop_closes,
     gate_two_evidence_exists,
+    gate_four_containment_true,
     render,
     render_markdown,
 )
@@ -284,3 +285,48 @@ def test_markdown_never_reports_a_gate_it_did_not_measure_as_met() -> None:
 def test_markdown_carries_the_evidence_under_each_gate() -> None:
     """A verdict without its evidence is the prose this replaced."""
     assert "no database here" in render_markdown(_one_of_each())
+
+
+# --- gate four reads the suite CI already ran, rather than running it again ----------
+
+
+def test_a_reported_suite_success_is_used_rather_than_re_run() -> None:
+    """The nightly already runs the whole suite and gates on it.
+
+    Running it a second time inside this script would buy a duplicate answer for four minutes,
+    which is the waste B111 closed when it stopped one pull request running the suite three
+    times. Worse, two runs can disagree, and then the report carries two verdicts about one tree
+    with nothing to choose between them. GitHub already knows the answer; this asks it.
+    """
+    verdict = gate_four_containment_true(run_suite=False, suite_result="success")
+
+    assert any("suite" in line.lower() and "success" in line.lower() for line in verdict.evidence)
+    assert not any("not measured" in line for line in verdict.evidence)
+
+
+def test_a_reported_suite_failure_is_a_real_not_met() -> None:
+    """Asserted on the suite line rather than on the gate.
+
+    Gate 4 is already NOT MET for an unrelated reason -- the sandbox is built and unwired -- so
+    reading the overall verdict here would pass whatever the suite reported, which is a test that
+    cannot fail. What this pins is that a reported failure becomes a failure and says so.
+    """
+    verdict = gate_four_containment_true(run_suite=False, suite_result="failure")
+
+    assert any("reported failure" in line for line in verdict.evidence)
+
+
+def test_a_skipped_suite_cannot_tell_rather_than_passing() -> None:
+    """`skipped` and `cancelled` are not results. A job that did not run says nothing about the
+    tree, and reading either as success is the same fabrication as an empty table read as zero."""
+    for reported in ("skipped", "cancelled"):
+        verdict = gate_four_containment_true(run_suite=False, suite_result=reported)
+
+        assert any("not a result about the tree" in line for line in verdict.evidence), reported
+        assert not any("success" in line.lower() for line in verdict.evidence), reported
+
+
+def test_no_suite_result_at_all_still_says_it_was_not_measured() -> None:
+    verdict = gate_four_containment_true(run_suite=False, suite_result=None)
+
+    assert any("not measured" in line for line in verdict.evidence)
