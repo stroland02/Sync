@@ -220,6 +220,25 @@ Drain it in a loop, acking each batch by the id the previous call returned, unti
 comes back empty. And treat a mismatch between the notification count and what `check` shows as a
 defect in your own reading, not as a stale notification.
 
+## A `worker_done` can be rejected, and the lane is the only one who finds out
+
+**`orca orchestration worker-done` fails with `Dispatch <id> capability is revoked` once that
+dispatch has been superseded** — which is exactly what a re-dispatch does. The lane sees the
+rejection; the coordinator sees nothing at all, because a report that was never accepted is not a
+report that arrived late. Twice on 2026-08-17 Lane B finished a unit, filed it, was rejected, and
+the coordinator planned the next sweep believing the lane had gone quiet.
+
+Two rules follow.
+
+**For a lane:** if `worker-done` is rejected, do not discard the body. Resend it as an ordinary
+message to the coordinator's terminal handle, with the rejection quoted at the top. Lane B did this
+and it is why both reports exist. A finished unit that nobody hears about is indistinguishable from
+one that was never done.
+
+**For the coordinator:** silence from a lane that was recently re-dispatched is not evidence it is
+idle. Read its terminal or its branch before concluding anything, and prefer not to re-dispatch a
+lane that is mid-unit — the re-dispatch is what revokes the address its report is holding.
+
 ## When a lane keeps working outside its boundary
 
 Three times on 2026-08-17 one lane built inside another's files: the Fleet change-unit aggregate

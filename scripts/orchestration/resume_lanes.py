@@ -156,19 +156,27 @@ def reset_seconds(notice: str) -> int | None:
     return hours * 3600 + minutes * 60 + seconds
 
 
-def budget_held(cli: str, handle: str) -> str | None:
+def budget_held(cli: str, handle: str, silent: bool = False) -> str | None:
     """The reset notice on a terminal that has stopped for budget, or `None`.
 
     Read from the terminal's own tail rather than inferred from silence, because silence is
     ambiguous -- a thinking agent and an exhausted one look identical from the outside, and only
     one of them should be left alone.
 
-    Only the last few lines are examined. A banner further back means the agent has produced output
-    since, which is proof it recovered.
+    While the terminal is still producing output, only the last few lines are examined: a banner
+    further back means the agent has written since, which is proof it recovered.
+
+    `silent` lifts that bound, and it has to. An outage that lands mid-tool-call leaves the agent's
+    own chrome drawn *underneath* the banner -- an in-flight tool line, a permissions footer, a
+    prompt -- and none of it is new output. The banner leaves the window pushed by furniture rather
+    than by writing, and the lane reads as dead. Measured on Lane E, 2026-08-17: fifty-five minutes
+    classified STALE, and the interrupt sent to unwedge it ended the session. When the tail has not
+    moved, everything in it describes now.
     """
     payload = call(cli, "terminal", "read", "--terminal", handle, "--json")
     terminal = (payload.get("result") or {}).get("terminal") or {}
-    recent = (terminal.get("tail") or [])[-BUDGET_NOTICE_WITHIN_LAST:]
+    lines = terminal.get("tail") or []
+    recent = lines if silent else lines[-BUDGET_NOTICE_WITHIN_LAST:]
     tail = " ".join(recent).lower()
     if not any(marker in tail for marker in BUDGET_EXHAUSTED):
         return None
@@ -304,7 +312,10 @@ def main() -> int:
         # fact have held.
         handle = dispatch.get("assignee_handle") or recorded.get(task["id"])
         if handle and handle in terminals:
-            held = budget_held(cli, handle)
+            # A tail that has not moved is a tail describing now, so the whole of it is read rather
+            # than its last few lines. `why` already carries the distinction: only the silence
+            # branch says "silent for".
+            held = budget_held(cli, handle, silent=why.startswith("silent for"))
             if held:
                 # The countdown in the notice was captured when the agent stopped, not now, so it
                 # is reported alongside how long ago that was. Printing a frozen "resets in 2h" an
