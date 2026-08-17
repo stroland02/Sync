@@ -26,6 +26,28 @@ const WIDTH = Number(process.env.EVAL_WIDTH ?? 1440)
 const HEIGHT = Number(process.env.EVAL_HEIGHT ?? 900)
 const OUT = process.env.EVAL_OUT ?? path.resolve("..", "docs", "superpowers", "reports", "screens")
 
+/**
+ * Credentials as a header, not embedded in the URL.
+ *
+ * Chrome uses URL-embedded credentials for the document but not for the page's own `fetch` calls,
+ * so a capture taken that way photographs a console whose every panel failed. Three separate
+ * measurements in this work were invalidated by exactly that before it was understood; a screenshot
+ * is the one artifact where the mistake is invisible to the person reading it later.
+ */
+function basicAuthHeader(rawUrl) {
+  const url = new URL(rawUrl)
+  if (url.username === "" && url.password === "") return null
+  const pair = `${decodeURIComponent(url.username)}:${decodeURIComponent(url.password)}`
+  return `Basic ${Buffer.from(pair).toString("base64")}`
+}
+
+function withoutCredentials(rawUrl) {
+  const url = new URL(rawUrl)
+  url.username = ""
+  url.password = ""
+  return url.toString()
+}
+
 function session(wsUrl) {
   const socket = new WebSocket(wsUrl)
   const pending = new Map()
@@ -91,6 +113,12 @@ for (const [name, route] of ROUTES) {
   await page.ready
   try {
     await page.send("Page.enable")
+    const auth = basicAuthHeader(target)
+    if (auth !== null) {
+      await page.send("Network.enable")
+      await page.send("Network.setExtraHTTPHeaders", { headers: { Authorization: auth } })
+      await page.send("Page.navigate", { url: withoutCredentials(target) })
+    }
     await page.send("Emulation.setDeviceMetricsOverride", {
       width: WIDTH,
       height: HEIGHT,
@@ -99,14 +127,25 @@ for (const [name, route] of ROUTES) {
     })
     // Wait for laid-out text rather than a load event, for the reason visual-eval.mjs records: a
     // half-rendered capture is a picture of nothing and looks like a defect in the console.
-    for (let attempt = 0; attempt < 60; attempt++) {
+    // Wait for panels to resolve, not just for the document to have text. A screenshot of a
+    // half-loaded screen looks like a design decision to whoever opens it later.
+    let settled = false
+    for (let attempt = 0; attempt < 120; attempt++) {
       const probe = await page.send("Runtime.evaluate", {
-        expression: `document.querySelector("main")?.textContent.trim().length > 40`,
+        expression: `(() => {
+          const main = document.querySelector("main")
+          if (main === null || main.textContent.trim().length < 40) return false
+          return !/Loading |Waiting for the API/i.test(main.textContent)
+        })()`,
         returnByValue: true,
       })
-      if (probe.result.value === true) break
+      if (probe.result.value === true) {
+        settled = true
+        break
+      }
       await new Promise((r) => setTimeout(r, 250))
     }
+    if (!settled) console.log(`  (warning) ${name} never settled; captured anyway`)
     const shot = await page.send("Page.captureScreenshot", { format: "png" })
     await writeFile(path.join(dir, `${name}.png`), Buffer.from(shot.data, "base64"))
     console.log(`captured ${name} <- ${route}`)
