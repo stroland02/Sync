@@ -36,6 +36,14 @@ from typing import Any, Callable, Protocol, Sequence
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
+# Run as a script, `scripts/` is on `sys.path` and the repository root is not, so
+# `import scripts.gate_verdict` fails — while under pytest it succeeds, because `pythonpath = ["."]`
+# in `pyproject.toml` puts the root there. That difference hid a crash in `--run-suite` behind a
+# green test suite: the flag this gate's own message told every reader to pass was the one path
+# nothing executed.
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
+
 MET = "MET"
 NOT_MET = "NOT_MET"
 CANNOT_TELL = "CANNOT_TELL"
@@ -358,16 +366,16 @@ def gate_four_containment_true(*, run_suite: bool, suite_result: str | None = No
     evidence.append(wiring_note)
     verdicts.append(MET if wired is True else (CANNOT_TELL if wired is None else NOT_MET))
 
+    # In precedence order, and the order is the argument. A verdict CI just produced beats a
+    # stored one; running the suite beats reading about it; and reading a stored verdict beats
+    # declining to answer, which is what this gate used to do on every invocation while `main` was
+    # in fact green.
     if suite_result is not None:
         suite_ok, suite_note = _reported_suite(suite_result)
     elif run_suite:
         suite_ok, suite_note = _suite_green()
     else:
-        suite_ok, suite_note = (
-            None,
-            "main-is-green not measured: pass --run-suite, or --suite-result to read a verdict "
-            "CI already produced",
-        )
+        suite_ok, suite_note = suite_from_record(head=head_commit())
     evidence.append(suite_note)
     verdicts.append(MET if suite_ok is True else (CANNOT_TELL if suite_ok is None else NOT_MET))
 
@@ -442,6 +450,91 @@ def _sandbox_wired() -> tuple[bool | None, str]:
     return True, "no sandbox primitive is baselined as unreachable"
 
 
+SUITE_RECORD = REPO_ROOT / ".cache" / "suite-verdict.json"
+
+
+def head_commit() -> str | None:
+    try:
+        result = subprocess.run(
+            ["git", "rev-parse", "HEAD"],
+            cwd=REPO_ROOT,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=60,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return None
+    return (result.stdout or "").strip() or None
+
+
+def record_suite_verdict(
+    path: Path, *, commit: str, trustworthy: bool, passed: bool, summary: str
+) -> None:
+    """Write down what the suite said, when, and about which commit.
+
+    Both halves are required and neither is sufficient. A timestamp with no commit cannot be
+    checked against the tree; a commit with no timestamp cannot be aged. Storing one and inferring
+    the other is how a record starts describing something nobody meant.
+    """
+    from datetime import datetime, timezone
+
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        json.dumps(
+            {
+                "commit": commit,
+                "measured_at": datetime.now(timezone.utc).isoformat(),
+                "trustworthy": trustworthy,
+                "passed": passed,
+                "summary": summary,
+            },
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
+
+
+def read_suite_record(path: Path = SUITE_RECORD) -> dict | None:
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+
+
+def suite_from_record(path: Path = SUITE_RECORD, *, head: str | None = None):
+    """A stored suite verdict, used only if it describes the commit in the tree.
+
+    **A green from forty commits ago is not a statement about `main` now.** Gate 3 is currently
+    failing on exactly that kind of staleness, and rebuilding it here — reporting a stale record as
+    a measurement — would be the gate committing the error it exists to catch. So a record whose
+    commit is not `HEAD` is absence, and it names both commits so the reader can decide whether to
+    re-run rather than guess what happened.
+    """
+    record = read_suite_record(path)
+    if record is None:
+        return None, (
+            "main-is-green not measured: run `uv run python scripts/beta_gates.py --run-suite` "
+            "once and every later invocation reads the result until the tree moves"
+        )
+    if head is not None and record.get("commit") != head:
+        return None, (
+            f"a suite verdict exists but describes {str(record.get('commit'))[:9]}, not the "
+            f"current {head[:9]} — measured {record.get('measured_at')}, so it says nothing about "
+            "this tree"
+        )
+    if not record.get("trustworthy"):
+        return None, (
+            f"the stored run cannot be trusted: {record.get('summary')} "
+            f"(measured {record.get('measured_at')})"
+        )
+    return bool(record.get("passed")), (
+        f"suite: {record.get('summary')} at {str(record.get('commit'))[:9]}, "
+        f"measured {record.get('measured_at')}"
+    )
+
+
 def _suite_green() -> tuple[bool | None, str]:
     """Run the suite and judge it with `gate_verdict`, which is the point of that script.
 
@@ -471,6 +564,18 @@ def _suite_green() -> tuple[bool | None, str]:
     output = (result.stdout or "") + (result.stderr or "")
     log.write_text(output, encoding="utf-8")
     verdict = read_verdict(output)
+    commit = head_commit()
+    if commit:
+        # Recorded whatever the answer, including an untrustworthy one. A run that died is a fact
+        # about this commit too, and storing only the good ones would make the record's silence
+        # mean two different things.
+        record_suite_verdict(
+            SUITE_RECORD,
+            commit=commit,
+            trustworthy=verdict.trustworthy,
+            passed=result.returncode == 0,
+            summary=verdict.summary or "no summary line",
+        )
     if not verdict.trustworthy:
         return None, f"the suite ran but its verdict cannot be believed: {verdict.reason}"
     return result.returncode == 0, f"suite: {verdict.summary}"

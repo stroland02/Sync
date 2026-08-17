@@ -27,6 +27,9 @@ from scripts.beta_gates import (
     gate_two_evidence_exists,
     CONSOLE_CLAIM_PATHS,
     gate_four_containment_true,
+    read_suite_record,
+    record_suite_verdict,
+    suite_from_record,
     gate_three_console_truth,
     signature_date,
     render,
@@ -508,3 +511,115 @@ def test_a_measured_run_does_not_carry_the_structural_note() -> None:
     )
 
     assert "structural" not in text
+
+
+# --- a durable suite verdict, and the staleness it must not paper over ---------------
+
+
+def test_a_record_for_the_current_commit_answers_the_question(tmp_path) -> None:
+    """The lie of omission this closes.
+
+    `main-is-green not measured: pass --run-suite` was printed on every invocation anybody ran,
+    while `main` was in fact green. A gate that declines to answer a question it is built to
+    answer teaches its reader to skip that line.
+    """
+    record = tmp_path / "suite.json"
+    record_suite_verdict(record, commit="abc123", trustworthy=True, passed=True, summary="3962 passed")
+
+    ok, detail = suite_from_record(record, head="abc123")
+
+    assert ok is True
+    assert "3962 passed" in detail
+
+
+def test_a_record_from_another_commit_cannot_tell_rather_than_reporting_green(tmp_path) -> None:
+    """The constraint that matters: a green from forty commits ago is not a statement about now.
+
+    Rebuilding Gate 3's staleness failure inside Gate 4 would be careless, so a record that does
+    not describe `HEAD` is absence rather than evidence — and it says which commit it does
+    describe, so the reader can decide whether to re-run rather than guess.
+    """
+    record = tmp_path / "suite.json"
+    record_suite_verdict(record, commit="old111", trustworthy=True, passed=True, summary="3962 passed")
+
+    ok, detail = suite_from_record(record, head="new222")
+
+    assert ok is None, "a stale green was reported as a measurement of HEAD"
+    assert "old111" in detail and "new222" in detail
+
+
+def test_a_recorded_failure_is_a_real_not_met(tmp_path) -> None:
+    record = tmp_path / "suite.json"
+    record_suite_verdict(record, commit="abc123", trustworthy=True, passed=False, summary="3 failed")
+
+    ok, _ = suite_from_record(record, head="abc123")
+
+    assert ok is False
+
+
+def test_a_recorded_run_that_was_untrustworthy_cannot_tell(tmp_path) -> None:
+    """A dead worker's tally is not a verdict, and storing it does not make it one."""
+    record = tmp_path / "suite.json"
+    record_suite_verdict(
+        record, commit="abc123", trustworthy=False, passed=False, summary="60 failed"
+    )
+
+    ok, detail = suite_from_record(record, head="abc123")
+
+    assert ok is None
+    assert "trust" in detail.lower()
+
+
+def test_no_record_says_how_to_produce_one(tmp_path) -> None:
+    ok, detail = suite_from_record(tmp_path / "absent.json", head="abc123")
+
+    assert ok is None
+    assert "--run-suite" in detail
+
+
+def test_a_record_carries_when_and_against_what(tmp_path) -> None:
+    """Both, because either alone is unreadable: a time with no commit cannot be checked against
+    the tree, and a commit with no time cannot be aged."""
+    record = tmp_path / "suite.json"
+    record_suite_verdict(record, commit="abc123", trustworthy=True, passed=True, summary="ok")
+
+    stored = read_suite_record(record)
+
+    assert stored["commit"] == "abc123"
+    assert stored["measured_at"], "a record with no timestamp cannot be aged"
+
+
+def test_run_suite_is_reachable_when_invoked_as_a_script() -> None:
+    """The flag the gate's own message told every reader to pass, and it crashed.
+
+    Run as a script, `scripts/` is on `sys.path` and the repository root is not, so
+    `import scripts.gate_verdict` inside `_suite_green` raised `ModuleNotFoundError`. Under pytest
+    it imports fine, because `pythonpath = ["."]` puts the root on the path — so a green suite hid
+    a crash on the one path no test executed.
+
+    Executed in a subprocess rather than imported, because importing it here would use the very
+    path setup that hid the defect.
+    """
+    import subprocess
+    import sys as _sys
+    from pathlib import Path as _Path
+
+    root = _Path(__file__).resolve().parents[1]
+    result = subprocess.run(
+        [
+            _sys.executable,
+            "-c",
+            "import runpy, sys; sys.argv=['beta_gates.py']; "
+            "m = runpy.run_path(r'%s', run_name='not_main'); "
+            "m['_suite_green']; import scripts.gate_verdict; print('importable')"
+            % (root / "scripts" / "beta_gates.py"),
+        ],
+        cwd=root / "scripts",
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        timeout=120,
+    )
+
+    assert "importable" in result.stdout, result.stdout + result.stderr
