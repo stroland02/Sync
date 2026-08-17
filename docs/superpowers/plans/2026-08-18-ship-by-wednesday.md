@@ -62,9 +62,21 @@ Four things, and only the first is mostly done:
    where telemetry routes 404 for a repository `/api/repositories` lists.
 3. **It comes up on a clean machine from a clean clone.** `scripts/dev_up.py` does this locally
    (`CI-W302`, `CI-W303`). What has never been tested is a *fresh clone by somebody who is not us*.
-4. **It is served somewhere, behind a credential.** `M14-W340` proved the console is servable as a
-   production artefact behind one shared credential. **Where, and under whose credential, is an
-   owner decision and it is now on the critical path.**
+4. ~~It is served somewhere, behind a credential.~~ **Superseded: deployment is local-only.** What
+   replaces it is a packaging target, named by the owner 2026-08-18: **installation must feel like
+   `npx skills add superloglabs/skills --all`** — one command, from the repository, and it works.
+
+**That is a specific and checkable bar, so state what it can and cannot mean here.** `npx` gives a
+Node entry point. Sync is a Python product with a TypeScript console, and it needs Python 3.12, `uv`,
+and a Postgres. **An `npx` wrapper cannot conjure a Python toolchain, and pretending it can is how a
+one-command install becomes a five-minute traceback.** What it can do is be the single thing a person
+types, check every precondition, and say precisely which one is missing and how to fix it —
+`scripts/dev_up.py` already does exactly this (`CI-W302`, `CI-W303`), and it refuses rather than
+dying. The `npx` entry point wraps that and surfaces its messages rather than hiding them.
+
+The honest form of the promise: **one command to type, one screen of output, and either the product
+is running or you know exactly what to install.** Not: one command that silently installs a language
+runtime.
 
 ## Priority order to Wednesday
 
@@ -77,7 +89,7 @@ Four things, and only the first is mostly done:
 | 1 | **`B147`** — a 404 claiming absence where the truth is zero | E | One of seven console screens cannot render at all. It is also the honesty principle violated below the console, so no screen can fix it |
 | 2 | **The console IA settles and stops moving** | B | Every screen must exist and be reachable. The IA rulings are made (`M14-W365`); what remains is building them |
 | 3 | **Fresh-clone bring-up, verified by somebody who did not build it** | C | Item 3 above. This has never been tested and it is the difference between "works here" and "deployable" |
-| 4 | **Deployment target and credential** | owner | Blocks item 4 above entirely. Nothing else can start until it is named |
+| 4 | **`npx` one-command install from the repo** | C | **Owner-named 2026-08-18**, to feel like `npx skills add superloglabs/skills --all`. This *is* the deployment story now that hosting is out. It wraps `dev_up.py`'s precondition checks rather than replacing them |
 
 **P1 — makes the product credible rather than merely working.**
 
