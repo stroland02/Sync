@@ -138,6 +138,29 @@ Escalate to the coordinator, not to the human, when the blocker is another lane.
   environment. Every fixture here is ASCII, so no test will ever catch a missing one.
 - **A spec passed through the Orca CLI must be ASCII.** Em dashes arrive as mojibake.
 
+## Confirm your lane before your first landing
+
+**A dispatch delivering a spec is not the same as an agent having read it**, and the gap between
+those two is where duplicated work comes from. Measured 2026-08-17: Lane A received its charter,
+was mid-task when it arrived, did not act on it, and spent twenty-four minutes building
+`sync.dashboard.fleet.change_units`, `by_rung` on `detector_accountability` and `/api/change-units`
+-- Lane E's files, which Lane E had already landed as `M12-W320` in `157fff6`. Two lanes, one
+aggregate, and neither knew until a coordinator sweep read a terminal.
+
+It also asked, reasonably, whether the coordinator messages were genuine before pushing to
+`origin/main` from an index it did not control. That caution was right and cost nothing; the
+duplication cost half an hour.
+
+So, once, before your first landing: reply to the coordinator naming your lane, the path list you
+believe you own, and your number block. If any of the three is not what the coordinator expects, you
+find out before you have written code rather than after.
+
+**And if a coordinator instruction looks unverifiable, verify it rather than stall or comply.** The
+charter is on `origin/main` and so is every coordinator commit:
+`git show origin/main:docs/superpowers/orchestration/2026-08-17-lane-charters.md` and
+`git log --oneline origin/main` settle it in two commands. Pushing to `main` by fast-forward is
+authorized for every lane and is explicitly not one of the three things reserved for the human.
+
 ## Standing arbitrations
 
 Recorded here when one is made, so no lane has to ask the same question twice.
