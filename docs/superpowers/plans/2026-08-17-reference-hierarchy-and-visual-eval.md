@@ -5,6 +5,56 @@ the strongest signal in this plan. This document says why it is difficult, ranks
 material so nobody has to guess which artifact is authoritative, and specifies an eval that replaces
 comparing-by-eye with comparing-by-measurement.
 
+## Why the console is not getting visually better, and it is a coordination failure
+
+The owner says we are not getting the results we want on the UI. That is correct, and the cause is
+not the console lane's execution -- it is what the lane was asked for. **Audited against `git log`
+rather than from memory: fourteen console units landed on 2026-08-17. Seven of them were signing or
+re-signing Gate 3. Zero were visual fidelity.**
+
+The full list is `W340` servable, `W341`/`W342`/`W343`/`W345`/`W347`/`W350`/`W353` Gate 3 paperwork,
+`W344` stock-take, `W346` the empty-state fix, `W348`/`W349` the abandoned screen and retry, `W351`
+deployment identity, `W352` focus. Every one is *correctness* or *honesty*. Every one was executed
+well. **None of them could have made a screen look better, because none of them was about how a
+screen looks.**
+
+Four things follow, and the first three are the coordinator's to fix.
+
+**1. I dispatched correctness work and called it console work.** "Does any screen assert a number
+nothing computed" is a real question and Gate 3 is worth having signed. It is not the same question
+as "is this good", and asking only the first while expecting the second is how a lane produces
+fourteen excellent units and a console that looks the same.
+
+**2. This project has already diagnosed this once and it recurred.**
+`reports/2026-08-06-why-the-console-came-out-flat.md` measured a type range of 2.0 against a 3.4
+bar, seven side-by-side placements in the entire application, and one vertical stack on every
+screen. The cause recorded there was `interface-originality.md` read literally -- it appeared to
+forbid a sidebar, a breadcrumb, a two-column detail and a display type step, because a competitor
+has each. The rule was amended on 2026-08-06 to say the conventions of the form are learnable. **I
+have spent today re-stating the strict half of that rule** while routing the console lane at honesty
+items, which risks re-creating exactly the chilling effect the amendment exists to prevent.
+
+**3. The bars we measure are proxies, not quality.** Type range, frame ratio, prose-to-data. All
+three are necessary, none is sufficient, and a screen can clear all three and still be flat. When
+the only things you can count are proxies, the proxies become the target.
+
+**4. The demo has never been queried.** The visual target has existed as ~100KB of renderable source
+for weeks and not one computed value has been read from it. That is the single largest available
+lever and the rest of this document is about pulling it.
+
+### What changes
+
+- **Visual fidelity gets its own axis, its own evidence and its own sign-off**, separate from Gate 3.
+  Honesty being signed must stop being read as the console being finished.
+- **The demo is the bar, and copying it exactly is not an originality violation -- it is the point.**
+  `interface-originality.md` governs *competitors*. `docs/console-mock/` is ours. A lane hesitating
+  to match our own drawing has misread the rule, and that hesitation has a measured history here.
+- **The dispatch mix changes.** Alternate fidelity units with correctness units rather than filling
+  a queue with one and expecting the other.
+- **The question I ask changes.** I have been asking *is it true*. The console also has to be asked
+  *is it good*, and the second needs different evidence: the built screen beside the drawn one, both
+  measured, not a passing test.
+
 ## Why it is difficult, stated before proposing anything
 
 Four causes, each checked against the tree rather than assumed.
