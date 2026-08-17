@@ -158,6 +158,19 @@ questions that block. The owner can reverse any of them at the cost of one fix r
       deprecating it.
 - [ ] Step 3: Gate; WORKLOG; commit.
 
+**Blocked on its own premise, measured 2026-08-17, and deliberately not started.** This task says
+the drawer is written three to five times. It is written once: `BindingDrawer` has exactly one
+consumer, `binding-surface-page.tsx:581`, and `grep -rn "Drawer" web/src/features web/src/components`
+returns those two files and nothing else. Fleet and the Solution Workflow do not open a drawer —
+the workflow renders each node's body inline through `NodeSequence` and `NodeEvidence`, which is a
+different shape, not an unextracted copy of this one.
+
+So the mock's three drawers are three features that do not exist, and extracting a shared component
+for them now is an abstraction with one asset behind it — `CLAUDE.md`'s *build for the case that
+exists*, and the reason *factor at the second use* names the second use rather than the first. The
+work this task actually contains is building the second drawer, and the extraction is what happens
+while building it. Whoever takes it should renumber it as that, not as a refactor.
+
 ### Task 4: Detector attribution's rung tally — full-stack (M12)
 
 **Files:**
