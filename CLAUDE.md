@@ -246,7 +246,23 @@ editing — nothing else.
 
 **One integration branch at a time.** It is named in the milestone's plan — `console-identity`
 during M7. Every worker branches from it, gates on it, and pushes its own branch. The coordinator
-merges into the integration branch. **A worker never opens a pull request and never pushes `main`.**
+merges into the integration branch. **A worker never opens a pull request and never *merges* into
+`main`.**
+
+**Amended 2026-08-17 by the coordinator, and reversible.** That sentence used to end "and never
+pushes `main`", which stopped a lane dead: it held a day of gated work locally while four other lanes
+landed several units an hour, because it read the rule correctly and `autonomous-development.md`
+lists pushing to `main` among the three things that stay the human's. The rule was written for one
+integration branch and one coordinator, and it does not describe five lanes with disjoint file
+ownership.
+
+The distinction that survives both readings: **a fast-forward of a branch that already contains
+`origin/main` is not a merge.** It creates no commit, resolves no conflict, makes no decision, and
+cannot lose anybody's work — it is publication, not integration. `git merge-base --is-ancestor
+origin/main HEAD` is the proof, and it is a command rather than a belief. **A worker may push `main`
+when that check passes and only then; if it fails, the branch has diverged, the fast-forward
+assumption is wrong, and it escalates instead of resolving.** Merging, pull requests, branch
+deletion, credentials and spend are untouched.
 
 **`main` catches up by fast-forward, on a schedule rather than at a milestone boundary.** The
 integration branch is only ever ahead of `main`, never divergent, so landing it is
