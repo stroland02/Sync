@@ -391,6 +391,72 @@ confidently instead of refusing.
 
 ## Ready
 
+### B169 — nothing exercises a cold clone, so the day-one path is verified as documented rather than as working
+
+`tests/test_day_one_path.py` is twelve tests and every one is structural: that each Quick start
+command resolves against the real argparse surface, that the README names every authenticated tool,
+that the API and CLI agree on a default DSN, that `--repo` refuses a filesystem path. They are worth
+having and they are what `B130` was for. **None of them runs anything from an empty checkout.**
+
+The claim they support is "the documentation describes commands that exist". The claim a design
+partner needs is "a person who follows this gets a working install", and nothing checks it.
+
+**Measured, not theorised.** A fresh `git worktree` of this repository fails about fifty tests purely
+for missing gitignored artifacts: 47 × `FileNotFoundError: oasdiff not found; run
+scripts/bootstrap_tools.sh` and 3 × `RuntimeError: Corpus repository 'furever' is missing at
+<path>/.cache/corpus/furever`. Seeding `tools/` and `.cache/corpus/` from a warm checkout took
+seconds and the same files then ran `237 passed`. Everyone already working here has a warm checkout,
+so the person who hits this is the second engineer or the first design partner.
+
+**Deliberately not a cold-clone CI job.** Fifteen minutes of wall clock gets disabled the first week
+it is flaky. What is wanted is a check on the bootstrap contract: that `bootstrap_tools.sh` and
+`fetch_corpus_repositories.py` produce exactly the artifacts the suite refuses without, and that a
+missing one fails with a message naming the script that supplies it.
+
+**Closes when:** a check fails if the bootstrap contract is broken — proven by removing one artifact
+and watching it go red — and the README's prerequisites are the set that check enforces, so the two
+cannot drift.
+
+### B170 — CI runs `-n auto` while every lane is told to use `-n 4`, and until today CI could not have reported a dead worker
+
+`pyproject.toml:99` is `addopts = "-m 'not e2e' -n auto"` and CI's `Tests` step is a bare
+`uv run pytest`, so the runner inherits `-n auto`. The lane charter tells every lane to use `-n 4`
+because `-n auto` crashed an xdist worker outright on this host.
+
+**This entry does not claim CI is currently broken by it.** The local crashes were starvation on the
+npx resolve lock, fixed by Lane D in `2cf2e62`, and `-n auto` has not been measured on a Linux runner
+since. What is true is that the guidance and the configuration disagree, and that until `CI-W295` the
+trustworthiness check could not have told anyone if a worker had died on a runner — it was reporting
+`no summary line` on every run.
+
+**The likely right answer is to retire the guidance rather than spread it.** `-n 4` is a workaround
+whose reason has expired, and changing a setting because it once correlated with a symptom is how a
+workaround outlives its cause.
+
+**Closes when:** `-n auto` is measured on a runner with the trustworthiness check reading the result,
+and either the charter's `-n 4` is retired with that measurement beside it, or CI is moved to `-n 4`
+with the crash it prevents named.
+
+### B171 — two of the four beta gates are measured continuously and two are measured when somebody remembers
+
+`beta_gates.py` runs on every push and reports Gates 1 and 2 as `CANNOT TELL`, correctly: CI has no
+corpus, and the job deliberately has no Postgres service because an empty database read as a
+measurement of zero is the absence-versus-zero error this product exists to refuse, committed by the
+repository about itself.
+
+The consequence is that **the two gates about evidence are only ever answered by a person typing the
+command on a machine with a corpus.** "Readiness is measured" is half true, and the half that is not
+measured is the half about whether the product works.
+
+**Not solved by a database in CI.** Solved either by a scheduled run somewhere that has a real
+corpus, or by accepting that those two gates are human-run and saying so wherever the meter's output
+is read, so nobody mistakes a continuous `CANNOT TELL` for a fresh one.
+
+**Closes when:** either the evidence gates are measured somewhere with a corpus on a schedule, or the
+published summary states which gates this environment can never answer and when they were last
+answered by hand.
+
+
 ### B156 — containerised patch agent authentication: SDK & CLI credential discovery contract (B97)
 
 Gate 4 is blocked on B97 (sandbox containment), and a containerised agent run fails before it
