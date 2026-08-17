@@ -240,17 +240,39 @@ def lane_name(spec: str) -> str:
     return head[:60] if head else "unnamed task"
 
 
-def verdict(dispatch: dict, terminals: dict[str, int], silence_ms: int) -> tuple[bool, str]:
-    """Whether this lane needs re-dispatching, and the reason to print either way."""
+def verdict(
+    dispatch: dict,
+    terminals: dict[str, int],
+    silence_ms: int,
+    fallback_handle: str | None = None,
+) -> tuple[bool, str]:
+    """Whether this lane needs re-dispatching, and the reason to print either way.
+
+    **A lane is stalled when its agent has stopped, not when Orca's record of it went bad**, and the
+    two come apart constantly: `worker-start` gives up after about a minute waiting for a busy TUI
+    and marks the dispatch failed while the agent it was attaching to works straight through.
+    Measured 2026-08-17 -- Lane C spent six minutes inside one `npm install` while every sweep read
+    its dispatch as failed and created another retry dispatch against a lane that needed nothing.
+
+    So a bad record is checked against the terminal before it is believed. The terminal is evidence;
+    the record is a hypothesis. `fallback_handle` is the lane's recorded terminal from
+    `lane_terminals.json`, which is the only handle available when the dispatch never carried one.
+    """
     status = dispatch.get("status")
     assignee = dispatch.get("assignee_handle")
+    record_is_bad = status in {"failed", "stopped"} or not assignee
 
-    if status in {"failed", "stopped"}:
-        return True, f"dispatch {status} ({dispatch.get('last_failure') or 'no reason recorded'})"
-    if not assignee:
-        # `dispatched` with no assignee is the common stall: worker-start timed out waiting for a
-        # busy TUI and the task list still reads as though the work is under way.
+    if record_is_bad:
+        handle = assignee or fallback_handle
+        # No terminal to check is not evidence of health: without one the record is all there is.
+        if handle and handle in terminals:
+            quiet_ms = int(time.time() * 1000) - terminals[handle]
+            if quiet_ms <= silence_ms:
+                return False, f"working ({quiet_ms // 1000}s since last output, despite the record)"
+        if status in {"failed", "stopped"}:
+            return True, f"dispatch {status} ({dispatch.get('last_failure') or 'no reason recorded'})"
         return True, f"never attached to a terminal (status {status})"
+
     if assignee not in terminals:
         return True, "assigned terminal is gone"
 
@@ -299,7 +321,7 @@ def main() -> int:
     for task in open_tasks:
         shown = call(cli, "orchestration", "dispatch-show", "--task", task["id"], "--json")
         dispatch = (shown.get("result") or {}).get("dispatch") or {}
-        needs, why = verdict(dispatch, terminals, silence_ms)
+        needs, why = verdict(dispatch, terminals, silence_ms, recorded.get(task["id"]))
         label = f"{task['id']} [{lane_name(task.get('spec', ''))}]"
 
         if not needs:

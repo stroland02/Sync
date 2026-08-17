@@ -344,8 +344,76 @@ routing.
 5. **Make it repeatable** — a command anyone can run, so the next reader does not start where this
    one did.
 
+## Live browser feedback in the scoring loop
+
+**Commissioned by the owner 2026-08-17**, in full below. The governing sentence is *do not rely
+solely on static analysis or unit tests* — after every applied fix, the live browser is inspected
+independently. The eval already drives Chrome over CDP to read computed styles, so the session
+exists; what it does not yet do is stay attached, and it throws away everything the page says about
+itself.
+
+**Attach and stay attached.** A browser session against the running dev server at
+`http://localhost:5173`, held open in the background across the whole loop rather than opened per
+measurement. Two facts about this machine belong here because each has already cost a run: **Vite
+binds IPv6-only, so `localhost:5173` answers and `127.0.0.1:5173` refuses** (`CI-W302`), and the
+console's own `fetch` calls do not carry URL-embedded credentials, so authentication goes through
+`Network.setExtraHTTPHeaders` or three panels render their never-reached-a-server state and get
+measured as missing composition (`M14-W355`).
+
+**Monitor.** After applying a remediation, wait for HMR to push the update before reading anything.
+The probe already refuses to measure a half-rendered page (`M14-W357`); an HMR update is that
+condition arriving on purpose.
+
+**Verify, in two directions, and the second is the one an error-only check misses.**
+
+*Did it break anything?*
+
+- **Console errors, uncaught exceptions, React hydration errors, and warning flags** —
+  `Runtime.exceptionThrown` and `Runtime.consoleAPICalled`. Hydration errors are called out
+  separately because React reports them as warnings, so an `error`-level filter drops exactly the
+  class this console is most likely to produce.
+- **Failed network requests** — `Network.loadingFailed`, and any response at 400 or above.
+- **A broken layout** — an element overflowing its container, a zero-height region that should have
+  content, a horizontal scroll on the page body.
+
+*Did it do what it was meant to?* **Inspect the DOM and confirm the structural nodes and components
+reflect the intended remediation.** A change that introduces no error and also did not take is a
+silent no-op, and this project has shipped four of those today under a different name — a number that
+looked fine. An absent error is not evidence of an applied change, and the affirmative check is the
+only thing that separates them.
+
+**A remediation that introduces a break, or that fails to appear in the DOM, is FAILED. Revert it and
+self-correct from what the browser said**, rather than from a re-reading of the diff. The point of the
+loop is that the browser is a better witness than the author.
+
+Two constraints, and the first is the one that makes it work at all.
+
+**Score the delta, never the absolute.** The console has pre-existing failures right now — `B147`
+means `codebase`'s telemetry routes 404 for a repository that `/api/repositories` lists — so a rule
+that fails on *any* failed request marks every change FAILED and the loop stops meaning anything.
+Capture a baseline before the edit, capture again after, and fail on **what the change introduced**.
+A remediation that fixes a pre-existing error should score better, not merely not-worse.
+
+**This is allowed to gate, and the reason matters.** `CI-W300` ruled that token-derived properties may
+gate while content counts may not, because counts move on every copy edit and gating them makes a
+snapshot test. A console error is neither: it is binary, it does not move when prose is edited, and
+it is never correct. The same holds for a failed request and for an overflowing element. **Gate on
+error signals and token-derived properties; never on counts.**
+
+On HMR: after an edit, wait for the update to apply and re-measure rather than assuming. The probe
+already refuses to measure a half-rendered page (`M14-W357`), and an HMR update is exactly that
+condition arriving on purpose.
+
+On payload efficiency: if local network traces are available, check that the UI is not over-fetching
+— the same route requested more than once per render, or a panel pulling a payload it does not read.
+Report it; do not fail on it. Over-fetching is a cost finding, not a correctness one, and failing a
+remediation for it would block correct work.
+
 ## What this does not solve
 
 It measures appearance, not behaviour. A screen can match the mock exactly and still assert a number
 nothing computed — that is Gate 3's job and Gate 3 is signed. The two are complementary and neither
 substitutes for the other.
+
+The live-feedback loop above narrows this a little — it catches a screen that *errors* — but not the
+gap that matters: a screen that renders perfectly and says something untrue.
