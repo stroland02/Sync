@@ -118,6 +118,10 @@ def _fake_abandonment_reader() -> dict[str, Any]:
     return {"groups": []}
 
 
+def _fake_change_units_reader(*, repo_id=None, limit=DEFAULT_LIMIT, offset=0) -> dict[str, Any]:
+    return {"items": [], "total": 0, "next_offset": None}
+
+
 _EMPTY_PAGE = {"items": [], "total": 0, "next_offset": None}
 
 
@@ -232,6 +236,7 @@ def _build_app(
     severity_reader=_fake_severity_reader,
     overview_reader=_fake_overview_reader,
     vendor_findings_reader=_fake_vendor_findings_reader,
+    change_units_reader=_fake_change_units_reader,
     context_reader=_fake_context_reader,
     context_writer=_fake_context_writer,
 ) -> Starlette:
@@ -258,6 +263,7 @@ def _build_app(
         severity_reader=severity_reader,
         overview_reader=overview_reader,
         vendor_findings_reader=vendor_findings_reader,
+        change_units_reader=change_units_reader,
         context_reader=context_reader,
         context_writer=context_writer,
     )
@@ -858,6 +864,58 @@ def test_repositories_route_reaches_its_reader_exactly_once_with_no_arguments():
     assert calls == [None]
 
 
+# -- change_units -------------------------------------------------------------
+
+
+def test_change_units_route_returns_readers_payload_unaltered():
+    payload = {
+        "items": [
+            {
+                "change_unit_id": "stripe:PostCharges:parameter-removed",
+                "vendor_id": "stripe",
+                "operation_id": "PostCharges",
+                "change_kind": "parameter-removed",
+                "severity": "breaking",
+                "repository_count": 2,
+                "call_site_count": 3,
+                "binding_rung": "static",
+                "finding_ids": ["f1", "f2"],
+                "repo_ids": ["r1", "r2"],
+                "standing": None,
+                "last_checkpoint_at": None,
+            }
+        ],
+        "total": 1,
+        "next_offset": None,
+    }
+    app = _build_app(
+        surface=GraphSurface(FakeGraph(), feed_fetched_at=FETCHED),
+        change_units_reader=lambda **_: payload,
+    )
+    client = TestClient(app)
+
+    response = client.get("/api/change-units")
+    assert response.status_code == 200
+    assert response.json() == payload
+
+
+def test_change_units_route_passes_query_params():
+    calls: list[dict[str, Any]] = []
+
+    def reader(*, repo_id=None, limit=DEFAULT_LIMIT, offset=0):
+        calls.append({"repo_id": repo_id, "limit": limit, "offset": offset})
+        return {"items": [], "total": 0, "next_offset": None}
+
+    app = _build_app(
+        surface=GraphSurface(FakeGraph(), feed_fetched_at=FETCHED),
+        change_units_reader=reader,
+    )
+    client = TestClient(app)
+
+    client.get("/api/change-units?repo_id=r1&limit=25&offset=50")
+    assert calls == [{"repo_id": "r1", "limit": 25, "offset": 50}]
+
+
 # -- the graph views: bindings, coverage, observed telemetry, detectors --------
 
 
@@ -1223,6 +1281,7 @@ class _RecordingClient(NamedTuple):
     severity_reads: list[str | None]
     overview_reads: list[str | None]
     vendor_findings_reads: list[dict[str, Any]]
+    change_units_reads: list[dict[str, Any]]
 
 
 def _recording_client(**graph_kw) -> _RecordingClient:
@@ -1239,6 +1298,7 @@ def _recording_client(**graph_kw) -> _RecordingClient:
     severity_reads: list[str | None] = []
     overview_reads: list[str | None] = []
     vendor_findings_reads: list[dict[str, Any]] = []
+    change_units_reads: list[dict[str, Any]] = []
 
     def workflow_reader(finding_id: str):
         workflow_reads.append(finding_id)
@@ -1288,6 +1348,10 @@ def _recording_client(**graph_kw) -> _RecordingClient:
         vendor_findings_reads.append({"vendor_id": vendor_id, **kwargs})
         return _fake_vendor_findings_reader(vendor_id, **kwargs)
 
+    def change_units_reader(*, repo_id=None, limit=DEFAULT_LIMIT, offset=0):
+        change_units_reads.append({"repo_id": repo_id, "limit": limit, "offset": offset})
+        return _fake_change_units_reader(repo_id=repo_id, limit=limit, offset=offset)
+
     app = create_app(
         surface=surface,
         workflow_reader=workflow_reader,
@@ -1303,6 +1367,7 @@ def _recording_client(**graph_kw) -> _RecordingClient:
         severity_reader=severity_reader,
         overview_reader=overview_reader,
         vendor_findings_reader=vendor_findings_reader,
+        change_units_reader=change_units_reader,
         context_reader=_fake_context_reader,
         context_writer=_fake_context_writer,
     )
@@ -1310,7 +1375,7 @@ def _recording_client(**graph_kw) -> _RecordingClient:
         TestClient(app), surface, workflow_reads, runs_reads, corpus_reads, repositories_reads,
         abandonment_reads,
         binding_reads, coverage_reads, observed_reads, detector_reads, severity_reads, overview_reads,
-        vendor_findings_reads,
+        vendor_findings_reads, change_units_reads,
     )
 
 
@@ -1325,7 +1390,7 @@ def test_no_route_reaches_past_the_read_surface():
         client, surface, workflow_reads, runs_reads, corpus_reads, repositories_reads,
         abandonment_reads,
         binding_reads, coverage_reads, observed_reads, detector_reads, severity_reads, overview_reads,
-        vendor_findings_reads,
+        vendor_findings_reads, change_units_reads,
     ) = _recording_client(findings=[_finding("f1", "s1", "c1")], sites=[site], changes=[change])
 
     assert client.get("/api/overview").status_code == 200
@@ -1337,6 +1402,7 @@ def test_no_route_reaches_past_the_read_surface():
     assert client.get("/api/corpus").status_code == 200
     assert client.get("/api/repositories").status_code == 200
     assert client.get("/api/corpus/abandonment").status_code == 200
+    assert client.get("/api/change-units").status_code == 200
     assert client.get("/api/vendors/stripe/operations/PostCharges/bindings").status_code == 200
     assert client.get("/api/repositories/r1/coverage").status_code == 200
     assert client.get("/api/repositories/r1/observed").status_code == 200
@@ -1352,6 +1418,7 @@ def test_no_route_reaches_past_the_read_surface():
     assert len(corpus_reads) == 1, "the corpus route must reach its own reader exactly once"
     assert len(repositories_reads) == 1, "the repositories route must reach its own reader exactly once"
     assert len(abandonment_reads) == 1, "the abandonment route must reach its own reader exactly once"
+    assert len(change_units_reads) == 1, "the change-units route must reach its own reader exactly once"
     assert len(binding_reads) == 1, "the bindings route must reach its own reader exactly once"
     assert len(coverage_reads) == 1, "the coverage route must reach its own reader exactly once"
     assert len(observed_reads) == 1, "the observed route must reach its own reader exactly once"
@@ -1452,6 +1519,9 @@ _LIMIT_OFFSET_COLLECTIONS = {
     "/api/vendors/{vendor_id}/changes",
     # Every remediation run across the fleet -- grows with usage, unboundedly.
     "/api/runs",
+    # Every open finding grouped into a change unit (`sync.dashboard.fleet.change_units`) --
+    # already page-shaped, and grows with the graph's own open findings.
+    "/api/change-units",
 }
 
 # Two routes carry more than one paginated list on the same screen, and `_limit_param`'s own
@@ -1601,6 +1671,7 @@ def test_every_collection_route_accepts_limit_and_offset():
         findings.append(_finding(f"f{i}", f"s{i}", "c1"))
     run_items = [{"thread_id": f"f{i}:0", "finding_id": f"f{i}", "outcome": "opened"} for i in range(5)]
     finding_items = [{"finding_id": f"f{i}", "vendor": "x", "line": i} for i in range(5)]
+    change_unit_items = [{"change_unit_id": f"u{i}", "vendor_id": "x"} for i in range(5)]
 
     def _paged(items: list, limit: int, offset: int) -> dict[str, Any]:
         window = items[offset : offset + limit]
@@ -1617,9 +1688,15 @@ def test_every_collection_route_accepts_limit_and_offset():
     def vendor_findings_reader(vendor_id: str, *, limit: int, offset: int, **_) -> dict[str, Any]:
         return _paged(finding_items, limit, offset)
 
+    def change_units_reader(*, repo_id=None, limit: int, offset: int) -> dict[str, Any]:
+        return _paged(change_unit_items, limit, offset)
+
     surface = GraphSurface(FakeGraph(findings=findings, sites=sites, changes=changes), feed_fetched_at=FETCHED)
     app = _build_app(
-        surface=surface, runs_reader=runs_reader, vendor_findings_reader=vendor_findings_reader
+        surface=surface,
+        runs_reader=runs_reader,
+        vendor_findings_reader=vendor_findings_reader,
+        change_units_reader=change_units_reader,
     )
 
     violations = _pagination_violations(app)
@@ -1800,6 +1877,7 @@ def _normalized(path: str) -> str:
 _NOT_YET_FETCHED_BY_CONSOLE = {
     "/api/corpus/abandonment",  # M12-W196: aggregate and route only, panel not yet scheduled
     "/api/repos/{param}/context",  # B126 Task 5: route only, the console screen is M7's line
+    "/api/change-units",  # M12-W320: aggregate and route only, panel not yet scheduled
 }
 
 

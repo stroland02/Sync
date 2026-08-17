@@ -16,6 +16,35 @@ to build by forgetting one.
 """
 
 from sync.runner.claude_sdk import ALLOWED_TOOLS, DISALLOWED_TOOLS, MODEL, ClaudeSdkRunner
+from sync.runner.outcome_tools import (
+    ABANDON_SCHEMA,
+    ASK_HUMAN_SCHEMA,
+    OUTCOME_TOOL_SCHEMAS,
+    PROPOSE_PATCH_SCHEMA,
+    REPORT_EXTERNAL_CAUSE_SCHEMA,
+    REPORT_FINDINGS_SCHEMA,
+    RETIRED_OUTCOME_TOOL_NAMES,
+    OutcomeToolValidator,
+    OutcomeValidationResult,
+    validate_outcome_call,
+)
 from sync.runner.static import StaticRunner
 
-__all__ = ["ALLOWED_TOOLS", "DISALLOWED_TOOLS", "MODEL", "ClaudeSdkRunner", "StaticRunner"]
+__all__ = [
+    "ABANDON_SCHEMA",
+    "ALLOWED_TOOLS",
+    "ASK_HUMAN_SCHEMA",
+    "ClaudeSdkRunner",
+    "DISALLOWED_TOOLS",
+    "MODEL",
+    "OUTCOME_TOOL_SCHEMAS",
+    "OutcomeToolValidator",
+    "OutcomeValidationResult",
+    "PROPOSE_PATCH_SCHEMA",
+    "REPORT_EXTERNAL_CAUSE_SCHEMA",
+    "REPORT_FINDINGS_SCHEMA",
+    "RETIRED_OUTCOME_TOOL_NAMES",
+    "StaticRunner",
+    "validate_outcome_call",
+]
+

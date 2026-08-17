@@ -275,3 +275,31 @@ def test_a_merge_webhook_cannot_update_a_rehearsal_row(store: GraphStore):
         "SELECT pr_merged FROM migration_outcome WHERE is_rehearsal"
     ).fetchone()
     assert rehearsal_row["pr_merged"] is None
+
+
+def test_apply_schema_reconciles_widened_unique_constraint_on_existing_database(store: GraphStore):
+    """B129: on a database created before B79 widened migration_outcome's natural key to include
+    `is_rehearsal`, `apply_schema` must reconcile the constraint so `record_migration_outcome`
+    succeeds instead of failing with psycopg.errors.InvalidColumnReference."""
+    conn = store._connect()
+    # Find existing unique constraint name and replace with the pre-B79 2-column key
+    cur = conn.execute("""
+        SELECT conname FROM pg_constraint
+        WHERE conrelid = 'migration_outcome'::regclass AND contype = 'u';
+    """)
+    for row in cur.fetchall():
+        conn.execute(f"ALTER TABLE migration_outcome DROP CONSTRAINT {row['conname']}")
+    conn.execute("ALTER TABLE migration_outcome ADD UNIQUE (finding_id, attempt_index)")
+
+    # Run apply_schema against this existing database with the old constraint
+    store.apply_schema()
+
+    # Rehearsal and production writes for the same finding and attempt index must both succeed
+    store.record_migration_outcome(
+        _outcome(terminal_status="halted", pr_number=None, is_rehearsal=True)
+    )
+    store.record_migration_outcome(_outcome(terminal_status="opened", pr_number=1, is_rehearsal=False))
+
+    total = conn.execute("SELECT count(*) AS n FROM migration_outcome").fetchone()["n"]
+    assert total == 2
+

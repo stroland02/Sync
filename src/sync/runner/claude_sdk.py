@@ -120,3 +120,4 @@ class ClaudeSdkRunner:
             raise RuntimeError(f"agent run produced no result message [{identity}]")
         if result.is_error:
             raise RuntimeError(f"agent run failed ({result.subtype}) [{identity}]: {result.errors}")
+

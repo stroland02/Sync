@@ -113,6 +113,210 @@ def parse_pull_request_event(body: bytes) -> PullRequestEvent:
     return PullRequestEvent(action, number, merged)
 
 
+class PullRequestReviewEvent(NamedTuple):
+    action: str
+    pr_number: int
+    state: str
+    body: str
+    reviewer: str
+
+
+def parse_review_event(body: bytes) -> PullRequestReviewEvent:
+    try:
+        payload = json.loads(body.decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise WebhookFormatError("webhook payload is not JSON") from exc
+
+    if not isinstance(payload, Mapping):
+        raise WebhookFormatError(f"webhook payload is a {type(payload).__name__}, not an object")
+
+    action = payload.get("action")
+    review = payload.get("review") or {}
+    pr = payload.get("pull_request") or {}
+
+    state = review.get("state", "")
+    review_body = review.get("body") or ""
+    reviewer = review.get("user", {}).get("login", "")
+    pr_number = pr.get("number", payload.get("number", 0))
+
+    if not isinstance(action, str) or not isinstance(pr_number, int):
+        raise WebhookFormatError("review payload missing action or pull_request number")
+
+    return PullRequestReviewEvent(
+        action=action,
+        pr_number=pr_number,
+        state=state,
+        body=review_body,
+        reviewer=reviewer,
+    )
+
+
+class PullRequestReviewCommentEvent(NamedTuple):
+    action: str
+    pr_number: int
+    path: str
+    line: int | None
+    body: str
+    diff_hunk: str
+    reviewer: str
+
+
+def parse_review_comment_event(body: bytes) -> PullRequestReviewCommentEvent:
+    try:
+        payload = json.loads(body.decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise WebhookFormatError("webhook payload is not JSON") from exc
+
+    if not isinstance(payload, Mapping):
+        raise WebhookFormatError(f"webhook payload is a {type(payload).__name__}, not an object")
+
+    action = payload.get("action")
+    comment = payload.get("comment") or {}
+    pr = payload.get("pull_request") or {}
+
+    path = comment.get("path", "")
+    line = comment.get("line") or comment.get("original_line")
+    comment_body = comment.get("body", "")
+    diff_hunk = comment.get("diff_hunk", "")
+    reviewer = comment.get("user", {}).get("login", "")
+    pr_number = pr.get("number", payload.get("number", 0))
+
+    if not isinstance(action, str) or not isinstance(pr_number, int):
+        raise WebhookFormatError("review comment payload missing action or pull_request number")
+
+    return PullRequestReviewCommentEvent(
+        action=action,
+        pr_number=pr_number,
+        path=path,
+        line=line,
+        body=comment_body,
+        diff_hunk=diff_hunk,
+        reviewer=reviewer,
+    )
+
+
+class CheckRunEvent(NamedTuple):
+    action: str
+    conclusion: str
+    head_sha: str
+    pr_number: int | None
+    output_title: str | None
+    output_summary: str | None
+
+
+def parse_check_run_event(body: bytes) -> CheckRunEvent:
+    try:
+        payload = json.loads(body.decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise WebhookFormatError("webhook payload is not JSON") from exc
+
+    if not isinstance(payload, Mapping):
+        raise WebhookFormatError(f"webhook payload is a {type(payload).__name__}, not an object")
+
+    action = payload.get("action", "")
+    check_run = payload.get("check_run") or {}
+    conclusion = check_run.get("conclusion") or ""
+    head_sha = check_run.get("head_sha", "")
+
+    output = check_run.get("output") or {}
+    output_title = output.get("title")
+    output_summary = output.get("summary")
+
+    check_suite = payload.get("check_suite") or check_run.get("check_suite") or {}
+    prs = check_suite.get("pull_requests") or check_run.get("pull_requests") or []
+    pr_number = prs[0].get("number") if prs else None
+
+    return CheckRunEvent(
+        action=action,
+        conclusion=conclusion,
+        head_sha=head_sha,
+        pr_number=pr_number,
+        output_title=output_title,
+        output_summary=output_summary,
+    )
+
+
+def format_review_feedback(
+    event: PullRequestReviewEvent | PullRequestReviewCommentEvent | CheckRunEvent | Any,
+) -> str:
+    if isinstance(event, PullRequestReviewCommentEvent):
+        location = f"{event.path}:{event.line}" if event.line else event.path
+        reviewer_part = f" from {event.reviewer}" if event.reviewer else ""
+        diff_part = f"\nDiff context:\n```diff\n{event.diff_hunk}\n```" if event.diff_hunk else ""
+        return (
+            f"Review comment{reviewer_part} on {location}:\n"
+            f"{event.body}{diff_part}"
+        )
+    if isinstance(event, PullRequestReviewEvent):
+        reviewer_part = f" ({event.reviewer})" if event.reviewer else ""
+        return (
+            f"Reviewer{reviewer_part} {event.state.replace('_', ' ')} on the pull request:\n"
+            f"{event.body}"
+        )
+    if isinstance(event, CheckRunEvent):
+        title = event.output_title or "CI check"
+        summary = event.output_summary or f"Conclusion: {event.conclusion}"
+        return f"CI check failure ({title}):\n{summary}"
+    return str(event)
+
+
+def dispatch_webhook_event(
+    event_name: str,
+    body: bytes,
+    signature: str,
+    secret: bytes,
+    graph,
+    checkpointer,
+    thread_id: str | None = None,
+    store=None,
+) -> bool:
+    """Verify and route incoming GitHub webhook to durable run resumption."""
+    verify_signature(body, signature, secret)
+
+    from sync.remediate.durable import resume_durable_run
+
+    if event_name == "pull_request_review_comment":
+        comment_event = parse_review_comment_event(body)
+        target_thread = thread_id or f"thread-{comment_event.pr_number}"
+        resume_durable_run(
+            graph=graph,
+            checkpointer=checkpointer,
+            thread_id=target_thread,
+            event=comment_event,
+            store=store,
+        )
+        return True
+
+    if event_name == "pull_request_review":
+        review_event = parse_review_event(body)
+        target_thread = thread_id or f"thread-{review_event.pr_number}"
+        resume_durable_run(
+            graph=graph,
+            checkpointer=checkpointer,
+            thread_id=target_thread,
+            event=review_event,
+            store=store,
+        )
+        return True
+
+    if event_name == "check_run":
+        check_event = parse_check_run_event(body)
+        if check_event.conclusion in ("failure", "timed_out", "action_required"):
+            target_thread = thread_id or (f"thread-{check_event.pr_number}" if check_event.pr_number else None)
+            if target_thread:
+                resume_durable_run(
+                    graph=graph,
+                    checkpointer=checkpointer,
+                    thread_id=target_thread,
+                    event=check_event,
+                    store=store,
+                )
+                return True
+
+    return False
+
+
+
 def count_human_edits(commits: Sequence[Mapping[str, Any]]) -> int:
     """How many commits on the branch somebody other than Sync wrote.
 

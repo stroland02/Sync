@@ -57,6 +57,10 @@ RepositoriesReader = Callable[[], dict[str, Any]]
 # answers.
 AbandonmentReader = Callable[[], dict[str, Any]]
 
+# The change-units reader backs `sync.dashboard.fleet.change_units`: open findings grouped by
+# vendor change and operation across the fleet or scoped to a single repository.
+ChangeUnitsReader = Callable[..., dict[str, Any]]
+
 # The graph-rendering readers back `sync.dashboard.graph_views`, outside `GraphSurface` for the
 # same reason the fleet readers above are: a binding surface, a per-repo coverage count and a
 # detector roll-up are questions about the whole graph or about one repository, not the frozen
@@ -173,6 +177,7 @@ def create_app(
     severity_reader: SeverityReader,
     overview_reader: OverviewReader,
     vendor_findings_reader: VendorFindingsReader,
+    change_units_reader: ChangeUnitsReader,
     context_reader: ContextReader,
     context_writer: ContextWriter,
 ) -> Starlette:
@@ -345,6 +350,17 @@ def create_app(
     async def adapters(request: Request) -> JSONResponse:
         return JSONResponse(adapters_reader())
 
+    async def change_units(request: Request) -> JSONResponse:
+        # `change_units_reader` answers `sync.dashboard.fleet.change_units`: open findings
+        # grouped by vendor change and operation, fleet-wide or narrowed to one repository.
+        return JSONResponse(
+            change_units_reader(
+                repo_id=request.query_params.get("repo_id"),
+                limit=_limit_param(request),
+                offset=_offset_param(request),
+            )
+        )
+
     async def repo_context(request: Request) -> JSONResponse:
         return JSONResponse(context_reader(request.path_params["repo_id"]))
 
@@ -390,6 +406,7 @@ def create_app(
         Route("/api/corpus", corpus, methods=["GET"]),
         Route("/api/corpus/abandonment", abandonment, methods=["GET"]),
         Route("/api/repositories", repositories, methods=["GET"]),
+        Route("/api/change-units", change_units, methods=["GET"]),
         Route(
             "/api/vendors/{vendor_id}/operations/{operation_id}/bindings",
             binding,

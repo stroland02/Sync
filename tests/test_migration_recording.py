@@ -342,6 +342,31 @@ def test_a_corpus_write_that_raises_is_visible_in_the_logs(caplog):
     assert any("migration_outcome" in record.getMessage() for record in caplog.records)
 
 
+def test_corpus_recorder_tracks_attempt_and_error_statistics():
+    """B130: a failed corpus write is tracked with counters and error messages on the recorder,
+    so an operator or driver can query whether bookkeeping succeeded without crashing the run."""
+    from sync.remediate.corpus import make_recorder
+
+    store = ExplodingStore()
+    recorder = make_recorder(store)
+    state = {
+        "finding": FINDING,
+        "site": SITE,
+        "change": CHANGE,
+        "static_attempts": 1,
+        "attempt_strategy": "agent",
+    }
+
+    ok = recorder(state, terminal_status="abandoned", abandon_reason="test-failure")
+    assert ok is False
+    assert recorder.attempt_count == 1
+    assert recorder.failure_count == 1
+    assert recorder.success_count == 0
+    assert len(recorder.errors) == 1
+    assert "migration_outcome" in recorder.errors[0]
+
+
+
 def test_a_store_with_no_corpus_method_fails_before_the_run_starts():
     """This asserted the opposite until the contract moved, and the reasoning it carried --
     "an older store is a missing row rather than a crashed pipeline" -- is what turned out to
