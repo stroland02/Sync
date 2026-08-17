@@ -126,6 +126,29 @@ authorized for every lane and is not one of the three.
 
 Escalate to the coordinator, not to the human, when the blocker is another lane.
 
+## When a lane runs out of context
+
+A lane will hit its context limit mid-milestone. That is normal and it is survivable, but only if
+the handoff is written **before** the last unit rather than after — an agent at 99% cannot write a
+good one, and at 100% cannot write one at all.
+
+**Watch for it and act at 90%, not at 99%.** The coordinator reads the percentage in the terminal
+footer during a sweep. When a lane crosses it, that lane's next unit is the handoff.
+
+**A handoff goes on `main`, as a report, and names commits rather than intentions.** Lane C's, at
+`docs/superpowers/reports/2026-08-17-lane-c-handoff.md`, is the model: three commands to run first,
+then every landed unit as a row of *identifier, commit, what it did*, then the open entries with
+what is known **and what is not**. Its own line says why — *"gate work done" is not resumable and
+`CI-W308 landed at 49292ac` is.*
+
+**Replacing the agent needs a new worker, not a cleared one.** `/clear` sent through
+`orca terminal send` is path-expanded by Git Bash into `C:/Program Files/Git/clear` and never
+reaches the TUI. Create a task whose spec points at the handoff and run
+`orca orchestration worker-start --task <id> --agent claude --worktree current`; Orca opens a fresh
+terminal. Then update `scripts/orchestration/lane_terminals.json`, mark the retired task
+`completed` so the sweep stops reporting it, and tell the old agent it is retired so two lanes do
+not take the same unit.
+
 ## Traps that have each cost this project an hour
 
 - **A handoff described in a report has not been handed off.** Three times on 2026-08-17 a lane
