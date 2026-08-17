@@ -477,27 +477,62 @@ def test_abandonment_by_change_kind_groups_by_change_kind_and_tier(store):
     assert groups[("response-property-removed", 2)]["abandoned_attempt_count"] == 0
 
 
-def test_abandonment_by_change_kind_reports_abandon_reasons_with_counts(store):
+def test_abandonment_by_change_kind_reports_abandon_reason_codes_with_counts(store):
+    """B128: the aggregate groups by the coded vocabulary, not by the free-text prose beside
+    it -- two rows can carry different `abandon_reason` sentences and still share a code.
+    """
     store.record_migration_outcome(
-        _outcome(attempt_index=0, terminal_status="abandoned", abandon_reason="compile error")
+        _outcome(
+            attempt_index=0, terminal_status="abandoned",
+            abandon_reason="error TS2339 on attempt 3",
+            abandon_reason_code="static_verify_exhausted",
+        )
     )
     store.record_migration_outcome(
         _outcome(
             finding_id="g" * 32, attempt_index=0,
-            terminal_status="abandoned", abandon_reason="compile error",
+            terminal_status="abandoned",
+            # Different prose, same cause -- this is exactly what grouping on `abandon_reason`
+            # could never collapse together.
+            abandon_reason="error TS2304 on attempt 3",
+            abandon_reason_code="static_verify_exhausted",
         )
     )
     store.record_migration_outcome(
         _outcome(
             finding_id="h" * 32, attempt_index=0,
-            terminal_status="abandoned", abandon_reason="verify timeout",
+            terminal_status="abandoned", abandon_reason="CI failed: https://example/run/1",
+            abandon_reason_code="ci_attempts_exhausted",
         )
     )
 
     result = abandonment_by_change_kind(store)
 
     group = result["groups"][0]
-    assert group["abandon_reasons"] == {"compile error": 2, "verify timeout": 1}
+    assert group["abandon_reason_codes"] == {
+        "static_verify_exhausted": 2,
+        "ci_attempts_exhausted": 1,
+    }
+
+
+def test_abandonment_by_change_kind_a_row_predating_the_code_column_reports_none(store):
+    """A row abandoned before `abandon_reason_code` existed carries `abandon_reason` alone.
+
+    That is a gap in the record, not the same fact as `unclassified` -- `unclassified` is a
+    real member of the vocabulary a run reaches when `make_abandon` could not classify it, and
+    collapsing the two would make a historical gap look like a defect in today's classifier.
+    """
+    store.record_migration_outcome(
+        _outcome(
+            attempt_index=0, terminal_status="abandoned", abandon_reason="tsc failed",
+            abandon_reason_code=None,
+        )
+    )
+
+    result = abandonment_by_change_kind(store)
+
+    group = result["groups"][0]
+    assert group["abandon_reason_codes"] == {None: 1}
 
 
 def test_abandonment_by_change_kind_a_group_never_abandoned_has_zero_not_absence(store):
@@ -510,7 +545,7 @@ def test_abandonment_by_change_kind_a_group_never_abandoned_has_zero_not_absence
     group = result["groups"][0]
     assert group["abandoned_attempt_count"] == 0
     assert group["abandoned_distinct_finding_count"] == 0
-    assert group["abandon_reasons"] == {}
+    assert group["abandon_reason_codes"] == {}
 
 
 def test_abandonment_by_change_kind_absence_is_not_zero(store):

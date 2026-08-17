@@ -169,14 +169,17 @@ def abandonment_by_change_kind(store: GraphStore) -> dict:
     not hand back a percentage that reads as a health score, which `CLAUDE.md` and this
     milestone's plan both refuse outright.
 
-    `abandon_reasons` is `abandon_reason` tallied within the group, over abandoned attempts only
-    -- the free-text diagnostic each abandoning run wrote, not a coded vocabulary. A group with
-    no abandonment has `{}`.
+    `abandon_reason_codes` is `abandon_reason_code` tallied within the group, over abandoned
+    attempts only (B128) -- the closed vocabulary `sync.remediate.state.AbandonReasonCode`
+    declares, not the free-text `abandon_reason` prose beside it: two abandonments that read
+    differently but share a cause now group together, which is what makes "which change kinds
+    are not mechanically safe, and why" a query rather than an argument. A group with no
+    abandonment has `{}`.
     """
     reasons: dict[tuple[str, int], dict] = {}
     for row in store.migration_outcome_abandon_reasons_by_kind():
         key = (row["change_kind"], row["tier"])
-        reasons.setdefault(key, {})[row["abandon_reason"]] = row["n"]
+        reasons.setdefault(key, {})[row["abandon_reason_code"]] = row["n"]
 
     groups = []
     for row in store.migration_outcome_rollup_by_kind():
@@ -189,7 +192,7 @@ def abandonment_by_change_kind(store: GraphStore) -> dict:
                 "distinct_finding_count": row["distinct_finding_count"],
                 "abandoned_attempt_count": row["abandoned_attempt_count"],
                 "abandoned_distinct_finding_count": row["abandoned_distinct_finding_count"],
-                "abandon_reasons": reasons.get(key, {}),
+                "abandon_reason_codes": reasons.get(key, {}),
             }
         )
     return {"groups": groups}

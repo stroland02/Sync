@@ -1141,6 +1141,7 @@ class GraphStore:
         "response_fields_touched_count", "strategy", "tier", "routing_row", "input_tokens",
         "output_tokens", "cache_read_input_tokens", "wall_ms", "static_verify_passed",
         "static_verify_error_class", "ci_result", "terminal_status", "abandon_reason",
+        "abandon_reason_code",
         "pr_number", "pr_merged", "pr_merged_at", "human_edits_before_merge",
     )
 
@@ -1208,21 +1209,30 @@ class GraphStore:
         return [dict(row) for row in rows]
 
     def migration_outcome_abandon_reasons_by_kind(self) -> list[dict]:
-        """`abandon_reason`, tallied per (`change_kind`, `tier`), over abandoned attempts only.
+        """`abandon_reason_code`, tallied per (`change_kind`, `tier`), over abandoned attempts
+        only.
 
-        `abandon_reason` is free text written by the abandoning node (`state.get("diagnostics")`
-        or exception text) rather than a coded vocabulary, so this reports whatever distinct
-        strings actually occurred -- a closed set *of what was observed*, not a promise the
-        column itself is bounded. `remediate-stage.md` requires `abandon_reason` non-null on an
-        abandoned run; a null here is a defect in the writer, not an expected case, and is
-        reported as `None` rather than silently folded into another bucket.
+        Groups on the closed vocabulary `sync.remediate.state.AbandonReasonCode` declares, not
+        on `abandon_reason`'s free text (B128): two runs that abandoned for the same reason
+        group together here even when their prose reads differently, which grouping on the
+        prose could never do -- "how often did tier 2 abandon because the compiler never
+        recovered" becomes `abandon_reason_code = 'static_verify_exhausted'` rather than a
+        substring match. `abandon_reason` stays free text and stays on the row
+        (`GraphStore.migration_outcomes`); this aggregate is not where it is deleted.
+
+        `remediate-stage.md` requires `abandon_reason` non-null on an abandoned run, and
+        `make_abandon` writes `abandon_reason_code` beside it on every abandonment (falling
+        back to `'unclassified'` rather than guessing), so a null code here is a row recorded
+        before this column existed, not an expected case -- reported as `None` rather than
+        folded into `'unclassified'`, which is a real member of the vocabulary and a different
+        fact.
         """
         rows = self._connect().execute(
             """
-            SELECT change_kind, tier, abandon_reason, count(*) AS n
+            SELECT change_kind, tier, abandon_reason_code, count(*) AS n
               FROM migration_outcome
              WHERE NOT is_rehearsal AND terminal_status = 'abandoned'
-             GROUP BY change_kind, tier, abandon_reason
+             GROUP BY change_kind, tier, abandon_reason_code
              ORDER BY change_kind, tier
             """
         ).fetchall()

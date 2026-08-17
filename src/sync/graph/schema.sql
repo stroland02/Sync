@@ -233,6 +233,13 @@ CREATE TABLE IF NOT EXISTS migration_outcome (
     ci_result                     TEXT,
     terminal_status               TEXT,
     abandon_reason                TEXT,
+    -- The coded companion beside the prose above, not instead of it (B128). One of the values
+    -- `sync.remediate.state.AbandonReasonCode` declares, written by `make_abandon` at the same
+    -- point it writes `abandon_reason`. Does not change this table's grain: it is one more
+    -- attribute of the row the natural key below already identifies, not a new dimension a row
+    -- varies over, so the unique constraint and `ON CONFLICT` clause are unchanged. NULL on a
+    -- row from before this column existed and on every row that is not an abandonment.
+    abandon_reason_code           TEXT,
 
     pr_number                     INTEGER,
     pr_merged                     BOOLEAN,

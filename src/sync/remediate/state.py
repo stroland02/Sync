@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Literal, TypedDict
+from typing import Literal, TypedDict, get_args
 
 from sync.core import CallSite, Evidence, Finding, Patch, RepoRef, VendorChange
 
@@ -15,6 +15,63 @@ Outcome = Literal["running", "opened", "abandoned", "reported"]
 
 MAX_STATIC_ATTEMPTS = 3
 MAX_CI_ATTEMPTS = 2
+
+# The coded companion to `abandon_reason`'s prose (B128). One member per routing decision in
+# `sync.remediate.nodes` that sends a run to `abandon` -- derived from what is actually there
+# rather than invented, and declared once here so `nodes.py` (which sets it), `corpus.py` and
+# `sync.graph.store` (which carry it to the row) and `sync.dashboard.fleet` (which groups by
+# it) share one spelling.
+#
+# Every failing node sets this beside `diagnostics`, on every failure, using the same fields
+# the router reads a beat later -- `await_ci` computing `ci_attempts_exhausted` versus
+# `ci_feedback_patch_budget_exhausted` from the same two counters `route_after_ci` checks is
+# the clearest case. A retry overwrites a non-terminal write before `abandon` ever reads it,
+# so the code left on state when a run actually reaches `abandon` is always the one describing
+# the failure that sent it there -- never a stale value from an earlier, retried attempt.
+#
+# - `locate_failed` -- the store lookup `locate` makes raised (`route_after_locate`).
+# - `prepare_failed` -- `adapter.prepare` raised: a broken registry, a lockfile out of sync
+#   with package.json (`route_after_prepare`).
+# - `patch_attempts_exhausted` -- the static-attempt budget ran out without the remediator
+#   ever producing a usable patch, whether it raised or returned an empty diff
+#   (`route_after_patch`).
+# - `static_verify_fault` -- `static_verify` itself raised, rather than returning a normal
+#   failing result: the environment fault `route_after_static` abandons on immediately,
+#   without spending the retry budget.
+# - `static_verify_exhausted` -- the static-attempt budget ran out with the compiler still
+#   rejecting every attempt (`route_after_static`'s budget branch) -- "the compiler never
+#   recovered", the backlog's own example query.
+# - `replay_exhausted` -- the static-attempt budget ran out with replay still failing
+#   (`route_after_replay`).
+# - `push_failed` -- `forge.push_branch` raised (`route_after_push`).
+# - `ci_poll_failed` -- `forge.await_ci` raised and produced no verdict at all
+#   (`route_after_ci`'s `fatal` branch).
+# - `ci_attempts_exhausted` -- the CI-attempt budget ran out with CI still red
+#   (`route_after_ci`'s `ci_attempts` branch).
+# - `ci_feedback_patch_budget_exhausted` -- CI was still red, the CI-attempt budget was not
+#   yet spent, but the static-attempt budget was -- a run that abandons one CI poll earlier
+#   than `ci_attempts_exhausted` because CI feedback is what used up the shared patch budget
+#   (`route_after_ci`'s `static_attempts` branch).
+# - `open_pr_failed` -- `forge.open_pull_request` raised (`route_after_open_pr`).
+# - `unclassified` -- the fallback `make_abandon` reports when a run reaches it carrying no
+#   code at all: a routing path this vocabulary does not yet cover, reported honestly rather
+#   than forced into a bucket that does not fit.
+AbandonReasonCode = Literal[
+    "locate_failed",
+    "prepare_failed",
+    "patch_attempts_exhausted",
+    "static_verify_fault",
+    "static_verify_exhausted",
+    "replay_exhausted",
+    "push_failed",
+    "ci_poll_failed",
+    "ci_attempts_exhausted",
+    "ci_feedback_patch_budget_exhausted",
+    "open_pr_failed",
+    "unclassified",
+]
+
+ABANDON_REASON_CODES: frozenset[str] = frozenset(get_args(AbandonReasonCode))
 
 
 class RunState(TypedDict, total=False):
@@ -146,3 +203,9 @@ class RunState(TypedDict, total=False):
     pr_number: int | None
     outcome: Outcome
     abandon_reason: str
+    # The coded companion set beside it, from the closed vocabulary above -- `None` until a
+    # node sets it, and cleared back to `None` on that node's own success so a stale code from
+    # an earlier, retried attempt cannot outlive the attempt it described. B128: grouping this
+    # column is what turns "abandoned attempts are where routing learns" from an argument into
+    # a query.
+    abandon_reason_code: AbandonReasonCode | None

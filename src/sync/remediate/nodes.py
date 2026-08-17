@@ -120,7 +120,11 @@ def make_locate(store, catalogue=None):
             site = store.get_call_site(finding.call_site_id)
             change = store.get_vendor_change(finding.vendor_change_id)
         except Exception as exc:
-            return {"fatal": True, "diagnostics": _describe(exc)}
+            return {
+                "fatal": True,
+                "diagnostics": _describe(exc),
+                "abandon_reason_code": "locate_failed",
+            }
         tier, row = _decide_tier(change, site, catalogue, state["repo"])
         return {
             "site": site,
@@ -159,7 +163,11 @@ def make_prepare(adapter):
         try:
             adapter.prepare(state["repo"])
         except Exception as exc:
-            return {"prepare_ok": False, "diagnostics": _describe(exc)}
+            return {
+                "prepare_ok": False,
+                "diagnostics": _describe(exc),
+                "abandon_reason_code": "prepare_failed",
+            }
         return {
             "prepare_ok": True,
             "diagnostics": "",
@@ -256,6 +264,13 @@ def make_patch(remediator, record=None):
                 "attempt_strategy": _attempted_strategy(exc, remediator),
                 "diagnostics": _describe(exc),
                 "feedback": _describe(exc),
+                # Unconditional on every failing attempt, not only the one that exhausts the
+                # budget: `route_after_patch` decides after this node returns whether the run
+                # retries or abandons, so this node cannot know which it is. A retry's own
+                # next write -- success clears it, another failure re-sets it -- overwrites
+                # this before `abandon` ever reads it, so only the truly last failure's code
+                # survives to be read.
+                "abandon_reason_code": "patch_attempts_exhausted",
             }
 
         if not proposed.diff.strip():
@@ -267,6 +282,7 @@ def make_patch(remediator, record=None):
                 "attempt_strategy": proposed.strategy,
                 "diagnostics": "the remediator produced no change",
                 "feedback": "the remediator produced no change",
+                "abandon_reason_code": "patch_attempts_exhausted",
             }
 
         return {
@@ -275,6 +291,7 @@ def make_patch(remediator, record=None):
             "attempt_strategy": proposed.strategy,
             "diagnostics": "",
             "feedback": "",
+            "abandon_reason_code": None,
         }
 
     return patch
@@ -302,6 +319,7 @@ def make_static_verify(adapter):
                 "static_fatal": True,
                 "verify_ok": False,
                 "diagnostics": _describe(exc),
+                "abandon_reason_code": "static_verify_fault",
             }
         return {
             "diagnostics": result.diagnostics,
@@ -309,6 +327,10 @@ def make_static_verify(adapter):
             "verify_ok": result.ok,
             "static_fatal": False,
             "attempt_static_passed": result.ok,
+            # Unconditional on `not result.ok`, same reasoning as `patch`'s two failure
+            # branches: `route_after_static` decides retry-or-abandon after this returns, and
+            # a retry's next node overwrites this before `abandon` can read a stale value.
+            "abandon_reason_code": None if result.ok else "static_verify_exhausted",
         }
 
     return static_verify
@@ -450,6 +472,7 @@ def make_replay(store=None):
                 f"replay ({result.outcome}): {result.reason}" if failed else ""
             ),
             "feedback": _replay_feedback(result.outcome, result.reason) if failed else "",
+            "abandon_reason_code": "replay_exhausted" if failed else None,
         }
 
     return replay
@@ -460,7 +483,10 @@ def _declined(outcome: str, reason: str, operation_id: str) -> RunState:
 
     `diagnostics` and `feedback` stay untouched: they are the routing and retry channel for
     a stage that reached a verdict, and writing a decline into them would hand the next patch
-    attempt a note about Sync's own plumbing to act on.
+    attempt a note about Sync's own plumbing to act on. `abandon_reason_code` stays untouched
+    for the same reason: `route_after_replay` sends `declined`/`not-attempted` straight to
+    `push_branch`, never to `abandon`, so this outcome never needs a code and setting one
+    would risk it lingering past whatever `push_branch` or `await_ci` writes next.
     """
     return {
         "replay_outcome": outcome,
@@ -507,8 +533,12 @@ def make_push_branch(forge: Forge):
         try:
             branch = forge.push_branch(state["repo"], state["patch"])
         except Exception as exc:
-            return {"fatal": True, "diagnostics": _describe(exc)}
-        return {"branch": branch, "fatal": False}
+            return {
+                "fatal": True,
+                "diagnostics": _describe(exc),
+                "abandon_reason_code": "push_failed",
+            }
+        return {"branch": branch, "fatal": False, "abandon_reason_code": None}
 
     return push_branch
 
@@ -527,14 +557,34 @@ def make_await_ci(forge: Forge):
         try:
             green, url = forge.await_ci(state["repo"], state["branch"])
         except Exception as exc:
-            return {"fatal": True, "diagnostics": _describe(exc)}
+            return {
+                "fatal": True,
+                "diagnostics": _describe(exc),
+                "abandon_reason_code": "ci_poll_failed",
+            }
+
+        ci_attempts = state.get("ci_attempts", 0) + 1
+        # The same two counters `route_after_ci` checks, in the same order, computed here
+        # because the router itself cannot write state: `ci_attempts` is what this call just
+        # incremented, and `static_attempts` is untouched since `patch` last set it. Whichever
+        # branch fires here is exactly the branch that will fire there a moment later.
+        if green:
+            code = None
+        elif ci_attempts >= MAX_CI_ATTEMPTS:
+            code = "ci_attempts_exhausted"
+        elif state.get("static_attempts", 0) >= MAX_STATIC_ATTEMPTS:
+            code = "ci_feedback_patch_budget_exhausted"
+        else:
+            code = None
+
         return {
             "ci_url": url,
-            "ci_attempts": state.get("ci_attempts", 0) + 1,
+            "ci_attempts": ci_attempts,
             "diagnostics": "" if green else f"CI failed: {url}",
             "feedback": "" if green else _ci_feedback(url, state["branch"], state.get("patch")),
             "fatal": False,
             "attempt_ci_result": "passed" if green else "failed",
+            "abandon_reason_code": code,
         }
 
     return await_ci
@@ -572,7 +622,11 @@ def make_open_pr(forge: Forge, record=None):
         except Exception as exc:
             # No row here: the attempt has not ended, it has failed on its way out, and
             # `abandon` is the node that closes it.
-            return {"fatal": True, "diagnostics": _describe(exc)}
+            return {
+                "fatal": True,
+                "diagnostics": _describe(exc),
+                "abandon_reason_code": "open_pr_failed",
+            }
 
         if record is not None:
             # Passed rather than read off `state`, and that is what holds the grain. This node
@@ -675,6 +729,12 @@ def make_report(halt_reason: str | None = None, record=None):
 def make_abandon(store, forge, record=None):
     def abandon(state: RunState) -> RunState:
         reason = state.get("diagnostics") or "unknown"
+        # The coded companion beside the prose (B128): whichever node's failure sent this run
+        # here left its own code on `abandon_reason_code`, using the same fields the routing
+        # function that chose `abandon` just read -- so this is a read, not a second
+        # classification. `unclassified` is the honest answer for a routing path this
+        # vocabulary does not yet cover, matching the prose fallback beside it.
+        reason_code = state.get("abandon_reason_code") or "unclassified"
         finding_id = state["finding"].id
         if finding_id:
             store.set_finding_status(finding_id, "abandoned")
@@ -684,7 +744,12 @@ def make_abandon(store, forge, record=None):
         # any attempt writes nothing, which `corpus.record` decides -- zero attempts is
         # zero rows at this table's grain.
         if record is not None:
-            record(state, terminal_status="abandoned", abandon_reason=reason)
+            record(
+                state,
+                terminal_status="abandoned",
+                abandon_reason=reason,
+                abandon_reason_code=reason_code,
+            )
 
         # `branch` is set only by a push that succeeded, which is the one signal the
         # forge cannot derive for itself: it cannot tell a finding that abandoned
@@ -698,6 +763,11 @@ def make_abandon(store, forge, record=None):
                 # needs. A cleanup that failed on top of it must not displace that.
                 pass
 
-        return {"outcome": "abandoned", "abandon_reason": reason, "pr_url": None}
+        return {
+            "outcome": "abandoned",
+            "abandon_reason": reason,
+            "abandon_reason_code": reason_code,
+            "pr_url": None,
+        }
 
     return abandon
