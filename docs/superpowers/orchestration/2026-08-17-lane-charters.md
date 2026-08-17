@@ -263,6 +263,14 @@ orca orchestration check --terminal <handle> --all --json    # your own mailbox,
 `--all` does not mark anything read, so `read_at` stays null there and cannot be used to tell handled
 from unhandled. Sort by `created_at` and compare against what you have actually acted on.
 
+**A long `terminal send` arrives truncated, and the receiving lane cannot tell.** Measured
+2026-08-17 after Lane A held a day of gated work through three separate rulings: it reported
+receiving *"an ambiguous truncated message about main-landing authorization"* and refused to act
+on it, which was the correct call. Every send had returned `ok: true`. **The sender sees success;
+the reader sees half a sentence and reasonably treats it as noise.** Keep terminal sends to one
+or two short sentences and split anything longer across several sends, or put the body in an
+`orchestration send` and use the terminal only to say a message is waiting.
+
 **And a third channel is in neither inbox.** `orca terminal send --enter` puts text into a lane's
 scrollback as its next input. It never becomes a message, so a lane that reads its inbox rather
 than its own transcript will not find it, and `check --all` will not show it either. Lane C asked
