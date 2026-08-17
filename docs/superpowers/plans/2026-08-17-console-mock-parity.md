@@ -13,7 +13,7 @@
 ## Global Constraints
 
 - **Integration branch: `console-parity`.** Workers branch from it, gate on it, push their own branch; the coordinator merges. A worker never opens a PR and never pushes `main`.
-- **Work item register:** before starting a task, take the next number in `docs/superpowers/WORKLOG.md` (the series continues from M7-W225; the milestone prefix for this plan is `M14`). Add the row before the first commit; carry the identifier on every commit for the task.
+- **Work item register:** before starting a task, take the next free number from **Lane B's allocated block W260-W279** (`docs/superpowers/orchestration/2026-08-17-lane-charters.md`); the milestone prefix for this plan is `M14`. Add the row before the first commit; carry the identifier on every commit for the task. (Amended 2026-08-17: the plan originally said "continue from W225", which collided with numbers other lanes had landed; W228-W233 were renumbered to W260-W265.)
 - Python is `python`, never `python3`. Packages via `uv` only. Postgres is on port 5433.
 - **Always pass `encoding="utf-8"`** to every `read_text`, `write_text`, `open`, and `subprocess.run(..., text=True)`.
 - `DESIGN.md` is the token authority. No new token, spacing value, or type step without an argued amendment there. Contrast floor 5.05:1.
