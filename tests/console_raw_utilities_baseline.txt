@@ -15,11 +15,6 @@ src/features/fleet/codebases-panel.tsx	text-amber-400
 src/features/fleet/codebases-panel.tsx	text-base
 src/features/fleet/codebases-panel.tsx	text-emerald-400
 src/features/fleet/codebases-panel.tsx	text-xl
-src/features/fleet/fleet-page.tsx	bg-emerald-500
-src/features/fleet/fleet-page.tsx	rounded
-src/features/fleet/fleet-page.tsx	rounded-lg
-src/features/fleet/fleet-page.tsx	text-3xl
-src/features/fleet/fleet-page.tsx	text-sm
 src/features/pullrequests/evidence-bundle.tsx	rounded
 src/features/signals/signals-page.tsx	py-0.5
 src/features/workflows/evidence.tsx	py-0.5
