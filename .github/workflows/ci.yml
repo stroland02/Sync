@@ -496,3 +496,38 @@ jobs:
       # in `test`.
       - name: Test
         run: npm test
+
+  # Beta readiness, measured rather than asserted. `scripts/beta_gates.py` answers the four gates
+  # in `plans/2026-08-17-sync-to-beta-scope.md` and may answer CANNOT TELL, which is a first-class
+  # verdict here rather than a polite failure.
+  #
+  # **This job never fails the build, and that is the design rather than an oversight.** Gates are
+  # a readiness report. A red build on a gate nobody promised to have met today teaches every lane
+  # to ignore CI, and an ignored CI is worse than none -- which is the whole of what B137 and B150
+  # cost this repository. `--exit-zero` says so precisely: the verdicts cannot fail the step, and
+  # the script crashing still can. `continue-on-error` would have swallowed both and is refused.
+  #
+  # No Postgres service, deliberately. CI has no corpus, so gates 1 and 2 report CANNOT TELL and
+  # say the environment could not answer. Standing up an empty database here would let an empty
+  # table be read as a measurement of zero, which is the exact error the meter exists to refuse --
+  # and it would be this repository making it about itself.
+  beta-gates:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Sync dependencies
+        run: uv sync --frozen
+
+      # Written to the step summary so the answer is readable from the run page without cloning
+      # anything. Printed to the log as well, because a summary is easy to miss in a failing run.
+      - name: Measure the beta gates
+        run: uv run python scripts/beta_gates.py --exit-zero --summary "$GITHUB_STEP_SUMMARY"

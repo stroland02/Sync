@@ -379,6 +379,44 @@ def render(verdicts: Sequence[Verdict]) -> str:
     return "\n".join(lines)
 
 
+_MARK = {MET: "✅", NOT_MET: "❌", CANNOT_TELL: "❔"}
+
+
+def render_markdown(verdicts: Sequence[Verdict]) -> str:
+    """The same verdicts, for a reader who has not cloned the repository.
+
+    A reader skims glyphs and bold text before words, so `CANNOT TELL` and `NOT MET` are given
+    different marks as well as different words. Rendering them alike here would re-introduce the
+    absence-versus-zero collapse the script refuses internally, at the one place anybody actually
+    looks — which is how a meter starts lying without a single wrong number in it.
+    """
+    met = sum(1 for v in verdicts if v.status == MET)
+    unknown = sum(1 for v in verdicts if v.status == CANNOT_TELL)
+
+    lines = [
+        "## Beta gates",
+        "",
+        f"**{met} of {len(verdicts)} met**, {unknown} cannot be told from this environment.",
+        "",
+        "This is a readiness report, not a test. It does not fail the build: a gate nobody "
+        "promised to have met today going red teaches everyone to ignore CI.",
+        "",
+    ]
+    for verdict in verdicts:
+        lines.append(
+            f"{_MARK[verdict.status]} **{_LABEL[verdict.status]}** — Gate {verdict.gate}: {verdict.name}"
+        )
+        lines.append("")
+        for item in verdict.evidence:
+            lines.append(f"- {item}")
+        lines.append("")
+    lines.append(
+        "❔ means the environment could not answer, not that the answer is zero. A gate that "
+        "needs the corpus cannot be measured where there is no corpus."
+    )
+    return "\n".join(lines)
+
+
 def measure(*, run_suite: bool) -> list[Verdict]:
     store, store_error = _open_store()
     health_reader = _health_reader(store_error)
@@ -455,6 +493,19 @@ def main(argv: Sequence[str]) -> int:
         help="measure Gate 4's green-main component by running the suite (~4 minutes)",
     )
     parser.add_argument("--json", action="store_true", help="emit the verdicts as JSON")
+    parser.add_argument(
+        "--summary",
+        metavar="PATH",
+        help="also write the report as markdown to PATH (use $GITHUB_STEP_SUMMARY in CI)",
+    )
+    parser.add_argument(
+        "--exit-zero",
+        action="store_true",
+        help=(
+            "exit 0 whatever the verdicts are. For CI, where this is a readiness report rather "
+            "than a test; a crash still exits non-zero"
+        ),
+    )
     args = parser.parse_args(list(argv[1:]))
 
     verdicts = measure(run_suite=args.run_suite)
@@ -462,6 +513,10 @@ def main(argv: Sequence[str]) -> int:
         print(json.dumps([v.__dict__ for v in verdicts], indent=2))
     else:
         print(render(verdicts))
+    if args.summary:
+        Path(args.summary).write_text(render_markdown(verdicts) + "\n", encoding="utf-8")
+    if args.exit_zero:
+        return 0
     return 0 if all(v.status == MET for v in verdicts) else 1
 
 
