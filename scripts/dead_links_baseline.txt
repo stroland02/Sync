@@ -99,9 +99,6 @@ src/sync/remediate/sandbox_image.py:ensure_image_built
 # (`docs/superpowers/specs/2026-07-25-sync-threat-model.md` is binding on anything that accepts
 src/sync/forge/webhook.py:dispatch_webhook_event
 
-# `reconcile_pull_request_outcomes` (M11) evaluates benchmark PR outcomes against ground truth.
-src/sync/benchmark/reconcile.py:reconcile_pull_request_outcomes
-
 # `GraphStore.intake_attempts` (B136 / M12-W322) queries recorded intake attempts from the store.
 # Finished and tested in `tests/test_intake_attempt_store.py`; the consumer view model / route
 # will be wired in Lane E's subsequent intake status dashboard work item.
