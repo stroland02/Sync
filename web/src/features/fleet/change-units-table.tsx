@@ -15,16 +15,16 @@ import { formatElapsed } from "@/lib/format"
 
 function deriveStanding(unit: ChangeUnitRow): { label: string; symbol: string; tone: string } {
   if (unit.standing === "opened") {
-    return { label: "PR open — CI green", symbol: "✓", tone: "text-emerald-400" }
+    return { label: "PR open — CI green", symbol: "✓", tone: "text-good-ink" }
   }
   if (unit.standing === "abandoned") {
-    return { label: "Abandoned", symbol: "✗", tone: "text-rose-400" }
+    return { label: "Abandoned", symbol: "✗", tone: "text-critical-ink" }
   }
   if (unit.standing === "reported") {
     return { label: "Reported — no patch attempted", symbol: "—", tone: "text-muted-foreground" }
   }
   if (unit.standing === "in_progress") {
-    return { label: "Remediation in progress", symbol: "!", tone: "text-amber-400" }
+    return { label: "Remediation in progress", symbol: "!", tone: "text-warning-ink" }
   }
   return { label: "No remediation run yet", symbol: "—", tone: "text-muted-foreground" }
 }
@@ -35,7 +35,7 @@ export function ChangeUnitsTable() {
   const rows = changeUnitsQuery.data?.items ?? []
 
   return (
-    <div className="flex flex-col rounded-lg border border-border bg-card overflow-hidden">
+    <div className="flex flex-col rounded-surface border border-border bg-card overflow-hidden">
       <Table>
         <TableHeader className="bg-surface-subtle">
           <TableRow className="border-b border-border hover:bg-transparent">
@@ -106,7 +106,7 @@ export function ChangeUnitsTable() {
                     {unit.call_site_count}
                   </TableCell>
                   <TableCell className="py-row px-section">
-                    <span className="font-mono text-meta text-muted-foreground bg-muted px-field py-field rounded border border-border">
+                    <span className="font-mono text-meta text-muted-foreground bg-muted px-field py-field rounded-control border border-border">
                       {unit.binding_rung}
                     </span>
                   </TableCell>

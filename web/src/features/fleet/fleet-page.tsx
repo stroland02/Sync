@@ -42,14 +42,19 @@
  * - **`PageHeader` carries the route's own `question`**, which has sat in `lib/routes.ts` unread
  *   by any feature screen since it was written. This is the first feature route to render the
  *   48px display step the chassis declared, and rendering it is the whole of what takes the type
- *   range past its bar.
- * - **A `ControlBar` holds the screen's scope and its one primary action.** The left slot states
+ *   range past its bar. Its `actions` slot carries the screen's one primary action: reviewing the
+ *   newest proposed patch. `proposed-patch.ts` reads the same `/api/runs` page `CodebasesPanel`
+ *   already fetches for the newest run whose outcome is `opened`, and the button is absent rather
+ *   than present when none has — a CTA that always points somewhere, aimed at an invented finding
+ *   id when reality has nothing to offer, is the fixture-as-fact defect this task closes.
+ * - **A `ControlBar` holds the screen's scope, with its action slot empty.** The left slot states
  *   what the counts are counted over rather than offering a selector, and that is deliberate:
  *   Fleet is the fleet-wide level by construction — the per-repository answer is one level down,
  *   at a repository's own Codebase screen — so a scope control here would claim a choice this
- *   level does not offer. The action is the detector attribution link, which was a "Full detail"
- *   buried mid-paragraph in a card description and is now in the position the grammar of a
- *   control plane keeps for it.
+ *   level does not offer. The three repository filters sit beside that scope sentence as
+ *   `chipSurface`-styled chips; the bar's action slot stays empty because the screen's one
+ *   primary action already sits in the header, and a second slot for it would be the same action
+ *   offered twice.
  * - **A fact rail** — `FleetFacts` — places the four counts beside one another with the label
  *   register above the value. The paragraph that used to open the screen still opens the body of
  *   it, and it now qualifies figures that are on screen beside it rather than describing figures
@@ -90,15 +95,27 @@
 import { useState } from "react"
 import { Link } from "react-router"
 
+import { useRuns } from "@/api/queries"
 import { Button } from "@/components/ui/button"
+import { FactTile } from "@/components/fact-tile"
 import { CodebasesPanel, type CodebaseFilter } from "@/features/fleet/codebases-panel"
 import { FleetFacts } from "@/features/fleet/fleet-facts"
+import { proposedPatchTarget } from "@/features/fleet/proposed-patch"
 import { ScreenLimitsCard } from "@/features/fleet/screen-limits"
 import { VendorDistributionCard } from "@/features/fleet/vendor-distribution"
 import { Breadcrumbs } from "@/layouts/breadcrumbs"
+import { ControlBar } from "@/layouts/control-bar"
+import { PageHeader } from "@/layouts/page-header"
+import { chipSurface } from "@/lib/selectable-surface"
 
 const DEFAULT_QUESTION =
   "All code repositories monitored by Sync, their attached API vendors, and active migrations."
+
+const FILTERS: [CodebaseFilter, string][] = [
+  ["ALL", "All repositories"],
+  ["NEEDS_REVIEW", "With active remediations"],
+  ["CLEAN", "Clean repositories"],
+]
 
 export interface FleetPageProps {
   readonly question?: string
@@ -106,71 +123,45 @@ export interface FleetPageProps {
 
 export function FleetPage({ question = DEFAULT_QUESTION }: FleetPageProps) {
   const [filter, setFilter] = useState<CodebaseFilter>("ALL")
+  const runsQuery = useRuns({ limit: 20, offset: 0 })
+  const target = proposedPatchTarget(runsQuery.data?.items ?? [])
 
   return (
     <section className="flex flex-col gap-section">
-      {/* Top Header Region with Title, Tag, and Review Proposed Patch CTA */}
-      <div className="flex flex-col gap-row">
-        <Breadcrumbs trail={[{ label: "Repositories" }]} />
-        <div className="flex flex-wrap items-start justify-between gap-section">
-          <div className="flex flex-col gap-field">
-            <div className="flex items-center gap-row">
-              <h1 className="text-3xl font-semibold tracking-tight text-foreground">Repositories</h1>
-              <span className="font-mono text-meta uppercase tracking-wider text-muted-foreground bg-muted px-row py-field rounded border border-border">
-                CODEBASES
-              </span>
-            </div>
-            <p className="text-body text-muted-foreground">{question}</p>
-          </div>
-          <Button asChild className="bg-emerald-500 hover:bg-emerald-400 text-black font-semibold text-sm px-section py-row rounded-lg shadow-sm">
-            <Link to="/findings/2f725bb99f21301920809d07f388f53a/workflow/pull-request">
-              Review proposed patch
-            </Link>
-          </Button>
-        </div>
-      </div>
+      <PageHeader
+        title="Repositories"
+        question={question}
+        trail={<Breadcrumbs trail={[{ label: "Repositories" }]} />}
+        actions={
+          target !== null && (
+            <Button asChild>
+              <Link to={target}>Review proposed patch</Link>
+            </Button>
+          )
+        }
+      />
 
       {/* Filter Tabs & Scope Description */}
-      <div className="flex flex-wrap items-center justify-between gap-section border-b border-border pb-row">
+      <ControlBar>
         <div className="flex flex-wrap items-center gap-row">
-          <button
-            type="button"
-            onClick={() => setFilter("ALL")}
-            className={
-              filter === "ALL"
-                ? "bg-muted px-section py-field rounded text-meta font-medium text-foreground border border-border"
-                : "text-muted-foreground hover:text-foreground px-section py-field rounded text-meta font-medium"
-            }
-          >
-            All repositories
-          </button>
-          <button
-            type="button"
-            onClick={() => setFilter("NEEDS_REVIEW")}
-            className={
-              filter === "NEEDS_REVIEW"
-                ? "bg-muted px-section py-field rounded text-meta font-medium text-foreground border border-border"
-                : "text-muted-foreground hover:text-foreground px-section py-field rounded text-meta font-medium"
-            }
-          >
-            With active remediations
-          </button>
-          <button
-            type="button"
-            onClick={() => setFilter("CLEAN")}
-            className={
-              filter === "CLEAN"
-                ? "bg-muted px-section py-field rounded text-meta font-medium text-foreground border border-border"
-                : "text-muted-foreground hover:text-foreground px-section py-field rounded text-meta font-medium"
-            }
-          >
-            Clean repositories
-          </button>
+          {FILTERS.map(([value, label]) => (
+            <Button
+              key={value}
+              type="button"
+              size="sm"
+              variant="outline"
+              aria-pressed={filter === value}
+              className={chipSurface(filter === value)}
+              onClick={() => setFilter(value)}
+            >
+              {label}
+            </Button>
+          ))}
         </div>
         <span className="text-meta text-muted-foreground">
           Repositories monitored across the organization
         </span>
-      </div>
+      </ControlBar>
 
       {/* 4-card metric strip */}
       <FleetFacts />
@@ -184,16 +175,18 @@ export function FleetPage({ question = DEFAULT_QUESTION }: FleetPageProps) {
           <VendorDistributionCard />
         </div>
         <div className="flex min-w-0 flex-col gap-section">
-          <div className="flex flex-col gap-field rounded-surface border border-line bg-surface p-section text-body text-muted-foreground">
-            <span className="furniture text-meta text-ink-muted">Health score policy</span>
-            <p>
-              There is no composite health figure here on purpose. A scalar that averaged three
-              gates would collapse "we could not check" onto the same axis as "we checked and it
-              passed", which is the failure this console exists to replace. Every figure on this
-              screen instead names its own scope, and the panel beside them names what none of these
-              figures can tell you at all.
-            </p>
-          </div>
+          <FactTile
+            label="Health score policy"
+            value={
+              <>
+                There is no composite health figure here on purpose. A scalar that averaged three
+                gates would collapse "we could not check" onto the same axis as "we checked and it
+                passed", which is the failure this console exists to replace. Every figure on this
+                screen instead names its own scope, and the panel beside them names what none of
+                these figures can tell you at all.
+              </>
+            }
+          />
           <ScreenLimitsCard />
         </div>
       </div>

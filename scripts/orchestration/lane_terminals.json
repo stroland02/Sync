@@ -1,8 +1,9 @@
 {
   "_why": "Which terminal each lane's Task belongs to, so a dispatch that never attached can still be placed. A dispatch records its assignee only once worker-start succeeds; the common stall is that it never did, because worker-start waits for a busy agent's TUI and gives up after a minute. Without this map the resume script knows a lane is stalled and has nowhere to put it. Written by the coordinator, read by resume_lanes.py. A handle that no longer exists is skipped rather than guessed at.",
   "task_e7b0e2302720": "term_96a3ec0e-4d49-4512-824f-55acc9637824",
-  "task_11f3461855bb": "term_e81409be-ca81-4196-9632-8f3dc18d2219",
   "task_069208567b9b": "term_7bcc230d-bc0a-4530-a70a-fc4f79de1ddf",
-  "task_8572562ff969": "term_9a7d3549-9f54-4eb7-9f0e-1b94ef8d3e8c",
-  "task_04b5e426ee63": "term_d8762a53-1d6f-4cd2-a4cd-3b8119d7c41a"
+  "task_4f770dc40fd2": "term_9a7d3549-9f54-4eb7-9f0e-1b94ef8d3e8c",
+  "task_cef1dfcea94e": "term_d8762a53-1d6f-4cd2-a4cd-3b8119d7c41a",
+  "_run": "run_bac65dd1e15c",
+  "task_4c9174277544": "term_e81409be-ca81-4196-9632-8f3dc18d2219"
 }

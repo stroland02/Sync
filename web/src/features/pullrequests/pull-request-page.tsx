@@ -65,6 +65,7 @@ import {
 import { EvidenceBundle } from "@/features/pullrequests/evidence-bundle"
 import { RunOutcome, type BelowThisPanel } from "@/features/workflows/run-outcome"
 import { Breadcrumbs } from "@/layouts/breadcrumbs"
+import { DetailGrid } from "@/layouts/detail-grid"
 import { PageHeader } from "@/layouts/page-header"
 import { UnknownRoute } from "@/layouts/unknown-route"
 import { DetailTitleText, pullRequestTitle } from "@/lib/detail-title"
@@ -239,47 +240,48 @@ function PullRequest({ findingId, question }: { findingId: string; question: str
     )
 
   return (
-    <div className="grid items-start gap-8 lg:grid-cols-[minmax(0,22.5rem)_minmax(0,1fr)]">
-      <div className="min-w-0 lg:col-span-2">
+    <DetailGrid
+      header={
         <PageHeader
           trail={<Breadcrumbs trail={trail} />}
           title={title}
           question={question}
         />
-      </div>
+      }
+      rail={
+        <div className="flex min-w-0 flex-col gap-section">
+          <FactList facts={railFacts(data, facts, failure, findingId)} />
 
-      <div className="flex min-w-0 flex-col gap-section">
-        <FactList facts={railFacts(data, facts, failure, findingId)} />
-
-        <p className="text-body text-muted-foreground">
-          Read from the checkpointer, the same source as{" "}
-          <Link
-            to={`/findings/${encodeURIComponent(findingId)}/workflow`}
-            className="underline underline-offset-2"
-          >
-            the solution workflow
-          </Link>
-          , which shows all eight nodes; this page shows the five that carry the evidence a pull
-          request rests on.
-        </p>
-
-        {facts.prUrl !== null && (
-          <p className="text-body">
-            <a
-              href={facts.prUrl}
-              target="_blank"
-              rel="noreferrer noopener"
+          <p className="text-body text-muted-foreground">
+            Read from the checkpointer, the same source as{" "}
+            <Link
+              to={`/findings/${encodeURIComponent(findingId)}/workflow`}
               className="underline underline-offset-2"
             >
-              Open the pull request
-            </a>{" "}
-            <span className="text-muted-foreground">
-              — leaves the console for the forge it was opened on.
-            </span>
+              the solution workflow
+            </Link>
+            , which shows all eight nodes; this page shows the five that carry the evidence a pull
+            request rests on.
           </p>
-        )}
-      </div>
 
+          {facts.prUrl !== null && (
+            <p className="text-body">
+              <a
+                href={facts.prUrl}
+                target="_blank"
+                rel="noreferrer noopener"
+                className="underline underline-offset-2"
+              >
+                Open the pull request
+              </a>{" "}
+              <span className="text-muted-foreground">
+                — leaves the console for the forge it was opened on.
+              </span>
+            </p>
+          )}
+        </div>
+      }
+    >
       <div className="flex min-w-0 flex-col gap-8">
         {query.isPending && <LoadingState what={`the run for finding ${findingId}`} />}
 
@@ -318,6 +320,6 @@ function PullRequest({ findingId, question }: { findingId: string; question: str
           </>
         )}
       </div>
-    </div>
+    </DetailGrid>
   )
 }

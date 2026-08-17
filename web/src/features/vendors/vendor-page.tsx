@@ -65,6 +65,8 @@ import {
   VendorFindingsCard,
   VendorFindingsControls,
 } from "@/features/vendors/vendor-findings-table"
+import { Breadcrumbs } from "@/layouts/breadcrumbs"
+import { DetailGrid } from "@/layouts/detail-grid"
 import { PageHeader } from "@/layouts/page-header"
 import { UnknownRoute } from "@/layouts/unknown-route"
 
@@ -87,9 +89,49 @@ export function VendorPage({ question = DEFAULT_QUESTION }: VendorPageProps) {
           what they assumed, so they belong beside the question rather than under it. Measured at
           1280x800, stacking the header full width instead cost 105px above the first table row and
           bought nothing this arrangement does not already give. */}
-      <div className="grid items-start gap-8 lg:grid-cols-[minmax(0,1fr)_minmax(0,22rem)]">
+      <DetailGrid
+        railSide="end"
+        rail={
+          <FactList
+            facts={[
+              { label: "Vendor", value: <span className="font-mono">{vendorId}</span> },
+              {
+                label: "Repository scope",
+                value:
+                  repoId === null ? (
+                    "Nothing selected one on the way here"
+                  ) : (
+                    <span className="font-mono">{repoId}</span>
+                  ),
+              },
+              {
+                label: "Findings counted over",
+                value: repoId === null ? "Every repository the index has seen" : repoId,
+              },
+              {
+                label: "Changes counted over",
+                value: "The vendor, never a repository",
+              },
+            ]}
+          />
+        }
+      >
         <div className="flex min-w-0 flex-col gap-section">
           <PageHeader
+            trail={
+              <Breadcrumbs
+                trail={[
+                  { label: "Repositories", to: "/" },
+                  // A vendor narrowed by a repository was reached through one, so the trail says
+                  // which. Unnarrowed, the vendor sits directly under the fleet scope and there is
+                  // no repository to name — inventing one would claim a path the reader did not take.
+                  ...(repoId === null
+                    ? []
+                    : [{ label: repoId, to: `/repositories/${encodeURIComponent(repoId)}` }]),
+                  { label: vendorId },
+                ]}
+              />
+            }
             title={<span className="font-mono">{vendorId}</span>}
             question={question}
           />
@@ -108,29 +150,7 @@ export function VendorPage({ question = DEFAULT_QUESTION }: VendorPageProps) {
             </p>
           )}
         </div>
-        <FactList
-          facts={[
-            { label: "Vendor", value: <span className="font-mono">{vendorId}</span> },
-            {
-              label: "Repository scope",
-              value:
-                repoId === null ? (
-                  "Nothing selected one on the way here"
-                ) : (
-                  <span className="font-mono">{repoId}</span>
-                ),
-            },
-            {
-              label: "Findings counted over",
-              value: repoId === null ? "Every repository the index has seen" : repoId,
-            },
-            {
-              label: "Changes counted over",
-              value: "The vendor, never a repository",
-            },
-          ]}
-        />
-      </div>
+      </DetailGrid>
 
       {/* The bar itself is composed inside `VendorFindingsControls`, beside the state it sets and
           the sentence saying which of the two tables below it reaches. A page that assembled the

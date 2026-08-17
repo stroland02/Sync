@@ -68,6 +68,7 @@ import {
 import { DetailTitleText, findingTitle } from "@/lib/detail-title"
 import { formatFindingBadge, orAbsent } from "@/lib/format"
 import { Breadcrumbs } from "@/layouts/breadcrumbs"
+import { DetailGrid } from "@/layouts/detail-grid"
 import { PageHeader } from "@/layouts/page-header"
 import { UnknownRoute } from "@/layouts/unknown-route"
 
@@ -93,7 +94,7 @@ function FieldList({ label, values }: { label: string; values: string[] }) {
           {values.map((value) => (
             <li
               key={value}
-              className="rounded-control border border-line px-field py-0.5 font-mono text-meta"
+              className="rounded-control border border-line px-field py-field font-mono text-meta"
             >
               {value}
             </li>
@@ -320,56 +321,57 @@ function FindingDetailPage({
   )
 
   return (
-    <div className="grid items-start gap-8 lg:grid-cols-[minmax(0,22.5rem)_minmax(0,1fr)]">
-      <div className="min-w-0 lg:col-span-2">
+    <DetailGrid
+      header={
         <PageHeader
           trail={<Breadcrumbs trail={trail} />}
           title={title}
           question={question}
         />
-      </div>
-
-      <div className="flex min-w-0 flex-col gap-section">
-        <FactList
-          facts={findingFacts(findingId, query.isSuccess ? query.data : null, failure, remediation)}
-        />
-        <p className="text-body text-ink-muted">
-          What this call site calls, and how the system knows it does.
-        </p>
-
-        {/* Outside the success branch on purpose. A finding that has been patched or
-            abandoned is no longer open, so this page 404s for it — and that is exactly the
-            finding whose run is most worth reading. The workflow lives in the checkpointer,
-            which does not care whether the graph still holds the finding, so both links below
-            can be live on a page whose finding is gone. */}
-        <div className="flex flex-col gap-field">
-          <p className="text-body">
-            <Link
-              to={`/findings/${encodeURIComponent(findingId)}/workflow`}
-              className="underline underline-offset-2"
-            >
-              Solution workflow
-            </Link>{" "}
-            <span className="text-muted-foreground">
-              — what Sync did about this finding, node by node.
-            </span>
+      }
+      rail={
+        <div className="flex min-w-0 flex-col gap-section">
+          <FactList
+            facts={findingFacts(findingId, query.isSuccess ? query.data : null, failure, remediation)}
+          />
+          <p className="text-body text-ink-muted">
+            What this call site calls, and how the system knows it does.
           </p>
-          {reachedPullRequest(remediation) && (
+
+          {/* Outside the success branch on purpose. A finding that has been patched or
+              abandoned is no longer open, so this page 404s for it — and that is exactly the
+              finding whose run is most worth reading. The workflow lives in the checkpointer,
+              which does not care whether the graph still holds the finding, so both links below
+              can be live on a page whose finding is gone. */}
+          <div className="flex flex-col gap-field">
             <p className="text-body">
               <Link
-                to={`/findings/${encodeURIComponent(findingId)}/workflow/pull-request`}
+                to={`/findings/${encodeURIComponent(findingId)}/workflow`}
                 className="underline underline-offset-2"
               >
-                Pull request
+                Solution workflow
               </Link>{" "}
               <span className="text-muted-foreground">
-                — the evidence bundle behind the patch this run opened.
+                — what Sync did about this finding, node by node.
               </span>
             </p>
-          )}
+            {reachedPullRequest(remediation) && (
+              <p className="text-body">
+                <Link
+                  to={`/findings/${encodeURIComponent(findingId)}/workflow/pull-request`}
+                  className="underline underline-offset-2"
+                >
+                  Pull request
+                </Link>{" "}
+                <span className="text-muted-foreground">
+                  — the evidence bundle behind the patch this run opened.
+                </span>
+              </p>
+            )}
+          </div>
         </div>
-      </div>
-
+      }
+    >
       <div className="flex min-w-0 flex-col gap-8">
         {query.isPending && <LoadingState what={`finding ${findingId}`} />}
 
@@ -437,6 +439,6 @@ function FindingDetailPage({
           </>
         )}
       </div>
-    </div>
+    </DetailGrid>
   )
 }
