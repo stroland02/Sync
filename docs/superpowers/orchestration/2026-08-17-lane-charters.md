@@ -306,6 +306,19 @@ orca orchestration check --terminal <handle> --all --json    # your own mailbox,
 `--all` does not mark anything read, so `read_at` stays null there and cannot be used to tell handled
 from unhandled. Sort by `created_at` and compare against what you have actually acted on.
 
+**Confirmed 2026-08-18: the coordinator's mailbox stopped receiving entirely, and `check` reports
+that as an empty queue.** Its newest non-heartbeat message is timestamped `19:53Z` and the total has
+been stuck at 54 for over five hours, across a period when lanes demonstrably sent — Lane D's
+terminal shows `msg_662ab1d03c2b` going out and it is not in the mailbox. **An empty inbox and a
+dead inbox are the same reading**, which is the day's recurring shape applied to the coordination
+layer itself, and it is why the sweep must not treat "no mail" as "nothing happened".
+
+**Read terminals. They are the channel that works.** `orca terminal read --terminal <handle>` shows
+what a lane is doing and what it believes it has sent, and every finding routed in the last five
+hours came from reading one rather than from mail. Relay between lanes by hand when it matters, and
+tell lanes to address each other directly rather than through the coordinator — a hop through a
+broken mailbox is worse than no hop.
+
 **A long `terminal send` arrives truncated, and the receiving lane cannot tell.** Measured
 2026-08-17 after Lane A held a day of gated work through three separate rulings: it reported
 receiving *"an ambiguous truncated message about main-landing authorization"* and refused to act
