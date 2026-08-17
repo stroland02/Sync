@@ -588,7 +588,40 @@ Code CLI binary to establish the exact discovery order and what a container need
   2. **Option B (Mounted OAuth credentials)**: Host mounts `$CLAUDE_CONFIG_DIR/.credentials.json` into container user's `$HOME/.claude/.credentials.json`. Requires handling container UID permissions and token refresh lifetimes.
   3. **Option C (Credential-injecting forward auth proxy)**: Container runs with dummy credentials or no credentials pointing to a local forward proxy (`HTTPS_PROXY` / `ANTHROPIC_BASE_URL`), and the proxy attaches the real `x-api-key` / `Authorization` header before forwarding upstream. Keeps all secrets strictly outside the sandbox container.
 
-### B165 — a customer's own file writes unfenced text into the patch prompt — Lane A
+**Ruling (Lane A, routed here per this entry).** Option C. Two independent reasons, not one.
+
+First, Option A does not match how this deployment actually authenticates. `sync.remediate
+.sandbox`'s own docstring already established this, verified against a real environment
+snapshot: no `ANTHROPIC_API_KEY` or `ANTHROPIC_AUTH_TOKEN` exists anywhere in this process's
+environment. `CLAUDE_CODE_EXECPATH` points at an already-authenticated `claude` binary --
+discovery order item 3, the on-disk OAuth session, not item 1 or 2. Choosing Option A would
+mean provisioning a credential type this deployment does not hold today, which is exactly the
+"a credential, an account, or a spend" exception `.claude/rules/autonomous-development.md`
+reserves for the human -- not a design choice this ruling can make.
+
+Second, and this is the one that would hold even if a static key did exist: Option B puts a
+live Anthropic session credential inside the filesystem of the container the model-driven agent
+controls. `sandbox.py`'s whole reason for existing is that the agent's own `Bash` tool is the
+untrusted actor -- CLAUDE.md's threat model ranks it first. A credential the sandboxed process
+can read is a credential the sandboxed process can exfiltrate, on the same `network="bridge"`
+window `disconnect_network`'s own docstring already measured as open for the better part of a
+second after teardown starts. Mounting `.credentials.json` into that container does not narrow
+the boundary this module exists to build; it hands the risky phase the one thing "we never hold
+customer secrets" was written to keep away from code running on a customer's behalf, except this
+time the secret is Sync's own rather than the customer's.
+
+Option C is the only one of the three where the answer to "what can a compromised or coerced
+agent turn read out of its own container" stays "nothing that reaches Anthropic on its own" --
+the proxy holds the credential, the container holds none, and the container's whole outbound
+reach is one proxy address a `network="none"`-adjacent container can still resolve. It is also
+the only option consistent with `ClaudeAgentOptions`' own `SandboxNetworkConfig.httpProxyPort`
+surface already assuming a proxy exists, per this entry's own B97 cross-reference.
+
+This ruling does not build the proxy -- that is still separate, undesigned work, and still item
+2 of B97's remaining four. What it retires is the ambiguity between three options; whoever
+designs the proxy next designs it to inject the credential rather than to pass one through.
+
+### B165 — a customer's own file writes unfenced text into the patch prompt — Lane A — CLOSED
 
 **Found 2026-08-17 auditing the threat model against the tree**
 (`docs/superpowers/reports/2026-08-17-threat-model-against-the-tree.md`). It is the largest open hole
@@ -650,6 +683,22 @@ time and that precedent is the cheaper one to follow.
 
 **Lane A.** `src/sync/remediate/agent_patch.py` assembles the prompt. `src/sync/context/` is in no
 lane in the current table; the fix belongs at the assembly point.
+
+**Closed.** Fixed at the assembly point exactly as scoped -- `src/sync/context/` untouched.
+`context_section` now goes through `fenced_block(REPOSITORY, ...)` beside every other section in
+`build_patch_prompt`. Both tests this entry's evidence bar named landed in
+`tests/test_patch_prompt_injection.py` rather than `test_agent_patch_context.py` -- that file
+already holds the VENDOR/REPOSITORY fenced/unfenced helpers and the identical mutation pattern the
+vendor-path equivalent uses, so the two untrusted-text tests stay in one file instead of splitting
+across two. `test_agent_patch_context.py`'s five existing tests, including
+`test_no_context_is_byte_identical_to_the_prompt_without_the_parameter`, pass unchanged.
+
+Mutation check run as asked: reverted the fix locally, watched both new tests redden (one
+`DID NOT RAISE UntrustedTextRefused`, one plain content assertion), restored it, watched both go
+green again. The seed-time-refusal open question is left open rather than ruled on here -- the
+entry itself says the vendor path's prompt-time precedent is the cheaper one to follow, and that is
+what this fix does; refusing at seed time is a different, larger change to `sync.context.seed` this
+entry did not ask for.
 
 ### B166 — the API has no authentication, and two of its routes write — Lane E
 
@@ -876,7 +925,7 @@ on the host-wide npx resolve lock (`src/sync/index/npx_lock.py`, Lane D's path, 
 legible; it does not make the run fast.
 
 
-### B151 — `main` is 60 tests red, the remediation graph does not terminate, and a crashed worker hides it
+### B151 — `main` is 60 tests red, the remediation graph does not terminate, and a crashed worker hides it — CLOSED
 
 **Filed by Lane C against Lane A's path, not fixed here.** `src/sync/remediate/**` is Lane A's,
 and a lane that owns neither the file nor the milestone should not be the one deciding what the
@@ -921,6 +970,16 @@ minutes the charter already calls the largest tax in the workspace.
 
 **Closes when:** the graph reaches a stop condition and those 60 tests pass on `main` (Lane A), and
 a crashed worker is reported as a crashed worker rather than as failing tests (Lane C).
+
+**Both halves closed.** Lane C's half is B152. Lane A's half: `report_reason`, `static_attempts`
+and `ci_attempts` were all still read and written by `nodes.py` after `12e416a` dropped them from
+`RunState`'s `TypedDict` — `StateGraph(RunState)` builds one channel per declared key, so every
+write to an undeclared one is silently dropped, never an error. The two counters landing on a
+dropped write meant the retry budget read the zero default forever, which is the recursion;
+`report_reason` came back as a bare `KeyError`. Fix restores all three where their own surviving
+comments already said they belonged (`src/sync/remediate/state.py`). Verified against this entry's
+own baseline (`60 failed, 3744 passed` at `acc0617`): the same files now run 3787 passed, 1
+skipped, 0 failed.
 
 
 ### B135 — a customer's repository could configure the patch agent, and the gate sat downstream of it — FIXED, and the entry stays for what it says about the gate
@@ -994,7 +1053,7 @@ set, recording for each whether its default admits customer-controlled or operat
 input, in the same form as the measurement above — an experiment, not a reading. `sandbox`,
 `plugins`, `agents`, `system_prompt` and `permission_mode` are the ones to start from.
 
-### B133 — B79's natural key never reached any database that already existed, so every corpus write fails
+### B133 — B79's natural key never reached any database that already existed, so every corpus write fails - CLOSED
 
 **Found 2026-08-16 by running `sync rehearse --depth full`, which nothing had done since the
 pipeline changed underneath it.** Every `migration_outcome` write in that run raised:
@@ -1033,6 +1092,15 @@ applies the schema, and watches a write that previously raised succeed — and p
 by running that test against the current `apply_schema` first. A fresh-database test proves
 nothing here; the fresh-database path is the one that already works.
 
+**Closed.** `GraphStore.apply_schema` (`src/sync/graph/store.py:255-339`) now reconciles a widened
+unique constraint on an existing database — it detects the old constraint by its columns, drops it
+and adds the one `schema.sql` declares. `tests/test_migration_corpus.py::
+test_apply_schema_reconciles_widened_unique_constraint_on_existing_database` proves it the way this
+entry asked: creates `migration_outcome` under the old two-column key, applies the schema, and
+watches a write that would have raised under B133 succeed. Verified against the live dev database
+2026-08-17: `migration_outcome`'s constraint is `UNIQUE (finding_id, attempt_index, is_rehearsal)`,
+not the two-column key this entry describes.
+
 ### B134 — a corpus write that fails leaves no queryable trace, so a systematic failure runs forever
 
 Filed from B133 rather than discovered separately: the reason B133 survived from the day B79
@@ -1060,6 +1128,15 @@ write side.
 recorded reason that a reader can join back to the run — and a run whose corpus writes all failed
 says so rather than exiting 0 silently. Whatever shape it takes must not make a corpus write able
 to fail a run, which is the property the current `except` exists to hold.
+
+**Half-built, checked 2026-08-17.** `make_recorder` already returns a `CorpusRecorder`
+(`src/sync/remediate/corpus.py:196-252`) tracking `.attempt_count`, `.success_count`,
+`.failure_count` and `.errors` — a stale, pre-renumbering duplicate of this entry (deleted from
+this file today) had mistakenly called that closed. It is not: nothing in `nodes.py`, `graph.py`,
+`sync.dashboard`, or `sync.cli` reads `.failure_count` or `.errors` back. The counter exists and
+nothing counts it. Same producer-with-no-consumer shape `M0-W242`'s rule names, and the same
+reason this session left it alone rather than wiring a caller into `src/sync/remediate/**` as a
+side effect of a documentation cleanup.
 
 ### B136 — Nothing records that an adapter was asked, only what it answered
 
@@ -4047,31 +4124,6 @@ a bucket.
 `migration_outcome` rows across 3 `(change_kind, tier)` groups, with **one** abandonment. There is
 no signal to learn from yet whatever the schema does, so this ranks behind getting attempts on the
 board.
-
-
-### B129 - `apply_schema` cannot carry a widened `UNIQUE` constraint to an existing database, so `ON CONFLICT` fails
-
-`schema.sql:255` declares `UNIQUE (finding_id, attempt_index, is_rehearsal)` on `migration_outcome`.
-`GraphStore.apply_schema` applies `CREATE TABLE IF NOT EXISTS` and derives `ADD COLUMN IF NOT EXISTS`
-for newly declared columns. However, against a database created before B79 widened the table's
-natural key, `CREATE TABLE IF NOT EXISTS` skips the table and leaves the existing 2-column unique
-constraint `UNIQUE (finding_id, attempt_index)` untouched.
-
-Every subsequent `INSERT INTO migration_outcome ... ON CONFLICT (finding_id, attempt_index, is_rehearsal)`
-fails with `psycopg.errors.InvalidColumnReference: there is no unique or exclusion constraint matching the ON CONFLICT specification`.
-
-**Closed in `M8-W218`**: `_reconcile_unique_constraints` added to `src/sync/graph/store.py`, deriving table-level `UNIQUE` constraints from CREATE TABLE bodies and querying `pg_constraint`. Superseded partial unique constraints are dropped and declared unique constraints added during `apply_schema` on existing databases. Tested on an existing database in `tests/test_migration_corpus.py`.
-
-
-### B130 - `corpus.record` swallows write failures silently, so systematic corpus drops run forever
-
-`corpus.record` catches every exception from `_record`, logs a warning, and returns `False`
-(`src/sync/remediate/corpus.py`). While a bookkeeping write failure must not crash an in-flight
-remediation run, swallowing the exception left no queryable failure state or counter for an operator
-or driver when every write systematically failed (as occurred with B129).
-
-**Closed in `M8-W218`**: `make_recorder` now returns `CorpusRecorder`, tracking `.attempt_count`, `.success_count`, `.failure_count`, and `.errors` without raising or breaking customer runs. Tested in `tests/test_migration_recording.py`.
-
 
 
 ### B145 — Context savings is a model presented as a measurement, on one branch only

@@ -238,6 +238,38 @@ def test_durable_graph_routes_open_pr_to_park_node():
     assert len(forge.deleted_branches) == 0
 
 
+def test_a_parked_finding_is_not_counted_among_the_abandoned():
+    """B134's corpus-level half of "abandoned distinguishable from parked": a finding whose
+    run opened a pull request and parked for review must never be counted as one that gave
+    up, and its own status must not read the same as a finding nothing has ever attempted.
+
+    `park` itself writes no `migration_outcome` row -- parking is not a new attempt, it is a
+    pause after the attempt that already succeeded and recorded `terminal_status="opened"`.
+    So the corpus row this asserts on is the one `open_pr` wrote a beat earlier, and the
+    property under test is that nothing downstream mistakes it for an abandonment.
+    """
+    store = StubStore()
+    adapter = StubAdapter(ok=True)
+    remediator = StubRemediator()
+    forge = StubForge(pr_number=99)
+    checkpointer = InMemorySaver()
+
+    graph = build_graph(
+        store=store, adapter=adapter, remediator=remediator, forge=forge,
+        checkpointer=checkpointer, durable=True,
+    )
+    initial_state: RunState = {
+        "finding": FINDING, "repo": REPO, "outcome": "running",
+        "static_attempts": 0, "ci_attempts": 0, "durable": True,
+    }
+    config = {"configurable": {"thread_id": "thread-f1"}}
+    final_state = graph.invoke(initial_state, config=config)
+
+    assert final_state["outcome"] == "parked"
+    assert [o.terminal_status for o in store.outcomes] == ["opened"]
+    assert not any(o.terminal_status == "abandoned" for o in store.outcomes)
+
+
 # ============================================================================
 # 2. Webhook Event Parsing & Verification Tests
 # ============================================================================
