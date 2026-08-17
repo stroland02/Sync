@@ -168,6 +168,15 @@ elevation ratio measured on the page plane. The ratios are the depth ramp's own 
 | state: a row that is selected | `--color-accent`, `--color-surface-emphasis` | `oklch(0.95 0.00275 159 / 4.9342%)` |
 | state: the scope an address is inside | `--color-surface-scope` | `oklch(0.95 0.00275 159 / 6.579%)` |
 
+> **Amended 2026-08-17 (M14-W366): the two tiers this passage argues from no longer exist.** The
+> area rail is deleted and there is one sidebar. The reasoning is kept rather than rewritten because
+> the *ratio* it establishes survives its subject: `--color-surface-scope` still marks the scope an
+> address is inside and still sits above the selected-row step, which is now the difference between
+> a repository heading and the destination row under it rather than between two tiers. What is no
+> longer true is the sentence about "a 48px column with no label in it" describing a shipped
+> surface — that column returns as the minimised sidebar, at the 48px this passage always assumed
+> and the shipped rail never used.
+
 **The third step was added on 2026-08-07 (M7-W199), and what it fixes is two tiers marked with one
 value.** The area rail and the contextual sidebar beside it both painted their current row at
 4.9342% — measured identical in the fidelity report's Surface 2 — so which of the two tiers a
@@ -667,6 +676,37 @@ against 128 raw ones, two of them landing on the same pixel value under a differ
 and `gap-field` both 4px; `p-4` and `p-section` both 16px). A raw value stays legitimate only for a
 page-layout number used once per view, on the grounds argued above for the 32px section gap — never
 inside a component.
+
+**Recorded decision (2026-08-17, M14-W367): the chassis has three page-layout numbers — an expanded
+sidebar at 240px, a minimised sidebar at 48px, and a 48px top bar.** They are argued here before
+being spent, and they are spelled in `layouts/` rather than as tokens, on exactly the grounds above:
+each is used once per view and none is a component value. `layouts/` sits outside the raw-spacing
+guard's scope (`tests/test_console_design_tokens.py:305-309`), so spelling them there is legitimate
+rather than a hole.
+
+**The 48px minimised width settles a contradiction this document has carried.** The passage on the
+current-row ramp above argues from "a 48px column with no label in it", while the rail that actually
+shipped was `w-10` — 40px. Two numbers, one of them never true. The rail is deleted as of `M14-W366`
+and there is now one sidebar, so the number is settled at **48px**: it is what the ramp argument was
+written against, it matches the top bar's `h-12` so the two edges meet, and it leaves 16px of
+clearance around a 16px icon rather than 12px.
+
+**240px expanded, not the vendored 13rem/208px.** `M14-W366` measured the shipped sidebar at 208px
+against mock v1's 246px, and the mock is the appearance target. 240px is the nearest value on the
+frame's own arithmetic (`6 × 40px`), lands within 6px of the drawing, and gives a destination label
+room to render without truncation at the longest level name the specification declares.
+
+**What minimising may and may not change.** It changes **density, not navigation** — the constraint
+carried from `M7-W160`'s commit body and the reason `M7-W171`'s predecessor was deleted. Every
+destination reachable expanded stays reachable minimised; no icon moves vertically across the state
+change, which means a group heading's row keeps its height and only its text goes `sr-only`; and no
+prose renders at one width and not the other, because that changes the height of every row beneath
+it. **No transition on the width.** `DESIGN.md`'s motion test is frequency rather than duration, and
+a surface the operator crosses repeatedly takes none — which is also why the vendored `Sidebar`'s
+`collapsible="icon"` path is not adopted: it carries `transition-[width]`
+(`web/src/vendor/supabase/ui/sidebar.tsx:226`) and is exempt from
+`test_nothing_transitions_geometry_anywhere` by path, so it would animate for a default reader while
+CI stayed green.
 
 **Recorded decision: each spacing level is at least twice the one below it, and the requirement
 binds the three *inner* levels, not the page frame.** `32 : 16 : 8 : 4` holds the 2× floor at every
