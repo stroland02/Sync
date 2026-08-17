@@ -1302,6 +1302,18 @@ gap as affecting one worktree. Two of those are now wrong and the third is wrong
 
 ### Actually in flight
 
+- **Surveyed 2026-08-17, from a session catching up after a gap.** `main` itself carries six live
+  terminals (`orca worktree ps`), and the M8-M11 resolution loop plan is being actively built out
+  across several worktrees: `m8-runner-seam` (M9-W219 outcome vocabulary just landed, an untracked
+  `tests/test_durable_runs.py` open for M10), `forge-pr-outcome` (M10-W226, asking GitHub what
+  became of an opened pull request, committed and clean), `m8-land` (an integration branch
+  reconciling the above with `origin/main`), and `console-motion` (M7-W227, unrelated console
+  polish, committed and clean). Three more — `b130-day-one-path`, `b131-generated-vendors`,
+  `b132-gate-hang` — all share one base commit (`5fb5515`, "the B97 sandbox integration design")
+  and each has real uncommitted work: `b131` is mid-edit on `cli.py`, `b132` on `docker-compose.yml`
+  and `.claude/rules/test-discipline.md`. **None of these six are safe to dispatch into or merge
+  from another session right now** — do not touch their files, do not assume a clean-looking branch
+  among them is actually finished without checking for a live terminal first.
 - **B78 — done, and worth one line here as a warning.** Gemini's `gemini-b78-rehearse` landed
   Tasks 1-6 (`75e5f17` through `eaa02a7`) via `428c953`, merging into `main`. That merge was not a
   real three-way merge -- a re-merge from the correct merge-base produces zero conflicts, so
