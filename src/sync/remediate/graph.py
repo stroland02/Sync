@@ -29,7 +29,7 @@ from sync.remediate.state import RunState
 _NO_FORGE = "this run was configured without a forge, so it cannot reach a remote"
 
 
-def build_graph(store, adapter, remediator, forge, checkpointer, catalogue=None, *, is_rehearsal=False):
+def build_graph(store, adapter, remediator, forge, checkpointer, catalogue=None, *, is_rehearsal=False, durable=False):
     # Built from the store this already receives, so no caller learns a new argument and no
     # run can be configured with the corpus recording silently switched off. Every node that
     # takes it is a place an attempt ends -- three of them with no forge, one more with one.
@@ -61,6 +61,7 @@ def build_graph(store, adapter, remediator, forge, checkpointer, catalogue=None,
         builder.add_node("push_branch", nodes.make_push_branch(forge))
         builder.add_node("await_ci", nodes.make_await_ci(forge))
         builder.add_node("open_pr", nodes.make_open_pr(forge, record))
+        builder.add_node("park", nodes.make_park(store, record))
     builder.add_node("report", nodes.make_report(None if remote else _NO_FORGE, record))
     builder.add_node("external_cause", nodes.make_external_cause(store, forge, record))
     # `abandon` is built with whatever forge there is, which with none is none. It deletes a
@@ -137,8 +138,10 @@ def build_graph(store, adapter, remediator, forge, checkpointer, catalogue=None,
         builder.add_conditional_edges(
             "open_pr",
             nodes.route_after_open_pr,
-            {"end": END, "abandon": "abandon"},
+            {"end": END, "park": "park", "abandon": "abandon"},
         )
+
+        builder.add_edge("park", END)
 
     builder.add_edge("report", END)
     builder.add_edge("external_cause", END)

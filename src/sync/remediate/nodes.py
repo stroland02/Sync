@@ -603,7 +603,28 @@ def route_after_open_pr(state: RunState) -> str:
     """
     if state.get("fatal"):
         return "abandon"
+    if state.get("durable"):
+        return "park"
     return "end"
+
+
+def make_park(store=None, record=None):
+    """The run opened a pull request or reached a turn boundary and parks for review.
+
+    Distinguished from abandon and report:
+    - Suspends execution with outcome='parked'.
+    - Stores parked_reason (default: 'awaiting_review').
+    """
+    def park(state: RunState) -> RunState:
+        reason = state.get("parked_reason") or "awaiting_review"
+        return {
+            "outcome": "parked",
+            "parked_reason": reason,
+        }
+
+    return park
+
+
 
 
 def make_report(halt_reason: str | None = None, record=None):

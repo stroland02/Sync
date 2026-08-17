@@ -403,6 +403,28 @@ def _drive_webhook(_: Path) -> None:
         parse_pull_request_event(UTF16)
 
 
+def _drive_webhook_review(_: Path) -> None:
+    from sync.forge.webhook import WebhookFormatError, parse_review_event
+
+    with pytest.raises(WebhookFormatError):
+        parse_review_event(UTF16)
+
+
+def _drive_webhook_review_comment(_: Path) -> None:
+    from sync.forge.webhook import WebhookFormatError, parse_review_comment_event
+
+    with pytest.raises(WebhookFormatError):
+        parse_review_comment_event(UTF16)
+
+
+def _drive_webhook_check_run(_: Path) -> None:
+    from sync.forge.webhook import WebhookFormatError, parse_check_run_event
+
+    with pytest.raises(WebhookFormatError):
+        parse_check_run_event(UTF16)
+
+
+
 def _drive_feed(_: Path) -> None:
     from sync.signals.feed.consumer import FeedFormatError, parse_feed
 
@@ -775,8 +797,14 @@ DRIVERS: dict[str, Callable[[Path], None]] = {
         _drive_python_sources,
     "sync/index/typescript.py::TypeScriptAdapter._readable_sources::UnicodeDecodeError":
         _drive_typescript_sources,
+    "sync/forge/webhook.py::parse_check_run_event::JSONDecodeError+UnicodeDecodeError":
+        _drive_webhook_check_run,
     "sync/forge/webhook.py::parse_pull_request_event::JSONDecodeError+UnicodeDecodeError":
         _drive_webhook,
+    "sync/forge/webhook.py::parse_review_comment_event::JSONDecodeError+UnicodeDecodeError":
+        _drive_webhook_review_comment,
+    "sync/forge/webhook.py::parse_review_event::JSONDecodeError+UnicodeDecodeError":
+        _drive_webhook_review,
     "sync/index/python_lang.py::PythonAdapter._read_manifests::TOMLDecodeError+UnicodeDecodeError":
         _drive_requirement_lines_pyproject,
     "sync/index/python_lang.py::PythonAdapter._read_manifests::UnicodeDecodeError":
