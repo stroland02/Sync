@@ -1,5 +1,13 @@
 # Gate 3, re-signed — 2026-08-17, after W277, W278, W279 and W340
 
+Signed: 2026-08-17T12:20:41-04:00
+
+That is the commit time of `M14-W341`, the moment this re-sign was recorded, rather than the moment
+the line was typed — a signature should date the verification, not the paperwork. The original pass
+(`2026-08-17-gate-3-screen-pass.md`) deliberately carries no `Signed:` line: it is the historical
+first signature, superseded by this one, and the meter listing it as "not read" is the correct
+description of it.
+
 The first pass (`2026-08-17-gate-3-screen-pass.md`) was signed at 11:10 and the console changed at
 11:54. The changes are this lane's own, and they are named, so this is a re-walk of what moved
 rather than ten screens again. **Gate 3 is re-signed.**
@@ -87,10 +95,13 @@ a number nothing computed — is still no.
 against the last commit touching the console directory, and returns `CANNOT TELL` whenever the
 console is newer. **The conservatism is right and the granularity is wrong.**
 
-It watches all of `web/`. That means it will return `CANNOT TELL` after a commit that changes a
-test file, a comment, a token value, a build config, or a script — none of which can change what a
-screen asserts about data. Gate 3's question is about claims made over payload fields; most console
-commits cannot touch that.
+**Correction to this report's own first version, which said it watches all of `web/`. It watches
+`web/src` (`scripts/beta_gates.py:453`).** That is narrower than I first wrote and the claim is
+corrected here rather than left standing. The argument survives the correction intact, because
+`web/src` still contains a great deal that cannot change what a screen asserts: every `*.test.*`
+file, `src/lib`, `src/vendor`, `test-setup.ts`. A commit touching only those returns
+`CANNOT TELL` on a question none of them can affect. Gate 3's question is about claims made over
+payload fields; most console commits cannot touch that.
 
 The consequence is the one the coordinator anticipated: a signal that fires on every commit is a
 signal lanes learn to clear reflexively rather than read. This re-sign is genuine — four real
@@ -98,8 +109,8 @@ changes, one of them a new runtime — but the *next* one will fire on a CSS twe
 correctly notice that clearing it is ceremony.
 
 **The refinement I would make**, offered for routing to Lane C since `scripts/` is its file and I
-have not touched it: narrow the watched set from `web/` to the surfaces that can actually change a
-claim — `web/src/features/**`, `web/src/components/**`, and `web/src/api/**` — excluding
+have not touched it: narrow the watched set from `web/src` to the surfaces that can actually change
+a claim — `web/src/features/**`, `web/src/components/**`, and `web/src/api/**` — excluding
 `*.test.*`. That keeps every real risk (a render change or a payload-type change trips it) and
 stops the alert firing on test-only, tooling and styling commits. It stays conservative: it can
 still only say `MET` or `CANNOT TELL`, never `NOT MET`, so a narrowed watch cannot manufacture a
@@ -109,6 +120,27 @@ A stronger version exists — hash the payload-consuming surface rather than com
 a commit that touches those files without changing what they claim does not trip it either — but
 that is more machinery than the problem currently justifies, and the path narrowing gets most of
 the benefit for one line.
+
+## The meter cannot see this re-sign, and that is a second defect in the same check
+
+Measured after this report landed: `uv run python scripts/beta_gates.py` still reports Gate 3 as
+`CANNOT TELL`, citing `2026-08-17-gate-3-screen-pass.md` and the 11:10 timestamp. It is not wrong
+about that file — it simply cannot see this one. `scripts/beta_gates.py:452` hardcodes the path of
+the *first* report, so a re-sign written to a new file is invisible to the gate no matter how
+thorough it is.
+
+That is worth separating from the granularity problem above, because the two have different fixes
+and only one of them is cosmetic. **Granularity makes the check noisy; the hardcoded path makes it
+unclearable.** A lane that does exactly what the check asks — re-sign the gate — still gets
+`CANNOT TELL` afterwards, and the only way to clear it is to edit another lane's file or to
+overwrite the original report and lose the record of what the first pass actually covered.
+
+The fix belongs with the narrowing and is one decision rather than one line: either the script
+points at whichever Gate 3 report is newest, or the scope plan names a single canonical path and
+re-signs are appended to that file instead of written beside it. **I would take the second**: one
+file that accretes dated sections keeps the meter simple and keeps the history of what each pass
+examined, which is the thing a future reader needs. Both are Lane C's call on Lane C's file, and
+this report does not touch it.
 
 ## Method note
 
