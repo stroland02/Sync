@@ -161,6 +161,19 @@ export interface RouteEntry {
    * each other so the declaration cannot drift from the run of levels its area claims.
    */
   area: Area
+  /**
+   * Which of the two sidebar regions this destination sits in.
+   *
+   * `repository` is scoped to one repository -- the independent variable the console is organised
+   * around. `root` is what a reader reaches without having chosen one. Two regions replace six
+   * areas because that is the only distinction the sidebar actually needs to draw.
+   *
+   * Three finding addresses sit in `repository` while declaring `findingId` rather than `repoId`.
+   * That is deliberate and checked as a literal allow-list in `routes.test.tsx`: a fleet-wide
+   * findings row has no repository to build a nested href from, because `RiskRow` carries none
+   * (`api/types.ts:135-145`). It retires when that payload gains a `repo_id`.
+   */
+  region: "root" | "repository"
   /** What an operator opens this screen to find out, in one sentence. */
   question: string
   /**
@@ -182,6 +195,7 @@ export interface RouteEntry {
 export const ROUTES: readonly RouteEntry[] = [
   {
     path: "/",
+    region: "root",
     reachedFrom: null,
     label: "Codebases",
     area: "fleet",
@@ -192,6 +206,7 @@ export const ROUTES: readonly RouteEntry[] = [
   },
   {
     path: "/repositories/:repoId",
+    region: "repository",
     reachedFrom: "a repository on the codebases screen",
     label: "Codebase",
     area: "codebase",
@@ -202,6 +217,7 @@ export const ROUTES: readonly RouteEntry[] = [
   },
   {
     path: "/vendors/:vendorId",
+    region: "root",
     reachedFrom: "a vendor on the codebases screen",
     label: "Vendor",
     area: "api-services",
@@ -212,6 +228,7 @@ export const ROUTES: readonly RouteEntry[] = [
   },
   {
     path: "/repositories/:repoId/observed",
+    region: "repository",
     reachedFrom: "a repository on the codebases screen",
     label: "Signals",
     area: "signals",
@@ -223,6 +240,7 @@ export const ROUTES: readonly RouteEntry[] = [
   },
   {
     path: "/bindings/vendors/:vendorId/operations/:operationId",
+    region: "root",
     reachedFrom: "an operation on a vendor's findings table",
     label: "Binding surface",
     area: "observe",
@@ -233,6 +251,7 @@ export const ROUTES: readonly RouteEntry[] = [
   },
   {
     path: "/detectors",
+    region: "root",
     reachedFrom: null,
     label: "Detectors",
     area: "observe",
@@ -243,6 +262,7 @@ export const ROUTES: readonly RouteEntry[] = [
   },
   {
     path: "/findings/:findingId",
+    region: "repository",
     reachedFrom: "a call site on a vendor or binding surface",
     label: "Finding",
     area: "remediation",
@@ -253,6 +273,7 @@ export const ROUTES: readonly RouteEntry[] = [
   },
   {
     path: "/findings/:findingId/workflow",
+    region: "repository",
     reachedFrom: "the finding it remediates",
     label: "Solution workflow",
     area: "remediation",
@@ -263,6 +284,7 @@ export const ROUTES: readonly RouteEntry[] = [
   },
   {
     path: "/findings/:findingId/workflow/pull-request",
+    region: "repository",
     reachedFrom: "the solution workflow that opened it",
     label: "Pull request",
     area: "remediation",

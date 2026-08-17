@@ -81,7 +81,12 @@ function concrete(path: string): string {
 }
 
 describe("the top bar sits above the chassis", () => {
-  it("renders a banner on every route", () => {
+  // 15s rather than the 5s default, and the reason is a real cost rather than flake. `M14-W366`
+  // made the sidebar render every destination on every route instead of one area's run, so this
+  // loop now mounts a nine-row sidebar nine times. It passes in ~10s alone and tipped over 5s only
+  // under a loaded parallel run. Recorded here because the next person to see it go red should know
+  // the cause is render volume, not a race.
+  it("renders a banner on every route", { timeout: 15_000 }, () => {
     // The measured gap this closes: `[role=banner]` counted 0 on every route, so the console had
     // no persistent statement of which subject a nine-level hierarchy had you inside.
     for (const route of ROUTES) {
