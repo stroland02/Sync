@@ -313,6 +313,53 @@ confidently instead of refusing.
 
 ## Ready
 
+### B151 — `main` is 60 tests red, the remediation graph does not terminate, and a crashed worker hides it
+
+**Filed by Lane C against Lane A's path, not fixed here.** `src/sync/remediate/**` is Lane A's,
+and a lane that owns neither the file nor the milestone should not be the one deciding what the
+graph's stop condition ought to be. Escalated as `msg_5650a184e975`.
+
+**Measured on `origin/main` at `acc0617`**, full suite, `-n 4`:
+`60 failed, 3744 passed, 4 skipped in 991.35s`.
+
+**It is not environmental, which is the first thing anybody meeting it will assume.** Postgres was
+healthy for the whole run — `pg_isready` accepting, ten test databases, one connection of three
+hundred. The charter's own trap note says a run failing in the hundreds is environmental; this one
+is not, and the distinguishing evidence is the failure text rather than the count:
+
+| Count | Failure |
+|---:|---|
+| 23 | `langgraph.errors.GraphRecursionError: Recursion limit of 10007 reached without hitting a stop condition` |
+| 12 | `IndexError: list index out of range` |
+| 3 | `KeyError: 'report_reason'` |
+
+Across `test_migration_recording.py` (26), `test_remediation_graph.py` (19),
+`test_pr_number_recorded.py` (9), `test_replay_stage.py` (3), `test_pipeline_composes.py` (1) and
+`test_python_repository.py` (1).
+
+**Attributed to `12e416a` "M10: durable runs and the human turn".** That commit removes
+`report_reason: str` from `RunState` in `src/sync/remediate/state.py` and rewrites attempt
+accounting: `attempt_index` becomes the monotonic counter while `static_attempts` and `ci_attempts`
+keep the routing bounds. The `KeyError` names the removed key directly. The recursion is the same
+change seen from the routing side — the graph's terminal conditions are read from counters that no
+longer mean what the routers assume.
+
+**Two gate defects the same run exposed, and these two are Lane C's own.**
+
+A crashed xdist worker reads as mass failure. `worker 'gw0' crashed while running
+tests/test_remediation_graph.py::test_a_patch_that_only_typechecks_with_untracked_files_never_reaches_push_branch`
+emitted a cascade of `F` marks that are not failures of the tests they are printed against. An
+earlier run of the same tree, cut off at 96%, showed roughly thirty such marks and no summary,
+which read as a catastrophic regression and was not one. This is the symptom the charter attributes
+to `-n auto`, now measured at `-n 4`, so the recommended setting is not a cure.
+
+The same test alone exceeds **600 seconds**. The full suite is 991s against the eight-to-fourteen
+minutes the charter already calls the largest tax in the workspace.
+
+**Closes when:** the graph reaches a stop condition and those 60 tests pass on `main` (Lane A), and
+a crashed worker is reported as a crashed worker rather than as failing tests (Lane C).
+
+
 ### B135 — a customer's repository could configure the patch agent, and the gate sat downstream of it — FIXED, and the entry stays for what it says about the gate
 
 **B135, B133 and B134 were filed as B131, B129 and B130 and renumbered on landing.** Three live branches -- `b129-truncate-corpus`, `b130-day-one-path`, `b131-generated-vendors` -- plus `b132-gate-hang` already held 129 through 132 when these were written, and `main`'s copy of this file topped out at B128, so the numbers read as free from every view that could see them. That is the failure this file's own opening rule describes, and `git log --all --oneline --grep` does not catch it either when the competing claim is a branch name rather than a commit message. The cheap check that would have: `git worktree list` and `git branch -a`, read for the number rather than for the work.
