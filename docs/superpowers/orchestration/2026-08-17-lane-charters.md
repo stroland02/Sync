@@ -165,7 +165,28 @@ authorized for every lane and is explicitly not one of the three things reserved
 
 Recorded here when one is made, so no lane has to ask the same question twice.
 
-**2026-08-17, the dead-link red on `main`.** `ensure_image_built` in
+**2026-08-17, the dead-link red now has three causes and one owner each.** Re-measured against
+`main` after the afternoon's landings: `test_lint_dead_links` reports three unreachable symbols, not
+one, and every one of them is the same shape -- a primitive landed without the consumer that would
+call it.
+
+- `sync/forge/github.py:631`, `GitHubForge.pull_request_outcome`. **The coordinator's, landed as
+  `M10-W229`.** Lane E is wiring it to the corpus right now and that landing closes this.
+- `sync/forge/webhook.py:263`, `dispatch_webhook_event`. Lane A's, from M10's event ingress. Closes
+  when the resume-on-pull-request-event path is wired.
+- `src/sync/remediate/sandbox_image.py:113`, `ensure_image_built`. Lane A's, from B97. Still open.
+
+Until all three close, any lane may exclude that one test from its own run **provided it says so
+when reporting**. Nobody should re-diagnose it.
+
+**The rule this is teaching, and it is not new -- `CLAUDE.md` already says a workaround ships with
+the backlog entry that retires it.** Do not land a producer with no consumer. If a primitive must
+land ahead of its caller, baseline it in the same commit and name the work item that removes the
+baseline. Three of these accumulated in one afternoon because each author reasonably judged their
+own piece complete, and the cost lands on the four lanes that then gate around a red they did not
+cause.
+
+**2026-08-17, the original dead-link ruling.** `ensure_image_built` in
 `src/sync/remediate/sandbox_image.py` is reached from nowhere and fails
 `test_lint_dead_links`. Lane C is right that baselining it would hide another session's in-progress
 work, and reached that on its own. **Ruling: leave the red, name `21b99f6` when reporting it, and do
