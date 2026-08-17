@@ -26,6 +26,7 @@ from scripts.beta_gates import (
     gate_one_loop_closes,
     gate_two_evidence_exists,
     render,
+    render_markdown,
 )
 
 
@@ -235,3 +236,51 @@ def test_render_spells_cannot_tell_with_a_space_rather_than_an_underscore() -> N
     assert "CANNOT_TELL" not in render(
         [Verdict(gate="1", name="n", status=CANNOT_TELL, evidence=["x"])]
     )
+
+
+# --- publishing: the meter has to be readable without a clone ------------------------
+
+
+def _one_of_each() -> list[Verdict]:
+    return [
+        Verdict(gate="1", name="the loop closes", status=NOT_MET, evidence=["0 green pull requests"]),
+        Verdict(gate="2", name="the evidence exists", status=CANNOT_TELL, evidence=["no database here"]),
+        Verdict(gate="3", name="the console tells the truth", status=MET, evidence=["signed"]),
+    ]
+
+
+def test_markdown_keeps_cannot_tell_visibly_apart_from_not_met() -> None:
+    """The rule the whole meter exists to honour, applied to its own output.
+
+    A reader skimming a summary sees glyphs and bold text before words. If `CANNOT TELL` and
+    `NOT MET` render the same, the publication re-introduces exactly the absence-versus-zero
+    collapse the script refuses internally, and it does it at the only place anybody looks.
+    """
+    text = render_markdown(_one_of_each())
+
+    not_met_line = next(line for line in text.splitlines() if "Gate 1" in line)
+    cannot_tell_line = next(line for line in text.splitlines() if "Gate 2" in line)
+
+    assert "NOT MET" in not_met_line
+    assert "CANNOT TELL" in cannot_tell_line
+    marks = {line.split()[0] for line in (not_met_line, cannot_tell_line)}
+    assert len(marks) == 2, f"both verdicts render with the same leading mark: {marks}"
+
+
+def test_markdown_states_the_count_of_each_verdict() -> None:
+    """So a reader who reads one line reads the right one."""
+    text = render_markdown(_one_of_each())
+
+    assert "1 of 3" in text
+    assert "cannot be told" in text.lower()
+
+
+def test_markdown_never_reports_a_gate_it_did_not_measure_as_met() -> None:
+    text = render_markdown([Verdict(gate="4", name="x", status=CANNOT_TELL, evidence=["y"])])
+
+    assert "0 of 1" in text
+
+
+def test_markdown_carries_the_evidence_under_each_gate() -> None:
+    """A verdict without its evidence is the prose this replaced."""
+    assert "no database here" in render_markdown(_one_of_each())
