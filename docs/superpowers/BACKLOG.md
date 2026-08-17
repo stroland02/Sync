@@ -89,7 +89,7 @@ two milestones now have a target instead of a description.
 
 | | Milestone | % | The one sentence that matters |
 |---|---|---|---|
-| **M0** | Walking skeleton, one real PR | **~90%** | Every component exists; **the proof is 1,073 commits stale** — measured 2026-08-07, not the "~200" this row claimed for a fortnight |
+| **M0** | Walking skeleton, one real PR | **~90%** | Every component exists; **the proof is 1,206 commits stale** — measured 2026-08-17 (`git rev-list --count`, the last commit to touch `tests/test_e2e_stripe.py`..`HEAD`), up from "1,073" on 2026-08-07. The gate is `B7`, still the user's call |
 | **M1** | Runtime signals, efficiency detector | **~85%** | Built; the dollar estimate is deliberately unbuilt |
 | **M2** | Production error detector | **~85%** | Built; never exercised against real telemetry |
 | **M3** | Multi-vendor, MCP, plugin SDK | **~95%** | Packaging closed 2026-07-30; nothing structural left |
@@ -99,7 +99,7 @@ two milestones now have a target instead of a description.
 | **M6** | Show it, rather than describe it | **0%** | Needs a UI worth filming. That is M7's line now, not M4.5's, and M7 is close enough that this is becoming schedulable |
 | **M7** | The console becomes a product | **~98%** | All nine levels on vendored Supabase substrate. Fidelity Tasks 1–6, Mock-to-Build Phases 1–5, ChangeUnitsTable, B123 checkpointer timestamps, and screen de-congestion landed |
 | **M8–M11** | The resolution loop | **0%** | Proposed 2026-08-06, nothing scheduled; Sync opens a pull request and stops watching it |
-| **M12** | Dashboards that earn their screen | **0%** | Proposed 2026-08-07 from the owner's review of our screens against the references; full-stack, because the useful panels need aggregates `sync.dashboard` does not compute |
+| **M12** | Dashboards that earn their screen | **~10%** | One of Phase 1's four aggregates landed (`M12-W195`–`W197`, `ee7a8dc`/`9395cfb`: abandonment by change kind and tier, the corpus's first read-back, plus the exemption-outlives-its-panel guard). Phases 2–4 (panels, grid composition, the honesty-sentence re-placement) unstarted |
 | **M13** | Dynamic visuals, Remotion & live telemetry | **0%** | Proposed 2026-08-16; live agent execution stream, thinking disclosures, dynamic node states inspired by DeepSeek Harness, and Remotion motion diffs |
 
 ### Implementation Plans Ledger (`docs/superpowers/plans/`)
@@ -1241,14 +1241,20 @@ measured at 1440x900 and 1280x800 at **4.00:1**, with regions placed beside anot
 to two on each. The presence guard still cannot land — it goes red on whatever remains — and the
 count of routes it would fail is the only thing this entry needs updating for.
 
-### B126 — every remediation run starts cold, and the facts it rediscovers do not change
+### B126 — every remediation run starts cold, and the facts it rediscovers do not change - CLOSED
 
 **Renumbered from B122 on 2026-08-16, landing the console line.** Two items were both filed as
 B122 on separate branches — this one and "the Finding level cannot name its own severity" below —
 and merging them onto one `main` would have let the collision stand. B126 is the next free number.
 
-**Designed and planned, deliberately not started.** The console is the current focus and this is
-pipeline work; it sits at the bottom of Ready so a tick takes the console items first.
+**All seven tasks landed 2026-08-16** (merge `5276718` per `git reflog show main`), verified present
+on the current tree: `src/sync/context/` (`seed.py`, `prompt.py`), `GraphStore.repo_context`/
+`upsert_repo_context`, `build_patch_prompt`'s `repo_context` parameter, `sync context show`/`set`
+on the CLI, the console's `GET`/`POST /api/repos/{repo_id}/context` routes, and the MCP
+`sync://context/{repo_id}` resource template with `SERVER_INSTRUCTIONS`. This entry's own text had
+gone stale back to its pre-landing form — likely lost in the origin/main reconciliation — while the
+code itself stayed on `main` throughout; corrected here rather than trusted from memory, per this
+repository's own rule about verifying before recommending from memory.
 
 - Design: [`specs/2026-08-06-sync-repo-context-design.md`](specs/2026-08-06-sync-repo-context-design.md)
 - Plan: [`plans/2026-08-06-sync-repo-context.md`](plans/2026-08-06-sync-repo-context.md), seven tasks
@@ -1365,6 +1371,18 @@ gap as affecting one worktree. Two of those are now wrong and the third is wrong
 
 ### Actually in flight
 
+- **Surveyed 2026-08-17, from a session catching up after a gap.** `main` itself carries six live
+  terminals (`orca worktree ps`), and the M8-M11 resolution loop plan is being actively built out
+  across several worktrees: `m8-runner-seam` (M9-W219 outcome vocabulary just landed, an untracked
+  `tests/test_durable_runs.py` open for M10), `forge-pr-outcome` (M10-W226, asking GitHub what
+  became of an opened pull request, committed and clean), `m8-land` (an integration branch
+  reconciling the above with `origin/main`), and `console-motion` (M7-W227, unrelated console
+  polish, committed and clean). Three more — `b130-day-one-path`, `b131-generated-vendors`,
+  `b132-gate-hang` — all share one base commit (`5fb5515`, "the B97 sandbox integration design")
+  and each has real uncommitted work: `b131` is mid-edit on `cli.py`, `b132` on `docker-compose.yml`
+  and `.claude/rules/test-discipline.md`. **None of these six are safe to dispatch into or merge
+  from another session right now** — do not touch their files, do not assume a clean-looking branch
+  among them is actually finished without checking for a live terminal first.
 - **B78 — done, and worth one line here as a warning.** Gemini's `gemini-b78-rehearse` landed
   Tasks 1-6 (`75e5f17` through `eaa02a7`) via `428c953`, merging into `main`. That merge was not a
   real three-way merge -- a re-merge from the correct merge-base produces zero conflicts, so
