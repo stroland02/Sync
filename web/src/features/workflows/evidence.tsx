@@ -30,9 +30,9 @@ import { orAbsent } from "@/lib/format"
 import { asHttpUrl } from "@/lib/url"
 import { Card, CardContent, CardHeader } from "@/vendor/supabase/ui/card"
 
-type FieldKind = "text" | "flag" | "url" | "block"
+export type FieldKind = "text" | "flag" | "url" | "block"
 
-interface Field {
+export interface Field {
   key: string
   label: string
   kind: FieldKind
@@ -47,8 +47,11 @@ interface Field {
  * The evidence each node carries, keyed and ordered as `_EVIDENCE_KEYS` in
  * `sync.dashboard.queries` writes it. Mirrored rather than derived: the payload cannot say
  * which of its keys is a URL and which is multi-line compiler output.
+ *
+ * Exported for `activity.ts`: the activity timeline's `primaryDetail` reuses this field order
+ * to pick a node's headline evidence value rather than inventing a second vocabulary.
  */
-const FIELDS: Record<string, Field[]> = {
+export const FIELDS: Record<string, Field[]> = {
   locate: [
     {
       key: "tier",
