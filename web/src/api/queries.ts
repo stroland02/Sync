@@ -11,6 +11,7 @@ import {
   DEFAULT_LIMIT,
   fetchAdapters,
   fetchBindingSurface,
+  fetchChangeUnits,
   fetchCorpus,
   fetchDetectors,
   fetchFinding,
@@ -25,6 +26,7 @@ import {
 } from "@/api/client"
 import type {
   BindingSurfaceParams,
+  ChangeUnitsParams,
   ObservedTelemetryParams,
   PageParams,
   VendorFindingsParams,
@@ -183,6 +185,25 @@ export function useCorpus() {
   return useQuery({
     queryKey: ["corpus"],
     queryFn: ({ signal }) => fetchCorpus(signal),
+  })
+}
+
+/**
+ * Open findings grouped by the vendor change and operation that produced them, fleet-wide or
+ * for one repository. `repoId` is part of the query key for the same reason `useOverview`'s
+ * is: two scopes are two groupings, and a shared key would serve one repository's units from
+ * the other's cache.
+ *
+ * Not polled: this grouping moves when SIGNAL runs or a remediation run reaches a new
+ * checkpoint, neither of which this screen would learn about sooner than a manual refresh —
+ * the same call `useRepositories` and `useCorpus` make.
+ */
+export function useChangeUnits(params: ChangeUnitsParams = {}) {
+  const limit = params.limit ?? DEFAULT_LIMIT
+  const offset = params.offset ?? 0
+  return useQuery({
+    queryKey: ["change-units", params.repoId ?? null, limit, offset],
+    queryFn: ({ signal }) => fetchChangeUnits({ repoId: params.repoId, limit, offset }, signal),
   })
 }
 

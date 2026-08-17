@@ -313,6 +313,86 @@ confidently instead of refusing.
 
 ## Ready
 
+### B154 — the gate wall-clock, measured before and after the npx lock fix — CLOSED by Lane D
+
+The charter calls this "the single largest tax on this whole workspace", and it was, and the
+cause was not what any of the three obvious guesses said. It was not xdist, not Postgres, and not
+the size of the suite.
+
+`run_tsc` falls back to `npx` whenever a clone carries no local TypeScript, and B101 put a
+host-wide lock around that resolve because two cold-cache resolves race and answer `ETXTBSY`. The
+lock was right; taking it on every call was not. `npx_lock.py`'s own opening paragraph had already
+ruled on this — *"`resolve_lock` exists to guard only the one-time resolve, not the compile that
+follows it"* — and `tsc.py` took it warm or cold, running a full `npx` invocation inside the
+critical section each time. With six sessions running suites at once, every tsc-dependent test in
+every lane queued on one lock. Not deadlock: starvation.
+
+Diagnosed from a worker-crash traceback that ended in `npx_lock.py:90 resolve_lock time.sleep`,
+handed to Lane D as `msg_34a9fc7a0bcd` with their own docstring quoted back, and fixed by them in
+`2cf2e62` — skip the lock once the cache is warm.
+
+**Measured on this host, same tree, same `-n 4`:**
+
+| | wall clock | verdict |
+|---|---:|---|
+| Before, three runs | 1215s, 1741s, 3270s | UNTRUSTWORTHY every time — a worker died in each |
+| After `2cf2e62` | **233s** | **TRUSTWORTHY**, `2 failed, 3844 passed, 4 skipped` |
+
+The verdict column is not decoration. Every pre-fix run had `gw0` or `gw1` die on
+`test_a_patch_that_only_typechecks_with_untracked_files_never_reaches_push_branch` — the same test
+four times — and printed `F` against tests that never ran. Those runs could not be compared to
+each other, let alone to this one, which is why B152 exists and why the before column reports a
+range rather than an average.
+
+The two remaining failures are not this: `test_lint_dead_links` (two functions from other lanes
+reached from nowhere) and `test_decode_handlers`. Both are somebody's real work in progress.
+
+**What this retires.** The charter's advice to prefer `-n 4` over `-n auto` was correct but
+treated the symptom; the crash it avoided was starvation, not a scheduler defect. Worth
+re-measuring `-n auto` now that the cause is gone, rather than carrying the workaround forever.
+
+
+### B153 — a job that failed downloading an action reads as a failed build, and six lanes make it common
+
+**Observed 2026-08-17 on run `32042158113`.** `serial` reported `failure` having run exactly one
+step, `Set up job`:
+
+```
+##[warning]Failed to download action 'https://codeload.github.com/astral-sh/setup-uv/tar.gz/<sha>'.
+Error: Response status code does not indicate success: 429 (Too Many Requests).
+##[error]Failed to download archive after 3 attempts.
+```
+
+Nothing about the repository was tested. `gh run list` reports it identically to a suite that
+failed, which is the same misreading B112 documents for a job no runner ever acquired — and B112's
+entry records what that costs: a coordinator sees red on its own branch and starts looking for a
+defect that does not exist.
+
+**Why it is common here rather than a curiosity.** Six lanes push to `main` through the day and
+every push starts four jobs, each of which downloads `astral-sh/setup-uv` before anything else.
+The workflow already does what it can: `concurrency.cancel-in-progress` is on and the group keys
+on `github.event_name` and `github.ref`, so superseded runs are cancelled rather than piling up.
+The remaining rate is GitHub's to serve, and it answered 429 three times in a row.
+
+**The distinguishing check**, cheap and worth putting in the tick beside B112's:
+
+```sh
+gh api repos/stroland02/Sync/actions/runs/<id>/jobs   --jq '.jobs[] | "\(.name) \(.conclusion) steps=\(.steps|length)"'
+```
+
+One step named `Set up job` and a `429` in its log means the runner never got as far as the code.
+Zero steps means B112. Anything else is a real result.
+
+**Not fixed, and the reason is that the honest fix is not ours.** Retrying is already what the
+runner does. Vendoring the action or pinning it by digest changes what is downloaded, not whether
+codeload answers. Reducing the job count would trade real coverage for a transient. What is
+actionable is that nobody spends an hour on it, which is what this entry is for.
+
+**Closes when:** either the signature stops appearing for a fortnight, or a lane is measured
+misdiagnosing it despite this entry — in which case the check belongs in a script rather than in
+prose.
+
+
 ### B152 — a crashed xdist worker reads as failing tests, and nothing told a lane otherwise — FIXED
 
 **Measured 2026-08-17, twice, on the same tree.** One run reported roughly thirty `F` marks and no

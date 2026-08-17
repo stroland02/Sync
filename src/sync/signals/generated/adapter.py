@@ -294,6 +294,20 @@ class GeneratedSpecAdapter:
             "and every call site resolves to nothing"
         )
 
+    @property
+    def uncorrelatable_reason(self) -> str | None:
+        """Why observed HTTP telemetry cannot correlate back to an operation for this vendor.
+
+        `RequestCorrelator` requires an authoritative URL route template mapping. Generated
+        adapters are driven by manifest diffs and lack an unambiguous HTTP request correlation
+        engine; attempting to correlate observed spans without staged routes would produce
+        silent false negatives or incorrect bindings.
+        """
+        return (
+            f"vendor '{self._vendor_id}' is served by GeneratedSpecAdapter and does not "
+            f"implement RequestCorrelator; observed HTTP telemetry cannot be correlated"
+        )
+
     def operation_for_symbol(
         self, symbol: str, *, language: str | None = None
     ) -> OperationRef | None:

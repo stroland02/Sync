@@ -90,6 +90,18 @@
  * **No row on this screen has an overflow menu.** Every row has exactly one action — the link it
  * already is — and the API is read-only, so a second would have to be invented. A menu whose only
  * entry duplicates the row is furniture claiming a choice nobody has.
+ *
+ * ## The change-unit table is the data centrepiece, as of M14-W277
+ *
+ * The mock's Fleet screen (`docs/console-mock/screens/01-fleet.png`) is one dense CHANGE UNIT
+ * table; the built screen carried repository cards and paragraphs instead, and no component here
+ * consumed `GET /api/change-units` even after Lane E shipped it — `change-units-table.tsx`
+ * synthesised its rows from `useOverview` and `useRuns`, deriving the same grain
+ * `sync.dashboard.fleet.change_units` already computes. That is the exact defect
+ * `.claude/rules/console-dev-loop.md` names: a rule the payload can answer, answered twice. The
+ * table now reads the real endpoint and sits directly under the fact rail, above the repository
+ * cards, so the density this screen was missing comes from more data rather than less prose —
+ * every sentence below is unchanged.
  */
 
 import { useState } from "react"
@@ -98,6 +110,7 @@ import { Link } from "react-router"
 import { useRuns } from "@/api/queries"
 import { Button } from "@/components/ui/button"
 import { FactTile } from "@/components/fact-tile"
+import { ChangeUnitsTable } from "@/features/fleet/change-units-table"
 import { CodebasesPanel, type CodebaseFilter } from "@/features/fleet/codebases-panel"
 import { FleetFacts } from "@/features/fleet/fleet-facts"
 import { proposedPatchTarget } from "@/features/fleet/proposed-patch"
@@ -165,6 +178,9 @@ export function FleetPage({ question = DEFAULT_QUESTION }: FleetPageProps) {
 
       {/* 4-card metric strip */}
       <FleetFacts />
+
+      {/* The data centrepiece: every open change unit, fleet-wide */}
+      <ChangeUnitsTable />
 
       {/* Primary Monitored Codebases Panel */}
       <CodebasesPanel filter={filter} />
