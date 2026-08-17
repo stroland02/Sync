@@ -602,10 +602,24 @@ class _TwoFindingStore:
     def set_finding_status(self, finding_id, status):
         self.statuses.append((finding_id, status))
 
+    def repo_context(self, repo_id):
+        # `run()` reads this once per run since the context-seeding task landed. No fixture
+        # here carries a `.sync/context.md`, so a real store would also answer None.
+        return None
+
+    def upsert_repo_context(self, context) -> None:
+        pass
+
 
 class _EditingRemediator:
     """Stands in for the patch agent: edits the call site's file on disk and
     returns the diff, which is what `AgentRemediator` does. No model call."""
+
+    def __init__(self, repo_context: str = "") -> None:
+        # `build_remediator` now constructs the real `AgentRemediator` with this kwarg, and
+        # this class replaces that constructor via `monkeypatch.setattr`, so it takes the same
+        # argument -- unused, since this stand-in never builds a prompt.
+        pass
 
     def propose(self, finding, change, site, repo, diagnostics=""):
         target = Path(repo.local_path) / site.path

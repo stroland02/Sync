@@ -125,6 +125,7 @@ forbidden_modules = [
     "sync.mcp",
     "sync.verify",
     "sync.rehearse",
+    "sync.context",
 ]
 
 [[tool.importlinter.contracts]]

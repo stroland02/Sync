@@ -14,6 +14,7 @@ import uvicorn
 from starlette.applications import Starlette
 
 from sync.api.app import create_app
+from sync.core.models import RepoContext
 from sync.dashboard import fleet, graph_views
 from sync.dashboard.queries import workflow_state
 from sync.graph.store import GraphStore
@@ -157,6 +158,12 @@ def app_factory() -> Starlette:
             limit=limit, offset=offset,
         )
 
+    def context_reader(repo_id: str):
+        return graph_views.repo_context(store, repo_id)
+
+    def context_writer(repo_id: str, body: str) -> None:
+        store.upsert_repo_context(RepoContext(repo_id=repo_id, body=body, source="operator"))
+
     return create_app(
         surface=surface,
         workflow_reader=workflow_reader,
@@ -171,6 +178,8 @@ def app_factory() -> Starlette:
         severity_reader=severity_reader,
         overview_reader=overview_reader,
         vendor_findings_reader=vendor_findings_reader,
+        context_reader=context_reader,
+        context_writer=context_writer,
     )
 
 

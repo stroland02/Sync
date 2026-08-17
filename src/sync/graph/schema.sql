@@ -466,3 +466,28 @@ CREATE TABLE IF NOT EXISTS observed_error_window (
     -- second one that double-counts the window.
     UNIQUE (repo_id, vendor_id, operation_id, source, status_class, window_start, window_end)
 );
+
+-- Grain: one row per repository. Not per run, and not per revision -- context is what stays
+-- true of a checkout while the code changes underneath it, and a row per revision would make
+-- the prompt's context a function of when the last index ran rather than of what the
+-- repository is.
+--
+-- `source` names the mechanism that produced the body, as `observed_shape.source` does and for
+-- the same reason: a patch traceable to bad context must be traceable to *which* bad context.
+-- `seeded-file` is the customer's own committed `.sync/context.md`. `operator` is a human
+-- through the console or the CLI. Membership is positive -- a source added and left
+-- unclassified is absent from the prompt rather than silently inside it.
+--
+-- Sync never writes `.sync/context.md` back. A `seeded-file` row is a copy, the file is the
+-- original, and every index re-seeds. An operator edit to a seeded row is therefore overwritten
+-- on the next index. That precedence is deliberate: when Sync and the customer disagree about
+-- what is true of the customer's repository, the customer wins.
+--
+-- No foreign key to `call_site`. Context may precede an index, and a repository Sync has never
+-- indexed is one an operator may still describe.
+CREATE TABLE IF NOT EXISTS repo_context (
+    repo_id     TEXT PRIMARY KEY,
+    body        TEXT NOT NULL,
+    source      TEXT NOT NULL,
+    updated_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+);

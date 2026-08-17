@@ -681,6 +681,22 @@ def _drive_git_diff(root: Path) -> None:
         _git_diff(root, "finding=f-1 repo=r1")
 
 
+def _drive_read_seed(root: Path) -> None:
+    """A customer's `.sync/context.md` that is not UTF-8, which reads as no context at all.
+
+    `read_seed` folds absent, empty, whitespace-only, unreadable and non-UTF-8 into one `None`
+    -- an optional file's malformed content must never abandon a run -- so this drives the one
+    case among those that actually decodes bytes.
+    """
+    from sync.context import SEED_RELATIVE_PATH, read_seed
+
+    target = root / SEED_RELATIVE_PATH
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_bytes(UTF16)
+
+    assert read_seed(root) is None
+
+
 def _drive_ts_manifest(root: Path) -> None:
     from sync.index.typescript import TypeScriptAdapter
     from sync.signals.stripe.adapter import StripeAdapter
@@ -776,6 +792,7 @@ DRIVERS: dict[str, Callable[[Path], None]] = {
         _drive_merge_outcome_commits,
     "sync/cli.py::intake::JSONDecodeError+OSError+UnicodeDecodeError":
         _drive_intake_registry_directory,
+    "sync/context/seed.py::read_seed::OSError+UnicodeDecodeError+ValueError": _drive_read_seed,
     "sync/cli.py::_score_corpus::OSError+UnicodeDecodeError+YAMLError": _drive_score_corpus_spec,
     "sync/index/typescript.py::TypeScriptAdapter._read_manifest::"
     "JSONDecodeError+UnicodeDecodeError": _drive_ts_manifest,
@@ -1013,6 +1030,7 @@ _WHOLE_STAGE_CATCH_ALL = (
 # A read sits under these two, so they are the blind spot rather than an instance of it being
 # harmless. Both say so where they sit. The docstring above carries what is known about each.
 _GUARDS_A_READ = (
+    "sync/api/app.py::create_app.set_repo_context::ValueError",
     "sync/cli.py::benchmark::KeyError+LookupError+ValueError",
     "sync/index/python_lang.py::PythonAdapter._syntax_errors::ValueError",
 )

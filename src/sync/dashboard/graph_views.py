@@ -8,7 +8,7 @@ alone and never `sync.remediate`, matching the convention both of those modules 
 every function returns primitives -- dicts, lists, strings, numbers -- never a live model, so a
 page that received one could not lazily re-query or mutate it.
 
-Seven functions, seven questions. Four of them take an optional `repo_id` and echo it back:
+Eight functions, eight questions. Four of them take an optional `repo_id` and echo it back:
 repository scope is what every console level below Codebase inherits, and a payload that names
 the scope it was computed in cannot be rendered under the wrong heading in silence.
 
@@ -30,6 +30,8 @@ the scope it was computed in cannot be rendered under the wrong heading in silen
 - `overview_summary` -- the fleet screen's lead answer: open findings by vendor, and a total
   that is honest about whether it stopped counting early. `overview_summary`'s own docstring
   carries why this reads `GraphStore` directly rather than the frozen `GraphSurface`.
+- `repo_context` -- one repository's context row: what stays true of the checkout, and which of
+  `seeded-file` or `operator` wrote it. Absent is an empty body with a null source, not a 404.
 
 **What none of these may claim.** An observed call is evidence a call site was exercised. It is
 not proof the binding is correct -- the correlation that produced it can itself be wrong, which
@@ -582,6 +584,30 @@ def overview_summary(
         "binding_source": summary["binding_rung"],
         "context_savings": total * _TOKENS_PER_AVOIDED_READ,
         "context_savings_bound_reached": bound_reached,
+    }
+
+
+def repo_context(store: GraphStore, repo_id: str) -> dict:
+    """One repository's context, as the row the console renders.
+
+    Echoes `repo_id` back for the reason every repository-scoped view here does: a payload that
+    names the scope it was computed in cannot be rendered under the wrong heading in silence.
+
+    `source` is part of the payload rather than an internal detail. The precedence rule --
+    a `seeded-file` row is overwritten by the next index and an `operator` row is not -- is
+    invisible in the body and surprising when met, so a screen that rendered bare prose would
+    be hiding the one fact a reader needs before editing it.
+
+    An absent row is an empty body with a null source rather than a 404. A repository that has
+    no context is a normal repository, and the screen that offers to write some is the same
+    screen that shows what is there.
+    """
+    found = store.repo_context(repo_id)
+    return {
+        "repo_id": repo_id,
+        "body": found.body if found is not None else "",
+        "source": found.source if found is not None else None,
+        "updated_at": found.updated_at.isoformat() if found is not None and found.updated_at else None,
     }
 
 

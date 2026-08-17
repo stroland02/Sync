@@ -12,7 +12,7 @@ from importlib import resources
 import psycopg
 from psycopg.rows import dict_row
 
-from sync.core import CallSite, Finding, FindingStatus, MigrationOutcome, VendorChange
+from sync.core import CallSite, Finding, FindingStatus, MigrationOutcome, RepoContext, VendorChange
 from sync.core.models import (
     SEVERITY_ORDER,
     UNATTRIBUTED,
@@ -1653,3 +1653,40 @@ class GraphStore:
             parameters,
         ).fetchone()
         return row["n"]
+
+    def upsert_repo_context(self, context: RepoContext) -> None:
+        """Write one repository's context, replacing whatever it held.
+
+        Last write wins, and there is no counter to lose. The natural key is `repo_id` and the
+        table holds one row per repository, so re-running a seed converges on the row it already
+        has -- which is what `2026-07-27-sync-pipeline-discipline.md` asks of every stage.
+
+        `updated_at` is taken from the database rather than from the caller. Two writers on two
+        machines disagreeing about the clock would otherwise make "which of these is later" a
+        question about their clocks instead of about the writes.
+        """
+        self._connect().execute(
+            """
+            INSERT INTO repo_context (repo_id, body, source)
+            VALUES (%s, %s, %s)
+            ON CONFLICT (repo_id) DO UPDATE SET
+                body = EXCLUDED.body,
+                source = EXCLUDED.source,
+                updated_at = now()
+            """,
+            [context.repo_id, context.body, context.source],
+        )
+
+    def repo_context(self, repo_id: str) -> RepoContext | None:
+        """One repository's context, or None when it has none.
+
+        None rather than an empty `RepoContext`, because absence and emptiness must not reach a
+        prompt as two states. A caller that renders a section for an empty body would put an
+        empty heading in front of an agent, which reads as a statement that there is nothing
+        worth knowing rather than as nothing at all.
+        """
+        row = self._connect().execute(
+            "SELECT * FROM repo_context WHERE repo_id = %s",
+            [repo_id],
+        ).fetchone()
+        return RepoContext(**row) if row is not None else None

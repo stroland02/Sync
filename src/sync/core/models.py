@@ -630,6 +630,43 @@ class ObservedShape(BaseModel):
         )
 
 
+CONTEXT_BODY_MAX = 8000
+"""Longest context body accepted, counted on the decoded string rather than on bytes.
+
+Counting characters rather than bytes so a body of accented prose is not silently shorter than
+an ASCII one. Over the cap is refused everywhere and truncated nowhere: prose cut mid-sentence
+and handed to an agent that edits code reads as a complete statement and is not one.
+"""
+
+CONTEXT_SOURCES: frozenset[str] = frozenset({"seeded-file", "operator"})
+"""Which mechanisms may produce a context body.
+
+`seeded-file` is the customer's own committed `.sync/context.md`. `operator` is a human through
+the console or the CLI. Membership is positive, as in `sync.graph.sources`: a mechanism added to
+the system and not added here is absent from the prompt rather than quietly inside it. An agent
+writing its own context is memory rather than context and is deliberately not a member.
+"""
+
+
+class RepoContext(BaseModel):
+    """What stays true of a customer's repository while the code changes underneath it.
+
+    The grain is one row per repository -- not per run and not per revision. A row per revision
+    would make the prompt's context a function of when the last index ran rather than of what
+    the repository is.
+
+    `source` attributes the body without claiming a rung. A rung describes how a binding between
+    code and a vendor operation was established; context establishes no binding, and putting
+    prose on a scale built for evidence would make `CLAUDE.md`'s attribution rule mean less
+    everywhere it is enforced.
+    """
+
+    repo_id: str
+    body: str
+    source: str
+    updated_at: datetime | None = None
+
+
 class ObservedErrorWindow(BaseModel):
     """How many times one operation failed, over one period somebody asked about.
 

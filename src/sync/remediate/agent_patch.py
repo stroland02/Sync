@@ -40,10 +40,11 @@ and it refuses the patch rather than being guessed at -- the diff cannot arbitra
 an agent that edits a tracked call site and leaves the new module unstaged produces one
 that looks complete and compiles to `TS2307: Cannot find module`.
 
-Section order is load-bearing. Everything stable sits ahead of the diagnostics block, the
-only part that changes between retries, so the prefix stays byte-identical and cacheable
-across attempts; anything appended after diagnostics is invalidated every round. See the
-prompt-cache boundary in `docs/superpowers/specs/2026-07-25-sync-latency-architecture.md`.
+Section order is load-bearing. Everything stable -- including the optional per-repository
+context section, when there is one -- sits ahead of the diagnostics block, the only part that
+changes between retries, so the prefix stays byte-identical and cacheable across attempts;
+anything appended after diagnostics is invalidated every round. See the prompt-cache boundary
+in `docs/superpowers/specs/2026-07-25-sync-latency-architecture.md`.
 """
 
 from __future__ import annotations
@@ -54,6 +55,7 @@ from pathlib import Path
 
 from claude_agent_sdk import ClaudeAgentOptions, ResultMessage, query
 
+from sync.context import render_section
 from sync.core import CallSite, Finding, Patch, RepoRef, VendorChange
 from sync.remediate import tool_gate, tool_output
 from sync.remediate.untrusted import (
@@ -148,6 +150,7 @@ def build_patch_prompt(
     change: VendorChange,
     site: CallSite,
     diagnostics: str = "",
+    repo_context: str = "",
 ) -> str:
     """Everything the agent needs, and nothing it does not."""
     field = changed_field(change)
@@ -182,8 +185,17 @@ def build_patch_prompt(
         "Why this matters:",
         *fenced_block(VENDOR, [finding.rationale]),
         "",
-        _SCOPE_RULES,
     ]
+
+    # Ahead of `_SCOPE_RULES` so the rules keep the last and strongest position, and ahead of
+    # the diagnostics block so the cacheable prefix grows rather than moves. An empty context
+    # appends nothing at all -- not an empty heading -- which is what keeps a prompt built for a
+    # repository with no context byte-identical to the prompt built before this feature existed.
+    context_section = render_section(repo_context)
+    if context_section:
+        sections += [context_section, ""]
+
+    sections.append(_SCOPE_RULES)
 
     if diagnostics:
         # The graph feeds a CI rejection and a failed agent run through this
@@ -303,6 +315,14 @@ class AgentRemediator:
 
     strategy = "agent"
 
+    def __init__(self, repo_context: str = "") -> None:
+        # Bound once at construction rather than threaded through `propose()`. The caller
+        # constructs one `AgentRemediator` per run, after reading the stored context once, so
+        # every finding in the run sees the same repository facts without widening the shared
+        # `Remediator` protocol -- and every codemod tier that never reads it -- to carry a
+        # value only this tier consumes.
+        self._repo_context = repo_context
+
     def can_handle(self, finding: Finding, change: VendorChange) -> bool:
         return finding.severity in ("breaking", "deprecation")
 
@@ -314,7 +334,7 @@ class AgentRemediator:
         repo: RepoRef,
         diagnostics: str = "",
     ) -> Patch:
-        prompt = build_patch_prompt(finding, change, site, diagnostics)
+        prompt = build_patch_prompt(finding, change, site, diagnostics, self._repo_context)
         repo_path = Path(repo.local_path)
 
         identity = _identity(finding, repo)

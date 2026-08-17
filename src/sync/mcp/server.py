@@ -33,6 +33,7 @@ from __future__ import annotations
 
 import json
 import sys
+from collections.abc import Callable
 from typing import Any, IO
 
 from sync.mcp.registry import dispatch, schemas_as_data
@@ -52,6 +53,30 @@ PROTOCOL_VERSION = "2025-06-18"
 SERVER_NAME = "sync"
 SERVER_VERSION = "0.1.0"
 
+# Advisory guidance a compatible client receives in the initialize response. `instructions` is a
+# field the MCP specification defines on `InitializeResult` in revision 2025-06-18, which is what
+# `PROTOCOL_VERSION` pins -- it is not a tool, it does not pass through `sync.mcp.registry`, and
+# the golden tool-schema file never sees it.
+#
+# It names no tool that does not exist. A client that acted on an invented name would get a
+# method error from a server that had just advertised it, which is worse than saying nothing.
+SERVER_INSTRUCTIONS = "\n".join(
+    [
+        "Sync holds the API Dependency Graph for this machine's repositories: which call sites "
+        "depend on which third-party operations, what those vendors changed, and what the "
+        "repository's own traffic showed.",
+        "",
+        "Read `sync://context/<repo_id>` before proposing an edit to a repository. It carries "
+        "what stays true of that checkout -- conventions, generated directories, the package "
+        "manager its lockfile names -- and it is cheaper than rediscovering any of it. A "
+        "repo_id is host/owner/name, for example github.com/acme/storefront.",
+        "",
+        "This server never writes to a repository. `sync_propose_patch` returns a verified "
+        "patch as data and stops before anything is pushed; deciding what to do with it is "
+        "yours.",
+    ]
+)
+
 _PARSE_ERROR = -32700
 _INVALID_REQUEST = -32600
 _METHOD_NOT_FOUND = -32601
@@ -69,6 +94,7 @@ def serve(
     stdin: IO[str] | None = None,
     stdout: IO[str] | None = None,
     feed: FeedCache | None = None,
+    context_reader: Callable[[str], str | None] | None = None,
 ) -> None:
     """Read requests until the stream ends, answering each on one line.
 
@@ -81,6 +107,10 @@ def serve(
     `2026-07-25-sync-graph-surface-design.md` draws that line as a data boundary rather than a
     packaging one -- so the resource is handed a cache and no store, and there is nothing here
     for it to reach the graph with.
+
+    `context_reader` is the one exception: a repository's context is customer-specific, like the
+    graph, but read-only and small enough to hand over as a plain callable rather than a store --
+    the same shape `sync.api.app`'s `ContextReader` already takes, for the same reason.
     """
     source = stdin if stdin is not None else sys.stdin
     sink = stdout if stdout is not None else sys.stdout
@@ -106,13 +136,16 @@ def serve(
             )
             continue
 
-        response = _handle(surface, request, feed)
+        response = _handle(surface, request, feed, context_reader)
         if response is not None:
             _write(sink, response)
 
 
 def _handle(
-    surface: GraphSurface, request: dict[str, Any], feed: FeedCache | None = None
+    surface: GraphSurface,
+    request: dict[str, Any],
+    feed: FeedCache | None = None,
+    context_reader: Callable[[str], str | None] | None = None,
 ) -> dict[str, Any] | None:
     """One request to one response, or `None` for a notification.
 
@@ -151,6 +184,7 @@ def _handle(
                     "resources": {"listChanged": False, "subscribe": False},
                 },
                 "serverInfo": {"name": SERVER_NAME, "version": SERVER_VERSION},
+                "instructions": SERVER_INSTRUCTIONS,
             },
         )
 
@@ -167,7 +201,7 @@ def _handle(
         return _result(request_id, {"resourceTemplates": resource_templates_as_data()})
 
     if method == "resources/read":
-        return _read(request_id, params, feed)
+        return _read(request_id, params, feed, context_reader)
 
     return _error(request_id, _METHOD_NOT_FOUND, f"unknown method: {method}")
 
@@ -184,18 +218,30 @@ def _known_vendors() -> tuple[str, ...]:
     return available_vendors()
 
 
-def _read(request_id: Any, params: dict[str, Any], feed: FeedCache | None) -> dict[str, Any]:
+def _read(
+    request_id: Any,
+    params: dict[str, Any],
+    feed: FeedCache | None,
+    context_reader: Callable[[str], str | None] | None = None,
+) -> dict[str, Any]:
     """One resource read, or a JSON-RPC error carrying which of the outcomes it was.
 
     The reason travels in `error.data` rather than only in the message. A client branching on
     wording breaks when the wording improves, and the difference between a vendor nobody
     registers and a vendor nobody has fetched is the difference between fixing a typo and
     running a fetch.
+
+    A context read comes back from `sync.mcp.resources.read` already framed as `{"contents":
+    [...]}`, because its body is plain markdown text and not JSON to encode -- the feed's own
+    payload below is the one that still needs wrapping and encoding here.
     """
     try:
-        contents = read_resource(params.get("uri") or "", feed, _known_vendors())
+        result = read_resource(params.get("uri") or "", feed, _known_vendors(), context_reader)
     except ResourceError as exc:
         return _error(request_id, _RESOURCE_NOT_FOUND, str(exc), data=exc.data)
+
+    if "contents" in result:
+        return _result(request_id, result)
 
     return _result(
         request_id,
@@ -204,7 +250,7 @@ def _read(request_id: Any, params: dict[str, Any], feed: FeedCache | None) -> di
                 {
                     "uri": params.get("uri"),
                     "mimeType": FEED_MIME_TYPE,
-                    "text": json.dumps(contents),
+                    "text": json.dumps(result),
                 }
             ]
         },
@@ -312,10 +358,17 @@ def main() -> int:
     protocol.reconfigure(encoding="utf-8")
     sys.stdout = sys.stderr
 
+    store = GraphStore(dsn)
+
+    def context_reader(repo_id: str) -> str | None:
+        found = store.repo_context(repo_id)
+        return found.body if found is not None else None
+
     serve(
-        GraphSurface(GraphStore(dsn)),
+        GraphSurface(store),
         stdout=protocol,
         feed=FeedCache(public_key=DEVELOPMENT_FEED_PUBLIC_KEY),
+        context_reader=context_reader,
     )
     return 0
 
