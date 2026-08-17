@@ -17,10 +17,12 @@ defect class the run-state Critical was.
 from __future__ import annotations
 
 from collections import Counter
+from typing import Any
 
 import psycopg
 from psycopg.rows import dict_row
 
+from sync.benchmark.axes import compute_axes
 from sync.dashboard.queries import _FINISHED, _pending_node
 from sync.graph.store import GraphStore
 
@@ -360,3 +362,122 @@ def change_units(
         "total": total,
         "next_offset": next_offset,
     }
+
+
+def corpus_health(store: GraphStore) -> dict[str, Any]:
+    """The corpus health view model: quality axes status, sample counts, and runs.
+
+    Beta's evidence has to be readable before it is quotable, and this answers which
+    quality axes have samples, which have none, and how many runs produced them.
+    Absence (status='unmeasured', has_samples=False, value=None) is distinct from
+    zero (status='measured', has_samples=True, value=0.0).
+    """
+    outcomes = store.migration_outcomes()
+    axes = compute_axes(outcomes)
+
+    # 1. merge_rate_by_change_kind
+    kind_groups = {
+        kind: {
+            "value": axis.value,
+            "n": axis.n,
+            "has_samples": axis.n > 0,
+            "status": "measured" if axis.n > 0 else "unmeasured",
+        }
+        for kind, axis in axes.merge_rate_by_change_kind.items()
+    }
+    kind_sample_count = sum(axis.n for axis in axes.merge_rate_by_change_kind.values())
+    kind_has_samples = kind_sample_count > 0
+    kind_axis = {
+        "name": "merge_rate_by_change_kind",
+        "display_name": "Merge Rate by Change Kind",
+        "status": "measured" if kind_has_samples else "unmeasured",
+        "has_samples": kind_has_samples,
+        "sample_count": kind_sample_count,
+        "value": {k: v["value"] for k, v in kind_groups.items()} if kind_has_samples else None,
+        "groups": kind_groups,
+        "unit": "ratio",
+        "denominator_description": "pull requests opened with decided outcome, grouped by change kind",
+    }
+
+    # 2. merge_rate_by_tier
+    tier_groups = {
+        tier: {
+            "value": axis.value,
+            "n": axis.n,
+            "has_samples": axis.n > 0,
+            "status": "measured" if axis.n > 0 else "unmeasured",
+        }
+        for tier, axis in axes.merge_rate_by_tier.items()
+    }
+    tier_sample_count = sum(axis.n for axis in axes.merge_rate_by_tier.values())
+    tier_has_samples = tier_sample_count > 0
+    tier_axis = {
+        "name": "merge_rate_by_tier",
+        "display_name": "Merge Rate by Repair Tier",
+        "status": "measured" if tier_has_samples else "unmeasured",
+        "has_samples": tier_has_samples,
+        "sample_count": tier_sample_count,
+        "value": {k: v["value"] for k, v in tier_groups.items()} if tier_has_samples else None,
+        "groups": tier_groups,
+        "unit": "ratio",
+        "denominator_description": "pull requests opened with decided outcome, grouped by repair tier",
+    }
+
+    # 3. routing_accuracy
+    routing_has_samples = axes.routing_accuracy.n > 0
+    routing_axis = {
+        "name": "routing_accuracy",
+        "display_name": "Routing Accuracy",
+        "status": "measured" if routing_has_samples else "unmeasured",
+        "has_samples": routing_has_samples,
+        "sample_count": axes.routing_accuracy.n,
+        "value": axes.routing_accuracy.value if routing_has_samples else None,
+        "unit": "ratio",
+        "denominator_description": "findings routed to tier 0",
+    }
+
+    # 4. tokens_per_merged_patch
+    tokens_has_samples = axes.tokens_per_merged_patch.n > 0
+    tokens_axis = {
+        "name": "tokens_per_merged_patch",
+        "display_name": "Tokens per Merged Patch",
+        "status": "measured" if tokens_has_samples else "unmeasured",
+        "has_samples": tokens_has_samples,
+        "sample_count": axes.tokens_per_merged_patch.n,
+        "value": axes.tokens_per_merged_patch.value if tokens_has_samples else None,
+        "unit": "tokens",
+        "denominator_description": "merged pull requests",
+    }
+
+    # 5. wall_ms_per_merged_patch
+    wall_ms_has_samples = axes.wall_ms_per_merged_patch.n > 0
+    wall_ms_axis = {
+        "name": "wall_ms_per_merged_patch",
+        "display_name": "Wall Clock Duration per Merged Patch",
+        "status": "measured" if wall_ms_has_samples else "unmeasured",
+        "has_samples": wall_ms_has_samples,
+        "sample_count": axes.wall_ms_per_merged_patch.n,
+        "value": axes.wall_ms_per_merged_patch.value if wall_ms_has_samples else None,
+        "unit": "milliseconds",
+        "denominator_description": "merged pull requests",
+    }
+
+    axis_list = [kind_axis, tier_axis, routing_axis, tokens_axis, wall_ms_axis]
+    measured_count = sum(1 for a in axis_list if a["has_samples"])
+    unmeasured_count = len(axis_list) - measured_count
+
+    return {
+        "summary": {
+            "total_runs": axes.counts.attempts,
+            "distinct_findings": axes.counts.findings,
+            "pull_requests_opened": axes.counts.pull_requests_opened,
+            "pull_requests_merged": axes.counts.pull_requests_merged,
+            "findings_abandoned": axes.counts.findings_abandoned,
+            "axes_measured_count": measured_count,
+            "axes_unmeasured_count": unmeasured_count,
+            "total_axes": len(axis_list),
+            "has_any_samples": measured_count > 0,
+        },
+        "axes": axis_list,
+    }
+

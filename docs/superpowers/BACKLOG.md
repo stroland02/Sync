@@ -1117,7 +1117,10 @@ the old check's blind spot directly.
 
 **What did not land, stated as plainly as the first bounded step stated its own gap.**
 `AgentRemediator._drive_agent` still runs on the host, exactly as before — nothing routes a real
-patch attempt through `sandbox.py` yet. `docker/patch-sandbox/Dockerfile` is authored against the
+patch attempt through `sandbox.py` yet. *(Corrected 2026-08-17: that method no longer exists. It moved
+unchanged to `sync.runner.claude_sdk.ClaudeSdkRunner._drive`, `src/sync/runner/claude_sdk.py:76`, so
+`sync.remediate` no longer imports the SDK. Where this entry names `_drive_agent`, read that. The
+sentence's claim is unaffected — the run is still on the host.)* `docker/patch-sandbox/Dockerfile` is authored against the
 image mitigation 1 specifies (Node LTS, git, pnpm/yarn via `corepack enable`, Python 3.12 + `uv`,
 TypeScript pinned per item 4), and it was built and probed on this host: `docker build` succeeds,
 runs as the non-root `sandbox` user, and carries Node v22.23.2, npm 10.9.8, `tsc` 5.9.3 (the pinned
@@ -1126,7 +1129,9 @@ version, not `npx`-resolved), `uv` 0.12.5, and corepack shims that resolve pnpm 
 not the package manager, so that fetch still needs the install phase's network. The image is not
 tagged, pushed, or pre-warmed anywhere a deployment would find it, and nothing in `src/` builds or
 references it — that wiring, and the pre-warming this entry's own precomputation argument depends
-on, is still unbuilt. The Anthropic-only forward proxy that item 3's literal "no network egress"
+on, is still unbuilt. *(Half-superseded 2026-08-17 by Decision 2: `src/sync/remediate/sandbox_image.py`
+now builds and content-tags the image and is the primitive a pre-warm would call. Still no registry, no
+push, and no caller — see the re-scope above.)* The Anthropic-only forward proxy that item 3's literal "no network egress"
 needs for a *live* agent
 turn (the model traffic problem: the CLI has to keep talking to Anthropic's API for the whole run,
 from inside the same network namespace the mitigation wants cut off) is unbuilt and undesigned
@@ -1135,6 +1140,76 @@ network exposure it had on 2026-08-06.
 
 **Closes when:** a patch run cannot open a socket to a host Sync did not name, proven by a test
 that watches the attempt fail rather than by a configuration file asserting it.
+
+---
+
+### B97 as of 2026-08-17: NOT CLOSED, and re-scoped to exactly what remains
+
+Re-checked against the tree rather than against this entry's own account, as Lane C queue item 4.
+**The close condition is not met, and it is not close to met.** The mechanism is finished. Nothing
+routes a patch attempt through it.
+
+**The one fact this re-scope turns on.** Not one of the six primitives is called from anywhere in
+`src/`. That is not a judgement — it is recorded by the repository's own lint:
+`scripts/dead_links_baseline.txt:65-69` accepts `ephemeral_container`, `disconnect_network`,
+`probe_connect`, `build_container_env` and `copy_between_containers` as reachable from nothing, and
+`:88` accepts `ensure_image_built` on the same basis. The baseline's own comment commits to removing
+all five in the commit that adds the caller. A patch run today is `asyncio.run` in the operator's
+process (`src/sync/runner/claude_sdk.py:73-92`), `cwd` inside the clone, full parent environment,
+unrestricted network stack — measured green by
+`tests/test_patch_sandbox.py::test_patch_agent_execution_context_reaches_arbitrary_host_today` and
+`::test_patch_agent_execution_context_inherits_the_full_parent_environment_today`.
+
+**Decision 2 landed and it does not move the close condition either.**
+`src/sync/remediate/sandbox_image.py` builds and content-tags the image (`compute_image_tag:92`,
+`ensure_image_built:113`), tested by `tests/test_sandbox_image.py` including a real `docker build`.
+It was briefly a truthful red on the dead-link lint and is now a baselined entry, on the stated
+grounds that neither a worker process nor a scheduler exists to call it and inventing one would be
+an abstraction with no caller. That is the right call. It also means the image is built by nothing
+on any real path.
+
+**What remains, in the order it has to happen.** These four are the whole of B97 now; everything
+else on this entry is done.
+
+1. **Compose the risky/safe container pair into one patch attempt.** Two `ephemeral_container`
+   calls with `copy_between_containers` between them, the first destroyed rather than disconnected.
+   The primitives exist; the assembly does not. `sandbox.py:61-74` says so itself.
+2. **The Anthropic-only forward proxy.** A `network="none"` container has no route for the SDK's own
+   traffic, which must flow for the whole run from inside the namespace the mitigation cuts off.
+   Unbuilt and undesigned beyond a sketch. `ClaudeAgentOptions`' `SandboxNetworkConfig` carries
+   `httpProxyPort` — *"HTTP proxy port if bringing your own proxy"* — so a proxy is assumed by that
+   surface too, not avoidable through it.
+3. **Establish which credential the CLI needs to reach Anthropic.** `build_container_env`'s
+   `auth_env` is deliberately unpopulated because nobody has confirmed this: no `ANTHROPIC_API_KEY`
+   reference exists anywhere in `src/`, and the environment snapshot taken while writing the module
+   carried no `ANTHROPIC_*` variable at all — only `CLAUDE_CODE_EXECPATH` pointing at an
+   already-authenticated binary. **A container that cannot authenticate cannot host a patch run**,
+   so this blocks item 1 as hard as the proxy does, and it is the cheapest of the four to answer.
+4. **Mitigation 5's other two properties.** `ephemeral_container` (`sandbox.py:170`) takes an image
+   and a network and passes no `--read-only`, no `--user` and no mount. Wiring the sandbox up as it
+   stands would deliver the network boundary and silently not deliver non-root or a read-only root
+   with the clone as the only writable mount, which the threat model asks for in the same breath.
+
+**What `build_container_env` still owes, kept from the earlier review because it is still owed.**
+Its allowlist is proven correct as a function (`tests/test_sandbox.py`, three tests) and has never
+been passed to a `docker create -e`. Exclusion is only real at a boundary that starts a process with
+no inherited environment; that has not been observed. Re-review adversarially when item 1 lands.
+
+**One thing that did change, in the other direction, and it is not on this entry's critical path.**
+`ClaudeAgentOptions.sandbox` is real at 0.2.128 (`types.py:2019`) and does **not** help: its
+`enabled` field is documented *"(macOS/Linux only)"* (`types.py:887`), so it is unavailable on this
+machine, and `types.py:876-881` scopes it to *how Claude Code sandboxes bash commands*, directing
+network restrictions to `WebFetch` permission rules — which Sync already denies outright. Even on
+Linux it would narrow the shell, which `tool_gate` already does at a layer Sync controls, and would
+not put the run in a credential-free namespace. The container stays load-bearing.
+
+**The env finding re-verified, with the current line.** `options.env` merges onto a full
+`dict(os.environ)` rather than substituting it: `inherited_env` is built at
+`claude_agent_sdk/_internal/transport/subprocess_cli.py:689` and `**self._options.env` is splatted
+on top at `:693`, inside the `process_env` literal spanning `:690-694`. The span this entry recorded
+as `:689-695` is now `:689-694`. The finding stands exactly as written.
+
+---
 
 **A second bounded step landed 2026-08-16** (`bafd7e2` on `b97-patch-sandbox`, not yet merged):
 `src/sync/remediate/sandbox.py` — `ephemeral_container`, `disconnect_network`, `probe_connect`,

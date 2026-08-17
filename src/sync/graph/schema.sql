@@ -498,3 +498,35 @@ CREATE TABLE IF NOT EXISTS repo_context (
     source      TEXT NOT NULL,
     updated_at  TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+-- Grain: one row per attempt (not per adapter).
+--
+-- Identity is (vendor_id, attempted_at, COALESCE(from_version, ''), COALESCE(to_version, ''))
+-- or id. The distinction this exists to make is *never-asked* apart from *nothing-new*, and
+-- *clean-decline* apart from *fetch-failure*. `vendor_change` records only results, so an
+-- adapter polled hourly that found nothing new for a week is indistinguishable from one
+-- whose fetch has been 403ing for a week. Both render as an old `last_change_at`.
+--
+-- `reason_code` is from the closed seventeen-member vocabulary in `sync.signals.intake_attempt`.
+-- Like `abandon_reason_code`, a promise to learn from failures and aggregate statistics across
+-- adapters requires a closed vocabulary rather than free text. Free text is retained only in `detail`
+-- as diagnostic detail.
+CREATE TABLE IF NOT EXISTS intake_attempt (
+    id            TEXT PRIMARY KEY,
+    vendor_id     TEXT NOT NULL,
+    attempted_at  TIMESTAMPTZ NOT NULL,
+    outcome       TEXT NOT NULL,
+    reason_code   TEXT,
+    detail        TEXT,
+    changes_count INTEGER NOT NULL DEFAULT 0,
+    from_version  TEXT,
+    to_version    TEXT,
+    source        TEXT,
+    duration_ms   DOUBLE PRECISION,
+    recorded_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
+
+    UNIQUE (vendor_id, attempted_at, from_version, to_version)
+);
+
+CREATE INDEX IF NOT EXISTS intake_attempt_vendor_idx ON intake_attempt (vendor_id, attempted_at DESC);
+
