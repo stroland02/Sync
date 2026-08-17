@@ -208,12 +208,38 @@ while building it. Whoever takes it should renumber it as that, not as a refacto
 - The merge policy renders **read-only** with the option in force named, per Decision 3. No control
   on this page mutates anything until M4's write path lands.
 
-- [ ] Step 1: Failing vitest — level count unchanged at nine; a declined adapter renders its reason;
+- [x] Step 1: Failing vitest — level count unchanged at nine; a declined adapter renders its reason;
       policy renders the option in force. RED.
-- [ ] Step 2: Implement against `sync.api`'s existing read surface; state absence where the API has
+- [x] Step 2: Implement against `sync.api`'s existing read surface; state absence where the API has
       no field yet rather than inventing one.
-- [ ] Step 3: Reach it from the rail and the palette; walk all nine levels plus this one.
-- [ ] Step 4: Gate; WORKLOG; commit.
+- [x] Step 3: Reach it from the rail and the palette; walk all nine levels plus this one.
+- [x] Step 4: Gate; WORKLOG; commit.
+
+**Landed. Two of this task's three interfaces are built as written and the third is refused, on
+Step 2's own instruction.**
+
+*The adapter table is built* — and needed a read surface that did not exist, so the slice is
+full-stack rather than console-only: `registered_adapters` in `sync.signals.registry`,
+`GraphStore.vendor_intake_rollup`, `sync.dashboard.adapters.adapter_inventory` and
+`GET /api/adapters`.
+
+*`/settings` is a destination and not a level*, as specified. It could not go in `ROUTES`, because
+`RouteEntry` requires a `GraphLevel` and an `Area` and Settings is neither — widening `level` to
+accept `null` would weaken the guard on nine real levels to admit one screen. `DESTINATIONS` is its
+own array; `App.tsx` serves both, the rail links it, and the palette lists it under its own heading.
+
+*The merge policy panel is refused.* This task says it renders read-only "with the option in force
+named". **There is no option in force.** Nothing in `sync.forge` reads a merge strategy, a
+required-reviewer rule or an auto-merge switch; every pull request is opened the same way and left
+for a human. A panel reading "Squash and merge" would be the console asserting a configured fact
+the system does not hold, which is precisely what Step 2 says not to do. The screen states the
+absence and names what has to land first.
+
+*A declined adapter cannot render its reason, for the same reason and it is worth separating.* Not
+a rendering gap: nothing records an intake **attempt**, only its result, so no column exists to
+read. A `decline_reason` null on every row would read as "no adapter has ever declined" — a claim
+nothing measured. `test_nothing_here_records_why_an_adapter_declined` asserts the field's absence,
+so the gap is held rather than forgotten, and that test is the one to change when the record lands.
 
 ### Task 6: The palette lists destinations honestly (M7)
 

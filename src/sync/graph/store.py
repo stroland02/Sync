@@ -811,6 +811,40 @@ class GraphStore:
         ).fetchall()
         return [VendorChange(**row) for row in rows]
 
+    def vendor_intake_rollup(self) -> dict[str, dict]:
+        """Per vendor id, what the graph has ever received: rows, distinct operations, the newest
+        `detected_at`, and the `source` values those rows carry.
+
+        Keyed by vendor id and grouped in SQL rather than returned as rows for a caller to fold,
+        because the caller is a screen listing one line per adapter and a fold in Python would be
+        the same GROUP BY written twice.
+
+        **A vendor absent from this mapping has never delivered, which is not the same as having
+        delivered nothing.** Nothing is invented for it here -- it simply is not a key, and
+        `sync.dashboard.adapters` is where that absence becomes the null the console renders as
+        never-measured.
+        """
+        rows = self._connect().execute(
+            """
+            SELECT vendor_id,
+                   count(*)                        AS changes,
+                   count(DISTINCT operation_id)    AS operations,
+                   max(detected_at)                AS last_change_at,
+                   array_agg(DISTINCT source)      AS sources
+            FROM vendor_change
+            GROUP BY vendor_id
+            """
+        ).fetchall()
+        return {
+            row["vendor_id"]: {
+                "changes": row["changes"],
+                "operations": row["operations"],
+                "last_change_at": row["last_change_at"].isoformat(),
+                "sources": sorted(row["sources"]),
+            }
+            for row in rows
+        }
+
     def vendor_changes_for_operation(
         self, vendor_id: str, operation_id: str, *, limit: int | None = None, offset: int = 0
     ) -> list[VendorChange]:

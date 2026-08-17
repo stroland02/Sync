@@ -42,7 +42,14 @@ import {
   CommandItem,
   CommandList,
 } from "@/components/ui/command"
-import { GRAPH_LEVELS, ROUTES, type GraphLevel, type RouteEntry } from "@/lib/routes"
+import {
+  DESTINATIONS,
+  GRAPH_LEVELS,
+  ROUTES,
+  type DestinationEntry,
+  type GraphLevel,
+  type RouteEntry,
+} from "@/lib/routes"
 
 /** What the palette calls itself, in one place: the dialog's placeholder and the trigger agree. */
 const PALETTE_LABEL = "Jump to a destination"
@@ -61,9 +68,20 @@ export interface PaletteRow {
 }
 
 export interface PaletteGroup {
-  level: GraphLevel
+  /** A graph level, or the heading a destination that is not a level is grouped under. */
+  level: GraphLevel | typeof DESTINATIONS_HEADING
   rows: readonly PaletteRow[]
 }
+
+/**
+ * Where a destination that is not a level is listed.
+ *
+ * Its own group rather than folded into one of the nine. `.claude/rules/console-hierarchy.md`
+ * is explicit that a screen may exist without being a level, and a palette that filed Settings
+ * under `Fleet` would be the console asserting a place on the ladder that the specification does
+ * not give it.
+ */
+export const DESTINATIONS_HEADING = "Deployment" as const
 
 /**
  * The registry, grouped for the list.
@@ -90,6 +108,29 @@ export function paletteGroups(
         })),
     }))
     .filter((group) => group.rows.length > 0)
+}
+
+/** `paletteGroups`, plus the destinations that are not levels, as a group of their own. */
+export function paletteSections(
+  routes: readonly RouteEntry[],
+  levels: readonly GraphLevel[],
+  destinations: readonly DestinationEntry[]
+): readonly PaletteGroup[] {
+  const groups = paletteGroups(routes, levels)
+  if (destinations.length === 0) return groups
+  return [
+    ...groups,
+    {
+      level: DESTINATIONS_HEADING,
+      rows: destinations.map((destination) => ({
+        path: destination.path,
+        pattern: destination.path,
+        label: destination.label,
+        question: destination.question,
+        lookUpFrom: null,
+      })),
+    },
+  ]
 }
 
 const OpenPalette = createContext<(() => void) | null>(null)
@@ -163,7 +204,7 @@ export function CommandPaletteProvider({ children }: { children: ReactNode }) {
           <CommandInput placeholder={`${PALETTE_LABEL}…`} />
           <CommandList>
             <CommandEmpty>No declared route matches.</CommandEmpty>
-            {paletteGroups(ROUTES, GRAPH_LEVELS).map((group) => (
+            {paletteSections(ROUTES, GRAPH_LEVELS, DESTINATIONS).map((group) => (
               <CommandGroup key={group.level} heading={group.level}>
                 {group.rows.map((row) => (
                   <CommandItem

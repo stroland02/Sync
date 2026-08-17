@@ -67,6 +67,12 @@ CoverageReader = Callable[[str], dict[str, Any]]
 ObservedReader = Callable[..., dict[str, Any]]
 DetectorReader = Callable[[], dict[str, Any]]
 
+# The adapter inventory backs `sync.dashboard.adapters.adapter_inventory`. It takes no
+# arguments and narrows by nothing: an adapter is a property of the deployment rather than
+# of a repository, and a `repo_id` filter here would answer a question about which vendors a
+# repository calls, which `/api/repositories/{repo_id}/observed` already answers better.
+AdaptersReader = Callable[[], dict[str, Any]]
+
 # The severity roll-up backs `sync.dashboard.graph_views.severity_rollup`, outside `GraphSurface`
 # for the same reason every reader above is: it is an aggregate over open findings, not a
 # per-finding question the frozen surface answers, and it is read once per call rather than
@@ -163,6 +169,7 @@ def create_app(
     coverage_reader: CoverageReader,
     observed_reader: ObservedReader,
     detector_reader: DetectorReader,
+    adapters_reader: AdaptersReader,
     severity_reader: SeverityReader,
     overview_reader: OverviewReader,
     vendor_findings_reader: VendorFindingsReader,
@@ -335,6 +342,9 @@ def create_app(
     async def detectors(request: Request) -> JSONResponse:
         return JSONResponse(detector_reader(repo_id=request.query_params.get("repo_id")))
 
+    async def adapters(request: Request) -> JSONResponse:
+        return JSONResponse(adapters_reader())
+
     async def repo_context(request: Request) -> JSONResponse:
         return JSONResponse(context_reader(request.path_params["repo_id"]))
 
@@ -388,6 +398,7 @@ def create_app(
         Route("/api/repositories/{repo_id}/coverage", repository_coverage, methods=["GET"]),
         Route("/api/repositories/{repo_id}/observed", repository_observed, methods=["GET"]),
         Route("/api/detectors", detectors, methods=["GET"]),
+        Route("/api/adapters", adapters, methods=["GET"]),
         # `{repo_id:path}` rather than `{repo_id}`: a `repo_id` is `host/owner/name` and
         # contains slashes, so the default converter would never match one.
         Route("/api/repos/{repo_id:path}/context", repo_context, methods=["GET"]),

@@ -539,6 +539,51 @@ def available_vendors() -> tuple[str, ...]:
     return tuple(sorted({*_BUILDERS, *_generated_vendors(), *_mcp_servers()}))
 
 
+@dataclass(frozen=True)
+class RegisteredAdapter:
+    """One registered vendor, as configuration rather than as a constructed adapter.
+
+    Three fields, and the reason for each is that a reader wants to know what serves a vendor
+    without paying for it. `kind` is which of the three routes registered it; `source` is the one
+    thing about that route worth naming on a screen -- the repository a generated vendor's
+    manifest is read from, the directory an MCP server's captures are kept in -- and is `None` for
+    a coded adapter, whose source is this repository.
+
+    Nothing here constructs an adapter or reads a staged artifact. `_load_twilio` raises without a
+    product manifest, so a reader that built one to ask what it is would report a deployment as
+    broken for the ordinary state of having not scanned yet.
+    """
+
+    vendor_id: str
+    kind: str
+    """`coded`, `generated` or `mcp`."""
+    source: str | None
+
+
+def registered_adapters() -> tuple[RegisteredAdapter, ...]:
+    """Every registered vendor with what registered it, sorted by id.
+
+    Sorted because the caller is a table and an unstable order is a diff on every render.
+
+    Held against `available_vendors` by `test_every_registered_id_is_one_the_command_line_would_
+    accept`: two lists of registered vendors that can disagree is the defect this module's
+    `_CODED_ADAPTERS` comment already names, and here it would surface as a row for an adapter no
+    run can select.
+    """
+    entries = [
+        RegisteredAdapter(vendor_id=vendor_id, kind="coded", source=None) for vendor_id in _BUILDERS
+    ]
+    entries += [
+        RegisteredAdapter(vendor_id=vendor.vendor_id, kind="generated", source=vendor.repo)
+        for vendor in _generated_vendors().values()
+    ]
+    entries += [
+        RegisteredAdapter(vendor_id=vendor_id, kind="mcp", source=server.snapshot_dir)
+        for vendor_id, server in _mcp_servers().items()
+    ]
+    return tuple(sorted(entries, key=lambda entry: entry.vendor_id))
+
+
 def _builders(vendor_id: str) -> tuple[Callable, Callable]:
     """The staging and loading pair for a vendor, coded first and configured second.
 
