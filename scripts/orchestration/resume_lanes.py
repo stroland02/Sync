@@ -213,12 +213,25 @@ def main() -> int:
         start = ["orchestration", "worker-start", "--task", task["id"], "--terminal", handle, "--json"]
         if dispatch.get("id"):
             start += ["--retry-of", dispatch["id"]]
+        before = dispatch.get("id")
         outcome = call(cli, *start)
         if outcome.get("ok"):
             print(f"RESTART {label}: {why}")
             restarted += 1
+            continue
+
+        # A dropped response is not proof the mutation failed. `runtime_unavailable` means Orca
+        # closed the connection before answering, and twice here the retry dispatch was created
+        # anyway -- so believing the error would report a lane as dead while it was in fact queued.
+        # Ask the runtime what actually happened instead of trusting the transport.
+        message = (outcome.get("error") or {}).get("message", "unknown error")
+        after = ((call(cli, "orchestration", "dispatch-show", "--task", task["id"], "--json")
+                  .get("result") or {}).get("dispatch") or {})
+        if after.get("id") and after.get("id") != before:
+            print(f"QUEUED  {label}: {why}; retry dispatch {after['id']} created, "
+                  f"attach pending (transport said: {message[:80]})")
+            restarted += 1
         else:
-            message = (outcome.get("error") or {}).get("message", "unknown error")
             print(f"FAILED  {label}: {why}; {message}")
 
     print(f"\n{restarted} lane(s) {'would be ' if args.dry_run else ''}restarted")
