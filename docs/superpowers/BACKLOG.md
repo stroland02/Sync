@@ -556,6 +556,15 @@ recorded reason that a reader can join back to the run — and a run whose corpu
 says so rather than exiting 0 silently. Whatever shape it takes must not make a corpus write able
 to fail a run, which is the property the current `except` exists to hold.
 
+**Half-built, checked 2026-08-17.** `make_recorder` already returns a `CorpusRecorder`
+(`src/sync/remediate/corpus.py:196-252`) tracking `.attempt_count`, `.success_count`,
+`.failure_count` and `.errors` — a stale, pre-renumbering duplicate of this entry (deleted from
+this file today) had mistakenly called that closed. It is not: nothing in `nodes.py`, `graph.py`,
+`sync.dashboard`, or `sync.cli` reads `.failure_count` or `.errors` back. The counter exists and
+nothing counts it. Same producer-with-no-consumer shape `M0-W242`'s rule names, and the same
+reason this session left it alone rather than wiring a caller into `src/sync/remediate/**` as a
+side effect of a documentation cleanup.
+
 ### B136 — Nothing records that an adapter was asked, only what it answered
 
 `GET /api/adapters` can say what each adapter has delivered and cannot say whether it was reached.
@@ -3467,31 +3476,6 @@ a bucket.
 `migration_outcome` rows across 3 `(change_kind, tier)` groups, with **one** abandonment. There is
 no signal to learn from yet whatever the schema does, so this ranks behind getting attempts on the
 board.
-
-
-### B129 - `apply_schema` cannot carry a widened `UNIQUE` constraint to an existing database, so `ON CONFLICT` fails
-
-`schema.sql:255` declares `UNIQUE (finding_id, attempt_index, is_rehearsal)` on `migration_outcome`.
-`GraphStore.apply_schema` applies `CREATE TABLE IF NOT EXISTS` and derives `ADD COLUMN IF NOT EXISTS`
-for newly declared columns. However, against a database created before B79 widened the table's
-natural key, `CREATE TABLE IF NOT EXISTS` skips the table and leaves the existing 2-column unique
-constraint `UNIQUE (finding_id, attempt_index)` untouched.
-
-Every subsequent `INSERT INTO migration_outcome ... ON CONFLICT (finding_id, attempt_index, is_rehearsal)`
-fails with `psycopg.errors.InvalidColumnReference: there is no unique or exclusion constraint matching the ON CONFLICT specification`.
-
-**Closed in `M8-W218`**: `_reconcile_unique_constraints` added to `src/sync/graph/store.py`, deriving table-level `UNIQUE` constraints from CREATE TABLE bodies and querying `pg_constraint`. Superseded partial unique constraints are dropped and declared unique constraints added during `apply_schema` on existing databases. Tested on an existing database in `tests/test_migration_corpus.py`.
-
-
-### B130 - `corpus.record` swallows write failures silently, so systematic corpus drops run forever
-
-`corpus.record` catches every exception from `_record`, logs a warning, and returns `False`
-(`src/sync/remediate/corpus.py`). While a bookkeeping write failure must not crash an in-flight
-remediation run, swallowing the exception left no queryable failure state or counter for an operator
-or driver when every write systematically failed (as occurred with B129).
-
-**Closed in `M8-W218`**: `make_recorder` now returns `CorpusRecorder`, tracking `.attempt_count`, `.success_count`, `.failure_count`, and `.errors` without raising or breaking customer runs. Tested in `tests/test_migration_recording.py`.
-
 
 
 ### B145 — Context savings is a model presented as a measurement, on one branch only
