@@ -1,8 +1,8 @@
 /**
- * The frame every level renders inside: a fixed icon rail, a contextual sidebar, and the content.
+ * The frame every level renders inside: one full-height sidebar, and the content column beside it.
  */
 
-import { useEffect, useRef, useState } from "react"
+import { useEffect, useRef } from "react"
 import {
   FileWarning,
   FolderTree,
@@ -25,16 +25,12 @@ import {
   AREAS,
   DESTINATIONS,
   ROUTES,
-  areaForPathname,
   boundParams,
   destinationHref,
   isActiveMenuItem,
-  type Area,
-  type AreaEntry,
   type GraphLevel,
   type RouteEntry,
 } from "@/lib/routes"
-import { cn } from "@/lib/utils"
 import {
   Sidebar,
   SidebarContent,
@@ -46,9 +42,7 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
   SidebarProvider,
-  useSidebar,
 } from "@/vendor/supabase/ui/sidebar"
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/vendor/supabase/ui/tooltip"
 
 const DESTINATION_ICON: Record<string, LucideIcon> = {
   "/": Radar,
@@ -62,16 +56,6 @@ const DESTINATION_ICON: Record<string, LucideIcon> = {
   "/findings/:findingId/workflow/pull-request": GitPullRequest,
 }
 
-const AREA_ICON: Record<Area, LucideIcon> = {
-  fleet: Radar,
-  codebase: FolderTree,
-  "api-services": Plug,
-  signals: Radio,
-  observe: Layers,
-  remediation: Wrench,
-}
-
-const RAIL_ITEM = "flex size-8 items-center justify-center rounded-control"
 /**
  * The rail slot was a disabled button reading "Settings arrives with the write path" for as
  * long as no screen existed. The screen exists now and is read-only, so the note says which of
@@ -79,106 +63,7 @@ const RAIL_ITEM = "flex size-8 items-center justify-center rounded-control"
  */
 const SETTINGS_NOTE = "Settings — read-only until the write path lands"
 
-const SETTINGS = DESTINATIONS.find((entry) => entry.path === "/settings")!
 
-function RailItem({
-  area,
-  active,
-  onSelect,
-}: {
-  area: AreaEntry
-  active: boolean
-  onSelect: (id: Area) => void
-}) {
-  const Icon = AREA_ICON[area.id]
-  const className = cn(
-    RAIL_ITEM,
-    active
-      ? "bg-surface-emphasis text-foreground"
-      : "text-graphics hover:bg-surface-subtle hover:text-foreground"
-  )
-  const mark = <Icon aria-hidden="true" className="size-5" />
-
-  return (
-    <li>
-      <Tooltip>
-        <TooltipTrigger asChild>
-          {area.landing === null ? (
-            <button
-              type="button"
-              aria-label={area.label}
-              aria-current={active ? "true" : undefined}
-              onClick={() => onSelect(area.id)}
-              className={className}
-            >
-              {mark}
-            </button>
-          ) : (
-            <Link
-              to={area.landing}
-              aria-label={area.label}
-              aria-current={active ? "true" : undefined}
-              className={className}
-            >
-              {mark}
-            </Link>
-          )}
-        </TooltipTrigger>
-        <TooltipContent side="right">{area.label}</TooltipContent>
-      </Tooltip>
-    </li>
-  )
-}
-
-function AreaRail({
-  activeId,
-  onSelect,
-}: {
-  activeId: Area
-  onSelect: (id: Area) => void
-}) {
-  const { state, setOpen } = useSidebar()
-
-  return (
-    <nav
-      aria-label="Areas"
-      data-state={state}
-      onMouseEnter={() => setOpen(true)}
-      onMouseLeave={() => setOpen(false)}
-      onFocus={() => setOpen(true)}
-      onBlur={() => setOpen(false)}
-      className="sticky top-12 flex h-[calc(100vh-3rem)] w-10 shrink-0 flex-col border-r border-line bg-sidebar py-row"
-    >
-      <ul className="flex flex-1 flex-col items-center gap-field">
-        {AREAS.map((area) => (
-          <RailItem
-            key={area.id}
-            area={area}
-            active={area.id === activeId}
-            onSelect={onSelect}
-          />
-        ))}
-        <li className="mt-auto">
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <NavLink
-                to={SETTINGS.path}
-                aria-label={SETTINGS.label}
-                title={SETTINGS_NOTE}
-                className={({ isActive }) =>
-                  cn(RAIL_ITEM, isActive ? "bg-surface-subtle text-foreground" : "text-graphics")
-                }
-              >
-                <Settings aria-hidden="true" className="size-5" />
-              </NavLink>
-            </TooltipTrigger>
-            <TooltipContent side="right">{SETTINGS_NOTE}</TooltipContent>
-          </Tooltip>
-        </li>
-      </ul>
-    </nav>
-  )
-}
 
 function DestinationRow({
   route,
@@ -267,28 +152,70 @@ function LevelGroup({
   )
 }
 
-function ContextualSidebar({ area, pathname }: { area: AreaEntry; pathname: string }) {
+/**
+ * One sidebar, full height, holding every destination.
+ *
+ * **Two tiers became one, which is a return rather than a new idea.** `M7-W160` built exactly this
+ * — its message says "a sidebar that expands to show extra information and minimises to a thin
+ * width is one" component — after the owner ruled against a 56px icon rail beside a 240px
+ * contextual panel on 2026-08-06. `M7-W171` then re-introduced the two-tier chassis, and the owner
+ * ruled against it a second time. This restores the ruling.
+ *
+ * **Deleting the rail is what forces the list to hold every area.** The rail was the only way to
+ * reach an area other than the current one, so a sidebar that still rendered `area.levels` alone
+ * would have made five of six areas unreachable — a navigation regression that no route test would
+ * catch, because the routes still exist. Every area is a group here for that reason, and
+ * `app-frame.test.tsx` asserts the reachability directly.
+ */
+function AppSidebar({ pathname }: { pathname: string }) {
   const bound = boundParams(pathname)
 
   return (
     <Sidebar
       collapsible="none"
-      className="sticky top-12 h-[calc(100vh-3rem)] shrink-0 border-r border-line bg-sidebar"
+      className="sticky top-0 h-svh shrink-0 border-r border-line bg-sidebar"
     >
       <nav aria-label="Destinations" className="flex min-h-0 flex-1 flex-col">
         <SidebarHeader className="gap-field px-row py-section">
           <div className="flex items-baseline gap-field pb-field border-b border-line mb-field">
-            <span className="font-semibold text-base tracking-tight text-foreground">sync</span>
-            <span className="font-semibold text-base text-emerald-400">.</span>
+            <span className="font-semibold text-emphasis tracking-tight text-foreground">sync</span>
             <span className="ml-auto font-mono text-meta uppercase tracking-wider text-muted-foreground">console</span>
           </div>
-          <h2 className="text-emphasis text-foreground">{area.label}</h2>
-          <p className="text-meta text-ink-muted">{area.purpose}</p>
         </SidebarHeader>
         <SidebarContent>
-          {area.levels.map((level) => (
-            <LevelGroup key={level} level={level} pathname={pathname} bound={bound} />
+          {AREAS.map((entry) => (
+            <div key={entry.id} className="flex flex-col">
+              <p className="furniture px-row pt-field text-meta text-ink-muted">{entry.label}</p>
+              {entry.levels.map((level) => (
+                <LevelGroup key={level} level={level} pathname={pathname} bound={bound} />
+              ))}
+            </div>
           ))}
+
+          {/* `DESTINATIONS` is a separate registry from `ROUTES` and its entries sit at no graph
+              level, so `LevelGroup` — which filters `ROUTES` by level — renders none of them. The
+              rail carried Settings in a hard-coded slot; deleting the rail without this group would
+              have removed the only way to reach it, while every routing test stayed green because
+              the route still exists. */}
+          <div className="flex flex-col">
+            <p className="furniture px-row pt-field text-meta text-ink-muted">Deployment</p>
+            <SidebarGroup>
+              <SidebarGroupContent>
+                <SidebarMenu>
+                  {DESTINATIONS.map((entry) => (
+                    <SidebarMenuItem key={entry.path}>
+                      <SidebarMenuButton asChild isActive={pathname === entry.path}>
+                        <NavLink to={entry.path} title={SETTINGS_NOTE}>
+                          <Settings aria-hidden="true" className="size-4 text-graphics" />
+                          <span className="text-body">{entry.label}</span>
+                        </NavLink>
+                      </SidebarMenuButton>
+                    </SidebarMenuItem>
+                  ))}
+                </SidebarMenu>
+              </SidebarGroupContent>
+            </SidebarGroup>
+          </div>
         </SidebarContent>
         <div className="mt-auto flex flex-col gap-field border-t border-line px-row py-field">
           <p className="text-meta text-ink-muted leading-snug">
@@ -341,38 +268,45 @@ export function AppFrame() {
     contentRef.current?.focus()
   }, [pathname])
 
-  const [picked, setPicked] = useState<{ id: Area; at: string } | null>(null)
-  if (picked !== null && picked.at !== pathname) setPicked(null)
-
-  const activeId = picked !== null && picked.at === pathname ? picked.id : areaForPathname(pathname)
-  const area = AREAS.find((entry) => entry.id === activeId) ?? AREAS[0]
+  // No area-selection state. It existed only so the rail could show one area's destinations while
+  // the pointer hovered another; with one list holding every area, there is nothing to select.
 
   return (
     <CommandPaletteProvider>
-      <div className="flex min-h-svh flex-col bg-background text-foreground">
-        <ErrorSurface />
+      {/* The sidebar is the first child and owns the full height; the bar lives inside the content
+          column beside it, not across the top of both. The owner's instruction was that the top bar
+          must not sit in front of the sidebar, and mock v1 already draws it this way — its nav
+          measures {x:0, y:0, 246x900} and its header starts at x:246.
 
-        <header
-          role="banner"
-          className="sticky top-0 z-30 flex h-12 shrink-0 items-center justify-between gap-section border-b border-line bg-background px-section"
-        >
-          <div className="flex min-w-0 flex-1 items-center">
-            <ScopeTrail />
-          </div>
-          <CommandPaletteTrigger />
-        </header>
+          `ErrorSurface` moved inside the content column with the bar, and that is a decision rather
+          than a consequence of moving the header. Above the chassis it displaced everything
+          including the navigation; here it displaces only the content. Navigation should survive a
+          panel's failure — you need it most when something is broken. `app-frame.test.tsx` passes
+          either way, so nothing in CI would have told us which one shipped. */}
+      <SidebarProvider
+        defaultOpen={false}
+        className="flex min-h-svh items-start bg-background text-foreground"
+      >
+        <AppSidebar pathname={pathname} />
 
-        <SidebarProvider defaultOpen={false} className="min-h-0 flex-1 items-start">
-          <AreaRail activeId={activeId} onSelect={(id) => setPicked({ id, at: pathname })} />
-          <ContextualSidebar area={area} pathname={pathname} />
+        <div className="flex min-w-0 flex-1 flex-col">
+          <ErrorSurface />
 
-          <div className="flex min-w-0 flex-1 flex-col">
-            <main ref={contentRef} tabIndex={-1} className="flex flex-1 flex-col gap-8 p-frame outline-none">
-              <Outlet />
-            </main>
-          </div>
-        </SidebarProvider>
-      </div>
+          <header
+            role="banner"
+            className="sticky top-0 z-30 flex h-12 shrink-0 items-center justify-between gap-section border-b border-line bg-background px-section"
+          >
+            <div className="flex min-w-0 flex-1 items-center">
+              <ScopeTrail />
+            </div>
+            <CommandPaletteTrigger />
+          </header>
+
+          <main ref={contentRef} tabIndex={-1} className="flex flex-1 flex-col gap-8 p-frame outline-none">
+            <Outlet />
+          </main>
+        </div>
+      </SidebarProvider>
     </CommandPaletteProvider>
   )
 }

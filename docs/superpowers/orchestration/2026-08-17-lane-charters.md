@@ -108,9 +108,22 @@ Every iteration, in order. Do not skip step 0, step 1 or step 6.
    ```
    If the ancestor check fails, the branch diverged: merge again and re-check. Never force-push,
    never open a pull request, never push a branch to `main` you have not gated.
-7. **Report.** Send `worker_done` naming the commit range that landed, what you gated, and what you
-   deliberately did not do. The coordinator re-dispatches you immediately; you do not need to ask
-   for more work.
+7. **Report, then re-arm yourself.** Send the report by
+   `orca orchestration send --to <coordinator handle>` naming the commit range that landed, what you
+   gated, and what you deliberately did not do. **Then go straight to step 1 and take the next item
+   yourself. Do not wait to be dispatched.**
+
+   **Amended 2026-08-17 evening, and the amendment fixes a stall the coordinator caused.** This step
+   used to say `worker_done`, and that the coordinator re-dispatches you. Then `worker-done` started
+   being rejected -- `capability is revoked` once a re-dispatch supersedes the address -- and every
+   lane was told to report by message instead. Nobody replaced the thing that re-armed them. Four
+   lanes were found idle at a prompt in one sweep, three of them having finished cleanly and stopped:
+   *"standing by for any newly scheduled cross-lane units."* Waiting for a dispatch that no longer
+   comes is indistinguishable from working, from the outside, until a sweep reads the terminal.
+
+   If your queue is genuinely empty, say so and name what you would take next. **An honest empty
+   queue is a result. Standing idle silently is not** -- it costs the same wall-clock as being
+   blocked while telling nobody.
 
 If an iteration produces nothing landable -- the item turned out to be already done, or blocked --
 report that as `worker_done` with `--outcome succeeded` and say so plainly. An honest empty

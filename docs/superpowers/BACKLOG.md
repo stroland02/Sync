@@ -17,6 +17,17 @@ merge two weeks later — the same class of collision `B116` was hand-picked to 
 documented below at that entry. A number chosen against `main` alone is chosen blind to whatever
 another branch has already claimed.
 
+**Checked and closed, 2026-08-17 evening: `repo-context` is fully superseded and holds nothing.**
+A sweep of every worktree found exactly one carrying unlanded commits — `repo-context`, three
+docs commits from 2026-08-06, eleven days stale. Landing it was never an option: its diff against
+`main` is **67,430 deletions across 524 files**, because it predates the entire console rebuild.
+Its content was compared file by file rather than assumed. The plan is **byte-identical** to
+`main`'s. The spec differs only by being *older* — `main`'s version records that the same design
+was written independently on `repo-context` and `superlog-reference` and reconciled into one text
+at the 2026-08-16 merge, which the branch copy predates. The `B116` entry likewise. **Nothing is
+recoverable from it and nothing is lost by leaving it.** Recorded here so the next sweep does not
+spend the same twenty minutes deciding.
+
 **A worktree with no commits in the last week and an unmerged branch is a backlog item, not
 invisible capacity.** Paused work does not surface itself: three branches (M3-W113, M3-W114,
 M3-W115) sat finished-but-unreviewed for seventeen days before a session's unrelated cleanup sweep
