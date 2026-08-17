@@ -49,6 +49,14 @@ from pathlib import Path
 # a lane dead.
 DEFAULT_SILENCE_MINUTES = 10
 
+# Which terminal each lane belongs to, for the case a dispatch never recorded one. A dispatch
+# stores its assignee only once `worker-start` succeeds, and the most common stall is that it
+# never did -- so precisely the lanes that most need resuming are the ones with no handle on
+# them. The coordinator writes this map beside the script; it is read next to the script rather
+# than from a repository path, because this script is installed outside any worktree so that it
+# survives one being deleted.
+LANE_TERMINALS = Path(__file__).resolve().parent / "lane_terminals.json"
+
 _WINDOWS_INSTALL = Path(
     os.environ.get("LOCALAPPDATA", "")
 ) / "Programs" / "orca" / "resources" / "bin" / "orca"
@@ -111,6 +119,21 @@ def live_terminals(cli: str) -> dict[str, int]:
     }
 
 
+def recorded_terminals() -> dict[str, str]:
+    """The coordinator's task-to-terminal map, or empty when it is absent.
+
+    Absent is a legitimate state -- the map is an aid, not a requirement -- so a missing or
+    unreadable file degrades to "no fallback placement" rather than stopping the sweep.
+    """
+    if not LANE_TERMINALS.exists():
+        return {}
+    try:
+        loaded = json.loads(LANE_TERMINALS.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError):
+        return {}
+    return {k: v for k, v in loaded.items() if k.startswith("task_") and isinstance(v, str)}
+
+
 def lane_name(spec: str) -> str:
     """The lane label out of a task spec, for a log line a human can scan."""
     head = (spec or "").strip().split(".")[0]
@@ -161,6 +184,7 @@ def main() -> int:
         return 0
 
     terminals = live_terminals(cli)
+    recorded = recorded_terminals()
     silence_ms = args.silence_minutes * 60 * 1000
     restarted = 0
 
@@ -181,7 +205,7 @@ def main() -> int:
         # Re-attach to the terminal the lane already owns when we still know it, so a lane keeps its
         # worktree and its conversation. Without a handle there is nothing to re-attach to, and
         # choosing a new placement is a coordinator decision rather than this script's.
-        handle = dispatch.get("assignee_handle")
+        handle = dispatch.get("assignee_handle") or recorded.get(task["id"])
         if not handle or handle not in terminals:
             print(f"MANUAL  {label}: {why}; no live terminal to re-attach, coordinator must place it")
             continue
