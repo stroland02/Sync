@@ -63,6 +63,7 @@ import { ObservedShapesTable } from "@/features/telemetry/observed-shapes-table"
 import { IndexCoverageCard } from "@/features/repositories/index-coverage-card"
 import { OpenFindingsCard } from "@/features/repositories/open-findings-card"
 import { ChangeUnitsTable } from "@/features/fleet/change-units-table"
+import { Breadcrumbs } from "@/layouts/breadcrumbs"
 import { ControlBar } from "@/layouts/control-bar"
 import { FooterBar } from "@/layouts/footer-bar"
 import { PageHeader } from "@/layouts/page-header"
@@ -264,6 +265,11 @@ function PageHeaderRegion({ repoId, question }: { repoId: string; question: stri
   return (
     <div className="flex flex-col gap-section">
       <PageHeader
+        trail={
+          <Breadcrumbs
+            trail={[{ label: "Repositories", to: "/" }, { label: repoId }]}
+          />
+        }
         title={<span className="font-mono">{repoId}</span>}
         question={question}
       />
