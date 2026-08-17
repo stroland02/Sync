@@ -66,6 +66,7 @@ from sync.signals.intake import (
     read_registry_apis,
     read_sdk_repositories,
 )
+from sync.signals.intake_attempt import execute_intake_attempt
 from sync.signals.registry_tier.directory import parse_directory
 from sync.signals.reachability import observed_call_counts, rank_reachability
 from sync.signals.registry import (
@@ -1089,7 +1090,13 @@ def run(args: argparse.Namespace, today: date | None = None) -> int:
             # a wrong number a reader would trust for being the larger one.
             unread = sorted(set(literal_unread) | set(_adapter_unread(adapter, repo)))
 
-            for change in vendor.fetch_changes(args.from_version, args.to_version):
+            changes, _ = execute_intake_attempt(
+                vendor,
+                args.from_version,
+                args.to_version,
+                sink=store if hasattr(store, "record_intake_attempt") else None,
+            )
+            for change in changes:
                 store.upsert_vendor_change(change)
 
             for change in model_deprecations:
