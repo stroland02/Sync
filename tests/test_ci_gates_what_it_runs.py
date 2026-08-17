@@ -336,3 +336,28 @@ def test_the_beta_gates_publish_where_they_can_be_read_without_cloning():
             f"job {name!r} measures the gates and publishes nothing, so the answer lives only in "
             "a log nobody opens"
         )
+
+
+def test_the_published_summary_is_read_back_and_checked():
+    """The publication is the whole point of the job, and it was the one part only simulated.
+
+    `--summary "$GITHUB_STEP_SUMMARY"` writing nothing would look identical to it working: the
+    step still exits 0, the log still carries the plain-text report, and GitHub's check-run API
+    does not expose job summaries, so a reader cannot tell a published summary from an empty one
+    without opening the run page and trusting their eyes.
+
+    That is the shape of thing this repository spent a day finding -- the safety net that reported
+    success while doing nothing. So the job reads its own summary back and fails if it is empty or
+    missing a gate. This step MAY fail the build: a publication that silently did nothing is a
+    broken job, not a readiness verdict, and the `--exit-zero` carve-out is for verdicts only.
+    """
+    for name, job in _beta_gate_jobs():
+        scripts = [_script(step) for step in job.get("steps", [])]
+        readback = [s for s in scripts if "GITHUB_STEP_SUMMARY" in s and "beta_gates.py" not in s]
+        assert readback, (
+            f"job {name!r} writes a summary and never reads it back, so a publication that wrote "
+            "nothing is indistinguishable from one that worked"
+        )
+        assert any("Gate 4" in s or "grep" in s for s in readback), (
+            f"job {name!r} reads the summary back without checking it carries the gates"
+        )
