@@ -391,6 +391,48 @@ confidently instead of refusing.
 
 ## Ready
 
+### B174 — `extract_credential` cannot tell malformed base64 from non-UTF-8 credentials — Lane E
+
+**Accounted rather than broken, and filed rather than fixed.** `CI-W304` added this clause to
+`SUBSUMING` under `_GUARDS_A_READ` because it genuinely guards a read; this is the narrowing that
+accounting concluded it wants. `src/sync/api/auth.py` is Lane E's file and the change is
+behaviour-adjacent, so it is written here rather than into their tree while they are mid-unit.
+
+```python
+if scheme == "basic":
+    try:
+        decoded = base64.b64decode(token).decode("utf-8")
+        _, _, password = decoded.partition(":")
+        return password
+    except Exception:
+        return None
+```
+
+**The current behaviour is correct and should not change.** Returning `None` denies the request,
+and a credential that is not text cannot match a configured password. Nothing here is a
+vulnerability.
+
+**What the clause loses is the ability to tell two different facts apart.** `except Exception`
+catches `binascii.Error` from malformed base64 and `UnicodeDecodeError` from well-formed base64
+carrying non-UTF-8 bytes, and those say different things about a caller — a broken client against
+a client sending bytes that are not a credential at all. This is the most attacker-controlled read
+in the tree: an `Authorization: Basic` header from an unauthenticated request, reached before any
+credential check.
+
+It also catches anything else that arm could ever raise, which is the ordinary cost of a bare
+`except Exception` over three statements rather than a specific complaint about this one.
+
+**Closes when:** the clause names what it means — `except (binascii.Error, UnicodeDecodeError)` is
+the whole change — or the entry is closed as declined with the reason, which is a defensible answer
+given nothing observable changes. If it is narrowed, `SUBSUMING` in `tests/test_decode_handlers.py`
+must lose the `sync/api/auth.py::extract_credential::Exception` key in the same commit, because
+`test_no_entry_in_the_subsuming_census_is_gone` fails on a census entry that describes nothing.
+
+**Numbering note.** Taken from `B174` rather than the `B150-B154` block the dispatch named: that
+block is fully used, and `B173` was reassigned to Lane B when its own block ran out at `B149`.
+`B174` is the last free number in Lane C's allocation.
+
+
 ### B172 — wire the visual eval into CI once Lane B settles the extraction mechanism
 
 **Not startable yet, deliberately.** Lane B is still deciding between the in-house script and
