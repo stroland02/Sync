@@ -148,8 +148,15 @@ jobs:
       # `set -o pipefail` is load-bearing: without it the step reports `tee`'s status, and a
       # failing suite passes straight through -- the same defect the coverage step below was
       # fixed for, which this capture would otherwise reintroduce here.
+      # `always()` on its own was wrong and CI said so on the first push: this job exits at
+      # `Dead links`, seven steps above, while that arbitration stands, so no log was written and
+      # this step failed with `suite-test.log does not exist` -- a second red naming a file, for a
+      # run that had already failed elsewhere. The refusal of a missing path stays, because a
+      # checker pointed at nothing must not report success; what was wrong was asking it about a
+      # suite that never ran. `hashFiles` is empty for a missing file and is the only way to ask
+      # that here without a step id.
       - name: Was that run trustworthy
-        if: always()
+        if: always() && hashFiles('suite-test.log') != ''
         run: uv run python scripts/gate_verdict.py suite-test.log
 
       # The corpus has two frozen inputs and this job used to stage one of them. `repositories.yaml`
@@ -323,7 +330,7 @@ jobs:
       # Same argument as `test`. `-n0` has no workers to lose, but it can still be killed before
       # its summary, and a run with no summary line is not a result either.
       - name: Was that run trustworthy
-        if: always()
+        if: always() && hashFiles('suite-serial.log') != ''
         run: uv run python scripts/gate_verdict.py suite-serial.log
 
   # Recorded, never gated. `2026-07-27-sync-benchmark-gates.md` forbids inventing a
@@ -437,7 +444,7 @@ jobs:
       # This job is the whole of a scheduled run, so an unreadable verdict here is a nightly that
       # reports nothing at all -- the same shape as the discarded exit code above, one step later.
       - name: Was that run trustworthy
-        if: always()
+        if: always() && hashFiles('suite-coverage.log') != ''
         run: uv run python scripts/gate_verdict.py suite-coverage.log
 
   # No Postgres and no Python: `web/` is a standalone Vite + React console, not part of the
