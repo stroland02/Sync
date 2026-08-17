@@ -49,6 +49,35 @@ class PullRequest:
     url: str
 
 
+@dataclass(frozen=True)
+class PullRequestOutcome:
+    """What became of a pull request Sync opened.
+
+    `migration_outcome` has carried `pr_merged`, `pr_merged_at` and `human_edits_before_merge`
+    since the corpus existed, and `sync.benchmark.axes` computes merge rate from them. Nothing
+    has ever written them. That is the whole reason merge rate has never had a sample: the
+    consumer was built and the producer was not, and a rate over zero decided rows reports as
+    absent rather than as wrong, so nothing complained.
+
+    **`merged` is three-valued and the third value is the load-bearing one.** `axes.py` already
+    states the rule this has to satisfy -- *"a null `pr_merged` is a webhook that has not
+    arrived, not a rejection"* -- so a pull request still open answers `None` rather than
+    `False`. A reviewer who has not decided and a reviewer who said no are different facts, and
+    folding them together would understate merge rate by exactly the number of pull requests
+    still waiting, which is largest at the moment the figure is first looked at.
+
+    `commits_by_others` counts commits on the pull request authored by anyone but Sync. That is
+    what `human_edits_before_merge` means: not whether a human touched the branch, but how much
+    they had to. Zero is a real measurement here and not an absence -- a pull request that
+    merged untouched is the outcome the product is claiming it can produce.
+    """
+
+    number: int
+    merged: bool | None
+    merged_at: str | None
+    commits_by_others: int
+
+
 def _gh() -> str:
     found = shutil.which("gh")
     if found is None:
@@ -63,6 +92,34 @@ def _owner_repo(url: str) -> str:
     trimmed = url.rstrip("/").removesuffix(".git")
     segments = trimmed.replace(":", "/").split("/")
     return f"{segments[-2]}/{segments[-1]}"
+
+
+def _commits_by_others(commits: list[dict]) -> int:
+    """How many commits on a pull request Sync did not author.
+
+    `human_edits_before_merge` is the axis this feeds, and the question it asks is how much a
+    reviewer had to do before the patch was acceptable -- so the unit is commits rather than
+    lines, which is what the forge can actually observe without fetching diffs.
+
+    A commit carries several authors in `gh`'s shape (`authors` is a list, because a co-authored
+    commit has more than one), and one is counted as Sync's only when *every* author is Sync.
+    A commit co-authored by a reviewer is a commit a reviewer worked on, whatever else is true
+    of it, and counting it as ours would report a patch as untouched when it was not.
+
+    An author with no email is counted as somebody else. `gh` omits the address for a commit
+    whose author it cannot resolve to a GitHub account, and treating unresolvable as ours would
+    make the figure smallest exactly where the provenance is least clear.
+    """
+    total = 0
+    for commit in commits:
+        authors = commit.get("authors") or []
+        if not authors:
+            # A commit `gh` reports with no author at all is not evidence that Sync wrote it.
+            total += 1
+            continue
+        if not all(author.get("email") == COMMIT_AUTHOR_EMAIL for author in authors):
+            total += 1
+    return total
 
 
 def branch_name_for(patch: Patch, repo: RepoRef) -> str:
@@ -570,6 +627,60 @@ class GitHubForge:
             path,
         )
         return PullRequest(number=self._pull_request_number(repo, url), url=url)
+
+    def pull_request_outcome(self, repo: RepoRef, number: int) -> PullRequestOutcome:
+        """Ask GitHub what happened to a pull request Sync opened.
+
+        The half of the loop that was never built. `open_pull_request` returns a number and the
+        run ends; nothing since has asked what the number became, so three of the five quality
+        axes have no sample and `pr_merged` is null on every row the corpus holds.
+
+        **State is read from `mergedAt` rather than from `state`, and the two disagree in the
+        case that matters.** `gh` reports `state` as `MERGED` or `CLOSED`, and a merged pull
+        request is also closed -- so a check written against `CLOSED` alone records a merge as a
+        rejection. `mergedAt` is present exactly when a merge happened, which makes it the field
+        that answers the question being asked.
+
+        A pull request still open answers `merged=None`. That is not "we could not tell": it is
+        the reviewer not having decided, and `sync.benchmark.axes` already excludes a null from
+        the rate it computes for precisely that reason.
+
+        Commits are counted rather than sampled. `gh pr view --json commits` returns every
+        commit on the head branch with its author, and Sync's own are the ones whose author
+        email is `COMMIT_AUTHOR_EMAIL` -- the address `push_branch` sets per-invocation, so the
+        comparison is against a constant this module owns rather than against whatever identity
+        the host machine's git config happens to carry.
+        """
+        raw = self._run(
+            [_gh(), "pr", "view", str(number),
+             "--repo", repo.url,
+             "--json", "number,state,mergedAt,commits"],
+            Path(repo.local_path),
+        )
+        payload = json.loads(raw)
+
+        state = payload.get("state")
+        if not isinstance(state, str):
+            # Refused rather than defaulted. Every branch below turns on this value, and a
+            # missing one guessed as open writes a null the next run reads as "still waiting" --
+            # a row that never resolves and never complains.
+            raise RuntimeError(f"gh pr view returned no state for #{number}: {raw}")
+
+        merged_at = payload.get("mergedAt")
+        merged: bool | None
+        if merged_at is not None:
+            merged = True
+        elif state == "OPEN":
+            merged = None
+        else:
+            merged = False
+
+        return PullRequestOutcome(
+            number=payload.get("number", number),
+            merged=merged,
+            merged_at=merged_at,
+            commits_by_others=_commits_by_others(payload.get("commits") or []),
+        )
 
     def _pull_request_number(self, repo: RepoRef, url: str) -> int:
         """The number GitHub gave the pull request at `url`.
