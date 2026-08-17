@@ -171,6 +171,7 @@ VENDOR_CASES: dict[str, VendorCase] = {
     "twilio": VendorCase(
         stage=_stage_twilio,
         known_symbol="twilio.insights.v1.calls.fetch",
+        correlation=(("GET", "/v1/Voice/CA1234567890abcdef1234567890abcdef"), "CA1234567890abcdef1234567890abcdef"),
     ),
     "anthropic": VendorCase(stage=_stage_nothing, known_symbol="anthropic.messages.create"),
     "openai": VendorCase(stage=_stage_nothing, known_symbol="openai.responses.create"),

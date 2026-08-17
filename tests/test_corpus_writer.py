@@ -176,17 +176,16 @@ def _terminal_statuses_recorded_by(path: Path) -> set[str]:
 
 
 def test_the_verification_boundary_records_without_a_push():
-    """Four call sites, and the positive class no longer sits entirely behind a push.
+    """Five call sites: retried, opened, abandoned, halted, and external_cause.
 
     `retried` closes an attempt another is about to supersede and `abandoned` is the negative
     class. `opened` is still written only after `forge.open_pull_request` returns a URL, and is
     still the only status carrying a `pr_number`. `halted` is the fourth: a patch that verified
     inside an assembly with no forge, which is an attempt that ran and so owes a row.
-
-    Fails when a fifth status appears.
+    `external_cause` is the fifth: reporting an external condition (vendor outage/sandbox 503).
     """
     assert _terminal_statuses_recorded_by(NODES) == {
-        "retried", "opened", "abandoned", "halted",
+        "retried", "opened", "abandoned", "halted", "external_cause",
     }
 
 

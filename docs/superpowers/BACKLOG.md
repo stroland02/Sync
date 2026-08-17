@@ -410,15 +410,14 @@ write to the one table `build_graph` refuses a store without.
 write every benchmark axis reads from. Merge rate, routing accuracy and cost per merged patch
 have never had a sample, and this is a second reason why: even a run that reached a pull request
 would have recorded nothing. It also silently disarms B79's own fix — the rehearsal/production
-collision that entry closed is open again on every pre-B79 database, because the constraint that
-separates them is not there.
+is_rehearsal)`. `schema.sql` declares that unique constraint, and `apply_schema` executes `CREATE
+TABLE IF NOT EXISTS` -- which does nothing when the table already exists under the old
+single-column unique constraint. So every fresh database worked, and every database created before
+B79 failed every corpus write forever with no error in the log anyone saw.
 
-**No test catches it.** `tests/conftest.py` gives every run a fresh database, so the schema is
-always applied to an empty one and the widened constraint always lands. This is the exact shape
-`CLAUDE.md` names for the encoding defects: correct by construction in the fixture, wrong against
-anything real.
-
-**Evidence that closes this:** `apply_schema` reconciles the constraint on a database that
+**What closes it:** `GraphStore.apply_schema` checks whether `migration_outcome`'s unique constraint
+matches the schema and alters it when it does not -- `ALTER TABLE migration_outcome DROP CONSTRAINT
+...; ALTER TABLE migration_outcome ADD CONSTRAINT ...` in the same migration block. Tested against a database that
 already holds the old one, proved by a test that creates the table with the two-column key,
 applies the schema, and watches a write that previously raised succeed — and proved able to fail
 by running that test against the current `apply_schema` first. A fresh-database test proves
@@ -3240,4 +3239,29 @@ a bucket.
 `migration_outcome` rows across 3 `(change_kind, tier)` groups, with **one** abandonment. There is
 no signal to learn from yet whatever the schema does, so this ranks behind getting attempts on the
 board.
+
+
+### B129 - `apply_schema` cannot carry a widened `UNIQUE` constraint to an existing database, so `ON CONFLICT` fails
+
+`schema.sql:255` declares `UNIQUE (finding_id, attempt_index, is_rehearsal)` on `migration_outcome`.
+`GraphStore.apply_schema` applies `CREATE TABLE IF NOT EXISTS` and derives `ADD COLUMN IF NOT EXISTS`
+for newly declared columns. However, against a database created before B79 widened the table's
+natural key, `CREATE TABLE IF NOT EXISTS` skips the table and leaves the existing 2-column unique
+constraint `UNIQUE (finding_id, attempt_index)` untouched.
+
+Every subsequent `INSERT INTO migration_outcome ... ON CONFLICT (finding_id, attempt_index, is_rehearsal)`
+fails with `psycopg.errors.InvalidColumnReference: there is no unique or exclusion constraint matching the ON CONFLICT specification`.
+
+**Closed in `M8-W218`**: `_reconcile_unique_constraints` added to `src/sync/graph/store.py`, deriving table-level `UNIQUE` constraints from CREATE TABLE bodies and querying `pg_constraint`. Superseded partial unique constraints are dropped and declared unique constraints added during `apply_schema` on existing databases. Tested on an existing database in `tests/test_migration_corpus.py`.
+
+
+### B130 - `corpus.record` swallows write failures silently, so systematic corpus drops run forever
+
+`corpus.record` catches every exception from `_record`, logs a warning, and returns `False`
+(`src/sync/remediate/corpus.py`). While a bookkeeping write failure must not crash an in-flight
+remediation run, swallowing the exception left no queryable failure state or counter for an operator
+or driver when every write systematically failed (as occurred with B129).
+
+**Closed in `M8-W218`**: `make_recorder` now returns `CorpusRecorder`, tracking `.attempt_count`, `.success_count`, `.failure_count`, and `.errors` without raising or breaking customer runs. Tested in `tests/test_migration_recording.py`.
+
 
