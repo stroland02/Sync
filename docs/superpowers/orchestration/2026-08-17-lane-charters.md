@@ -254,6 +254,14 @@ orca orchestration check --terminal <handle> --all --json    # your own mailbox,
 `--all` does not mark anything read, so `read_at` stays null there and cannot be used to tell handled
 from unhandled. Sort by `created_at` and compare against what you have actually acted on.
 
+**And a third channel is in neither inbox.** `orca terminal send --enter` puts text into a lane's
+scrollback as its next input. It never becomes a message, so a lane that reads its inbox rather
+than its own transcript will not find it, and `check --all` will not show it either. Lane C asked
+on 2026-08-17 which item a dispatch referred to, naming its newest inbox message and saying
+correctly that nothing followed it — while the dispatch sat in its scrollback, sent by terminal.
+Use `terminal send` when a message *must* interrupt a busy agent, and follow it with an
+`orchestration send` carrying the same content, so it exists somewhere a lane can look it up.
+
 **The same split is why a lane can be certain it is being ignored while you are certain you replied.**
 Lane A said so directly — *"nothing new is showing up in this dispatch's mailbox; if there are
 messages waiting somewhere else, they're not reaching me"* — and it was right: a ruling that unblocked
