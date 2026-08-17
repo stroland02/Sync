@@ -300,8 +300,9 @@ def test_the_container_tests_skip_rather_than_error_when_no_daemon_answers():
         f"a run with no reachable daemon exited {child.returncode}\n"
         f"--- stdout ---\n{child.stdout}\n--- stderr ---\n{child.stderr}"
     )
-    assert "3 skipped" in child.stdout, (
-        f"expected the three container tests to skip, got:\n{child.stdout}"
+    assert "4 skipped" in child.stdout, (
+        f"expected all four @pytest.mark.docker tests in test_patch_sandbox.py to skip, got:\n"
+        f"{child.stdout}"
     )
     # The counts line rather than the whole output: the skip reason quotes the daemon, and the
     # daemon's own words for an unanswered endpoint are "error during connect". Asserting on
