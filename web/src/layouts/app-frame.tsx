@@ -2,12 +2,13 @@
  * The frame every level renders inside: one full-height sidebar, and the content column beside it.
  */
 
-import { useEffect, useRef } from "react"
+import { useEffect, useRef, useState } from "react"
 import {
   FileWarning,
   FolderTree,
   GitPullRequest,
   Layers,
+  PanelLeft,
   Plug,
   Radar,
   Radio,
@@ -21,6 +22,12 @@ import { Link, NavLink, Outlet, useLocation } from "react-router"
 import { ErrorSurface } from "@/components/error-surface"
 import { CommandPaletteProvider, CommandPaletteTrigger } from "@/layouts/command-palette"
 import { ScopeTrail } from "@/layouts/scope-switchers"
+import {
+  SIDEBAR_WIDTH_EXPANDED,
+  SIDEBAR_WIDTH_MINIMISED,
+  readMinimised,
+  writeMinimised,
+} from "@/layouts/sidebar-collapse"
 import {
   AREAS,
   DESTINATIONS,
@@ -69,10 +76,12 @@ function DestinationRow({
   route,
   pathname,
   bound,
+  minimised,
 }: {
   route: RouteEntry
   pathname: string
   bound: Record<string, string>
+  minimised: boolean
 }) {
   const Icon = DESTINATION_ICON[route.path] ?? Layers
   const current = isActiveMenuItem(route, pathname)
@@ -84,7 +93,7 @@ function DestinationRow({
   const body = (
     <>
       <Icon aria-hidden="true" />
-      <span>{route.label}</span>
+      <span className={minimised ? "sr-only" : undefined}>{route.label}</span>
     </>
   )
 
@@ -130,25 +139,52 @@ function LevelGroup({
   level,
   pathname,
   bound,
+  minimised,
 }: {
   level: GraphLevel
   pathname: string
   bound: Record<string, string>
+  minimised: boolean
 }) {
   const routes = ROUTES.filter((route) => route.level === level)
   if (routes.length === 0) return null
 
   return (
     <SidebarGroup>
-      <SidebarGroupLabel className="furniture text-meta text-ink-muted">{level}</SidebarGroupLabel>
+      <SidebarGroupLabel className="furniture text-meta text-ink-muted">
+        <span className={minimised ? "sr-only" : undefined}>{level}</span>
+      </SidebarGroupLabel>
       <SidebarGroupContent>
         <SidebarMenu>
           {routes.map((route) => (
-            <DestinationRow key={route.path} route={route} pathname={pathname} bound={bound} />
+            <DestinationRow
+              key={route.path}
+              route={route}
+              pathname={pathname}
+              bound={bound}
+              minimised={minimised}
+            />
           ))}
         </SidebarMenu>
       </SidebarGroupContent>
     </SidebarGroup>
+  )
+}
+
+/**
+ * A group heading that keeps its row when the sidebar is minimised.
+ *
+ * **This is what stops every icon beneath it moving.** A heading removed at the narrow width
+ * shortens the column and drags each row below it upward, which is the defect `M7-W160` named and
+ * the reason its predecessor was deleted. The row keeps its height and only the text stops being
+ * visible — `sr-only` rather than `hidden`, so a screen reader still hears the grouping it needs
+ * most when the labels are gone.
+ */
+function GroupHeading({ label, minimised }: { label: string; minimised: boolean }) {
+  return (
+    <p className="furniture flex h-6 items-center px-row pt-field text-meta text-ink-muted">
+      <span className={minimised ? "sr-only" : undefined}>{label}</span>
+    </p>
   )
 }
 
@@ -169,25 +205,64 @@ function LevelGroup({
  */
 function AppSidebar({ pathname }: { pathname: string }) {
   const bound = boundParams(pathname)
+  const [minimised, setMinimised] = useState(readMinimised)
+
+  function toggle() {
+    setMinimised((was) => {
+      writeMinimised(!was)
+      return !was
+    })
+  }
 
   return (
     <Sidebar
       collapsible="none"
-      className="sticky top-0 h-svh shrink-0 border-r border-line bg-sidebar"
+      style={{ width: minimised ? SIDEBAR_WIDTH_MINIMISED : SIDEBAR_WIDTH_EXPANDED }}
+      data-state={minimised ? "minimised" : "expanded"}
+      className="sticky top-0 h-svh shrink-0 overflow-hidden border-r border-line bg-sidebar"
     >
       <nav aria-label="Destinations" className="flex min-h-0 flex-1 flex-col">
         <SidebarHeader className="gap-field px-row py-section">
-          <div className="flex items-baseline gap-field pb-field border-b border-line mb-field">
+          <div className="flex h-6 items-center gap-field pb-field border-b border-line mb-field">
             <span className="font-semibold text-emphasis tracking-tight text-foreground">sync</span>
-            <span className="ml-auto font-mono text-meta uppercase tracking-wider text-muted-foreground">console</span>
+            <span
+              className={
+                minimised
+                  ? "sr-only"
+                  : "ml-auto font-mono text-meta uppercase tracking-wider text-muted-foreground"
+              }
+            >
+              console
+            </span>
           </div>
+          {/* An explicit control, never a hover and never a viewport read. `M7-W171` deleted a
+              `collapsed` state initialised from `window.innerWidth` once at mount with no resize
+              listener, so an operator's choice did not survive a resize. This one persists. */}
+          <button
+            type="button"
+            onClick={toggle}
+            aria-expanded={!minimised}
+            title={minimised ? "Expand the sidebar" : "Minimise the sidebar"}
+            className="flex h-6 items-center gap-field rounded-control px-field text-meta text-ink-muted hover:bg-surface-subtle hover:text-foreground"
+          >
+            <PanelLeft aria-hidden="true" className="size-4 text-graphics" />
+            <span className="sr-only">
+              {minimised ? "Expand the sidebar" : "Minimise the sidebar"}
+            </span>
+          </button>
         </SidebarHeader>
         <SidebarContent>
           {AREAS.map((entry) => (
             <div key={entry.id} className="flex flex-col">
-              <p className="furniture px-row pt-field text-meta text-ink-muted">{entry.label}</p>
+              <GroupHeading label={entry.label} minimised={minimised} />
               {entry.levels.map((level) => (
-                <LevelGroup key={level} level={level} pathname={pathname} bound={bound} />
+                <LevelGroup
+                  key={level}
+                  level={level}
+                  pathname={pathname}
+                  bound={bound}
+                  minimised={minimised}
+                />
               ))}
             </div>
           ))}
@@ -198,16 +273,16 @@ function AppSidebar({ pathname }: { pathname: string }) {
               have removed the only way to reach it, while every routing test stayed green because
               the route still exists. */}
           <div className="flex flex-col">
-            <p className="furniture px-row pt-field text-meta text-ink-muted">Deployment</p>
+            <GroupHeading label="Deployment" minimised={minimised} />
             <SidebarGroup>
               <SidebarGroupContent>
                 <SidebarMenu>
                   {DESTINATIONS.map((entry) => (
                     <SidebarMenuItem key={entry.path}>
                       <SidebarMenuButton asChild isActive={pathname === entry.path}>
-                        <NavLink to={entry.path} title={SETTINGS_NOTE}>
+                        <NavLink to={entry.path} title={SETTINGS_NOTE} aria-label={entry.label}>
                           <Settings aria-hidden="true" className="size-4 text-graphics" />
-                          <span className="text-body">{entry.label}</span>
+                          <span className={minimised ? "sr-only" : "text-body"}>{entry.label}</span>
                         </NavLink>
                       </SidebarMenuButton>
                     </SidebarMenuItem>
@@ -217,7 +292,21 @@ function AppSidebar({ pathname }: { pathname: string }) {
             </SidebarGroup>
           </div>
         </SidebarContent>
-        <div className="mt-auto flex flex-col gap-field border-t border-line px-row py-field">
+        {/* The footer carries a protected sentence, so hiding it at the narrow width is a decision
+            rather than a layout convenience. `.claude/rules/console-surface.md` forbids collapsing
+            a protected sentence behind a disclosure; `sr-only` here is not that. The sentence stays
+            in the document and in the accessibility tree, the sidebar defaults to EXPANDED so it is
+            visible to anyone who has not chosen otherwise, and it returns the moment the operator
+            expands. What it must not do is render as prose in a 48px column, where it would wrap to
+            a dozen lines and push the whole footer off screen — which is how a qualification
+            actually gets lost. */}
+        <div
+          className={
+            minimised
+              ? "sr-only"
+              : "mt-auto flex flex-col gap-field border-t border-line px-row py-field"
+          }
+        >
           <p className="text-meta text-ink-muted leading-snug">
             Nine graph levels, six areas. An area groups a run of levels — it is not a level itself.
           </p>

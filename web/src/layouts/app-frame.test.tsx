@@ -201,6 +201,71 @@ describe("a failure displaces the chassis rather than floating over it", () => {
   })
 })
 
+describe("the sidebar minimises without moving a row", () => {
+  /**
+   * The constraint, carried from `M7-W160`'s commit body and the reason its predecessor was
+   * deleted: **minimising changes density, not navigation.** Every destination reachable expanded
+   * stays reachable minimised, and no icon moves vertically across the state change.
+   *
+   * **jsdom has no layout**, so the vertical offsets themselves cannot be read — `getBoundingClientRect`
+   * returns zeroes. Asserting on those numbers would pass against any tree at all. What is held here
+   * is the structural cause: every row is one fixed-height box in a column, so an icon can only
+   * travel vertically if an element above it enters or leaves the flow. Comparing the sidebar's
+   * ordered element skeleton between the two states catches exactly that, and it is why a group
+   * heading's text goes `sr-only` rather than the heading row being removed.
+   *
+   * This is `M7-W160`'s own guard shape, which was proved red twice before it was trusted.
+   */
+  function skeleton(): string[] {
+    return [...destinations().querySelectorAll("*")].map(
+      (el) => `${el.tagName}/${el.getAttribute("data-destination") ?? ""}`
+    )
+  }
+
+  function toggle(): HTMLElement {
+    return screen.getByRole("button", { name: /minimise the sidebar|expand the sidebar/i })
+  }
+
+  it("keeps the same elements in the same order at both widths", () => {
+    renderAt("/")
+
+    const expanded = skeleton()
+    fireEvent.click(toggle())
+    const minimised = skeleton()
+
+    // Identical, element for element. A heading row that vanished when minimised would shorten this
+    // list and move every icon beneath it upward — which is the defect, not a detail of it.
+    expect(minimised).toEqual(expanded)
+  })
+
+  it("keeps every destination reachable at the minimised width", () => {
+    renderAt("/")
+
+    fireEvent.click(toggle())
+
+    const reachable = [...destinations().querySelectorAll("a[href]")].map((el) =>
+      el.getAttribute("href")
+    )
+    for (const route of ROUTES.filter((r) => !r.path.includes(":"))) {
+      expect(reachable).toContain(route.path)
+    }
+    for (const entry of DESTINATIONS) {
+      expect(reachable).toContain(entry.path)
+    }
+  })
+
+  it("says which state it is in, and offers the other one", () => {
+    renderAt("/")
+
+    // An explicit control with `aria-expanded`, not a hover and not a viewport read. `M7-W171`
+    // deleted a `collapsed` state initialised from `window.innerWidth` once at mount with no resize
+    // listener, so an operator's choice did not survive a resize. Nothing here infers one.
+    expect(toggle().getAttribute("aria-expanded")).toBe("true")
+    fireEvent.click(toggle())
+    expect(toggle().getAttribute("aria-expanded")).toBe("false")
+  })
+})
+
 describe("one sidebar carries every area", () => {
   // The rail is gone and this block replaces the eleven tests that described it. `M7-W160` had
   // already built one list at two widths after the owner ruled against an icon rail beside a
