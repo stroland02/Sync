@@ -19,7 +19,6 @@ import { afterEach, describe, expect, it } from "vitest"
 
 import App from "@/App"
 import {
-  AREAS,
   DESTINATIONS,
   GRAPH_LEVELS,
   ROUTES,
@@ -38,21 +37,6 @@ function routeAt(path: string) {
   return entry
 }
 
-/**
- * The rail's vocabulary, written out rather than imported.
- *
- * Spelled as a literal so this file pins the union instead of agreeing with whatever the registry
- * currently says — `AREA_IDS` rather than `AREAS`, because the registry exports that name and a
- * shadow would make the cross-check below compare the list against itself.
- */
-const AREA_IDS = [
-  "fleet",
-  "codebase",
-  "api-services",
-  "signals",
-  "observe",
-  "remediation",
-] as const
 
 /**
  * A route whose `params` is non-empty needs a subject the registry does not hold — a vendor id,
@@ -115,10 +99,7 @@ describe("the navigation covers the route registry", () => {
   })
 })
 
-describe("the rail groups levels into areas without inventing one", () => {
-  it("gives every route a declared area", () => {
-    for (const route of ROUTES) expect(AREA_IDS).toContain(route.area)
-  })
+describe("the sidebar groups levels into regions without inventing one", () => {
 
   /**
    * The two regions, and the only two structural claims the sidebar needs from the registry.
@@ -173,34 +154,14 @@ describe("the rail groups levels into areas without inventing one", () => {
     }
   })
 
-  it("names the same areas on the rail as the routes claim", () => {
-    expect(AREAS.map((area) => area.id)).toEqual([...AREA_IDS])
-  })
 
   it("claims no level outside GRAPH_LEVELS", () => {
     // The vocabulary is pinned to the specification by `tests/test_console_hierarchy.py`; here:
     // an area groups levels the specification declares and never a level of its own invention.
     for (const route of ROUTES) expect(GRAPH_LEVELS).toContain(route.level)
-    for (const area of AREAS) {
-      for (const level of area.levels) expect(GRAPH_LEVELS).toContain(level)
-    }
   })
 
-  it("files each route under the area that claims its level", () => {
-    // `area` is declared per route and derivable from `level`, which is two spellings of one fact.
-    // This is the assertion that stops them disagreeing.
-    for (const route of ROUTES) {
-      const owner = AREAS.find((area) => area.levels.includes(route.level))
-      expect(route.area).toBe(owner?.id)
-    }
-  })
 
-  it("covers every level exactly once across the areas", () => {
-    // A level in two areas is a destination that appears twice; a level in none is a screen the
-    // rail cannot reach. Both are the failure the reconciliation of 2026-08-05 found.
-    const claimed = AREAS.flatMap((area) => [...area.levels])
-    expect(claimed.sort()).toEqual([...GRAPH_LEVELS].sort())
-  })
 })
 
 describe("a menu item can own more than one route", () => {

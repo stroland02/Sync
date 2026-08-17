@@ -62,9 +62,160 @@ Four things, and only the first is mostly done:
    where telemetry routes 404 for a repository `/api/repositories` lists.
 3. **It comes up on a clean machine from a clean clone.** `scripts/dev_up.py` does this locally
    (`CI-W302`, `CI-W303`). What has never been tested is a *fresh clone by somebody who is not us*.
-4. **It is served somewhere, behind a credential.** `M14-W340` proved the console is servable as a
-   production artefact behind one shared credential. **Where, and under whose credential, is an
-   owner decision and it is now on the critical path.**
+4. ~~It is served somewhere, behind a credential.~~ **Superseded: deployment is local-only.** What
+   replaces it is a packaging target, named by the owner 2026-08-18: **installation must feel like
+   `npx skills add superloglabs/skills --all`** — one command, from the repository, and it works.
+
+**That is a specific and checkable bar, so state what it can and cannot mean here.** `npx` gives a
+Node entry point. Sync is a Python product with a TypeScript console, and it needs Python 3.12, `uv`,
+and a Postgres. **An `npx` wrapper cannot conjure a Python toolchain, and pretending it can is how a
+one-command install becomes a five-minute traceback.** What it can do is be the single thing a person
+types, check every precondition, and say precisely which one is missing and how to fix it —
+`scripts/dev_up.py` already does exactly this (`CI-W302`, `CI-W303`), and it refuses rather than
+dying. The `npx` entry point wraps that and surfaces its messages rather than hiding them.
+
+**Read the Superlog command as a *method*, not a feature list — owner clarification, 2026-08-18.**
+The point is not that it happens to index. The point is **no assembly required**: one command sets up
+*everything the product needs to work*, and the user is never left holding a list of steps. For Sync
+that is the toolchain and its shims, the database and its schema, whatever harnesses and skills the
+product depends on, the console build, the running services, and the index of the target codebase.
+
+**The test is not "does the command exist". It is: after this one command, is there anything a person
+still has to figure out?** Every remaining step is a defect in the command, not a note for the README.
+
+**What the one command actually does, per the owner 2026-08-18: all setup, launch localhost, and
+index the codebase.** That third step is the one that matters and it is the one nobody had scoped.
+It means first-run is not *bring up a product with seed data* — it is **point Sync at a repository
+and watch it build that repository's API dependency graph**. The console then shows the user's own
+call sites, their own vendors, their own findings.
+
+Three consequences, and the first is the whole reason this is worth doing before Wednesday:
+
+- **It is the answer to *is this real*.** Seeded data proves nothing to a sceptic; a graph built from
+  a repository they chose, in front of them, proves the indexer works on code nobody tuned it for.
+- **The INDEX path must survive an arbitrary repository**, not just the corpus fixtures. Unknown
+  frameworks, missing lockfiles, a language we do not index, zero call sites — each needs a legible
+  outcome rather than a traceback. `sync.index` already attributes an unbindable wrapper rather than
+  reporting a false zero (`M5-W311`), which is exactly the shape the rest of it needs.
+- **Seed data becomes a fallback, not the demo.** If indexing the target produces nothing, the
+  console must say *this repository has no calls we recognise* — never show somebody else's data
+  where theirs should be.
+
+The honest form of the promise: **one command to type, one screen of output, and either the product
+is running or you know exactly what to install.** Not: one command that silently installs a language
+runtime.
+
+## The quickstart, designed from Sync's own data
+
+**A competitor's onboarding was supplied as reference on 2026-08-18 and is treated under
+`.claude/rules/interface-originality.md`: the arrangement is learnable, the rendering is not.** What
+transfers is the shape of the journey. What does not transfer is their copy, their step order, their
+key-first posture, or anything their product needs and ours does not.
+
+**The problem, restated before it becomes a design.** A person with a codebase has to get from
+*nothing* to *seeing their own data* without assembling anything. Every step between those two points
+is attrition, and a step that produces an empty screen is worse than no step at all.
+
+**Sync's answer differs from a telemetry product's, and the difference is the strongest thing we
+have.** A telemetry tool's dashboard is empty until traces arrive, so its onboarding must be about
+instrumentation: install an SDK, get a key, wire an exporter, wait for an event. **Sync needs none of
+that to show you something true.** The API dependency graph's first rung is *static* — call sites
+read out of the code itself. So:
+
+**Point Sync at a repository and it shows you real findings before you have configured anything. No
+key, no SDK, no signup, no instrumentation.**
+
+That inverts the usual order — **value before configuration** — and it is not a trick, because the
+provenance rung means the console can say exactly how much that free answer is worth. Which produces
+Sync's own second step, and it is one a telemetry product cannot offer:
+
+1. **Index.** One command. Your repository, your call sites, your vendors, your findings — every
+   binding marked `static`, and the console saying plainly that `static` is what it is.
+2. **Attach telemetry, optionally, and watch bindings move from `static` to `observed`.** The screen
+   shows the upgrade. **You can see precisely what the instrumentation bought you**, which is an
+   argument for instrumenting rather than a precondition to being allowed in.
+3. **Let it open a pull request, when you trust it.** Not first. After you have seen its reasoning on
+   your own code.
+
+**The measurable claim to put in front of an investor:** the local path is *one* command. The
+reference product's is five. That is checkable in front of them, and `dev_up.py` already does it.
+
+**What this means for the docs by Wednesday.** A `README` quickstart that is this journey and nothing
+else, written against what the product actually does — no placeholder keys, no steps that do not
+apply, and no claim the meter cannot support.
+
+## The install target, decided
+
+**Three references now, converging on one shape.** A skills-installer aimed at a coding agent; a
+five-command self-host; and — the clearest of them — `npx @deepseek-ai/dsh web`, which starts a web
+UI on localhost with no clone and no install steps. **The owner has pointed at the same thing three
+times, so stop qualifying it and name a target.**
+
+**Why the clean version is easy for them and not for us, stated once so nobody rediscovers it.** That
+harness is a Node program: everything it needs ships inside the npm package, so `npx` can deliver the
+whole product. Sync is Python and TypeScript over Postgres. **`npx` cannot ship a Python runtime or a
+database**, and a wrapper that pretends otherwise fails in front of the person being shown it.
+
+**So the decision: `npx` → Docker → UI, with Docker as the single stated prerequisite.**
+
+```
+npx <sync-package>          # or: docker compose up, for people who prefer it
+```
+
+It pulls or builds one image containing the API, the console and the Python toolchain, brings up
+Postgres beside it, applies the schema, indexes the repository it was pointed at, and serves the
+console on localhost. **One prerequisite, named up front: Docker.** That is the same prerequisite the
+reference self-host has, and it is the only honest way to get from three commands to one.
+
+**Why this beats the alternatives, briefly.** Wrapping `dev_up.py` in `npx` still requires Python,
+`uv`, and Postgres already installed — three prerequisites instead of one, and each is a place the
+demo dies. Cloning and building on the fly is slower, needs the same toolchain, and turns a demo into
+a build log. **The container is the artifact; `npx` is the doorbell.**
+
+**What this makes P0 that was not before:** a Dockerfile and compose file that actually produce a
+running product, and a published or buildable image. `docker compose up -d` exists for Postgres
+today; the product itself has never been containerised. That is the work.
+
+## Agent automation settings, and the one option we refuse
+
+**Two further reference documents supplied 2026-08-18: a GitHub App integration flow, and per-project
+agent automation settings.** Same treatment — the shape of the control surface is learnable, the
+copy and the specific arrangement are not, and each item has to survive being restated against what
+Sync already has.
+
+**What Sync already has, checked rather than assumed:**
+
+- **Project context exists and is better placed than the reference's.** Theirs is a free-text field
+  in a dashboard. Ours is `.sync/context.md`, read out of the customer's own repository
+  (`sync.context.seed`, `SEED_RELATIVE_PATH`), so it lives with the code it describes, versions with
+  it, and needs no dashboard round-trip. `B165` also means it is fenced at instruction position.
+  **Nothing to build here; it needs saying in the docs, not implementing.**
+- **A read-only Settings screen** (`M4-W231`) and a `settings` feature route.
+- **Pull-request outcomes** already recorded and reconciled (`M10-W229`, `sync reconcile-pull-requests`).
+
+**What is genuinely missing: the policy itself.** There is no stored answer to *what happens after
+Sync opens a pull request*, no merge strategy, and no base-branch override. Three settings, per
+repository rather than per project, because a repository is Sync's unit:
+
+| Setting | Values | Default |
+|---|---|---|
+| merge policy | `never`, `when_checks_pass` | `never` |
+| merge method | `squash`, `merge`, `rebase` | `squash` |
+| base branch | any branch name | the repository's default |
+
+**We refuse the third merge-policy value, and the refusal is a product position rather than a gap.**
+The reference offers `immediately` — merge the fix without waiting for any check to run. **That
+directly contradicts this project's non-negotiable that nothing reaches a pull request unverified,
+and it contradicts the whole argument the console exists to make.** A tool that will merge before its
+own evidence arrives is the black box Sync was built against. So `immediately` is not implemented,
+and the Settings screen says *why* rather than omitting it silently — an absent option a competitor
+has reads as an oversight; a refused one reads as a position.
+
+**Scope for Wednesday.** The storage, the API, and the console rendering the current policy are P1 —
+they make the product legible as a real product, and the Settings screen already exists to hold them.
+The GitHub App OAuth flow is **P2 and explicitly out**: Sync uses the authenticated `gh` CLI, hosting
+is out of scope, and an OAuth callback needs a hosted endpoint we have deliberately decided not to
+have this week.
 
 ## Priority order to Wednesday
 
@@ -77,7 +228,7 @@ Four things, and only the first is mostly done:
 | 1 | **`B147`** — a 404 claiming absence where the truth is zero | E | One of seven console screens cannot render at all. It is also the honesty principle violated below the console, so no screen can fix it |
 | 2 | **The console IA settles and stops moving** | B | Every screen must exist and be reachable. The IA rulings are made (`M14-W365`); what remains is building them |
 | 3 | **Fresh-clone bring-up, verified by somebody who did not build it** | C | Item 3 above. This has never been tested and it is the difference between "works here" and "deployable" |
-| 4 | **Deployment target and credential** | owner | Blocks item 4 above entirely. Nothing else can start until it is named |
+| 4 | **`npx` one-command install from the repo** | C | **Owner-named 2026-08-18**, to feel like `npx skills add superloglabs/skills --all`. This *is* the deployment story now that hosting is out. It wraps `dev_up.py`'s precondition checks rather than replacing them |
 
 **P1 — makes the product credible rather than merely working.**
 
