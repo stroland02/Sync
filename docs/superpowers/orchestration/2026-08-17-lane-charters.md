@@ -42,7 +42,7 @@ Take your numbers from your own block. Nobody else will.
 | Lane | Work items | Backlog items |
 |---|---|---|
 | A -- remediation loop | W240-W259 | B140-B144 |
-| B -- console | W260-W279 | B145-B149 |
+| B -- console | W260-W279, W340-W359 | B145-B149, B173-B182 |
 | C -- pipeline health | W280-W299 | B150-B154 |
 | D -- signals and adapters | W300-W319 | B155-B159 |
 | E -- graph, dashboard, API | W320-W339 | B160-B164 |
@@ -121,6 +121,25 @@ Escalate to the coordinator, not to the human, when the blocker is another lane.
 
 ## Traps that have each cost this project an hour
 
+- **A handoff described in a report has not been handed off.** Three times on 2026-08-17 a lane
+  finished a unit and told the coordinator it had defined something for another lane -- Lane C
+  "filed for Lane E" an `auth.py` narrowing that existed only in a code comment, and Lane D
+  "defined the telemetry attachment shape (`telemetry_attached_at`)" for Lanes E and B, which
+  appeared nowhere in `src/` or `docs/`. Both arguments were correct and neither was findable.
+  **A cross-lane contract goes in `BACKLOG.md` with a number from your block, or it did not
+  happen** -- and it names the field, where it sits, what writes it, what `null` means, and what
+  a consumer must render differently for `null` versus zero. Without that last sentence the
+  receiving lanes each infer one, and you get two answers to one question.
+- **A stale worktree makes you rebuild what already landed, and the rebuild looks like progress.**
+  Step 1 of the loop is `git fetch origin && git merge origin/main --no-edit`, and it is first for
+  this reason rather than for tidiness. Measured twice on 2026-08-17: Lane A gated a merge and held
+  a day of work against a branch it was not using, and Lane E — two hours after the API entrypoint
+  fix landed on `main` as `6a9637d` — read its own stale copy of `src/sync/api/__main__.py`,
+  concluded the import was missing, and began writing it again. Nothing in that file said the fix
+  existed. **Four lanes land continuously here, so a branch that merged once and then worked for
+  hours is stale by definition**, and the failure does not announce itself: you are reading a real
+  file, seeing a real absence, and fixing a real bug that is already fixed somewhere you did not
+  look.
 - **Gate from your own worktree, and check the path before you read the result.** `cd` to
   `C:\Users\strol\orca\Sync\Sync` runs the suite against the *primary* tree, which holds `main` — so
   the gate passes, proves nothing about your branch, and reads exactly like success. Caught on
@@ -243,6 +262,22 @@ orca orchestration check --terminal <handle> --all --json    # your own mailbox,
 
 `--all` does not mark anything read, so `read_at` stays null there and cannot be used to tell handled
 from unhandled. Sort by `created_at` and compare against what you have actually acted on.
+
+**A long `terminal send` arrives truncated, and the receiving lane cannot tell.** Measured
+2026-08-17 after Lane A held a day of gated work through three separate rulings: it reported
+receiving *"an ambiguous truncated message about main-landing authorization"* and refused to act
+on it, which was the correct call. Every send had returned `ok: true`. **The sender sees success;
+the reader sees half a sentence and reasonably treats it as noise.** Keep terminal sends to one
+or two short sentences and split anything longer across several sends, or put the body in an
+`orchestration send` and use the terminal only to say a message is waiting.
+
+**And a third channel is in neither inbox.** `orca terminal send --enter` puts text into a lane's
+scrollback as its next input. It never becomes a message, so a lane that reads its inbox rather
+than its own transcript will not find it, and `check --all` will not show it either. Lane C asked
+on 2026-08-17 which item a dispatch referred to, naming its newest inbox message and saying
+correctly that nothing followed it — while the dispatch sat in its scrollback, sent by terminal.
+Use `terminal send` when a message *must* interrupt a busy agent, and follow it with an
+`orchestration send` carrying the same content, so it exists somewhere a lane can look it up.
 
 **The same split is why a lane can be certain it is being ignored while you are certain you replied.**
 Lane A said so directly — *"nothing new is showing up in this dispatch's mailbox; if there are

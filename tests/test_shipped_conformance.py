@@ -184,10 +184,18 @@ VENDOR_CASES: dict[str, VendorCase] = {
         known_symbol="twilio.insights.v1.calls.fetch",
         correlation=(("GET", "/v1/Voice/CA1234567890abcdef1234567890abcdef"), "CA1234567890abcdef1234567890abcdef"),
     ),
-    "anthropic": VendorCase(stage=_stage_anthropic, known_symbol="anthropic.messages.create"),
+    "anthropic": VendorCase(
+        stage=_stage_anthropic,
+        known_symbol="anthropic.messages.create",
+        correlation=(("GET", "/v1/models/claude-3-5-sonnet-20241022"), "claude-3-5-sonnet-20241022"),
+    ),
     "openai": VendorCase(stage=_stage_nothing, known_symbol="openai.responses.create"),
     "cloudflare": VendorCase(stage=_stage_nothing, known_symbol="cloudflare.zones.list"),
-    "vercel": VendorCase(stage=_stage_vercel, known_symbol="vercel.aliases.getAlias"),
+    "vercel": VendorCase(
+        stage=_stage_vercel,
+        known_symbol="vercel.aliases.getAlias",
+        correlation=(("GET", "/v4/aliases/al_123456789"), "al_123456789"),
+    ),
 }
 
 

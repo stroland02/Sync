@@ -388,6 +388,8 @@ class PythonAdapter:
         # Which files this clone holds that are not UTF-8, so two passes over one of them report
         # it once. `_readable_sources` carries why they are skipped at all.
         self._undecodable: set[Path] = set()
+        self._importing_paths: set[Path] = set()
+        self._bound_paths: set[Path] = set()
 
     # --- manifests ----------------------------------------------------------------
 
@@ -563,6 +565,19 @@ class PythonAdapter:
         root = Path(repo.local_path)
         return sorted(path.relative_to(root).as_posix() for path in self._undecodable)
 
+    def unbound_import_paths(self, repo: RepoRef) -> list[str]:
+        """Source paths that imported the vendor SDK module but produced no bound call sites.
+
+        Repository-relative paths. Identifies wrapper files or re-exports where the vendor SDK
+        is imported but call sites sit behind abstractions that the single-file static AST indexer
+        cannot resolve.
+        """
+        root = Path(repo.local_path)
+        return sorted(
+            path.relative_to(root).as_posix()
+            for path in (self._importing_paths - self._bound_paths)
+        )
+
     # --- clients ------------------------------------------------------------------
 
     def _client_identifiers(self, repo: RepoRef) -> set[str]:
@@ -597,6 +612,7 @@ class PythonAdapter:
                 if node.type == "import_statement":
                     for child in node.named_children:
                         if child.type == "dotted_name" and _text(child, source) == self._module:
+                            self._importing_paths.add(file_path)
                             names.add(self._module)
                             modules.add(self._module)
                         elif child.type == "aliased_import":
@@ -604,12 +620,14 @@ class PythonAdapter:
                             alias = child.child_by_field_name("alias")
                             if original is not None and alias is not None:
                                 if _text(original, source) == self._module:
+                                    self._importing_paths.add(file_path)
                                     names.add(_text(alias, source))
                                     modules.add(_text(alias, source))
                 elif node.type == "import_from_statement":
                     module = node.child_by_field_name("module_name")
                     if module is None or _text(module, source).split(".")[0] != self._module:
                         continue
+                    self._importing_paths.add(file_path)
                     for child in node.named_children:
                         if _same(child, module):
                             continue
@@ -945,6 +963,7 @@ class PythonAdapter:
                     f"{symbol}|{','.join(args_keys)}|{','.join(response_fields)}".encode()
                 ).hexdigest()[:32]
 
+                self._bound_paths.add(file_path)
                 yield CallSite(
                     repo_id=repo.repo_id,
                     path=relative,

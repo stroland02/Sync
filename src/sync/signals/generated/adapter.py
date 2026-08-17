@@ -299,13 +299,12 @@ class GeneratedSpecAdapter:
         """Why observed HTTP telemetry cannot correlate back to an operation for this vendor.
 
         `RequestCorrelator` requires an authoritative URL route template mapping. Generated
-        adapters are driven by manifest diffs and lack an unambiguous HTTP request correlation
-        engine; attempting to correlate observed spans without staged routes would produce
-        silent false negatives or incorrect bindings.
+        adapters build route templates from SDK source checkouts when staged; without staged source,
+        observed HTTP telemetry cannot be correlated.
         """
         return (
-            f"vendor '{self._vendor_id}' is served by GeneratedSpecAdapter and does not "
-            f"implement RequestCorrelator; observed HTTP telemetry cannot be correlated"
+            f"vendor '{self._vendor_id}' is served by GeneratedSpecAdapter with no staged SDK "
+            f"source, so no route map was built; observed HTTP telemetry cannot be correlated"
         )
 
     def operation_for_symbol(
@@ -551,3 +550,85 @@ class GeneratedSpecAdapter:
         destination.parent.mkdir(parents=True, exist_ok=True)
         destination.write_text(body, encoding="utf-8")
         return destination
+
+
+def _segments(path: str) -> tuple[str, ...]:
+    return tuple(path.strip("/").split("/")) if path.strip("/") else ()
+
+
+def _matches(template: tuple[str, ...], request: tuple[str, ...]) -> bool:
+    return len(template) == len(request) and all(
+        (literal.startswith("{") and literal.endswith("}")) or literal == observed
+        for literal, observed in zip(template, request)
+    )
+
+
+def _build_routes(
+    operations: Iterable[ExtractedOperation],
+) -> dict[tuple[str, int], list[tuple[tuple[str, ...], ExtractedOperation]]]:
+    routes: dict[tuple[str, int], list[tuple[tuple[str, ...], ExtractedOperation]]] = {}
+    for op in operations:
+        template = _segments(op.path)
+        routes.setdefault((op.http_method.lower(), len(template)), []).append((template, op))
+    return routes
+
+
+class CorrelatingGeneratedSpecAdapter(GeneratedSpecAdapter):
+    """A GeneratedSpecAdapter over a staged SDK source that implements RequestCorrelator.
+
+    Extends `GeneratedSpecAdapter` with runtime HTTP request correlation, matching observed
+    client spans against the route templates extracted directly from the staged SDK source.
+    """
+
+    def __init__(
+        self,
+        vendor_id: str,
+        sources: Mapping[str, SpecSource],
+        fetch: Fetch,
+        cache_dir: Path | str,
+        vendor_spec_urls: Mapping[str, str] | None = None,
+        sdk_bindings: Mapping[str, Mapping[str, str]] | None = None,
+        sdk_source: Path | str | None = None,
+        sdk_spec_operations: Path | str | None = None,
+        sdk_source_generator: str = DEFAULT_GENERATOR,
+    ) -> None:
+        super().__init__(
+            vendor_id=vendor_id,
+            sources=sources,
+            fetch=fetch,
+            cache_dir=cache_dir,
+            vendor_spec_urls=vendor_spec_urls,
+            sdk_bindings=sdk_bindings,
+            sdk_source=sdk_source,
+            sdk_spec_operations=sdk_spec_operations,
+            sdk_source_generator=sdk_source_generator,
+        )
+        self._routes: dict[tuple[str, int], list[tuple[tuple[str, ...], ExtractedOperation]]] | None = None
+
+    @property
+    def uncorrelatable_reason(self) -> str | None:
+        return None
+
+    def operation_for_request(self, http_method: str, path: str) -> OperationRef | None:
+        """The operation an observed request addressed, or None if nothing here can say."""
+        symbols = self._extracted_symbols()
+        if not symbols:
+            return None
+        if self._routes is None:
+            self._routes = _build_routes(symbols.values())
+
+        request = _segments(path)
+        candidates = self._routes.get((http_method.lower(), len(request)), ())
+        if any(not segment for segment in request):
+            return None
+
+        matched = [entry for template, entry in candidates if _matches(template, request)]
+        if not matched:
+            return None
+        entry = min(matched, key=lambda e: e.path.count("{"))
+        return OperationRef(
+            operation_id=f"{entry.http_method} {entry.path}",
+            http_method=entry.http_method.lower(),
+            path=entry.path,
+        )
+
