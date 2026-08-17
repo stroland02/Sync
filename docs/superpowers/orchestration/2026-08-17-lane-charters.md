@@ -220,6 +220,29 @@ Drain it in a loop, acking each batch by the id the previous call returned, unti
 comes back empty. And treat a mismatch between the notification count and what `check` shows as a
 defect in your own reading, not as a stale notification.
 
+**There are two inboxes, and draining one does not drain the other.** Bare `check` reads the Run's
+FIFO. `check --terminal <your handle> --all` reads the messages addressed to your terminal, and they
+are not the same set: on 2026-08-17 the coordinator's terminal mailbox held **52 non-heartbeat
+messages**, among them a Lane C `worker_done` reporting `CI-W299` and `CI-W300` that never appeared
+in the FIFO at all and was never answered. The FIFO had been drained to empty at the time.
+
+So a sweep reads both, and the terminal mailbox is the one that goes unread, because nothing prompts
+you to look at it:
+
+```
+orca orchestration check --json                              # the Run FIFO, ack in a loop
+orca orchestration check --terminal <handle> --all --json    # your own mailbox, sort by created_at
+```
+
+`--all` does not mark anything read, so `read_at` stays null there and cannot be used to tell handled
+from unhandled. Sort by `created_at` and compare against what you have actually acted on.
+
+**The same split is why a lane can be certain it is being ignored while you are certain you replied.**
+Lane A said so directly — *"nothing new is showing up in this dispatch's mailbox; if there are
+messages waiting somewhere else, they're not reaching me"* — and it was right: a ruling that unblocked
+a full day of its held work had been sent and never arrived. It took `orca terminal send --enter` to
+deliver. **When a lane reports it is not receiving mail, believe it and change channel.**
+
 ## A `worker_done` can be rejected, and the lane is the only one who finds out
 
 **`orca orchestration worker-done` fails with `Dispatch <id> capability is revoked` once that
