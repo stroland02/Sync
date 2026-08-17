@@ -141,6 +141,42 @@ distinguishes a run parked on a customer's CI from one that has died. **Take the
 the right-aligned metadata; render outcome as a recorded value from a closed vocabulary, legible
 without its colour, which is the badge form the same rule already permits.**
 
+## Item 10: Settings must contain settings
+
+**What was asked:** *"we also need to add actual settings within the settings page as it's just
+listing a bunch of information."* **Correct, and it is a known state rather than a regression** —
+`M4-W231` landed Settings deliberately **read-only**. Nothing there is editable because nothing
+behind it was writable.
+
+**Structure taken from the reference screenshot, conventions only:**
+
+- **A left sub-navigation inside the page**, listing setting groups, with the right pane showing one
+  group at a time. This is the component that turns a list of facts into a place where things are
+  changed.
+- **Each setting as a card: label and one line of helper text on the left, the control on the
+  right.** The helper text says what the setting affects, not what the control is.
+- **A scope selector beside the group tabs**, so it is always clear what is being configured.
+- **Save scoped to the card**, not a page-wide save.
+- **Destructive actions in their own card at the bottom**, with the consequence spelled out.
+- **A character counter** where a field has a real limit.
+
+**What Sync actually has to put in there, which is the part that matters** — a settings page with
+invented settings is worse than a read-only one:
+
+| Group | Settings | State |
+|---|---|---|
+| Codebases | select, add, remove | **New.** This is where item 1's selection lives in its long form |
+| Pull requests | merge policy, merge method, base branch | Scoped in `M0-W311`. `immediately` is **refused** and the screen says why |
+| Adapters | per-vendor configuration | A screen already exists |
+
+**One field that must not become editable, and the reference does the opposite.** Their project
+context is a dashboard textarea. **Ours is `.sync/context.md`, in the customer's own repository**, and
+`sync/context/seed.py` states the property plainly: *it is the customer's, not Sync's. It is read and
+never written.* Making it editable from the console would take a file that versions with the code it
+describes and start writing to it from somewhere else. **Show it, say where it comes from, link to
+it, never edit it** — and that difference is worth stating on the screen, because it is a better
+answer than the reference's, not a missing feature.
+
 ## Item 9: the interface is bland, and themes are wanted eventually
 
 **Themes are a change to a recorded ruling, so flag it rather than starting.** `DESIGN.md:79` records
