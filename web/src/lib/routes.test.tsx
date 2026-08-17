@@ -19,7 +19,6 @@ import { afterEach, describe, expect, it } from "vitest"
 
 import App from "@/App"
 import {
-  AREAS,
   DESTINATIONS,
   GRAPH_LEVELS,
   ROUTES,
@@ -38,21 +37,6 @@ function routeAt(path: string) {
   return entry
 }
 
-/**
- * The rail's vocabulary, written out rather than imported.
- *
- * Spelled as a literal so this file pins the union instead of agreeing with whatever the registry
- * currently says — `AREA_IDS` rather than `AREAS`, because the registry exports that name and a
- * shadow would make the cross-check below compare the list against itself.
- */
-const AREA_IDS = [
-  "fleet",
-  "codebase",
-  "api-services",
-  "signals",
-  "observe",
-  "remediation",
-] as const
 
 /**
  * A route whose `params` is non-empty needs a subject the registry does not hold — a vendor id,
@@ -115,39 +99,69 @@ describe("the navigation covers the route registry", () => {
   })
 })
 
-describe("the rail groups levels into areas without inventing one", () => {
-  it("gives every route a declared area", () => {
-    for (const route of ROUTES) expect(AREA_IDS).toContain(route.area)
+describe("the sidebar groups levels into regions without inventing one", () => {
+
+  /**
+   * The two regions, and the only two structural claims the sidebar needs from the registry.
+   *
+   * Six areas became two regions because the repository is the independent variable: a screen is
+   * either scoped to one repository or it is not. `root` holds what a reader reaches without having
+   * chosen one; `repository` holds what hangs off the choice.
+   */
+  it("puts every route in exactly one of the two regions, and neither is empty", () => {
+    // Written because the first version of the two tests below PASSED against a registry with no
+    // `region` field at all: both filters returned nothing, both loops ran zero times, and two
+    // vacuous assertions reported a partition that did not exist. This is the guard that makes
+    // them bite, and it is the same defect `M14-W363` fixed in two other places today.
+    const REGIONS = ["root", "repository"] as const
+
+    for (const route of ROUTES) expect(REGIONS).toContain(route.region)
+    for (const region of REGIONS) {
+      expect(ROUTES.filter((route) => route.region === region).length).toBeGreaterThan(0)
+    }
+    expect(
+      ROUTES.filter((r) => r.region === "root").length +
+        ROUTES.filter((r) => r.region === "repository").length
+    ).toBe(ROUTES.length)
   })
 
-  it("names the same areas on the rail as the routes claim", () => {
-    expect(AREAS.map((area) => area.id)).toEqual([...AREA_IDS])
+  it("declares no repository parameter on a root route", () => {
+    // A root screen that needed a repository would be unreachable from the place it is offered.
+    for (const route of ROUTES.filter((r) => r.region === "root")) {
+      expect(route.params).not.toContain("repoId")
+    }
   })
+
+  it("takes the repository as the first parameter of every repository route, bar three", () => {
+    // Three finding addresses sit under the repository region and cannot declare `repoId`: a
+    // fleet-wide findings row has no repository to put in the href, because `RiskRow` carries none
+    // (`web/src/api/types.ts:135-145`). They are an explicit literal allow-list rather than a
+    // predicate, so adding a fourth is a decision somebody writes down. The backlog item that
+    // retires this is the one filed for `RiskRow` gaining a `repo_id`; until the payload carries it,
+    // a nested finding href would assert a containment nothing computed.
+    const ALLOWED_WITHOUT_REPO = [
+      "/findings/:findingId",
+      "/findings/:findingId/workflow",
+      "/findings/:findingId/workflow/pull-request",
+    ]
+
+    for (const route of ROUTES.filter((r) => r.region === "repository")) {
+      if (ALLOWED_WITHOUT_REPO.includes(route.path)) {
+        expect(route.params).toEqual(["findingId"])
+        continue
+      }
+      expect(route.params[0]).toBe("repoId")
+    }
+  })
+
 
   it("claims no level outside GRAPH_LEVELS", () => {
     // The vocabulary is pinned to the specification by `tests/test_console_hierarchy.py`; here:
     // an area groups levels the specification declares and never a level of its own invention.
     for (const route of ROUTES) expect(GRAPH_LEVELS).toContain(route.level)
-    for (const area of AREAS) {
-      for (const level of area.levels) expect(GRAPH_LEVELS).toContain(level)
-    }
   })
 
-  it("files each route under the area that claims its level", () => {
-    // `area` is declared per route and derivable from `level`, which is two spellings of one fact.
-    // This is the assertion that stops them disagreeing.
-    for (const route of ROUTES) {
-      const owner = AREAS.find((area) => area.levels.includes(route.level))
-      expect(route.area).toBe(owner?.id)
-    }
-  })
 
-  it("covers every level exactly once across the areas", () => {
-    // A level in two areas is a destination that appears twice; a level in none is a screen the
-    // rail cannot reach. Both are the failure the reconciliation of 2026-08-05 found.
-    const claimed = AREAS.flatMap((area) => [...area.levels])
-    expect(claimed.sort()).toEqual([...GRAPH_LEVELS].sort())
-  })
 })
 
 describe("a menu item can own more than one route", () => {

@@ -71,83 +71,6 @@ export const GRAPH_LEVELS = [
 
 export type GraphLevel = (typeof GRAPH_LEVELS)[number]
 
-/**
- * The rail's vocabulary: six areas, each holding a contiguous run of `GRAPH_LEVELS`.
- *
- * **An area is a navigation grouping, not a graph level, and the distinction is load-bearing.**
- * `.claude/rules/console-hierarchy.md` binds `GRAPH_LEVELS` to the specification: a level with no
- * line in the design document does not go in that array. It says nothing about how a rail groups
- * them, and it must not be read as licence to invent one either — so every area below is a *run of
- * consecutive levels in the specification's own order*, which is why the `levels` arrays are
- * contiguous slices and not curated sets, and why `routes.test.tsx` asserts the six of them cover
- * `GRAPH_LEVELS` exactly once each.
- *
- * `Settings` is deliberately absent. The rail renders it last, and it is not a member of this
- * union: no route declares it, the specification declares no level for it, and putting it here
- * would be the fourth invented level rather than the first honest one.
- */
-export type Area = "fleet" | "codebase" | "api-services" | "signals" | "observe" | "remediation"
-
-/**
- * `landing` is the route the rail item links to, and `null` means every route inside this area needs
- * a subject the registry does not hold. That is not a gap to paper over: a Solution Workflow exists
- * for a finding, so it is reached from one, and the rail says so instead of offering a link that
- * would resolve to `/findings//workflow`. An area with no landing selects its sidebar without
- * navigating, which is what makes its levels discoverable before an operator has picked a subject.
- */
-export interface AreaEntry {
-  id: Area
-  label: string
-  /** What this area is for, one line, in the sidebar under its heading. */
-  purpose: string
-  levels: readonly GraphLevel[]
-  landing: string | null
-}
-
-export const AREAS: readonly AreaEntry[] = [
-  {
-    id: "fleet",
-    label: "Codebases",
-    purpose: "All repositories watched by Sync, their attached vendors, and active migrations.",
-    levels: ["Fleet"],
-    landing: "/",
-  },
-  {
-    id: "codebase",
-    label: "Codebase",
-    purpose: "What the index found in one repository, and what it cannot see.",
-    levels: ["Codebase"],
-    landing: null,
-  },
-  {
-    id: "api-services",
-    label: "API services",
-    purpose: "What a vendor changed, and what those changes put at risk.",
-    levels: ["API Services"],
-    landing: null,
-  },
-  {
-    id: "signals",
-    label: "Signals",
-    purpose: "What a repository has attached, and what each source has reported.",
-    levels: ["Signals"],
-    landing: null,
-  },
-  {
-    id: "observe",
-    label: "Observe",
-    purpose: "Where a vendor change lands in the code, and which detector said so.",
-    levels: ["Binding surface", "Errors & Incidents"],
-    landing: "/detectors",
-  },
-  {
-    id: "remediation",
-    label: "Remediation",
-    purpose: "What Sync did about a finding, node by node, including what it abandoned.",
-    levels: ["Finding", "Solution Workflow", "Pull Request"],
-    landing: null,
-  },
-] as const
 
 export interface RouteEntry {
   /** Absolute path. Dynamic segments use react-router's `:name` syntax. */
@@ -155,12 +78,18 @@ export interface RouteEntry {
   label: string
   level: GraphLevel
   /**
-   * The rail item this destination sits under. Derivable from `level` through `AREAS`, and
-   * declared anyway: the grouping is a product decision a reviewer checks route by route, and a
-   * derivation would put it in a `filter` nobody reads. `routes.test.tsx` holds the two against
-   * each other so the declaration cannot drift from the run of levels its area claims.
+   * Which of the two sidebar regions this destination sits in.
+   *
+   * `repository` is scoped to one repository -- the independent variable the console is organised
+   * around. `root` is what a reader reaches without having chosen one. Two regions replace six
+   * areas because that is the only distinction the sidebar actually needs to draw.
+   *
+   * Three finding addresses sit in `repository` while declaring `findingId` rather than `repoId`.
+   * That is deliberate and checked as a literal allow-list in `routes.test.tsx`: a fleet-wide
+   * findings row has no repository to build a nested href from, because `RiskRow` carries none
+   * (`api/types.ts:135-145`). It retires when that payload gains a `repo_id`.
    */
-  area: Area
+  region: "root" | "repository"
   /** What an operator opens this screen to find out, in one sentence. */
   question: string
   /**
@@ -182,9 +111,9 @@ export interface RouteEntry {
 export const ROUTES: readonly RouteEntry[] = [
   {
     path: "/",
+    region: "root",
     reachedFrom: null,
     label: "Codebases",
-    area: "fleet",
     level: "Fleet",
     question: "All code repositories monitored by Sync, their attached API vendors, and active migrations.",
     params: [],
@@ -192,9 +121,9 @@ export const ROUTES: readonly RouteEntry[] = [
   },
   {
     path: "/repositories/:repoId",
+    region: "repository",
     reachedFrom: "a repository on the codebases screen",
     label: "Codebase",
-    area: "codebase",
     level: "Codebase",
     question: "Is this repository actually covered, and what does Sync not see in it?",
     params: ["repoId"],
@@ -202,9 +131,9 @@ export const ROUTES: readonly RouteEntry[] = [
   },
   {
     path: "/vendors/:vendorId",
+    region: "root",
     reachedFrom: "a vendor on the codebases screen",
     label: "Vendor",
-    area: "api-services",
     level: "API Services",
     question: "What is at risk from this vendor, and what did it change?",
     params: ["vendorId"],
@@ -212,9 +141,9 @@ export const ROUTES: readonly RouteEntry[] = [
   },
   {
     path: "/repositories/:repoId/observed",
+    region: "repository",
     reachedFrom: "a repository on the codebases screen",
     label: "Signals",
-    area: "signals",
     level: "Signals",
     question:
       "What vendor, signal source and human surface does this repository have attached, and what has each reported?",
@@ -223,9 +152,9 @@ export const ROUTES: readonly RouteEntry[] = [
   },
   {
     path: "/bindings/vendors/:vendorId/operations/:operationId",
+    region: "root",
     reachedFrom: "an operation on a vendor's findings table",
     label: "Binding surface",
-    area: "observe",
     level: "Binding surface",
     question: "A vendor shipped a breaking change — what call sites does it hit?",
     params: ["vendorId", "operationId"],
@@ -233,9 +162,9 @@ export const ROUTES: readonly RouteEntry[] = [
   },
   {
     path: "/detectors",
+    region: "root",
     reachedFrom: null,
     label: "Detectors",
-    area: "observe",
     level: "Errors & Incidents",
     question: "Which detector is producing my false positives?",
     params: [],
@@ -243,9 +172,9 @@ export const ROUTES: readonly RouteEntry[] = [
   },
   {
     path: "/findings/:findingId",
+    region: "repository",
     reachedFrom: "a call site on a vendor or binding surface",
     label: "Finding",
-    area: "remediation",
     level: "Finding",
     question: "What is this finding, and what binding does it rest on?",
     params: ["findingId"],
@@ -253,9 +182,9 @@ export const ROUTES: readonly RouteEntry[] = [
   },
   {
     path: "/findings/:findingId/workflow",
+    region: "repository",
     reachedFrom: "the finding it remediates",
     label: "Solution workflow",
-    area: "remediation",
     level: "Solution Workflow",
     question: "What did Sync's remediation graph do about this finding, node by node?",
     params: ["findingId"],
@@ -263,9 +192,9 @@ export const ROUTES: readonly RouteEntry[] = [
   },
   {
     path: "/findings/:findingId/workflow/pull-request",
+    region: "repository",
     reachedFrom: "the solution workflow that opened it",
     label: "Pull request",
-    area: "remediation",
     level: "Pull Request",
     question: "Did Sync open a pull request for this finding, and what proof backs it?",
     params: ["findingId"],
@@ -402,33 +331,5 @@ export const DESTINATIONS: readonly DestinationEntry[] = [
   },
 ] as const
 
-/** Every destination inside an area, in the specification's order. */
-function routesInArea(area: Area): readonly RouteEntry[] {
-  return ROUTES.filter((route) => route.area === area)
-}
 
-/**
- * Whether the rail should render this area as the one being looked at.
- *
- * This is the `pages` branch above with a real caller behind it: an area owns every address inside
- * its run of levels, so `Observe` is current on a binding surface as much as on `/detectors`, and it
- * says which addresses those are by listing them rather than by matching a prefix.
- */
-function isActiveArea(area: AreaEntry, pathname: string): boolean {
-  const owned = routesInArea(area.id)
-  return isActiveMenuItem(
-    { path: area.landing ?? owned[0].path, pages: owned.map((route) => route.path) },
-    pathname
-  )
-}
 
-/**
- * Which rail item an address sits under.
- *
- * Falls back to the first area rather than throwing: `App.tsx` serves `UnknownRoute` at an address
- * no route declares, and that screen renders inside this chassis like any other. A rail with no
- * item selected there would be a fourth state nothing else in the shell has.
- */
-export function areaForPathname(pathname: string): Area {
-  return AREAS.find((area) => isActiveArea(area, pathname))?.id ?? AREAS[0].id
-}
