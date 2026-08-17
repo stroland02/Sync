@@ -89,7 +89,7 @@ two milestones now have a target instead of a description.
 
 | | Milestone | % | The one sentence that matters |
 |---|---|---|---|
-| **M0** | Walking skeleton, one real PR | **~90%** | Every component exists; **the proof is 1,073 commits stale** — measured 2026-08-07, not the "~200" this row claimed for a fortnight |
+| **M0** | Walking skeleton, one real PR | **~90%** | Every component exists; **the proof is 1,206 commits stale** — measured 2026-08-17 (`git rev-list --count`, the last commit to touch `tests/test_e2e_stripe.py`..`HEAD`), up from "1,073" on 2026-08-07. The gate is `B7`, still the user's call |
 | **M1** | Runtime signals, efficiency detector | **~85%** | Built; the dollar estimate is deliberately unbuilt |
 | **M2** | Production error detector | **~85%** | Built; never exercised against real telemetry |
 | **M3** | Multi-vendor, MCP, plugin SDK | **~95%** | Packaging closed 2026-07-30; nothing structural left |
@@ -99,7 +99,7 @@ two milestones now have a target instead of a description.
 | **M6** | Show it, rather than describe it | **0%** | Needs a UI worth filming. That is M7's line now, not M4.5's, and M7 is close enough that this is becoming schedulable |
 | **M7** | The console becomes a product | **~98%** | All nine levels on vendored Supabase substrate. Fidelity Tasks 1–6, Mock-to-Build Phases 1–5, ChangeUnitsTable, B123 checkpointer timestamps, and screen de-congestion landed |
 | **M8–M11** | The resolution loop | **0%** | Proposed 2026-08-06, nothing scheduled; Sync opens a pull request and stops watching it |
-| **M12** | Dashboards that earn their screen | **0%** | Proposed 2026-08-07 from the owner's review of our screens against the references; full-stack, because the useful panels need aggregates `sync.dashboard` does not compute |
+| **M12** | Dashboards that earn their screen | **~10%** | One of Phase 1's four aggregates landed (`M12-W195`–`W197`, `ee7a8dc`/`9395cfb`: abandonment by change kind and tier, the corpus's first read-back, plus the exemption-outlives-its-panel guard). Phases 2–4 (panels, grid composition, the honesty-sentence re-placement) unstarted |
 | **M13** | Dynamic visuals, Remotion & live telemetry | **0%** | Proposed 2026-08-16; live agent execution stream, thinking disclosures, dynamic node states inspired by DeepSeek Harness, and Remotion motion diffs |
 
 ### Implementation Plans Ledger (`docs/superpowers/plans/`)
@@ -1432,6 +1432,75 @@ plan asserts that so a third member is a deliberate edit rather than a quiet one
 `tests/golden/tool_schemas.json` unmodified, and `build_patch_prompt` proved byte-identical for a
 repository with no context. The first two are assertions in the plan rather than review
 judgements.
+
+### B129 — a scan emptied the migration corpus and the context it had just written - CLOSED
+
+`cli.run` cleared the graph with `store.truncate_all(keep=("call_site",))`. `truncate_all` empties
+every table `schema.sql` declares, so that allow-list held one name against the seven it did not,
+and every `sync run` emptied all seven.
+
+Two of them nothing can rebuild. `migration_outcome` is the migration corpus: one row per repair
+attempt, the only durable record that a pull request was ever opened, the table `abandon_reason`
+lives in, and its own grain comment says it cannot be backfilled. `repo_context` is what B126
+shipped two commits earlier — the same `run()` seeds it from the checkout at `cli.py:943` and reads
+it back at `cli.py:1082`, with the truncate between them, so the patch agent's prompt carried an
+empty string and the comment above the read claimed the row had just been converged. Three more
+are telemetry a scan does not produce and cannot re-produce: `observed_shape`, `observed_call` and
+`observed_error_window`.
+
+**This is a strong candidate for the corpus holding three or four rows after more than a thousand
+commits**, which the M0 line above records without an explanation.
+
+**It also disabled the merge measurement, which is the one number that tests the product claim.**
+`set_merge_outcome` is an `UPDATE … WHERE finding_id = %s AND attempt_index = %s`, and the merge
+webhook arrives days after the run. Any scan in between deleted the row it was going to update, so
+the update matched nothing and said so to no one: `pr_merged` stayed null, and `merge_rate` was
+computed over whatever survived. `set_merge_outcome`'s own docstring says "a column that silently
+stays null destroys it" — the update path was there and the row was not.
+
+**It was seen and written down eighteen days before it was fixed.**
+[`reports/2026-07-29-a-blank-line-left-a-ghost-forever.md`](reports/2026-07-29-a-blank-line-left-a-ghost-forever.md),
+under *What is left, named rather than fixed*: "`sync run` still truncates `migration_outcome`
+… `CLAUDE.md` says abandoned runs are data, and a scan currently deletes them." That is the whole
+argument for filing a defect with a number rather than a paragraph in a report. The paragraph sat
+there while the B126 plan, at line 68, stated that `truncate_all` "derives its table list from
+`schema.sql`, so it needs no edit" — true of the wipe and beside the point about it — and shipped
+a sixth table into the wiped set on that basis.
+
+**What closed it.** A scan now names what it clears instead of what it spares:
+`GraphStore.truncate_signal_and_detect()` empties `vendor_change` and `finding` and nothing else.
+`truncate_all` keeps its whole-database meaning for the two callers that want one: a test fixture
+starting from nothing, and the benchmark harness, which `cli.score` already refuses to point at the
+corpus database. `keep` is deleted rather than left unused.
+
+**Decided against the fix the 2026-07-29 report proposed**, which was to read `keep` "as the
+mechanism that already exists" and widen it. Widening it would have been correct on the day and
+wrong on the next table: `repo_context` was added by B126 and joined the wiped set without anyone
+choosing that, and a widened allow-list would have let the table after it do the same. An
+allow-list is a list somebody has to remember at a call site, which is the failure mode
+`truncate_all`'s own docstring already said it was written to end. Naming the cleared set makes
+forgetting safe instead of expensive.
+
+The new method issues no `CASCADE`. `finding` holds the schema's only two foreign keys and both
+ends are accounted for, so the constraint is satisfied without one — and a `CASCADE` would reach
+silently into whatever table references these next, which is the shape of the defect itself.
+
+**Evidence:** `tests/test_scan_preserves_durable_rows.py`, five tests driving the real `sync.cli.run`
+against Postgres with everything outside the database stubbed. Four failed against the shipped code
+— `assert set() == {'f-1', 'f-2'}` for the corpus, `the scan deleted the context it had just
+seeded` for its own repository's context, the same for a second repository's, and `assert 0 == 1`
+for the observed shape — and the fifth is the guard in the other direction: a stale finding and a
+stale vendor change from a previous scan are both still gone afterwards, so the four above cannot
+be satisfied by a scan that simply stopped clearing anything.
+
+**What it does not do.** `finding` and `vendor_change` are still truncated across every repository
+and every vendor, so a scan of one customer still deletes another customer's findings. Narrowing
+them means giving each the treatment `replace_call_sites` gives `call_site`: a per-repository
+retraction pass for `finding`, keyed on `(detector, call_site_id, vendor_change_id, claim)`, and a
+per-vendor-and-version-range one for `vendor_change` — which has to survive the oasdiff exemption
+`CLAUDE.md` names, since those rows do not converge and a retraction pass over them would retract
+and re-assert the same change on alternate runs. That is a table-by-table grain argument with its
+own tests, not a line to change beside this one.
 
 ## In flight
 

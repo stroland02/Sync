@@ -108,10 +108,6 @@ class _RecordingStore:
 
     def __init__(self):
         self.calls: list[str] = []
-        # Which tables a scan asked to survive the wipe. Recorded rather than ignored because
-        # `call_site` surviving is what makes convergence by retraction reachable at all: a scan
-        # that truncated it would take every finding with it and there would be nothing to retract.
-        self.kept: tuple[str, ...] = ()
 
     @contextmanager
     def transaction(self):
@@ -122,9 +118,13 @@ class _RecordingStore:
     def apply_schema(self):
         self.calls.append("apply_schema")
 
-    def truncate_all(self, keep=()):
+    def truncate_signal_and_detect(self):
+        self.calls.append("truncate_signal_and_detect")
+
+    def truncate_all(self):
+        # Recorded rather than absent, so a scan that went back to emptying the whole database
+        # fails on the assertion that names the property instead of on a missing attribute.
         self.calls.append("truncate_all")
-        self.kept = tuple(keep)
 
     def replace_call_sites(self, repo_id, sites):
         self.calls.append("replace_call_sites")
@@ -247,15 +247,15 @@ def test_the_graph_is_truncated_after_apply_schema_and_before_the_scan(monkeypat
     # side effect of asserting when the truncate happens; the suite now builds a
     # `VendorChangeDetector` per deprecation vendor as well, and how many there are is a
     # different test's business. The property in the name is preserved literally.
-    assert store.calls[:3] == ["apply_schema", "begin", "truncate_all"]
+    assert store.calls[:3] == ["apply_schema", "begin", "truncate_signal_and_detect"]
     assert store.calls[-1] == "commit"
-    assert store.calls.index("truncate_all") < store.calls.index("scan")
+    assert store.calls.index("truncate_signal_and_detect") < store.calls.index("scan")
     assert store.calls.index("replace_call_sites") < store.calls.index("scan")
     assert store.calls.index("upsert_vendor_change") < store.calls.index("scan")
-    # And the wipe spares the one table a scan converges instead of clearing. Without this the
-    # ordering above would pass just as well against a truncate that emptied `call_site` too --
-    # which is what it used to do, and which deleted every finding the previous scan raised.
-    assert store.kept == ("call_site",)
+    # And the clear names what it empties rather than what it spares. A scan reaching
+    # `truncate_all` empties the migration corpus and the repository context along with
+    # everything else, which is what B129 measured; the ordering above holds either way.
+    assert "truncate_all" not in store.calls
 
 
 EQUIVALENT_URLS = [
@@ -578,7 +578,7 @@ class _TwoFindingStore:
     def apply_schema(self):
         pass
 
-    def truncate_all(self, keep=()):
+    def truncate_signal_and_detect(self):
         pass
 
     def replace_call_sites(self, repo_id, sites):
