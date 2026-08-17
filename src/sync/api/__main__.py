@@ -21,6 +21,7 @@ import uvicorn
 from starlette.applications import Starlette
 
 from sync.api.app import create_app
+from sync.api.auth import configured_api_password, validate_bind_security
 from sync.core.models import RepoContext
 from sync.dashboard import fleet, graph_views
 from sync.dashboard.adapters import adapter_inventory
@@ -205,8 +206,6 @@ def app_factory() -> Starlette:
 
     def context_writer(repo_id: str, body: str) -> None:
         store.upsert_repo_context(RepoContext(repo_id=repo_id, body=body, source="operator"))
-
-    from sync.api.auth import configured_api_password, validate_bind_security
 
     return create_app(
         surface=surface,
