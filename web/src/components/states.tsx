@@ -12,7 +12,7 @@
  */
 
 import { motion } from "framer-motion"
-import { useEffect, useState, type ReactNode } from "react"
+import { useState, type ReactNode } from "react"
 
 import {
   ApiStatusError,
@@ -22,6 +22,7 @@ import {
 } from "@/api/errors"
 import { Status, statusSurfaceClass, type StatusTone } from "@/components/status"
 import { Button } from "@/components/ui/button"
+import { secondsSince, useNow } from "@/lib/elapsed"
 import {
   EASE_STANDARD,
   LOADING_ELAPSED_THRESHOLD_MS,
@@ -67,19 +68,12 @@ function Panel({
  * fetch's age across a retry and describe a different span than the one the operator is watching.
  */
 function useElapsedSeconds(): number | null {
-  const [elapsedMs, setElapsedMs] = useState(0)
+  const [startedAt] = useState(() => Date.now())
+  const now = useNow(250)
 
-  useEffect(() => {
-    const startedAt = Date.now()
-    // Wall clock rather than an accumulated tick count: a background tab throttles the interval,
-    // and a counter that added one per fire would report a number smaller than the wait the
-    // operator actually experienced, which is the one thing this figure exists to be right about.
-    const timer = window.setInterval(() => setElapsedMs(Date.now() - startedAt), 250)
-    return () => window.clearInterval(timer)
-  }, [])
-
+  const elapsedMs = now - startedAt
   if (elapsedMs < LOADING_ELAPSED_THRESHOLD_MS) return null
-  return Math.floor(elapsedMs / 1000)
+  return secondsSince(startedAt, now)
 }
 
 /**

@@ -13,7 +13,11 @@ afterEach(() => {
 
 const mockQueryState: { runs: unknown } = { runs: undefined }
 
-vi.mock("@/api/queries", () => ({
+// `hasLiveRun` comes through unmocked. It is a pure predicate over the page this file already
+// builds, so mocking it would mean maintaining a second answer to "is a run in flight" that could
+// disagree with the one the table actually calls — and the table's freshness line reads it.
+vi.mock("@/api/queries", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/api/queries")>()),
   useRuns: () => mockQueryState.runs,
 }))
 

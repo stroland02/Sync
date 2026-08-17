@@ -62,6 +62,7 @@ import { ObservedCallsTable } from "@/features/telemetry/observed-calls-table"
 import { ObservedShapesTable } from "@/features/telemetry/observed-shapes-table"
 import { IndexCoverageCard } from "@/features/repositories/index-coverage-card"
 import { OpenFindingsCard } from "@/features/repositories/open-findings-card"
+import { ChangeUnitsTable } from "@/features/fleet/change-units-table"
 import { ControlBar } from "@/layouts/control-bar"
 import { FooterBar } from "@/layouts/footer-bar"
 import { PageHeader } from "@/layouts/page-header"
@@ -248,14 +249,12 @@ export function CodebasePage({ question = DEFAULT_QUESTION }: CodebasePageProps)
   return (
     <section className="flex flex-col gap-8">
       <PageHeaderRegion repoId={repoId} question={question} />
-      {/* The two halves of the route's own question, beside one another. Both tables are narrow —
-          two columns and three — and stacking them is what put the telemetry panel below the fold
-          on every width. The telemetry panel keeps the full width because its three tables are
-          eight to twelve columns each. */}
+      {/* The two halves of the route's own question, beside one another */}
       <div className="grid gap-8 xl:grid-cols-2">
         <OpenFindingsCard repoId={repoId} />
         <IndexCoverageCard repoId={repoId} />
       </div>
+      <ChangeUnitsTable />
       <ObservedTelemetryCard repoId={repoId} />
     </section>
   )
@@ -264,9 +263,6 @@ export function CodebasePage({ question = DEFAULT_QUESTION }: CodebasePageProps)
 function PageHeaderRegion({ repoId, question }: { repoId: string; question: string }) {
   return (
     <div className="flex flex-col gap-section">
-      {/* No trail. Fleet and the repository are both segments the top bar's scope trail derives
-          from this same address, so a breadcrumb here repeated all of it 90px lower — M7-W195,
-          Task 1's review finding 1. `layouts/scope-switchers.tsx` carries what the bar reaches. */}
       <PageHeader
         title={<span className="font-mono">{repoId}</span>}
         question={question}
@@ -281,13 +277,10 @@ function PageHeaderRegion({ repoId, question }: { repoId: string; question: stri
           </Link>
         }
       >
-        {/* One line. The long form — that every figure below moves when a different repository is
-            selected — is already in `OpenFindingsCard`'s caption, and saying it twice is a fact
-            that will disagree with itself. */}
         <div className="flex min-w-0 flex-col gap-field">
           <span className="furniture text-meta text-ink-muted">Scope</span>
           <span className="text-body">
-            This repository alone. Fleet is every repository the index has seen.
+            This repository alone. The codebase overview shows all repositories watched by Sync.
           </span>
         </div>
       </ControlBar>

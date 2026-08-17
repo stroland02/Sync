@@ -41,6 +41,7 @@
  */
 
 import type { ReactNode } from "react"
+import { FetchedAt } from "@/components/fetched-at"
 import { Link, useParams } from "react-router"
 
 import { NotFoundError } from "@/api/errors"
@@ -58,6 +59,7 @@ import { Breadcrumbs } from "@/layouts/breadcrumbs"
 import { PageHeader } from "@/layouts/page-header"
 import { UnknownRoute } from "@/layouts/unknown-route"
 import { DetailTitleText, runTitle } from "@/lib/detail-title"
+import { formatFindingBadge } from "@/lib/format"
 import { formatTimestamp } from "@/lib/format"
 
 const DEFAULT_QUESTION =
@@ -268,8 +270,8 @@ function Workflow({ findingId, question }: { findingId: string; question: string
           trail={
             <Breadcrumbs
               trail={[
-                { label: "Fleet", to: "/" },
-                { label: findingId, to: `/findings/${encodeURIComponent(findingId)}` },
+                { label: "Repositories", to: "/" },
+                { label: formatFindingBadge(findingId), to: `/findings/${encodeURIComponent(findingId)}` },
                 { label: "Solution workflow" },
               ]}
             />
@@ -328,12 +330,21 @@ function Workflow({ findingId, question }: { findingId: string; question: string
 
         {data !== undefined && (
           <>
-            {query.isError && (
+            {query.isError ? (
               <StaleBanner
                 fetchedAt={query.dataUpdatedAt}
                 live={!terminal}
                 isFetching={query.isFetching}
                 onRetry={() => void query.refetch()}
+              />
+            ) : (
+              /* The healthy counterpart to `StaleBanner`. That banner only appears once a refetch
+                 has failed, so until now a run being watched and a run whose screen had gone quiet
+                 for a terminal outcome looked identical — both just sat there. This says which. */
+              <FetchedAt
+                at={query.dataUpdatedAt}
+                polling={!terminal}
+                idleReason="This run has reached a terminal outcome, so nothing is being polled."
               />
             )}
 
