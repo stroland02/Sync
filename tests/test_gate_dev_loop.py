@@ -25,6 +25,8 @@ from scripts.dev_up import (
     OK,
     Check,
     check_api_entrypoint,
+    check_npm,
+    npm_executable,
     render,
     undefined_names_in,
 )
@@ -176,3 +178,61 @@ def test_render_is_quiet_when_everything_holds() -> None:
 
     assert "every precondition holds" in text
     assert "MISSING" not in text
+
+
+# --- the start path, which --check never exercised -----------------------------------
+
+
+def test_no_subprocess_call_spawns_a_bare_executable_name() -> None:
+    """Found by running the command rather than by checking it, which is the point.
+
+    `--check` was tested and passed; the start path was not, and it could not work at all here. On
+    Windows npm is `npm.CMD`, and spawning it by bare name without a shell raises
+    `FileNotFoundError: [WinError 2]` -- a traceback out of a launcher whose entire purpose is to
+    turn a missing precondition into a sentence. `CLAUDE.md` already records this for the corepack
+    shims: `shutil.which` resolves the form Windows can execute.
+
+    Read from the syntax tree rather than the source text. The first version of this test searched
+    for the literal `["npm"` and was tripped by the docstring above describing the defect -- a
+    check fooled by prose about the thing it checks, which is a small instance of the same error
+    this file exists to avoid.
+    """
+    import ast
+
+    tree = ast.parse((REPO_ROOT / "scripts" / "dev_up.py").read_text(encoding="utf-8"))
+    offenders = []
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call) or not node.args:
+            continue
+        target = node.args[0]
+        if not isinstance(target, ast.List) or not target.elts:
+            continue
+        first = target.elts[0]
+        if isinstance(first, ast.Constant) and isinstance(first.value, str):
+            if "/" not in first.value and "\\" not in first.value:
+                offenders.append(first.value)
+
+    assert not offenders, (
+        f"spawned by bare name and unresolvable on Windows: {offenders}. "
+        "Resolve through shutil.which so the .CMD form is used"
+    )
+
+
+def test_npm_missing_is_a_precondition_rather_than_a_crash(monkeypatch) -> None:
+    """The launcher must report it, not die on it."""
+    import scripts.dev_up as dev_up
+
+    monkeypatch.setattr(dev_up.shutil, "which", lambda _name: None)
+    check = dev_up.check_npm()
+
+    assert check.status == MISSING
+    assert check.fix, "a missing precondition with no fix has moved the search rather than ended it"
+
+
+def test_npm_resolves_on_this_machine() -> None:
+    """Executed against the real PATH: whatever it returns must be runnable."""
+    resolved = npm_executable()
+
+    assert resolved is not None
+    assert Path(resolved).exists(), f"{resolved} was resolved and does not exist"
+    assert check_npm().status == OK
