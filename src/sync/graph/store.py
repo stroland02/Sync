@@ -353,8 +353,8 @@ class GraphStore:
             if statement.upper().startswith("CREATE TABLE")
         ]
 
-    def truncate_all(self, keep: Sequence[str] = ()) -> None:
-        """Empty every table the schema declares, except the ones named.
+    def truncate_all(self) -> None:
+        """Empty every table the schema declares.
 
         The list used to be written out here, and it was right -- but it was right the way
         `schema.sql` was complete: by somebody remembering. A table added later would have been
@@ -362,19 +362,38 @@ class GraphStore:
         consequence is quieter than a failed insert. Rows from one run survive into the next and
         the failure surfaces somewhere with no obvious connection to this method.
 
-        `keep` exists because a scan cannot use this method as written. It empties the whole
-        database, so a scan of one repository erases every other repository's rows -- `cli.run`
-        says a hosted control plane must never do it, and until `replace_call_sites` existed there
-        was nothing else that made a re-index converge. A scan now keeps `call_site` and converges
-        it per repository instead.
-
-        Keeping a parent while truncating its children is what the foreign keys already allow:
-        `finding` references `call_site`, and truncating the referencing table needs nothing from
-        the referenced one. Keeping a child while truncating its parent would need `CASCADE` to
-        reach back, which it does, so a caller cannot use this to leave a dangling row.
+        A whole-database wipe, and it means it. Its callers are a test fixture starting from
+        nothing and the benchmark harness, which scores into a scratch database `cli.score`
+        refuses to let anyone point at the corpus. A scan is not one of them: it calls
+        `truncate_signal_and_detect`, and B129 records what it cost while it called this with an
+        allow-list instead.
         """
-        tables = [table for table in self._schema_tables() if table not in set(keep)]
-        self._connect().execute(f"TRUNCATE {', '.join(tables)} CASCADE")
+        self._connect().execute(f"TRUNCATE {', '.join(self._schema_tables())} CASCADE")
+
+    def truncate_signal_and_detect(self) -> None:
+        """Empty what a scan rebuilds from scratch: SIGNAL's rows, then DETECT's.
+
+        A scan names what it clears rather than what it spares, and the inversion is the whole
+        fix. The allow-list this replaced held one table against the seven it did not name, so a
+        scan emptied the migration corpus, the repository context it had seeded eight lines
+        earlier, and three tables of telemetry it did not produce and cannot re-produce -- and a
+        table added to `schema.sql` afterwards would have joined the wiped set by saying nothing.
+        Naming the cleared set means a table nobody thought about survives, which is the
+        direction a mistake here should point.
+
+        `call_site` is rebuilt by a scan too and is deliberately absent: INDEX converges it per
+        repository through `replace_call_sites`, which retracts what a pass stopped finding
+        rather than deleting it. These two are not converged that way yet, so a scan of one
+        repository still clears every repository's findings and every vendor's changes. That is
+        a per-table grain argument rather than a line to change here, and B129 carries it.
+
+        Never `CASCADE`. `finding` holds the only foreign keys in the schema and both ends are
+        accounted for -- `vendor_change` is truncated with it and `call_site` is only referenced
+        -- so the constraint is satisfied without one. A `CASCADE` would instead reach silently
+        into whatever table references these next, which is the shape of the defect this method
+        exists to close.
+        """
+        self._connect().execute("TRUNCATE vendor_change, finding")
 
     def upsert_call_site(self, site: CallSite) -> str:
         # line and col are part of identity, not just data: two distinct call sites

@@ -1195,7 +1195,7 @@ class _LoopStore:
     def apply_schema(self):
         pass
 
-    def truncate_all(self, keep=()):
+    def truncate_signal_and_detect(self):
         pass
 
     def replace_call_sites(self, repo_id, sites):
