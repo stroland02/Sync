@@ -375,7 +375,10 @@ def gate_four_containment_true(*, run_suite: bool, suite_result: str | None = No
     elif run_suite:
         suite_ok, suite_note = _suite_green()
     else:
-        suite_ok, suite_note = suite_from_record(head=head_commit())
+        # `SUITE_RECORD` read here rather than taken as a default argument: a default binds
+        # at definition time, so a test pointing the module at another path would be
+        # silently ignored and would pass while asserting nothing.
+        suite_ok, suite_note = suite_from_record(SUITE_RECORD, head=head_commit())
     evidence.append(suite_note)
     verdicts.append(MET if suite_ok is True else (CANNOT_TELL if suite_ok is None else NOT_MET))
 

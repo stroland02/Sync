@@ -332,7 +332,21 @@ def test_a_skipped_suite_cannot_tell_rather_than_passing() -> None:
         assert not any("success" in line.lower() for line in verdict.evidence), reported
 
 
-def test_no_suite_result_at_all_still_says_it_was_not_measured() -> None:
+def test_with_no_flag_and_no_record_it_says_it_was_not_measured(tmp_path, monkeypatch) -> None:
+    """Rewritten by `CI-W306`, and the rewrite is the point rather than a fixup.
+
+    This asserted that no flag means "not measured", which was true when the only sources were two
+    flags. It is now false by design: with no flag the gate reads a durable record, which is the
+    whole of what that unit fixed. Left alone the test would have pinned the behaviour it was
+    landed to remove.
+
+    So it pins the surviving claim — with no flag *and* no record there is nothing to report — and
+    points at a record that genuinely does not exist, rather than at the repository's own, which is
+    what made the original fail.
+    """
+    import scripts.beta_gates as beta_gates
+
+    monkeypatch.setattr(beta_gates, "SUITE_RECORD", tmp_path / "absent.json")
     verdict = gate_four_containment_true(run_suite=False, suite_result=None)
 
     assert any("not measured" in line for line in verdict.evidence)
