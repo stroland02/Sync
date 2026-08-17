@@ -25,7 +25,7 @@ import { afterEach, describe, expect, it, vi } from "vitest"
 import { AppFrame } from "@/layouts/app-frame"
 import { shortcutHint } from "@/layouts/command-palette"
 import { KINDS_SHOWN, clearErrors, reportError } from "@/lib/error-log"
-import { AREAS, DESTINATIONS, ROUTES, type AreaEntry } from "@/lib/routes"
+import { DESTINATIONS, ROUTES, type RouteEntry } from "@/lib/routes"
 
 // The top bar's switchers read the same two queries the list screens read. Mocked rather than
 // served through a client, for the reason `fleet-facts.test.tsx` gives: this file is about the
@@ -71,8 +71,10 @@ function destinationRows(): Element[] {
   return [...destinations().querySelectorAll("[data-destination]")]
 }
 
-function routesOf(area: AreaEntry) {
-  return ROUTES.filter((route) => area.levels.includes(route.level))
+const REGIONS = ["root", "repository"] as const
+
+function routesOf(region: RouteEntry["region"]) {
+  return ROUTES.filter((route) => route.region === region)
 }
 
 /** A concrete URL for a route, since `:findingId` matches nothing on its own. */
@@ -287,15 +289,17 @@ describe("one sidebar carries every area", () => {
     )
 
     // Every route in the registry, from one screen, with nothing to hover and nothing to select.
-    expect(shown).toEqual(ROUTES.map((route) => route.path))
+    // Grouped by region rather than in raw registry order: root first, then repository, which is
+    // the order the sidebar draws them and the order a reader meets them.
+    expect(shown).toEqual(REGIONS.flatMap((region) => routesOf(region).map((r) => r.path)))
   })
 
   it("names every area as a group, so the run of levels under it still reads as one area", () => {
     renderAt("/")
 
     const text = destinations().textContent ?? ""
-    for (const area of AREAS) {
-      expect(text).toContain(area.label)
+    for (const label of ["Across all repositories", "Within a repository"]) {
+      expect(text).toContain(label)
     }
   })
 
@@ -310,7 +314,7 @@ describe("one sidebar carries every area", () => {
 
     expect(settings.getAttribute("href")).toBe("/settings")
     expect(settings.getAttribute("aria-disabled")).toBeNull()
-    expect(AREAS.map((area) => area.label)).not.toContain("Settings")
+    expect(ROUTES.map((route) => route.label)).not.toContain("Settings")
     expect(settings.getAttribute("title")).toBe("Settings — read-only until the write path lands")
   })
 
@@ -338,8 +342,8 @@ describe("the sidebar carries the destinations", () => {
     // longer hides the others -- both were properties of the two-tier chassis. What survives, and
     // is worth more, is that the list does not reorder under the reader as they navigate.
     const order: string[][] = []
-    for (const area of AREAS) {
-      const route = routesOf(area)[0]
+    for (const region of REGIONS) {
+      const route = routesOf(region)[0]
       renderAt(concrete(route.path))
       order.push(
         [...destinations().querySelectorAll("[data-destination]")].map(
@@ -351,7 +355,7 @@ describe("the sidebar carries the destinations", () => {
     for (const shown of order) {
       expect(shown).toEqual(order[0])
     }
-    expect(order[0]).toEqual(ROUTES.map((route) => route.path))
+    expect(order[0]).toEqual(REGIONS.flatMap((region) => routesOf(region).map((r) => r.path)))
   })
 
   it("groups them under the graph levels the specification names", () => {
@@ -367,7 +371,14 @@ describe("the sidebar carries the destinations", () => {
     const labels = [...destinations().querySelectorAll('[data-sidebar="group-label"]')].map(
       (el) => el.textContent
     )
-    expect(labels).toEqual(AREAS.flatMap((area) => [...area.levels]))
+    // Every level, grouped by region in registry order.
+    const expected: string[] = []
+    for (const region of REGIONS) {
+      for (const route of routesOf(region)) {
+        if (!expected.includes(route.level)) expected.push(route.level)
+      }
+    }
+    expect(labels).toEqual(expected)
   })
 
   it("marks the row for the current route, and marks only it", () => {
@@ -384,10 +395,10 @@ describe("the sidebar carries the destinations", () => {
   })
 
   it("names every destination for a screen reader", () => {
-    for (const area of AREAS) {
-      renderAt(concrete(routesOf(area)[0].path))
+    for (const region of REGIONS) {
+      renderAt(concrete(routesOf(region)[0].path))
 
-      for (const route of routesOf(area)) {
+      for (const route of routesOf(region)) {
         const row = destinations().querySelector(`[data-destination="${route.path}"]`)
         expect(row?.getAttribute("aria-label")).toContain(route.label)
         // The tooltip is the sighted reader's equivalent of the accessible name, so it carries the
@@ -483,8 +494,8 @@ describe("every declared destination is reachable without an activation", () => 
     renderAt("/")
 
     const seen = new Set<string>()
-    for (const area of AREAS) {
-      for (const route of routesOf(area)) {
+    for (const region of REGIONS) {
+      for (const route of routesOf(region)) {
         expect(destinations().querySelector(`[data-destination="${route.path}"]`)).toBeTruthy()
         seen.add(route.path)
       }

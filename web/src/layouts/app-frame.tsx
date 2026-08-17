@@ -29,7 +29,6 @@ import {
   writeMinimised,
 } from "@/layouts/sidebar-collapse"
 import {
-  AREAS,
   DESTINATIONS,
   ROUTES,
   boundParams,
@@ -135,18 +134,41 @@ function DestinationRow({
   )
 }
 
+/**
+ * The two regions the sidebar draws, in the order it draws them.
+ *
+ * Six areas became two because the repository is the independent variable: a screen is either
+ * scoped to one repository or it is not. The labels say which, plainly, and they are honest while
+ * no repository is selected — nothing here claims a repository has been chosen.
+ */
+const REGIONS = [
+  { id: "root", label: "Across all repositories" },
+  { id: "repository", label: "Within a repository" },
+] as const
+
+/** The graph levels present in one region, in registry order, without repeats. */
+function levelsIn(region: RouteEntry["region"]): GraphLevel[] {
+  const seen: GraphLevel[] = []
+  for (const route of ROUTES) {
+    if (route.region === region && !seen.includes(route.level)) seen.push(route.level)
+  }
+  return seen
+}
+
 function LevelGroup({
   level,
+  region,
   pathname,
   bound,
   minimised,
 }: {
   level: GraphLevel
+  region: RouteEntry["region"]
   pathname: string
   bound: Record<string, string>
   minimised: boolean
 }) {
-  const routes = ROUTES.filter((route) => route.level === level)
+  const routes = ROUTES.filter((route) => route.level === level && route.region === region)
   if (routes.length === 0) return null
 
   return (
@@ -252,13 +274,14 @@ function AppSidebar({ pathname }: { pathname: string }) {
           </button>
         </SidebarHeader>
         <SidebarContent>
-          {AREAS.map((entry) => (
-            <div key={entry.id} className="flex flex-col">
-              <GroupHeading label={entry.label} minimised={minimised} />
-              {entry.levels.map((level) => (
+          {REGIONS.map((region) => (
+            <div key={region.id} className="flex flex-col">
+              <GroupHeading label={region.label} minimised={minimised} />
+              {levelsIn(region.id).map((level) => (
                 <LevelGroup
                   key={level}
                   level={level}
+                  region={region.id}
                   pathname={pathname}
                   bound={bound}
                   minimised={minimised}
