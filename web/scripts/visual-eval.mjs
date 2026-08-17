@@ -119,9 +119,16 @@ const PROBE = `(() => {
   // A failed panel is not a measurable panel: its error prose counts as console prose and its
   // missing content counts as missing composition. The caller refuses on this rather than
   // reporting numbers that look plausible.
-  const failed = /never reached a server|did not answer|Could not reach the API|unreachable/i.test(
-    main.textContent
-  )
+  // Structural rather than phrase-matching: every failed panel renders ErrorState, and every
+  // ErrorState with a retry renders a "Try again" control, so the control is the marker. The phrase
+  // list stays for panels that predate the retry affordance. A "not found (/api/...)" panel slipped
+  // past a list of unreachable-style wordings and counted 302 characters of error prose as console
+  // prose on the codebase screen -- the fourth failure of this shape in this work.
+  const failed =
+    [...main.querySelectorAll("button")].some((b) => b.textContent.trim() === "Try again") ||
+    /never reached a server|did not answer|Could not reach the API|unreachable|not found [(][/]api[/]/i.test(
+      main.textContent
+    )
 
   const body = getComputedStyle(document.body)
   return {

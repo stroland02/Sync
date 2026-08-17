@@ -371,3 +371,93 @@ both turned out to be dominated by protected sentences.
 
 **No layout or prose work should be ordered off any number in this file taken before this section.**
 The instrument is trustworthy from here; the readings before it are not.
+
+---
+
+# Fleet, re-audited on the fixed instrument — and one cut made
+
+**`prose-audit.mjs` carried the same defect the eval had** and was fixed the same way before this
+run: it waited only for `main` to have text, so it could count a skeleton's "Loading…" as console
+prose. It now waits for every panel to settle and refuses if any shows a fetch failure.
+
+Fleet, settled: **1777 characters across 16 paragraphs.**
+
+| Class | Chars | What it is |
+|---|---|---|
+| **Protected** | **1327** | change-unit grain (twice), staleness-not-liveness, absence-is-not-zero, three-attempts-one-finding, the fleet-vs-codebase scope sentence, the standing-limits framing, and the completeness statement |
+| **Discretionary** | **450** | the route question, two figure labels, one panel description, and one string repeated once per card |
+
+Against the mock's 340, Fleet's discretionary prose was **450 — over by 110**, which is a real gap
+and the first one this work has found that survives a correct measurement.
+
+## The cut, and why it is the only one available
+
+`Git repository · Monitored by Sync` rendered on **every** repository card — 170 of those 450
+characters. It carries none of the four distinctions, and both halves are already established by
+context: a reader looking at the Sync console's own repository list knows the rows are repositories
+and knows Sync is watching them. **Deleting it removes no fact.**
+
+Removed, test-first. Verified by re-running the audit rather than by asserting:
+
+| | before | after |
+|---|---|---|
+| total | 1777 | **1607** |
+| paragraphs | 16 | 11 |
+| discretionary | 450 | **280** |
+
+**280 against the mock's 340 — Fleet is now under parity on discretionary prose**, and the four
+protected sentences were confirmed still present in the same run rather than assumed.
+
+Nothing else on Fleet is available to cut. The remaining 280 characters are the route's own question,
+two figure labels and one panel description, each of which says something the screen does not
+otherwise say.
+
+---
+
+# The re-audit, and a fourth instrument defect found by running it
+
+## The auditor was still wrong, and codebase found it
+
+`prose-audit.mjs` refused on *unreachable*-style wordings and did not know about a **not-found**
+panel. The codebase screen renders two — `/coverage` and `/observed` both 404 — so the auditor
+counted **302 characters of error prose as console prose** and reported a number that looked fine.
+
+That is the fourth defect of this exact shape in this work: markup technique, harness
+authentication, half-rendered pages, and now an incomplete refusal list. All four returned a
+plausible number rather than an error.
+
+**Fixed structurally rather than by adding another phrase.** Every failed panel renders `ErrorState`,
+and every `ErrorState` with a retry renders a `Try again` control, so the *control* is the marker.
+The phrase list stays for panels that predate the retry affordance. Both instruments now share it,
+and the auditor now refuses codebase outright rather than measuring it.
+
+## What the audit found, per screen
+
+**`fleet` — audited, one cut made, now under parity.** 1777 characters, 1327 protected, 450
+discretionary against the drawing's 340. The repeated card description was removed; discretionary is
+now 280. Recorded in full in the section above.
+
+**`observe` (`/detectors`) — 3085 characters, and roughly 80% of it is protected.** Eight paragraphs
+carry distinctions outright: the rung as a class of evidence rather than a position on a good-to-bad
+scale; the refusal to compute a precision figure with no labelled corpus behind it; the fleet-wide
+versus repository scope sentence; *"Every bar is the same length because it is a composition, not a
+quantity… drawing that as length would render the smaller ones as a sliver indistinguishable from
+nothing"*; the once-each counting grain; *"an absence, which is not the same fact as a rung this
+console does not have"*; and *"that absence is indistinguishable from a detector that does not
+exist"*. **≈2468 protected against ≈617 discretionary**, and the discretionary remainder is the
+route's own question plus figure labels that are the counts themselves. **No cut available.**
+
+**`codebase` — cannot be audited, and the reason is a defect worth more than the audit.** Both its
+telemetry routes 404 for a repository that `/api/repositories` lists. Filed as **B147**.
+
+**`signals` — classification stands, total to be re-taken.** Its 1083 characters carrying the
+never-measured distinction were classified by reading the sentences, which does not depend on the
+total; the total itself was measured before the readiness fix and should be re-run.
+
+**`api-services`, `remediation`, `settings` — not yet audited.** Deliberately not guessed at.
+
+## The composition gaps are unchanged and still small
+
+One pairing each on `codebase`, `signals` and `observe`. Not attempted in this unit: `codebase`
+cannot currently be measured at all, and changing a layout while its own screen refuses to report is
+how a proxy gets optimised.

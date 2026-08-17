@@ -81,19 +81,49 @@ try {
     mobile: false,
   })
 
-  for (let attempt = 0; attempt < 80; attempt++) {
+  // Readiness means every panel has resolved, not that the document has text. Panels fetch
+  // independently, so a screen can carry laid-out prose while half of it is still a skeleton --
+  // and a skeleton's "Loading..." counts as prose. `visual-eval.mjs` returned a different answer on
+  // every run before this was fixed there; the same defect lived here.
+  let settled = false
+  for (let attempt = 0; attempt < 120; attempt++) {
     const probe = await page.send("Runtime.evaluate", {
-      expression: 'document.querySelector("main")?.textContent.trim().length > 40',
+      expression: `(() => {
+        const main = document.querySelector("main")
+        if (main === null || main.textContent.trim().length < 40) return false
+        return !/Loading |Waiting for the API/i.test(main.textContent)
+      })()`,
       returnByValue: true,
     })
-    if (probe.result.value === true) break
+    if (probe.result.value === true) {
+      settled = true
+      break
+    }
     await new Promise((r) => setTimeout(r, 250))
+  }
+  if (!settled) {
+    throw new Error(
+      "panels never settled within 30s. Refusing to audit: a loading state's text would be counted " +
+        "as console prose."
+    )
   }
 
   const result = await page.send("Runtime.evaluate", {
     expression: `(() => {
       const main = document.querySelector("main")
-      const failed = /never reached a server|did not answer|unreachable/i.test(main.textContent)
+      const failed = (() => {
+        // Structural rather than phrase-matching. Every failed panel renders ErrorState, and every
+        // ErrorState with a retry renders a "Try again" control -- so the control is the marker.
+        // The phrase list is kept for the states that predate the retry affordance. This is the
+        // fourth failure mode of this shape: a "not found (/api/...)" panel slipped past a regex
+        // listing only unreachable-style wordings, and counted 302 characters of error prose as
+        // console prose on the codebase screen.
+        const buttons = [...main.querySelectorAll("button")].map((b) => b.textContent.trim())
+        if (buttons.includes("Try again")) return true
+        return /never reached a server|did not answer|Could not reach the API|unreachable|not found [(][/]api[/]/i.test(
+          main.textContent
+        )
+      })()
       const paragraphs = [...main.querySelectorAll("p")].map((p) => p.textContent.trim())
       return { failed, total: paragraphs.reduce((n, t) => n + t.length, 0), paragraphs }
     })()`,
