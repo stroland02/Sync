@@ -596,6 +596,35 @@ unreachable on every attempt and still fails at the deadline.
 a transient or unknown condition recorded as a definite negative.
 
 
+### B187 — the console's credential silently makes every API panel 401, and only the container shows it
+
+**Found 2026-08-18 by `CI-W368`, by running the API and the console in one image for the first
+time.** Neither component is wrong on its own and together they serve a console with no data in it.
+
+- `sync.api.auth.configured_api_password` falls back to `SYNC_CONSOLE_PASSWORD` when
+  `SYNC_API_PASSWORD` is unset, so *having the console's credential in the environment* is enough
+  to make the API demand one.
+- `web/scripts/serve-console.mjs` deliberately deletes `authorization` before proxying to `/api`,
+  on the stated grounds that the console's shared credential is not the API's and the API does not
+  check it.
+
+**Measured:** console `200`, `/api/repositories` `401`, `{"error":"unauthorized"}` — a fully
+rendered console whose every panel is empty for an authentication reason no screen can show. That
+is the "half a stack" failure `dev_up.py` exists to prevent, arriving through a door nobody had
+opened, because until this image the two had never run in one process tree.
+
+**Worked around, not fixed.** `docker/entrypoint.sh` starts the API with
+`env -u SYNC_CONSOLE_PASSWORD`, so the API sees no credential, binds loopback inside the container,
+and is never published. The console's HTTP Basic gate stays the only boundary and it sits in front
+of both the console and the proxied API.
+
+**Closes when** the two agree in code rather than by an unset variable: either the API stops
+reading `SYNC_CONSOLE_PASSWORD` as its own (Lane E, `src/sync/api/auth.py`), or the proxy forwards
+a credential the API accepts (Lane B, `web/scripts/serve-console.mjs`). **Whichever way it goes, a
+test must run the pair together** — the reason this survived is that every existing test runs one
+or the other.
+
+
 ### B174 — `extract_credential` cannot tell malformed base64 from non-UTF-8 credentials — Lane E
 
 **Accounted rather than broken, and filed rather than fixed.** `CI-W304` added this clause to
