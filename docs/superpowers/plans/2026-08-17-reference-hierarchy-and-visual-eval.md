@@ -346,19 +346,45 @@ routing.
 
 ## Live browser feedback in the scoring loop
 
-**Commissioned by the owner 2026-08-17.** The eval already drives Chrome over CDP to read computed
-styles. The same session knows three more things it currently throws away, and each one is a
-correctness signal rather than a matter of taste:
+**Commissioned by the owner 2026-08-17**, in full below. The governing sentence is *do not rely
+solely on static analysis or unit tests* — after every applied fix, the live browser is inspected
+independently. The eval already drives Chrome over CDP to read computed styles, so the session
+exists; what it does not yet do is stay attached, and it throws away everything the page says about
+itself.
 
-- **Console errors and uncaught exceptions** — `Runtime.exceptionThrown` and `Runtime.consoleAPICalled`
-  at `error` level.
+**Attach and stay attached.** A browser session against the running dev server at
+`http://localhost:5173`, held open in the background across the whole loop rather than opened per
+measurement. Two facts about this machine belong here because each has already cost a run: **Vite
+binds IPv6-only, so `localhost:5173` answers and `127.0.0.1:5173` refuses** (`CI-W302`), and the
+console's own `fetch` calls do not carry URL-embedded credentials, so authentication goes through
+`Network.setExtraHTTPHeaders` or three panels render their never-reached-a-server state and get
+measured as missing composition (`M14-W355`).
+
+**Monitor.** After applying a remediation, wait for HMR to push the update before reading anything.
+The probe already refuses to measure a half-rendered page (`M14-W357`); an HMR update is that
+condition arriving on purpose.
+
+**Verify, in two directions, and the second is the one an error-only check misses.**
+
+*Did it break anything?*
+
+- **Console errors, uncaught exceptions, React hydration errors, and warning flags** —
+  `Runtime.exceptionThrown` and `Runtime.consoleAPICalled`. Hydration errors are called out
+  separately because React reports them as warnings, so an `error`-level filter drops exactly the
+  class this console is most likely to produce.
 - **Failed network requests** — `Network.loadingFailed`, and any response at 400 or above.
 - **A broken layout** — an element overflowing its container, a zero-height region that should have
   content, a horizontal scroll on the page body.
 
-**A remediation that introduces any of the three is FAILED. Revert it and self-correct from what the
-browser said**, rather than from a re-reading of the diff. The point of the loop is that the browser
-is a better witness than the author.
+*Did it do what it was meant to?* **Inspect the DOM and confirm the structural nodes and components
+reflect the intended remediation.** A change that introduces no error and also did not take is a
+silent no-op, and this project has shipped four of those today under a different name — a number that
+looked fine. An absent error is not evidence of an applied change, and the affirmative check is the
+only thing that separates them.
+
+**A remediation that introduces a break, or that fails to appear in the DOM, is FAILED. Revert it and
+self-correct from what the browser said**, rather than from a re-reading of the diff. The point of the
+loop is that the browser is a better witness than the author.
 
 Two constraints, and the first is the one that makes it work at all.
 
