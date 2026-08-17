@@ -962,13 +962,18 @@ def run(args: argparse.Namespace, today: date | None = None) -> int:
         # an absent call site.
         #
         # A stale row from a previous invocation is indistinguishable from a real
-        # finding to the detector, so everything a scan re-derives is cleared
-        # first. `call_site` is the exception and is now converged per repository
-        # instead: position is part of a call site's identity, so one blank line
-        # inserted above a call used to leave the old row behind forever with its
-        # finding attached, and the only thing that had ever cleared those was a
-        # truncate of the whole database -- which erases every other repository's
-        # rows, exactly what a hosted control plane must never do.
+        # finding to the detector, so what a scan rebuilds from scratch is cleared
+        # first -- and only that. `truncate_signal_and_detect` names the two tables
+        # rather than naming the six it spares, which is what stopped a scan from
+        # emptying the migration corpus, the context it had seeded a few lines above,
+        # and three tables of telemetry no scan produces.
+        #
+        # `call_site` is rebuilt too and is converged per repository instead: position
+        # is part of a call site's identity, so one blank line inserted above a call
+        # used to leave the old row behind forever with its finding attached, and the
+        # only thing that had ever cleared those was a truncate of the whole database
+        # -- which erases every other repository's rows, exactly what a hosted control
+        # plane must never do.
         #
         # Converged by retraction rather than by deletion, which is not a detail:
         # `finding.call_site_id` cascades, so deleting the stale row deletes what
@@ -978,11 +983,6 @@ def run(args: argparse.Namespace, today: date | None = None) -> int:
         # Finding ids are stable hashes of (detector, call_site_id, vendor_change_id),
         # so a re-inserted finding gets the same id its checkpoint thread already
         # used -- checkpoint coordinates survive the truncate.
-        #
-        # What is still truncated wholesale, and is still cross-repository:
-        # `finding` and `vendor_change` are re-derived every scan, and the observed
-        # tables are cleared by a scan that did not produce them. Narrowing those is
-        # a decision per table with its own grain argument and is not made here.
         # Fetched before the transaction opens. The ingest holds an ACCESS EXCLUSIVE lock on the
         # graph tables, and two vendor pages behind a slow network would hold it for the length
         # of the download rather than the length of the write.
@@ -995,7 +995,7 @@ def run(args: argparse.Namespace, today: date | None = None) -> int:
         )
 
         with store.transaction():
-            store.truncate_all(keep=("call_site",))
+            store.truncate_signal_and_detect()
 
             # Kept as well as stored: `ParameterDeprecationDetector` takes call sites directly,
             # and the store answers `call_sites_for_operation` rather than "all of them". The id

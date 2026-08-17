@@ -24,6 +24,7 @@ from sync.core.models import (
 from sync.core.protocols import (
     Detector,
     LanguageAdapter,
+    PatchRunner,
     Remediator,
     RequestCorrelator,
     VendorAdapter,
@@ -43,6 +44,7 @@ __all__ = [
     "LanguageAdapter",
     "OperationRef",
     "Patch",
+    "PatchRunner",
     "PatchStrategy",
     "Remediator",
     "RepoContext",

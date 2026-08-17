@@ -197,6 +197,8 @@ def repo(tmp_path: Path) -> RepoRef:
     )
 
 
+from sync.runner import ClaudeSdkRunner
+
 @pytest.fixture(autouse=True)
 def agent_is_a_failure(monkeypatch):
     """Reaching the agent is the defect, so it fails loudly rather than quietly costing a model
@@ -205,7 +207,7 @@ def agent_is_a_failure(monkeypatch):
     def refuse(self, prompt, repo_path, identity):
         raise AssertionError("a parameter deprecation reached the agent tier")
 
-    monkeypatch.setattr(AgentRemediator, "_run_agent", refuse)
+    monkeypatch.setattr(ClaudeSdkRunner, "run", refuse)
 
 
 def _site(model: str = "claude-opus-5") -> CallSite:

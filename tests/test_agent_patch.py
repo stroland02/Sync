@@ -9,6 +9,7 @@ from claude_agent_sdk import ResultMessage
 from sync.core import CallSite, Finding, Remediator, RepoRef, VendorChange
 from sync.remediate import agent_patch
 from sync.remediate.agent_patch import AgentRemediator, build_patch_prompt
+from sync.runner import ALLOWED_TOOLS, DISALLOWED_TOOLS, MODEL, ClaudeSdkRunner, StaticRunner, claude_sdk
 
 SITE = CallSite(
     repo_id="r1", path="src/billing.ts", line=6, col=8, vendor_id="stripe",
@@ -296,28 +297,65 @@ def test_run_agent_configures_the_repo_cwd_and_the_pinned_model(monkeypatch, tmp
         captured["options"] = options
         yield _ok_result()
 
-    monkeypatch.setattr(agent_patch, "query", fake_query)
+    monkeypatch.setattr(claude_sdk, "query", fake_query)
 
-    AgentRemediator()._run_agent("do the patch", tmp_path, "finding=f-42 repo=acme-billing")
+    ClaudeSdkRunner(agent_patch.patch_hooks).run("do the patch", tmp_path, "finding=f-42 repo=acme-billing")
 
     options = captured["options"]
     assert captured["prompt"] == "do the patch"
     assert options.cwd == tmp_path
-    assert options.model == agent_patch.MODEL
+    assert options.model == MODEL
     assert options.thinking == {"type": "adaptive"}
     assert options.effort == "xhigh"
-    assert options.allowed_tools == agent_patch.ALLOWED_TOOLS
-    assert options.disallowed_tools == agent_patch.DISALLOWED_TOOLS
+    assert options.allowed_tools == ALLOWED_TOOLS
+    assert options.disallowed_tools == DISALLOWED_TOOLS
+
+
+def test_the_run_loads_no_settings_from_the_filesystem(monkeypatch, tmp_path):
+    """`cwd` is a clone of a customer's repository, and `.claude/settings.json` is a file that
+    repository may ship.
+
+    `ClaudeAgentOptions.setting_sources` defaults to `None`, which the SDK documents as "all
+    sources are loaded". A `SessionStart` hook in the clone's own settings is therefore a shell
+    command Sync runs -- before the first tool call, so `sync.remediate.tool_gate` never sees
+    it, and inside a process that holds every credential the control plane has, since
+    `options.env` merges onto `os.environ` rather than replacing it (B97).
+
+    Measured 2026-08-16 against the real SDK: a `.claude/settings.json` written into the
+    working directory executed `echo` and the marker came back on a `hook_response` message.
+    With `setting_sources=[]` the same experiment reported it did not fire.
+
+    `[]` and not `["user"]`: the operator's own global settings are no more part of a patch
+    run than the customer's are. The same experiment showed this host's SessionStart hooks
+    firing inside the patch agent and its `init` tool roster carrying the operator's whole
+    installed set rather than the six `ALLOWED_TOOLS` names.
+
+    Sync's own hooks are unaffected -- they are passed programmatically through `hooks=`,
+    which is not a filesystem source.
+    """
+    captured = {}
+
+    async def fake_query(*, prompt, options):
+        captured["options"] = options
+        yield _ok_result()
+
+    monkeypatch.setattr(claude_sdk, "query", fake_query)
+
+    ClaudeSdkRunner(agent_patch.patch_hooks).run("do the patch", tmp_path, "finding=f-42 repo=acme-billing")
+
+    assert captured["options"].setting_sources == []
+    # The gate still reaches the run, which is the half a bare isolation flag could break.
+    assert set(captured["options"].hooks) == {"PreToolUse", "PostToolUse"}
 
 
 def test_run_agent_raises_when_the_sdk_reports_a_failed_run(monkeypatch, tmp_path):
     async def fake_query(*, prompt, options):
         yield _ok_result(is_error=True, subtype="error_max_turns", errors=["hit max turns"])
 
-    monkeypatch.setattr(agent_patch, "query", fake_query)
+    monkeypatch.setattr(claude_sdk, "query", fake_query)
 
     with pytest.raises(RuntimeError, match="hit max turns"):
-        AgentRemediator()._run_agent("do the patch", tmp_path, "finding=f-42 repo=acme-billing")
+        ClaudeSdkRunner(agent_patch.patch_hooks).run("do the patch", tmp_path, "finding=f-42 repo=acme-billing")
 
 
 def test_run_agent_raises_when_no_result_message_arrives(monkeypatch, tmp_path):
@@ -325,10 +363,10 @@ def test_run_agent_raises_when_no_result_message_arrives(monkeypatch, tmp_path):
         return
         yield  # pragma: no cover - unreachable; makes this an async generator
 
-    monkeypatch.setattr(agent_patch, "query", fake_query)
+    monkeypatch.setattr(claude_sdk, "query", fake_query)
 
     with pytest.raises(RuntimeError):
-        AgentRemediator()._run_agent("do the patch", tmp_path, "finding=f-42 repo=acme-billing")
+        ClaudeSdkRunner(agent_patch.patch_hooks).run("do the patch", tmp_path, "finding=f-42 repo=acme-billing")
 
 
 def _failing_query(**_):
@@ -343,7 +381,7 @@ def test_a_failed_agent_run_names_the_finding_and_the_repository(monkeypatch, tm
     nothing else -- a stack trace is not in the aggregate, and every finding in
     a `--limit 0` run raises through the same two lines.
     """
-    monkeypatch.setattr(agent_patch, "query", _failing_query())
+    monkeypatch.setattr(claude_sdk, "query", _failing_query())
     repo = REPO.model_copy(update={"local_path": str(tmp_path)})
 
     with pytest.raises(RuntimeError) as raised:
@@ -357,7 +395,7 @@ def test_a_run_with_no_result_message_names_the_finding_and_the_repository(monke
         return
         yield  # pragma: no cover - unreachable; makes this an async generator
 
-    monkeypatch.setattr(agent_patch, "query", fake_query)
+    monkeypatch.setattr(claude_sdk, "query", fake_query)
     repo = REPO.model_copy(update={"local_path": str(tmp_path)})
 
     with pytest.raises(RuntimeError) as raised:
@@ -371,7 +409,7 @@ def test_a_finding_with_no_id_yet_does_not_report_its_identity_as_none(monkeypat
     aggregated failure list reads as a bug in Sync rather than as a finding
     that was never persisted.
     """
-    monkeypatch.setattr(agent_patch, "query", _failing_query())
+    monkeypatch.setattr(claude_sdk, "query", _failing_query())
     repo = REPO.model_copy(update={"local_path": str(tmp_path)})
 
     with pytest.raises(RuntimeError) as raised:
@@ -416,20 +454,9 @@ def clone(tmp_path, monkeypatch):
     return path
 
 
-def _agent_doing(work) -> object:
-    """Replace the model call with `work`, which stands for what the agent leaves
-    in the clone. Only the working tree and the index the agent leaves behind
-    decide what `propose` reports, so nothing here needs the SDK.
-    """
-    def run_agent(self, prompt, repo_path, identity):
-        work(Path(repo_path))
-
-    return run_agent
-
-
 def _propose_after(clone: Path, monkeypatch, work) -> object:
-    monkeypatch.setattr(AgentRemediator, "_run_agent", _agent_doing(work))
-    return AgentRemediator().propose(
+    runner = StaticRunner(edit=work)
+    return AgentRemediator(runner=runner).propose(
         SAVED_FINDING, CHANGE, SITE, REPO.model_copy(update={"local_path": str(clone)}),
     )
 

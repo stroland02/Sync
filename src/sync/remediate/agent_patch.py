@@ -1,6 +1,10 @@
-"""Patch generation delegated to the Claude Agent SDK.
+"""Patch generation delegated to a model, through the `PatchRunner` seam.
 
-The Agent SDK runs against a throwaway clone, never a customer's working tree.
+This module decides what the patch has to be and reads what the clone ended up holding; a
+runner in `sync.runner` drives the model in between, and is the only thing that knows which
+SDK does the driving.
+
+The runner runs against a throwaway clone, never a customer's working tree.
 Nothing it produces is trusted: the graph typechecks the result and then waits
 for the repository's own CI before anything becomes a pull request.
 
@@ -49,14 +53,13 @@ in `docs/superpowers/specs/2026-07-25-sync-latency-architecture.md`.
 
 from __future__ import annotations
 
-import asyncio
 import subprocess
 from pathlib import Path
-
-from claude_agent_sdk import ClaudeAgentOptions, ResultMessage, query
+from typing import Any
 
 from sync.context import render_section
 from sync.core import CallSite, Finding, Patch, RepoRef, VendorChange
+from sync.core.protocols import PatchRunner
 from sync.remediate import tool_gate, tool_output
 from sync.remediate.untrusted import (
     HARDENING,
@@ -66,21 +69,8 @@ from sync.remediate.untrusted import (
     fence,
     fenced_block,
 )
+from sync.runner import ClaudeSdkRunner
 from sync.signals.oasdiff import changed_field
-
-MODEL = "claude-opus-5"
-
-# ClaudeAgentOptions has no raw max_tokens knob -- the SDK manages its own
-# multi-turn budget -- so the project's max_tokens=64000 binding does not
-# apply here; it governs direct Messages API calls elsewhere in the pipeline.
-ALLOWED_TOOLS = ["Read", "Write", "Edit", "Bash", "Glob", "Grep"]
-# Not merely omitted from ALLOWED_TOOLS: an unlisted tool still falls through
-# to the permission mode instead of being blocked, so network tools have to be
-# denied explicitly to guarantee none run.
-DISALLOWED_TOOLS = ["WebSearch", "WebFetch"]
-# Every entry above allows a whole tool, which auto-approves it before any permission callback
-# is consulted -- so what the agent may do inside those tools is decided in `sync.remediate
-# .tool_gate`, which the SDK reaches through a PreToolUse hook that nothing shadows.
 
 _SCOPE_RULES = """
 Rules:
@@ -310,18 +300,33 @@ def _unstaged_additions(repo_path: Path) -> list[str]:
     return result.stdout.split()
 
 
+def patch_hooks(identity: str, refusals: list[str]) -> dict[str, list[Any]]:
+    """What narrows the agent inside the tools it was allowed.
+
+    Assembled here rather than inside the runner because it is remediation's policy: which
+    commands a patch legitimately needs, and how a tool's output is framed as untrusted text.
+    A runner that reached for this would make `sync.runner` depend on `sync.remediate`, and
+    the seam runs the other way.
+    """
+    return {**tool_gate.hooks(identity), **tool_output.hooks(identity, refusals)}
+
+
 class AgentRemediator:
-    """Remediator backed by the Claude Agent SDK."""
+    """Remediator backed by a model, driven through a `PatchRunner`."""
 
     strategy = "agent"
 
-    def __init__(self, repo_context: str = "") -> None:
+    def __init__(self, repo_context: str = "", runner: PatchRunner | None = None) -> None:
         # Bound once at construction rather than threaded through `propose()`. The caller
         # constructs one `AgentRemediator` per run, after reading the stored context once, so
         # every finding in the run sees the same repository facts without widening the shared
         # `Remediator` protocol -- and every codemod tier that never reads it -- to carry a
         # value only this tier consumes.
         self._repo_context = repo_context
+        # The default is the production path, carrying the gate. A caller that names no runner
+        # gets a hardened one; the seam serves tests and M9's outcome vocabulary rather than
+        # being a switch somebody has to remember to set.
+        self._runner: PatchRunner = runner or ClaudeSdkRunner(patch_hooks)
 
     def can_handle(self, finding: Finding, change: VendorChange) -> bool:
         return finding.severity in ("breaking", "deprecation")
@@ -338,7 +343,7 @@ class AgentRemediator:
         repo_path = Path(repo.local_path)
 
         identity = _identity(finding, repo)
-        self._run_agent(prompt, repo_path, identity)
+        self._runner.run(prompt, repo_path, identity)
 
         # Asked of the tree rather than of the diff. An unstaged addition is in
         # neither the tree `static_verify` compiles nor the commit `push_branch`
@@ -365,38 +370,3 @@ class AgentRemediator:
             rationale=finding.rationale,
         )
 
-    def _run_agent(self, prompt: str, repo_path: Path, identity: str) -> None:
-        """Isolated so tests can substitute it without touching `propose`."""
-        asyncio.run(self._drive_agent(prompt, repo_path, identity))
-
-    async def _drive_agent(self, prompt: str, repo_path: Path, identity: str) -> None:
-        # A hook cannot abandon a run -- an exception raised inside one is answered to the
-        # CLI, not to this frame -- so `tool_output` records its refusals here instead.
-        refusals: list[str] = []
-        options = ClaudeAgentOptions(
-            cwd=repo_path,
-            model=MODEL,
-            thinking={"type": "adaptive"},
-            effort="xhigh",
-            allowed_tools=ALLOWED_TOOLS,
-            disallowed_tools=DISALLOWED_TOOLS,
-            hooks={**tool_gate.hooks(identity), **tool_output.hooks(identity, refusals)},
-        )
-        result: ResultMessage | None = None
-        async for message in query(prompt=prompt, options=options):
-            if isinstance(message, ResultMessage):
-                result = message
-
-        # Ahead of the two checks below, which describe how the run ended rather than why it
-        # was stopped. A refusal reports as an ordinary completion with an empty diff, and
-        # `route_after_patch` reads that as a remediator that found nothing to change.
-        if refusals:
-            raise RuntimeError(refusals[0])
-
-        # A run that failed or never reported must not be mistaken for one that
-        # completed and correctly found nothing to change: both would otherwise
-        # leave behind the same empty git diff.
-        if result is None:
-            raise RuntimeError(f"agent run produced no result message [{identity}]")
-        if result.is_error:
-            raise RuntimeError(f"agent run failed ({result.subtype}) [{identity}]: {result.errors}")
