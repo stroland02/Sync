@@ -21,6 +21,37 @@ it belongs to whoever notices.
 
 M4 continues the sequence at 126. Everything before that is in `git log`.
 
+## 2026-08-17: five parallel lanes, 72 work items
+
+**This file is a register, not a report.** It records what landed, in order, so a number identifies
+work without anyone having to remember it. For *status* -- what is done, what is being worked now,
+and what to do next -- read `BACKLOG.md`'s "Where development stands, 2026-08-17 evening", which is
+written against `git log` and a measurement rather than against memory.
+
+Today's rows come from five lanes working concurrently under
+`orchestration/2026-08-17-lane-charters.md`. Reading them in file order is misleading, because five
+lanes interleave; read them by prefix instead:
+
+| Prefix | Lane | What it covers |
+|---|---|---|
+| `M0-W233`..`W255` | coordinator | Orchestration itself: charters, the resume sweep, arbitrations, and the beta scope. Every one of these exists because something went wrong in coordination and was fixed |
+| `M5-W300`..`W308` | D | Signals, adapters, intake, and the two `B7` verification passes |
+| `M10`, `M8`, `M9` | A | The resolution loop: the runner seam, the outcome vocabulary, durable runs, and B151 |
+| `M12-W320`..`W324` | E | Graph, dashboard, API: the aggregates, the intake table, corpus health, merge-rate wiring |
+| `M14-W228`..`W341` | B | The console: mock-parity, Gate 3's screen pass, and the production-servable artefact |
+| `CI-W233`..`W289` | C | CI, gates, and `beta_gates.py` |
+
+**Numbers are allocated per lane in blocks** so two sessions cannot claim one number -- that
+happened five times in one afternoon before the blocks existed. The blocks are in the charter. A
+commit subject may carry a pre-renumber number where a collision was found on landing; the row is
+the authority, and it says so where that happened.
+
+Three rows are worth reading even if you read nothing else, because each is a defect the workspace
+found in itself rather than in the product: `M0-W244`, a safety net that reported success while
+doing nothing; `M0-W250`, an arbitration that was unenforceable because the coordinator had told
+every lane to skip the test that enforced it; and `M0-W253`, the gate meter contradicting the
+coordinator within minutes of landing.
+
 | Item | Subject | State | Where |
 |---|---|---|---|
 | M4-W126 | The Pull Request level and its evidence bundle | landed | `c808854`, `d0e316f` |
@@ -245,6 +276,7 @@ write path, are unbuilt; Phase 6 needs auth and tenancy and belongs to M4's host
 | M5-W308 | Gate 2 quality axes computation & rehearsal row isolation verification: verified sync.benchmark.axes computation across 5 axes and confirmed migration_outcome rehearsal row exclusion (is_rehearsal=True) | landed | `docs/superpowers/WORKLOG.md` |
 | M0-W255 | Gate 2's two hidden questions separated and the dangerous one answered well: rehearsal rows cannot reach its metrics, because `is_rehearsal` is recorded and `GraphStore.migration_outcomes` filters `WHERE NOT is_rehearsal` -- confirmed in the source rather than taken from a report. Had they been indistinguishable, every axis would have been quotable as evidence it had not earned. All five axes compute correctly over a wide population. So Gate 2 is no longer *we do not know whether this works* but *this works and has no data yet*, and it correctly still reads CANNOT TELL, because a proven calculation over zero rows is still zero rows | landed | `docs/superpowers/plans/2026-08-17-sync-to-beta-scope.md` |
 | M14-W341 | Gate 3 re-signed after W277/W278/W279/W340, a re-walk of what moved rather than ten screens again. The substantive question was W340's production runtime: static assets behind Basic with `/api` proxied is not the dev-proxy path the first pass was signed against, and absence-versus-zero survives a rebuild without automatically surviving a different fetch path. Measured rather than reasoned -- six endpoints fetched direct from the API and through the proxy and compared byte for byte, all identical, and the comparison is meaningful because `/api/change-units` carries 23 nulls including `standing`; 404 passes through as 404, so not-found is not collapsed into absence. Walked in Chrome on the built assets: the new STANDING column names the two kinds of nothing it cannot separate, the workflow captions and Settings' merge-policy refusal render intact, and the ticking evidence-age correctly does not render on a run whose outcome is `reported`, verified against the payload rather than assumed. Also answers the coordinator's question on the staleness meter: it is too crude, it watches all of `web/` so it will fire on test, token and tooling commits that cannot change a claim, and the one-line refinement is to narrow the watched set to `features/`, `components/` and `api/` excluding tests -- routed to Lane C rather than taken, since `scripts/` is its file | landed | `docs/superpowers/reports/2026-08-17-gate-3-resign.md` |
+| M0-W256 | The registers say what is true today rather than what was true a fortnight ago. `BACKLOG.md`'s milestone table is rewritten against `git log` and the gate meter: M5 from ~35% to ~80%, M12 from ~10% to ~55%, M8 and M9 to done, M10 to ~85%, and M8-M11 split into four rows because they no longer share a state. A dated status section carries the four measured gate verdicts, the order work should be done in and why, and who owns which paths right now. `WORKLOG.md` gains a preamble saying it is a register rather than a report, and how to read 72 interleaved rows by lane prefix instead of in file order | landed | `docs/superpowers/BACKLOG.md`, `docs/superpowers/WORKLOG.md` |
 
 **M7-W160's navigation was rebuilt once, on the owner's ruling of 2026-08-06.** The first pass built a
 56px icon rail of four product areas beside a 240px contextual panel, and collapsing removed the
