@@ -179,7 +179,7 @@ consumer, not five. The work it actually contains is building the second drawer.
 
 ### Lane C -- pipeline health, the gate, and CI
 
-**Owns:** `.github/**`, `scripts/**`, `pyproject.toml`, `docker-compose.yml`, `docker/**`,
+**Owns:** `.github/**`, `scripts/**` except `scripts/orchestration/**`, `pyproject.toml`, `docker-compose.yml`, `docker/**`,
 `tests/conftest.py`, `tests/test_lint_*`, `tests/test_ci_*`, `tests/test_gate_*`,
 `tests/test_leaked_database_sweep.py`, `tests/test_patch_sandbox.py`, `tests/test_sandbox.py`.
 
@@ -252,10 +252,30 @@ Queue, in order:
 **Every stage is idempotent and every table declares its grain as a comment before it gains a
 column.** One `migration_outcome` row is one attempt, not one finding.
 
+## The loop survives the session that started it
+
+Every agent here, the coordinator included, eventually stops mid-loop: a token budget runs out, a
+session closes, a runtime drops a connection. The lane then goes quiet and nothing notices, because
+the thing that would have noticed is the session that died.
+
+`scripts/orchestration/resume_lanes.py` is what notices. It is idempotent, takes no arguments in its
+normal form, and re-attaches any stopped lane to its own terminal. A scheduled task on this machine
+runs it every twenty minutes, so a lane that dies while nobody is watching is picked up within
+twenty minutes rather than at the next time a human happens to look.
+
+Run `uv run python scripts/orchestration/resume_lanes.py --dry-run` to see every lane's verdict
+without changing anything. That is the right first command when you do not know what state the
+workspace is in.
+
+**It never invents work.** It re-attaches an existing Task to an existing terminal. Deciding what a
+lane does next is a coordinator judgement, and a script that guessed would turn a finished milestone
+into busywork.
+
 ## The coordinator
 
-Owns `docs/superpowers/WORKLOG.md`, `docs/superpowers/BACKLOG.md`, this file, arbitration between
-lanes, and reconciling a landing that two lanes raced. Message it with
+Owns `docs/superpowers/WORKLOG.md`, `docs/superpowers/BACKLOG.md`, this file,
+`scripts/orchestration/**`, arbitration between lanes, and reconciling a landing that two lanes
+raced. Message it with
 `orca orchestration ask` when you are blocked on another lane, and with `escalation` when something
 is wrong that your lane cannot fix.
 
