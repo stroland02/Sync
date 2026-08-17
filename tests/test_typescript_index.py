@@ -317,3 +317,35 @@ def test_the_indexer_tells_the_adapter_which_language_it_indexed(tmp_path):
 
     assert seen, "the indexer resolved no symbols, so this proves nothing"
     assert {language for _, language in seen} == {"typescript"}
+
+
+def test_unbound_import_paths_reports_wrapper_files(tmp_path: Path):
+    repo_dir = tmp_path / "wrapper_repo"
+    repo_dir.mkdir()
+    (repo_dir / "package.json").write_text(
+        json.dumps({"dependencies": {"stripe": "^14.0.0"}}), encoding="utf-8"
+    )
+    src_dir = repo_dir / "src"
+    src_dir.mkdir()
+    # A wrapper file that imports stripe and exports a wrapper function
+    (src_dir / "wrapper.ts").write_text(
+        "import Stripe from 'stripe';\nexport const stripe = new Stripe('key');\nexport function myCharge() { return 1; }\n",
+        encoding="utf-8",
+    )
+    # An app file that calls the wrapper function
+    (src_dir / "app.ts").write_text(
+        "import { myCharge } from './wrapper';\nexport function run() { return myCharge(); }\n",
+        encoding="utf-8",
+    )
+
+    repo = RepoRef(repo_id="wrapper_repo", url="https://example.invalid/wrapper_repo", local_path=str(repo_dir), head_sha="0" * 40)
+    adapter = _adapter(tmp_path)
+
+    # index yields 0 call sites because calls happen on myCharge rather than stripe.charges.create
+    sites = list(adapter.index(repo))
+    assert len(sites) == 0
+
+    # unbound_import_paths explicitly identifies src/wrapper.ts as importing the SDK without bound call sites
+    unbound = adapter.unbound_import_paths(repo)
+    assert unbound == ["src/wrapper.ts"]
+

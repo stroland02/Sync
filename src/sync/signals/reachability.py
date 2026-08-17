@@ -208,20 +208,38 @@ def observed_call_counts(calls: Iterable) -> dict[str, int]:
     return counts
 
 
-def _evidence(assessment: Assessment, call_sites: Mapping[str, int]) -> tuple[str, int | None]:
-    """Which of the three classes this dependency is in, and its static count if it has one.
+def _evidence(
+    assessment: Assessment,
+    call_sites: Mapping[str, int],
+    unbound_imports: Mapping[str, Sequence[str]] | None = None,
+) -> tuple[str, int | None, str]:
+    """Which of the three classes this dependency is in, its static count, and its resolved reason.
 
     The intake category resolves the ambiguity a count cannot: a vendor absent from the counts
     was either looked at and not found, or never looked at, and only the category says which.
     `WATCHED` means a registered vendor *and* a declared binding for this ecosystem, so the
     indexer could bind it and an absence there is a measured zero. Anything else could not be
     bound, so an absence is an absence of evidence.
+
+    When `unbound_imports` indicates that the SDK was imported in source files (e.g. internal
+    wrapper modules or re-exports) but 0 call sites were statically bound, the reason explicitly
+    notes the wrapper abstraction rather than leaving it indistinguishable from a codebase that
+    never imported the SDK.
     """
     if assessment.category != WATCHED:
-        return UNBINDABLE, None
+        return UNBINDABLE, None, assessment.reason
 
     found = call_sites.get(assessment.vendor_id or "", 0)
-    return (CALLED if found else UNCALLED), found
+    if found > 0:
+        return CALLED, found, assessment.reason
+
+    unbound = (unbound_imports or {}).get(assessment.vendor_id or "", ())
+    if unbound:
+        count = len(unbound)
+        reason = f"imported in {count} wrapper file{'s' if count != 1 else ''} with no direct static call sites"
+        return UNCALLED, 0, reason
+
+    return UNCALLED, 0, assessment.reason
 
 
 def _band(row: Reach) -> int:
@@ -253,6 +271,7 @@ def rank_reachability(
     report: IntakeReport,
     call_sites: Mapping[str, int] | None = None,
     observed_calls: Mapping[str, int] | None = None,
+    unbound_imports: Mapping[str, Sequence[str]] | None = None,
 ) -> ReachabilityRanking:
     """The repository's dependencies, ordered by what is known to reach a vendor.
 
@@ -274,12 +293,13 @@ def rank_reachability(
             evidence=evidence,
             vendor_id=assessment.vendor_id,
             missing=assessment.missing,
-            reason=assessment.reason,
+            reason=reason,
             call_sites=found,
             observed_calls=observed.get(assessment.vendor_id or ""),
         )
-        for assessment, (evidence, found) in (
-            (assessment, _evidence(assessment, static)) for assessment in report.assessments
+        for assessment, (evidence, found, reason) in (
+            (assessment, _evidence(assessment, static, unbound_imports))
+            for assessment in report.assessments
         )
     ]
 

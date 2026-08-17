@@ -553,3 +553,33 @@ def test_two_functions_sharing_a_result_name_do_not_merge(tmp_path):
 
     assert sites["stripe.charges.create"].response_fields_read == ["status"]
     assert sites["stripe.charges.retrieve"].response_fields_read == ["amount_refunded"]
+
+
+def test_unbound_import_paths_reports_wrapper_files(tmp_path: Path):
+    repo_dir = tmp_path / "py_wrapper_repo"
+    repo_dir.mkdir()
+    (repo_dir / "requirements.txt").write_text("stripe==12.0.0\n", encoding="utf-8")
+    src_dir = repo_dir / "src"
+    src_dir.mkdir()
+    # A wrapper file that imports stripe and exports a helper
+    (src_dir / "wrapper.py").write_text(
+        "import stripe\n\ndef helper():\n    return 1\n",
+        encoding="utf-8",
+    )
+    # An app file that calls the helper
+    (src_dir / "app.py").write_text(
+        "from src.wrapper import helper\n\ndef run():\n    return helper()\n",
+        encoding="utf-8",
+    )
+
+    repo = RepoRef(repo_id="py_wrapper_repo", url="https://example.invalid/py_wrapper_repo", local_path=str(repo_dir), head_sha="0" * 40)
+    adapter = _adapter(tmp_path)
+
+    # index yields 0 call sites because calls happen on helper() rather than stripe.charges.create
+    sites = list(adapter.index(repo))
+    assert len(sites) == 0
+
+    # unbound_import_paths explicitly identifies src/wrapper.py as importing the SDK without bound call sites
+    unbound = adapter.unbound_import_paths(repo)
+    assert unbound == ["src/wrapper.py"]
+

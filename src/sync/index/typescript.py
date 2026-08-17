@@ -365,6 +365,8 @@ class TypeScriptAdapter:
         # Which files this clone holds that are not UTF-8, so two passes over one of them report
         # it once. `_readable_sources` carries why they are skipped at all.
         self._undecodable: set[Path] = set()
+        self._importing_paths: set[Path] = set()
+        self._bound_paths: set[Path] = set()
 
     def _read_manifest(self, repo: RepoRef) -> tuple[dict[str, object], str | None]:
         """The SDK versions `package.json` declares, and why it declares nothing when it cannot
@@ -502,6 +504,19 @@ class TypeScriptAdapter:
         root = Path(repo.local_path)
         return sorted(path.relative_to(root).as_posix() for path in self._undecodable)
 
+    def unbound_import_paths(self, repo: RepoRef) -> list[str]:
+        """The source paths that imported the vendor SDK package but yielded zero bound call sites.
+
+        Repository-relative paths. Identifies wrapper files or re-exports where the vendor SDK
+        is imported but call sites sit behind abstractions that the single-file static AST indexer
+        cannot resolve.
+        """
+        root = Path(repo.local_path)
+        return sorted(
+            path.relative_to(root).as_posix()
+            for path in (self._importing_paths - self._bound_paths)
+        )
+
     def _client_identifiers(self, repo: RepoRef) -> set[str]:
         """Identifiers bound to a vendor client anywhere in the repository.
 
@@ -546,6 +561,7 @@ class TypeScriptAdapter:
                     text = _text(node, source)
                     if f"'{self._package}'" not in text and f'"{self._package}"' not in text:
                         continue
+                    self._importing_paths.add(file_path)
                     for child in _walk(node):
                         if child.type == "identifier":
                             imported.add(_text(child, source))
@@ -789,6 +805,7 @@ class TypeScriptAdapter:
                     f"{symbol}|{','.join(args_keys)}|{','.join(response_fields)}".encode()
                 ).hexdigest()[:32]
 
+                self._bound_paths.add(file_path)
                 yield CallSite(
                     repo_id=repo.repo_id,
                     path=relative,
