@@ -67,7 +67,7 @@ Every iteration, in order. Do not skip step 1 and do not skip step 6.
 5. **Gate locally.** The local gate is the authority, not CI -- hosted runners here report a job
    that never started as `failure`. Run every gate your change touches and say which ones ran:
    - Python: `uv run lint-imports`, `uv run python scripts/lint_encoding.py src tests`,
-     `uv run pytest tests/ -q -n auto`
+     `uv run pytest tests/ -q -n 4`
    - Console: from `web/`, `npm test`, `npm run build`, `npm run lint`
 6. **Land it on `main` by fast-forward.** Merge `origin/main` once more, re-run the cheap gates,
    then prove containment before you push:
@@ -105,7 +105,7 @@ Escalate to the coordinator, not to the human, when the blocker is another lane.
   environmental. Wait for `docker exec sync-postgres-1 pg_isready -U sync`, then re-run. Do not
   debug it and do not restart the container -- five other agents are using it.
 - **`python3` does not exist here.** The interpreter is `python`. `uv` only; never Poetry.
-- **`-n0` is unusable on this host.** Use `-n auto`. A single test file is fine with `-n0`.
+- **Use `-n 4`, not `-n auto`, for the full suite.** `-n0` is unusable here -- it takes long enough that nobody runs it -- but `-n auto` is not the safe opposite: it has crashed an xdist worker outright on this machine (`INTERNALERROR ... KeyError: <WorkerController gw7>`) and Lane C measured the same thing independently. A crashed worker aborts the run, which reads as a catastrophic failure and is not one. `-n 4` is the working default; a single test file is fine with `-n0`.
 - **Never `git stash`.** `refs/stash` is one stack shared by every worktree of this repository, so
   a pop in your tree can take another agent's work.
 - **Never `git checkout <file>` on a file with uncommitted work.** It reverts the whole file.
@@ -113,6 +113,19 @@ Escalate to the coordinator, not to the human, when the blocker is another lane.
   `subprocess.run(..., text=True)`, and set `PYTHONIOENCODING=utf-8` in a child process's
   environment. Every fixture here is ASCII, so no test will ever catch a missing one.
 - **A spec passed through the Orca CLI must be ASCII.** Em dashes arrive as mojibake.
+
+## Standing arbitrations
+
+Recorded here when one is made, so no lane has to ask the same question twice.
+
+**2026-08-17, the dead-link red on `main`.** `ensure_image_built` in
+`src/sync/remediate/sandbox_image.py` is reached from nowhere and fails
+`test_lint_dead_links`. Lane C is right that baselining it would hide another session's in-progress
+work, and reached that on its own. **Ruling: leave the red, name `21b99f6` when reporting it, and do
+not edit or baseline that file. Lane A wires it as part of its own queue** -- the file is Lane A's,
+the function is B97's, and a lane that owns neither should not be the one to decide it is dead. Any
+lane may exclude that one test from its own gate run while this stands, and must say so when
+reporting.
 
 ## The lanes
 
