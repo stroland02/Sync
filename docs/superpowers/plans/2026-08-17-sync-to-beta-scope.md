@@ -423,6 +423,29 @@ adapters, the generated-spec adapters with their declarative `NO_MANIFEST` / `NO
 clean-decline from fetch-failure, and rate limits and vendor downtime classified into reason codes
 without aborting a scan.
 
+## Why a fully unit-tested screen goes unseen, and the gap under it
+
+The abandoned-run screen renders correctly -- the outcome sits inside the sequence immediately after
+`static_verify`, the last node the run reached, above four nodes reading *never ran* rather than
+*not yet*; the reason appears in the closing bracket and again in the timeline; and `static_verify`
+carries the real compiler diagnostic, so a reviewer sees **why** Sync gave up rather than being told
+that it did.
+
+**Why nobody had ever rendered it is the finding.** The workflow route serves the *newest*
+generation, and the seeded fixture pairs an abandoned generation 0 with an opened generation 1 --
+**so no URL in the fixture produces that screen.** A fully unit-tested screen went unseen not
+because anyone skipped it but because the data made it unreachable. That is a distinct failure from
+the empty-state one, and it generalises: a screen reachable only from data nobody seeds is a screen
+nobody looks at, and its tests will keep passing.
+
+**`B146`, filed rather than built, and it is a real product gap.** A superseded generation has no
+address. `superseded-generations.tsx` renders no link and *cannot* -- the route takes a finding and
+returns the newest attempt, with no generation parameter to ask for an older one. So for a finding
+that abandoned and was then retried, the abandon **reason** stays visible and the **evidence beneath
+it is unreachable**. Stated exactly: the product claim that abandoned attempts stay visible with
+their reason is true as written; what is unreachable is the evidence under the reason. The fix needs
+a route and a view model, both Lane E's files.
+
 ## A pattern worth naming: documented, asserted, never executed
 
 Two findings today have the same shape, and it is not a coincidence -- it is the failure mode this
