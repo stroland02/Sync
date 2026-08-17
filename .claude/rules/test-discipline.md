@@ -50,6 +50,18 @@ covers call sites no fixture reaches.
 A test that pins an exact error string, a timestamp, or a dict ordering fails on changes that
 break nothing. Assert the property the code promises.
 
+## Never open an admin connection by hand
+
+`CREATE DATABASE` and `DROP DATABASE` go through `conftest.admin_connection`, and a drop goes
+through `conftest.drop_database` or `conftest.drop_databases_best_effort`. Not style: a bare
+`psycopg.connect(admin_dsn)` has no `statement_timeout` and no `lock_timeout`, and `DROP
+DATABASE` waits on an immediate cluster-wide checkpoint while holding an object lock. Several
+worktrees run this suite at once, so those queue — and B132 is a serial gate killed after 70
+minutes having printed nothing, blocked in exactly that statement.
+
+A teardown uses the best-effort form. Cleanup that fails a test which passed reports a defect in
+whatever that test covers, and a database it could not drop is one the next run's sweep takes.
+
 ## Run focused while iterating, full before committing
 
 `uv run pytest tests/test_x.py::test_name -v` while working. `uv run pytest` once before the
