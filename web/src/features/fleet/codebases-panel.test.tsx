@@ -42,12 +42,12 @@ const overview = (over: Partial<OverviewResponse>): OverviewResponse => ({
   ...over,
 })
 
-function renderPanel() {
+function renderPanel(filter?: "ALL" | "NEEDS_REVIEW" | "CLEAN") {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   return render(
     <QueryClientProvider client={client}>
       <MemoryRouter initialEntries={["/"]}>
-        <CodebasesPanel />
+        <CodebasesPanel filter={filter} />
       </MemoryRouter>
     </QueryClientProvider>
   )
@@ -82,5 +82,27 @@ describe("CodebasesPanel", () => {
     expect(await screen.findByText("org/repo")).toBeTruthy()
     expect(screen.queryByText("9 open findings")).toBeNull()
     expect(screen.getByText(/open findings not yet answered/)).toBeTruthy()
+  })
+
+  it("does not claim zero matches while a scoped query is still pending under a non-ALL filter", async () => {
+    mockRepositories = { isPending: false, isError: false, data: { repo_ids: ["org/repo"] } }
+    fetchOverview.mockReturnValue(new Promise<OverviewResponse>(() => {}))
+
+    renderPanel("NEEDS_REVIEW")
+
+    // "No codebases match" would be claiming the scoped answer is a confirmed zero; the true
+    // state is "not yet answered", so the loading state is what must show instead.
+    expect(await screen.findByText("Loading monitored codebases…")).toBeTruthy()
+    expect(screen.queryByText("No codebases match the selected filter.")).toBeNull()
+  })
+
+  it("claims no matches only once every scoped query has settled", async () => {
+    mockRepositories = { isPending: false, isError: false, data: { repo_ids: ["org/repo"] } }
+    fetchOverview.mockResolvedValue(overview({ total_findings: 0 }))
+
+    renderPanel("NEEDS_REVIEW")
+
+    expect(await screen.findByText("No codebases match the selected filter.")).toBeTruthy()
+    expect(screen.queryByText("Loading monitored codebases…")).toBeNull()
   })
 })

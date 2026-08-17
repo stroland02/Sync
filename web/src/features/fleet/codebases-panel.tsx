@@ -22,6 +22,14 @@
  * one absence marker (`Absent`). A confirmed zero renders "No open findings". Collapsing "not yet
  * answered" onto "zero" is exactly the kind of claim this rewrite exists to stop making; see
  * `codebase-cards.ts` for where the distinction is computed and tested.
+ *
+ * The same distinction has to hold at the filter, not only at the card. `NEEDS_REVIEW` and
+ * `CLEAN` both read `openFindings`, and `matchesFilter` treats `null` as matching neither — but a
+ * filtered list built from cards that are still `null` would still read as "zero matches" to
+ * whoever is looking at the empty state, which is the conflation this file exists to refuse. So
+ * while any scoped query behind a non-`ALL` filter is still pending, the panel renders
+ * `LoadingState` rather than let the filter claim a confirmed absence of matches it cannot back.
+ * `ALL` never reads `openFindings` to decide membership, so it is never held back by this.
  */
 
 import { useQueries } from "@tanstack/react-query"
@@ -136,6 +144,16 @@ export function CodebasesPanel({ filter = "ALL" }: CodebasesPanelProps) {
 
   if (reposQuery.isError) {
     return <ErrorState error={reposQuery.error} what="monitored codebases" />
+  }
+
+  // NEEDS_REVIEW and CLEAN both read `openFindings`, so filtering against a scope whose answer
+  // has not arrived yet would count a pending query as a non-match — the same null-vs-zero
+  // conflation `codebase-cards.ts` refuses at the derivation layer, reached instead through the
+  // filter. ALL never reads the count, so it is exempt: nothing here needs the scoped answer to
+  // decide whether a card belongs on screen.
+  const overviewsPending = overviewQueries.some((query) => query.isPending)
+  if (filter !== "ALL" && overviewsPending) {
+    return <LoadingState what="monitored codebases" />
   }
 
   const cards = repoIds.map((repoId, index) => cardFacts(repoId, overviewQueries[index]?.data))
