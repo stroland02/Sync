@@ -1,32 +1,31 @@
 /**
- * The chassis is two tiers, and this is the test that decides it.
+ * The chassis is ONE full-height sidebar, and this is the test that decides it.
  *
- * A fixed icon rail carries the product's areas; a contextual sidebar carries the destinations
- * inside the area that is active. The discriminator between that and the single sidebar it
- * replaces is **which tier changes when you navigate**: the rail's items are the same items in
- * the same order on every route, and only the sidebar's contents move.
+ * One list carries every area's destinations; the top bar lives inside the content column beside
+ * it rather than across the top of both. The discriminator against the two-tier chassis this
+ * replaces is that **nothing has to be activated to reach anything**: every declared route is a row
+ * on screen from the moment the console loads, so reachability is asserted without a click.
  *
  * **jsdom has no layout, so vertical position cannot be read directly** — `getBoundingClientRect`
  * returns zeroes here. Saying so matters, because a test that asserted on those numbers would pass
- * against any tree at all. What is asserted instead is the structural cause: the rail's ordered
- * sequence of accessible names is identical on every route, and an item can only move if one above
- * it appears or disappears. The pixels are measured in Chrome and recorded in `DESIGN.md`; this
- * holds the property that makes that measurement come out right.
+ * against any tree at all. What is asserted instead is structure: document order, containment, and
+ * the ordered sequence of rows. The pixels are measured in Chrome and recorded in `DESIGN.md`.
  *
- * Rewritten for M7-W171 from the M7-W160 file that pinned the one-sidebar arrangement. Four of its
- * assertions described a collapse threshold and a reserved heading row and describe nothing that
- * exists now; three described reachability, accessible naming and `reachedFrom`, which the two-tier
- * shell owes exactly as much, and those are carried forward against the new tiers.
+ * Rewritten for `M14-W366` from the `M7-W171` two-tier file. Eleven of its assertions described an
+ * icon rail — hover labels, a collapse threshold, a pick that survives Back — and describe nothing
+ * that exists now. What they guaranteed that still matters is carried forward rather than deleted
+ * with them: every area reachable, Settings reachable, every level named, no destination lost.
+ * `M14-W273` is the precedent for that distinction.
  */
 
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react"
-import { MemoryRouter, useNavigate } from "react-router"
+import { MemoryRouter } from "react-router"
 import { afterEach, describe, expect, it, vi } from "vitest"
 
 import { AppFrame } from "@/layouts/app-frame"
 import { shortcutHint } from "@/layouts/command-palette"
 import { KINDS_SHOWN, clearErrors, reportError } from "@/lib/error-log"
-import { AREAS, ROUTES, type AreaEntry } from "@/lib/routes"
+import { AREAS, DESTINATIONS, ROUTES, type AreaEntry } from "@/lib/routes"
 
 // The top bar's switchers read the same two queries the list screens read. Mocked rather than
 // served through a client, for the reason `fleet-facts.test.tsx` gives: this file is about the
@@ -62,86 +61,14 @@ function renderAt(path: string) {
   )
 }
 
-/** The icon rail: the tier that does not change. */
-function rail(): HTMLElement {
-  return screen.getByRole("navigation", { name: /areas/i })
-}
-
 /** The contextual sidebar: the tier that does. */
 function destinations(): HTMLElement {
   return screen.getByRole("navigation", { name: /destinations/i })
 }
 
-/**
- * Every rail item's accessible name, in document order.
- *
- * Read off `aria-label` rather than through `getAllByRole("link")`, because the rail deliberately
- * holds three kinds of control: a link for an area with a landing route, a button for an area whose
- * every destination needs a subject the registry does not hold, and one `aria-disabled` entry for
- * Settings. A role query would see one of the three and report the rail as shorter than it is.
- */
-function railNames(): string[] {
-  return [...rail().querySelectorAll("[aria-label]")].map(
-    (el) => el.getAttribute("aria-label") ?? ""
-  )
-}
-
-/** The rail item the chassis is marking as the one being looked at. */
-function railCurrent(): (string | null)[] {
-  return [...rail().querySelectorAll('[aria-current="true"]')].map((el) =>
-    el.getAttribute("aria-label")
-  )
-}
-
-/**
- * Whether the rail is showing its labels, read off the vendored primitive's own attribute.
- *
- * `data-state` is what `SidebarProvider` computes and what every `group-data-[collapsible=icon]`
- * class in `vendor/supabase/ui/sidebar.tsx` reads. Asserting on it rather than on a width class
- * keeps this a claim about the primitive's state machine, which is the thing being consumed.
- */
-function railState(): string | null {
-  return rail().getAttribute("data-state")
-}
-
-/**
- * The rail's flow skeleton: one entry per element inside it, in document order.
- *
- * This is the structural cause of NOTES entry 6's mechanical test — an icon must not move
- * vertically across the collapse. jsdom has no layout, so the offsets themselves are measured in
- * Chrome and recorded in `DESIGN.md`; what can be held here is the property that makes them come
- * out equal. Every rail row is one fixed-height box in a column, so an icon can only travel
- * vertically if an element above it enters or leaves the flow between the two states. A
- * `SidebarGroupLabel` is exactly that shape — `h-8` expanded, `-mt-8 opacity-0` collapsed — and it
- * is the defect this comparison catches.
- *
- * Read as tag plus accessible name rather than as markup, so restyling a row does not fail it.
- */
-function railSkeleton(): string[] {
-  return [...rail().querySelectorAll("*")].map(
-    (el) => `${el.tagName}/${el.getAttribute("aria-label") ?? ""}`
-  )
-}
-
-/** Every second-tier row, in document order, as the element that actually renders it. */
+/** Every destination row, in document order, as the element that actually renders it. */
 function destinationRows(): Element[] {
   return [...destinations().querySelectorAll("[data-destination]")]
-}
-
-/**
- * A real Back, rather than a second click forward onto the same address.
- *
- * The two are not the same assertion. A forward click would prove the rail agrees with the address
- * it arrives at; Back proves it does not resurrect a state it left behind, which is where a pick
- * that is masked rather than dropped goes wrong.
- */
-function BackButton() {
-  const navigate = useNavigate()
-  return (
-    <button type="button" onClick={() => navigate(-1)}>
-      go back
-    </button>
-  )
 }
 
 function routesOf(area: AreaEntry) {
@@ -166,17 +93,35 @@ describe("the top bar sits above the chassis", () => {
     }
   })
 
-  it("puts the bar above the rail rather than inside the scrolling column", () => {
-    // The structural claim, asserted where jsdom can see it: the header is a sibling *before* the
-    // rail-and-content row. Inside `main` it would be the breadcrumb again — gone on first scroll.
+  it("puts the sidebar full height beside the content, with the bar inside the content column", () => {
+    // The inverse of the invariant this file held until M14-W366, and inverted on purpose. The bar
+    // used to be a sibling *before* the whole rail-and-content row, which put it in front of the
+    // sidebar; the owner's instruction is that the sidebar is full height and the bar does not sit
+    // in front of it. Mock v1 already draws exactly that — its nav is {x:0, y:0, 246x900} and its
+    // header starts at x:246. The replacement is deliberately stronger than what it replaces: it
+    // pins the sidebar's position relative to the bar AND the bar's membership of the content
+    // column, where the old one only asserted document order.
     renderAt("/")
 
     const banner = screen.getByRole("banner")
+    const sidebar = destinations()
+    const main = document.querySelector("main")
+    expect(main).not.toBeNull()
 
-    expect(banner.contains(rail())).toBe(false)
+    // The sidebar comes first in document order, and the bar does not contain it.
     expect(
-      banner.compareDocumentPosition(rail()) & Node.DOCUMENT_POSITION_FOLLOWING
+      banner.compareDocumentPosition(sidebar) & Node.DOCUMENT_POSITION_PRECEDING
     ).toBeTruthy()
+    expect(banner.contains(sidebar)).toBe(false)
+
+    // The bar shares a column with `main` — that is what "inside the content column" means, and it
+    // is the half that stops the bar drifting back to spanning the full width.
+    const column = banner.parentElement
+    expect(column).not.toBeNull()
+    expect(column!.contains(main!)).toBe(true)
+
+    // ...and that column does not hold the sidebar, or the bar would be in front of it again.
+    expect(column!.contains(sidebar)).toBe(false)
   })
 
   it("carries the scope trail, and it names the subject the address is inside", () => {
@@ -256,168 +201,87 @@ describe("a failure displaces the chassis rather than floating over it", () => {
   })
 })
 
-describe("the rail carries the product's areas", () => {
-  it("names every area exactly once and Settings last", () => {
+describe("one sidebar carries every area", () => {
+  // The rail is gone and this block replaces the eleven tests that described it. `M7-W160` had
+  // already built one list at two widths after the owner ruled against an icon rail beside a
+  // contextual panel; `M7-W171` re-introduced the two tiers and the owner ruled against it a second
+  // time. What those tests guaranteed that still matters -- every area reachable, Settings
+  // reachable, no destination lost -- is asserted here rather than deleted with them. `M14-W273`
+  // is the precedent: a test whose subject retires may go, but not the coverage it carried.
+
+  it("shows every area's destinations at once, not just the current area's", () => {
     renderAt("/")
 
-    const items = railNames()
+    const shown = [...destinations().querySelectorAll("[data-destination]")].map((el) =>
+      el.getAttribute("data-destination")
+    )
 
-    expect(items[items.length - 1]).toMatch(/settings/i)
-    expect(new Set(items).size).toBe(items.length)
-    expect(items).toHaveLength(AREAS.length + 1)
+    // Every route in the registry, from one screen, with nothing to hover and nothing to select.
+    expect(shown).toEqual(ROUTES.map((route) => route.path))
   })
 
-  it("keeps every rail item in the same position on every route", () => {
-    // The two-tier property, asserted where jsdom can see it. If the rail's sequence differed
-    // between two routes, an icon would move under the pointer as an operator navigated, which is
-    // the one thing a persistent rail must not do.
-    renderAt("/")
-    const atRoot = railNames()
-    cleanup()
-
-    for (const route of ROUTES) {
-      renderAt(concrete(route.path))
-      expect(railNames()).toEqual(atRoot)
-      cleanup()
-    }
-
-    expect(atRoot.length).toBeGreaterThan(1)
-  })
-
-  it("names each rail item for a screen reader, not only in a tooltip", () => {
-    // A tooltip supplements the name; it is not the mechanism that supplies it. Every rail control
-    // is icon-only, so without `aria-label` the rail is a column of unnamed buttons.
+  it("names every area as a group, so the run of levels under it still reads as one area", () => {
     renderAt("/")
 
-    expect(within(rail()).getByRole("link", { name: /codebases|repositories|fleet/i })).toBeTruthy()
+    const text = destinations().textContent ?? ""
     for (const area of AREAS) {
-      expect(railNames()).toContain(area.label)
+      expect(text).toContain(area.label)
     }
   })
 
-  it("reaches Settings without making it an area or a level", () => {
-    // Settings is a destination, not a rung: `DESTINATIONS` declares it, `GRAPH_LEVELS` stays at
-    // nine, and `AREAS` never gains a seventh member. This rail slot held a disabled button for as
-    // long as no screen existed; the screen exists now and is read-only, so the entry links and its
-    // note says which of those two things is true rather than continuing to promise the other.
+  it("reaches Settings, which is a destination rather than an area or a level", () => {
+    // Unchanged in substance from the rail-era test: `DESTINATIONS` declares Settings, `GRAPH_LEVELS`
+    // stays at nine and `AREAS` never gains a seventh member. Only the container moved. This is the
+    // test that would have caught deleting the rail without rehoming its hard-coded Settings slot --
+    // the route would still exist and every routing test would still pass.
     renderAt("/")
 
-    const settings = within(rail()).getByLabelText(/settings/i)
+    const settings = within(destinations()).getByRole("link", { name: /settings/i })
 
     expect(settings.getAttribute("href")).toBe("/settings")
     expect(settings.getAttribute("aria-disabled")).toBeNull()
     expect(AREAS.map((area) => area.label)).not.toContain("Settings")
-    // Asserted on `title` rather than on the tooltip: a Radix tooltip is in the document only while
-    // it is open, so the sentence has to be readable without one.
     expect(settings.getAttribute("title")).toBe("Settings — read-only until the write path lands")
   })
 
-  it("keeps an area's rail item current on every route that area owns", () => {
-    // This is the `pages` mechanism where it is genuinely load-bearing. A rail item owns a run of
-    // levels rather than one address, so it says which addresses it owns in data — the alternative
-    // is a regex over the path, which quietly stops matching the day a route is added beneath it.
-    for (const area of AREAS) {
-      for (const route of routesOf(area)) {
-        renderAt(concrete(route.path))
-
-        expect(railCurrent()).toEqual([area.label])
-
-        cleanup()
-      }
-    }
-  })
-
-  it("shows its labels while a pointer is on it and hides them again after", () => {
-    // The measured gap: the rail was 40px and fixed, so six areas were six permanently unlabelled
-    // glyphs and `[data-collapsible]` counted zero. The mechanism is the vendored primitive's own
-    // open state; what this project supplies is the pointer that drives it.
+  it("holds every parameterless route as a real link from a single screen", () => {
+    // The reachability guarantee, restated here because the component that satisfied it was
+    // deleted. A route needing a subject the address does not supply renders as a described span
+    // rather than a link, which is the existing contract; everything else must be reachable.
     renderAt("/")
 
-    expect(railState()).toBe("collapsed")
-
-    fireEvent.mouseEnter(rail())
-    expect(railState()).toBe("expanded")
-
-    fireEvent.mouseLeave(rail())
-    expect(railState()).toBe("collapsed")
-  })
-
-  it("shows them for a keyboard too, not only for a pointer", () => {
-    // A rail that only labels itself under a pointer is a rail nobody tabbing through it can read.
-    renderAt("/")
-
-    fireEvent.focusIn(within(rail()).getByLabelText("Codebase"))
-
-    expect(railState()).toBe("expanded")
-  })
-
-  it("moves nothing above an icon between the collapsed and expanded states", () => {
-    // NOTES entry 6, held where jsdom can see it. `railSkeleton`'s docstring carries why this is
-    // the structural cause rather than the pixels, and where the pixels are read instead.
-    renderAt("/")
-
-    const collapsed = railSkeleton()
-    fireEvent.mouseEnter(rail())
-    const expanded = railSkeleton()
-
-    expect(expanded).toEqual(collapsed)
-    // Guards the comparison itself: two empty lists are equal, and would report a rail that
-    // rendered nothing as one that moves nothing.
-    expect(collapsed.length).toBeGreaterThan(AREAS.length)
-  })
-
-  it("drops a pick when the address changes, and does not revive it on Back", () => {
-    // Picking an area with no landing route is a browse, not a navigation, so it has to be dropped
-    // the moment the address moves rather than suspended while the address differs. Suspended, it
-    // comes back the instant its own address does — and then the rail marks one area while another
-    // area's screen renders underneath it, which is the one disagreement this shell must not have.
-    render(
-      <MemoryRouter initialEntries={["/"]}>
-        <AppFrame />
-        <BackButton />
-      </MemoryRouter>
+    const reachable = [...destinations().querySelectorAll("a[href]")].map((el) =>
+      el.getAttribute("href")
     )
-    expect(railCurrent()).toEqual(["Codebases"])
-
-    fireEvent.click(within(rail()).getByLabelText("Codebase"))
-    expect(railCurrent()).toEqual(["Codebase"])
-
-    // A link, so this is a real navigation away from the address the pick was made at.
-    fireEvent.click(within(rail()).getByLabelText("Observe"))
-    expect(railCurrent()).toEqual(["Observe"])
-
-    fireEvent.click(screen.getByRole("button", { name: "go back" }))
-
-    // Back at `/`, where the Codebases screen renders. The rail says Codebases, not the area browsed here
-    // three clicks ago.
-    expect(railCurrent()).toEqual(["Codebases"])
+    for (const route of ROUTES.filter((r) => !r.path.includes(":"))) {
+      expect(reachable).toContain(route.path)
+    }
+    for (const entry of DESTINATIONS) {
+      expect(reachable).toContain(entry.path)
+    }
   })
 })
 
-describe("the contextual sidebar carries the active area's destinations", () => {
-  it("heads itself with the area the current route belongs to", () => {
+describe("the sidebar carries the destinations", () => {
+  it("keeps every area's destinations in the same order on every route", () => {
+    // Replaces two rail-era tests. The sidebar no longer heads itself with the current area and no
+    // longer hides the others -- both were properties of the two-tier chassis. What survives, and
+    // is worth more, is that the list does not reorder under the reader as they navigate.
+    const order: string[][] = []
     for (const area of AREAS) {
       const route = routesOf(area)[0]
       renderAt(concrete(route.path))
-
-      expect(within(destinations()).getByRole("heading", { name: area.label })).toBeTruthy()
-
-      cleanup()
-    }
-  })
-
-  it("renders the active area's destinations and no other area's", () => {
-    for (const area of AREAS) {
-      const route = routesOf(area)[0]
-      renderAt(concrete(route.path))
-
-      const shown = [...destinations().querySelectorAll("[data-destination]")].map((el) =>
-        el.getAttribute("data-destination")
+      order.push(
+        [...destinations().querySelectorAll("[data-destination]")].map(
+          (el) => el.getAttribute("data-destination") ?? ""
+        )
       )
-      expect(shown).toEqual(routesOf(area).map((r) => r.path))
-
       cleanup()
     }
+    for (const shown of order) {
+      expect(shown).toEqual(order[0])
+    }
+    expect(order[0]).toEqual(ROUTES.map((route) => route.path))
   })
 
   it("groups them under the graph levels the specification names", () => {
@@ -425,16 +289,15 @@ describe("the contextual sidebar carries the active area's destinations", () => 
     // run of consecutive levels, and the sidebar prints the level names it holds. Read off the
     // group labels rather than by text, because a level name and a destination's label are the same
     // word on five of the nine routes.
-    for (const area of AREAS) {
-      renderAt(concrete(routesOf(area)[0].path))
+    // Every level, from one screen. The rail-era version rendered one area at a time and compared
+    // against that area's run; with one list the whole ladder is on screen, so the assertion is
+    // against the specification's nine in the order the areas declare them.
+    renderAt("/")
 
-      const labels = [...destinations().querySelectorAll('[data-sidebar="group-label"]')].map(
-        (el) => el.textContent
-      )
-      expect(labels).toEqual([...area.levels])
-
-      cleanup()
-    }
+    const labels = [...destinations().querySelectorAll('[data-sidebar="group-label"]')].map(
+      (el) => el.textContent
+    )
+    expect(labels).toEqual(AREAS.flatMap((area) => [...area.levels]))
   })
 
   it("marks the row for the current route, and marks only it", () => {
@@ -485,7 +348,16 @@ describe("the contextual sidebar carries the active area's destinations", () => 
     ]) {
       renderAt(at)
 
-      const rows = destinationRows()
+      // Scoped to the three finding rows. The rail-era version could assert over every row on
+      // screen, because only the active area rendered; one list puts all nine there, and the rows
+      // whose subject the address does NOT supply are still correctly spans. Widening this to the
+      // whole list would assert the opposite of the contract it is checking.
+      const rows = [
+        "/findings/:findingId",
+        "/findings/:findingId/workflow",
+        "/findings/:findingId/workflow/pull-request",
+      ].map((path) => destinations().querySelector(`[data-destination="${path}"]`)!)
+
       expect(rows.map((row) => row.tagName)).toEqual(["A", "A", "A"])
       expect(rows.map((row) => row.getAttribute("href"))).toEqual([
         "/findings/f-1",
@@ -531,16 +403,17 @@ describe("the contextual sidebar carries the active area's destinations", () => 
   })
 })
 
-describe("every declared destination is one rail activation away", () => {
-  it("shows an area's whole run of levels the moment its rail item is used", () => {
-    // The reachability claim the whole chassis exists to make, and the one the first version of this
-    // shell failed: four area icons remained and the nine specification levels could not be reached.
+describe("every declared destination is reachable without an activation", () => {
+  it("shows all nine specification levels from one screen, with nothing to click first", () => {
+    // The reachability claim the whole chassis exists to make, and the one the first version of
+    // this shell failed: four area icons remained and the nine specification levels could not be
+    // reached. The rail-era version of this test needed six clicks to prove it. One sidebar needs
+    // none, which is the point of collapsing the tiers -- so the assertion gets strictly stronger
+    // while the setup gets simpler.
     renderAt("/")
 
     const seen = new Set<string>()
     for (const area of AREAS) {
-      fireEvent.click(within(rail()).getByLabelText(area.label))
-
       for (const route of routesOf(area)) {
         expect(destinations().querySelector(`[data-destination="${route.path}"]`)).toBeTruthy()
         seen.add(route.path)
@@ -550,6 +423,7 @@ describe("every declared destination is one rail activation away", () => {
     expect([...seen].sort()).toEqual(ROUTES.map((route) => route.path).sort())
   })
 })
+
 
 describe("the console says whose data this is", () => {
   /**
@@ -609,9 +483,11 @@ describe("focus follows the route", () => {
     renderAt("/")
     expect(document.activeElement).not.toBe(document.querySelector("main"))
 
-    // The Observe rail item is a real link, because its area has a landing that needs no subject.
-    // Clicking it is an in-app navigation rather than a contrived route swap.
-    fireEvent.click(screen.getByRole("link", { name: /observe/i }))
+    // Detectors is a real link in the sidebar, because it needs no subject from the address.
+    // Clicking it is an in-app navigation rather than a contrived route swap. This used to click
+    // the Observe rail item; the rail is gone, and the destination it led to serves the same
+    // purpose here.
+    fireEvent.click(within(destinations()).getByRole("link", { name: /detectors/i }))
 
     await waitFor(() => expect(document.activeElement).toBe(document.querySelector("main")))
   })
