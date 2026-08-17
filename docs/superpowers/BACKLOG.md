@@ -352,7 +352,7 @@ on the host-wide npx resolve lock (`src/sync/index/npx_lock.py`, Lane D's path, 
 legible; it does not make the run fast.
 
 
-### B151 — `main` is 60 tests red, the remediation graph does not terminate, and a crashed worker hides it
+### B151 — `main` is 60 tests red, the remediation graph does not terminate, and a crashed worker hides it — CLOSED
 
 **Filed by Lane C against Lane A's path, not fixed here.** `src/sync/remediate/**` is Lane A's,
 and a lane that owns neither the file nor the milestone should not be the one deciding what the
@@ -397,6 +397,16 @@ minutes the charter already calls the largest tax in the workspace.
 
 **Closes when:** the graph reaches a stop condition and those 60 tests pass on `main` (Lane A), and
 a crashed worker is reported as a crashed worker rather than as failing tests (Lane C).
+
+**Both halves closed.** Lane C's half is B152. Lane A's half: `report_reason`, `static_attempts`
+and `ci_attempts` were all still read and written by `nodes.py` after `12e416a` dropped them from
+`RunState`'s `TypedDict` — `StateGraph(RunState)` builds one channel per declared key, so every
+write to an undeclared one is silently dropped, never an error. The two counters landing on a
+dropped write meant the retry budget read the zero default forever, which is the recursion;
+`report_reason` came back as a bare `KeyError`. Fix restores all three where their own surviving
+comments already said they belonged (`src/sync/remediate/state.py`). Verified against this entry's
+own baseline (`60 failed, 3744 passed` at `acc0617`): the same files now run 3787 passed, 1
+skipped, 0 failed.
 
 
 ### B135 — a customer's repository could configure the patch agent, and the gate sat downstream of it — FIXED, and the entry stays for what it says about the gate
