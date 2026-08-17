@@ -1877,7 +1877,6 @@ def _normalized(path: str) -> str:
 _NOT_YET_FETCHED_BY_CONSOLE = {
     "/api/corpus/abandonment",  # M12-W196: aggregate and route only, panel not yet scheduled
     "/api/repos/{param}/context",  # B126 Task 5: route only, the console screen is M7's line
-    "/api/change-units",  # M12-W320: aggregate and route only, panel not yet scheduled
 }
 
 
