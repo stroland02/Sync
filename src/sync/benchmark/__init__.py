@@ -17,6 +17,7 @@ from sync.benchmark.mutate import (
     depends_on_change,
     generate_pair,
 )
+from sync.benchmark.reconcile import reconcile_pull_request_outcomes
 from sync.benchmark.report import axis_rows, render_report
 from sync.benchmark.score import (
     SYNTHETIC_REFERENCE,
@@ -51,6 +52,7 @@ __all__ = [
     "depends_on_change",
     "generate_pair",
     "index_sources",
+    "reconcile_pull_request_outcomes",
     "render_report",
     "score_change",
     "score_pair",

@@ -1430,6 +1430,48 @@ class GraphStore:
         ).fetchall()
         return [dict(row) for row in rows]
 
+    def repo_id_for_finding(self, finding_id: str) -> str | None:
+        """The repository ID of the call site a finding was raised against, or None."""
+        row = self._connect().execute(
+            """
+            SELECT cs.repo_id
+              FROM finding f
+              JOIN call_site cs ON f.call_site_id = cs.id
+             WHERE f.id = %s
+            """,
+            (finding_id,),
+        ).fetchone()
+        return row["repo_id"] if row else None
+
+    def repo_ids_for_findings(self, finding_ids: Sequence[str]) -> dict[str, str]:
+        """Map each finding_id to its call site's repo_id."""
+        if not finding_ids:
+            return {}
+        rows = self._connect().execute(
+            """
+            SELECT f.id AS finding_id, cs.repo_id
+              FROM finding f
+              JOIN call_site cs ON f.call_site_id = cs.id
+             WHERE f.id = ANY(%s)
+            """,
+            (list(finding_ids),),
+        ).fetchall()
+        return {row["finding_id"]: row["repo_id"] for row in rows}
+
+    def pending_merge_outcomes(self) -> list[MigrationOutcome]:
+        """Every production attempt with an open pull request awaiting merge decision."""
+        rows = self._connect().execute(
+            """
+            SELECT *
+              FROM migration_outcome
+             WHERE NOT is_rehearsal
+               AND pr_number IS NOT NULL
+               AND pr_merged IS NULL
+             ORDER BY finding_id, attempt_index
+            """
+        ).fetchall()
+        return [MigrationOutcome(**row) for row in rows]
+
     def set_merge_outcome(
         self,
         finding_id: str,
@@ -1437,8 +1479,9 @@ class GraphStore:
         pr_number: int | None = None,
         pr_merged: bool | None = None,
         human_edits_before_merge: int | None = None,
+        pr_merged_at: datetime | str | None = None,
     ) -> None:
-        """Fill in what only arrives days later, by webhook.
+        """Fill in what only arrives days later, by webhook or polling.
 
         Merge outcome is the one measurement that tests the product claim, and a column that
         silently stays null destroys it. The update path exists from the first row rather than
@@ -1449,17 +1492,40 @@ class GraphStore:
         row sharing the same finding and attempt index, crediting a merge to an attempt that
         never reached a forge.
         """
+        merged_at_dt: datetime | None = None
+        if isinstance(pr_merged_at, str):
+            try:
+                merged_at_dt = datetime.fromisoformat(pr_merged_at.replace("Z", "+00:00"))
+            except ValueError:
+                merged_at_dt = None
+        elif isinstance(pr_merged_at, datetime):
+            merged_at_dt = pr_merged_at
+
         self._connect().execute(
             """
             UPDATE migration_outcome
                SET pr_number = COALESCE(%s, pr_number),
                    pr_merged = COALESCE(%s, pr_merged),
-                   pr_merged_at = CASE WHEN %s THEN now() ELSE pr_merged_at END,
+                   pr_merged_at = CASE
+                       WHEN %s IS FALSE THEN NULL
+                       WHEN %s::timestamptz IS NOT NULL THEN %s::timestamptz
+                       WHEN %s IS TRUE THEN now()
+                       ELSE pr_merged_at
+                   END,
                    human_edits_before_merge = COALESCE(%s, human_edits_before_merge)
              WHERE finding_id = %s AND attempt_index = %s AND NOT is_rehearsal
             """,
-            (pr_number, pr_merged, bool(pr_merged), human_edits_before_merge,
-             finding_id, attempt_index),
+            (
+                pr_number,
+                pr_merged,
+                pr_merged,
+                merged_at_dt,
+                merged_at_dt,
+                pr_merged,
+                human_edits_before_merge,
+                finding_id,
+                attempt_index,
+            ),
         )
 
     _SHAPE_COLUMNS = (
