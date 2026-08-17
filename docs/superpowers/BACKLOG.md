@@ -452,6 +452,30 @@ recorded reason that a reader can join back to the run — and a run whose corpu
 says so rather than exiting 0 silently. Whatever shape it takes must not make a corpus write able
 to fail a run, which is the property the current `except` exists to hold.
 
+### B136 — Nothing records that an adapter was asked, only what it answered
+
+`GET /api/adapters` can say what each adapter has delivered and cannot say whether it was reached.
+The two facts a Settings screen needs are *when did this adapter last run* and *why did it decline*,
+and neither is a column anywhere: `vendor_change` records results, so an adapter polled hourly that
+has found nothing new for a week is indistinguishable from one whose fetch has been 403ing for a
+week. Both render as an old `last_change_at`.
+
+`sync.dashboard.adapters.adapter_inventory` names the limit in its docstring and deliberately does
+**not** carry a `decline_reason` field. A column null on every row would read as "no adapter has
+ever declined", which nothing measured, and
+`tests/test_adapter_inventory.py::test_nothing_here_records_why_an_adapter_declined` asserts the
+absence so the gap stays visible rather than becoming a blank column nobody questions.
+
+**What closes it:** an intake attempt record — one row per adapter per attempt, carrying the outcome
+and, on a failure, the reason from a closed vocabulary rather than free text (the argument `B128`
+made for `abandon_reason_code`, and the same reason: a promise to learn from failures needs a schema
+that can be aggregated). The grain is one row per *attempt*, not per adapter, and `schema.sql` needs
+that stated as a comment before the first column lands — the rule `migration_outcome` exists to
+illustrate.
+
+The screen is built and honest without it. This is the row that lets it answer the question it was
+drawn to answer.
+
 ### B90 — The console is one idiom repeated eight times, and the resources to fix it are already installed
 
 Measured on 2026-08-05 across `web/src`: **21 `<Card>`, 17 `<Table>`, 1 chart, 5,781 lines.** The

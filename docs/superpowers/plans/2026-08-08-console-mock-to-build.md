@@ -158,6 +158,19 @@ questions that block. The owner can reverse any of them at the cost of one fix r
       deprecating it.
 - [ ] Step 3: Gate; WORKLOG; commit.
 
+**Blocked on its own premise, measured 2026-08-17, and deliberately not started.** This task says
+the drawer is written three to five times. It is written once: `BindingDrawer` has exactly one
+consumer, `binding-surface-page.tsx:581`, and `grep -rn "Drawer" web/src/features web/src/components`
+returns those two files and nothing else. Fleet and the Solution Workflow do not open a drawer —
+the workflow renders each node's body inline through `NodeSequence` and `NodeEvidence`, which is a
+different shape, not an unextracted copy of this one.
+
+So the mock's three drawers are three features that do not exist, and extracting a shared component
+for them now is an abstraction with one asset behind it — `CLAUDE.md`'s *build for the case that
+exists*, and the reason *factor at the second use* names the second use rather than the first. The
+work this task actually contains is building the second drawer, and the extraction is what happens
+while building it. Whoever takes it should renumber it as that, not as a refactor.
+
 ### Task 4: Detector attribution's rung tally — full-stack (M12)
 
 **Files:**
@@ -195,12 +208,38 @@ questions that block. The owner can reverse any of them at the cost of one fix r
 - The merge policy renders **read-only** with the option in force named, per Decision 3. No control
   on this page mutates anything until M4's write path lands.
 
-- [ ] Step 1: Failing vitest — level count unchanged at nine; a declined adapter renders its reason;
+- [x] Step 1: Failing vitest — level count unchanged at nine; a declined adapter renders its reason;
       policy renders the option in force. RED.
-- [ ] Step 2: Implement against `sync.api`'s existing read surface; state absence where the API has
+- [x] Step 2: Implement against `sync.api`'s existing read surface; state absence where the API has
       no field yet rather than inventing one.
-- [ ] Step 3: Reach it from the rail and the palette; walk all nine levels plus this one.
-- [ ] Step 4: Gate; WORKLOG; commit.
+- [x] Step 3: Reach it from the rail and the palette; walk all nine levels plus this one.
+- [x] Step 4: Gate; WORKLOG; commit.
+
+**Landed. Two of this task's three interfaces are built as written and the third is refused, on
+Step 2's own instruction.**
+
+*The adapter table is built* — and needed a read surface that did not exist, so the slice is
+full-stack rather than console-only: `registered_adapters` in `sync.signals.registry`,
+`GraphStore.vendor_intake_rollup`, `sync.dashboard.adapters.adapter_inventory` and
+`GET /api/adapters`.
+
+*`/settings` is a destination and not a level*, as specified. It could not go in `ROUTES`, because
+`RouteEntry` requires a `GraphLevel` and an `Area` and Settings is neither — widening `level` to
+accept `null` would weaken the guard on nine real levels to admit one screen. `DESTINATIONS` is its
+own array; `App.tsx` serves both, the rail links it, and the palette lists it under its own heading.
+
+*The merge policy panel is refused.* This task says it renders read-only "with the option in force
+named". **There is no option in force.** Nothing in `sync.forge` reads a merge strategy, a
+required-reviewer rule or an auto-merge switch; every pull request is opened the same way and left
+for a human. A panel reading "Squash and merge" would be the console asserting a configured fact
+the system does not hold, which is precisely what Step 2 says not to do. The screen states the
+absence and names what has to land first.
+
+*A declined adapter cannot render its reason, for the same reason and it is worth separating.* Not
+a rendering gap: nothing records an intake **attempt**, only its result, so no column exists to
+read. A `decline_reason` null on every row would read as "no adapter has ever declined" — a claim
+nothing measured. `test_nothing_here_records_why_an_adapter_declined` asserts the field's absence,
+so the gap is held rather than forgotten, and that test is the one to change when the record lands.
 
 ### Task 6: The palette lists destinations honestly (M7)
 
@@ -214,9 +253,17 @@ questions that block. The owner can reverse any of them at the cost of one fix r
   it is the honest behaviour for six of the nine routes.
 - Each row carries its route pattern, so the palette doubles as the map of what exists.
 
-- [ ] Step 1: Failing vitest — a subject-taking route renders as a lookup and not a dead link. RED.
-- [ ] Step 2: Implement; `ROUTES` stays the single source, so a new route appears here for free.
-- [ ] Step 3: Gate; WORKLOG; commit.
+- [x] Step 1: Failing vitest — a subject-taking route renders as a lookup and not a dead link. RED.
+- [x] Step 2: Implement; `ROUTES` stays the single source, so a new route appears here for free.
+- [x] Step 3: Gate; WORKLOG; commit.
+
+**Landed as `M7-W227`.** The palette listed two of nine destinations, not seven of nine as this task
+assumed: it filtered on `params.length === 0`, so every subject-taking route was dropped rather than
+rendered disabled. The ruling taken, against `command-palette.tsx`'s own docstring arguing the
+opposite: list it. That docstring's case — a disabled row that never becomes enabled is dead weight
+— holds for a row that says nothing, and the row now says `reachedFrom` and the route pattern, which
+is what `AppFrame`'s sidebar already decided for the same registry field. Reversing this costs one
+edit to `paletteGroups`.
 
 ---
 

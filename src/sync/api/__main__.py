@@ -23,6 +23,7 @@ from starlette.applications import Starlette
 from sync.api.app import create_app
 from sync.core.models import RepoContext
 from sync.dashboard import fleet, graph_views
+from sync.dashboard.adapters import adapter_inventory
 from sync.dashboard.queries import workflow_state
 from sync.graph.store import DEFAULT_DSN, GraphStore, describe_dsn
 from sync.mcp.tools import GraphSurface
@@ -190,6 +191,9 @@ def app_factory() -> Starlette:
             limit=limit, offset=offset,
         )
 
+    def adapters_reader():
+        return adapter_inventory(store)
+
     def context_reader(repo_id: str):
         return graph_views.repo_context(store, repo_id)
 
@@ -207,6 +211,7 @@ def app_factory() -> Starlette:
         coverage_reader=coverage_reader,
         observed_reader=observed_reader,
         detector_reader=detector_reader,
+        adapters_reader=adapters_reader,
         severity_reader=severity_reader,
         overview_reader=overview_reader,
         vendor_findings_reader=vendor_findings_reader,

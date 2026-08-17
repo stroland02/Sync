@@ -13,7 +13,7 @@ import type { ComponentType } from "react"
 import { Route, Routes, useLocation } from "react-router"
 
 import { ErrorBoundary } from "@/components/error-boundary"
-import { ROUTES } from "@/lib/routes"
+import { DESTINATIONS, ROUTES } from "@/lib/routes"
 import { AppFrame } from "@/layouts/app-frame"
 import { UnknownRoute } from "@/layouts/unknown-route"
 
@@ -60,6 +60,18 @@ export default function App() {
             />
           )
         )}
+        {/* A destination is not a level, and the router does not care: both arrays declare a
+            path, an element and the question the header renders. Serving them from one place is
+            what keeps `/settings` from being the tenth screen only a typed URL reaches. */}
+        {DESTINATIONS.map((destination) => (
+          <Route
+            key={destination.path}
+            path={destination.path.slice(1)}
+            element={
+              <RoutedScreen element={destination.element} question={destination.question} />
+            }
+          />
+        ))}
         <Route path="*" element={<RoutedScreen element={UnknownRoute} />} />
       </Route>
     </Routes>
