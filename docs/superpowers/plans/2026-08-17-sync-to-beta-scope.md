@@ -78,6 +78,18 @@ fixtures, for merge rate and at least three of the five quality axes. Merge rate
 `pull_request_outcome` wired to something that updates the corpus; the rest need runs to have
 happened.
 
+**Gate 3 -- SIGNED 2026-08-17.** Evidence:
+`docs/superpowers/reports/2026-08-17-gate-3-screen-pass.md`. Ten of ten screens, every number traced
+to a named payload field or a named derivation, read live off the API and compared against what the
+screen renders; a number seen in only one of the two is not sourced. No product code changed to
+produce the report. The pass also found what a weaker one would have accepted: `CONTEXT SAVINGS`
+was originally passed on pattern-consistency with another screen, which is not provenance, and
+chasing it to `graph_views` showed it computed as a row count times a fixed per-read constant --
+which clears this gate and files `B145`, because no tokens are ever counted and the console
+discloses the modelling only on the bounded-scan branch. The sharpest positive finding is Settings,
+the one screen where the mock itself invents fixture numbers and the built console refuses to render
+them.
+
 **Gate 3 -- the console tells the truth about that evidence.** Every honesty distinction still
 renders -- provenance at two levels, absence apart from zero, staleness apart from liveness,
 never-measured apart from nothing-here -- and no screen asserts a number nothing computed. The
