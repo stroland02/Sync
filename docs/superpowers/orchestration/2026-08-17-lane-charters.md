@@ -197,6 +197,29 @@ arrive -- an arbitration, a stop-work, a regression another lane caused -- prefe
 `orca terminal send --terminal <handle> --enter`, which reaches a busy agent as its next input
 rather than waiting for it to ask for mail.
 
+## Reading mail: the queue does not advance unless you acknowledge, and there is no `ack` subcommand
+
+**`orca orchestration check` returns the oldest *unacknowledged* batch, and returns it again, and
+again.** The acknowledgement is a flag on `check` itself:
+
+```
+orca orchestration check --ack <delivery_id> --json
+```
+
+There is no `orca orchestration ack`. Calling one fails with `invalid_argument`, which reads as a bad
+argument rather than as a missing command, so the natural next move is to fix the arguments instead
+of the verb.
+
+Measured 2026-08-17, by the coordinator, on itself: a `worker_done` from Lane B was read, acted on
+and answered — and then returned unchanged on the next two sweeps, while a Lane C escalation and a
+Lane C `worker_done` sat behind it, unseen. The owner's prompt said *"you have 2 messages"* and then
+*"you have 3"* while `check` reported one, which is exactly the signal to look at. **A queue that
+only ever shows you the message you have already handled looks identical to a quiet queue.**
+
+Drain it in a loop, acking each batch by the id the previous call returned, until the delivery id
+comes back empty. And treat a mismatch between the notification count and what `check` shows as a
+defect in your own reading, not as a stale notification.
+
 ## When a lane keeps working outside its boundary
 
 Three times on 2026-08-17 one lane built inside another's files: the Fleet change-unit aggregate
