@@ -432,7 +432,27 @@ workspace produces when it is working well in every other respect.
 off, twenty-eight references to `seed-console` in the report, and the state a design partner sees in
 their first five minutes had never been rendered. One real defect was waiting there.
 
-**The day-one path (`B169`).** Twelve tests assert that the day-one setup is *documented* correctly.
+**`B169` is now closed, and the answer refines the pattern rather than merely confirming it.** The
+documentation was not wrong. `scripts/fetch_corpus_repositories.py` was named in **no document in
+this repository** -- not `README.md`, not `CONTRIBUTING.md`, nothing under `docs/` -- so what was
+written was *correct and incomplete*, and no assertion about the prose could ever have caught it.
+Somebody following the setup exactly still met the failures.
+
+The fix made the instructions true rather than the test pass: both setup blocks now name the corpus
+step ahead of `uv run pytest`, with a note on why both steps are once per *checkout* rather than once
+per machine, since the artifacts are gitignored and a second worktree needs them again.
+`tests/test_gate_setup_contract.py` keeps them true by **executing** -- it runs both refusal paths
+with the artifact genuinely absent, reads the script each message names, and asserts that script
+appears in the setup documents *before* the suite command. That is the assertion that fails when a
+step is added to the code and not to the instructions, and it was proved able to fail by removing
+the step and watching it go red. Sufficiency was measured rather than assumed: seeding exactly those
+artifacts into a fresh worktree turned about fifty failures into 237 passed.
+
+A cold-clone CI job was deliberately **not** built, on the grounds that fifteen minutes of wall clock
+gets disabled the first flaky week and would prove in fifteen minutes what this proves in under a
+second.
+
+**The original framing (`B169`).** Twelve tests assert that the day-one setup is *documented* correctly.
 **None of them runs anything from an empty checkout**, and a fresh worktree fails about fifty tests
 on gitignored artifacts alone. So the instructions are verified as prose and unverified as
 instructions.
