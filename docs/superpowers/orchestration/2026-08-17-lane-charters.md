@@ -138,11 +138,55 @@ Escalate to the coordinator, not to the human, when the blocker is another lane.
   environment. Every fixture here is ASCII, so no test will ever catch a missing one.
 - **A spec passed through the Orca CLI must be ASCII.** Em dashes arrive as mojibake.
 
+## Confirm your lane before your first landing
+
+**A dispatch delivering a spec is not the same as an agent having read it**, and the gap between
+those two is where duplicated work comes from. Measured 2026-08-17: Lane A received its charter,
+was mid-task when it arrived, did not act on it, and spent twenty-four minutes building
+`sync.dashboard.fleet.change_units`, `by_rung` on `detector_accountability` and `/api/change-units`
+-- Lane E's files, which Lane E had already landed as `M12-W320` in `157fff6`. Two lanes, one
+aggregate, and neither knew until a coordinator sweep read a terminal.
+
+It also asked, reasonably, whether the coordinator messages were genuine before pushing to
+`origin/main` from an index it did not control. That caution was right and cost nothing; the
+duplication cost half an hour.
+
+So, once, before your first landing: reply to the coordinator naming your lane, the path list you
+believe you own, and your number block. If any of the three is not what the coordinator expects, you
+find out before you have written code rather than after.
+
+**And if a coordinator instruction looks unverifiable, verify it rather than stall or comply.** The
+charter is on `origin/main` and so is every coordinator commit:
+`git show origin/main:docs/superpowers/orchestration/2026-08-17-lane-charters.md` and
+`git log --oneline origin/main` settle it in two commands. Pushing to `main` by fast-forward is
+authorized for every lane and is explicitly not one of the three things reserved for the human.
+
 ## Standing arbitrations
 
 Recorded here when one is made, so no lane has to ask the same question twice.
 
-**2026-08-17, the dead-link red on `main`.** `ensure_image_built` in
+**2026-08-17, the dead-link red now has three causes and one owner each.** Re-measured against
+`main` after the afternoon's landings: `test_lint_dead_links` reports three unreachable symbols, not
+one, and every one of them is the same shape -- a primitive landed without the consumer that would
+call it.
+
+- `sync/forge/github.py:631`, `GitHubForge.pull_request_outcome`. **The coordinator's, landed as
+  `M10-W229`.** Lane E is wiring it to the corpus right now and that landing closes this.
+- `sync/forge/webhook.py:263`, `dispatch_webhook_event`. Lane A's, from M10's event ingress. Closes
+  when the resume-on-pull-request-event path is wired.
+- `src/sync/remediate/sandbox_image.py:113`, `ensure_image_built`. Lane A's, from B97. Still open.
+
+Until all three close, any lane may exclude that one test from its own run **provided it says so
+when reporting**. Nobody should re-diagnose it.
+
+**The rule this is teaching, and it is not new -- `CLAUDE.md` already says a workaround ships with
+the backlog entry that retires it.** Do not land a producer with no consumer. If a primitive must
+land ahead of its caller, baseline it in the same commit and name the work item that removes the
+baseline. Three of these accumulated in one afternoon because each author reasonably judged their
+own piece complete, and the cost lands on the four lanes that then gate around a red they did not
+cause.
+
+**2026-08-17, the original dead-link ruling.** `ensure_image_built` in
 `src/sync/remediate/sandbox_image.py` is reached from nowhere and fails
 `test_lint_dead_links`. Lane C is right that baselining it would hide another session's in-progress
 work, and reached that on its own. **Ruling: leave the red, name `21b99f6` when reporting it, and do
