@@ -56,7 +56,7 @@ from typing import Any, Callable, Mapping
 import yaml
 
 from sync.core.protocols import VendorAdapter
-from sync.signals.generated.adapter import GeneratedSpecAdapter, http_fetch
+from sync.signals.generated.adapter import DEFAULT_GENERATOR, GeneratedSpecAdapter, http_fetch
 from sync.signals.generated.manifest import SpecSource, parse_manifest
 from sync.signals.mcp_server.adapter import VENDOR_ID_PREFIX, McpServerAdapter
 from sync.signals.stripe.adapter import StripeAdapter, fetch_sdk_spec, fetch_spec
@@ -347,6 +347,11 @@ def _prepare_generated(vendor: GeneratedVendor, context: VendorContext) -> Prepa
             vendor.vendor_id, vendor.manifest,
         )
 
+    sdk_source = context.cache_dir / "sdk_source"
+    sdk_source_path = sdk_source if sdk_source.exists() else None
+    generator_file = context.cache_dir / "sdk_generator.txt"
+    generator = generator_file.read_text(encoding="utf-8").strip() if generator_file.exists() else DEFAULT_GENERATOR
+
     return PreparedVendor(
         adapter=GeneratedSpecAdapter(
             vendor_id=vendor.vendor_id,
@@ -354,6 +359,8 @@ def _prepare_generated(vendor: GeneratedVendor, context: VendorContext) -> Prepa
             fetch=fetch_specification,
             cache_dir=context.cache_dir,
             sdk_bindings=vendor.sdk_bindings,
+            sdk_source=sdk_source_path,
+            sdk_source_generator=generator,
         ),
         documents=(),
     )
@@ -368,13 +375,22 @@ def _load_generated(vendor: GeneratedVendor, context: VendorContext) -> VendorAd
     caller `load_vendor` exists for -- wants a request correlator, which this adapter does not
     implement and is refused for at the entry point.
     """
+    sdk_source = context.cache_dir / "sdk_source"
+    sdk_source_path = sdk_source if sdk_source.exists() else None
+    generator_file = context.cache_dir / "sdk_generator.txt"
+    generator = generator_file.read_text(encoding="utf-8").strip() if generator_file.exists() else DEFAULT_GENERATOR
+
     return GeneratedSpecAdapter(
         vendor_id=vendor.vendor_id,
         sources={},
         fetch=fetch_specification,
         cache_dir=context.cache_dir,
         sdk_bindings=vendor.sdk_bindings,
+        sdk_source=sdk_source_path,
+        sdk_source_generator=generator,
     )
+
+
 
 
 def _twilio_products(context: VendorContext) -> tuple[ProductDocument, ...]:
