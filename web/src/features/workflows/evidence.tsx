@@ -30,9 +30,9 @@ import { orAbsent } from "@/lib/format"
 import { asHttpUrl } from "@/lib/url"
 import { Card, CardContent, CardHeader } from "@/vendor/supabase/ui/card"
 
-type FieldKind = "text" | "flag" | "url" | "block"
+export type FieldKind = "text" | "flag" | "url" | "block"
 
-interface Field {
+export interface Field {
   key: string
   label: string
   kind: FieldKind
@@ -47,8 +47,11 @@ interface Field {
  * The evidence each node carries, keyed and ordered as `_EVIDENCE_KEYS` in
  * `sync.dashboard.queries` writes it. Mirrored rather than derived: the payload cannot say
  * which of its keys is a URL and which is multi-line compiler output.
+ *
+ * Exported for `activity.ts`: the activity timeline's `primaryDetail` reuses this field order
+ * to pick a node's headline evidence value rather than inventing a second vocabulary.
  */
-const FIELDS: Record<string, Field[]> = {
+export const FIELDS: Record<string, Field[]> = {
   locate: [
     {
       key: "tier",
@@ -197,7 +200,7 @@ function Flag({ field, value }: { field: Field; value: unknown }) {
     ? (field.trueLabel ?? "yes")
     : (field.falseLabel ?? "no")
   return (
-    <span className="rounded-control border border-line px-field py-0.5 text-meta">
+    <span className="rounded-control border border-line px-field py-field text-meta">
       {value ? "PASS" : "FAIL"} — {wording}
     </span>
   )
@@ -312,25 +315,6 @@ function FieldValue({ field, value }: { field: Field; value: unknown }) {
   }
 }
 
-const NODE_STRATEGY_EXPLANATIONS: Record<string, string> = {
-  locate:
-    "Decision table evaluates breaking changes against AST call signatures to select deterministic AST transforms vs model generation.",
-  prepare:
-    "Isolates target codebase in clean workspace; enforces zero lifecycle scripts (--ignore-scripts) and checks compiler availability.",
-  patch:
-    "Generates type-safe edits preserving customer formatting; carries diagnostic feedback if prior tsc verification failed.",
-  static_verify:
-    "Executes in-place tsc compilation; checks dependency mtime stamps to ensure no local node_modules were altered.",
-  replay:
-    "Validates response serialization and client parsing behavior against modified vendor schemas.",
-  push_branch:
-    "Stages only verified modified call sites and creates targeted branch on remote forge.",
-  await_ci:
-    "Monitors forge webhook events and remote test suite progress on customer CI runners.",
-  open_pr:
-    "Bundles verification artifacts and commit history into verified pull request.",
-}
-
 /**
  * Everything one node produced.
  *
@@ -376,16 +360,6 @@ export function NodeEvidence({
       {blocks.map((field) => (
         <BlockField key={field.key} field={field} value={evidence[field.key]} />
       ))}
-      {name in NODE_STRATEGY_EXPLANATIONS && (
-        <details className="rounded border border-border bg-surface-subtle p-field text-meta text-muted-foreground">
-          <summary className="cursor-pointer font-mono font-medium text-muted-foreground hover:text-foreground">
-            Reasoning & Strategy
-          </summary>
-          <p className="mt-field font-sans text-meta text-foreground">
-            {NODE_STRATEGY_EXPLANATIONS[name]}
-          </p>
-        </details>
-      )}
     </div>
   )
 }

@@ -65,6 +65,7 @@ import {
   VendorFindingsCard,
   VendorFindingsControls,
 } from "@/features/vendors/vendor-findings-table"
+import { Breadcrumbs } from "@/layouts/breadcrumbs"
 import { DetailGrid } from "@/layouts/detail-grid"
 import { PageHeader } from "@/layouts/page-header"
 import { UnknownRoute } from "@/layouts/unknown-route"
@@ -117,6 +118,20 @@ export function VendorPage({ question = DEFAULT_QUESTION }: VendorPageProps) {
       >
         <div className="flex min-w-0 flex-col gap-section">
           <PageHeader
+            trail={
+              <Breadcrumbs
+                trail={[
+                  { label: "Repositories", to: "/" },
+                  // A vendor narrowed by a repository was reached through one, so the trail says
+                  // which. Unnarrowed, the vendor sits directly under the fleet scope and there is
+                  // no repository to name — inventing one would claim a path the reader did not take.
+                  ...(repoId === null
+                    ? []
+                    : [{ label: repoId, to: `/repositories/${encodeURIComponent(repoId)}` }]),
+                  { label: vendorId },
+                ]}
+              />
+            }
             title={<span className="font-mono">{vendorId}</span>}
             question={question}
           />

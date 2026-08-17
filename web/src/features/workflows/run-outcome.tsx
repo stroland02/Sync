@@ -66,7 +66,7 @@ function Panel({
   children: ReactNode
 }) {
   return (
-    <div className={frame === "panel" ? "max-w-prose rounded border border-border p-section" : ""}>
+    <div className={frame === "panel" ? "max-w-prose rounded-surface border border-border p-section" : ""}>
       {frame === "panel" ? (
         <h2 className="text-emphasis">{headline}</h2>
       ) : (

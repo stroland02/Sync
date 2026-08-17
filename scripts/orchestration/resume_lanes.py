@@ -36,6 +36,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import os
 import shutil
 import subprocess
@@ -67,6 +68,8 @@ BUDGET_EXHAUSTED = (
     "usage limit",
     "rate limit",
     "quota exceeded",
+    "quota reached",          # Gemini's wording; "exceeded" alone missed a real outage
+    "upgrade your subscription",
     "insufficient credit",
 )
 
@@ -132,19 +135,44 @@ def live_terminals(cli: str) -> dict[str, int]:
     }
 
 
+# How close to the end of the tail a budget notice must sit to still count. A recovered agent
+# pushes its banner up the scrollback as it produces output, so a notice buried further back than
+# this is history rather than a live state -- without the bound, one exhausted afternoon would hold
+# a healthy lane for as long as the banner stayed in the buffer.
+BUDGET_NOTICE_WITHIN_LAST = 6
+
+
+def reset_seconds(notice: str) -> int | None:
+    """How long the agent said its outage would last, in seconds, or `None` if it did not say.
+
+    Reads the `Resets in 2h3m21s` / `resets 10:20am` shapes the agent CLIs print. Only the
+    duration form is parseable into a deadline; a wall-clock time would need the machine's timezone
+    to mean anything, and guessing that is how a hold ends an hour early.
+    """
+    match = re.search(r"resets?\s+in\s+(?:(\d+)h)?\s*(?:(\d+)m)?\s*(?:(\d+)s)?", notice, re.I)
+    if not match or not any(match.groups()):
+        return None
+    hours, minutes, seconds = (int(g) if g else 0 for g in match.groups())
+    return hours * 3600 + minutes * 60 + seconds
+
+
 def budget_held(cli: str, handle: str) -> str | None:
     """The reset notice on a terminal that has stopped for budget, or `None`.
 
     Read from the terminal's own tail rather than inferred from silence, because silence is
     ambiguous -- a thinking agent and an exhausted one look identical from the outside, and only
     one of them should be left alone.
+
+    Only the last few lines are examined. A banner further back means the agent has produced output
+    since, which is proof it recovered.
     """
     payload = call(cli, "terminal", "read", "--terminal", handle, "--json")
     terminal = (payload.get("result") or {}).get("terminal") or {}
-    tail = " ".join(terminal.get("tail") or []).lower()
+    recent = (terminal.get("tail") or [])[-BUDGET_NOTICE_WITHIN_LAST:]
+    tail = " ".join(recent).lower()
     if not any(marker in tail for marker in BUDGET_EXHAUSTED):
         return None
-    for line in reversed(terminal.get("tail") or []):
+    for line in reversed(recent):
         if "resets" in line.lower():
             # ASCII-folded before it is ever printed. A terminal tail carries box-drawing and
             # spinner glyphs, and stdout on this machine is cp1252, so returning the raw line
@@ -153,6 +181,34 @@ def budget_held(cli: str, handle: str) -> str | None:
             folded = "".join(c if 32 <= ord(c) < 127 else " " for c in line)
             return " ".join(folded.split())[:120]
     return "no reset time printed"
+
+
+def recorded_run(cli: str) -> str | None:
+    """The Run to sweep, named explicitly rather than inherited from a terminal binding.
+
+    **This is what made the scheduled task inert.** `orchestration task-list` answers for the Run
+    bound to the invoking terminal, and a Windows scheduled task is not an Orca terminal, so it has
+    no binding and sees no tasks. The sweep then printed "no open lane tasks; nothing to resume" and
+    exited zero -- healthy-looking, and wrong, three times in a row while five lanes were open. A
+    safety net that reports success while doing nothing is worse than one that fails loudly.
+
+    The coordinator records the Run id beside the terminal map. Absent that, the newest Run is a
+    reasonable guess and is stated as one.
+    """
+    if LANE_TERMINALS.exists():
+        try:
+            recorded = json.loads(LANE_TERMINALS.read_text(encoding="utf-8")).get("_run")
+        except (json.JSONDecodeError, OSError):
+            recorded = None
+        if isinstance(recorded, str) and recorded.startswith("run_"):
+            return recorded
+
+    runs = (call(cli, "orchestration", "run-list", "--json").get("result") or {}).get("runs") or []
+    if not runs:
+        return None
+    newest = runs[-1]
+    print(f"note: no Run recorded beside this script; guessing the newest, {newest.get('id')}")
+    return newest.get("id")
 
 
 def recorded_terminals() -> dict[str, str]:
@@ -213,7 +269,15 @@ def main() -> int:
         print("orca runtime unreachable; nothing to resume")
         return 1
 
-    tasks = (call(cli, "orchestration", "task-list", "--json").get("result") or {}).get("tasks") or []
+    run_id = recorded_run(cli)
+    listing = ["orchestration", "task-list", "--json"]
+    if run_id:
+        listing = ["orchestration", "task-list", "--run", run_id, "--json"]
+    tasks = (call(cli, *listing).get("result") or {}).get("tasks") or []
+    if not tasks and run_id is None:
+        print("no Run could be resolved; this sweep saw nothing and that is a failure, not a quiet "
+              "workspace -- record a _run key beside this script")
+        return 1
     open_tasks = [t for t in tasks if t.get("status") not in {"completed"}]
     if not open_tasks:
         print("no open lane tasks; nothing to resume")
@@ -242,13 +306,26 @@ def main() -> int:
         if handle and handle in terminals:
             held = budget_held(cli, handle)
             if held:
-                print(f"HELD    {label}: out of budget, not retried ({held})")
-                continue
+                # The countdown in the notice was captured when the agent stopped, not now, so it
+                # is reported alongside how long ago that was. Printing a frozen "resets in 2h" an
+                # hour later reads as a live figure and overstates the outage by exactly the time
+                # already served.
+                quiet_s = int((int(time.time() * 1000) - terminals[handle]) / 1000)
+                window = reset_seconds(held)
 
-        if args.dry_run:
-            print(f"WOULD   {label}: {why}")
-            restarted += 1
-            continue
+                # **A hold must expire.** An exhausted agent produces no output, so its banner never
+                # scrolls out of the tail -- without a deadline the lane stays held forever, which
+                # is the outage made permanent by the very thing meant to survive it. When the
+                # agent's own stated window has elapsed since it printed the notice, stop believing
+                # the banner and try.
+                if window is not None and quiet_s > window:
+                    print(f"RESUME  {label}: stated window of {window // 60} min elapsed "
+                          f"({quiet_s // 60} min since the notice); retrying")
+                else:
+                    remaining = "unknown" if window is None else f"{max(0, (window - quiet_s)) // 60} min"
+                    print(f"HELD    {label}: out of budget, not retried "
+                          f"[{held}] -- captured {quiet_s // 60} min ago, {remaining} left")
+                    continue
 
         # Re-attach to the terminal the lane already owns when we still know it, so a lane keeps its
         # worktree and its conversation. Without a handle there is nothing to re-attach to, and
@@ -257,8 +334,27 @@ def main() -> int:
             print(f"MANUAL  {label}: {why}; no live terminal to re-attach, coordinator must place it")
             continue
 
+        # `--retry-of` is only valid against a dispatch the runtime considers settled. Passing it
+        # for a still-active one is rejected with "cannot retry from Dispatch <id>", which is how
+        # three healthy lanes were reported as failures. A dispatch that is still `dispatched` with
+        # a live terminal is not ours to restart at all: Orca believes it is running, and forcing a
+        # retry is how a merely-quiet worker gets circuit-broken.
+        status = dispatch.get("status")
+        if status not in {"failed", "stopped"} and dispatch.get("assignee_handle"):
+            print(f"STALE   {label}: {why}; dispatch still active, not retried "
+                  f"(read the terminal before deciding it is dead)")
+            continue
+
+        # Every verdict above is reached identically with and without `--dry-run`, which is the
+        # whole point: a preview that takes a different path from the run it previews predicts
+        # nothing. Only the mutation itself is skipped.
+        if args.dry_run:
+            print(f"WOULD   {label}: {why}")
+            restarted += 1
+            continue
+
         start = ["orchestration", "worker-start", "--task", task["id"], "--terminal", handle, "--json"]
-        if dispatch.get("id"):
+        if dispatch.get("id") and status in {"failed", "stopped"}:
             start += ["--retry-of", dispatch["id"]]
         before = dispatch.get("id")
         outcome = call(cli, *start)

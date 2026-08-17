@@ -313,6 +313,92 @@ confidently instead of refusing.
 
 ## Ready
 
+### B152 — a crashed xdist worker reads as failing tests, and nothing told a lane otherwise — FIXED
+
+**Measured 2026-08-17, twice, on the same tree.** One run reported roughly thirty `F` marks and no
+summary after `[gw0] node down: Not properly terminated`; the same tree run to completion reported
+`1 failed, 3742 passed`. A third reported `60 failed` with two dead workers inside it. The three
+are not distinguishable by counting, and the first two describe the same code.
+
+Every mark printed after a worker dies belongs to a test that never reached a verdict. pytest
+prints it as `F` regardless, so an absence wears a failure's glyph — the exact distinction this
+project refuses to lose anywhere else. A finding carries the rung it came from; absence renders
+apart from zero; a vendor that can bind nothing says so rather than reporting no findings. A run
+whose tally cannot be attributed belongs in the same set, and now is.
+
+`scripts/gate_verdict.py` reads a captured pytest output and answers whether its verdict can be
+believed at all — a prior question to whether the suite passed, and deliberately separate from it.
+A failing suite is still exit 0 here; a run that died is exit 2.
+
+It reads the text rather than hooking pytest, and that is the ruling rather than an omission: the
+runs this exists to catch are the ones that died, and a plugin inside a dead worker reports
+nothing. The output file is the only artifact that survives both shapes.
+
+Three shapes are caught, each measured from a real run rather than imagined: `[gwN] node down`,
+which is the common one and now names the test the worker was running; `INTERNALERROR>` from
+xdist's own bookkeeping, which ends in `no tests ran` and reads as nothing-to-see to anybody
+skimming the last line; and a run with no summary line at all, which is what a killed run leaves.
+
+**Evidence it works rather than merely runs.** The nine tests were shown red before the module
+existed and red again against a sabotaged implementation that ignored the crash. Then it was run
+against the four real captures from this day's gating: the clean run classified `TRUSTWORTHY`, two
+crashed runs `UNTRUSTWORTHY` naming `gw0` and `gw1, gw4`, and the truncated run reported as never
+reaching a verdict. Pointed at a path that does not exist it exits 64 rather than reporting
+success, which is the refusal `lint_dead_links` and `lint_test_skips` already make.
+
+**What it does not do.** It does not stop workers crashing. The cause measured today is starvation
+on the host-wide npx resolve lock (`src/sync/index/npx_lock.py`, Lane D's path, escalated as
+`msg_34a9fc7a0bcd`), and a run of 3,270 seconds against 262 on a quiet host. This makes the lie
+legible; it does not make the run fast.
+
+
+### B151 — `main` is 60 tests red, the remediation graph does not terminate, and a crashed worker hides it
+
+**Filed by Lane C against Lane A's path, not fixed here.** `src/sync/remediate/**` is Lane A's,
+and a lane that owns neither the file nor the milestone should not be the one deciding what the
+graph's stop condition ought to be. Escalated as `msg_5650a184e975`.
+
+**Measured on `origin/main` at `acc0617`**, full suite, `-n 4`:
+`60 failed, 3744 passed, 4 skipped in 991.35s`.
+
+**It is not environmental, which is the first thing anybody meeting it will assume.** Postgres was
+healthy for the whole run — `pg_isready` accepting, ten test databases, one connection of three
+hundred. The charter's own trap note says a run failing in the hundreds is environmental; this one
+is not, and the distinguishing evidence is the failure text rather than the count:
+
+| Count | Failure |
+|---:|---|
+| 23 | `langgraph.errors.GraphRecursionError: Recursion limit of 10007 reached without hitting a stop condition` |
+| 12 | `IndexError: list index out of range` |
+| 3 | `KeyError: 'report_reason'` |
+
+Across `test_migration_recording.py` (26), `test_remediation_graph.py` (19),
+`test_pr_number_recorded.py` (9), `test_replay_stage.py` (3), `test_pipeline_composes.py` (1) and
+`test_python_repository.py` (1).
+
+**Attributed to `12e416a` "M10: durable runs and the human turn".** That commit removes
+`report_reason: str` from `RunState` in `src/sync/remediate/state.py` and rewrites attempt
+accounting: `attempt_index` becomes the monotonic counter while `static_attempts` and `ci_attempts`
+keep the routing bounds. The `KeyError` names the removed key directly. The recursion is the same
+change seen from the routing side — the graph's terminal conditions are read from counters that no
+longer mean what the routers assume.
+
+**Two gate defects the same run exposed, and these two are Lane C's own.**
+
+A crashed xdist worker reads as mass failure. `worker 'gw0' crashed while running
+tests/test_remediation_graph.py::test_a_patch_that_only_typechecks_with_untracked_files_never_reaches_push_branch`
+emitted a cascade of `F` marks that are not failures of the tests they are printed against. An
+earlier run of the same tree, cut off at 96%, showed roughly thirty such marks and no summary,
+which read as a catastrophic regression and was not one. This is the symptom the charter attributes
+to `-n auto`, now measured at `-n 4`, so the recommended setting is not a cure.
+
+The same test alone exceeds **600 seconds**. The full suite is 991s against the eight-to-fourteen
+minutes the charter already calls the largest tax in the workspace.
+
+**Closes when:** the graph reaches a stop condition and those 60 tests pass on `main` (Lane A), and
+a crashed worker is reported as a crashed worker rather than as failing tests (Lane C).
+
+
 ### B135 — a customer's repository could configure the patch agent, and the gate sat downstream of it — FIXED, and the entry stays for what it says about the gate
 
 **B135, B133 and B134 were filed as B131, B129 and B130 and renumbered on landing.** Three live branches -- `b129-truncate-corpus`, `b130-day-one-path`, `b131-generated-vendors` -- plus `b132-gate-hang` already held 129 through 132 when these were written, and `main`'s copy of this file topped out at B128, so the numbers read as free from every view that could see them. That is the failure this file's own opening rule describes, and `git log --all --oneline --grep` does not catch it either when the competing claim is a branch name rather than a commit message. The cheap check that would have: `git worktree list` and `git branch -a`, read for the number rather than for the work.
@@ -475,11 +561,15 @@ illustrate.
 The screen is built and honest without it. This is the row that lets it answer the question it was
 drawn to answer.
 
-### B137 — CI was red on `main`, and the one run on a schedule reported success over a failing suite — FIXED
+### B150 — CI was red on `main`, and the one run on a schedule reported success over a failing suite — FIXED
 
-**Filed as B133 and renumbered before it was written.** `docs/superpowers/BACKLOG.md` already held
-B133 through B136, exactly the collision B135's own opening note describes; B137 was the next free
-number by `git log --all --oneline --grep` and by this file.
+**Filed as B133, then B137, and renumbered twice.** `docs/superpowers/BACKLOG.md` already held B133
+through B136, exactly the collision B135's own opening note describes, so this was written as B137 —
+the next free number by `git log --all --oneline --grep` and by this file. That was the old rule and
+it was the wrong one: the lane charters landed the same day pre-allocate B137-B139 to the
+coordinator, and a number that is free today is not a number nobody else is going to take. Renumbered
+into Lane C's own block, where nothing else can claim it. Its work item moved from `CI-W233` to
+`CI-W280` for the same reason, and that one had already collided with the coordinator's `M0-W233`.
 
 **What was red.** Run `32024607194` on `04ece58`: `test` failed, `serial` failed, `web` passed,
 `coverage` skipped. Steps ran, so this is not B112's "job never acquired" signature.
@@ -1841,12 +1931,16 @@ ignored in silence.
 
 **What is left, and none of it blocks the gate:**
 
-- **The container tests have never run in CI and may not pass there.** They reach the host through
-  `host.docker.internal`, which Docker Desktop provides and a plain Linux daemon does not without
-  `--add-host=host.docker.internal:host-gateway`. `bc04f14` landed them at 22:17 UTC on
-  2026-08-16; the last CI run that actually executed anything was 04:18 UTC that day, and the three
-  since are B112's phantom failures with every job blank. Unknown, not broken — and adding the flag
-  touches `sync.remediate.sandbox`, which is B97's, so it wants its own change.
+- ~~**The container tests have never run in CI and may not pass there.**~~ **Answered by B150, and
+  all three clauses were wrong.** They did run, they did not pass, and the fix needed no change to
+  `sync.remediate.sandbox` at all. The prediction about `host.docker.internal` was right — a plain
+  Linux daemon does not provide it — but the consequence was worse than "may not pass": both
+  positive controls failed, so the tests were proving *nothing* on Linux rather than failing
+  honestly. The fix is in the test: it now tries the resolved name and then the container's own
+  default gateway, and the never-networked probe refuses every candidate rather than one name,
+  which is a stronger claim than the original made. Kept struck through rather than deleted
+  because the reasoning that produced a wrong prediction is worth reading beside the measurement
+  that corrected it.
 - **The churn itself is untouched.** Forty `DROP DATABASE` per run is the cost that the tuning
   makes affordable rather than removes; a suite that shared one aged database across
   `test_schema_convergence` would issue far fewer.

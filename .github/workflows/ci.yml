@@ -136,7 +136,21 @@ jobs:
         run: uv run python scripts/fetch_corpus_repositories.py
 
       - name: Tests
-        run: uv run pytest
+        run: |
+          set -o pipefail
+          uv run pytest 2>&1 | tee suite-test.log
+
+      # A tally is only a result if the run that produced it finished. A crashed xdist worker
+      # prints `F` against every test it never reached, so `60 failed` and `1 failed` can describe
+      # the same tree -- B152 measured exactly that, three times in one morning. `gate_verdict.py`
+      # answers whether the verdict can be believed, which is a different question from whether
+      # the suite passed, and it runs on failure too because that is the case it exists for.
+      # `set -o pipefail` is load-bearing: without it the step reports `tee`'s status, and a
+      # failing suite passes straight through -- the same defect the coverage step below was
+      # fixed for, which this capture would otherwise reintroduce here.
+      - name: Was that run trustworthy
+        if: always()
+        run: uv run python scripts/gate_verdict.py suite-test.log
 
       # The corpus has two frozen inputs and this job used to stage one of them. `repositories.yaml`
       # pins the trees; `symbol_map.yaml` pins the map that decides which call sites resolve at
@@ -302,7 +316,15 @@ jobs:
       # Gated, and the only gate here. No lints: those are facts about the source, and running
       # them twice buys a second copy of the same answer.
       - name: Tests, serial scheduler
-        run: uv run pytest -q -n0
+        run: |
+          set -o pipefail
+          uv run pytest -q -n0 2>&1 | tee suite-serial.log
+
+      # Same argument as `test`. `-n0` has no workers to lose, but it can still be killed before
+      # its summary, and a run with no summary line is not a result either.
+      - name: Was that run trustworthy
+        if: always()
+        run: uv run python scripts/gate_verdict.py suite-serial.log
 
   # Recorded, never gated. `2026-07-27-sync-benchmark-gates.md` forbids inventing a
   # threshold -- a gate at an invented number either fires constantly and gets disabled or
@@ -408,7 +430,15 @@ jobs:
       # database, with coverage recorded. Not the lints, not the corpus score and its floors,
       # not `web` -- each of those runs on the push that put `main` where the nightly found it.
       - name: Coverage (recorded) and the suite (gated)
-        run: uv run pytest -q --cov=sync --cov-report=term-missing:skip-covered
+        run: |
+          set -o pipefail
+          uv run pytest -q --cov=sync --cov-report=term-missing:skip-covered 2>&1 | tee suite-coverage.log
+
+      # This job is the whole of a scheduled run, so an unreadable verdict here is a nightly that
+      # reports nothing at all -- the same shape as the discarded exit code above, one step later.
+      - name: Was that run trustworthy
+        if: always()
+        run: uv run python scripts/gate_verdict.py suite-coverage.log
 
   # No Postgres and no Python: `web/` is a standalone Vite + React console, not part of the
   # graph pipeline `test` and `serial` exercise, so coupling it into either job would fail

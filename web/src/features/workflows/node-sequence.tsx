@@ -23,17 +23,20 @@
  */
 
 import { motion } from "framer-motion"
-import { useEffect, useRef, useState, type ReactNode } from "react"
+import { useEffect, useId, useRef, useState, type ReactNode } from "react"
 
 import type {
   NodeStanding,
   WorkflowNode,
   WorkflowNodeName,
   WorkflowNodeStatus,
+  WorkflowOutcome,
 } from "@/api/types"
 import { NodeEvidence } from "@/features/workflows/evidence"
 import { closingEntryIndex } from "@/features/workflows/narrative-order"
+import { defaultDisclosed, inkFor, latestEvidenceAt } from "@/features/workflows/sequence-dynamics"
 import { formatTimestamp } from "@/lib/format"
+import { formatAge, secondsSince, useNow } from "@/lib/elapsed"
 import { STANDING_LABEL, STANDING_SENTENCE } from "@/features/workflows/node-standing"
 import { CHANGE_WASH_DURATION, EASE_STANDARD, useReducedMotion } from "@/lib/motion"
 
@@ -69,6 +72,45 @@ const UNKNOWN_NODE =
 /** `PURPOSE[name]`, or `UNKNOWN_NODE` when the payload names a node this file does not. */
 function purposeFor(name: string): string {
   return name in PURPOSE ? PURPOSE[name as WorkflowNodeName] : UNKNOWN_NODE
+}
+
+/**
+ * How a node does what `PURPOSE` says it does — mechanism rather than outcome, and the same
+ * words for every run of that node.
+ *
+ * ## Rehomed from `evidence.tsx` by Task 11
+ *
+ * This text used to render inside `NodeEvidence`, titled "Reasoning & Strategy" — evidence's
+ * own frame, which is a run's *recorded* facts. Nothing here is recorded; it is authored copy
+ * about the node, identical whether the run is its first attempt or its fifth. Sitting inside
+ * the evidence block under that title let it read as reasoning the run produced, which the data
+ * does not support. The words survive; the frame does not. It sits beside the purpose sentence
+ * instead, retitled "How this node works", and it is never reachable from inside the evidence
+ * disclosure this task adds.
+ */
+const NODE_MECHANICS: Record<WorkflowNodeName, string> = {
+  locate:
+    "Decision table evaluates breaking changes against AST call signatures to select deterministic AST transforms vs model generation.",
+  prepare:
+    "Isolates target codebase in clean workspace; enforces zero lifecycle scripts (--ignore-scripts) and checks compiler availability.",
+  patch:
+    "Generates type-safe edits preserving customer formatting; carries diagnostic feedback if prior tsc verification failed.",
+  static_verify:
+    "Executes in-place tsc compilation; checks dependency mtime stamps to ensure no local node_modules were altered.",
+  replay:
+    "Validates response serialization and client parsing behavior against modified vendor schemas.",
+  push_branch:
+    "Stages only verified modified call sites and creates targeted branch on remote forge.",
+  await_ci:
+    "Monitors forge webhook events and remote test suite progress on customer CI runners.",
+  open_pr:
+    "Bundles verification artifacts and commit history into verified pull request.",
+}
+
+/** `NODE_MECHANICS[name]`, or undefined for a node this file does not name. No fallback text —
+ * unlike `purposeFor`, silence is the right answer when there is nothing authored to show. */
+function mechanicsFor(name: string): string | undefined {
+  return name in NODE_MECHANICS ? NODE_MECHANICS[name as WorkflowNodeName] : undefined
 }
 
 interface Appearance {
@@ -201,13 +243,86 @@ function NodeMarker({ node }: { node: WorkflowNode }) {
   )
 }
 
-function StepBody({ node }: { node: WorkflowNode }) {
+/**
+ * How long since the newest evidence any node has stamped — staleness, never liveness.
+ *
+ * `useNow` is mounted only while this component is, so the interval exists exactly while the
+ * figure is on screen: a finished run, or a run with nothing stamped yet, never even starts one.
+ * Reduced motion does not stop it — `LoadingState` (M7-W218) is the precedent: a ticking figure
+ * is information a reader is deciding with, not decoration, so it survives the same preference
+ * that removes `ChangeWash`.
+ */
+function EvidenceAge({ since }: { since: string }) {
+  const now = useNow(1000)
+  const seconds = secondsSince(Date.parse(since), now)
+
+  return (
+    <p className="mt-field max-w-prose text-meta text-muted-foreground">
+      {formatAge(seconds)} since last evidence — staleness, not liveness.
+    </p>
+  )
+}
+
+/**
+ * A node's evidence, behind a disclosure that opens by default only for the node the run most
+ * recently reached — the entry a reviewer almost certainly came to read. Every other node with
+ * evidence is one click away, never hidden for good: the name, the standing, the timestamp, the
+ * purpose sentence and the `due_again` sentence stay outside the disclosure regardless, because
+ * several of them are protected honesty sentences and this task collapses none of them.
+ */
+function EvidenceDisclosure({
+  node,
+  defaultOpen,
+}: {
+  node: WorkflowNode
+  defaultOpen: boolean
+}) {
+  const [open, setOpen] = useState(defaultOpen)
+  const panelId = useId()
+  const keyCount = Object.keys(node.evidence).length
+
+  if (keyCount === 0) return null
+
+  return (
+    <div className="mt-section">
+      <button
+        type="button"
+        aria-expanded={open}
+        aria-controls={panelId}
+        onClick={() => setOpen((value) => !value)}
+        className="furniture text-meta text-muted-foreground hover:text-foreground"
+      >
+        {`evidence (${keyCount})`}
+      </button>
+      {open && (
+        <div id={panelId}>
+          <NodeEvidence name={node.name} evidence={node.evidence} />
+        </div>
+      )}
+    </div>
+  )
+}
+
+function StepBody({
+  node,
+  defaultOpen,
+  evidenceSince,
+}: {
+  node: WorkflowNode
+  defaultOpen: boolean
+  /** The run's newest evidence stamp, when this is the due node of an unfinished run. */
+  evidenceSince?: string | null
+}) {
   const look = appearanceOf(node.standing)
+  const receded = inkFor(node.standing) === "receded"
+  const nameClass = receded ? "text-ink-muted" : look.nameClass
+  const purposeClass = receded ? "text-ink-muted" : "text-muted-foreground"
+  const mechanics = mechanicsFor(node.name)
 
   return (
     <>
       <div className="flex flex-wrap items-baseline gap-x-row gap-y-field">
-        <h3 className={`font-mono text-body ${look.nameClass}`}>{node.name}</h3>
+        <h3 className={`font-mono text-body ${nameClass}`}>{node.name}</h3>
         <p className="text-meta text-muted-foreground">{STANDING_LABEL[node.standing]}</p>
         {node.first_seen_at && (
           <time
@@ -223,13 +338,22 @@ function StepBody({ node }: { node: WorkflowNode }) {
           </time>
         )}
       </div>
-      <p className="mt-field max-w-prose text-body text-muted-foreground">
+      <p className={`mt-field max-w-prose text-body ${purposeClass}`}>
         {purposeFor(node.name)}
       </p>
+      {mechanics !== undefined && (
+        <details className="mt-field max-w-prose text-meta text-muted-foreground">
+          <summary className="cursor-pointer font-mono font-medium text-muted-foreground hover:text-foreground">
+            How this node works
+          </summary>
+          <p className="mt-field font-sans text-meta text-foreground">{mechanics}</p>
+        </details>
+      )}
       {node.standing === "due_again" && (
         <p className="mt-field max-w-prose text-body">{STANDING_SENTENCE.due_again}</p>
       )}
-      <NodeEvidence name={node.name} evidence={node.evidence} />
+      {evidenceSince != null && <EvidenceAge since={evidenceSince} />}
+      <EvidenceDisclosure node={node} defaultOpen={defaultOpen} />
     </>
   )
 }
@@ -249,15 +373,32 @@ export function NodeSequence({
   nodes,
   opening,
   closing,
+  outcome,
 }: {
   nodes: WorkflowNode[]
   /** What arrived: the finding this run answers, and what this route can and cannot see. */
   opening?: ReactNode
   /** How the run ended, placed where it ended. `narrative-order.ts` owns where that is. */
   closing?: ReactNode
+  /**
+   * The run's own outcome, undefined when the caller has not wired one up.
+   *
+   * Read for exactly one thing: whether the evidence-age figure may render at all. Only
+   * `outcome === null` — a run genuinely still in flight — earns it; an omitted prop reads the
+   * same as a finished run, which is the safe default for a caller that has not decided.
+   */
+  outcome?: WorkflowOutcome | null
 }) {
-  const closingAt = closing === undefined ? -1 : closingEntryIndex(nodes)
+  const reachedCount = closingEntryIndex(nodes)
+  const closingAt = closing === undefined ? -1 : reachedCount
+  const lastReachedIndex = reachedCount - 1
   const closingEntry = { key: "closing", marker: <BracketMarker glyph="◆" />, body: closing }
+
+  const latest = outcome === null ? latestEvidenceAt(nodes) : null
+  const dueIndex =
+    latest === null
+      ? -1
+      : nodes.findIndex((node) => node.standing === "due" || node.standing === "due_again")
 
   const entries: { key: string; marker: ReactNode; body: ReactNode }[] = []
   if (opening !== undefined) {
@@ -268,7 +409,13 @@ export function NodeSequence({
     entries.push({
       key: node.name,
       marker: <NodeMarker node={node} />,
-      body: <StepBody node={node} />,
+      body: (
+        <StepBody
+          node={node}
+          defaultOpen={defaultDisclosed(index, lastReachedIndex)}
+          evidenceSince={index === dueIndex ? latest : null}
+        />
+      ),
     })
   })
   if (closingAt === nodes.length) entries.push(closingEntry)
