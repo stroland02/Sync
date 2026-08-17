@@ -115,24 +115,26 @@ export function VendorPage({ question = DEFAULT_QUESTION }: VendorPageProps) {
           />
         }
       >
-        <PageHeader
-          title={<span className="font-mono">{vendorId}</span>}
-          question={question}
-        />
-        {repoId === null ? (
-          <p className="max-w-prose text-body text-muted-foreground">
-            Every open finding and every published change for {vendorId}, across every
-            repository the index has seen. Nothing selected a repository on the way here, so
-            this page is in the fleet's scope rather than one codebase's — open it from a
-            repository to narrow the findings below.
-          </p>
-        ) : (
-          <p className="max-w-prose text-body text-muted-foreground">
-            Open findings for {vendorId} in <span className="font-mono">{repoId}</span> alone.
-            The vendor changes below are the exception and say so: what {vendorId} published is
-            a fact about the vendor, not about this repository.
-          </p>
-        )}
+        <div className="flex min-w-0 flex-col gap-section">
+          <PageHeader
+            title={<span className="font-mono">{vendorId}</span>}
+            question={question}
+          />
+          {repoId === null ? (
+            <p className="max-w-prose text-body text-muted-foreground">
+              Every open finding and every published change for {vendorId}, across every
+              repository the index has seen. Nothing selected a repository on the way here, so
+              this page is in the fleet's scope rather than one codebase's — open it from a
+              repository to narrow the findings below.
+            </p>
+          ) : (
+            <p className="max-w-prose text-body text-muted-foreground">
+              Open findings for {vendorId} in <span className="font-mono">{repoId}</span> alone.
+              The vendor changes below are the exception and say so: what {vendorId} published is
+              a fact about the vendor, not about this repository.
+            </p>
+          )}
+        </div>
       </DetailGrid>
 
       {/* The bar itself is composed inside `VendorFindingsControls`, beside the state it sets and

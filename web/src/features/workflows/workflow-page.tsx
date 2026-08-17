@@ -282,7 +282,7 @@ function Workflow({ findingId, question }: { findingId: string; question: string
         />
       }
       rail={
-        <>
+        <div className="flex min-w-0 flex-col gap-section">
           <FactList facts={runFacts(data, failure, findingId)} />
 
           {data !== undefined && (
@@ -302,73 +302,75 @@ function Workflow({ findingId, question }: { findingId: string; question: string
               reviewer can send on.
             </p>
           )}
-        </>
+        </div>
       }
     >
-      {query.isPending && <LoadingState what={`the run for finding ${findingId}`} />}
+      <div className="flex min-w-0 flex-col gap-8">
+        {query.isPending && <LoadingState what={`the run for finding ${findingId}`} />}
 
-      {data === undefined &&
-        query.isError &&
-        (query.error instanceof NotFoundError ? (
-          <div className="flex flex-col items-start gap-section">
-            <NotFoundState
-              headline="No remediation run for this finding."
-              detail="The API answered, and the checkpointer holds no run under this identifier. Either remediation has not been started for this finding, or it has never been started for any finding on this database. This is an answer about the run, not a failure of the console — a finding can be perfectly real and have no attempt against it yet."
-              identifier={query.error.identifier}
-            />
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={query.isFetching}
-              onClick={() => void query.refetch()}
-            >
-              {query.isFetching ? "Asking…" : "Check again"}
-            </Button>
-          </div>
-        ) : (
-          <ErrorState error={query.error} what={`the run for finding ${findingId}`} />
-        ))}
-
-      {data !== undefined && (
-        <>
-          {query.isError ? (
-            <StaleBanner
-              fetchedAt={query.dataUpdatedAt}
-              live={!terminal}
-              isFetching={query.isFetching}
-              onRetry={() => void query.refetch()}
-            />
-          ) : (
-            /* The healthy counterpart to `StaleBanner`. That banner only appears once a refetch
-               has failed, so until now a run being watched and a run whose screen had gone quiet
-               for a terminal outcome looked identical — both just sat there. This says which. */
-            <FetchedAt
-              at={query.dataUpdatedAt}
-              polling={!terminal}
-              idleReason="This run has reached a terminal outcome, so nothing is being polled."
-            />
-          )}
-
-          <SupersededGenerations
-            generations={data.generations}
-            currentThreadId={data.thread_id}
-          />
-
-          <NodeSequence
-            nodes={data.nodes}
-            opening={<Arrival findingId={findingId} />}
-            closing={
-              <RunOutcome
-                outcome={data.outcome}
-                abandonReason={data.abandon_reason}
-                reportReason={data.report_reason}
-                below={BELOW}
-                frame="entry"
+        {data === undefined &&
+          query.isError &&
+          (query.error instanceof NotFoundError ? (
+            <div className="flex flex-col items-start gap-section">
+              <NotFoundState
+                headline="No remediation run for this finding."
+                detail="The API answered, and the checkpointer holds no run under this identifier. Either remediation has not been started for this finding, or it has never been started for any finding on this database. This is an answer about the run, not a failure of the console — a finding can be perfectly real and have no attempt against it yet."
+                identifier={query.error.identifier}
               />
-            }
-          />
-        </>
-      )}
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={query.isFetching}
+                onClick={() => void query.refetch()}
+              >
+                {query.isFetching ? "Asking…" : "Check again"}
+              </Button>
+            </div>
+          ) : (
+            <ErrorState error={query.error} what={`the run for finding ${findingId}`} />
+          ))}
+
+        {data !== undefined && (
+          <>
+            {query.isError ? (
+              <StaleBanner
+                fetchedAt={query.dataUpdatedAt}
+                live={!terminal}
+                isFetching={query.isFetching}
+                onRetry={() => void query.refetch()}
+              />
+            ) : (
+              /* The healthy counterpart to `StaleBanner`. That banner only appears once a refetch
+                 has failed, so until now a run being watched and a run whose screen had gone quiet
+                 for a terminal outcome looked identical — both just sat there. This says which. */
+              <FetchedAt
+                at={query.dataUpdatedAt}
+                polling={!terminal}
+                idleReason="This run has reached a terminal outcome, so nothing is being polled."
+              />
+            )}
+
+            <SupersededGenerations
+              generations={data.generations}
+              currentThreadId={data.thread_id}
+            />
+
+            <NodeSequence
+              nodes={data.nodes}
+              opening={<Arrival findingId={findingId} />}
+              closing={
+                <RunOutcome
+                  outcome={data.outcome}
+                  abandonReason={data.abandon_reason}
+                  reportReason={data.report_reason}
+                  below={BELOW}
+                  frame="entry"
+                />
+              }
+            />
+          </>
+        )}
+      </div>
     </DetailGrid>
   )
 }

@@ -249,7 +249,7 @@ function PullRequest({ findingId, question }: { findingId: string; question: str
         />
       }
       rail={
-        <>
+        <div className="flex min-w-0 flex-col gap-section">
           <FactList facts={railFacts(data, facts, failure, findingId)} />
 
           <p className="text-body text-muted-foreground">
@@ -279,45 +279,47 @@ function PullRequest({ findingId, question }: { findingId: string; question: str
               </span>
             </p>
           )}
-        </>
+        </div>
       }
     >
-      {query.isPending && <LoadingState what={`the run for finding ${findingId}`} />}
+      <div className="flex min-w-0 flex-col gap-8">
+        {query.isPending && <LoadingState what={`the run for finding ${findingId}`} />}
 
-      {data === undefined &&
-        query.isError &&
-        (query.error instanceof NotFoundError ? (
-          <div className="flex flex-col items-start gap-section">
-            <NotFoundState
-              headline="No remediation run for this finding, so there is no pull request."
-              detail="The API answered, and the checkpointer holds no run under this identifier. Either remediation has not been started for this finding, or it has never been started for any finding on this database. This is an answer about the run, not a failure of the console — a finding can be perfectly real and have no attempt against it yet."
-              identifier={query.error.identifier}
+        {data === undefined &&
+          query.isError &&
+          (query.error instanceof NotFoundError ? (
+            <div className="flex flex-col items-start gap-section">
+              <NotFoundState
+                headline="No remediation run for this finding, so there is no pull request."
+                detail="The API answered, and the checkpointer holds no run under this identifier. Either remediation has not been started for this finding, or it has never been started for any finding on this database. This is an answer about the run, not a failure of the console — a finding can be perfectly real and have no attempt against it yet."
+                identifier={query.error.identifier}
+              />
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={query.isFetching}
+                onClick={() => void query.refetch()}
+              >
+                {query.isFetching ? "Asking…" : "Check again"}
+              </Button>
+            </div>
+          ) : (
+            <ErrorState error={query.error} what={`the run for finding ${findingId}`} />
+          ))}
+
+        {data !== undefined && (
+          <>
+            <RunOutcome
+              outcome={data.outcome}
+              abandonReason={data.abandon_reason}
+              reportReason={data.report_reason}
+              below={BELOW}
             />
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={query.isFetching}
-              onClick={() => void query.refetch()}
-            >
-              {query.isFetching ? "Asking…" : "Check again"}
-            </Button>
-          </div>
-        ) : (
-          <ErrorState error={query.error} what={`the run for finding ${findingId}`} />
-        ))}
 
-      {data !== undefined && (
-        <>
-          <RunOutcome
-            outcome={data.outcome}
-            abandonReason={data.abandon_reason}
-            reportReason={data.report_reason}
-            below={BELOW}
-          />
-
-          <EvidenceBundle nodes={data.nodes} outcome={data.outcome} />
-        </>
-      )}
+            <EvidenceBundle nodes={data.nodes} outcome={data.outcome} />
+          </>
+        )}
+      </div>
     </DetailGrid>
   )
 }

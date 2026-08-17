@@ -379,19 +379,21 @@ function BindingSurfaceDetail({
           />
         }
       >
-        <PageHeader
-          // Fleet and the vendor are the top bar's, derived from this same address. The
-          // operation stays: it is deeper than the vendor, which is where that trail stops.
-          // M7-W195.
-          trail={<Breadcrumbs trail={[{ label: operationId }]} />}
-          title={
-            <span className="font-mono">
-              {vendorId} / {operationId}
-            </span>
-          }
-          question={question}
-        />
-        <ScopeNote repoId={repoId} />
+        <div className="flex min-w-0 flex-col gap-section">
+          <PageHeader
+            // Fleet and the vendor are the top bar's, derived from this same address. The
+            // operation stays: it is deeper than the vendor, which is where that trail stops.
+            // M7-W195.
+            trail={<Breadcrumbs trail={[{ label: operationId }]} />}
+            title={
+              <span className="font-mono">
+                {vendorId} / {operationId}
+              </span>
+            }
+            question={question}
+          />
+          <ScopeNote repoId={repoId} />
+        </div>
       </DetailGrid>
 
       {query.isPending && <LoadingState what={`bindings for ${vendorId}/${operationId}`} />}
