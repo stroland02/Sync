@@ -110,6 +110,20 @@ def _fake_corpus_reader() -> dict[str, Any]:
     }
 
 
+def _fake_corpus_health_reader() -> dict[str, Any]:
+    return {
+        "summary": {
+            "total_runs": 0,
+            "distinct_findings": 0,
+            "axes_measured_count": 0,
+            "axes_unmeasured_count": 5,
+            "total_axes": 5,
+            "has_any_samples": False,
+        },
+        "axes": [],
+    }
+
+
 def _fake_repositories_reader() -> dict[str, Any]:
     return {"repo_ids": []}
 
@@ -226,6 +240,7 @@ def _build_app(
     workflow_reader=lambda finding_id: None,
     runs_reader=_fake_runs_reader,
     corpus_reader=_fake_corpus_reader,
+    corpus_health_reader=_fake_corpus_health_reader,
     repositories_reader=_fake_repositories_reader,
     abandonment_reader=_fake_abandonment_reader,
     binding_reader=_fake_binding_reader,
@@ -253,6 +268,7 @@ def _build_app(
         workflow_reader=workflow_reader,
         runs_reader=runs_reader,
         corpus_reader=corpus_reader,
+        corpus_health_reader=corpus_health_reader,
         repositories_reader=repositories_reader,
         abandonment_reader=abandonment_reader,
         binding_reader=binding_reader,
@@ -1272,6 +1288,7 @@ class _RecordingClient(NamedTuple):
     workflow_reads: list[str]
     runs_reads: list[dict[str, int]]
     corpus_reads: list[None]
+    corpus_health_reads: list[None]
     repositories_reads: list[None]
     abandonment_reads: list[None]
     binding_reads: list[tuple[str, str, str | None]]
@@ -1289,6 +1306,7 @@ def _recording_client(**graph_kw) -> _RecordingClient:
     workflow_reads: list[str] = []
     runs_reads: list[dict[str, int]] = []
     corpus_reads: list[None] = []
+    corpus_health_reads: list[None] = []
     repositories_reads: list[None] = []
     abandonment_reads: list[None] = []
     binding_reads: list[tuple[str, str, str | None]] = []
@@ -1311,6 +1329,10 @@ def _recording_client(**graph_kw) -> _RecordingClient:
     def corpus_reader():
         corpus_reads.append(None)
         return _fake_corpus_reader()
+
+    def corpus_health_reader():
+        corpus_health_reads.append(None)
+        return _fake_corpus_health_reader()
 
     def repositories_reader():
         repositories_reads.append(None)
@@ -1357,6 +1379,7 @@ def _recording_client(**graph_kw) -> _RecordingClient:
         workflow_reader=workflow_reader,
         runs_reader=runs_reader,
         corpus_reader=corpus_reader,
+        corpus_health_reader=corpus_health_reader,
         repositories_reader=repositories_reader,
         abandonment_reader=abandonment_reader,
         binding_reader=binding_reader,
@@ -1372,8 +1395,8 @@ def _recording_client(**graph_kw) -> _RecordingClient:
         context_writer=_fake_context_writer,
     )
     return _RecordingClient(
-        TestClient(app), surface, workflow_reads, runs_reads, corpus_reads, repositories_reads,
-        abandonment_reads,
+        TestClient(app), surface, workflow_reads, runs_reads, corpus_reads, corpus_health_reads,
+        repositories_reads, abandonment_reads,
         binding_reads, coverage_reads, observed_reads, detector_reads, severity_reads, overview_reads,
         vendor_findings_reads, change_units_reads,
     )
@@ -1387,8 +1410,8 @@ def test_no_route_reaches_past_the_read_surface():
     site = _site("s1")
     change = _change("c1")
     (
-        client, surface, workflow_reads, runs_reads, corpus_reads, repositories_reads,
-        abandonment_reads,
+        client, surface, workflow_reads, runs_reads, corpus_reads, corpus_health_reads,
+        repositories_reads, abandonment_reads,
         binding_reads, coverage_reads, observed_reads, detector_reads, severity_reads, overview_reads,
         vendor_findings_reads, change_units_reads,
     ) = _recording_client(findings=[_finding("f1", "s1", "c1")], sites=[site], changes=[change])
@@ -1400,6 +1423,7 @@ def test_no_route_reaches_past_the_read_surface():
     assert client.get("/api/workflows/f1").status_code == 200
     assert client.get("/api/runs").status_code == 200
     assert client.get("/api/corpus").status_code == 200
+    assert client.get("/api/corpus/health").status_code == 200
     assert client.get("/api/repositories").status_code == 200
     assert client.get("/api/corpus/abandonment").status_code == 200
     assert client.get("/api/change-units").status_code == 200
@@ -1416,6 +1440,7 @@ def test_no_route_reaches_past_the_read_surface():
     # own, one of these counts would read 0 or 2 rather than 1.
     assert len(runs_reads) == 1, "the runs route must reach its own reader exactly once"
     assert len(corpus_reads) == 1, "the corpus route must reach its own reader exactly once"
+    assert len(corpus_health_reads) == 1, "the corpus health route must reach its own reader exactly once"
     assert len(repositories_reads) == 1, "the repositories route must reach its own reader exactly once"
     assert len(abandonment_reads) == 1, "the abandonment route must reach its own reader exactly once"
     assert len(change_units_reads) == 1, "the change-units route must reach its own reader exactly once"
@@ -1567,6 +1592,7 @@ _NOT_COLLECTIONS = {
     "/api/findings/{finding_id}",
     "/api/workflows/{finding_id}",
     "/api/corpus",
+    "/api/corpus/health",
     "/api/corpus/abandonment",
     "/api/repositories",
     "/api/repositories/{repo_id}/coverage",
@@ -1876,6 +1902,7 @@ def _normalized(path: str) -> str:
 # a place routes go to be exempted from the drift guard forever.
 _NOT_YET_FETCHED_BY_CONSOLE = {
     "/api/corpus/abandonment",  # M12-W196: aggregate and route only, panel not yet scheduled
+    "/api/corpus/health",  # M12-W323: corpus health view model and route only, panel not yet scheduled
     "/api/repos/{param}/context",  # B126 Task 5: route only, the console screen is M7's line
 }
 
@@ -2116,5 +2143,6 @@ def test_app_factory_readers_accept_what_their_routes_actually_pass(monkeypatch)
         "/api/detectors",
         "/api/detectors?repo_id=r1",
         "/api/corpus",
+        "/api/corpus/health",
     ):
         assert client.get(path).status_code == 200, path

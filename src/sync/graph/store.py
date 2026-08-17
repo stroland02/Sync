@@ -22,6 +22,7 @@ from sync.core.models import (
     ObservedShape,
 )
 from sync.graph.sources import TRAFFIC_SOURCES
+from sync.signals.intake_attempt import IntakeAttempt
 
 
 DEFAULT_DSN = "postgresql://sync:sync@localhost:5433/sync"
@@ -1958,3 +1959,75 @@ class GraphStore:
             [repo_id],
         ).fetchone()
         return RepoContext(**row) if row is not None else None
+
+    def record_intake_attempt(self, attempt: IntakeAttempt) -> str:
+        """Persist one intake attempt record.
+
+        Idempotent: updates existing attempt if the natural key matches.
+        """
+        attempt_id = _stable_id(
+            attempt.vendor_id,
+            attempt.attempted_at.isoformat(),
+            attempt.from_version or "",
+            attempt.to_version or "",
+        )
+        self._connect().execute(
+            """
+            INSERT INTO intake_attempt (
+                id, vendor_id, attempted_at, outcome, reason_code, detail,
+                changes_count, from_version, to_version, source, duration_ms
+            )
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            ON CONFLICT (id) DO UPDATE
+               SET outcome = EXCLUDED.outcome,
+                   reason_code = EXCLUDED.reason_code,
+                   detail = EXCLUDED.detail,
+                   changes_count = EXCLUDED.changes_count,
+                   source = EXCLUDED.source,
+                   duration_ms = EXCLUDED.duration_ms
+            """,
+            (
+                attempt_id,
+                attempt.vendor_id,
+                attempt.attempted_at,
+                attempt.outcome,
+                attempt.reason_code,
+                attempt.detail,
+                attempt.changes_count,
+                attempt.from_version,
+                attempt.to_version,
+                attempt.source,
+                attempt.duration_ms,
+            ),
+        )
+        return attempt_id
+
+    def intake_attempts(
+        self, vendor_id: str | None = None, limit: int = 100
+    ) -> list[IntakeAttempt]:
+        """Query recent intake attempts, optionally filtered by vendor_id."""
+        if vendor_id is not None:
+            rows = self._connect().execute(
+                """
+                SELECT vendor_id, attempted_at, outcome, reason_code, detail,
+                       changes_count, from_version, to_version, source, duration_ms
+                  FROM intake_attempt
+                 WHERE vendor_id = %s
+                 ORDER BY attempted_at DESC
+                 LIMIT %s
+                """,
+                (vendor_id, limit),
+            ).fetchall()
+        else:
+            rows = self._connect().execute(
+                """
+                SELECT vendor_id, attempted_at, outcome, reason_code, detail,
+                       changes_count, from_version, to_version, source, duration_ms
+                  FROM intake_attempt
+                 ORDER BY attempted_at DESC
+                 LIMIT %s
+                """,
+                (limit,),
+            ).fetchall()
+        return [IntakeAttempt(**dict(row)) for row in rows]
+

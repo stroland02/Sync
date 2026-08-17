@@ -49,6 +49,7 @@ WorkflowReader = Callable[[str], Optional[dict[str, Any]]]
 # three databases' worth of shape.
 RunsReader = Callable[..., dict[str, Any]]
 CorpusReader = Callable[[], dict[str, Any]]
+CorpusHealthReader = Callable[[], dict[str, Any]]
 RepositoriesReader = Callable[[], dict[str, Any]]
 
 # `abandonment_by_change_kind`'s reader -- which change kinds are not mechanically safe, and at
@@ -167,6 +168,7 @@ def create_app(
     workflow_reader: WorkflowReader,
     runs_reader: RunsReader,
     corpus_reader: CorpusReader,
+    corpus_health_reader: CorpusHealthReader,
     repositories_reader: RepositoriesReader,
     abandonment_reader: AbandonmentReader,
     binding_reader: BindingReader,
@@ -302,6 +304,9 @@ def create_app(
     async def corpus(request: Request) -> JSONResponse:
         return JSONResponse(corpus_reader())
 
+    async def corpus_health_endpoint(request: Request) -> JSONResponse:
+        return JSONResponse(corpus_health_reader())
+
     async def repositories(request: Request) -> JSONResponse:
         return JSONResponse(repositories_reader())
 
@@ -404,6 +409,7 @@ def create_app(
         Route("/api/workflows/{finding_id}", workflow, methods=["GET"]),
         Route("/api/runs", runs, methods=["GET"]),
         Route("/api/corpus", corpus, methods=["GET"]),
+        Route("/api/corpus/health", corpus_health_endpoint, methods=["GET"]),
         Route("/api/corpus/abandonment", abandonment, methods=["GET"]),
         Route("/api/repositories", repositories, methods=["GET"]),
         Route("/api/change-units", change_units, methods=["GET"]),

@@ -189,6 +189,25 @@ export function useCorpus() {
 }
 
 /**
+ * Open findings grouped by the vendor change and operation that produced them, fleet-wide or
+ * for one repository. `repoId` is part of the query key for the same reason `useOverview`'s
+ * is: two scopes are two groupings, and a shared key would serve one repository's units from
+ * the other's cache.
+ *
+ * Not polled: this grouping moves when SIGNAL runs or a remediation run reaches a new
+ * checkpoint, neither of which this screen would learn about sooner than a manual refresh —
+ * the same call `useRepositories` and `useCorpus` make.
+ */
+export function useChangeUnits(params: ChangeUnitsParams = {}) {
+  const limit = params.limit ?? DEFAULT_LIMIT
+  const offset = params.offset ?? 0
+  return useQuery({
+    queryKey: ["change-units", params.repoId ?? null, limit, offset],
+    queryFn: ({ signal }) => fetchChangeUnits({ repoId: params.repoId, limit, offset }, signal),
+  })
+}
+
+/**
  * The `repo_id` roll-up from the index. Not polled, for the same reason as `useCorpus`: it
  * moves only when INDEX runs, which nothing on this screen would tell you had happened
  * sooner than a manual refresh would.

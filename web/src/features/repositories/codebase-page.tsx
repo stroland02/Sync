@@ -255,7 +255,7 @@ export function CodebasePage({ question = DEFAULT_QUESTION }: CodebasePageProps)
         <OpenFindingsCard repoId={repoId} />
         <IndexCoverageCard repoId={repoId} />
       </div>
-      <ChangeUnitsTable />
+      <ChangeUnitsTable repoId={repoId} />
       <ObservedTelemetryCard repoId={repoId} />
     </section>
   )

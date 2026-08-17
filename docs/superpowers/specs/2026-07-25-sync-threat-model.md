@@ -1,12 +1,37 @@
 # Sync — Threat Model
 
-**Date:** 2026-07-25, extended 2026-08-06
-**Status:** Specified. Contains one finding against code already on the M0 branch. The prompt-injection
-section was rewritten on 2026-08-06 from a traced inventory of the inputs rather than from a category,
-and three layers of defence are built: the prompt boundary, a predicate on the run, and a fence on what
-the agent reads for itself. The sandbox that would contain any of them is not.
+**Date:** 2026-07-25, extended 2026-08-06, reconciled against the code 2026-08-17
+**Status:** Specified, and partly built. Four layers of defence are built and cited below: the prompt
+boundary, a predicate on the run, a fence on what the agent reads for itself, and — since 2026-08-16, and
+absent from this document until the reconciliation — the refusal to load any settings file from any
+filesystem. **The sandbox that would contain any of them is still not built**, and the reconciliation
+found that the mechanism now exists in full while nothing routes a patch attempt through it.
 **Scope:** What Sync holds, what it must never hold, the blast radius when it is compromised, and the gap
 between the architecture the design document claims and the code as written.
+
+### The 2026-08-17 reconciliation
+
+Every claim below has been checked against the tree rather than against this document's own account.
+Three things came out of it, and the second is the one worth reading first:
+
+1. **Mitigation 1 is still unbuilt, and it is now unbuilt in a more specific way.** Every container
+   primitive it needs exists and is proven against real containers on this host. Not one of them is
+   called from anywhere in `src/`. `scripts/dead_links_baseline.txt:55-88` accepts all six symbols —
+   `ephemeral_container`, `disconnect_network`, `probe_connect`, `build_container_env`,
+   `copy_between_containers`, `ensure_image_built` — as reachable from nothing, on purpose. A patch run
+   today executes in the operator's own process, `asyncio.run` in `sync.runner.claude_sdk`
+   (`src/sync/runner/claude_sdk.py:73-92`), with the full parent environment and an unrestricted network
+   stack. **The close condition on B97 is not met and this document should not be read as if it were.**
+2. **Two of the seven answers this document gives a security reviewer are false today**, and one of them
+   describes the crown jewel. They are marked in place — see *Two answers below are false today*.
+3. **A hole larger than the one `tool_gate` closed was found and fixed on 2026-08-16, and this document
+   never knew about it.** A customer's own `.claude/settings.json` was configuration Sync obeyed, and a
+   `SessionStart` hook in it ran a shell command *before the first tool call*, which is where the gate
+   sits. Recorded now in *Layer four*.
+
+Citations in the prompt-injection table and the M0 finding had drifted by up to two hundred lines and are
+corrected throughout. A drifted citation in a security document is not cosmetic: it is a claim nobody can
+check, which reads the same as a claim nobody has checked.
 
 This is a security document and a sales document. The design document's promise — *we never execute your code
 and never hold your secrets* — is the strongest procurement argument Sync has, and it is only worth making if
@@ -78,11 +103,17 @@ move, and the claim is worth more than the convenience.
 longer asserts the absolute; it states that never executing customer code is the intent rather
 than the invariant, and that Sync runs the customer's *toolchain* while never running their
 application. The third path above is genuinely closed — every install command in
-`src/sync/index/deps.py` passes `--ignore-scripts`, so no lifecycle script from the dependency
-tree runs. The first two are open by design: `src/sync/index/tsc.py:132` still prefers
+`src/sync/index/deps.py` passes `--ignore-scripts` (`deps.py:25-29`, all four manager entries
+including the `npm install` fallback), so no lifecycle script from the dependency tree runs.
+The first two are open by design: `src/sync/index/tsc.py:148` still prefers
 `node_modules/.bin/tsc`, and `tsconfig.json` still resolves plugins into the compiler process.
-The unpinned fallback is also still there (`tsc.py:150`, `--package=typescript@latest`), so the
-non-reproducibility noted above stands.
+The unpinned fallback is also still there, so the non-reproducibility noted above stands.
+
+*Reconciled 2026-08-17.* The two line numbers this paragraph carried were `tsc.py:132` and
+`tsc.py:150`, and both had drifted. The current ones are `tsc.py:148` for the local-compiler
+preference and **two** sites for the unpinned fallback rather than one: `tsc.py:168` inside
+`run_tsc`, and `tsc.py:230` in the cache pre-warm, which pulls `typescript@latest` on a path that
+runs before any verification. Mitigation 4 below is therefore unbuilt at two places, not one.
 
 ### Required mitigations
 
@@ -108,6 +139,23 @@ Concretely:
 5. **Run non-root, read-only root filesystem, with the clone on the only writable mount**, and a hard wall-clock
    kill. `_TSC_TIMEOUT_SECONDS` already provides the last of these.
 
+### Where each of the five stands, checked against the tree on 2026-08-17
+
+One line each, and a mitigation is "built" only where something in `src/` reaches it on a real run.
+
+| | Mitigation | State | Established by |
+|---|---|---|---|
+| 1 | Credential-free sandbox | **Unbuilt.** Every primitive exists and is proven; nothing calls one. | `src/sync/remediate/sandbox.py`, unreachable from `src/` per `scripts/dead_links_baseline.txt:65-69`. The run happens on the host at `src/sync/runner/claude_sdk.py:73-92`. |
+| 2 | Install with lifecycle scripts disabled | **Built.** | `src/sync/index/deps.py:25-29` — `--ignore-scripts` on yarn, npm, pnpm and the fallback alike. |
+| 3 | No network egress from the sandbox | **Unbuilt for a patch run.** The container-level cutoff is proven; no patch run is inside a container. | Proven: `tests/test_patch_sandbox.py::test_container_network_cutoff_blocks_arbitrary_egress` and `::test_never_networked_container_receives_nothing_after_install_container_is_torn_down`. Not applied: `tests/test_patch_sandbox.py::test_patch_agent_execution_context_reaches_arbitrary_host_today` opens a socket to `1.1.1.1:443` from the shape the patch agent actually runs in, and passes. |
+| 4 | Pin the fallback compiler | **Unbuilt, at two sites.** | `src/sync/index/tsc.py:168` and `:230`, both `--package=typescript@latest`. |
+| 5 | Non-root, read-only root, wall-clock kill | **One of three.** The wall-clock kill is real (`src/sync/index/tsc.py:23`, `_TSC_TIMEOUT_SECONDS = 300`). The image runs as a non-root `sandbox` user, but nothing runs in the image. Read-only root with the clone as the only writable mount is neither built nor expressed anywhere — `ephemeral_container` (`sandbox.py:170`) takes an image and a network and passes no `--read-only`, no `--user` and no mount. |
+
+Mitigation 5's last row is the one this reconciliation would otherwise have let pass. The container
+primitive has no parameter for any of the three properties mitigation 5 asks for, so wiring the sandbox
+up as it stands would deliver the network boundary and silently not deliver this one. Named here so the
+commit that adds the caller has to answer it.
+
 ### What stays true after the mitigation
 
 The claim narrows and survives, and the narrowed version is still the strongest in the category:
@@ -119,6 +167,13 @@ The claim narrows and survives, and the narrowed version is still the strongest 
 
 That is a claim a security reviewer can check against an architecture diagram, which is the property that makes
 it useful in procurement.
+
+**It is not true yet, and the sentence above is written in the present tense.** *Added 2026-08-17.* Read it
+as the claim the mitigation buys, not as a description of the system. Two of its three clauses are false
+today: the typecheck runs in the operator's own process rather than a disposable container, and that
+process holds every credential the control plane has. The third — that the authoritative verification is
+the customer's own CI under the customer's own secrets — is true now. Nothing in this document may be
+quoted into a trust page or a procurement answer until the first two are.
 
 ## GitHub App permission scope
 
@@ -141,6 +196,22 @@ human, which is what keeps the blast radius of a bad patch at "a pull request so
 **Enforce the branch constraint in code, not in policy.** A guard in `sync.forge` that refuses to push to a
 repository's default branch or to any branch Sync did not create, with a test that asserts the refusal, is worth
 more than any documented intention.
+
+**Built, and built in a stronger shape than this asked for.** *Verified 2026-08-17.* There is no guard that
+refuses a default branch, because there is no path that could name one. `branch_name_for`
+(`src/sync/forge/github.py:125-140`) derives the branch from a SHA-256 of the repository id and the patch
+rationale and returns `sync/api-drift-<digest>`; `push_branch` (`:196`) calls it and takes no branch
+argument from anywhere. A caller cannot ask for `main`, so the refusal has nothing to refuse. **A guard
+that can be reached is weaker than a constructor that cannot produce the bad value**, and this is the
+second form.
+
+What the refusals do cover is the case the original sentence did not anticipate: a branch that *is* Sync's
+by name but carries somebody else's commit. `push_branch` pushes with a lease and refuses outright where
+any commit the push would discard was written by anyone but Sync, so a reviewer's fixup is never
+overwritten — the finding abandons with a reason naming the author instead.
+`tests/test_github_forge.py::test_push_branch_refuses_a_branch_whose_tip_somebody_else_wrote` and
+`::test_push_branch_refuses_a_branch_hiding_a_stranger_commit_under_a_sync_tip` are the two that watch it
+refuse.
 
 ## Prompt injection
 
@@ -177,25 +248,39 @@ vendor's published markdown page and keeps the behaviour cell verbatim — delib
 request body quotes the vendor's own wording and that wording is what makes the finding credible
 (`src/sync/signals/deprecations/parameters.py:121`). The cell is filed as `raw["behavior"]`
 (`:174`), `sync.detect.parameter_deprecation` interpolates it into `Finding.rationale`
-(`src/sync/detect/parameter_deprecation.py:147`), and `build_patch_prompt` renders that under "Why this
-matters". The precondition for treating this as urgent was met before the note that named it was filed.
+(`src/sync/detect/parameter_deprecation.py:121`, calling `_rationale` at `:135` — the previously cited
+`:147` had drifted), and `build_patch_prompt` renders that under "Why this matters"
+(`src/sync/remediate/agent_patch.py:175-176`). The precondition for treating this as urgent was met
+before the note that named it was filed.
 
 ### Where untrusted bytes enter
 
 Ranked by how easily an attacker reaches the byte, not by where it sits in the pipeline.
 
+*Every citation in this table was re-checked on 2026-08-17 and six of the seven rows had drifted; the
+table below carries the current lines and the old ones are recorded underneath so a reader of an earlier
+copy can tell drift from a change of substance. Nothing about which bytes enter, or what they buy, changed.*
+
 | Entry | Field it becomes | Who can write it | Reaches the patch prompt |
 |---|---|---|---|
-| `signals/deprecations/parameters.py:121` → `:174` | `raw["behavior"]`, `raw["applies_from"]` | Anyone who can change a vendor's published documentation page, plus anyone who can serve it — `signals/deprecations/adapter.py:137-151` is a plain urllib GET | Yes, via `Finding.rationale` |
+| `signals/deprecations/parameters.py:121` → `:174` | `raw["behavior"]`, `raw["applies_from"]` | Anyone who can change a vendor's published documentation page, plus anyone who can serve it — `signals/deprecations/adapter.py:147-150` is a plain urllib GET | Yes, via `Finding.rationale` |
 | `signals/oasdiff.py:166` (`raw=record`) | `raw["text"]`, and through it `changed_field` (`:202-210`) | Anyone who can land a property name or description in a vendor's OpenAPI specification | Yes — "Affected field", and inside the "Required edit" sentence |
 | `signals/oasdiff.py` (`kind`, `operation_id`, versions) | `VendorChange.kind`, `.operation_id` | The same | Yes, three prompt lines |
 | `signals/feed/consumer.py:79` | Every field of `VendorChange`, unvalidated | Whoever holds the feed signing key | Yes, all of it |
-| `index/typescript.py:594-618`, `index/python_lang.py:768-783`, `index/literals.py:140` | `CallSite.path`, `.symbol`, `.args_keys`, `.response_fields_read`, `.operation_id` | Anyone who can merge — or in most workflows merely open — a pull request against the customer's own repository | Yes, four prompt lines |
-| `remediate/nodes.py:295, 439, 522` | `diagnostics` | `tsc` output over customer source and the vendor's shipped `.d.ts`; a CI verdict; the rejected diff | Yes, the retry section |
+| `index/typescript.py:792-805`, `index/python_lang.py:948-963`, `index/literals.py:136-145` | `CallSite.path`, `.symbol`, `.args_keys`, `.response_fields_read`, `.operation_id` | Anyone who can merge — or in most workflows merely open — a pull request against the customer's own repository | Yes, four prompt lines |
+| `remediate/nodes.py:265` (a failed patch attempt), `:327` (`tsc`), `:585` (a CI verdict) | `diagnostics` | `tsc` output over customer source and the vendor's shipped `.d.ts`; a CI verdict; the rejected diff | Yes, the retry section |
 | The clone itself | Nothing — read by the agent's own `Read`, `Grep` and `Bash` calls | Anyone who can write a file in the repository | **Not through the prompt at all**, and the larger channel by volume. Framed at the tool layer instead — see "The second channel" below |
 
+Superseded citations, for anyone reading an older copy: `adapter.py:137-151` → `:147-150`;
+`typescript.py:594-618` → `:792-805`; `python_lang.py:768-783` → `:948-963`; `literals.py:140` →
+`:136-145`; `nodes.py:295, 439, 522` → `:265, :327, :585`; and `models.py:97-110` → `:118-131` below.
+The two rows that did not move are the ones that matter most — the vendor documentation cell and the
+oasdiff record — so the highest-reach entries are citable as originally written.
+
 `VendorChange`'s string fields are bare `str` with no validator, no length bound and no charset constraint
-(`src/sync/core/models.py:97-110`). The three accidental filters that exist — `_looks_like_a_model_id`,
+(`src/sync/core/models.py:118-131` — the eleven fields of the `VendorChange` model; the previously cited
+`:97-110` now lands inside `CallSite` and describes different fields entirely). The three accidental
+filters that exist — `_looks_like_a_model_id`,
 `_IDENTIFIER` in the parameter parser, and oasdiff's newline check — each cover one field and none covers
 `raw["behavior"]`.
 
@@ -214,7 +299,8 @@ credentials rather than the attacker's, which is the whole point of doing it.
    application repository routinely contains `.env` files, `.npmrc` tokens, fixture credentials and CI
    configuration. Sync holds no customer secrets, which is exactly why this matters: the secrets are in the
    clone, and `Bash` is a general egress channel. `WebSearch` and `WebFetch` are in `DISALLOWED_TOOLS`
-   (`agent_patch.py:69`), which is a real block, but `curl` is not a tool — it is a program, and the agent
+   (`src/sync/runner/claude_sdk.py:32` — the SDK options moved out of `sync.remediate` and the old
+   `agent_patch.py:69` names nothing now), which is a real block, but `curl` is not a tool — it is a program, and the agent
    was given a shell. Nothing in the verification gate looks at this: the exfiltration happens during the
    run and the diff can be empty or innocent afterwards. **Damage is unbounded and detection is zero.**
    *Amended 2026-08-06: a tool gate now refuses any shell command outside a fixed list of three and
@@ -239,14 +325,24 @@ because mitigation 1 puts the clone in a credential-free sandbox. That mitigatio
 until it is, the CodeRabbit shape at the top of this document is reachable from item 1 by a shorter path
 than any of these four.
 
+*Amended 2026-08-17, and the amendment sharpens rather than softens this.* "As designed" is doing all the
+work in that first sentence, and the design is not the system. The patch agent's process inherits every
+credential the parent holds, measured directly by
+`tests/test_patch_sandbox.py::test_patch_agent_execution_context_inherits_the_full_parent_environment_today`,
+and no `ClaudeAgentOptions` argument can change it. **So the correct statement is that the key is not
+reachable in the architecture and is reachable in the code**, and the whole distance between those two
+sentences is mitigation 1. A shorter path than item 1 was also found and closed in the interim — a
+`SessionStart` hook from the customer's own `.claude/settings.json`, which ran before the gate existed on
+the path at all; see *Layer four*.
+
 ### What the existing gates genuinely stop, and where the boundary sits
 
 They stop a patch that does not compile, and a patch the customer's own tests reject. `static_verify`
 measures the tree a push would carry rather than whatever the agent left in the clone
 (`sync.index.shipped_tree`), an edit inside an installed dependency fails the verification by name
 before the compiler runs (`sync.index.dependency_edits`), and an unstaged new file fails the gate rather
-than shipping (`agent_patch.py:299-305`). Those are real and they are more than most tools in this
-category have.
+than shipping (`src/sync/remediate/agent_patch.py:357-363`, drifted from the `:299-305` this document
+carried). Those are real and they are more than most tools in this category have.
 
 **The boundary is this: every one of those gates is a predicate on the artifact. None of them is a
 predicate on the run.** They ask what the branch contains. They do not ask what the agent did, what it
@@ -343,6 +439,24 @@ reddens the three smuggling tests, and widening the marker to any `<untrusted` r
 `src/sync/remediate/tool_gate.py`, registered as a `PreToolUse` hook on every `ClaudeAgentOptions`
 the patch node builds. Three refusals and one record:
 
+*Verified 2026-08-17, and the description below is still accurate to the byte.* `PERMITTED_TOOLS`
+(`tool_gate.py:51`) is exactly the six named; `PERMITTED_COMMANDS` (`tool_gate.py:58-62`) is exactly the
+three pairs; the two-token match is `tool_gate.py:123`; the compound and substitution refusals are
+`:113-121`; the `.git/` refusal is `:128-135`; the record is `:186` and `:191-193`. Eighteen tests in
+`tests/test_patch_tool_gate.py` hold it, including
+`::test_the_exfiltration_the_threat_model_ranks_first_is_refused`, which is the `curl` attack ranked
+first above, watched being refused.
+
+**One structural fact changed and it is a strengthening, so it is recorded rather than merely corrected.**
+The options are no longer built by the patch node: `sync.remediate` no longer imports the SDK at all, and
+`ClaudeSdkRunner` (`src/sync/runner/claude_sdk.py:62-92`) builds them from hooks the caller supplies.
+`ClaudeSdkRunner.__init__` takes that hook factory as a **required** argument and deliberately does not
+default it to "no hooks" (`claude_sdk.py:65-71`), because an ungated run reports as an ordinary success
+and nothing downstream could tell the difference. `agent_patch.patch_hooks` (`agent_patch.py:303-311`) is
+what the production path passes, and
+`tests/test_patch_tool_gate.py::test_the_gate_is_handed_to_the_sdk_for_every_tool_not_only_bash` asserts
+it arrives.
+
 - **A tool outside the set a patch needs is refused.** `Read`, `Grep`, `Glob`, `Edit`, `Write`,
   `Bash` are what making a patch takes. Everything else is denied, including tools that do not
   exist yet, because the set is stated as what is permitted rather than as a list of what is not.
@@ -396,7 +510,13 @@ that sees every call, so choosing reduction does not cost the detection it was c
   CLI honours a returned `permissionDecision: "deny"` is taken from the SDK's own contract and from
   the bundled binary carrying the field, not from a run. Observing it needs a model API call, which
   the test discipline here forbids. This is the weakest claim on the page and it should be read as
-  such.
+  such. *Amended 2026-08-17: half of this has since been observed and the half matters.* A probe run
+  against the real SDK on 2026-08-16 (recorded in `BACKLOG.md`'s B135) reported
+  `hook_consulted_for=['Bash']` — so the hook **is** reached for a call the agent makes, under the
+  options this pipeline actually passes, including `setting_sources=[]`. What remains unobserved is
+  narrower than the sentence above says: not whether the gate is on the path, only whether the CLI
+  acts on a `deny` it is handed. Read the residual claim as "the CLI honours the decision", not "the
+  gate runs".
 - **It does nothing about what the agent reads.** `Read` and `Grep` over the clone stay permitted
   and unfenced, which is B99 and is the larger channel. The gate now records those calls, so the
   exposure is at least legible; it is not reduced. *Amended 2026-08-06: those results are now
@@ -413,6 +533,18 @@ that sees every call, so choosing reduction does not cost the detection it was c
 
 `src/sync/remediate/tool_output.py`, a `PostToolUse` hook registered beside the `PreToolUse` gate on
 every `ClaudeAgentOptions` the patch node builds. It closes B99.
+
+*Re-verified 2026-08-17 against `claude_agent_sdk` 0.2.128, and every mechanism claim in this section
+holds unchanged.* `HookEvent` includes `PostToolUse` at `types.py:262`.
+`PostToolUseHookSpecificOutput.updatedToolOutput` is at `types.py:428`, documented exactly as quoted
+below — *"Replaces the tool output before it is sent to the model."* **The trap this section says decides
+how the module is written is confirmed in the SDK's own docstring rather than only in the bundled
+binary**: `types.py:431-433` states that for built-in tools the value must match the tool's output schema
+and that *"a mismatched shape is rejected and the original output is kept."* That is the fail-open
+behaviour, in the vendor's own words, and it is why the module rewrites the response object it was handed
+and refuses when the fields it knows are absent. One registration detail has moved: the options are built
+in `sync.runner.claude_sdk` now, and the hooks reach them through `agent_patch.patch_hooks`
+(`agent_patch.py:303-311`) — see the same correction under *The first predicate on the run*.
 
 Everything above defends the bytes Sync *chose* to include. The agent then goes and reads the
 repository itself, and until this shipped, what came back from `Read` and `Grep` arrived in the same
@@ -505,6 +637,135 @@ a boundary, is worse than none — and the read still has to reach a diff to mat
 - **A framed instruction is still an instruction the agent read.** The frame says whose bytes these
   are. It does not, and cannot, make a persuasive sentence unpersuasive.
 
+### Layer four: the customer's repository could configure the patch agent, closed 2026-08-16
+
+**This document did not know about this hole, and it was larger than the one `tool_gate` closed.**
+Recorded here on 2026-08-17 from `BACKLOG.md`'s B135, which is where it was found and fixed.
+
+`ClaudeAgentOptions.setting_sources` defaults to `None`, which the SDK documents as *all sources are
+loaded*. `cwd` is a clone of a customer's repository. So a `.claude/settings.json` that repository ships
+was configuration Sync obeyed — and a `SessionStart` hook in it is a shell command that runs **before the
+first tool call**. `tool_gate` is a `PreToolUse` hook. It was not that the gate allowed the command; the
+gate was not on the path. Combined with the env-inheritance finding below, that is arbitrary code
+execution holding `SYNC_GRAPH_DSN` and every other control-plane credential, from a file an attacker
+commits. It is the top-ranked attack on this page reached without touching the agent at all.
+
+The same defect had a second half with no security story: the patch agent inherited the **operator's** own
+Claude Code installation. A probe's `init` message listed this host's entire tool roster rather than the
+six names in `ALLOWED_TOOLS`, and this machine's own `SessionStart` hooks fired inside a production patch
+prompt.
+
+**Closed by `SETTING_SOURCES: list[str] = []` at `src/sync/runner/claude_sdk.py:50`**, passed at `:87`.
+`[]` rather than `["user"]`: the operator's settings are no more part of a patch run than the customer's.
+
+**Proven by a test that reads the options the runner builds**, not by the constant:
+`tests/test_agent_patch.py::test_the_run_loads_no_settings_from_the_filesystem` (`:314-348`) asserts both
+halves — `setting_sources == []`, *and* that `PreToolUse` and `PostToolUse` are still in `options.hooks`.
+The second assertion is the one worth having: a fix that turned off every settings source and took the
+hook mechanism with it would have removed `tool_gate` while reading as hardening. Sync's own hooks survive
+because they are passed programmatically through `hooks=`, which is not a filesystem source, and the probe
+that measured the whole thing reported `hook_consulted_for=['Bash']` under the isolated options.
+
+**What this says about the boundary, and it generalises past this bug.** `tool_gate` was built as *the*
+answer to "what can the patch agent do", and it is a good answer to the question it asks — what the agent
+may *request*. It says nothing about what the SDK does on the agent's behalf before the agent exists.
+`ClaudeAgentOptions` declares 45 fields against the seven `CLAUDE.md` used to list, and every default is a
+surface of this kind. Reviewing the ones the runner does not set is B135's remaining evidence item.
+
+### Mitigation 1: the mechanism is finished and nothing calls it
+
+*Written 2026-08-17, from the code rather than from this document's own account. This section exists
+because the difference between "a sandbox exists" and "a patch runs in a sandbox" is the whole of B97, and
+three separate documents had described the first in language that reads as the second.*
+
+**Where a patch run actually happens.** `AgentRemediator.propose` (`agent_patch.py:334-371`) calls
+`self._runner.run(...)`, whose production value is `ClaudeSdkRunner` (`agent_patch.py:329`), which is
+`asyncio.run` in this process (`claude_sdk.py:73-74`). `cwd` is the clone. There is no container anywhere
+on that path. **A patch run today has exactly the network exposure and exactly the credential exposure it
+had on 2026-08-06**, and that is measured rather than inferred:
+`tests/test_patch_sandbox.py::test_patch_agent_execution_context_reaches_arbitrary_host_today` (`:270`)
+opens a real socket to `1.1.1.1:443` from that shape and passes, and
+`::test_patch_agent_execution_context_inherits_the_full_parent_environment_today` (`:295`) shows
+`SYNC_GRAPH_DSN` arriving in the child. Both are deliberately-green demonstrations of a present gap.
+
+**What `src/sync/remediate/sandbox.py` provides, and what each claim rests on.**
+
+| Primitive | Line | Proven by | Standing |
+|---|---|---|---|
+| `ephemeral_container` | `:170` | `tests/test_patch_sandbox.py::test_container_network_cutoff_blocks_arbitrary_egress`, `::test_never_networked_container_receives_nothing_after_install_container_is_torn_down` — real containers on this host's Docker Desktop 4.81.0 / WSL2 | Proven, with a positive control so a pass cannot come from a harness that never had a route |
+| `disconnect_network` | `:209` | `::test_container_network_cutoff_blocks_arbitrary_egress` | Proven for a **new** connection attempt only |
+| `disconnect_network`, already-open socket | `:209` | `::test_disconnect_network_does_not_stop_an_already_open_socket` | **Proven not to work.** A socket open before the call keeps delivering real data for 0.92–1.5s. This test stays green permanently as the characterisation of a limit, not as a RED awaiting a fix |
+| `probe_connect` | `:272` | `::test_container_network_cutoff_blocks_arbitrary_egress`, plus `tests/test_sandbox.py:61-89` over `_parse_probe_output` | Proven. Note the shipped bug it had: `"REACHABLE" in stdout` is true of `"UNREACHABLE: ..."` too, so the check did no work and correctness rested by coincidence on `returncode`. Fixed to an exact match at `:269`, and `::test_probe_output_rejects_unreachable_even_when_returncode_is_zero` reproduces the old blind spot directly |
+| `copy_between_containers` | `:293` | `::test_never_networked_container_receives_nothing_after_install_container_is_torn_down` | Proven end to end against real containers and a real listener |
+| `build_container_env` | `:141` | `tests/test_sandbox.py:16-59` — three tests, no Docker | **Proven in isolation, unproven at the boundary.** The allowlist is correct as a function. It has never been passed to a `docker create -e`, because nothing has ever called it. Exclusion is only real where the process starts with no inherited environment, and that has not been observed |
+
+**Two in-place fixes for the already-open-socket window were tried against this host's real kernel and
+both failed. Written down so nobody tries them again.** `ss -K` (kill a socket via `sock_diag` netlink),
+run inside the container with `--cap-add=NET_ADMIN`: `RTNETLINK answers: Invalid argument` on every
+attempt, capability present or not — kernel 6.18.33.1-microsoft-standard-WSL2 does not support the destroy
+operation. `conntrack -F`: the command succeeds and has no effect, because flushing conntrack clears
+NAT/tracking state and not the socket, and this traffic was not NATed. What does close the window is
+destroying the container, which is why the design is a risky/safe container **pair** rather than one
+container that gets disconnected.
+
+**`sandbox_image.py` and the reachability question.** `ensure_image_built` (`sandbox_image.py:113`) is the
+idempotent inspect-or-build a worker startup or a scheduled pre-warm would call; `compute_image_tag`
+(`:92`) hashes the Dockerfile's bytes and the toolchain build args so "is my image current" is a
+deterministic `docker image inspect` rather than trust in a mutable `latest`. It was briefly a truthful
+red on the dead-link lint. It is not unreachable-by-oversight any more, and it is not wired either: it is
+now an accepted entry at `scripts/dead_links_baseline.txt:88`, on the stated grounds that neither a worker
+process nor a scheduler exists in this tree, and inventing one to satisfy a lint would be an abstraction
+with no caller. **That is a defensible call and it does not move mitigation 1 one inch.** The five
+`sandbox.py` symbols sit at `dead_links_baseline.txt:65-69` under a comment that says the same thing and
+commits to removing all five in the commit that adds the caller.
+
+**What is still missing between here and a patch run inside a container**, stated so it can be planned
+rather than rediscovered:
+
+1. **A composed pipeline.** `ephemeral_container` × 2 and `copy_between_containers` are primitives a caller
+   assembles. No caller exists. `sandbox.py:61-74` says so in its own docstring.
+2. **The Anthropic-only forward proxy.** A `network="none"` container has no route for anything, including
+   the SDK's own traffic to Anthropic's API, which has to keep flowing for the whole run from inside the
+   namespace the mitigation wants cut off. Unbuilt and undesigned beyond a sketch.
+3. **The auth credential.** `build_container_env`'s `auth_env` parameter is deliberately unpopulated,
+   because what credential the CLI needs to reach Anthropic is unverified in this tree — no
+   `ANTHROPIC_API_KEY` reference exists anywhere in `src/`, and the environment snapshot taken while
+   writing the module carried no `ANTHROPIC_*` variable at all, only `CLAUDE_CODE_EXECPATH` pointing at an
+   already-authenticated binary. Naming it in the spec would assert a fact nobody has confirmed.
+4. **Mitigation 5's other two properties.** `--read-only`, `--user`, and a single writable mount. See the
+   table under *Where each of the five stands*.
+
+### `ClaudeAgentOptions` cannot supply the environment mitigation 1 needs
+
+*Both findings below re-verified against the installed `claude_agent_sdk` 0.2.128 on 2026-08-17.*
+
+**`env=` merges onto the parent environment; it does not replace it.**
+`.venv/Lib/site-packages/claude_agent_sdk/_internal/transport/subprocess_cli.py:689` builds
+`inherited_env` from `os.environ` in full (less `CLAUDECODE`), and `:690-694` splats
+`**self._options.env` on top of it. So a variable not named in `env=` still reaches the CLI subprocess
+whenever the parent holds it. `SYNC_GRAPH_DSN` and its neighbours cannot be excluded from the patch
+agent's process by any `ClaudeAgentOptions` argument. **Only a boundary that starts a process with no
+inherited environment does that**, which is what makes the container load-bearing rather than a nicer way
+to do something the SDK could already do. The line span previously recorded as `:689-695` is now
+`:689-694`, with the merge itself at `:693`.
+
+**`sandbox=` is not available on this machine, and would not be the mechanism even where it is.**
+`ClaudeAgentOptions.sandbox: SandboxSettings | None = None` is real (`types.py:2019`), and 45 fields are
+declared on that dataclass. But `SandboxSettings.enabled` is documented in the SDK's own source as
+*"Enable bash sandboxing (macOS/Linux only). Default: False"* (`types.py:887`), so `CLAUDE.md`'s record of
+the platform restriction stands unchanged at 0.2.128. Two further qualifications the reconciliation added,
+both from the SDK's own text rather than inferred:
+
+- **Its scope is bash commands, not the process.** `types.py:876-881` says the setting *"controls how
+  Claude Code sandboxes bash commands"*, and directs filesystem and network restrictions to permission
+  rules instead — *"Network restrictions: Use WebFetch allow/deny rules."* Sync already denies `WebFetch`
+  outright. So even on Linux this would narrow the shell the agent is handed, which is what `tool_gate`
+  already does at a layer Sync controls, and would not put the run in a credential-free namespace.
+- **`deniedDomains` exists** (`SandboxNetworkConfig`, `types.py:852`), alongside `allowedDomains`,
+  `httpProxyPort` and `socksProxyPort`, so `CLAUDE.md`'s mention of it is accurate. `httpProxyPort` — *"HTTP
+  proxy port if bringing your own proxy"* — is worth noting against open item 2 above, since the forward
+  proxy the design needs would have to exist either way.
+
 ### Sequencing, revised
 
 Layers two and three of the reference's shape — the injection-pattern list and further prompt hardening —
@@ -529,6 +790,28 @@ item on this page that does.
 
 Written in the order a review actually goes.
 
+### Two answers below are false today, and one of them describes the crown jewel
+
+*Found by the 2026-08-17 reconciliation. Marked here rather than rewritten, because the answers are the
+ones the architecture buys and they should stay legible as targets — but nothing in this section may be
+quoted to a customer, put on a trust page, or entered into a security questionnaire until the two are true.*
+
+- **Answer 3 is false.** It says the typecheck runs *"in a disposable container with no credentials and no
+  network."* It runs in the operator's own process, on the host, with the full parent environment and an
+  unrestricted network stack. Measured, not inferred:
+  `tests/test_patch_sandbox.py::test_patch_agent_execution_context_reaches_arbitrary_host_today` and
+  `::test_patch_agent_execution_context_inherits_the_full_parent_environment_today` both pass.
+- **Answer 6 is false in its load-bearing clause.** It says the App key *"is isolated from every process
+  that touches customer content."* No such isolation exists: the process that drives the patch agent
+  inside a customer's clone inherits everything the parent holds, and `ClaudeAgentOptions` has no argument
+  that changes it (see *`ClaudeAgentOptions` cannot supply the environment mitigation 1 needs*). The two
+  clauses after it are true — rotation does revoke every installation token, and no customer secret exists
+  to leak because none was ever collected.
+
+Answers 1, 2, 4, 5 and 7 are true today. Answer 1's second sentence — *"clones are ephemeral and destroyed
+with the sandbox"* — is true of the clone and describes a sandbox that does not exist; read it as "clones
+are ephemeral", which they are.
+
 1. *Do you store our source code?* No. The ADG stores call-site locations and shapes. Clones are ephemeral and
    destroyed with the sandbox.
 2. *Do you hold any of our secrets?* No — not vendor keys, CI secrets, or environment files. Sync cannot run
@@ -549,8 +832,8 @@ Written in the order a review actually goes.
 
 | Milestone | Security work |
 |---|---|
-| M0 | The branch-guard in `sync.forge` with its test. Pin the fallback compiler. Document the sandbox requirement. The M0 target is a fork we control, so the sandbox itself is not yet load-bearing. |
-| M1 | The credential-free verification sandbox, before any repository Sync does not own is indexed. This is the gate on touching a real customer, and it should be treated as one. |
+| M0 | The branch-guard in `sync.forge` with its test — **done**, by construction rather than by a guard (`forge/github.py:125-140`). Pin the fallback compiler — **not done**, `tsc.py:168` and `:230`. Document the sandbox requirement — done, this file. The M0 target is a fork we control, so the sandbox itself is not yet load-bearing. |
+| M1 | The credential-free verification sandbox, before any repository Sync does not own is indexed. This is the gate on touching a real customer, and it should be treated as one. **Still unbuilt as of 2026-08-17.** Every container primitive it needs is finished and proven; nothing calls one. The remaining work is named in *Mitigation 1: the mechanism is finished and nothing calls it*, items 1 to 4. |
 | M4 | SOC 2 Type II observation period, subprocessor list, DPA, and the public trust page built from the seven answers above. |
 
 The honest constraint: SOC 2 Type II requires an observation window and money, and neither is available to a

@@ -207,6 +207,29 @@ export function fetchCorpus(signal?: AbortSignal): Promise<CorpusSummary> {
   return getJson<CorpusSummary>("/api/corpus", signal)
 }
 
+export interface ChangeUnitsParams extends PageParams, ScopeParams {}
+
+/**
+ * Open findings grouped by the vendor change and operation that produced them —
+ * `sync.dashboard.fleet.change_units`'s own grain, computed once so the console never derives
+ * it a second way from `/api/overview` and `/api/runs`.
+ *
+ * `repoId` narrows the grouping itself, not just the rows shown afterward: the reader filters
+ * the underlying open findings to one repository before folding them into change units, so a
+ * scoped page's `repository_count` and `call_site_count` describe that repository alone.
+ */
+export function fetchChangeUnits(
+  params: ChangeUnitsParams = {},
+  signal?: AbortSignal,
+): Promise<ChangeUnitsPage> {
+  const path = withQueryParams("/api/change-units", {
+    repo_id: params.repoId,
+    limit: params.limit,
+    offset: params.offset,
+  })
+  return getJson<ChangeUnitsPage>(path, signal)
+}
+
 /** The `repo_id` roll-up from the index. */
 export function fetchRepositories(signal?: AbortSignal): Promise<RepositoriesResponse> {
   return getJson<RepositoriesResponse>("/api/repositories", signal)
