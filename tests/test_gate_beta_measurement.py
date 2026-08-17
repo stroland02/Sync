@@ -438,3 +438,33 @@ def test_the_watched_set_is_only_what_can_change_a_claim_about_data() -> None:
 def test_tests_are_excluded_from_the_watched_set() -> None:
     """A vitest file changing cannot change what a screen asserts to a reader."""
     assert any("exclude" in path and "test" in path for path in CONSOLE_CLAIM_PATHS)
+
+
+def test_a_structural_cannot_tell_says_it_will_not_change_by_itself() -> None:
+    """B171, and it was smaller than filed: the footer already said absence is not zero.
+
+    What was missing is that a reader cannot tell a `CANNOT TELL` that might resolve next run from
+    one that is structural to the environment. In CI, gates 1 and 2 will read `CANNOT TELL` on
+    every push forever, because CI has no corpus and deliberately gets no database. Left
+    unqualified that is indistinguishable from a fresh unknown, and a reader eventually stops
+    looking at it -- the same way a gate that fires on a CSS tweak teaches a lane to stop clearing
+    it.
+    """
+    verdicts = [
+        Verdict(gate="1", name="the loop closes", status=CANNOT_TELL, evidence=["no corpus"]),
+        Verdict(gate="4", name="containment", status=NOT_MET, evidence=["unwired"]),
+    ]
+
+    text = render_markdown(verdicts)
+
+    assert "structural" in text
+    assert "scripts/beta_gates.py" in text
+
+
+def test_a_measured_run_does_not_carry_the_structural_note() -> None:
+    """Silence is the ordinary case. A run that answered has nothing to explain."""
+    text = render_markdown(
+        [Verdict(gate="1", name="the loop closes", status=NOT_MET, evidence=["0 green"])]
+    )
+
+    assert "structural" not in text
