@@ -538,6 +538,33 @@ export function matchesFilter(facts: CodebaseCardFacts, filter: CodebaseFilter):
 
 ### Task 9: The disposition chart stops spending hue on a categorical axis
 
+> **Refused on inspection, 2026-08-17. No code change. This task is closed as a ruling.**
+>
+> The task inherits M12's invariant — *a chart's colour may not carry a fact its length or position
+> already carries* — and applies it to two charts. **The invariant is right and its precondition is
+> false for both**, which is only visible by reading the charts rather than the plan.
+>
+> `corpus-chart.tsx` draws **one** horizontal stacked bar. Its `yAxis` holds a single category
+> (`["Attempts"]`) with `axisLabel: { show: false }`, so there is no per-category axis and no
+> position that says which disposition a segment is. Length carries how many attempts; hue carries
+> which disposition. Those are two different facts, so collapsing the segments to one colour would
+> delete the second rather than remove a redundancy — the chart would show four indistinguishable
+> runs of one bar.
+>
+> `rung-composition-chart.tsx` is the same shape per detector, and it was flagged by the Task 3
+> measurement walk as an apparent breach of `console-surface.md`'s *the provenance rung stays
+> monochrome*. **Checked rather than assumed:** that rule governs the rung as prose furniture — the
+> badge and the column, where a hue would grade a class of evidence on a good-to-bad scale it does
+> not sit on. The chart's fill is categorical identity, and the "colour never travels alone" bar is
+> met three times over, verified in `rung-composition-option.ts` rather than taken from the
+> docstring: a legend naming every rung (`:36`), per-detector axis labels (`:87`), inline segment
+> labels (`:124-127`), and `absentRungs` stating in words which rungs a detector has none of.
+>
+> **What would have been the defect is already absent from both:** neither takes the green or red
+> series slot for `opened`/`abandoned`, precisely so identity is not read as verdict.
+>
+> Cost if this ruling is wrong: one option-builder change and a test, in either chart, at any time.
+
 **Files:**
 - Modify: `web/src/features/fleet/corpus-chart.tsx` (option builder near `:151`)
 - Test: `web/src/features/fleet/corpus-chart-option.test.ts` (new; mirror the pattern of `web/src/features/detectors/rung-composition-option.test.ts`)
