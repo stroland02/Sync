@@ -170,6 +170,26 @@ charter is on `origin/main` and so is every coordinator commit:
 `git log --oneline origin/main` settle it in two commands. Pushing to `main` by fast-forward is
 authorized for every lane and is explicitly not one of the three things reserved for the human.
 
+## Addressing a worker: resolve the dispatch id immediately before sending
+
+**A dispatch id is not a stable address for a lane.** It changes every time a lane is re-dispatched,
+and a coordinator that caches one sends into a dead mailbox with a cheerful `ok=true` and no
+delivery. Measured 2026-08-17: a high-priority broadcast about a 60-test regression was addressed to
+`ctx_2c000ad0eae9` after the sweep had already replaced it with `ctx_f76066ef0571`, and the lane
+reported `count: 0` while the coordinator believed it had been told.
+
+So resolve it fresh, in the same breath as the send:
+
+```
+orca orchestration dispatch-show --task <task_id> --json    # read .dispatch.id
+orca orchestration send --to dispatch:<that id> ...
+```
+
+The terminal handle is the durable identity; the dispatch id is not. When a message genuinely must
+arrive -- an arbitration, a stop-work, a regression another lane caused -- prefer
+`orca terminal send --terminal <handle> --enter`, which reaches a busy agent as its next input
+rather than waiting for it to ask for mail.
+
 ## Standing arbitrations
 
 Recorded here when one is made, so no lane has to ask the same question twice.
