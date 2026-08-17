@@ -196,9 +196,14 @@ the beta critical path; everything else is real work that does not block the gat
 
 1. **[Gate 4]** `main` is red on `test_lint_dead_links`; every lane is currently gating around it and
    is therefore one step from mistaking a real regression for it.
-2. Postgres bounces under six sessions and costs a diagnosis every time it does.
-3. `test_disconnect_network_does_not_stop_an_already_open_socket` fails under `-n auto` and passes
-   alone.
+2. ~~Postgres bounces under six sessions~~ **CLOSED by `M0-W231`**, and verified 2026-08-17: `fsync`,
+   `synchronous_commit` and `full_page_writes` are off in the running container *and* in `main`'s
+   `docker-compose.yml`, so it survives a recreate. Five leaked test databases rather than sixty,
+   with the conftest statement, lock and sweep bounds and the 900s pytest watchdog all still in
+   place.
+3. ~~`test_disconnect_network_...` fails under contention~~ **CLOSED by `CI-W280`, and the
+   coordinator's diagnosis was wrong.** It was not contention: `host.docker.internal` does not
+   resolve on Linux. The test is 8 passed under `-n 4` in 29.71s.
 4. **[Gate 4]** Reconcile `specs/2026-07-25-sync-threat-model.md` against the code that now exists,
    and close or re-scope `B97`. The sandbox landed; the spec should say what is actually true.
 5. Gate wall-clock. Eight to fourteen minutes, paid by every lane on every iteration, is the largest
