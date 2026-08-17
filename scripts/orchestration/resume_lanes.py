@@ -157,6 +157,34 @@ def budget_held(cli: str, handle: str) -> str | None:
     return "no reset time printed"
 
 
+def recorded_run(cli: str) -> str | None:
+    """The Run to sweep, named explicitly rather than inherited from a terminal binding.
+
+    **This is what made the scheduled task inert.** `orchestration task-list` answers for the Run
+    bound to the invoking terminal, and a Windows scheduled task is not an Orca terminal, so it has
+    no binding and sees no tasks. The sweep then printed "no open lane tasks; nothing to resume" and
+    exited zero -- healthy-looking, and wrong, three times in a row while five lanes were open. A
+    safety net that reports success while doing nothing is worse than one that fails loudly.
+
+    The coordinator records the Run id beside the terminal map. Absent that, the newest Run is a
+    reasonable guess and is stated as one.
+    """
+    if LANE_TERMINALS.exists():
+        try:
+            recorded = json.loads(LANE_TERMINALS.read_text(encoding="utf-8")).get("_run")
+        except (json.JSONDecodeError, OSError):
+            recorded = None
+        if isinstance(recorded, str) and recorded.startswith("run_"):
+            return recorded
+
+    runs = (call(cli, "orchestration", "run-list", "--json").get("result") or {}).get("runs") or []
+    if not runs:
+        return None
+    newest = runs[-1]
+    print(f"note: no Run recorded beside this script; guessing the newest, {newest.get('id')}")
+    return newest.get("id")
+
+
 def recorded_terminals() -> dict[str, str]:
     """The coordinator's task-to-terminal map, or empty when it is absent.
 
@@ -215,7 +243,15 @@ def main() -> int:
         print("orca runtime unreachable; nothing to resume")
         return 1
 
-    tasks = (call(cli, "orchestration", "task-list", "--json").get("result") or {}).get("tasks") or []
+    run_id = recorded_run(cli)
+    listing = ["orchestration", "task-list", "--json"]
+    if run_id:
+        listing = ["orchestration", "task-list", "--run", run_id, "--json"]
+    tasks = (call(cli, *listing).get("result") or {}).get("tasks") or []
+    if not tasks and run_id is None:
+        print("no Run could be resolved; this sweep saw nothing and that is a failure, not a quiet "
+              "workspace -- record a _run key beside this script")
+        return 1
     open_tasks = [t for t in tasks if t.get("status") not in {"completed"}]
     if not open_tasks:
         print("no open lane tasks; nothing to resume")
