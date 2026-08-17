@@ -128,6 +128,24 @@ def test_no_pytest_step_discards_its_exit_code():
                 "and every floor above 0 lets it through; this is the shape that made a hundred "
                 "nightlies green over a red suite"
             )
+            # An adversarial review of the commit that wrote the three assertions above mutated
+            # this workflow three ways and watched all four tests in this file stay green:
+            # `continue-on-error` on the step, `continue-on-error` on the job, and a script ending
+            # `exit 0`. Each reproduces the nightly defect exactly, and the first is the likely
+            # one -- it is GitHub's own idiom for "record but do not gate", which is what the old
+            # step's name claimed to be doing while it swallowed pytest's verdict too.
+            assert step.get("continue-on-error") is not True, (
+                f"{label} carries `continue-on-error`, so the job stays green over a failing "
+                "suite. Coverage not gating is a claim about a number; this discards the verdict"
+            )
+            assert not script.rstrip().endswith("exit 0"), (
+                f"{label} ends `exit 0`, which discards whatever pytest reported. `set +e` and an "
+                "unconditional success are the same defect as `|| true` written across two lines"
+            )
+        assert job.get("continue-on-error") is not True, (
+            f"job {name!r} runs pytest under `continue-on-error`, so no step in it can fail the "
+            "workflow. A job that cannot go red is not a gate, whatever its steps assert"
+        )
 
 
 def test_the_nightly_gates_the_suite():

@@ -1931,12 +1931,16 @@ ignored in silence.
 
 **What is left, and none of it blocks the gate:**
 
-- **The container tests have never run in CI and may not pass there.** They reach the host through
-  `host.docker.internal`, which Docker Desktop provides and a plain Linux daemon does not without
-  `--add-host=host.docker.internal:host-gateway`. `bc04f14` landed them at 22:17 UTC on
-  2026-08-16; the last CI run that actually executed anything was 04:18 UTC that day, and the three
-  since are B112's phantom failures with every job blank. Unknown, not broken — and adding the flag
-  touches `sync.remediate.sandbox`, which is B97's, so it wants its own change.
+- ~~**The container tests have never run in CI and may not pass there.**~~ **Answered by B150, and
+  all three clauses were wrong.** They did run, they did not pass, and the fix needed no change to
+  `sync.remediate.sandbox` at all. The prediction about `host.docker.internal` was right — a plain
+  Linux daemon does not provide it — but the consequence was worse than "may not pass": both
+  positive controls failed, so the tests were proving *nothing* on Linux rather than failing
+  honestly. The fix is in the test: it now tries the resolved name and then the container's own
+  default gateway, and the never-networked probe refuses every candidate rather than one name,
+  which is a stronger claim than the original made. Kept struck through rather than deleted
+  because the reasoning that produced a wrong prediction is worth reading beside the measurement
+  that corrected it.
 - **The churn itself is untouched.** Forty `DROP DATABASE` per run is the cost that the tuning
   makes affordable rather than removes; a suite that shared one aged database across
   `test_schema_convergence` would issue far fewer.
