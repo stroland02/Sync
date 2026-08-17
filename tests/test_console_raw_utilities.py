@@ -5,6 +5,11 @@ type steps, and colour only through tokens. A raw utility inside ``features/``
 duplicates one of them under a different name, or asserts a judgement colour the
 surface rules forbid. The baseline file holds the violations that existed when the
 guard landed; it only ever shrinks. A pair not in the baseline fails immediately.
+
+``rounded-full`` is exempt for the same reason ``gap-8`` is: a circle is a shape,
+not a point on the radius scale, and neither ``rounded-control`` nor
+``rounded-surface`` can express one. ``node-sequence.tsx``'s status markers are
+circular by design, so the raw spelling there is not a token gap to close.
 """
 
 from __future__ import annotations
@@ -18,10 +23,13 @@ _BASELINE = Path(__file__).resolve().parent / "console_raw_utilities_baseline.tx
 
 # Each alternative is a raw spelling with a token answer. ``gap-8`` is exempt by
 # DESIGN.md's own text; icon ``size-*`` is geometry, not spacing, and is not hunted.
+# ``rounded-full`` is exempt the same way: a circle is a shape the radius scale does
+# not express, so it is left out of the alternation entirely rather than matched and
+# tolerated.
 _RAW = re.compile(
     r"(?<![-\w:])("
     r"text-(?:xs|sm|base|lg|xl|2xl|3xl|4xl)"          # type steps exist for these
-    r"|rounded(?:-(?:sm|md|lg|xl|2xl|full))?(?![-\w])"  # radius-control / radius-surface
+    r"|rounded(?:-(?:sm|md|lg|xl|2xl))?(?![-\w])"  # radius-control / radius-surface
     r"|(?:p|px|py|m|mx|my|gap)-(?:0\.5|1|1\.5|2|2\.5|3|4|5|6)(?![-\w.])"
     r"|(?:bg|text|border)-(?:emerald|amber|red|green|blue|yellow|orange|rose|sky|"
     r"slate|zinc|gray|stone|neutral)-\d{2,3}(?:/\d{1,3})?"

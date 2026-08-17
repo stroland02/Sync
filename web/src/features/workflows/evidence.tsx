@@ -197,7 +197,7 @@ function Flag({ field, value }: { field: Field; value: unknown }) {
     ? (field.trueLabel ?? "yes")
     : (field.falseLabel ?? "no")
   return (
-    <span className="rounded-control border border-line px-field py-0.5 text-meta">
+    <span className="rounded-control border border-line px-field py-field text-meta">
       {value ? "PASS" : "FAIL"} — {wording}
     </span>
   )
@@ -377,7 +377,7 @@ export function NodeEvidence({
         <BlockField key={field.key} field={field} value={evidence[field.key]} />
       ))}
       {name in NODE_STRATEGY_EXPLANATIONS && (
-        <details className="rounded border border-border bg-surface-subtle p-field text-meta text-muted-foreground">
+        <details className="rounded-surface border border-border bg-surface-subtle p-field text-meta text-muted-foreground">
           <summary className="cursor-pointer font-mono font-medium text-muted-foreground hover:text-foreground">
             Reasoning & Strategy
           </summary>
