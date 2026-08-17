@@ -144,6 +144,38 @@ reference product's is five. That is checkable in front of them, and `dev_up.py`
 else, written against what the product actually does — no placeholder keys, no steps that do not
 apply, and no claim the meter cannot support.
 
+## The install target, decided
+
+**Three references now, converging on one shape.** A skills-installer aimed at a coding agent; a
+five-command self-host; and — the clearest of them — `npx @deepseek-ai/dsh web`, which starts a web
+UI on localhost with no clone and no install steps. **The owner has pointed at the same thing three
+times, so stop qualifying it and name a target.**
+
+**Why the clean version is easy for them and not for us, stated once so nobody rediscovers it.** That
+harness is a Node program: everything it needs ships inside the npm package, so `npx` can deliver the
+whole product. Sync is Python and TypeScript over Postgres. **`npx` cannot ship a Python runtime or a
+database**, and a wrapper that pretends otherwise fails in front of the person being shown it.
+
+**So the decision: `npx` → Docker → UI, with Docker as the single stated prerequisite.**
+
+```
+npx <sync-package>          # or: docker compose up, for people who prefer it
+```
+
+It pulls or builds one image containing the API, the console and the Python toolchain, brings up
+Postgres beside it, applies the schema, indexes the repository it was pointed at, and serves the
+console on localhost. **One prerequisite, named up front: Docker.** That is the same prerequisite the
+reference self-host has, and it is the only honest way to get from three commands to one.
+
+**Why this beats the alternatives, briefly.** Wrapping `dev_up.py` in `npx` still requires Python,
+`uv`, and Postgres already installed — three prerequisites instead of one, and each is a place the
+demo dies. Cloning and building on the fly is slower, needs the same toolchain, and turns a demo into
+a build log. **The container is the artifact; `npx` is the doorbell.**
+
+**What this makes P0 that was not before:** a Dockerfile and compose file that actually produce a
+running product, and a published or buildable image. `docker compose up -d` exists for Postgres
+today; the product itself has never been containerised. That is the work.
+
 ## Agent automation settings, and the one option we refuse
 
 **Two further reference documents supplied 2026-08-18: a GitHub App integration flow, and per-project
