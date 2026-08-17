@@ -312,7 +312,9 @@ confidently instead of refusing.
 
 ## Ready
 
-### B131 — a customer's repository could configure the patch agent, and the gate sat downstream of it — FIXED, and the entry stays for what it says about the gate
+### B135 — a customer's repository could configure the patch agent, and the gate sat downstream of it — FIXED, and the entry stays for what it says about the gate
+
+**B135, B133 and B134 were filed as B131, B129 and B130 and renumbered on landing.** Three live branches -- `b129-truncate-corpus`, `b130-day-one-path`, `b131-generated-vendors` -- plus `b132-gate-hang` already held 129 through 132 when these were written, and `main`'s copy of this file topped out at B128, so the numbers read as free from every view that could see them. That is the failure this file's own opening rule describes, and `git log --all --oneline --grep` does not catch it either when the competing claim is a branch name rather than a commit message. The cheap check that would have: `git worktree list` and `git branch -a`, read for the number rather than for the work.
 
 **Found 2026-08-16 while probing why a full-depth rehearsal abandoned. Fixed the same day in
 `M8-W217`; recorded here because the shape of the miss matters more than the fix.**
@@ -381,7 +383,7 @@ set, recording for each whether its default admits customer-controlled or operat
 input, in the same form as the measurement above — an experiment, not a reading. `sandbox`,
 `plugins`, `agents`, `system_prompt` and `permission_mode` are the ones to start from.
 
-### B129 — B79's natural key never reached any database that already existed, so every corpus write fails
+### B133 — B79's natural key never reached any database that already existed, so every corpus write fails
 
 **Found 2026-08-16 by running `sync rehearse --depth full`, which nothing had done since the
 pipeline changed underneath it.** Every `migration_outcome` write in that run raised:
@@ -421,9 +423,9 @@ applies the schema, and watches a write that previously raised succeed — and p
 by running that test against the current `apply_schema` first. A fresh-database test proves
 nothing here; the fresh-database path is the one that already works.
 
-### B130 — a corpus write that fails leaves no queryable trace, so a systematic failure runs forever
+### B134 — a corpus write that fails leaves no queryable trace, so a systematic failure runs forever
 
-Filed from B129 rather than discovered separately: the reason B129 survived from the day B79
+Filed from B133 rather than discovered separately: the reason B133 survived from the day B79
 landed until somebody ran a rehearsal by hand is that nothing downstream of the failure knows it
 happened.
 
