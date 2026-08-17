@@ -33,6 +33,17 @@ here as a table you only ever insert into.
 rule being learned the expensive way: an identity that was not actually unique, so
 re-derivation collided instead of converging.
 
+## A scan clears the tables it names, and a foreign key can widen that behind your back
+
+`GraphStore.truncate_signal_and_detect` empties `vendor_change` and `finding` — the two tables a
+scan rebuilds from scratch — and issues no `CASCADE`. So a new table is safe from a scan by
+default, and a new foreign key pointing at either of those two makes the scan's `TRUNCATE` fail
+loudly rather than quietly widen.
+
+**Adding `CASCADE` to make that error go away re-opens B129**, which emptied the migration corpus,
+the repository context and three tables of telemetry on every run. Truncate the new table
+alongside them if a scan genuinely rebuilds it, or do not point a foreign key at them.
+
 ## Vendor operations are Type 2, not Type 1
 
 A spec version is history. Never update a vendor-derived row in place — write a new row with
