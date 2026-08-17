@@ -144,6 +144,47 @@ reference product's is five. That is checkable in front of them, and `dev_up.py`
 else, written against what the product actually does — no placeholder keys, no steps that do not
 apply, and no claim the meter cannot support.
 
+## Agent automation settings, and the one option we refuse
+
+**Two further reference documents supplied 2026-08-18: a GitHub App integration flow, and per-project
+agent automation settings.** Same treatment — the shape of the control surface is learnable, the
+copy and the specific arrangement are not, and each item has to survive being restated against what
+Sync already has.
+
+**What Sync already has, checked rather than assumed:**
+
+- **Project context exists and is better placed than the reference's.** Theirs is a free-text field
+  in a dashboard. Ours is `.sync/context.md`, read out of the customer's own repository
+  (`sync.context.seed`, `SEED_RELATIVE_PATH`), so it lives with the code it describes, versions with
+  it, and needs no dashboard round-trip. `B165` also means it is fenced at instruction position.
+  **Nothing to build here; it needs saying in the docs, not implementing.**
+- **A read-only Settings screen** (`M4-W231`) and a `settings` feature route.
+- **Pull-request outcomes** already recorded and reconciled (`M10-W229`, `sync reconcile-pull-requests`).
+
+**What is genuinely missing: the policy itself.** There is no stored answer to *what happens after
+Sync opens a pull request*, no merge strategy, and no base-branch override. Three settings, per
+repository rather than per project, because a repository is Sync's unit:
+
+| Setting | Values | Default |
+|---|---|---|
+| merge policy | `never`, `when_checks_pass` | `never` |
+| merge method | `squash`, `merge`, `rebase` | `squash` |
+| base branch | any branch name | the repository's default |
+
+**We refuse the third merge-policy value, and the refusal is a product position rather than a gap.**
+The reference offers `immediately` — merge the fix without waiting for any check to run. **That
+directly contradicts this project's non-negotiable that nothing reaches a pull request unverified,
+and it contradicts the whole argument the console exists to make.** A tool that will merge before its
+own evidence arrives is the black box Sync was built against. So `immediately` is not implemented,
+and the Settings screen says *why* rather than omitting it silently — an absent option a competitor
+has reads as an oversight; a refused one reads as a position.
+
+**Scope for Wednesday.** The storage, the API, and the console rendering the current policy are P1 —
+they make the product legible as a real product, and the Settings screen already exists to hold them.
+The GitHub App OAuth flow is **P2 and explicitly out**: Sync uses the authenticated `gh` CLI, hosting
+is out of scope, and an OAuth callback needs a hosted endpoint we have deliberately decided not to
+have this week.
+
 ## Priority order to Wednesday
 
 **P0 — must be true or there is no product.**
