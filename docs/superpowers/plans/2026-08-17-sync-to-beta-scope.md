@@ -423,6 +423,29 @@ adapters, the generated-spec adapters with their declarative `NO_MANIFEST` / `NO
 clean-decline from fetch-failure, and rate limits and vendor downtime classified into reason codes
 without aborting a scan.
 
+## A pattern worth naming: documented, asserted, never executed
+
+Two findings today have the same shape, and it is not a coincidence -- it is the failure mode this
+workspace produces when it is working well in every other respect.
+
+**The console's empty state.** Every walk ran against the seeded fixture. Ten screens were signed
+off, twenty-eight references to `seed-console` in the report, and the state a design partner sees in
+their first five minutes had never been rendered. One real defect was waiting there.
+
+**The day-one path (`B169`).** Twelve tests assert that the day-one setup is *documented* correctly.
+**None of them runs anything from an empty checkout**, and a fresh worktree fails about fifty tests
+on gitignored artifacts alone. So the instructions are verified as prose and unverified as
+instructions.
+
+Both are tests that pass while proving nothing about the thing they are named after, and both were
+found by a lane being asked to look at something nobody had looked at rather than to check something
+that had. **`B169` is a beta blocker**: a design partner who follows the documented setup, or a
+second engineer joining, meets fifty failures before meeting the product.
+
+The generalisation, which belongs in the charter more than here: *an assertion about a document is
+not an assertion about the thing the document describes.* When those two are allowed to drift, the
+test keeps passing and the drift is invisible precisely because coverage looks complete.
+
 ## The three decisions that are the human's, named now
 
 None of these blocks a lane today. Each will block a gate, and naming them now means nobody
