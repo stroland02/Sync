@@ -471,3 +471,41 @@ def test_never_networked_container_receives_nothing_after_install_container_is_t
     finally:
         stop.set()
         server.close()
+
+
+@pytest.mark.docker
+def test_add_host_reaches_the_docker_desktop_gateway_without_opening_the_internet():
+    """The property `tests/test_isolated_network.py` needs and could not get for free: an
+    `--internal` Docker network (proven there to carry no default gateway and no
+    `host.docker.internal` resolution at all) still lets a container reach the host once the
+    container itself is created with `--add-host=host.docker.internal:host-gateway` --
+    Docker Desktop's own host-gateway mechanism, resolved per container rather than supplied by
+    the network. Proven both ways in one test: the resolution succeeds, and the internet is
+    still unreachable, so this is additive to isolation rather than a hole in it.
+
+    Measured by hand against this host's Docker Desktop before writing this test: with the flag,
+    `host.docker.internal` resolved to `192.168.65.254` and a connect attempt to `1.1.1.1:443`
+    raised `OSError: [Errno 101] Network is unreachable` -- the same "no route at all" shape
+    `network="none"` already proves elsewhere in this file, not merely a refused connection.
+    """
+    from sync.remediate import sandbox
+    from sync.remediate.isolated_network import isolated_network
+
+    with isolated_network() as network_name:
+        with sandbox.ephemeral_container(
+            image=_TEST_IMAGE, network=network_name, add_host="host.docker.internal:host-gateway",
+        ) as container:
+            resolved = _run_docker(
+                "exec", container.id, "python3", "-c",
+                "import socket; print(socket.gethostbyname('host.docker.internal'))",
+            )
+            assert resolved.returncode == 0, (
+                f"host.docker.internal did not resolve with --add-host set: {resolved.stderr}"
+            )
+            assert resolved.stdout.strip()
+
+            no_internet = sandbox.probe_connect(container, "1.1.1.1", 443)
+            assert not no_internet.reachable, (
+                "expected the internet to stay unreachable with --add-host set; "
+                f"got: {no_internet.detail}"
+            )
