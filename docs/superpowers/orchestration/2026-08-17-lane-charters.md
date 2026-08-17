@@ -190,6 +190,42 @@ arrive -- an arbitration, a stop-work, a regression another lane caused -- prefe
 `orca terminal send --terminal <handle> --enter`, which reaches a busy agent as its next input
 rather than waiting for it to ask for mail.
 
+## When a lane keeps working outside its boundary
+
+Three times on 2026-08-17 one lane built inside another's files: the Fleet change-unit aggregate
+that duplicated `M12-W320`, the panel wiring in `1985e3e` that `M14-W277` superseded, and an edit to
+`web/src/api/queries.ts` made while the owning lane was editing `web/` in the same minute.
+
+**None of the three was caught by the lane doing it, and none was caught by review.** Each surfaced
+because a coordinator read a terminal, and each cost three parties: the lane that wrote it, the lane
+that discovered it, and the coordinator that routed it. Duplicated work is the most expensive failure
+this workspace has, because it looks like progress from inside.
+
+So the boundary is not a preference and it is not satisfied by good intentions. **Before editing a
+file, check it against your own lane's path list.** If it is not there, do not edit it -- message the
+coordinator, name the file and what you need, and keep working inside your lane while you wait. The
+one exception is the narrow one above: a red you caused, where the failure message names the fix.
+
+A lane that finds itself repeatedly outside its boundary is usually solving the wrong problem. The
+work only that lane can do is the work nobody else is able to pick up, and it is almost always the
+harder item further down its own queue.
+
+## Fixing a red you caused in another lane's file
+
+The rule is escalate rather than edit outside your lane. **One exception, ratified 2026-08-17:** a
+lane may fix a red **it caused** in another lane's file when the failure message names the exact fix
+and the edit is unambiguous -- provided it declares the edit in its report and offers the reversal.
+
+The case: Lane B's `M14-W277` landed the Fleet panel, which was the event that expired an entry in
+`_NOT_YET_FETCHED_BY_CONSOLE` in `tests/test_api_routes.py` -- a set that documents its own expiry.
+The guard went red on `main` at that moment and stayed red. Escalating would have left `main` broken
+on Lane B's account while it waited on a coordinator, and a charter that produces that outcome is
+wrong at that point.
+
+Two things make it safe rather than a licence: the red must be **yours**, and the fix must be the
+one the failure message states. Anything requiring judgement about another lane's design is still an
+escalation.
+
 ## Standing arbitrations
 
 Recorded here when one is made, so no lane has to ask the same question twice.
