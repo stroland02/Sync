@@ -528,6 +528,31 @@ collapse onto "we checked and it does not apply."** A skip is the second sentenc
 out of time is the first.
 
 
+### B185 — a database that is coming up read as a database that is gone — CLOSED
+
+**Found and closed 2026-08-17 by `CI-W362`**, while measuring the Postgres bounce.
+`docs/superpowers/reports/2026-08-17-what-the-postgres-bounce-actually-is.md` carries the evidence.
+
+`pytest_configure` caught `psycopg.OperationalError`, warned "no Postgres", and let the run continue
+**unisolated** -- `SYNC_DSN` unset, every database-touching test running without its own database.
+`psycopg.errors.CannotConnectNow` is SQLSTATE `57P03`, "the database system is starting up", and it
+is an `OperationalError` **subclass**, so any run reaching collection during a restart was told the
+server did not exist. Measured: crash recovery on the shared container took **2.74s** and refused
+**25 connections** while it ran. A mass red, with a diagnosis cost, from a condition that clears
+itself in under three seconds.
+
+Postgres distinguishes the two states and the code did not. An absent server refuses the socket and
+raises a plain `OperationalError` with no SQLSTATE -- nothing to wait for. A recovering server
+answers and says so. `admin_connection_once_ready` waits out the second, bounded at 60s against a
+measured 2.74s, and still fails immediately on the first.
+
+**This is the third instance of one shape in this lane today**, after `B183` (a deadline anchored to
+the wrong event) and `B184` (a silent daemon read as an absent one): **"we could not check yet"
+collapsed onto "there is nothing here."** Worth carrying as a class, not three separate fixes.
+
+**A fourth was then found by looking for it, and that is the argument for treating it as a class.** `CI-W365` audited this lane's surface for the same shape and found `scripts/beta_gates.py::_resume_path_exists` returning `False` on `OSError` -- an unreadable file reported as a missing resume path, which made Gate 1 fail with a specific claim about code it had not read. The same script argues the opposite of itself six hundred lines earlier for the database it cannot reach. Fixed there; the audit's other candidates were each checked and found deliberate.
+
+
 ### B174 — `extract_credential` cannot tell malformed base64 from non-UTF-8 credentials — Lane E
 
 **Accounted rather than broken, and filed rather than fixed.** `CI-W304` added this clause to
@@ -572,9 +597,41 @@ block is fully used, and `B173` was reassigned to Lane B when its own block ran 
 
 ### B172 — wire the visual eval into CI once Lane B settles the extraction mechanism
 
-**Not startable yet, deliberately.** Lane B is still deciding between the in-house script and
-`d-extract`, and that decision is the whole of the CI wiring — it determines what the harness
-invokes and what it installs. A harness built around an unsettled shape is a harness built twice.
+**Re-measured 2026-08-17 by `CI-W364`. The original blocker is gone and a different one is now
+load-bearing, so this is half-startable rather than startable.**
+
+**Settled:** the extraction mechanism. `web/scripts/visual-eval.mjs` won the trial, speaks CDP over
+Node 22's global `WebSocket`, installs nothing, and takes every URL and port as an environment
+variable. Landed across `M14-W355`, `M14-W357` and `M14-W359`.
+
+**Still blocking, and it is Lane B's to clear because the file is `web/**`:**
+
+- **The eval cannot fail.** There is no `process.exit(1)` and no gate predicate anywhere in
+  `visual-eval.mjs` — it prints per-property deltas and returns success whatever it measured.
+  Wiring CI around it today would produce a job that always passes, which is exactly the shape
+  `.claude/rules/test-discipline.md` calls a test that cannot fail, and it would report the console
+  as measured while asserting nothing. **The gate-versus-report split below has to exist in the
+  script before there is anything for CI to wire.**
+- **The console under test needs a live API.** `web/scripts/serve-console.mjs` proxies `/api` to
+  `SYNC_API_ORIGIN` (default `127.0.0.1:8787`), so a CI run needs Postgres, the Sync API and seeded
+  data before a single property can be read — which is most of the three-to-five minutes estimated
+  below, and the part most likely to make the job flaky.
+
+**Worth measuring before building any of it, and cheap:** whether the properties that may gate —
+colour, radius, font-size, font-weight — can be read with the API absent. `serve-console.mjs` says a
+dead API must not read as a console defect, so panels should render their empty states; if the token
+-derived properties survive that, the whole Postgres-and-API half of the CI cost disappears and this
+becomes a small job rather than a large one. Nobody has checked, and it is cheap to: measured
+2026-08-17, `uv run python scripts/dev_up.py --check` reports Postgres reachable, schema present, 72
+call sites seeded, the API entrypoint resolving and port 8787 free, with `npm install --prefix web`
+the single missing precondition. The measurement is one command away from runnable for whoever takes
+this.
+
+**It is not taken here because clearing it would not unblock the item.** The gate predicate is the
+binding constraint and it lives in `web/**`, so this stays Lane B's until the eval can fail.
+
+Original framing, kept because the requirements below still stand: Lane B was deciding between the
+in-house script and `d-extract`, and that decision was the whole of the CI wiring.
 
 Requirements established ahead of it, in
 `reports/2026-08-17-visual-eval-what-ci-needs.md`:

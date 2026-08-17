@@ -306,6 +306,19 @@ orca orchestration check --terminal <handle> --all --json    # your own mailbox,
 `--all` does not mark anything read, so `read_at` stays null there and cannot be used to tell handled
 from unhandled. Sort by `created_at` and compare against what you have actually acted on.
 
+**Confirmed 2026-08-18: the coordinator's mailbox stopped receiving entirely, and `check` reports
+that as an empty queue.** Its newest non-heartbeat message is timestamped `19:53Z` and the total has
+been stuck at 54 for over five hours, across a period when lanes demonstrably sent — Lane D's
+terminal shows `msg_662ab1d03c2b` going out and it is not in the mailbox. **An empty inbox and a
+dead inbox are the same reading**, which is the day's recurring shape applied to the coordination
+layer itself, and it is why the sweep must not treat "no mail" as "nothing happened".
+
+**Read terminals. They are the channel that works.** `orca terminal read --terminal <handle>` shows
+what a lane is doing and what it believes it has sent, and every finding routed in the last five
+hours came from reading one rather than from mail. Relay between lanes by hand when it matters, and
+tell lanes to address each other directly rather than through the coordinator — a hop through a
+broken mailbox is worse than no hop.
+
 **A long `terminal send` arrives truncated, and the receiving lane cannot tell.** Measured
 2026-08-17 after Lane A held a day of gated work through three separate rulings: it reported
 receiving *"an ambiguous truncated message about main-landing authorization"* and refused to act
@@ -517,8 +530,16 @@ Queue, in order:
    the leaked-database volume, and fix or document it with evidence.
 3. **`test_disconnect_network_does_not_stop_an_already_open_socket`** fails under `-n auto` and
    passes alone. A test that fails only under contention is a test nobody can read a verdict from.
-4. **Gate wall-clock.** The full suite is eight to fourteen minutes and every lane pays it on every
-   iteration. That is the single largest tax on this whole workspace.
+4. ~~**Gate wall-clock.** The full suite is eight to fourteen minutes and every lane pays it on
+   every iteration. That is the single largest tax on this whole workspace.~~ **Closed as measured,
+   `CI-W363`. The figure was about four times the truth and five lanes were planning against it.**
+   Eight runs on 2026-08-17 measured **152-230s, median about 175s** for roughly 4000 tests --
+   `CI-W287` and the `-n 4` to `-n auto` switch had already done this work. The arithmetic says
+   nothing is left to attack: twelve workers at 167s is about 2000 CPU seconds, the slowest single
+   test is 35.64s, and the twenty-five slowest together are a fifth of the total, so deleting the
+   worst one outright would return under two percent of wall clock. The suite is throughput-bound on
+   a long tail of thousands of millisecond tests, and none of the slow ones is slow because it
+   sleeps -- each drives a real container, a real child pytest, a real `tsc`, or a real Postgres.
 
 ### Lane D -- signals, adapters and intake, M5
 
