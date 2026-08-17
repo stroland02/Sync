@@ -492,3 +492,24 @@ def test_a_half_read_repository_ranks_what_it_read_and_still_names_what_it_could
     assert "openai" in _names(ranking)
     assert sum(ranking.counts().values()) == len(ranking.rows)
     assert any("pyproject.toml" in problem for problem in payload["unreadable"])
+
+
+def test_unbound_imports_distinguishes_wrapper_from_genuine_uncalled():
+    # A watched dependency with 0 call sites but 1 unbound wrapper file
+    report = IntakeReport(
+        assessments=(
+            _assessment("stripe", WATCHED, vendor_id="stripe"),
+        ),
+        unreadable=(),
+    )
+    ranking = rank_reachability(
+        report,
+        call_sites={"stripe": 0},
+        unbound_imports={"stripe": ["src/lib/stripe.ts"]},
+    )
+    row = ranking.rows[0]
+    assert row.call_sites == 0
+    assert row.evidence == UNCALLED
+    assert "wrapper" in row.reason
+    assert "1 wrapper file" in row.reason
+

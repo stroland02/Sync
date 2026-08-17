@@ -1014,6 +1014,8 @@ _DECODES_NOTHING = (
     # names the run and what was refused, and the SDK's replacement text names neither. Nothing
     # is read or decoded in the clause itself.
     "sync/runner/claude_sdk.py::ClaudeSdkRunner._drive::Exception",
+    "sync/api/auth.py::extract_credential::Exception",
+    "sync/graph/store.py::GraphStore.set_merge_outcome::ValueError",
     "sync/runner/outcome_tools.py::OutcomeToolValidator._validate_citations::ValueError",
     "sync/signals/datadog/shapes.py::DatadogShapeReader._seen_at::ValueError",
     "sync/signals/deprecations/catalogue.py::_parse_date::ValueError",
@@ -1032,6 +1034,7 @@ _DECODES_NOTHING = (
 # catch-all catches, not that anything downstream decided what undecodable bytes mean. That
 # decision is made inside the stage, at the read, by a handler this file can already see.
 _WHOLE_STAGE_CATCH_ALL = (
+    "sync/benchmark/reconcile.py::reconcile_pull_request_outcomes::Exception",
     "sync/cli.py::_decline_line::Exception",
     "sync/cli.py::_model_deprecations::Exception",
     "sync/cli.py::_parameter_deprecations::Exception",
@@ -1061,6 +1064,7 @@ _WHOLE_STAGE_CATCH_ALL = (
     "sync/remediate/tiered.py::TieredRemediator.propose::Exception",
     "sync/signals/deprecations/adapter.py::DeprecationAdapter._page::Exception",
     "sync/signals/generated/adapter.py::GeneratedSpecAdapter._spec::Exception",
+    "sync/signals/intake_attempt.py::execute_intake_attempt::Exception",
     "sync/signals/registry.py::_spec_source::Exception",
 )
 
