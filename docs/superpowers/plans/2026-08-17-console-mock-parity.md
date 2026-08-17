@@ -781,4 +781,11 @@ Today the palette lists only the two zero-param routes (`command-palette.tsx:115
 
 Rulings made during execution land here: what was decided, what it was decided against, why. Three rulings arrived from the owner before execution and are recorded in the spec: whole-console scope; the liveness-pulse refusal stands; Remotion deferred. One ruling is made by this plan itself:
 
+- **W226's `NODE_STRATEGY_EXPLANATIONS` gets rehomed by Task 11.** `c8b061d` (another session,
+  2026-08-17) added a static per-node description under a "Reasoning & Strategy" disclosure inside
+  `NodeEvidence`. The text is generic — the same words for every run — but its title and placement
+  inside the *evidence* block let it read as reasoning the run recorded, which is a claim the data
+  does not hold. Task 11's executor moves it beside the `PURPOSE` sentence (which is the same kind
+  of static text, honestly placed) and retitles it "How this node works", or folds it into
+  `PURPOSE` outright. The words may stay; the frame may not.
 - **The shared `detail-drawer` extraction (mock-to-build Task 3) is refused for now.** `binding-drawer.tsx` is the only consumer in the tree; extracting a shared component for one caller violates "factor at the second use, not the third" (`CLAUDE.md`). The extraction happens in the task that adds a second drawer, whichever plan that lands in. `BACKLOG.md` carries the pointer (Task 1 writes it).
