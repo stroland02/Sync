@@ -118,3 +118,47 @@ def test_a_verdict_is_readable_without_reading_the_dots() -> None:
 def test_verdict_is_a_value_rather_than_a_print() -> None:
     """So a caller can gate on it. A checker that only prints cannot be wired into anything."""
     assert isinstance(read_verdict(CLEAN), Verdict)
+
+
+# --- the form real CI actually prints ------------------------------------------------
+
+BANNERED = """bringing up nodes...
+........................................................................ [100%]
+======= 1 failed, 3892 passed, 7 skipped, 4 warnings in 74.73s (0:01:14) =======
+"""
+
+
+def test_a_summary_wrapped_in_pytest_banner_is_still_a_summary() -> None:
+    """Quoted verbatim from run 32047325280, where this check called a healthy run untrustworthy.
+
+    Every fixture in this file was hand-written from a local run, where pytest prints the tally
+    bare. On a runner it decorates the same line with `=` padding, so the anchored pattern matched
+    nothing and the verdict became "the run printed no summary line" -- on a run that had printed
+    one, with 3,892 tests passing.
+
+    The cost was not the wrong word. This check runs as a step that may fail its job, so it failed
+    `test` on every push and the eight steps after it never ran: the pinned specifications, the
+    symbol map, the corpus score and its binding floors. A check written to stop a run being
+    misread was itself misreading every run, and taking coverage down with it.
+    """
+    verdict = read_verdict(BANNERED)
+
+    assert verdict.trustworthy is True
+    assert verdict.summary is not None
+    assert "3892 passed" in verdict.summary
+
+
+def test_the_banner_is_not_carried_into_the_reported_summary() -> None:
+    """A reader pastes this into a report; the decoration is noise."""
+    summary = read_verdict(BANNERED).summary
+
+    assert summary is not None
+    assert not summary.startswith("=")
+    assert not summary.rstrip().endswith("=")
+
+
+def test_a_crashed_worker_is_still_caught_when_the_summary_is_bannered() -> None:
+    """The fix must not buy a summary at the cost of the thing this module exists for."""
+    text = BANNERED.replace("bringing up nodes...", "[gw0] node down: Not properly terminated")
+
+    assert read_verdict(text).trustworthy is False

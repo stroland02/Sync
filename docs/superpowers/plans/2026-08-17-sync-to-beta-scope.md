@@ -80,7 +80,14 @@ happened.
 
 ## Measured, not asserted: `uv run python scripts/beta_gates.py`
 
-**As of 2026-08-17, 0 of 4 met, 2 cannot be told.** The gates stopped being a coordinator's prose
+**Gate 3 is MET as of 2026-08-17 -- the first to clear, and cleared by measurement rather than by
+assertion.** It took three attempts and the two failures are the interesting part: the first
+signature went stale within forty-four minutes, and the second was invisible because the meter had
+one report path compiled in, which made the gate unclearable by a lane doing exactly what it asked.
+Both were found by the lane being blocked, not by the coordinator, and the meter now names its own
+remedy when it cannot tell.
+
+**1 of 4 met, 1 cannot be told.** The gates stopped being a coordinator's prose
 the moment `CI-W289` landed, and the first thing the tool did was contradict this document.
 
 - **Gate 1 -- NOT MET.** Four real attempts in the corpus, none with a pull request that went green.
@@ -189,9 +196,14 @@ the beta critical path; everything else is real work that does not block the gat
 
 1. **[Gate 4]** `main` is red on `test_lint_dead_links`; every lane is currently gating around it and
    is therefore one step from mistaking a real regression for it.
-2. Postgres bounces under six sessions and costs a diagnosis every time it does.
-3. `test_disconnect_network_does_not_stop_an_already_open_socket` fails under `-n auto` and passes
-   alone.
+2. ~~Postgres bounces under six sessions~~ **CLOSED by `M0-W231`**, and verified 2026-08-17: `fsync`,
+   `synchronous_commit` and `full_page_writes` are off in the running container *and* in `main`'s
+   `docker-compose.yml`, so it survives a recreate. Five leaked test databases rather than sixty,
+   with the conftest statement, lock and sweep bounds and the 900s pytest watchdog all still in
+   place.
+3. ~~`test_disconnect_network_...` fails under contention~~ **CLOSED by `CI-W280`, and the
+   coordinator's diagnosis was wrong.** It was not contention: `host.docker.internal` does not
+   resolve on Linux. The test is 8 passed under `-n 4` in 29.71s.
 4. **[Gate 4]** Reconcile `specs/2026-07-25-sync-threat-model.md` against the code that now exists,
    and close or re-scope `B97`. The sandbox landed; the spec should say what is actually true.
 5. Gate wall-clock. Eight to fourteen minutes, paid by every lane on every iteration, is the largest
@@ -270,6 +282,118 @@ thing against a real repository with a real vendor change and a real CI run.
 
 The decision is still the owner's, for the reasons it always was -- a real pull request on a real
 repository, and real model spend.
+
+## Gate 4 is not blocked on wiring, and the coordinator was wrong about that
+
+I spent several cycles pressing Lane A to "wire the sandbox", on the meter's reading that
+`ephemeral_container`, `copy_between_containers` and `ensure_image_built` are baselined as reached
+from nowhere. Lane A declined and cited this repository's own re-scope of `B97`. It was right.
+
+**`B97`'s remainder is four items and two of them block hard.**
+
+1. Compose the risky/safe container pair into one patch attempt. The primitives exist; the assembly
+   does not. This is the only one that is actually wiring.
+2. **An Anthropic-only forward proxy, unbuilt and undesigned beyond a sketch.** A `network="none"`
+   container has no route for the SDK's own traffic -- which must flow for the whole run, from
+   inside the namespace the mitigation exists to cut off. `ClaudeAgentOptions`' own
+   `SandboxNetworkConfig` carries `httpProxyPort`, so a proxy is assumed by that surface too rather
+   than avoidable through it.
+3. **Nobody has established which credential the CLI needs to reach Anthropic.** No
+   `ANTHROPIC_API_KEY` reference exists anywhere in `src/`, and the environment snapshot carried no
+   `ANTHROPIC_*` variable at all -- only `CLAUDE_CODE_EXECPATH`, pointing at an already-authenticated
+   binary. A container that cannot authenticate cannot host a patch run, so this blocks item 1 as
+   hard as the proxy does. It is the cheapest of the four to answer and **it is a credential
+   question, which makes it the owner's.**
+4. Mitigation 5's remaining properties.
+
+So Gate 4 reads NOT MET for a truthful reason and will keep reading NOT MET until a proxy is
+designed and a credential is established. **The baseline entries are honest**, not a dodge: neither
+a worker process nor a scheduler exists to call the image builder, and inventing one would be an
+abstraction with no caller.
+
+The coordinator lesson is worth keeping: the meter said "reached from nowhere", which is true, and I
+read it as "somebody forgot to call this", which was not. A gate saying *what* is missing does not
+tell you *why*, and the lane that owns the file had the answer the whole time.
+
+## Ruling 7: B97's proxy and its credential are one piece of work, not two
+
+**Decided 2026-08-17, on `B156`'s evidence.** Lane D established the CLI's credential discovery order
+empirically -- `ANTHROPIC_AUTH_TOKEN`, then `ANTHROPIC_API_KEY`, then on-disk OAuth at
+`.credentials.json`, then `apiKeyHelper`, then third-party providers, then failure with
+`authentication_failed` -- and confirmed that `build_container_env()` passes none of them, so an
+isolated container fails with *"Not logged in"* before a patch begins. **A forward proxy alone is
+therefore insufficient.** That was not known before; it was assumed the proxy was the whole of the
+network problem.
+
+Three container options exist and two of them defeat the thing the sandbox is for:
+
+- **`auth_env` injection** puts a live credential inside the container. The whole premise of B97 is
+  that the patch agent holds `Bash` and is not trusted with what is reachable from inside; handing
+  it a credential is the same mistake the mitigation exists to prevent, differing only in whose
+  secret is at risk.
+- **Mounted credentials** are the same objection plus a filesystem path to exfiltrate.
+- **A credential-injecting proxy** keeps the credential outside the container entirely. The
+  container gets no egress except through the proxy, and the proxy attaches authentication to
+  Anthropic-bound traffic that the container itself never holds.
+
+**The third is the design, and it means B97's item 2 and item 3 are one piece of work.** The proxy
+that restricts egress to Anthropic is the same component that supplies the credential; building it
+twice, or building the proxy first and discovering the credential problem afterwards, is the failure
+this ruling exists to prevent.
+
+**What is still the owner's:** which credential Sync's own runs authenticate with -- an operator
+OAuth session, a dedicated API key, or a third-party provider. That is an account and a spend, and
+it decides what the proxy holds.
+
+## The empty-state gap is closed, and it found exactly one defect
+
+**Walked 2026-08-17 and the blocker is resolved.** The lane stood up a separate schema-applied
+zero-row database -- nine tables, zero rows verified before walking and dropped after -- rather than
+truncating the graph five other lanes were using, and walked it on the production runtime behind the
+credential gate.
+
+**One real defect.** Fleet rendered `Open findings 0` under its note across every vendor and every
+repository, which describes a search that never ran when nothing has been indexed. Fixed test-first
+as `M14-W346`: the note now says nothing has been searched, and that this is not a measurement that
+found nothing, reverting to the ordinary scope note the moment one repository is indexed.
+
+**Three of the rail's four zeros were already honest** and were left alone -- runs and repair
+attempts count events that genuinely did not occur, and repositories-indexed already carried the
+distinction. **Two screens were already right, quoted rather than reported as an absence of
+complaints:** detectors says *"The API answered, and the graph holds no open findings in this scope
+right now. That is an answer, not a failure"*; Settings renders *"Nothing received"* over a heading
+saying that nothing received has never delivered, which is not the same as having delivered nothing.
+
+**A hypothesis was disproved rather than confirmed.** The coordinator suggested the failed-fetch gap
+and the empty-graph gap might be one defect wearing two hats. They are not: with the API killed and
+the console still running, Fleet renders *"the API did not answer"* in the figure slot itself, with
+no bare zeros anywhere. The console already distinguishes them where it matters, so that stock-take
+item survives but shrinks from honesty to **affordance** -- it says which state it is in, it just
+offers no way to recover from the failed one.
+
+The Gate 3 signature now covers the empty graph as well as the seeded one, and was deliberately
+dated *after* the fix commit -- 12:54:34 against 12:54:13 -- because a signature dated before it
+would describe a console one commit older than the one it claims to cover, which is the staleness
+this gate exists to catch, self-inflicted.
+
+## The one console gap that would block a design-partner beta
+
+`reports/2026-08-17-console-beta-stock-take.md`, from the lane that has walked every screen twice
+with a measurement in hand and once through the production runtime.
+
+**Every walk this console has had ran against the seeded fixture. A design partner's first five
+minutes are the opposite state: configured, nothing indexed, every table empty.** That is the one
+screen state nobody has examined, and on a console whose entire argument is that absence is not
+zero, a screen reading zero where it means never-measured fails on the axis the product is sold on.
+
+The claim is carefully limited and worth repeating in its own words: *"I do not claim it does; I
+claim nobody has looked, and it is one seeded database away from being checkable."*
+
+Four smaller gaps sit under it, none blocking: a failed panel offers no way to re-ask, nothing on
+screen names which deployment the console is bound to, route changes do not move focus, and the
+abandoned-run workflow screen is unit-tested but has never been rendered. Two things are argued
+*against*: restyling, because every measured bar is clear and nothing is asking for it, and the
+second drawer, which still has one consumer.
 
 ## The three decisions that are the human's, named now
 

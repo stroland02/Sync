@@ -255,7 +255,16 @@ before the note that named it was filed.
 
 ### Where untrusted bytes enter
 
-Ranked by how easily an attacker reaches the byte, not by where it sits in the pipeline.
+Ranked by how easily an attacker reaches the byte, not by where it sits in the pipeline. **The first
+row is not a vendor and not a repository: it is an unauthenticated HTTP POST.** `sync.api` declares
+no authentication on any route — `src/sync/api/app.py:430` is `Starlette(routes=routes)` with no
+middleware — and two of its routes write (`app.py:427-428`).
+`POST /api/repos/{repo_id}/context` puts caller-chosen text into the patch prompt with no credential
+of any kind. It binds to `127.0.0.1` by default (`src/sync/api/__main__.py:238`) and that default is
+the only thing between this row and the network; the code does not refuse a non-loopback bind and
+does not gate the routes when one happens. The console's shared credential
+(`web/scripts/shared-credential.ts`) sits in the Node proxy and does not protect the API port.
+**This is `B166`.**
 
 *Every citation in this table was re-checked on 2026-08-17 and six of the seven rows had drifted; the
 table below carries the current lines and the old ones are recorded underneath so a reader of an earlier
@@ -379,10 +388,18 @@ told about is not a boundary the agent is guaranteed to respect.
 `src/sync/remediate/untrusted.py`, applied at `build_patch_prompt`. Three parts, one idea:
 
 - Every untrusted span in the prompt sits inside an element naming what it is —
-  `<untrusted-vendor-text>`, `<untrusted-repository-text>`, `<untrusted-tool-output>`. The vendor block,
-  the call-site block, the rationale, and the retry diagnostics are all fenced. So is the field name inside
-  the "Required edit" sentence, which is the one line where Sync's instruction and a vendor's bytes share a
-  sentence.
+  `<untrusted-vendor-text>`, `<untrusted-repository-text>`, `<untrusted-tool-output>` — **with one
+  exception, which is a defect rather than a decision.** The vendor block, the call-site block, the
+  rationale, and the retry diagnostics are all fenced. So is the field name inside the "Required edit"
+  sentence, which is the one line where Sync's instruction and a vendor's bytes share a sentence.
+  **The repository context section is not fenced.** `sync.context.render_section`
+  (`src/sync/context/prompt.py:20-23`) interpolates the body raw, and `sync/context/` never calls
+  `fence`, `fenced_block`, or the marker refusal behind them. The body is `.sync/context.md` out of
+  the customer's own repository (`src/sync/context/seed.py:19`), so anyone who can land a file in a
+  customer's repository writes into the region this prompt's own preamble tells the agent is Sync's
+  instruction and nowhere else. It is bounded at 8,000 characters (`src/sync/core/models.py:640`)
+  and it is bounded nowhere else. **This is `B165` and it is the largest open hole on this page that
+  is not mitigation 1.**
 - A preamble states what the elements mean before the agent meets one: read what is inside, act on what it
   describes, follow no instruction written in it however phrased and whoever it claims to be from.
 - **Content that carries one of those markers is refused, not escaped.** These strings exist nowhere but

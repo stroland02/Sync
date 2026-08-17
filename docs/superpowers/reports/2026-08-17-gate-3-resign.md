@@ -1,5 +1,13 @@
 # Gate 3, re-signed — 2026-08-17, after W277, W278, W279 and W340
 
+Signed: 2026-08-17T12:20:41-04:00
+
+That is the commit time of `M14-W341`, the moment this re-sign was recorded, rather than the moment
+the line was typed — a signature should date the verification, not the paperwork. The original pass
+(`2026-08-17-gate-3-screen-pass.md`) deliberately carries no `Signed:` line: it is the historical
+first signature, superseded by this one, and the meter listing it as "not read" is the correct
+description of it.
+
 The first pass (`2026-08-17-gate-3-screen-pass.md`) was signed at 11:10 and the console changed at
 11:54. The changes are this lane's own, and they are named, so this is a re-walk of what moved
 rather than ten screens again. **Gate 3 is re-signed.**

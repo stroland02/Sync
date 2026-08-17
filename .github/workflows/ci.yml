@@ -540,3 +540,22 @@ jobs:
           uv run python scripts/beta_gates.py --exit-zero
           --suite-result "${{ needs.serial.result }}"
           --summary "$GITHUB_STEP_SUMMARY"
+
+      # The publication is the point of this job and it was the one part never verified against a
+      # real run. A `--summary` that wrote nothing would look identical to one that worked: the
+      # step still exits 0, the log still carries the plain-text report, and GitHub's check-run
+      # API does not expose job summaries -- so nobody could tell without opening the run page and
+      # trusting their eyes. That is the shape of thing this repository spent a day finding.
+      #
+      # This step MAY fail the build, unlike the one above it. A publication that silently did
+      # nothing is a broken job rather than a readiness verdict, and `--exit-zero` is a carve-out
+      # for verdicts only.
+      - name: Check the summary was actually published
+        run: |
+          set -euo pipefail
+          test -s "$GITHUB_STEP_SUMMARY" || { echo "the step summary is empty"; exit 1; }
+          for gate in "Gate 1" "Gate 2" "Gate 3" "Gate 4"; do
+            grep -q "$gate" "$GITHUB_STEP_SUMMARY" || { echo "summary is missing $gate"; exit 1; }
+          done
+          echo "published summary, $(wc -l < "$GITHUB_STEP_SUMMARY") lines:"
+          cat "$GITHUB_STEP_SUMMARY"
