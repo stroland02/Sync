@@ -27,6 +27,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import subprocess
 import sys
 from dataclasses import dataclass, field
@@ -200,39 +201,109 @@ def gate_two_evidence_exists(
     return Verdict(gate="2", name=name, status=MET, evidence=evidence)
 
 
-def gate_three_console_truth(report: Path, console_dir: Path) -> Verdict:
+# What a change to the console can actually alter about a claim on a screen. Watching all of
+# `web/` meant a token, a build config, a vitest file or a script re-opened this gate, and a gate
+# that fires on a CSS tweak teaches the lane that clearing it is ceremony -- which is how a gate
+# stops being read at all. Narrowed on Lane B's proposal after its first re-sign.
+#
+# Deliberately conservative rather than minimal: this gate can only ever say MET or CANNOT TELL,
+# never NOT MET, so a path wrongly left out costs a re-walk nobody needed, while a path wrongly
+# left in costs the gate its readers.
+CONSOLE_CLAIM_PATHS = (
+    "web/src/features",
+    "web/src/components",
+    "web/src/api",
+    ":(exclude)*.test.*",
+)
+
+# The line a sign-off writes to say when it was signed. A recorded date rather than the file's
+# commit date, because a whitespace edit to the report is not a re-sign and git cannot tell the
+# two apart.
+_SIGNED = re.compile(r"^Signed:\s*(?P<when>\S+)\s*$", re.MULTILINE)
+
+SIGNATURE_LINE = "Signed: <ISO 8601 timestamp>"
+
+
+def signature_date(text: str) -> str | None:
+    """The date a sign-off recorded for itself, or `None` if it recorded none."""
+    match = _SIGNED.search(text)
+    return match["when"] if match else None
+
+
+def gate_three_console_truth(reports_dir: Path, *, console_changed_at: str | None) -> Verdict:
     """Gate 3: signed. Confirm the signature still corresponds to the tree.
 
-    The scope plan records this gate as signed on 2026-08-17 with a named report, so this does not
-    re-derive it -- re-deriving a signed gate would be asserting the right to overrule a sign-off
-    this lane did not make. What it checks is whether the thing signed is still the thing here: a
-    console changed after the pass was written is a pass describing a screen nobody is looking at.
+    This does not re-derive the gate -- re-deriving a sign-off another lane made would be
+    asserting a right this script does not have. It asks the cheaper question: is the thing signed
+    still the thing here.
+
+    **Every gate-3 report is read, not one named file.** The first version had a single path
+    hardcoded, so when Lane B re-signed by landing a second document beside the first, the meter
+    went on reading the original and reported the same stale timestamp after a genuine re-sign. A
+    lane that does the work and watches the gate ignore it learns the gate is ceremony.
+
+    **The signature date is the one the document records, not the one git holds.** A whitespace
+    edit to a report is not a re-sign, and git cannot tell those apart. The cost is that a report
+    without the line cannot be read, so that case says exactly which line to add rather than
+    failing mysteriously.
     """
     name = "the console tells the truth about that evidence"
-    if not report.exists():
+    reports = sorted(reports_dir.glob("*gate-3*.md")) if reports_dir.exists() else []
+    if not reports:
         return Verdict(
             gate="3",
             name=name,
             status=CANNOT_TELL,
             evidence=[
-                f"the sign-off report is missing: {report.relative_to(REPO_ROOT)}",
-                "the scope plan records this gate as signed; without the report the signature "
-                "cannot be checked and is not assumed",
+                f"no gate-3 sign-off found in {reports_dir}",
+                "the scope plan records this gate as signed; without a report the signature "
+                "cannot be checked, and it is not assumed",
             ],
         )
 
-    evidence = [f"signed, evidence at {report.relative_to(REPO_ROOT)}"]
-    signed_at = _last_commit_touching(report)
-    console_at = _last_commit_touching(console_dir)
-    if signed_at is None or console_at is None:
-        evidence.append("could not read git history for the report or the console")
+    signed: list[tuple[str, Path]] = []
+    unsigned: list[Path] = []
+    for report in reports:
+        try:
+            recorded = signature_date(report.read_text(encoding="utf-8"))
+        except OSError:
+            recorded = None
+        if recorded:
+            signed.append((recorded, report))
+        else:
+            unsigned.append(report)
+
+    evidence = [f"{len(reports)} gate-3 report(s) found: " + ", ".join(r.name for r in reports)]
+
+    if not signed:
+        evidence.append(
+            "none of them records a signature date, so a re-sign cannot be distinguished from a "
+            f"typo fix. Add a line reading `{SIGNATURE_LINE}` to the pass that is current"
+        )
         return Verdict(gate="3", name=name, status=CANNOT_TELL, evidence=evidence)
 
-    evidence.append(f"report last written {signed_at}, console last changed {console_at}")
-    if console_at > signed_at:
+    if unsigned:
         evidence.append(
-            "the console changed after the pass was signed, so the signature describes an "
-            "earlier tree; re-signing is Lane B's call rather than this script's"
+            "not read, because they record no signature date: "
+            + ", ".join(r.name for r in unsigned)
+        )
+
+    latest, source = max(signed)
+    evidence.append(f"latest recorded signature {latest}, from {source.name}")
+
+    if console_changed_at is None:
+        evidence.append("the console's history could not be read, so staleness is unknown")
+        return Verdict(gate="3", name=name, status=CANNOT_TELL, evidence=evidence)
+
+    evidence.append(
+        "console last changed "
+        f"{console_changed_at}, over {', '.join(CONSOLE_CLAIM_PATHS)}"
+    )
+    if console_changed_at > latest:
+        evidence.append(
+            "the recorded signature date is older than the console change, so this reads as "
+            "stale. If the console was re-signed since, the report's `Signed:` line was not "
+            "updated -- update that line rather than re-walking the screens"
         )
         return Verdict(gate="3", name=name, status=CANNOT_TELL, evidence=evidence)
     return Verdict(gate="3", name=name, status=MET, evidence=evidence)
@@ -440,6 +511,28 @@ def render_markdown(verdicts: Sequence[Verdict]) -> str:
     return "\n".join(lines)
 
 
+def _console_changed_at() -> str | None:
+    """When the console last changed in a way that could alter a claim about data.
+
+    A pathspec rather than a directory: `CONSOLE_CLAIM_PATHS` carries git's own `:(exclude)` form
+    so a vitest file changing does not re-open a gate about what a screen tells a reader.
+    """
+    try:
+        result = subprocess.run(
+            ["git", "log", "-1", "--format=%cI", "--", *CONSOLE_CLAIM_PATHS],
+            cwd=REPO_ROOT,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=60,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return None
+    stamp = (result.stdout or "").strip()
+    return stamp or None
+
+
 def measure(*, run_suite: bool, suite_result: str | None = None) -> list[Verdict]:
     store, store_error = _open_store()
     health_reader = _health_reader(store_error)
@@ -449,8 +542,8 @@ def measure(*, run_suite: bool, suite_result: str | None = None) -> list[Verdict
         gate_one_loop_closes(store, resume_built=resume_built),
         gate_two_evidence_exists(store, health_reader=health_reader),
         gate_three_console_truth(
-            REPO_ROOT / "docs" / "superpowers" / "reports" / "2026-08-17-gate-3-screen-pass.md",
-            REPO_ROOT / "web" / "src",
+            REPO_ROOT / "docs" / "superpowers" / "reports",
+            console_changed_at=_console_changed_at(),
         ),
         gate_four_containment_true(run_suite=run_suite, suite_result=suite_result),
     ]

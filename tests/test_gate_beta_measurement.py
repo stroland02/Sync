@@ -25,7 +25,10 @@ from scripts.beta_gates import (
     Verdict,
     gate_one_loop_closes,
     gate_two_evidence_exists,
+    CONSOLE_CLAIM_PATHS,
     gate_four_containment_true,
+    gate_three_console_truth,
+    signature_date,
     render,
     render_markdown,
 )
@@ -330,3 +333,108 @@ def test_no_suite_result_at_all_still_says_it_was_not_measured() -> None:
     verdict = gate_four_containment_true(run_suite=False, suite_result=None)
 
     assert any("not measured" in line for line in verdict.evidence)
+
+
+# --- gate three: what counts as a re-sign, and what counts as a console change -------
+
+
+def _reports(tmp_path, **docs):
+    directory = tmp_path / "reports"
+    directory.mkdir()
+    for name, body in docs.items():
+        (directory / f"{name}.md").write_text(body, encoding="utf-8")
+    return directory
+
+
+def test_a_resign_that_arrives_as_a_new_document_is_seen(tmp_path) -> None:
+    """The defect that made this unit necessary, stated as a test.
+
+    The meter had one report path hardcoded, so when Lane B re-signed by landing
+    `2026-08-17-gate-3-resign.md` beside the original the meter went on reading the original and
+    reported the same stale timestamp as before. A lane that does the work and watches the gate
+    ignore it learns that clearing the gate is ceremony, which is how a gate stops being read.
+    """
+    directory = _reports(
+        tmp_path,
+        **{
+            "2026-08-17-gate-3-screen-pass": "Signed: 2026-08-17T11:10:00-04:00\n",
+            "2026-08-17-gate-3-resign": "Signed: 2026-08-17T12:20:00-04:00\n",
+        },
+    )
+
+    verdict = gate_three_console_truth(directory, console_changed_at="2026-08-17T11:54:54-04:00")
+
+    assert verdict.status is MET
+    assert any("resign" in line for line in verdict.evidence)
+
+
+def test_a_recorded_signature_older_than_the_console_says_so_in_those_words(tmp_path) -> None:
+    """The legibility half. A lane whose re-sign did not register must be told why, not left to
+    guess -- the answer is almost always that it updated the prose and not the signature line."""
+    directory = _reports(
+        tmp_path, **{"2026-08-17-gate-3-resign": "Signed: 2026-08-17T09:00:00-04:00\n"}
+    )
+
+    verdict = gate_three_console_truth(directory, console_changed_at="2026-08-17T11:54:54-04:00")
+
+    assert verdict.status is CANNOT_TELL
+    joined = " ".join(verdict.evidence)
+    assert "recorded signature date is older than the console change" in joined
+    assert "Signed:" in joined
+
+
+def test_a_report_with_no_signature_line_names_the_line_to_add(tmp_path) -> None:
+    directory = _reports(tmp_path, **{"2026-08-17-gate-3-resign": "# a pass with no marker\n"})
+
+    verdict = gate_three_console_truth(directory, console_changed_at="2026-08-17T11:54:54-04:00")
+
+    assert verdict.status is CANNOT_TELL
+    assert any("Signed:" in line for line in verdict.evidence)
+
+
+def test_no_report_at_all_cannot_tell(tmp_path) -> None:
+    directory = tmp_path / "reports"
+    directory.mkdir()
+
+    verdict = gate_three_console_truth(directory, console_changed_at="2026-08-17T11:54:54-04:00")
+
+    assert verdict.status is CANNOT_TELL
+
+
+def test_an_unreadable_console_history_cannot_tell(tmp_path) -> None:
+    directory = _reports(
+        tmp_path, **{"2026-08-17-gate-3-resign": "Signed: 2026-08-17T12:20:00-04:00\n"}
+    )
+
+    verdict = gate_three_console_truth(directory, console_changed_at=None)
+
+    assert verdict.status is CANNOT_TELL
+
+
+def test_signature_date_reads_the_recorded_line_rather_than_the_prose() -> None:
+    assert signature_date("intro\nSigned: 2026-08-17T12:20:00-04:00\nmore") == (
+"2026-08-17T12:20:00-04:00"
+    )
+    assert signature_date("# Gate 3, re-signed - 2026-08-17\nno marker here") is None
+
+
+# --- the watched set ----------------------------------------------------------------
+
+
+def test_the_watched_set_is_only_what_can_change_a_claim_about_data() -> None:
+    """Watching all of `web/` meant a token, a build config or a script re-opened the gate.
+
+    None of those can change what a screen claims about data, and a gate that fires on a CSS tweak
+    teaches the lane that clearing it is ceremony. Narrow, and deliberately conservative: this gate
+    can only ever say MET or CANNOT TELL, never NOT MET, so a miss costs a re-walk rather than a
+    false pass.
+    """
+    assert "web/src/features" in CONSOLE_CLAIM_PATHS
+    assert "web/src/components" in CONSOLE_CLAIM_PATHS
+    assert "web/src/api" in CONSOLE_CLAIM_PATHS
+    assert not any(path == "web" or path == "web/src" for path in CONSOLE_CLAIM_PATHS)
+
+
+def test_tests_are_excluded_from_the_watched_set() -> None:
+    """A vitest file changing cannot change what a screen asserts to a reader."""
+    assert any("exclude" in path and "test" in path for path in CONSOLE_CLAIM_PATHS)
