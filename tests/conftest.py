@@ -101,6 +101,14 @@ meaning what they say.
 DOCKER_MARKER = "docker"
 DOCKER_PROBE_TIMEOUT_SECONDS = 30
 
+# How long `pytest_configure` will wait for a Postgres that is answering but still
+# recovering. Sized against a measurement rather than a guess: a crash recovery on the
+# shared container took 2.74s end to end on 2026-08-17, so this is roughly twenty times
+# the observed cost. It is only ever spent when the server says it is starting up --
+# an absent server is refused immediately and is not waited for at all.
+POSTGRES_RECOVERY_WAIT_SECONDS = 60
+POSTGRES_RECOVERY_POLL_SECONDS = 0.5
+
 LEAKED_DATABASE_PATTERN = r"sync\_test\_%"
 """The SQL `LIKE` pattern for databases this file creates, and nothing else.
 
@@ -516,6 +524,40 @@ def template_dsn(pinned: str | None, server: str | None = None) -> str:
     return pinned or server or DEFAULT_DSN
 
 
+def admin_connection_once_ready(
+    admin_dsn: str,
+    *,
+    budget_seconds: float = POSTGRES_RECOVERY_WAIT_SECONDS,
+    connect=admin_connection,
+    sleep=time.sleep,
+    now=time.monotonic,
+):
+    """An admin connection, waiting out a server that is still coming up.
+
+    Postgres says which of the two it is, and the distinction is the whole point.
+    A server that is **absent** refuses the socket, and psycopg raises a plain
+    `OperationalError` with no SQLSTATE -- there is nothing to wait for. A server
+    that is **recovering** answers, and refuses with SQLSTATE `57P03`
+    (`CannotConnectNow`, "the database system is starting up"). That is a
+    temporary state with a known end, and treating it as absence is what turns
+    one restart into a suite-wide red.
+
+    Measured 2026-08-17 on the shared container: crash recovery took 2.74s from
+    process start to accepting connections and refused 25 connections while it
+    ran. The budget here is far larger than that, because the cost of waiting a
+    little longer than necessary is seconds and the cost of not waiting is every
+    database-touching test in the run failing for a reason that is not theirs.
+    """
+    deadline = now() + budget_seconds
+    while True:
+        try:
+            return connect(admin_dsn)
+        except psycopg.errors.CannotConnectNow:
+            if now() >= deadline:
+                raise
+            sleep(POSTGRES_RECOVERY_POLL_SECONDS)
+
+
 def pytest_configure(config) -> None:
     global _created_dbname, _admin_dsn
 
@@ -528,11 +570,17 @@ def pytest_configure(config) -> None:
     template = template_dsn(pinned, server=os.environ.get("SYNC_TEST_SERVER"))
     admin_dsn = dsn_for(ADMIN_DBNAME, template)
     try:
-        conn = admin_connection(admin_dsn)
+        conn = admin_connection_once_ready(admin_dsn)
     except psycopg.OperationalError as exc:
         # No server: the tests that need one were going to fail anyway, and the
         # ones that do not still run. Leaving SYNC_DSN unset keeps that exactly
         # as it was before this file existed.
+        #
+        # A server that is merely *recovering* no longer arrives here, and that is
+        # B185: `CannotConnectNow` is an `OperationalError` subclass, so a restart
+        # mid-collection used to read as "no Postgres" and send the whole run
+        # unisolated, failing every database-touching test for a reason that was
+        # not its own. `admin_connection_once_ready` waits that state out.
         warnings.warn(f"no Postgres at {template}, tests run unisolated: {exc}", stacklevel=1)
         return
 

@@ -528,6 +528,29 @@ collapse onto "we checked and it does not apply."** A skip is the second sentenc
 out of time is the first.
 
 
+### B185 — a database that is coming up read as a database that is gone — CLOSED
+
+**Found and closed 2026-08-17 by `CI-W362`**, while measuring the Postgres bounce.
+`docs/superpowers/reports/2026-08-17-what-the-postgres-bounce-actually-is.md` carries the evidence.
+
+`pytest_configure` caught `psycopg.OperationalError`, warned "no Postgres", and let the run continue
+**unisolated** -- `SYNC_DSN` unset, every database-touching test running without its own database.
+`psycopg.errors.CannotConnectNow` is SQLSTATE `57P03`, "the database system is starting up", and it
+is an `OperationalError` **subclass**, so any run reaching collection during a restart was told the
+server did not exist. Measured: crash recovery on the shared container took **2.74s** and refused
+**25 connections** while it ran. A mass red, with a diagnosis cost, from a condition that clears
+itself in under three seconds.
+
+Postgres distinguishes the two states and the code did not. An absent server refuses the socket and
+raises a plain `OperationalError` with no SQLSTATE -- nothing to wait for. A recovering server
+answers and says so. `admin_connection_once_ready` waits out the second, bounded at 60s against a
+measured 2.74s, and still fails immediately on the first.
+
+**This is the third instance of one shape in this lane today**, after `B183` (a deadline anchored to
+the wrong event) and `B184` (a silent daemon read as an absent one): **"we could not check yet"
+collapsed onto "there is nothing here."** Worth carrying as a class, not three separate fixes.
+
+
 ### B174 — `extract_credential` cannot tell malformed base64 from non-UTF-8 credentials — Lane E
 
 **Accounted rather than broken, and filed rather than fixed.** `CI-W304` added this clause to
