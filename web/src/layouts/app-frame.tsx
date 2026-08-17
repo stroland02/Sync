@@ -290,9 +290,20 @@ function ContextualSidebar({ area, pathname }: { area: AreaEntry; pathname: stri
             <LevelGroup key={level} level={level} pathname={pathname} bound={bound} />
           ))}
         </SidebarContent>
-        <div className="mt-auto border-t border-line px-row py-field">
+        <div className="mt-auto flex flex-col gap-field border-t border-line px-row py-field">
           <p className="text-meta text-ink-muted leading-snug">
             Nine graph levels, six areas. An area groups a run of levels — it is not a level itself.
+          </p>
+          {/* Whose data this is, which nothing on screen said until a console could be served
+              somewhere a partner reaches it. The sentence claims only what this console can
+              actually know: it reads one graph and filters nothing per viewer. It deliberately
+              does not name a deployment — no route serves an identifier for one, and inventing a
+              label here would be the console asserting something nothing computed, on the screen
+              furniture rather than in a figure. */}
+          <p className="text-meta text-ink-muted leading-snug">
+            Every screen here reads one deployment's graph, and nothing is filtered per viewer — a
+            repository you do not recognise is one this deployment was configured to watch, not
+            another customer's.
           </p>
         </div>
       </nav>

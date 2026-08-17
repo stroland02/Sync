@@ -550,3 +550,32 @@ describe("every declared destination is one rail activation away", () => {
     expect([...seen].sort()).toEqual(ROUTES.map((route) => route.path).sort())
   })
 })
+
+describe("the console says whose data this is", () => {
+  /**
+   * A partner reaching a hosted console sees repository names. Nothing on screen told them
+   * whether an unfamiliar one is their own deployment holding a repo they did not expect, or
+   * somebody else`s data — and on a single-tenant product with one shared credential in front
+   * of it, that is a trust question rather than a cosmetic one. It became answerable the moment
+   * the console could be served somewhere a partner reaches.
+   *
+   * What is asserted here is only what the console can honestly know: that everything visible
+   * comes from one graph and nothing is filtered per viewer. The console holds no deployment
+   * name — no route serves one — so it must not render one.
+   */
+  it("states that every screen reads one deployment, on every screen", () => {
+    renderAt("/")
+    expect(screen.getByText(/one deployment/i)).not.toBeNull()
+
+    cleanup()
+    renderAt("/detectors")
+    expect(screen.getByText(/one deployment/i)).not.toBeNull()
+  })
+
+  it("says the view is unfiltered, so an unfamiliar name is this deployment`s own", () => {
+    renderAt("/")
+    const note = screen.getByText(/one deployment/i).textContent ?? ""
+    expect(note).toMatch(/filtered/i)
+    expect(note).toMatch(/not another customer/i)
+  })
+})
