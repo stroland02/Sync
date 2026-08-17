@@ -281,20 +281,6 @@ export function useDetectors(repoId?: string) {
 }
 
 /**
- * Open findings grouped into change units, fleet-wide or for one repository. Not polled: a
- * change unit moves only when SIGNAL or a remediation checkpoint writes, neither of which this
- * screen would learn about sooner than a manual refresh.
- */
-export function useChangeUnits(params: ChangeUnitsParams = {}) {
-  const limit = params.limit ?? DEFAULT_LIMIT
-  const offset = params.offset ?? 0
-  return useQuery({
-    queryKey: ["change-units", params.repoId ?? null, limit, offset],
-    queryFn: ({ signal }) => fetchChangeUnits({ ...params, limit, offset }, signal),
-  })
-}
-
-/**
  * Every adapter this deployment registers, and what each has ever delivered.
  *
  * Not polled. This view moves when a scan writes a `vendor_change` row or when somebody edits the

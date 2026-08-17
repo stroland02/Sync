@@ -336,23 +336,6 @@ export function fetchDetectors(
   )
 }
 
-export interface ChangeUnitsParams extends PageParams, ScopeParams {}
-
-/**
- * Open findings grouped by vendor change and operation — one row per `sync.dashboard.fleet
- * .change_units` unit, fleet-wide or narrowed to one repository.
- */
-export function fetchChangeUnits(
-  params: ChangeUnitsParams = {},
-  signal?: AbortSignal,
-): Promise<ChangeUnitsPage> {
-  const path = withQueryParams("/api/change-units", {
-    repo_id: params.repoId,
-    limit: params.limit,
-    offset: params.offset,
-  })
-  return getJson<ChangeUnitsPage>(path, signal)
-}
 
 /**
  * Every adapter this deployment registers, and what each has ever delivered.
