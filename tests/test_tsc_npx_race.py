@@ -115,3 +115,31 @@ def test_two_concurrent_typechecks_against_a_cold_cache_do_not_race(
         f"a concurrent cold-cache resolve failed: {results}"
     )
     assert all(r.diagnostics == "" for r in results)
+
+
+def test_a_warm_cache_skips_the_resolve_lock(fake_npx_on_path: Path, project: Path):
+    """Once the cache is warm, callers must not acquire the resolve lock.
+
+    `resolve_lock` exists to guard the one-time resolve against ETXTBSY/EBUSY.
+    If subsequent typechecks still acquired the lock, parallel runs would serialize
+    and starve under test concurrency.
+    """
+    from sync.index.tsc import _lock_path
+
+    # First run warms the cache and writes the marker
+    result1 = run_tsc(project, timeout=30)
+    assert result1.ok
+
+    # Manually hold/block the lock directory
+    lock = _lock_path()
+    lock.mkdir(exist_ok=True)
+    try:
+        # Second run on a warm cache must succeed quickly without waiting on the blocked lock
+        result2 = run_tsc(project, timeout=1.0)
+        assert result2.ok
+    finally:
+        try:
+            lock.rmdir()
+        except OSError:
+            pass
+
