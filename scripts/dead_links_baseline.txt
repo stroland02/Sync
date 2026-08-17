@@ -117,3 +117,16 @@ src/sync/graph/store.py:GraphStore.intake_attempts
 # assembled into one orchestrated attempt -- is the next unit, not this one.
 src/sync/remediate/forward_proxy_server.py:running_proxy
 
+# `isolated_network` (B97) is the third primitive: a Docker network with `--internal`, which
+# structurally removes routing to anything outside the network's own local subnet -- not merely
+# the internet. Finished and tested against real Docker (`tests/test_isolated_network.py`, three
+# tests): the flag is present in the CLI invocation, a container attached to it genuinely cannot
+# reach the internet (positive control first), and the network is removed on exit. What that
+# same test file's own module docstring records as a corrected assumption rather than a quiet
+# gap: `--add-host=host.docker.internal:host-gateway` was expected to let a container on this
+# network reach a bare host process and measured not to -- DNS resolution and routing are
+# different facts, and `--internal` blocks the second even where the first succeeds. So the
+# proxy has to be a container on this same isolated network rather than a host process, and
+# nothing in this tree yet composes that pairing. Unreachable on purpose until it does.
+src/sync/remediate/isolated_network.py:isolated_network
+
