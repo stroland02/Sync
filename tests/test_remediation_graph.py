@@ -716,10 +716,14 @@ def test_a_failed_cleanup_does_not_replace_the_reason_the_finding_abandoned():
 
 # Read off the shipped assembly rather than transcribed from `graph.py`, so a router whose
 # destination moves moves this pin with it. `__start__` and `__end__` are langgraph's and are
-# part of the compiled shape, so they are pinned alongside the ten Sync writes.
+# part of the compiled shape, so they are pinned alongside the twelve Sync writes. `park` and
+# `external_cause` are M10's: a run awaiting a human turn ends at `park` rather than `abandon`,
+# and `patch` can route straight to `external_cause` when the failure is a vendor condition
+# rather than something a different patch could fix.
 SHIPPED_NODES = (
     "__start__", "locate", "prepare", "patch", "static_verify", "replay",
-    "push_branch", "await_ci", "open_pr", "report", "abandon", "__end__",
+    "push_branch", "await_ci", "open_pr", "park", "report", "external_cause",
+    "abandon", "__end__",
 )
 
 # `data` carries the router's decision only where the decision and its destination differ.
@@ -735,6 +739,7 @@ SHIPPED_EDGES = frozenset({
     ("patch", "static_verify", None, True),
     ("patch", "patch", None, True),
     ("patch", "abandon", None, True),
+    ("patch", "external_cause", None, True),
     ("static_verify", "patch", None, True),
     ("static_verify", "replay", "push_branch", True),
     ("static_verify", "abandon", None, True),
@@ -748,11 +753,19 @@ SHIPPED_EDGES = frozenset({
     ("await_ci", "abandon", None, True),
     ("open_pr", "__end__", "end", True),
     ("open_pr", "abandon", None, True),
+    ("open_pr", "park", None, True),
+    ("park", "__end__", None, False),
     ("report", "__end__", None, False),
+    ("external_cause", "__end__", None, False),
     ("abandon", "__end__", None, False),
 })
 
 REMOTE_NODES = frozenset({"push_branch", "await_ci", "open_pr"})
+
+# `park` does not itself touch the remote -- it is M10's human-turn stop, reached only through
+# `open_pr`'s own routing. A forge-less build omits `open_pr`, so `park` disappears with it as a
+# consequence rather than because parking is a remote operation.
+_ABSENT_WITHOUT_A_FORGE = REMOTE_NODES | {"park"}
 
 
 def _topology(graph):
@@ -793,8 +806,8 @@ def test_a_graph_built_without_a_forge_has_no_node_that_can_push():
     graph_nodes, edges = _topology(_build(None))
 
     assert REMOTE_NODES.isdisjoint(graph_nodes)
-    # Nothing else moved: the three named nodes are the only difference.
-    assert set(graph_nodes) == set(SHIPPED_NODES) - REMOTE_NODES
+    # `park` moves too, as `open_pr`'s consequence rather than a fourth remote-touching node.
+    assert set(graph_nodes) == set(SHIPPED_NODES) - _ABSENT_WITHOUT_A_FORGE
     assert not [
         edge for edge in edges if REMOTE_NODES & {edge[0], edge[1]}
     ]

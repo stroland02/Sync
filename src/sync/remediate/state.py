@@ -177,6 +177,7 @@ class RunState(TypedDict, total=False):
     routing_row: str | None
     # One line for an operator on a run that produced no pull request and was not a
     # failure. Deliberately not `diagnostics`: that one becomes `abandon_reason`.
+    report_reason: str
     # Attempt-level facts the corpus writer reads from `RunState`.
     #
     # An attempt is one `locate -> patch -> static_verify [-> replay] [-> push -> await_ci]` cycle.
@@ -189,6 +190,13 @@ class RunState(TypedDict, total=False):
     # `static_attempts=2, ci_attempts=1`, which is 3 attempts, but `ci_attempts` alone resets
     # on each static pass. `attempt_index` is monotonic across the entire graph execution.
     attempt_index: int
+    # `StateGraph(RunState)` builds one channel per key declared here -- a node returning a key
+    # this class does not declare is not an error, it is a write nothing reads, silently. Both
+    # counters below are retry budgets `route_after_static`/`route_after_ci` read back on every
+    # loop with `state.get(..., 0)`; undeclared, every increment vanishes and the read is always
+    # the default, so the budget check never trips and the graph recurses forever.
+    static_attempts: int
+    ci_attempts: int
     # Attempt-level facts recorded into `migration_outcome` at the attempt boundary.
     # `attempt_started_at` is set by `locate` when the attempt begins.
     # `attempt_strategy` is set by `patch` from the proposed patch strategy.

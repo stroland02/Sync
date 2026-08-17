@@ -313,6 +313,47 @@ confidently instead of refusing.
 
 ## Ready
 
+### B153 — a job that failed downloading an action reads as a failed build, and six lanes make it common
+
+**Observed 2026-08-17 on run `32042158113`.** `serial` reported `failure` having run exactly one
+step, `Set up job`:
+
+```
+##[warning]Failed to download action 'https://codeload.github.com/astral-sh/setup-uv/tar.gz/<sha>'.
+Error: Response status code does not indicate success: 429 (Too Many Requests).
+##[error]Failed to download archive after 3 attempts.
+```
+
+Nothing about the repository was tested. `gh run list` reports it identically to a suite that
+failed, which is the same misreading B112 documents for a job no runner ever acquired — and B112's
+entry records what that costs: a coordinator sees red on its own branch and starts looking for a
+defect that does not exist.
+
+**Why it is common here rather than a curiosity.** Six lanes push to `main` through the day and
+every push starts four jobs, each of which downloads `astral-sh/setup-uv` before anything else.
+The workflow already does what it can: `concurrency.cancel-in-progress` is on and the group keys
+on `github.event_name` and `github.ref`, so superseded runs are cancelled rather than piling up.
+The remaining rate is GitHub's to serve, and it answered 429 three times in a row.
+
+**The distinguishing check**, cheap and worth putting in the tick beside B112's:
+
+```sh
+gh api repos/stroland02/Sync/actions/runs/<id>/jobs   --jq '.jobs[] | "\(.name) \(.conclusion) steps=\(.steps|length)"'
+```
+
+One step named `Set up job` and a `429` in its log means the runner never got as far as the code.
+Zero steps means B112. Anything else is a real result.
+
+**Not fixed, and the reason is that the honest fix is not ours.** Retrying is already what the
+runner does. Vendoring the action or pinning it by digest changes what is downloaded, not whether
+codeload answers. Reducing the job count would trade real coverage for a transient. What is
+actionable is that nobody spends an hour on it, which is what this entry is for.
+
+**Closes when:** either the signature stops appearing for a fortnight, or a lane is measured
+misdiagnosing it despite this entry — in which case the check belongs in a script rather than in
+prose.
+
+
 ### B152 — a crashed xdist worker reads as failing tests, and nothing told a lane otherwise — FIXED
 
 **Measured 2026-08-17, twice, on the same tree.** One run reported roughly thirty `F` marks and no
