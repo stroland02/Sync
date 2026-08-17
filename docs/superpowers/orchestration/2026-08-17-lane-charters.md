@@ -124,11 +124,20 @@ Escalate to the coordinator, not to the human, when the blocker is another lane.
 - **A fresh worktree fails about 50 tests for missing gitignored tooling.** Run
   `bash scripts/bootstrap_tools.sh` and `uv run python scripts/fetch_corpus_repositories.py` once
   per checkout. Do this before you believe any failure.
-- **Postgres is shared, on port 5433, and it bounces.** A run that fails in the hundreds with
-  `the database system is starting up`, `is in recovery mode`, or `connection failed` is
-  environmental. Wait for `docker exec sync-postgres-1 pg_isready -U sync`, then re-run. Do not
-  debug it and do not restart the container -- five other agents are using it.
+- **Postgres is shared, on port 5433, and it bounces -- but read the failure text, never the
+  count.** This note used to say a run failing in the hundreds is environmental, and that phrasing
+  was itself a hazard: on 2026-08-17 `main` was 60 tests red for a real reason while Postgres
+  accepted connections throughout, using one connection of three hundred, and the count alone would
+  have sent every lane to the wrong conclusion. **Environmental** means the failures carry
+  `the database system is starting up`, `is in recovery mode`, or `connection failed`; then wait for
+  `docker exec sync-postgres-1 pg_isready -U sync` and re-run. Anything else -- a `KeyError`, a
+  `GraphRecursionError`, an `IndexError` -- is a real regression wearing a large number.
+  Do not restart the container: five other agents are using it.
 - **`python3` does not exist here.** The interpreter is `python`. `uv` only; never Poetry.
+- **A crashed xdist worker prints `F` against tests that never ran, at any `-n`.** Measured at
+  `-n 4` on 2026-08-17: about thirty phantom failures in a run cut off before its summary, reading
+  as a catastrophic regression that did not exist. `-n 4` is the better default but it is not a cure
+  for this, so a run without a summary line is not a result -- re-run it before reporting anything.
 - **Use `-n 4`, not `-n auto`, for the full suite.** `-n0` is unusable here -- it takes long enough that nobody runs it -- but `-n auto` is not the safe opposite: it has crashed an xdist worker outright on this machine (`INTERNALERROR ... KeyError: <WorkerController gw7>`) and Lane C measured the same thing independently. A crashed worker aborts the run, which reads as a catastrophic failure and is not one. `-n 4` is the working default; a single test file is fine with `-n0`.
 - **Never `git stash`.** `refs/stash` is one stack shared by every worktree of this repository, so
   a pop in your tree can take another agent's work.
