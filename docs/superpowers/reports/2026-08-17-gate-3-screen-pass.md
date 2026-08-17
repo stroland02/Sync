@@ -1,5 +1,23 @@
 # Gate 3 — does anything on this screen assert a number nothing computed?
 
+> **Re-signed 2026-08-17 evening, and this file is the signature the meter reads.**
+> The original pass below was signed at 11:10. The console changed at 11:54 — `M14-W277` (Fleet
+> reads the change-unit grain), `M14-W278` (Settings composed as a grid) and `M14-W279` — and
+> `M14-W340` then made the console servable as static assets behind one shared credential, which is
+> a different runtime rather than a different screen.
+>
+> **Each of those was re-walked and the gate still holds.** The evidence is in
+> `2026-08-17-gate-3-resign.md`: six endpoints compared byte for byte between the API and the
+> production proxy, a 404 confirmed to pass through as a 404 rather than collapsing into an
+> absence, and the screens walked in Chrome on the built assets behind the gate.
+>
+> **This note is also the mechanism.** `scripts/beta_gates.py` dates a signature by the last commit
+> touching *this* file, so a re-sign written only to a neighbouring file leaves the meter reading
+> the original date and reporting `CANNOT TELL` — which is exactly what happened. A re-sign is
+> recorded here, in the file the meter reads. Verified before writing it: `web/src` has not changed
+> since `6b68397` at 11:54:54, so this signature covers the console as it stands rather than
+> claiming coverage of work that landed afterwards.
+
 **2026-08-17.** Beta sign-off evidence, gathered during the closing measured walk (Task 15 of
 `2026-08-17-console-mock-parity.md`), against the console running live at 1440×900 over the seeded
 fixture (`seed-console-repo-a`, `seed-console-repo-b`, vendors `seed-console-stripe` /
