@@ -855,6 +855,42 @@ def _coverage_lines(unread: Sequence[str]) -> list[str]:
     ]
 
 
+def _binding_lines(vendor: Any) -> list[str]:
+    """Why this run could bind no call site at all, or nothing when it could bind one.
+
+    The distinction `_coverage_lines` draws for a file, drawn for a whole vendor. An adapter with
+    no symbol map declines every symbol, both indexers skip every call, and the run prints the
+    same zero for a repository that calls the vendor and one that has never imported it. Neither
+    is an error and neither raises, so the count is the only thing a reader gets -- and holding
+    only the count, they cannot recover which of the two they are looking at.
+
+    That is the shape `select_language_adapter` refuses in its own docstring, "a run that appears
+    to work and establishes nothing", reached from the other side: the language matched, the
+    repository was walked, and nothing downstream of `operation_for_symbol` could ever fire.
+
+    `unbindable_reason` is optional the way `unverifiable_reason` and `sdk_bindings` are, and the
+    default runs in the safe direction. An adapter that declares nothing is reported as ordinary,
+    so a third party's adapter written before the field existed goes on running unqualified; the
+    cost of that default is a silent zero for an adapter nobody has updated, and the cost of the
+    other one is a qualification printed over every real measurement, which retires itself by
+    teaching the reader to skip it.
+
+    Nothing here is composed about the vendor. The sentence naming what is missing is the
+    adapter's, because the substrate that failed to produce a map is the only thing that knows
+    why -- a message written at this boundary would be `cli.py` holding vendor knowledge, and
+    would have to be edited for each new way of failing to bind.
+    """
+    reason = getattr(vendor, "unbindable_reason", None)
+    if not reason:
+        return []
+    return [
+        f"no call site can bind to '{vendor.vendor_id}' in any repository",
+        f"  {reason}",
+        "  The count below is not a measurement: a repository that calls this vendor arrives "
+        "at the same zero.",
+    ]
+
+
 def _detector_suite(
     store: GraphStore,
     *,
@@ -1094,9 +1130,11 @@ def run(args: argparse.Namespace, today: date | None = None) -> int:
                 store,
             )
 
-        # Before the finding count, because it qualifies it. A reader who sees the number first
-        # has already drawn a conclusion from it.
-        for line in _coverage_lines(unread):
+        # Before the finding count, because they qualify it. A reader who sees the number first
+        # has already drawn a conclusion from it. The binding gap leads, because it is the wider
+        # of the two: unread paths cost part of the answer, and a vendor that binds nothing
+        # means there was never an answer to cost.
+        for line in _binding_lines(vendor) + _coverage_lines(unread):
             print(line)
 
         print(f"{len(findings)} finding(s)")
