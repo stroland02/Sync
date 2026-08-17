@@ -315,3 +315,78 @@ decision. The Gate 3 evidence in
 `docs/superpowers/reports/2026-08-17-gate-3-screen-pass.md` covers a different question — whether
 any number on these screens is asserted rather than sourced — and should be read alongside this
 table, not instead of it.
+
+---
+
+## M14-W278: the grid layout, closed on this table's own number
+
+**2026-08-17, later still.** The owner's 2026-08-07 complaint — "the console's layout is one
+vertical stack where it should be a grid" — had a sibling half (Fleet's prose-to-data ratio) land
+as M14-W277 just before this item started. This is the surviving half. The instruction was to
+measure first and change only what the measurement justified, using this file's own snippet
+verbatim rather than a new one. Full raw output, the RED/GREEN test evidence, and the
+viewport/server-stop confirmations are in
+`.superpowers/sdd/2026-08-17-console-mock-parity/m12-grid-report.md`.
+
+### Before table (re-measured, prior to any change this item made)
+
+| # | Route | Task 15 closing `sideBySideRegions` | Re-measured | Clears >= 1? |
+|---|---|---|---|---|
+| 1 | `/` (Fleet) | 10 | 11 | yes |
+| 2 | `/repositories/seed-console-repo-a` (Codebase) | 12 | 9 | yes |
+| 3 | `/vendors/seed-console-stripe` (Vendor) | 12 | 12 | yes |
+| 4 | `/repositories/seed-console-repo-a/observed` (Signals) | 4 | 4 | yes |
+| 5 | `/bindings/.../PostCharges` (Binding surface) | 7 | 7 | yes |
+| 6 | `/detectors` | 5 | 5 | yes |
+| 7 | `/findings/9f176dea…` (Finding) | 5 | 5 | yes |
+| 8 | `/findings/9f176dea…/workflow` (Workflow) | 25 | 25 | yes |
+| 9 | `/findings/9f176dea…/workflow/pull-request` (PR) | 8 | 8 | yes |
+| 10 | `/settings` | 0 | **0** | **no** |
+
+Fleet's 10→11 and Codebase's 12→9 are both traced to `ChangeUnitsTable` row counts, not to any
+layout change: Fleet's move is ordinary data-volume noise on a metric that counts DOM containers,
+and Codebase's drop is the direct, correct consequence of W277 scoping `GET /api/change-units` to
+one repository (fewer rows for one repository than for the whole fleet is what scoping means) —
+confirmed against `git show c2162cf -- web/src/features/repositories/codebase-page.tsx`, a
+one-line diff passing `repoId` through. Neither is a regression and neither was touched here.
+
+### Decision
+
+Routes 1–9 already clear the bar and were left alone — restyling any of them "to look busier"
+is exactly the failure the brief warned against, and a route that already clears the bar is
+reported with its number rather than forced into a new shape. `/settings` still measured 0, same
+as Task 15's first reading. Ruled (`.claude/rules/autonomous-development.md`): fix it. `routes.ts`
+declaring Settings outside `GRAPH_LEVELS` governs which hierarchy test applies to it, not whether
+the console's one other structural convention — regions beside regions — should. Its two blocks
+(`Adapters`, a wide table; `Merge policy`, two short paragraphs) were already independently
+meaningful content with no synthetic tile required to pair them, so `settings-page.tsx` was wired
+onto the existing `DetailGrid` (`web/src/layouts/detail-grid.tsx`) rather than a sixth grid
+literal: `PageHeader` in the `header` slot, `Merge policy` as the rail, `Adapters` keeping the
+wide column for its table. No sentence was reworded — both refusal paragraphs and the Adapters
+intro are guarded verbatim by `settings-page.test.tsx`, which also proves the wiring itself: RED
+before the change (`expected 543 to be less than 141` — Adapters preceded Merge policy in DOM
+order under the old stack), GREEN after.
+
+### After table
+
+| # | Route | Before | After | Changed? |
+|---|---|---|---|---|
+| 1 | `/` | 11 | 11 | no — already clears |
+| 2 | `/repositories/seed-console-repo-a` | 9 | 9 | no — already clears |
+| 3 | `/vendors/seed-console-stripe` | 12 | 12 | no — already clears |
+| 4 | `/repositories/seed-console-repo-a/observed` | 4 | 4 | no — already clears |
+| 5 | `/bindings/.../PostCharges` | 7 | 7 | no — already clears |
+| 6 | `/detectors` | 5 | 5 | no — already clears |
+| 7 | `/findings/9f176dea…` | 5 | 5 | no — already clears |
+| 8 | `/findings/9f176dea…/workflow` | 25 | 25 | no — already clears |
+| 9 | `/findings/9f176dea…/workflow/pull-request` | 8 | 8 | no — already clears |
+| 10 | `/settings` | **0** | **1** | **yes — fixed** |
+
+All ten routes now clear the `>= 1` bar. Re-measured live after the fix:
+`{"typeMax":46,"typeMin":12,"typeRange":"3.83","sideBySideRegions":1,"framePx":40}`.
+
+### Gate
+
+`cd web && npm test` — 329 tests passed (327 base + 2 new), none went red. `npm run build` clean.
+`npm run lint` — zero new warnings. `uv run pytest tests/test_console_raw_utilities.py -q` — 1
+passed, baseline still empty. This item touched no Python.

@@ -16,12 +16,20 @@
  * `sync.forge`. Rendering a panel reading "Squash and merge" would be the console asserting a fact
  * about the system that the system does not hold, which is the exact failure the honesty rules
  * exist to prevent. What is on screen instead is what would have to exist first.
+ *
+ * **M14-W278 put the two blocks in `DetailGrid` rather than a single flex-col stack.** Measured
+ * against `docs/superpowers/reports/2026-08-17-console-mock-gaps.md`'s own snippet, this was the
+ * one route among the ten measured that still read `sideBySideRegions: 0` — a destination, not a
+ * level, but still a screen with no region beside another. Merge policy is the shorter of the two
+ * blocks and sits in the rail; Adapters keeps the wide column, because its table is the one thing
+ * on this screen that needs the room. No sentence moved changed a word.
  */
 
 import { useAdapters } from "@/api/queries"
 import { ErrorState, LoadingState } from "@/components/states"
 import { AdapterTable } from "@/features/settings/adapter-table"
 import { Breadcrumbs } from "@/layouts/breadcrumbs"
+import { DetailGrid } from "@/layouts/detail-grid"
 import { PageHeader } from "@/layouts/page-header"
 
 const DEFAULT_QUESTION =
@@ -36,14 +44,31 @@ export function SettingsPage({ question = DEFAULT_QUESTION }: SettingsPageProps)
   const query = useAdapters()
 
   return (
-    <section className="flex flex-col gap-8">
-      <PageHeader
-        title="Settings"
-        question={question}
-        trail={<Breadcrumbs trail={[{ label: "Settings" }]} />}
-      />
-
-      <div className="flex flex-col gap-section">
+    <DetailGrid
+      header={
+        <PageHeader
+          title="Settings"
+          question={question}
+          trail={<Breadcrumbs trail={[{ label: "Settings" }]} />}
+        />
+      }
+      rail={
+        <div className="flex flex-col gap-field">
+          <h2 className="text-emphasis">Merge policy</h2>
+          <p className="text-body text-muted-foreground">
+            Sync has no merge policy to show. Nothing in the pull-request path reads a configured
+            merge strategy, a required-reviewer rule or an auto-merge switch; every pull request is
+            opened the same way and left for a human. A panel naming a policy here would describe a
+            setting that does not exist.
+          </p>
+          <p className="text-body text-muted-foreground">
+            What has to land first is the write path this whole screen is read-only for. Until then
+            the honest state of the deployment's policy is that it is your forge's, not Sync's.
+          </p>
+        </div>
+      }
+    >
+      <div className="flex min-w-0 flex-col gap-section">
         <div className="flex flex-col gap-field">
           <h2 className="text-emphasis">Adapters</h2>
           <p className="text-body text-muted-foreground">
@@ -56,20 +81,6 @@ export function SettingsPage({ question = DEFAULT_QUESTION }: SettingsPageProps)
         {query.isError && <ErrorState error={query.error} what="the adapter inventory" />}
         {query.isSuccess && <AdapterTable adapters={query.data.adapters} />}
       </div>
-
-      <div className="flex flex-col gap-field">
-        <h2 className="text-emphasis">Merge policy</h2>
-        <p className="text-body text-muted-foreground">
-          Sync has no merge policy to show. Nothing in the pull-request path reads a configured
-          merge strategy, a required-reviewer rule or an auto-merge switch; every pull request is
-          opened the same way and left for a human. A panel naming a policy here would describe a
-          setting that does not exist.
-        </p>
-        <p className="text-body text-muted-foreground">
-          What has to land first is the write path this whole screen is read-only for. Until then
-          the honest state of the deployment's policy is that it is your forge's, not Sync's.
-        </p>
-      </div>
-    </section>
+    </DetailGrid>
   )
 }
