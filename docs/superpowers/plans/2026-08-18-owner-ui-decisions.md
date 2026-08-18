@@ -568,3 +568,77 @@ vendor's share of a real total is a measurement rendered proportionally. It does
 composite unless it starts averaging two different facts — which is what `M14-W394` caught in the
 adopted cards, where a filled track over `openFindings / callSites` was a rate wearing a bar's
 clothes.
+
+## Round thirteen: decisions 65-67
+
+**65. The diff renders unified and syntax-highlighted.** One column, removals above additions, with
+the file name and `3 files · +12 −9`. **Rejected: split view**, which needs width the dense layout
+does not have, and **rejected: pinning the call site inside the diff** — the finding already names
+the line and decision 66 makes that line clickable.
+
+**66. Clicking a file path anywhere opens a source drawer with the line highlighted**, and an
+`Open on GitHub ↗` escape hatch. **Rejected: linking straight out to GitHub**, and **rejected:
+copying the path.**
+
+**This is the first UI decision that changes what the backend must hold, and it needs a threat-model
+answer before it is built.** To render `src/api/billing.ts:41` in a drawer, something must serve that
+file's contents. Sync clones a customer repository to index it. **The question this decision forces
+is whether that clone is retained after the run, and that is not a console question** —
+`docs/superpowers/specs/2026-07-25-sync-threat-model.md` is where it belongs.
+
+Three routes, and they are not equivalent:
+
+- **Serve from a retained clone.** Simplest, and it means customer source sits at rest on Sync's disk
+  between runs. That is a claim the threat model currently does not make.
+- **Fetch on demand from the forge.** Nothing at rest, but it needs a credential with read access at
+  view time, and `CLAUDE.md`'s *we never hold customer secrets* is unqualified.
+- **Store only the lines the graph references**, with their context window, at index time. Bounded,
+  attributable, and it is the only one of the three where what Sync holds is exactly what it has
+  already told the customer it looked at.
+
+**The third is the one that fits what this product says about itself**, and it is a coordinator
+recommendation rather than a ruling — the owner decides, and it is a threat-model amendment either
+way. **`Open on GitHub ↗` must exist regardless**, because it is the answer when the drawer cannot
+show a file.
+
+**67. Tool calls in the Activity transcript render as typed cards, expanded by default.** Each node
+renders as itself — `locate`, `patch`, `verify`, `push` — with its duration and its own fields.
+**Rejected: collapsed by default**, and **rejected: a plain chronological log.**
+
+**Expanded-by-default is the honest choice and the expensive one.** Nothing about the run is behind a
+click, which is the position this screen exists to take — but it also means a long run is a long
+page, and a card with nothing to show must say so rather than rendering an empty expansion.
+
+## Round fourteen: decisions 68-71
+
+**68. The breadcrumb shows the full path and every segment is a link**, the last one plain text.
+`checkout › API Services › stripe › PostCharges › Solution workflow`. **Rejected: collapsing the
+middle**, and **rejected: a back link only.**
+
+**69. A destructive action opens a dialog naming the consequence** — what is removed, with counts,
+and what survives. **Rejected: type-the-name**, and **rejected: do-it-with-undo**, which would have
+required a soft-delete column built for a control rather than for a fact.
+
+**Those counts must be real, and this is the whole reason the dialog is the right one.** `Removes
+1,204 call sites, 31 findings, 18 runs / Keeps 2 open pull requests` is a claim, and a dialog that
+guesses is worse than one that does not offer the number. **A count the query cannot establish says
+so; it never renders `0`.** A dialog that says *removes 0 findings* about a workspace whose findings
+were never counted is the absence-into-zero failure at the one moment it is irreversible.
+
+**70. A global search field lives in the rail**, searching call sites, findings, vendors, operations
+and files across the workspace, with results grouped by type and counted.
+
+**This does not merge with decision 43's command palette, and neither replaces the other.** The
+palette navigates to *named things* and holds no actions. Rail search looks *inside* the workspace's
+content. Building one and calling it the other would leave a reader unable to find a file path by
+its middle segment, which is exactly what rail search is for. **Two components, one index, and the
+counts beside each group are the valuable part — they say what you would get before you click.**
+
+**71. A long identifier truncates from the start and keeps the filename and line.**
+`…/internal/charge-handler.ts:41`.
+
+**The failure mode this creates has to be handled rather than accepted.** Two different files with
+the same basename truncate to the same string. So the **full path goes in the `title` attribute and
+the accessible name** — as decisions 60 and 65 already require for hovered precision — and the source
+drawer shows it whole. **Where two visible rows would truncate identically, the column widens rather
+than lying**; identical-looking rows that are different records is a worse table than a wide one.

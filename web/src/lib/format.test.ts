@@ -11,7 +11,7 @@
 
 import { afterEach, describe, expect, it, vi } from "vitest"
 
-import { describeRung, pathAfter } from "@/lib/format"
+import { describeRange, describeRung, pathAfter } from "@/lib/format"
 import type { BindingSource } from "@/api/types"
 
 afterEach(() => {
@@ -82,5 +82,34 @@ describe("pathAfter", () => {
     // An empty cell would be a row that names no file at all, which is worse than a repeated
     // prefix.
     expect(pathAfter("packages/billing/", "packages/billing/")).toBe("packages/billing/")
+  })
+})
+
+describe("describeRange with a filter active", () => {
+  it("says a bare range when nothing is filtered out", () => {
+    expect(describeRange(0, 50, 200)).toBe("1–50 of 200")
+  })
+
+  it("never lets a filtered count read as the whole set", () => {
+    // Decision 60: the footer is the only thing standing between a filtered table and being read
+    // as everything, because the owner did not take filter chips. A bare "1-4 of 4" under a
+    // narrowed table is the claim this refuses.
+    expect(describeRange(0, 4, 4, 31)).toBe("1–4 of 4 matched, 27 filtered out")
+  })
+
+  it("keeps the range across pages rather than collapsing to the shown count", () => {
+    // The decision's own example is single-page. On page two "showing 50 of 200" would be false;
+    // the range is what stays true, and the filtered clause travels with it.
+    expect(describeRange(50, 50, 120, 900)).toBe("51–100 of 120 matched, 780 filtered out")
+  })
+
+  it("says nothing about filtering when the filter excluded nothing", () => {
+    // A filter matching everything is not a filter the reader needs warning about, and
+    // "0 filtered out" is noise that makes the real case easier to miss.
+    expect(describeRange(0, 31, 31, 31)).toBe("1–31 of 31")
+  })
+
+  it("still says none when a filter matched nothing", () => {
+    expect(describeRange(0, 0, 0, 31)).toBe("none of 31, all 31 filtered out")
   })
 })
