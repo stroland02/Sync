@@ -700,3 +700,41 @@ actually needs to know.
 `CLAUDE.md:63` is amended by the owner to this extent and no further: **motion reflecting a received
 transition is permitted. A composite score, a health figure, a traffic light and a green dot standing
 for aggregate wellness remain refused.**
+
+## Round sixteen: decisions 76-79, the motion system
+
+**76. Server-sent events push every transition.** `GET /api/events` as `text/event-stream`, carrying
+`run.stage`, `finding.opened` and the rest. **Rejected: polling**, and **rejected: push with a
+polling fallback.**
+
+**This is backend work before it is motion work**, and it is the thing that makes the rest honest:
+animation binds to a received event, so a row moves at the moment the transition actually happened.
+**A dropped stream is a state the console must render**, not one it may hide — if the connection
+fails there is no fallback by decision, so the screen says the stream is down and what it last saw.
+
+**77. A changed value swaps to its new figure with the delta beside it**, `31 ↑+1`, fading after ten
+seconds. **Rejected: counting up**, and this rejection is load-bearing — a rolling counter renders
+`1,207` on its way to `1,216`, and **`1,207` is a number nothing ever measured.** For four hundred
+milliseconds the console states a figure that was never true.
+
+**78. The canvas streams nodes as files are read, then settles the layout when the index completes**,
+about 600ms. Edges draw straight during the stream and relax at the end. **Rejected: a progress bar
+followed by the finished graph**, which hides the moment worth watching.
+
+**79. Maximum motion — staggered entrances, charts drawing in, panels springing, page cross-fades.**
+
+**Two reconciliations, because 79 as previewed contradicts 77 and omits an accessibility default.**
+
+1. **Numbers do not roll.** 79's preview lists rolling numbers among the maximum set; **decision 77
+   is the specific ruling on a changing value and it governs.** Rich motion everywhere else, swap
+   plus delta on figures. A lane building a rolling counter and citing 79 has misread the pair.
+2. **`prefers-reduced-motion` is still respected in full.** It was named in the two options not
+   chosen, and the chosen one did not say to drop it. **Honouring it is the platform default, not a
+   reduction of the owner's choice** — recorded as an assumption the owner can reverse, and it is the
+   difference between a premium interface and one that makes some people ill.
+
+**One performance bound, stated now rather than discovered on stage.** Dense tables are 50 rows
+(decision 40); a 30ms stagger across 50 rows is a page that takes a second and a half to finish
+arriving. **The stagger caps at the first 12 rows and the remainder appear together** — the effect
+is entirely in the first few anyway, and a demo that visibly crawls on real data is worse than one
+that never staggered.
