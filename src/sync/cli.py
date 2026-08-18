@@ -39,7 +39,7 @@ from sync.forge.webhook import (
     record_merge_outcome,
 )
 from sync.graph.store import DEFAULT_DSN, GraphStore
-from sync.index.codebase import _resolve_repo_ref, index_codebase
+from sync.index.codebase import _resolve_repo_ref, index_codebase, remote_repo_id
 from sync.index.literals import index_operation_literals
 from sync.index.python_lang import PythonAdapter
 from sync.index.typescript import TypeScriptAdapter
@@ -259,33 +259,10 @@ def select_language_adapter(repo: RepoRef, vendor_adapter: Any) -> Any:
     )
 
 
-_SCHEME = re.compile(r"^[A-Za-z][A-Za-z0-9+.-]*://")
-_PORT = re.compile(r":\d+/")
-
-
-def _repo_id(url: str) -> str:
-    """A repository's identity, derived from its remote rather than its checkout.
-
-    Call site ids hash `repo_id`, so this value decides whether two customers
-    whose `src/billing.ts` both call `stripe.charges.create` occupy one row or
-    two. Every spelling of one remote has to reduce to one string: scheme,
-    trailing `.git`, scp-style `git@host:owner/name`, a port, an embedded
-    credential. The credential in particular must not survive, because the
-    result is written to every `call_site` row and hashed into the branch name
-    the forge pushes.
-
-    Path case is preserved. GitHub is case-insensitive there, but not every
-    host is, and splitting one repository in two is a cheaper mistake than
-    merging two distinct ones.
-    """
-    remote = _SCHEME.sub("", url.strip().rstrip("/"))
-    userinfo, at, rest = remote.partition("@")
-    if at and "/" not in userinfo:
-        remote = rest
-    remote = _PORT.sub("/", remote, count=1)
-    remote = remote.replace(":", "/", 1)
-    host, _, path = remote.removesuffix(".git").partition("/")
-    return f"{host.lower()}/{path}"
+# Moved to `sync.index.codebase.remote_repo_id` on 2026-08-18, because both derivation paths
+# must read one function: `run` normalizes the remote it was given, and `sync index` normalizes
+# the checkout's own origin, or one repository holds two identities depending on which door it
+# came in through.
 
 
 # The schemes a forge-addressable remote is spelled with, plus the scp-style form git accepts
@@ -329,7 +306,7 @@ def _clone(url: str, dest: Path) -> RepoRef:
         ["git", "rev-parse", "HEAD"], cwd=dest,
         capture_output=True, text=True, encoding="utf-8", check=True,
     ).stdout.strip()
-    return RepoRef(repo_id=_repo_id(url), url=url, local_path=str(dest), head_sha=head)
+    return RepoRef(repo_id=remote_repo_id(url), url=url, local_path=str(dest), head_sha=head)
 
 
 def _git(args: list[str], cwd: Path) -> None:

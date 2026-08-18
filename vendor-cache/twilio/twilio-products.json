@@ -1,0 +1,22 @@
+[
+  {
+    "filename": "twilio_messaging_v1.json",
+    "domain": "messaging",
+    "version": "v1"
+  },
+  {
+    "filename": "twilio_verify_v2.json",
+    "domain": "verify",
+    "version": "v2"
+  },
+  {
+    "filename": "twilio_conversations_v1.json",
+    "domain": "conversations",
+    "version": "v1"
+  },
+  {
+    "filename": "twilio_lookups_v2.json",
+    "domain": "lookups",
+    "version": "v2"
+  }
+]

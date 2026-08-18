@@ -1,0 +1,1142 @@
+{
+  "twilio.messaging.v1.services.alpha_senders.create": {
+    "operation_id": "CreateAlphaSender",
+    "http_method": "post",
+    "path": "/v1/Services/{ServiceSid}/AlphaSenders"
+  },
+  "twilio.messaging.v1.services.alpha_senders.list": {
+    "operation_id": "ListAlphaSender",
+    "http_method": "get",
+    "path": "/v1/Services/{ServiceSid}/AlphaSenders"
+  },
+  "twilio.messaging.v1.services.alpha_senders.fetch": {
+    "operation_id": "FetchAlphaSender",
+    "http_method": "get",
+    "path": "/v1/Services/{ServiceSid}/AlphaSenders/{Sid}"
+  },
+  "twilio.messaging.v1.services.alpha_senders.delete": {
+    "operation_id": "DeleteAlphaSender",
+    "http_method": "delete",
+    "path": "/v1/Services/{ServiceSid}/AlphaSenders/{Sid}"
+  },
+  "twilio.messaging.v1.brand_registrations.brand_registration_otps.create": {
+    "operation_id": "CreateBrandRegistrationOtp",
+    "http_method": "post",
+    "path": "/v1/a2p/BrandRegistrations/{BrandRegistrationSid}/SmsOtp"
+  },
+  "twilio.messaging.v1.brand_registrations.fetch": {
+    "operation_id": "FetchBrandRegistrations",
+    "http_method": "get",
+    "path": "/v1/a2p/BrandRegistrations/{Sid}"
+  },
+  "twilio.messaging.v1.brand_registrations.update": {
+    "operation_id": "UpdateBrandRegistrations",
+    "http_method": "post",
+    "path": "/v1/a2p/BrandRegistrations/{Sid}"
+  },
+  "twilio.messaging.v1.brand_registrations.list": {
+    "operation_id": "ListBrandRegistrations",
+    "http_method": "get",
+    "path": "/v1/a2p/BrandRegistrations"
+  },
+  "twilio.messaging.v1.brand_registrations.create": {
+    "operation_id": "CreateBrandRegistrations",
+    "http_method": "post",
+    "path": "/v1/a2p/BrandRegistrations"
+  },
+  "twilio.messaging.v1.brand_registrations.brand_vettings.create": {
+    "operation_id": "CreateBrandVetting",
+    "http_method": "post",
+    "path": "/v1/a2p/BrandRegistrations/{BrandSid}/Vettings"
+  },
+  "twilio.messaging.v1.brand_registrations.brand_vettings.list": {
+    "operation_id": "ListBrandVetting",
+    "http_method": "get",
+    "path": "/v1/a2p/BrandRegistrations/{BrandSid}/Vettings"
+  },
+  "twilio.messaging.v1.brand_registrations.brand_vettings.fetch": {
+    "operation_id": "FetchBrandVetting",
+    "http_method": "get",
+    "path": "/v1/a2p/BrandRegistrations/{BrandSid}/Vettings/{BrandVettingSid}"
+  },
+  "twilio.messaging.v1.services.channel_senders.list": {
+    "operation_id": "ListChannelSender",
+    "http_method": "get",
+    "path": "/v1/Services/{MessagingServiceSid}/ChannelSenders"
+  },
+  "twilio.messaging.v1.services.channel_senders.create": {
+    "operation_id": "CreateChannelSender",
+    "http_method": "post",
+    "path": "/v1/Services/{MessagingServiceSid}/ChannelSenders"
+  },
+  "twilio.messaging.v1.services.channel_senders.fetch": {
+    "operation_id": "FetchChannelSender",
+    "http_method": "get",
+    "path": "/v1/Services/{MessagingServiceSid}/ChannelSenders/{Sid}"
+  },
+  "twilio.messaging.v1.services.channel_senders.delete": {
+    "operation_id": "DeleteChannelSender",
+    "http_method": "delete",
+    "path": "/v1/Services/{MessagingServiceSid}/ChannelSenders/{Sid}"
+  },
+  "twilio.messaging.v1.deactivations.fetch": {
+    "operation_id": "FetchDeactivation",
+    "http_method": "get",
+    "path": "/v1/Deactivations"
+  },
+  "twilio.messaging.v1.services.destination_alpha_senders.create": {
+    "operation_id": "CreateDestinationAlphaSender",
+    "http_method": "post",
+    "path": "/v1/Services/{ServiceSid}/DestinationAlphaSenders"
+  },
+  "twilio.messaging.v1.services.destination_alpha_senders.list": {
+    "operation_id": "ListDestinationAlphaSender",
+    "http_method": "get",
+    "path": "/v1/Services/{ServiceSid}/DestinationAlphaSenders"
+  },
+  "twilio.messaging.v1.services.destination_alpha_senders.fetch": {
+    "operation_id": "FetchDestinationAlphaSender",
+    "http_method": "get",
+    "path": "/v1/Services/{ServiceSid}/DestinationAlphaSenders/{Sid}"
+  },
+  "twilio.messaging.v1.services.destination_alpha_senders.delete": {
+    "operation_id": "DeleteDestinationAlphaSender",
+    "http_method": "delete",
+    "path": "/v1/Services/{ServiceSid}/DestinationAlphaSenders/{Sid}"
+  },
+  "twilio.messaging.v1.domain_certs.update": {
+    "operation_id": "UpdateDomainCertV4",
+    "http_method": "post",
+    "path": "/v1/LinkShortening/Domains/{DomainSid}/Certificate"
+  },
+  "twilio.messaging.v1.domain_certs.fetch": {
+    "operation_id": "FetchDomainCertV4",
+    "http_method": "get",
+    "path": "/v1/LinkShortening/Domains/{DomainSid}/Certificate"
+  },
+  "twilio.messaging.v1.domain_certs.delete": {
+    "operation_id": "DeleteDomainCertV4",
+    "http_method": "delete",
+    "path": "/v1/LinkShortening/Domains/{DomainSid}/Certificate"
+  },
+  "twilio.messaging.v1.domain_config.update": {
+    "operation_id": "UpdateDomainConfig",
+    "http_method": "post",
+    "path": "/v1/LinkShortening/Domains/{DomainSid}/Config"
+  },
+  "twilio.messaging.v1.domain_config.fetch": {
+    "operation_id": "FetchDomainConfig",
+    "http_method": "get",
+    "path": "/v1/LinkShortening/Domains/{DomainSid}/Config"
+  },
+  "twilio.messaging.v1.domain_config_messaging_service.fetch": {
+    "operation_id": "FetchDomainConfigMessagingService",
+    "http_method": "get",
+    "path": "/v1/LinkShortening/MessagingService/{MessagingServiceSid}/DomainConfig"
+  },
+  "twilio.messaging.v1.domain_validate_dns.fetch": {
+    "operation_id": "FetchDomainDnsValidation",
+    "http_method": "get",
+    "path": "/v1/LinkShortening/Domains/{DomainSid}/ValidateDns"
+  },
+  "twilio.messaging.v1.external_campaign.create": {
+    "operation_id": "CreateExternalCampaign",
+    "http_method": "post",
+    "path": "/v1/Services/PreregisteredUsa2p"
+  },
+  "twilio.messaging.v1.linkshortening_messaging_service.create": {
+    "operation_id": "CreateLinkshorteningMessagingService",
+    "http_method": "post",
+    "path": "/v1/LinkShortening/Domains/{DomainSid}/MessagingServices/{MessagingServiceSid}"
+  },
+  "twilio.messaging.v1.linkshortening_messaging_service.delete": {
+    "operation_id": "DeleteLinkshorteningMessagingService",
+    "http_method": "delete",
+    "path": "/v1/LinkShortening/Domains/{DomainSid}/MessagingServices/{MessagingServiceSid}"
+  },
+  "twilio.messaging.v1.linkshortening_messaging_service_domain_association.fetch": {
+    "operation_id": "FetchLinkshorteningMessagingServiceDomainAssociation",
+    "http_method": "get",
+    "path": "/v1/LinkShortening/MessagingServices/{MessagingServiceSid}/Domain"
+  },
+  "twilio.messaging.v1.services.phone_numbers.create": {
+    "operation_id": "CreatePhoneNumber",
+    "http_method": "post",
+    "path": "/v1/Services/{ServiceSid}/PhoneNumbers"
+  },
+  "twilio.messaging.v1.services.phone_numbers.list": {
+    "operation_id": "ListPhoneNumber",
+    "http_method": "get",
+    "path": "/v1/Services/{ServiceSid}/PhoneNumbers"
+  },
+  "twilio.messaging.v1.services.phone_numbers.delete": {
+    "operation_id": "DeletePhoneNumber",
+    "http_method": "delete",
+    "path": "/v1/Services/{ServiceSid}/PhoneNumbers/{Sid}"
+  },
+  "twilio.messaging.v1.services.phone_numbers.fetch": {
+    "operation_id": "FetchPhoneNumber",
+    "http_method": "get",
+    "path": "/v1/Services/{ServiceSid}/PhoneNumbers/{Sid}"
+  },
+  "twilio.messaging.v1.request_managed_cert.update": {
+    "operation_id": "UpdateRequestManagedCert",
+    "http_method": "post",
+    "path": "/v1/LinkShortening/Domains/{DomainSid}/RequestManagedCert"
+  },
+  "twilio.messaging.v1.services.create": {
+    "operation_id": "CreateService",
+    "http_method": "post",
+    "path": "/v1/Services"
+  },
+  "twilio.messaging.v1.services.list": {
+    "operation_id": "ListService",
+    "http_method": "get",
+    "path": "/v1/Services"
+  },
+  "twilio.messaging.v1.services.update": {
+    "operation_id": "UpdateService",
+    "http_method": "post",
+    "path": "/v1/Services/{Sid}"
+  },
+  "twilio.messaging.v1.services.fetch": {
+    "operation_id": "FetchService",
+    "http_method": "get",
+    "path": "/v1/Services/{Sid}"
+  },
+  "twilio.messaging.v1.services.delete": {
+    "operation_id": "DeleteService",
+    "http_method": "delete",
+    "path": "/v1/Services/{Sid}"
+  },
+  "twilio.messaging.v1.services.short_codes.create": {
+    "operation_id": "CreateShortCode",
+    "http_method": "post",
+    "path": "/v1/Services/{ServiceSid}/ShortCodes"
+  },
+  "twilio.messaging.v1.services.short_codes.list": {
+    "operation_id": "ListShortCode",
+    "http_method": "get",
+    "path": "/v1/Services/{ServiceSid}/ShortCodes"
+  },
+  "twilio.messaging.v1.services.short_codes.delete": {
+    "operation_id": "DeleteShortCode",
+    "http_method": "delete",
+    "path": "/v1/Services/{ServiceSid}/ShortCodes/{Sid}"
+  },
+  "twilio.messaging.v1.services.short_codes.fetch": {
+    "operation_id": "FetchShortCode",
+    "http_method": "get",
+    "path": "/v1/Services/{ServiceSid}/ShortCodes/{Sid}"
+  },
+  "twilio.messaging.v1.tollfree_verifications.fetch": {
+    "operation_id": "FetchTollfreeVerification",
+    "http_method": "get",
+    "path": "/v1/Tollfree/Verifications/{Sid}"
+  },
+  "twilio.messaging.v1.tollfree_verifications.update": {
+    "operation_id": "UpdateTollfreeVerification",
+    "http_method": "post",
+    "path": "/v1/Tollfree/Verifications/{Sid}"
+  },
+  "twilio.messaging.v1.tollfree_verifications.delete": {
+    "operation_id": "DeleteTollfreeVerification",
+    "http_method": "delete",
+    "path": "/v1/Tollfree/Verifications/{Sid}"
+  },
+  "twilio.messaging.v1.tollfree_verifications.list": {
+    "operation_id": "ListTollfreeVerification",
+    "http_method": "get",
+    "path": "/v1/Tollfree/Verifications"
+  },
+  "twilio.messaging.v1.tollfree_verifications.create": {
+    "operation_id": "CreateTollfreeVerification",
+    "http_method": "post",
+    "path": "/v1/Tollfree/Verifications"
+  },
+  "twilio.messaging.v1.services.us_app_to_person.create": {
+    "operation_id": "CreateUsAppToPerson",
+    "http_method": "post",
+    "path": "/v1/Services/{MessagingServiceSid}/Compliance/Usa2p"
+  },
+  "twilio.messaging.v1.services.us_app_to_person.list": {
+    "operation_id": "ListUsAppToPerson",
+    "http_method": "get",
+    "path": "/v1/Services/{MessagingServiceSid}/Compliance/Usa2p"
+  },
+  "twilio.messaging.v1.services.us_app_to_person.delete": {
+    "operation_id": "DeleteUsAppToPerson",
+    "http_method": "delete",
+    "path": "/v1/Services/{MessagingServiceSid}/Compliance/Usa2p/{Sid}"
+  },
+  "twilio.messaging.v1.services.us_app_to_person.fetch": {
+    "operation_id": "FetchUsAppToPerson",
+    "http_method": "get",
+    "path": "/v1/Services/{MessagingServiceSid}/Compliance/Usa2p/{Sid}"
+  },
+  "twilio.messaging.v1.services.us_app_to_person.update": {
+    "operation_id": "UpdateUsAppToPerson",
+    "http_method": "post",
+    "path": "/v1/Services/{MessagingServiceSid}/Compliance/Usa2p/{Sid}"
+  },
+  "twilio.messaging.v1.services.us_app_to_person_usecases.fetch": {
+    "operation_id": "FetchUsAppToPersonUsecase",
+    "http_method": "get",
+    "path": "/v1/Services/{MessagingServiceSid}/Compliance/Usa2p/Usecases"
+  },
+  "twilio.messaging.v1.usecases.fetch": {
+    "operation_id": "FetchUsecase",
+    "http_method": "get",
+    "path": "/v1/Services/Usecases"
+  },
+  "twilio.verify.v2.services.access_tokens.create": {
+    "operation_id": "CreateAccessToken",
+    "http_method": "post",
+    "path": "/v2/Services/{ServiceSid}/AccessTokens"
+  },
+  "twilio.verify.v2.services.access_tokens.fetch": {
+    "operation_id": "FetchAccessToken",
+    "http_method": "get",
+    "path": "/v2/Services/{ServiceSid}/AccessTokens/{Sid}"
+  },
+  "twilio.verify.v2.services.rate_limits.buckets.create": {
+    "operation_id": "CreateBucket",
+    "http_method": "post",
+    "path": "/v2/Services/{ServiceSid}/RateLimits/{RateLimitSid}/Buckets"
+  },
+  "twilio.verify.v2.services.rate_limits.buckets.list": {
+    "operation_id": "ListBucket",
+    "http_method": "get",
+    "path": "/v2/Services/{ServiceSid}/RateLimits/{RateLimitSid}/Buckets"
+  },
+  "twilio.verify.v2.services.rate_limits.buckets.update": {
+    "operation_id": "UpdateBucket",
+    "http_method": "post",
+    "path": "/v2/Services/{ServiceSid}/RateLimits/{RateLimitSid}/Buckets/{Sid}"
+  },
+  "twilio.verify.v2.services.rate_limits.buckets.fetch": {
+    "operation_id": "FetchBucket",
+    "http_method": "get",
+    "path": "/v2/Services/{ServiceSid}/RateLimits/{RateLimitSid}/Buckets/{Sid}"
+  },
+  "twilio.verify.v2.services.rate_limits.buckets.delete": {
+    "operation_id": "DeleteBucket",
+    "http_method": "delete",
+    "path": "/v2/Services/{ServiceSid}/RateLimits/{RateLimitSid}/Buckets/{Sid}"
+  },
+  "twilio.verify.v2.services.entities.challenges.create": {
+    "operation_id": "CreateChallenge",
+    "http_method": "post",
+    "path": "/v2/Services/{ServiceSid}/Entities/{Identity}/Challenges"
+  },
+  "twilio.verify.v2.services.entities.challenges.list": {
+    "operation_id": "ListChallenge",
+    "http_method": "get",
+    "path": "/v2/Services/{ServiceSid}/Entities/{Identity}/Challenges"
+  },
+  "twilio.verify.v2.services.entities.challenges.fetch": {
+    "operation_id": "FetchChallenge",
+    "http_method": "get",
+    "path": "/v2/Services/{ServiceSid}/Entities/{Identity}/Challenges/{Sid}"
+  },
+  "twilio.verify.v2.services.entities.challenges.update": {
+    "operation_id": "UpdateChallenge",
+    "http_method": "post",
+    "path": "/v2/Services/{ServiceSid}/Entities/{Identity}/Challenges/{Sid}"
+  },
+  "twilio.verify.v2.services.entities.create": {
+    "operation_id": "CreateEntity",
+    "http_method": "post",
+    "path": "/v2/Services/{ServiceSid}/Entities"
+  },
+  "twilio.verify.v2.services.entities.list": {
+    "operation_id": "ListEntity",
+    "http_method": "get",
+    "path": "/v2/Services/{ServiceSid}/Entities"
+  },
+  "twilio.verify.v2.services.entities.delete": {
+    "operation_id": "DeleteEntity",
+    "http_method": "delete",
+    "path": "/v2/Services/{ServiceSid}/Entities/{Identity}"
+  },
+  "twilio.verify.v2.services.entities.fetch": {
+    "operation_id": "FetchEntity",
+    "http_method": "get",
+    "path": "/v2/Services/{ServiceSid}/Entities/{Identity}"
+  },
+  "twilio.verify.v2.services.entities.factors.delete": {
+    "operation_id": "DeleteFactor",
+    "http_method": "delete",
+    "path": "/v2/Services/{ServiceSid}/Entities/{Identity}/Factors/{Sid}"
+  },
+  "twilio.verify.v2.services.entities.factors.fetch": {
+    "operation_id": "FetchFactor",
+    "http_method": "get",
+    "path": "/v2/Services/{ServiceSid}/Entities/{Identity}/Factors/{Sid}"
+  },
+  "twilio.verify.v2.services.entities.factors.update": {
+    "operation_id": "UpdateFactor",
+    "http_method": "post",
+    "path": "/v2/Services/{ServiceSid}/Entities/{Identity}/Factors/{Sid}"
+  },
+  "twilio.verify.v2.services.entities.factors.list": {
+    "operation_id": "ListFactor",
+    "http_method": "get",
+    "path": "/v2/Services/{ServiceSid}/Entities/{Identity}/Factors"
+  },
+  "twilio.verify.v2.services.entities.factors.create": {
+    "operation_id": "CreateNewFactor",
+    "http_method": "post",
+    "path": "/v2/Services/{ServiceSid}/Entities/{Identity}/Factors"
+  },
+  "twilio.verify.v2.forms.fetch": {
+    "operation_id": "FetchForm",
+    "http_method": "get",
+    "path": "/v2/Forms/{FormType}"
+  },
+  "twilio.verify.v2.services.messaging_configurations.create": {
+    "operation_id": "CreateMessagingConfiguration",
+    "http_method": "post",
+    "path": "/v2/Services/{ServiceSid}/MessagingConfigurations"
+  },
+  "twilio.verify.v2.services.messaging_configurations.list": {
+    "operation_id": "ListMessagingConfiguration",
+    "http_method": "get",
+    "path": "/v2/Services/{ServiceSid}/MessagingConfigurations"
+  },
+  "twilio.verify.v2.services.messaging_configurations.update": {
+    "operation_id": "UpdateMessagingConfiguration",
+    "http_method": "post",
+    "path": "/v2/Services/{ServiceSid}/MessagingConfigurations/{Country}"
+  },
+  "twilio.verify.v2.services.messaging_configurations.fetch": {
+    "operation_id": "FetchMessagingConfiguration",
+    "http_method": "get",
+    "path": "/v2/Services/{ServiceSid}/MessagingConfigurations/{Country}"
+  },
+  "twilio.verify.v2.services.messaging_configurations.delete": {
+    "operation_id": "DeleteMessagingConfiguration",
+    "http_method": "delete",
+    "path": "/v2/Services/{ServiceSid}/MessagingConfigurations/{Country}"
+  },
+  "twilio.verify.v2.services.entities.challenges.notifications.create": {
+    "operation_id": "CreateNotification",
+    "http_method": "post",
+    "path": "/v2/Services/{ServiceSid}/Entities/{Identity}/Challenges/{ChallengeSid}/Notifications"
+  },
+  "twilio.verify.v2.services.rate_limits.create": {
+    "operation_id": "CreateRateLimit",
+    "http_method": "post",
+    "path": "/v2/Services/{ServiceSid}/RateLimits"
+  },
+  "twilio.verify.v2.services.rate_limits.list": {
+    "operation_id": "ListRateLimit",
+    "http_method": "get",
+    "path": "/v2/Services/{ServiceSid}/RateLimits"
+  },
+  "twilio.verify.v2.services.rate_limits.update": {
+    "operation_id": "UpdateRateLimit",
+    "http_method": "post",
+    "path": "/v2/Services/{ServiceSid}/RateLimits/{Sid}"
+  },
+  "twilio.verify.v2.services.rate_limits.fetch": {
+    "operation_id": "FetchRateLimit",
+    "http_method": "get",
+    "path": "/v2/Services/{ServiceSid}/RateLimits/{Sid}"
+  },
+  "twilio.verify.v2.services.rate_limits.delete": {
+    "operation_id": "DeleteRateLimit",
+    "http_method": "delete",
+    "path": "/v2/Services/{ServiceSid}/RateLimits/{Sid}"
+  },
+  "twilio.verify.v2.safelist.create": {
+    "operation_id": "CreateSafelist",
+    "http_method": "post",
+    "path": "/v2/SafeList/Numbers"
+  },
+  "twilio.verify.v2.safelist.fetch": {
+    "operation_id": "FetchSafelist",
+    "http_method": "get",
+    "path": "/v2/SafeList/Numbers/{PhoneNumber}"
+  },
+  "twilio.verify.v2.safelist.delete": {
+    "operation_id": "DeleteSafelist",
+    "http_method": "delete",
+    "path": "/v2/SafeList/Numbers/{PhoneNumber}"
+  },
+  "twilio.verify.v2.services.create": {
+    "operation_id": "CreateService",
+    "http_method": "post",
+    "path": "/v2/Services"
+  },
+  "twilio.verify.v2.services.list": {
+    "operation_id": "ListService",
+    "http_method": "get",
+    "path": "/v2/Services"
+  },
+  "twilio.verify.v2.services.fetch": {
+    "operation_id": "FetchService",
+    "http_method": "get",
+    "path": "/v2/Services/{Sid}"
+  },
+  "twilio.verify.v2.services.delete": {
+    "operation_id": "DeleteService",
+    "http_method": "delete",
+    "path": "/v2/Services/{Sid}"
+  },
+  "twilio.verify.v2.services.update": {
+    "operation_id": "UpdateService",
+    "http_method": "post",
+    "path": "/v2/Services/{Sid}"
+  },
+  "twilio.verify.v2.services.verifications.create": {
+    "operation_id": "CreateVerification",
+    "http_method": "post",
+    "path": "/v2/Services/{ServiceSid}/Verifications"
+  },
+  "twilio.verify.v2.services.verifications.update": {
+    "operation_id": "UpdateVerification",
+    "http_method": "post",
+    "path": "/v2/Services/{ServiceSid}/Verifications/{Sid}"
+  },
+  "twilio.verify.v2.services.verifications.fetch": {
+    "operation_id": "FetchVerification",
+    "http_method": "get",
+    "path": "/v2/Services/{ServiceSid}/Verifications/{Sid}"
+  },
+  "twilio.verify.v2.verification_attempts.list": {
+    "operation_id": "ListVerificationAttempt",
+    "http_method": "get",
+    "path": "/v2/Attempts"
+  },
+  "twilio.verify.v2.verification_attempts.fetch": {
+    "operation_id": "FetchVerificationAttempt",
+    "http_method": "get",
+    "path": "/v2/Attempts/{Sid}"
+  },
+  "twilio.verify.v2.verification_attempts_summary.fetch": {
+    "operation_id": "FetchVerificationAttemptsSummary",
+    "http_method": "get",
+    "path": "/v2/Attempts/Summary"
+  },
+  "twilio.verify.v2.services.verification_checks.create": {
+    "operation_id": "CreateVerificationCheck",
+    "http_method": "post",
+    "path": "/v2/Services/{ServiceSid}/VerificationCheck"
+  },
+  "twilio.verify.v2.templates.list": {
+    "operation_id": "ListVerificationTemplate",
+    "http_method": "get",
+    "path": "/v2/Templates"
+  },
+  "twilio.verify.v2.services.webhooks.create": {
+    "operation_id": "CreateWebhook",
+    "http_method": "post",
+    "path": "/v2/Services/{ServiceSid}/Webhooks"
+  },
+  "twilio.verify.v2.services.webhooks.list": {
+    "operation_id": "ListWebhook",
+    "http_method": "get",
+    "path": "/v2/Services/{ServiceSid}/Webhooks"
+  },
+  "twilio.verify.v2.services.webhooks.update": {
+    "operation_id": "UpdateWebhook",
+    "http_method": "post",
+    "path": "/v2/Services/{ServiceSid}/Webhooks/{Sid}"
+  },
+  "twilio.verify.v2.services.webhooks.delete": {
+    "operation_id": "DeleteWebhook",
+    "http_method": "delete",
+    "path": "/v2/Services/{ServiceSid}/Webhooks/{Sid}"
+  },
+  "twilio.verify.v2.services.webhooks.fetch": {
+    "operation_id": "FetchWebhook",
+    "http_method": "get",
+    "path": "/v2/Services/{ServiceSid}/Webhooks/{Sid}"
+  },
+  "twilio.verify.v2.services.verify_factor.update": {
+    "operation_id": "UpdatePasskeysFactor",
+    "http_method": "post",
+    "path": "/v2/Services/{ServiceSid}/Passkeys/VerifyFactor"
+  },
+  "twilio.verify.v2.services.factors.create": {
+    "operation_id": "CreateNewFactorPasskey",
+    "http_method": "post",
+    "path": "/v2/Services/{ServiceSid}/Passkeys/Factors"
+  },
+  "twilio.verify.v2.services.challenges.create": {
+    "operation_id": "CreateChallengePasskeys",
+    "http_method": "post",
+    "path": "/v2/Services/{ServiceSid}/Passkeys/Challenges"
+  },
+  "twilio.verify.v2.services.approve_challenge.update": {
+    "operation_id": "UpdateChallengePasskeys",
+    "http_method": "post",
+    "path": "/v2/Services/{ServiceSid}/Passkeys/ApproveChallenge"
+  },
+  "twilio.conversations.v1.configuration.fetch": {
+    "operation_id": "FetchConfiguration",
+    "http_method": "get",
+    "path": "/v1/Configuration"
+  },
+  "twilio.conversations.v1.configuration.update": {
+    "operation_id": "UpdateConfiguration",
+    "http_method": "post",
+    "path": "/v1/Configuration"
+  },
+  "twilio.conversations.v1.address_configurations.list": {
+    "operation_id": "ListConfigurationAddress",
+    "http_method": "get",
+    "path": "/v1/Configuration/Addresses"
+  },
+  "twilio.conversations.v1.address_configurations.create": {
+    "operation_id": "CreateConfigurationAddress",
+    "http_method": "post",
+    "path": "/v1/Configuration/Addresses"
+  },
+  "twilio.conversations.v1.address_configurations.fetch": {
+    "operation_id": "FetchConfigurationAddress",
+    "http_method": "get",
+    "path": "/v1/Configuration/Addresses/{Sid}"
+  },
+  "twilio.conversations.v1.address_configurations.update": {
+    "operation_id": "UpdateConfigurationAddress",
+    "http_method": "post",
+    "path": "/v1/Configuration/Addresses/{Sid}"
+  },
+  "twilio.conversations.v1.address_configurations.delete": {
+    "operation_id": "DeleteConfigurationAddress",
+    "http_method": "delete",
+    "path": "/v1/Configuration/Addresses/{Sid}"
+  },
+  "twilio.conversations.v1.configuration.webhooks.fetch": {
+    "operation_id": "FetchConfigurationWebhook",
+    "http_method": "get",
+    "path": "/v1/Configuration/Webhooks"
+  },
+  "twilio.conversations.v1.configuration.webhooks.update": {
+    "operation_id": "UpdateConfigurationWebhook",
+    "http_method": "post",
+    "path": "/v1/Configuration/Webhooks"
+  },
+  "twilio.conversations.v1.conversations.create": {
+    "operation_id": "CreateConversation",
+    "http_method": "post",
+    "path": "/v1/Conversations"
+  },
+  "twilio.conversations.v1.conversations.list": {
+    "operation_id": "ListConversation",
+    "http_method": "get",
+    "path": "/v1/Conversations"
+  },
+  "twilio.conversations.v1.conversations.update": {
+    "operation_id": "UpdateConversation",
+    "http_method": "post",
+    "path": "/v1/Conversations/{Sid}"
+  },
+  "twilio.conversations.v1.conversations.delete": {
+    "operation_id": "DeleteConversation",
+    "http_method": "delete",
+    "path": "/v1/Conversations/{Sid}"
+  },
+  "twilio.conversations.v1.conversations.fetch": {
+    "operation_id": "FetchConversation",
+    "http_method": "get",
+    "path": "/v1/Conversations/{Sid}"
+  },
+  "twilio.conversations.v1.conversations.messages.create": {
+    "operation_id": "CreateConversationMessage",
+    "http_method": "post",
+    "path": "/v1/Conversations/{ConversationSid}/Messages"
+  },
+  "twilio.conversations.v1.conversations.messages.list": {
+    "operation_id": "ListConversationMessage",
+    "http_method": "get",
+    "path": "/v1/Conversations/{ConversationSid}/Messages"
+  },
+  "twilio.conversations.v1.conversations.messages.update": {
+    "operation_id": "UpdateConversationMessage",
+    "http_method": "post",
+    "path": "/v1/Conversations/{ConversationSid}/Messages/{Sid}"
+  },
+  "twilio.conversations.v1.conversations.messages.delete": {
+    "operation_id": "DeleteConversationMessage",
+    "http_method": "delete",
+    "path": "/v1/Conversations/{ConversationSid}/Messages/{Sid}"
+  },
+  "twilio.conversations.v1.conversations.messages.fetch": {
+    "operation_id": "FetchConversationMessage",
+    "http_method": "get",
+    "path": "/v1/Conversations/{ConversationSid}/Messages/{Sid}"
+  },
+  "twilio.conversations.v1.conversations.messages.delivery_receipts.fetch": {
+    "operation_id": "FetchConversationMessageReceipt",
+    "http_method": "get",
+    "path": "/v1/Conversations/{ConversationSid}/Messages/{MessageSid}/Receipts/{Sid}"
+  },
+  "twilio.conversations.v1.conversations.messages.delivery_receipts.list": {
+    "operation_id": "ListConversationMessageReceipt",
+    "http_method": "get",
+    "path": "/v1/Conversations/{ConversationSid}/Messages/{MessageSid}/Receipts"
+  },
+  "twilio.conversations.v1.conversations.participants.create": {
+    "operation_id": "CreateConversationParticipant",
+    "http_method": "post",
+    "path": "/v1/Conversations/{ConversationSid}/Participants"
+  },
+  "twilio.conversations.v1.conversations.participants.list": {
+    "operation_id": "ListConversationParticipant",
+    "http_method": "get",
+    "path": "/v1/Conversations/{ConversationSid}/Participants"
+  },
+  "twilio.conversations.v1.conversations.participants.update": {
+    "operation_id": "UpdateConversationParticipant",
+    "http_method": "post",
+    "path": "/v1/Conversations/{ConversationSid}/Participants/{Sid}"
+  },
+  "twilio.conversations.v1.conversations.participants.delete": {
+    "operation_id": "DeleteConversationParticipant",
+    "http_method": "delete",
+    "path": "/v1/Conversations/{ConversationSid}/Participants/{Sid}"
+  },
+  "twilio.conversations.v1.conversations.participants.fetch": {
+    "operation_id": "FetchConversationParticipant",
+    "http_method": "get",
+    "path": "/v1/Conversations/{ConversationSid}/Participants/{Sid}"
+  },
+  "twilio.conversations.v1.conversations.webhooks.list": {
+    "operation_id": "ListConversationScopedWebhook",
+    "http_method": "get",
+    "path": "/v1/Conversations/{ConversationSid}/Webhooks"
+  },
+  "twilio.conversations.v1.conversations.webhooks.create": {
+    "operation_id": "CreateConversationScopedWebhook",
+    "http_method": "post",
+    "path": "/v1/Conversations/{ConversationSid}/Webhooks"
+  },
+  "twilio.conversations.v1.conversations.webhooks.fetch": {
+    "operation_id": "FetchConversationScopedWebhook",
+    "http_method": "get",
+    "path": "/v1/Conversations/{ConversationSid}/Webhooks/{Sid}"
+  },
+  "twilio.conversations.v1.conversations.webhooks.update": {
+    "operation_id": "UpdateConversationScopedWebhook",
+    "http_method": "post",
+    "path": "/v1/Conversations/{ConversationSid}/Webhooks/{Sid}"
+  },
+  "twilio.conversations.v1.conversations.webhooks.delete": {
+    "operation_id": "DeleteConversationScopedWebhook",
+    "http_method": "delete",
+    "path": "/v1/Conversations/{ConversationSid}/Webhooks/{Sid}"
+  },
+  "twilio.conversations.v1.conversation_with_participants.create": {
+    "operation_id": "CreateConversationWithParticipants",
+    "http_method": "post",
+    "path": "/v1/ConversationWithParticipants"
+  },
+  "twilio.conversations.v1.credentials.create": {
+    "operation_id": "CreateCredential",
+    "http_method": "post",
+    "path": "/v1/Credentials"
+  },
+  "twilio.conversations.v1.credentials.list": {
+    "operation_id": "ListCredential",
+    "http_method": "get",
+    "path": "/v1/Credentials"
+  },
+  "twilio.conversations.v1.credentials.update": {
+    "operation_id": "UpdateCredential",
+    "http_method": "post",
+    "path": "/v1/Credentials/{Sid}"
+  },
+  "twilio.conversations.v1.credentials.delete": {
+    "operation_id": "DeleteCredential",
+    "http_method": "delete",
+    "path": "/v1/Credentials/{Sid}"
+  },
+  "twilio.conversations.v1.credentials.fetch": {
+    "operation_id": "FetchCredential",
+    "http_method": "get",
+    "path": "/v1/Credentials/{Sid}"
+  },
+  "twilio.conversations.v1.participant_conversations.list": {
+    "operation_id": "ListParticipantConversation",
+    "http_method": "get",
+    "path": "/v1/ParticipantConversations"
+  },
+  "twilio.conversations.v1.roles.create": {
+    "operation_id": "CreateRole",
+    "http_method": "post",
+    "path": "/v1/Roles"
+  },
+  "twilio.conversations.v1.roles.list": {
+    "operation_id": "ListRole",
+    "http_method": "get",
+    "path": "/v1/Roles"
+  },
+  "twilio.conversations.v1.roles.update": {
+    "operation_id": "UpdateRole",
+    "http_method": "post",
+    "path": "/v1/Roles/{Sid}"
+  },
+  "twilio.conversations.v1.roles.delete": {
+    "operation_id": "DeleteRole",
+    "http_method": "delete",
+    "path": "/v1/Roles/{Sid}"
+  },
+  "twilio.conversations.v1.roles.fetch": {
+    "operation_id": "FetchRole",
+    "http_method": "get",
+    "path": "/v1/Roles/{Sid}"
+  },
+  "twilio.conversations.v1.services.create": {
+    "operation_id": "CreateService",
+    "http_method": "post",
+    "path": "/v1/Services"
+  },
+  "twilio.conversations.v1.services.list": {
+    "operation_id": "ListService",
+    "http_method": "get",
+    "path": "/v1/Services"
+  },
+  "twilio.conversations.v1.services.delete": {
+    "operation_id": "DeleteService",
+    "http_method": "delete",
+    "path": "/v1/Services/{Sid}"
+  },
+  "twilio.conversations.v1.services.fetch": {
+    "operation_id": "FetchService",
+    "http_method": "get",
+    "path": "/v1/Services/{Sid}"
+  },
+  "twilio.conversations.v1.services.bindings.delete": {
+    "operation_id": "DeleteServiceBinding",
+    "http_method": "delete",
+    "path": "/v1/Services/{ChatServiceSid}/Bindings/{Sid}"
+  },
+  "twilio.conversations.v1.services.bindings.fetch": {
+    "operation_id": "FetchServiceBinding",
+    "http_method": "get",
+    "path": "/v1/Services/{ChatServiceSid}/Bindings/{Sid}"
+  },
+  "twilio.conversations.v1.services.bindings.list": {
+    "operation_id": "ListServiceBinding",
+    "http_method": "get",
+    "path": "/v1/Services/{ChatServiceSid}/Bindings"
+  },
+  "twilio.conversations.v1.services.configuration.fetch": {
+    "operation_id": "FetchServiceConfiguration",
+    "http_method": "get",
+    "path": "/v1/Services/{ChatServiceSid}/Configuration"
+  },
+  "twilio.conversations.v1.services.configuration.update": {
+    "operation_id": "UpdateServiceConfiguration",
+    "http_method": "post",
+    "path": "/v1/Services/{ChatServiceSid}/Configuration"
+  },
+  "twilio.conversations.v1.services.conversations.create": {
+    "operation_id": "CreateServiceConversation",
+    "http_method": "post",
+    "path": "/v1/Services/{ChatServiceSid}/Conversations"
+  },
+  "twilio.conversations.v1.services.conversations.list": {
+    "operation_id": "ListServiceConversation",
+    "http_method": "get",
+    "path": "/v1/Services/{ChatServiceSid}/Conversations"
+  },
+  "twilio.conversations.v1.services.conversations.update": {
+    "operation_id": "UpdateServiceConversation",
+    "http_method": "post",
+    "path": "/v1/Services/{ChatServiceSid}/Conversations/{Sid}"
+  },
+  "twilio.conversations.v1.services.conversations.delete": {
+    "operation_id": "DeleteServiceConversation",
+    "http_method": "delete",
+    "path": "/v1/Services/{ChatServiceSid}/Conversations/{Sid}"
+  },
+  "twilio.conversations.v1.services.conversations.fetch": {
+    "operation_id": "FetchServiceConversation",
+    "http_method": "get",
+    "path": "/v1/Services/{ChatServiceSid}/Conversations/{Sid}"
+  },
+  "twilio.conversations.v1.services.conversations.messages.create": {
+    "operation_id": "CreateServiceConversationMessage",
+    "http_method": "post",
+    "path": "/v1/Services/{ChatServiceSid}/Conversations/{ConversationSid}/Messages"
+  },
+  "twilio.conversations.v1.services.conversations.messages.list": {
+    "operation_id": "ListServiceConversationMessage",
+    "http_method": "get",
+    "path": "/v1/Services/{ChatServiceSid}/Conversations/{ConversationSid}/Messages"
+  },
+  "twilio.conversations.v1.services.conversations.messages.update": {
+    "operation_id": "UpdateServiceConversationMessage",
+    "http_method": "post",
+    "path": "/v1/Services/{ChatServiceSid}/Conversations/{ConversationSid}/Messages/{Sid}"
+  },
+  "twilio.conversations.v1.services.conversations.messages.delete": {
+    "operation_id": "DeleteServiceConversationMessage",
+    "http_method": "delete",
+    "path": "/v1/Services/{ChatServiceSid}/Conversations/{ConversationSid}/Messages/{Sid}"
+  },
+  "twilio.conversations.v1.services.conversations.messages.fetch": {
+    "operation_id": "FetchServiceConversationMessage",
+    "http_method": "get",
+    "path": "/v1/Services/{ChatServiceSid}/Conversations/{ConversationSid}/Messages/{Sid}"
+  },
+  "twilio.conversations.v1.services.conversations.messages.delivery_receipts.fetch": {
+    "operation_id": "FetchServiceConversationMessageReceipt",
+    "http_method": "get",
+    "path": "/v1/Services/{ChatServiceSid}/Conversations/{ConversationSid}/Messages/{MessageSid}/Receipts/{Sid}"
+  },
+  "twilio.conversations.v1.services.conversations.messages.delivery_receipts.list": {
+    "operation_id": "ListServiceConversationMessageReceipt",
+    "http_method": "get",
+    "path": "/v1/Services/{ChatServiceSid}/Conversations/{ConversationSid}/Messages/{MessageSid}/Receipts"
+  },
+  "twilio.conversations.v1.services.conversations.participants.create": {
+    "operation_id": "CreateServiceConversationParticipant",
+    "http_method": "post",
+    "path": "/v1/Services/{ChatServiceSid}/Conversations/{ConversationSid}/Participants"
+  },
+  "twilio.conversations.v1.services.conversations.participants.list": {
+    "operation_id": "ListServiceConversationParticipant",
+    "http_method": "get",
+    "path": "/v1/Services/{ChatServiceSid}/Conversations/{ConversationSid}/Participants"
+  },
+  "twilio.conversations.v1.services.conversations.participants.update": {
+    "operation_id": "UpdateServiceConversationParticipant",
+    "http_method": "post",
+    "path": "/v1/Services/{ChatServiceSid}/Conversations/{ConversationSid}/Participants/{Sid}"
+  },
+  "twilio.conversations.v1.services.conversations.participants.delete": {
+    "operation_id": "DeleteServiceConversationParticipant",
+    "http_method": "delete",
+    "path": "/v1/Services/{ChatServiceSid}/Conversations/{ConversationSid}/Participants/{Sid}"
+  },
+  "twilio.conversations.v1.services.conversations.participants.fetch": {
+    "operation_id": "FetchServiceConversationParticipant",
+    "http_method": "get",
+    "path": "/v1/Services/{ChatServiceSid}/Conversations/{ConversationSid}/Participants/{Sid}"
+  },
+  "twilio.conversations.v1.services.conversations.webhooks.create": {
+    "operation_id": "CreateServiceConversationScopedWebhook",
+    "http_method": "post",
+    "path": "/v1/Services/{ChatServiceSid}/Conversations/{ConversationSid}/Webhooks"
+  },
+  "twilio.conversations.v1.services.conversations.webhooks.list": {
+    "operation_id": "ListServiceConversationScopedWebhook",
+    "http_method": "get",
+    "path": "/v1/Services/{ChatServiceSid}/Conversations/{ConversationSid}/Webhooks"
+  },
+  "twilio.conversations.v1.services.conversations.webhooks.update": {
+    "operation_id": "UpdateServiceConversationScopedWebhook",
+    "http_method": "post",
+    "path": "/v1/Services/{ChatServiceSid}/Conversations/{ConversationSid}/Webhooks/{Sid}"
+  },
+  "twilio.conversations.v1.services.conversations.webhooks.delete": {
+    "operation_id": "DeleteServiceConversationScopedWebhook",
+    "http_method": "delete",
+    "path": "/v1/Services/{ChatServiceSid}/Conversations/{ConversationSid}/Webhooks/{Sid}"
+  },
+  "twilio.conversations.v1.services.conversations.webhooks.fetch": {
+    "operation_id": "FetchServiceConversationScopedWebhook",
+    "http_method": "get",
+    "path": "/v1/Services/{ChatServiceSid}/Conversations/{ConversationSid}/Webhooks/{Sid}"
+  },
+  "twilio.conversations.v1.services.conversation_with_participants.create": {
+    "operation_id": "CreateServiceConversationWithParticipants",
+    "http_method": "post",
+    "path": "/v1/Services/{ChatServiceSid}/ConversationWithParticipants"
+  },
+  "twilio.conversations.v1.services.configuration.notifications.update": {
+    "operation_id": "UpdateServiceNotification",
+    "http_method": "post",
+    "path": "/v1/Services/{ChatServiceSid}/Configuration/Notifications"
+  },
+  "twilio.conversations.v1.services.configuration.notifications.fetch": {
+    "operation_id": "FetchServiceNotification",
+    "http_method": "get",
+    "path": "/v1/Services/{ChatServiceSid}/Configuration/Notifications"
+  },
+  "twilio.conversations.v1.services.participant_conversations.list": {
+    "operation_id": "ListServiceParticipantConversation",
+    "http_method": "get",
+    "path": "/v1/Services/{ChatServiceSid}/ParticipantConversations"
+  },
+  "twilio.conversations.v1.services.roles.create": {
+    "operation_id": "CreateServiceRole",
+    "http_method": "post",
+    "path": "/v1/Services/{ChatServiceSid}/Roles"
+  },
+  "twilio.conversations.v1.services.roles.list": {
+    "operation_id": "ListServiceRole",
+    "http_method": "get",
+    "path": "/v1/Services/{ChatServiceSid}/Roles"
+  },
+  "twilio.conversations.v1.services.roles.update": {
+    "operation_id": "UpdateServiceRole",
+    "http_method": "post",
+    "path": "/v1/Services/{ChatServiceSid}/Roles/{Sid}"
+  },
+  "twilio.conversations.v1.services.roles.delete": {
+    "operation_id": "DeleteServiceRole",
+    "http_method": "delete",
+    "path": "/v1/Services/{ChatServiceSid}/Roles/{Sid}"
+  },
+  "twilio.conversations.v1.services.roles.fetch": {
+    "operation_id": "FetchServiceRole",
+    "http_method": "get",
+    "path": "/v1/Services/{ChatServiceSid}/Roles/{Sid}"
+  },
+  "twilio.conversations.v1.services.users.create": {
+    "operation_id": "CreateServiceUser",
+    "http_method": "post",
+    "path": "/v1/Services/{ChatServiceSid}/Users"
+  },
+  "twilio.conversations.v1.services.users.list": {
+    "operation_id": "ListServiceUser",
+    "http_method": "get",
+    "path": "/v1/Services/{ChatServiceSid}/Users"
+  },
+  "twilio.conversations.v1.services.users.update": {
+    "operation_id": "UpdateServiceUser",
+    "http_method": "post",
+    "path": "/v1/Services/{ChatServiceSid}/Users/{Sid}"
+  },
+  "twilio.conversations.v1.services.users.delete": {
+    "operation_id": "DeleteServiceUser",
+    "http_method": "delete",
+    "path": "/v1/Services/{ChatServiceSid}/Users/{Sid}"
+  },
+  "twilio.conversations.v1.services.users.fetch": {
+    "operation_id": "FetchServiceUser",
+    "http_method": "get",
+    "path": "/v1/Services/{ChatServiceSid}/Users/{Sid}"
+  },
+  "twilio.conversations.v1.services.users.user_conversations.update": {
+    "operation_id": "UpdateServiceUserConversation",
+    "http_method": "post",
+    "path": "/v1/Services/{ChatServiceSid}/Users/{UserSid}/Conversations/{ConversationSid}"
+  },
+  "twilio.conversations.v1.services.users.user_conversations.delete": {
+    "operation_id": "DeleteServiceUserConversation",
+    "http_method": "delete",
+    "path": "/v1/Services/{ChatServiceSid}/Users/{UserSid}/Conversations/{ConversationSid}"
+  },
+  "twilio.conversations.v1.services.users.user_conversations.fetch": {
+    "operation_id": "FetchServiceUserConversation",
+    "http_method": "get",
+    "path": "/v1/Services/{ChatServiceSid}/Users/{UserSid}/Conversations/{ConversationSid}"
+  },
+  "twilio.conversations.v1.services.users.user_conversations.list": {
+    "operation_id": "ListServiceUserConversation",
+    "http_method": "get",
+    "path": "/v1/Services/{ChatServiceSid}/Users/{UserSid}/Conversations"
+  },
+  "twilio.conversations.v1.services.configuration.webhooks.update": {
+    "operation_id": "UpdateServiceWebhookConfiguration",
+    "http_method": "post",
+    "path": "/v1/Services/{ChatServiceSid}/Configuration/Webhooks"
+  },
+  "twilio.conversations.v1.services.configuration.webhooks.fetch": {
+    "operation_id": "FetchServiceWebhookConfiguration",
+    "http_method": "get",
+    "path": "/v1/Services/{ChatServiceSid}/Configuration/Webhooks"
+  },
+  "twilio.conversations.v1.users.create": {
+    "operation_id": "CreateUser",
+    "http_method": "post",
+    "path": "/v1/Users"
+  },
+  "twilio.conversations.v1.users.list": {
+    "operation_id": "ListUser",
+    "http_method": "get",
+    "path": "/v1/Users"
+  },
+  "twilio.conversations.v1.users.update": {
+    "operation_id": "UpdateUser",
+    "http_method": "post",
+    "path": "/v1/Users/{Sid}"
+  },
+  "twilio.conversations.v1.users.delete": {
+    "operation_id": "DeleteUser",
+    "http_method": "delete",
+    "path": "/v1/Users/{Sid}"
+  },
+  "twilio.conversations.v1.users.fetch": {
+    "operation_id": "FetchUser",
+    "http_method": "get",
+    "path": "/v1/Users/{Sid}"
+  },
+  "twilio.conversations.v1.users.user_conversations.update": {
+    "operation_id": "UpdateUserConversation",
+    "http_method": "post",
+    "path": "/v1/Users/{UserSid}/Conversations/{ConversationSid}"
+  },
+  "twilio.conversations.v1.users.user_conversations.delete": {
+    "operation_id": "DeleteUserConversation",
+    "http_method": "delete",
+    "path": "/v1/Users/{UserSid}/Conversations/{ConversationSid}"
+  },
+  "twilio.conversations.v1.users.user_conversations.fetch": {
+    "operation_id": "FetchUserConversation",
+    "http_method": "get",
+    "path": "/v1/Users/{UserSid}/Conversations/{ConversationSid}"
+  },
+  "twilio.conversations.v1.users.user_conversations.list": {
+    "operation_id": "ListUserConversation",
+    "http_method": "get",
+    "path": "/v1/Users/{UserSid}/Conversations"
+  },
+  "twilio.lookups.v2.phone_numbers.fetch": {
+    "operation_id": "FetchPhoneNumber",
+    "http_method": "get",
+    "path": "/v2/PhoneNumbers/{PhoneNumber}"
+  },
+  "twilio.lookups.v2.query.create": {
+    "operation_id": "CreateBulkLookup",
+    "http_method": "post",
+    "path": "/v2/batch/query"
+  },
+  "twilio.lookups.v2.rate_limits.fetch": {
+    "operation_id": "FetchLookupAccountRateLimits",
+    "http_method": "get",
+    "path": "/v2/RateLimits"
+  },
+  "twilio.lookups.v2.bucket.fetch": {
+    "operation_id": "FetchLookupRateLimit",
+    "http_method": "get",
+    "path": "/v2/RateLimits/Fields/{Field}/Bucket/{Bucket}"
+  },
+  "twilio.lookups.v2.bucket.delete": {
+    "operation_id": "DeleteLookupRateLimit",
+    "http_method": "delete",
+    "path": "/v2/RateLimits/Fields/{Field}/Bucket/{Bucket}"
+  },
+  "twilio.lookups.v2.bucket.update": {
+    "operation_id": "UpdateLookupRateLimit",
+    "http_method": "put",
+    "path": "/v2/RateLimits/Fields/{Field}/Bucket/{Bucket}"
+  },
+  "twilio.lookups.v2.lookupOverrides.fetch": {
+    "operation_id": "FetchLookupPhoneNumberOverrides",
+    "http_method": "get",
+    "path": "/v2/PhoneNumbers/{PhoneNumber}/Overrides/{Field}"
+  },
+  "twilio.lookups.v2.lookupOverrides.create": {
+    "operation_id": "CreateLookupPhoneNumberOverrides",
+    "http_method": "post",
+    "path": "/v2/PhoneNumbers/{PhoneNumber}/Overrides/{Field}"
+  },
+  "twilio.lookups.v2.lookupOverrides.update": {
+    "operation_id": "UpdateLookupPhoneNumberOverrides",
+    "http_method": "put",
+    "path": "/v2/PhoneNumbers/{PhoneNumber}/Overrides/{Field}"
+  },
+  "twilio.lookups.v2.lookupOverrides.delete": {
+    "operation_id": "DeleteLookupPhoneNumberOverrides",
+    "http_method": "delete",
+    "path": "/v2/PhoneNumbers/{PhoneNumber}/Overrides/{Field}"
+  }
+}

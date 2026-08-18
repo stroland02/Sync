@@ -4746,3 +4746,29 @@ already reads correctly as a crash rather than a clean slate).
 **Evidence that closes it:** `--no-admin` on a macOS and a Linux machine without admin rights and
 without `uv` reaches the console, and a Windows reboot followed by `--no-admin` adopts or restarts
 the cluster without a manual `pg_ctl`.
+
+### B192 — the typecheck baseline dies on TypeScript 7 and on repositories whose tsconfig is nested
+
+**Measured 2026-08-18, on the first full `sync run` against this repository itself.** 25 findings
+were raised (12 vendor-change, 13 anthropic model-deprecation via the generated tier); the first
+remediation attempt abandoned at the baseline: `could not establish a typecheck baseline`, with
+`tsc` 7.0.2 printing its help text — a usage error, not a compile. Two suspects, both real: the
+native-preview `tsc` 7 changed its command line, and this repository's `tsconfig.json` lives in
+`web/` rather than at the root the baseline points at. The abandon was recorded with its reason,
+which is the pipeline behaving as designed — but a baseline that cannot meet TS7 or a nested
+tsconfig turns every TypeScript-in-a-subdirectory repository into an abandon.
+
+**Evidence that closes it:** the same run reaching `patch` on this repository, with the baseline
+resolving the nested `web/tsconfig.json` and a pinned-major `tsc` invocation that TS 5, 6 and 7
+all answer with a compile.
+
+### B193 — the Twilio symbol builder cannot derive the legacy v2010 core API
+
+**Measured 2026-08-18 during the first Twilio bake.** `build_symbol_map` over
+`twilio_api_v2010.json` raises `SymbolCollision`: the legacy `{Sid}.json` URL shape collapses the
+mount-chain derivation, so `DeleteAddress` and `DeleteApplication` derive one symbol. The bake
+shipped without it — messaging v1, verify v2, conversations v1 and lookups v2, 228 symbols at
+`twilio/twilio-oai@b02705eb7dbf` — which means the single most-called Twilio product (SMS via the
+2010 core API) is not yet bindable. **Evidence that closes it:** a chain derivation that
+understands the `.json` suffix and the `{AccountSid}` mount, baking v2010 without a collision and
+binding `client.messages.create` in a fixture repository.

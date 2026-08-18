@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 import subprocess
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -55,23 +56,97 @@ class CodebaseIndexReport:
     unread_paths: tuple[str, ...] = ()
 
 
+_SCHEME = re.compile(r"^[A-Za-z][A-Za-z0-9+.-]*://")
+_PORT = re.compile(r":\d+/")
+
+
+def remote_repo_id(url: str) -> str:
+    """A repository's identity, derived from its remote rather than its checkout.
+
+    Call site ids hash `repo_id`, so this value decides whether two customers
+    whose `src/billing.ts` both call `stripe.charges.create` occupy one row or
+    two. Every spelling of one remote has to reduce to one string: scheme,
+    trailing `.git`, scp-style `git@host:owner/name`, a port, an embedded
+    credential. The credential in particular must not survive, because the
+    result is written to every `call_site` row and hashed into the branch name
+    the forge pushes.
+
+    Path case is preserved. GitHub is case-insensitive there, but not every
+    host is, and splitting one repository in two is a cheaper mistake than
+    merging two distinct ones.
+
+    Lives here rather than in `cli` because both derivation paths read it: `run`
+    normalizes the remote it was given, and `_resolve_repo_ref` below normalizes
+    the checkout's own origin — one function, or the two spellings of one
+    repository drift apart, which was measured on 2026-08-18 as three identities
+    for this repository in one graph.
+    """
+    remote = _SCHEME.sub("", url.strip().rstrip("/"))
+    userinfo, at, rest = remote.partition("@")
+    if at and "/" not in userinfo:
+        remote = rest
+    remote = _PORT.sub("/", remote, count=1)
+    remote = remote.replace(":", "/", 1)
+    host, _, path = remote.removesuffix(".git").partition("/")
+    return f"{host.lower()}/{path}"
+
+
+def _origin_url(path: Path) -> str | None:
+    """The checkout's own origin remote, or None when it has none to speak of."""
+    if not (path / ".git").exists():
+        return None
+    try:
+        result = subprocess.run(
+            ["git", "remote", "get-url", "origin"],
+            cwd=path,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=15,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+    url = result.stdout.strip()
+    if result.returncode != 0 or not url:
+        return None
+    # A path-shaped origin (a local mirror) carries no forge identity; deriving one from it
+    # would put a filesystem path into every call-site id.
+    if "://" not in url and not re.match(r"^[^:@]+@[^/\\:@]+:", url):
+        return None
+    return url
+
+
 def _resolve_repo_ref(target: RepoRef | Path | str) -> RepoRef:
-    """Convert a path or RepoRef into a normalized RepoRef with valid repo_id and head_sha."""
+    """Convert a path or RepoRef into a normalized RepoRef with valid repo_id and head_sha.
+
+    **The origin decides the identity, when there is one.** `run --repo <remote>` derives
+    `repo_id` from the remote, so a checkout of that same remote must derive the same string —
+    otherwise one repository holds two identities in the graph depending on which door it came
+    in through, and every screen scoped to one cannot see the other's rows. Measured 2026-08-18:
+    this repository held three. The package name and the directory name remain the fallbacks
+    for a checkout with no forge-addressable origin, which is exactly the first-run case
+    `sync index` exists for.
+    """
     if isinstance(target, RepoRef):
         return target
     path = Path(target).resolve()
     if not path.is_dir():
         raise ValueError(f"repository path '{path}' is not a directory")
 
-    repo_id = path.name
-    pkg_json = path / "package.json"
-    if pkg_json.is_file():
-        try:
-            data = json.loads(pkg_json.read_text(encoding="utf-8-sig"))
-            if isinstance(data, dict) and "name" in data and isinstance(data["name"], str):
-                repo_id = data["name"]
-        except Exception:
-            pass
+    origin = _origin_url(path)
+    if origin is not None:
+        repo_id = remote_repo_id(origin)
+    else:
+        repo_id = path.name
+        pkg_json = path / "package.json"
+        if pkg_json.is_file():
+            try:
+                data = json.loads(pkg_json.read_text(encoding="utf-8-sig"))
+                if isinstance(data, dict) and "name" in data and isinstance(data["name"], str):
+                    repo_id = data["name"]
+            except Exception:
+                pass
 
     head_sha = "0" * 40
     git_dir = path / ".git"

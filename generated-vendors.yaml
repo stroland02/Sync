@@ -114,3 +114,87 @@
       # 2026-07-29). There is no Python target, so nothing constrains this from the other side.
       package: "@vercel/sdk"
       symbol_root: vercel
+
+# --- Added 2026-08-18, each manifest fetched live the same day and committed under
+# tests/fixtures/manifests/; each Python binding read from the SDK's own pyproject.toml,
+# committed under tests/fixtures/sdk_packages/. Python declared only: every entry below has
+# spoken for Python and deliberately not for TypeScript, whose npm packages await their own
+# fetched evidence -- a binding nobody checked is worse than none.
+
+- vendor_id: modern-treasury
+  repo: modern-treasury/modern-treasury-python
+  manifest: .stats.yml
+  sdk_bindings:
+    python:
+      distribution: modern-treasury
+      module: modern_treasury
+
+- vendor_id: lithic
+  repo: lithic-com/lithic-python
+  manifest: .stats.yml
+  sdk_bindings:
+    python:
+      distribution: lithic
+      module: lithic
+
+- vendor_id: increase
+  repo: Increase/increase-python
+  manifest: .stats.yml
+  sdk_bindings:
+    python:
+      distribution: increase
+      module: increase
+
+- vendor_id: finch
+  repo: Finch-API/finch-api-python
+  manifest: .stats.yml
+  # Distribution and module come apart here -- `finch-api` on PyPI, `finch` at import -- which
+  # is the Python half of the anthropic lesson above.
+  sdk_bindings:
+    python:
+      distribution: finch-api
+      module: finch
+
+- vendor_id: orb
+  repo: orbcorp/orb-python
+  manifest: .stats.yml
+  # `orb-billing` on PyPI, `orb` at import: the same two-name case as finch.
+  sdk_bindings:
+    python:
+      distribution: orb-billing
+      module: orb
+
+- vendor_id: groq
+  repo: groq/groq-python
+  manifest: .stats.yml
+  sdk_bindings:
+    python:
+      distribution: groq
+      module: groq
+
+- vendor_id: openlayer
+  repo: openlayer-ai/openlayer-python
+  manifest: .stats.yml
+  sdk_bindings:
+    python:
+      distribution: openlayer
+      module: openlayer
+
+- vendor_id: browserbase
+  repo: browserbase/sdk-python
+  manifest: .stats.yml
+  sdk_bindings:
+    python:
+      distribution: browserbase
+      module: browserbase
+
+# The second Speakeasy vendor, alongside vercel: its workflow.yaml names the specification the
+# generator reads, and `mistralai` is both the PyPI distribution and the import module
+# (pyproject.toml read 2026-08-18, `src/mistralai`).
+- vendor_id: mistral
+  repo: mistralai/client-python
+  manifest: .speakeasy/workflow.yaml
+  sdk_bindings:
+    python:
+      distribution: mistralai
+      module: mistralai

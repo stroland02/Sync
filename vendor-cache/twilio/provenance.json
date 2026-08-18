@@ -1,0 +1,13 @@
+{
+  "vendor_id": "twilio",
+  "source": "twilio/twilio-oai@b02705eb7dbf63e0925375779730a4fc93c3b0b4",
+  "products": [
+    "twilio_messaging_v1.json",
+    "twilio_verify_v2.json",
+    "twilio_conversations_v1.json",
+    "twilio_lookups_v2.json"
+  ],
+  "symbols": 228,
+  "baked_at": "2026-08-18T22:55:18.593516+00:00",
+  "note": "Baked from the vendor's own specification repository at the commit above. This snapshot ages: a finding derived from it reflects Twilio as of that commit, not today. Re-baking is a maintained task, not an automatic one."
+}
