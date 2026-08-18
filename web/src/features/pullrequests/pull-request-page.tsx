@@ -119,7 +119,7 @@ function railFacts(
   repoId: string | undefined,
   findingId: string,
 ): Fact[] {
-  function fact(width: string, render: (state: WorkflowState) => ReactNode): ReactNode {
+  function fact(render: (state: WorkflowState) => ReactNode): ReactNode {
     if (data !== undefined) return render(data)
     if (failure !== null) return failure
     return <Pending />
@@ -139,7 +139,7 @@ function railFacts(
     },
     {
       label: "Repository",
-      value: fact("w-32", (state) =>
+      value: fact((state) =>
         state.repo_id === null ? (
           <Absent>unknown</Absent>
         ) : (
@@ -154,7 +154,7 @@ function railFacts(
     },
     {
       label: "Pull request",
-      value: fact("w-16", (state) =>
+      value: fact((state) =>
         facts.prNumber === null ? (
           <Absent>{noPullRequestPhrase(state.outcome)}</Absent>
         ) : (
@@ -164,7 +164,7 @@ function railFacts(
     },
     {
       label: "Branch",
-      value: fact("w-40", (state) =>
+      value: fact((state) =>
         facts.branch === null ? (
           <Absent>{noBranchPhrase(state.outcome)}</Absent>
         ) : (
@@ -174,13 +174,13 @@ function railFacts(
     },
     {
       label: "Run",
-      value: fact("w-40", (state) => (
+      value: fact((state) => (
         <code className="font-mono text-meta break-all select-all">{state.thread_id}</code>
       )),
     },
     {
       label: "Generations",
-      value: fact("w-12", (state) => (
+      value: fact((state) => (
         <div className="flex flex-col gap-field">
           <span className="font-mono">{state.generation_count}</span>
           {state.generation_count > 1 && (

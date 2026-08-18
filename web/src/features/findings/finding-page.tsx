@@ -179,7 +179,7 @@ function findingFacts(
   failure: ReactNode | null,
   remediation: RemediationState,
 ): Fact[] {
-  function fact(width: string, render: (found: FindingDetail) => ReactNode): ReactNode {
+  function fact(render: (found: FindingDetail) => ReactNode): ReactNode {
     if (data !== null) return render(data)
     if (failure !== null) return failure
     return <Pending />
@@ -194,7 +194,7 @@ function findingFacts(
     },
     {
       label: "Severity",
-      value: fact("w-20", (found) => (
+      value: fact((found) => (
         <span className="font-mono">
           <Formatted value={orAbsent(found.finding.severity)} />
         </span>
@@ -202,7 +202,7 @@ function findingFacts(
     },
     {
       label: "Repository",
-      value: fact("w-32", (found) =>
+      value: fact((found) =>
         found.finding.repo_id === null ? (
           <Absent>unknown</Absent>
         ) : (
@@ -217,7 +217,7 @@ function findingFacts(
     },
     {
       label: "Call site",
-      value: fact("w-36", (found) => (
+      value: fact((found) => (
         <code className="font-mono text-meta break-all">
           {found.finding.file}:{found.finding.line}
         </code>
@@ -225,7 +225,7 @@ function findingFacts(
     },
     {
       label: "Vendor",
-      value: fact("w-32", (found) => (
+      value: fact((found) => (
         <Link
           to={`${workspacePath(repoId)}/vendors/${encodeURIComponent(found.vendor)}`}
           className="font-mono underline underline-offset-2"
@@ -236,7 +236,7 @@ function findingFacts(
     },
     {
       label: "Operation",
-      value: fact("w-28", (found) => (
+      value: fact((found) => (
         <span className="font-mono">
           <Formatted value={orAbsent(found.operation)} />
         </span>
@@ -244,7 +244,7 @@ function findingFacts(
     },
     {
       label: "Symbol",
-      value: fact("w-36", (found) => (
+      value: fact((found) => (
         <span className="font-mono">
           <Formatted value={orAbsent(found.symbol)} />
         </span>
@@ -252,7 +252,7 @@ function findingFacts(
     },
     {
       label: "SDK version",
-      value: fact("w-16", (found) => (
+      value: fact((found) => (
         <span className="font-mono">
           <Formatted value={orAbsent(found.sdk_version)} />
         </span>
@@ -260,7 +260,7 @@ function findingFacts(
     },
     {
       label: "This finding's rung",
-      value: fact("w-20", (found) => <RungBadge rung={found.finding.binding_source} />),
+      value: fact((found) => <RungBadge rung={found.finding.binding_source} />),
     },
     { label: "Remediation", value: remediationFact(remediation) },
   ]
