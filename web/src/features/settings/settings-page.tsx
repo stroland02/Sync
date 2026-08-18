@@ -1,11 +1,12 @@
 /**
  * Settings: what this deployment watches, and what it lets you configure.
  *
- * Organized into four primary setting groups matching the system's operational architecture:
- * 1. Codebases — Repository scope, project context (.sync/context.md), and static analysis configuration.
- * 2. Pull requests — Automated merge policies (with refusal notice for immediate/always), merge methods, base branches.
+ * Organized into five primary setting groups matching the system's operational architecture:
+ * 1. Pull requests — Automated merge policies (with refusal notice for immediate/always), merge methods, base branches.
+ * 2. Codebases — Repository scope, project context (.sync/context.md), and static analysis configuration.
  * 3. Adapters — Inventory of registered signal feeds and vendor adapters.
  * 4. GitHub Connection — Local gh CLI authentication status, monitored repository permissions, and local-only forge notes.
+ * 5. About Sync — Foundational platform explanations (provenance rungs, adapter tiers, abandon reasons, verification gates).
  */
 
 import { useState } from "react"
@@ -18,9 +19,10 @@ import { PullRequestsSettingsPanel } from "@/features/settings/pull-requests-set
 import { CodebasesSettingsPanel } from "@/features/settings/codebases-settings-panel"
 import { GithubConnectionSettingsPanel } from "@/features/settings/github-connection-settings-panel"
 import { AdaptersSettingsPanel } from "@/features/settings/adapters-settings-panel"
+import { AboutPlatformPanel } from "@/features/settings/about-platform-panel"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/vendor/supabase/ui/select"
 
-export type SettingsGroup = "pull-requests" | "codebases" | "adapters" | "github-connection"
+export type SettingsGroup = "pull-requests" | "codebases" | "adapters" | "github-connection" | "about"
 
 interface GroupDef {
   id: SettingsGroup
@@ -48,6 +50,11 @@ const SETTING_GROUPS: readonly GroupDef[] = [
     id: "github-connection",
     label: "GitHub Connection",
     description: "Forge authentication, local CLI status, and permissions",
+  },
+  {
+    id: "about",
+    label: "About Sync",
+    description: "Platform architecture, provenance rungs, adapter tiers, and gates",
   },
 ] as const
 
@@ -153,6 +160,9 @@ export function SettingsPage({ question = DEFAULT_QUESTION }: SettingsPageProps)
           )}
           {selectedGroup === "github-connection" && (
             <GithubConnectionSettingsPanel repoId={activeRepo} />
+          )}
+          {selectedGroup === "about" && (
+            <AboutPlatformPanel />
           )}
         </main>
       </div>
