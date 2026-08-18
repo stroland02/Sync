@@ -16,7 +16,7 @@ from datetime import datetime, timezone
 import pytest
 
 from sync.core import CallSite, Finding, ObservedCall, ObservedErrorWindow, ObservedShape, RepoSettings, VendorChange
-from sync.core.models import SEVERITY_ORDER
+from sync.core.models import FINDING_RUNGS, SEVERITY_ORDER
 from sync.dashboard.graph_views import (
     binding_surface,
     detector_accountability,
@@ -26,6 +26,7 @@ from sync.dashboard.graph_views import (
     observed_telemetry,
     overview_summary,
     repo_settings,
+    repository_graph,
     repository_graph,
     severity_rollup,
     vendor_change_volume,
@@ -1474,10 +1475,19 @@ class TestRepositoryGraph:
     """
 
     def test_a_repository_with_no_call_sites_draws_no_edges_and_says_so(self, store):
+        # Whole-dict rather than field-by-field on purpose: this pins the contract, so a field
+        # added to the payload has to be added here deliberately instead of arriving unnoticed.
+        # `indexed_at` is `None` and `off_path` is nought, and those say different things -- the
+        # first is "no call site row has ever existed here", which cannot tell a never-run index
+        # from one that found nothing; the second is a read that happened and returned none.
         assert repository_graph(store, "r1") == {
             "repo_id": "r1",
             "vendors": [],
             "bindings": [],
+            "observed_bindings": [],
+            "off_path": {"unresolved": 0, "unattributed": 0},
+            "rungs": list(FINDING_RUNGS),
+            "indexed_at": None,
             "total_bindings": 0,
             "truncated": False,
         }
@@ -1823,3 +1833,105 @@ def test_findings_by_kind_over_time_on_an_empty_graph_reports_no_days(store):
     assert result["days"] == []
     assert result["total"] == 0
     assert result["by_rung"] == {}
+
+
+# --- The indexing canvas: every rung on the picture, and off-path kept visible ----------------
+#
+# `repository_graph` drew static edges only, which is correct about call sites and incomplete as
+# a picture of what Sync knows. These cover the rest of the closed rung vocabulary and the two
+# states an empty canvas must not conflate.
+
+
+def test_repository_graph_carries_observed_edges_at_their_own_rung(store):
+    """A stronger rung is a separate edge, never blended into the static one. Two facts about the
+    same operation stay two facts."""
+    store.upsert_call_site(_site())
+    store.record_observed_call(_observed_call(operation_id="PostCharges"))
+
+    result = repository_graph(store, "r1")
+
+    assert {"vendor_id": "stripe", "operation_id": "PostCharges", "rung": "observed", "calls": 1} in (
+        result["observed_bindings"]
+    )
+    assert all(binding["rung"] == "static" for binding in result["bindings"])
+
+
+def test_repository_graph_keeps_an_uncorrelated_span_off_path_rather_than_dropping_it(store):
+    """`unresolved` is traffic that named no operation. Dropping it would understate what reached
+    the vendor; folding it into `observed` would claim a correlation nothing made."""
+    store.upsert_call_site(_site())
+    store.record_observed_call(
+        _observed_call(operation_id="", binding_rung="unresolved", trace_id="t9")
+    )
+
+    result = repository_graph(store, "r1")
+
+    assert result["off_path"]["unresolved"] == 1
+    assert all(edge["rung"] != "unresolved" for edge in result["observed_bindings"])
+
+
+def test_repository_graph_counts_unattributed_findings_off_path(store):
+    """`unattributed` is a finding whose rung predates the column. It is not a rung a binder
+    emits, so it cannot be drawn as one, and it is not nothing either.
+
+    Written by SQL because `insert_finding` refuses the value outright, and that refusal is
+    correct: nothing may write `unattributed` today, so the only rows carrying it are history.
+    Constructing one any other way would be testing a state the writer guarantees cannot arise.
+    """
+    store.upsert_call_site(_site())
+    sites = store.replace_call_sites("r1", [_site()])
+    finding_id = store.insert_finding(_finding(sites[0], claim="c1", binding_rung="static"))
+    store._connect().execute(
+        "UPDATE finding SET binding_rung = 'unattributed' WHERE id = %s", (finding_id,)
+    )
+
+    result = repository_graph(store, "r1")
+
+    assert result["off_path"]["unattributed"] == 1
+
+
+def test_repository_graph_reports_off_path_as_nought_when_the_graph_holds_none(store):
+    """Nought here is a measurement: the tables were read and held none. That is different from
+    the never-indexed case below, which is why only one of them is a number."""
+    store.upsert_call_site(_site())
+
+    result = repository_graph(store, "r1")
+
+    assert result["off_path"] == {"unresolved": 0, "unattributed": 0}
+
+
+def test_repository_graph_echoes_the_closed_rung_vocabulary(store):
+    """So a rung with no edge reads as a rung with no edge, rather than as a rung that cannot be."""
+    result = repository_graph(store, "r1")
+
+    assert result["rungs"] == list(FINDING_RUNGS)
+
+
+def test_repository_graph_says_nothing_has_ever_been_indexed_rather_than_nought(store):
+    """The distinction this canvas turns on. No call site row has ever existed for this
+    repository, which is either an index that never ran or one that ran and found no vendor call
+    -- and nothing records which, so it must not claim either."""
+    result = repository_graph(store, "r1")
+
+    assert result["indexed_at"] is None
+    assert result["bindings"] == []
+
+
+def test_repository_graph_reports_when_the_index_last_wrote_a_row_here(store):
+    store.upsert_call_site(_site())
+
+    result = repository_graph(store, "r1")
+
+    assert result["indexed_at"] is not None
+
+
+def test_repository_graph_still_reports_indexed_after_every_call_site_is_retracted(store):
+    """A repository whose calls have all gone was still indexed. Reporting `None` would say the
+    index never ran, which is a different and false claim."""
+    store.upsert_call_site(_site(path="src/a.ts", line=1))
+    store.replace_call_sites("r1", [])
+
+    result = repository_graph(store, "r1")
+
+    assert result["indexed_at"] is not None
+    assert result["bindings"] == []

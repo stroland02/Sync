@@ -816,10 +816,46 @@ export interface RepositoryGraphVendor {
 }
 
 /** `GET /api/repositories/{repo_id}/graph`. The picture the Overview draws. */
+/** One edge traffic established, aggregated to one per (vendor, operation, rung). */
+export interface RepositoryGraphObservedBinding {
+  vendor_id: string
+  operation_id: string
+  /** The rung this edge was established at. Never blended with the static edge beside it. */
+  binding_rung: BindingSource
+  /** Observed calls behind this edge. `observed_call`'s grain is one row per unit of work. */
+  calls: number
+}
+
+/**
+ * What the repository holds that no edge can carry, as counts.
+ *
+ * Both are measurements — the tables were read and held what they held. Neither is nothing, and
+ * neither may be folded into a rung: an uncorrelated span names no operation to draw an edge to,
+ * and `unattributed` is a value no binder emits and which `BindingRung` excludes.
+ */
+export interface RepositoryGraphOffPath {
+  unresolved: number
+  unattributed: number
+}
+
 export interface RepositoryGraphResponse {
   repo_id: string
   vendors: RepositoryGraphVendor[]
   bindings: RepositoryGraphBinding[]
+  observed_bindings: RepositoryGraphObservedBinding[]
+  off_path: RepositoryGraphOffPath
+  /** The closed rung vocabulary, echoed so a rung with no edge differs from one that cannot be. */
+  rungs: BindingSource[]
+  /**
+   * When the index last wrote a call site here, or `null` if it never has.
+   *
+   * **This `null` is ambiguous on purpose and the screen must say both.** No call site row has
+   * ever existed for this repository, which is either an index that never ran or one that ran and
+   * found no vendor call — nothing records an index attempt, only its result, so the payload
+   * refuses to pick. Retracted rows still count: a repository whose calls have all gone was
+   * indexed, and answering `null` there would claim the index never ran.
+   */
+  indexed_at: string | null
   /** How many current call sites the repository holds, whether or not all of them were drawn. */
   total_bindings: number
   /** Whether `bindings` is all of them. A partial picture says so rather than implying whole. */
