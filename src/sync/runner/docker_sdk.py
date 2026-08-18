@@ -4,9 +4,14 @@ operator's own process.
 `sync.core.protocols.PatchRunner` is the whole seam this needs: `AgentRemediator.propose` calls
 `self._runner.run(prompt, repo_path, identity)` and reads the clone afterwards, never the return
 value, so a runner that edits the clone by a different mechanism is a complete substitute without
-touching `AgentRemediator` at all. Swapping the default in `AgentRemediator.__init__` from
-`ClaudeSdkRunner` to this class is the whole of the integration once this class is trusted --
-deliberately not done in this commit; see this module's own report to the coordinator for why.
+touching `AgentRemediator` at all. `AgentRemediator.__init__` now selects this class over
+`ClaudeSdkRunner` when `SANDBOX_ENV` ("SYNC_PATCH_SANDBOX") is `"1"`, through
+`runner_from_environment` below -- unset, which is every deployment today, construction is
+unchanged. **Selecting this class is not the same claim as running it in production.**
+`runner_from_environment` refuses to build one at all when `_CREDENTIAL_ENV` is unset, because
+sourcing the sandbox's own Anthropic credential is still the open piece: no live patch run has
+gone through this class, opting a real deployment in needs that credential question answered
+first, and answering it is an owner decision this module takes as given rather than invents.
 
 **What this closes, checked against `docs/superpowers/specs/2026-07-25-sync-threat-model.md`'s
 own ledger:** mitigation 1 (credential-free sandbox) and mitigation 3 (no network egress except
@@ -36,6 +41,47 @@ from pathlib import Path
 
 from sync.remediate import sandbox
 from sync.remediate.isolated_network import isolated_network
+from sync.remediate.sandbox_image import ensure_image_built
+
+# `AgentRemediator.__init__` reads this; "1" opts a deployment into `DockerSdkRunner` in place
+# of `ClaudeSdkRunner`. Unset (the default everywhere today), behaviour is unchanged.
+SANDBOX_ENV = "SYNC_PATCH_SANDBOX"
+
+# Names the credential `runner_from_environment` forwards to the proxy container, which is what
+# the proxy attaches to every request it forwards to Anthropic (`forward_proxy.build_forward_request`)
+# -- the same credential a non-sandboxed run authenticates with, sourced here rather than assumed,
+# because Ruling 7 makes which one that is an owner decision.
+_CREDENTIAL_ENV = "SYNC_PATCH_SANDBOX_CREDENTIAL"
+
+# Overrides the image tag `ensure_image_built` would otherwise compute and build/inspect for.
+# Unset is the normal path: `runner_from_environment` calls `ensure_image_built()` itself, so a
+# pre-warmed image costs one `docker image inspect` and a cold one is built on the spot.
+_IMAGE_ENV = "SYNC_PATCH_SANDBOX_IMAGE"
+
+
+def runner_from_environment() -> "DockerSdkRunner":
+    """The production `DockerSdkRunner`, configured from the environment rather than from a
+    caller who would otherwise have to source the same two values themselves.
+
+    Refuses outright when `_CREDENTIAL_ENV` is unset, rather than falling back to nothing or to
+    a guess -- `ClaudeSdkRunner`'s own production path authenticates through an already-signed-in
+    CLI binary (`CLAUDE_CODE_EXECPATH`), not a portable credential string, so there is no existing
+    value this factory could read instead. Sourcing the sandbox's own credential is the
+    still-open piece of B97 named in this module's own docstring and in the threat model's
+    Ruling 7; this factory names the gap rather than papering over it with an invented default.
+    """
+    credential = os.environ.get(_CREDENTIAL_ENV)
+    if not credential:
+        raise RuntimeError(
+            f"{_CREDENTIAL_ENV} is not set. DockerSdkRunner forwards this value to the proxy "
+            f"container, which attaches it to every request it forwards to Anthropic in place "
+            f"of whatever the sandboxed container sent -- it is the sandboxed run's real "
+            f"upstream credential, not a lesser one, and which credential that should be is an "
+            f"owner decision (docs/superpowers/specs/2026-07-25-sync-threat-model.md's Ruling 7) "
+            f"this factory takes as given rather than invents."
+        )
+    image = os.environ.get(_IMAGE_ENV) or ensure_image_built()
+    return DockerSdkRunner(image=image, credential=credential)
 
 _REMEDIATE_DIR = Path(__file__).resolve().parents[1] / "remediate"
 _DRIVER_DIR = Path(__file__).resolve().parents[3] / "docker" / "patch-sandbox"

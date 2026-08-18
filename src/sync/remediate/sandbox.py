@@ -47,31 +47,28 @@ kernel before choosing the structural one, and neither closed the window:**
 container outright.** `docker kill` on a container mid-stream stops the listener's
 byte count from advancing within about a second and the listener sees a clean EOF
 -- because the *process* is gone, not because its socket was individually reset.
-That is the shape `copy_between_containers` and the pairing it supports exist for:
-the risky (networked) phase's container is never reused for the safe phase.
-Instead, whatever it produced is copied out and the risky container is destroyed
-outright (the same unconditional `docker rm -f` `ephemeral_container` already runs
-on exit -- no new teardown mechanism), while the safe phase runs in a second
-container created with `network="none"` from the start, which structurally never
-had a route to leak from. There is no cutover moment in that design for a socket to
-survive, because no process that could still call `sendall()` outlives the boundary.
-`tests/test_patch_sandbox.py::test_never_networked_container_receives_nothing_after_install_container_is_torn_down`
+`tests/test_patch_sandbox.py::test_networked_container_receives_nothing_after_it_is_torn_down`
 proves it end to end.
+
+**This module originally sketched a risky/safe container *pair* as the shape a live patch run
+would use this destroy-based close through**: a networked install phase, destroyed once its
+output was copied out (`copy_between_containers`), handing off to a `network="none"` safe phase
+that never had a route to leak from. `DockerSdkRunner` (`sync.runner.docker_sdk`, B97 Decision 1)
+hosts the live patch run a different way -- two containers alive together on an
+`isolated_network.isolated_network` `--internal` network, with a forward proxy on one of them and
+never a destroy-and-copy handoff between them -- because the sandboxed container never holds an
+open route to anywhere but the proxy in the first place, so there is no already-open socket to
+close by destroying anything. `copy_between_containers` is deleted (`M14-W411`) rather than kept
+beside a design that does not call it: nothing else in this tree does a networked-install-then-
+safe-verify split, and CLAUDE.md's "wait for the caller" rule is explicit that an unreached
+primitive is debt with no asset behind it, not a hedge.
 
 **What this module does not yet do, on purpose, rather than by oversight:**
 
-- Host a live patch run. `ephemeral_container`, `disconnect_network`, and
-  `copy_between_containers` are the primitives the design calls for, each proven
-  independently. Routing the agent's own model traffic through a narrower
-  allowlist -- a local forward proxy reachable only to Anthropic's API, so the
-  safe-phase container is never on literally zero network while an agent turn is
-  in flight -- is unbuilt. A `network="none"` container has no route for
-  anything, including the SDK's own traffic, and cannot yet host a live agent
-  turn. `docker/patch-sandbox/Dockerfile` describes the image this would run;
-  nothing in this tree yet builds an agent session inside it, and nothing yet
-  composes the risky/safe container pair into one orchestrated patch attempt --
-  `copy_between_containers` and the two calls to `ephemeral_container` around it
-  are the primitives a future caller assembles, not an assembled pipeline.
+- Grant the rest of mitigation 5. `ephemeral_container` runs a container non-root only because
+  the image's own `USER` directive says so -- it passes no `--read-only` and enforces no
+  per-container wall-clock kill, so a caller wanting either still has to ask for it and
+  `ephemeral_container` still cannot grant it.
 - Solve the credential passlist by itself. `build_container_env` below only
   achieves exclusion where it is used at a boundary that starts a process with no
   inherited environment -- a `docker exec` call against a freshly created
@@ -91,7 +88,6 @@ from __future__ import annotations
 import os
 import posixpath
 import subprocess
-import tempfile
 import uuid
 from contextlib import contextmanager
 from dataclasses import dataclass
@@ -174,18 +170,18 @@ def ephemeral_container(
     exit.
 
     Created attached to `network` -- Docker's own default `bridge` unless a
-    caller names something else. Two names matter to a caller building the
-    risky/safe split `copy_between_containers` supports: the default `bridge`
-    for the install phase, which needs outbound internet, and Docker's built-in
-    `"none"` network for the patch/verify phase, which structurally never has a
-    route -- proven directly against this host (a container created with
-    `network="none"` gets `[Errno 101] Network is unreachable` on its first
-    connect attempt, not merely no route added yet). `disconnect_network` is a
-    narrower tool than either: it removes a *running* container's route to
-    block future connection attempts, and does not stop a connection already
-    open when it is called (see this module's docstring). The container's only
-    process is `sleep infinity`; nothing customer-facing is its entrypoint, and
-    everything this module does to it happens through `docker exec`.
+    caller names something else. `DockerSdkRunner` names an
+    `isolated_network.isolated_network` `--internal` network for both of its
+    containers instead of either extreme: unlike `bridge`, it has no route out to
+    the internet, and unlike `"none"`, the proxy and the sandboxed container can
+    still reach each other on it. `"none"` and `disconnect_network` remain useful
+    on their own terms -- a container created with `network="none"` gets
+    `[Errno 101] Network is unreachable` on its first connect attempt, proven
+    directly against this host, and `disconnect_network` removes a *running*
+    container's route to block future connection attempts (see this module's
+    docstring for what it does not stop). The container's only process is
+    `sleep infinity`; nothing customer-facing is its entrypoint, and everything
+    this module does to it happens through `docker exec`.
 
     `add_host`, passed straight to `docker create --add-host`, exists for one
     caller: a container on `isolated_network.isolated_network`'s `--internal`
@@ -262,9 +258,10 @@ def disconnect_network(container: Container, network: str = "bridge") -> None:
     test_disconnect_network_does_not_stop_an_already_open_socket` proves it
     directly. A caller that needs the exfiltration boundary -- not merely "no
     new sockets" -- does not call this function on a container it plans to keep
-    running; it destroys the risky-phase container after copying its output out
-    (`copy_between_containers`) and runs the safe phase in a container that was
-    never attached to a network at all.
+    running; it destroys the container outright
+    (`test_networked_container_receives_nothing_after_it_is_torn_down`), or, as
+    `DockerSdkRunner` does, never gives the container a route to lose in the
+    first place.
     """
     result = _docker("network", "disconnect", network, container.id)
     if result.returncode != 0:
@@ -323,49 +320,16 @@ def probe_connect(container: Container, host: str, port: int) -> ProbeResult:
     return _parse_probe_output(result.returncode, result.stdout, result.stderr)
 
 
-def copy_between_containers(source: Container, dest: Container, path: str) -> None:
-    """Move `path` (a file or a directory) from `source`'s filesystem to the same
-    path inside `dest`'s filesystem, staged through a host-side temporary
-    directory that is removed before this returns.
-
-    This is the mechanism the risky/safe container split depends on:
-    `source` -- the install phase's networked container -- can be destroyed the
-    moment this returns, and `dest` -- created with `network="none"` -- carries
-    forward whatever the risky phase produced (typically `node_modules`) without
-    the two containers ever sharing a filesystem or a lifetime. There is no
-    cutover moment here for a socket to survive, because `dest` never had a
-    route to lose in the first place.
-
-    `path`'s parent directory is created inside `dest` first (`mkdir -p`, via
-    `docker exec`) so a caller does not have to pre-arrange `dest`'s directory
-    structure to match `source`'s before calling this. Container paths are
-    always POSIX regardless of the host this runs on, hence `posixpath` rather
-    than `os.path` for the half of this that names a path inside a container.
-    """
-    parent = posixpath.dirname(path) or "/"
-    mkdir = _docker("exec", dest.id, "mkdir", "-p", parent)
-    if mkdir.returncode != 0:
-        raise RuntimeError(f"mkdir -p {parent} in {dest.id} failed: {mkdir.stderr.strip()}")
-
-    with tempfile.TemporaryDirectory() as staging:
-        staged_path = os.path.join(staging, "payload")
-        copy_out = _docker("cp", f"{source.id}:{path}", staged_path)
-        if copy_out.returncode != 0:
-            raise RuntimeError(f"docker cp out of {source.id}:{path} failed: {copy_out.stderr.strip()}")
-        copy_in = _docker("cp", staged_path, f"{dest.id}:{path}")
-        if copy_in.returncode != 0:
-            raise RuntimeError(f"docker cp into {dest.id}:{path} failed: {copy_in.stderr.strip()}")
-
-
 def copy_into_container(container: Container, host_path: str, container_path: str) -> None:
     """Move `host_path` (a file or a directory) from the host straight into `container` at
     `container_path` -- B97 Decision 1's own need: the driver, the gate and the fence files, and
     the finding's clone, all have to reach the sandboxed container from the host that cloned the
     repository, not from another container.
 
-    No staging directory: `docker cp` already reaches the host filesystem directly on this side,
-    unlike `copy_between_containers`, where neither endpoint is the host and a temp directory is
-    what lets one `docker cp` hand off to another.
+    No staging directory: `docker cp` already reaches the host filesystem directly on this side.
+    A container-to-container copy would need one, since neither endpoint is the host -- this
+    module no longer has that shape (`copy_between_containers`, deleted at `M14-W411`; see this
+    module's own docstring for why).
     """
     parent = posixpath.dirname(container_path) or "/"
     mkdir = _docker("exec", container.id, "mkdir", "-p", parent)

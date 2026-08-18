@@ -456,23 +456,36 @@ def _dead_links_clean() -> tuple[bool | None, str]:
     return False, "unbaselined dead links: " + "; ".join(offenders[:4])
 
 
-def _sandbox_wired() -> tuple[bool | None, str]:
+def _sandbox_wired(baseline_path: Path | None = None) -> tuple[bool | None, str]:
     """Whether anything routes a patch attempt through the container primitives.
 
     B97's close condition is a patch run that cannot open a socket to a host Sync did not name.
     The mechanism is proven; what has never been true is that anything calls it. This asks the
     question the same way the repository already answers it -- the dead-link baseline accepts
     those symbols as reached from nothing, which is the machine-checkable form of "unwired".
+
+    Matched against actual baseline *entries* (`<path>:<qualname>`, `lint_dead_links.load_baseline`'s
+    own format) rather than a substring search over the whole file. A prose comment explaining that
+    a symbol stopped violating -- exactly the kind of note this baseline accumulates once something
+    is wired -- contains the symbol's bare name too, and a substring match over the whole text read
+    that comment as the entry it was retiring. Caught when `ephemeral_container` still read `False`
+    here the run after its own baseline entry was deleted, because a neighbouring comment still
+    named it.
+
+    `baseline_path` is read inside the function body rather than defaulted at definition time --
+    `SUITE_RECORD`'s own comment below gives the reason: a default bound at definition would make
+    a test pointing this at another path silently ignored.
     """
-    baseline = REPO_ROOT / "scripts" / "dead_links_baseline.txt"
+    baseline = baseline_path if baseline_path is not None else REPO_ROOT / "scripts" / "dead_links_baseline.txt"
     try:
-        text = baseline.read_text(encoding="utf-8")
+        from scripts.lint_dead_links import load_baseline
+        entries = load_baseline(baseline)
     except OSError as exc:
         return None, f"could not read the dead-link baseline: {exc}"
     unwired = [
         symbol
         for symbol in ("ephemeral_container", "copy_between_containers", "ensure_image_built")
-        if symbol in text
+        if any(entry.endswith(f":{symbol}") for entry in entries)
     ]
     if unwired:
         return False, (
