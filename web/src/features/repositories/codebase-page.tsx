@@ -59,6 +59,8 @@
 
 import { Link, useParams } from "react-router"
 
+import { InfoHint } from "@/components/info-hint"
+import { Button } from "@/components/ui/button"
 import { ChangeUnitsTable } from "@/features/fleet/change-units-table"
 import { IndexCoverageCard } from "@/features/repositories/index-coverage-card"
 import { OpenFindingsCard } from "@/features/repositories/open-findings-card"
@@ -79,21 +81,23 @@ import { UnknownRoute } from "@/layouts/unknown-route"
  * the calls made to them.
  */
 function VendorsListLink({ repoId }: { repoId: string }) {
+  // A button rather than a sentence carrying a link (owner direction 2026-08-18); the
+  // explanation rides the ⓘ, and the qualification it carried — no route computes the
+  // operations a repository calls — moves with it rather than being dropped.
   return (
-    <p className="max-w-prose text-body text-muted-foreground">
-      Which API vendors this repository is bound to, and how much is open against each, is its own
-      list —{" "}
-      <Link
-        to={`/repositories/${encodeURIComponent(repoId)}/vendors`}
-        className="underline underline-offset-2"
-      >
-        the vendors attached to this repository
-      </Link>
-      . A vendor appears there once INDEX finds a call site binding this repository to it. It is a
-      list of vendors and never of the individual operations called: no route computes the
-      operations a repository calls, so nothing on this screen or below it can be read as an
-      inventory of them.
-    </p>
+    <div className="flex items-center gap-row">
+      <Button asChild variant="outline" size="sm">
+        <Link to={`/repositories/${encodeURIComponent(repoId)}/vendors`}>
+          Vendors attached to this repository
+        </Link>
+      </Button>
+      <InfoHint label="About the vendors list">
+        Which API vendors this repository is bound to, and how much is open against each. A
+        vendor appears there once INDEX finds a call site binding this repository to it. It is a
+        list of vendors, never of the individual operations called — no route computes the
+        operations a repository calls, so nothing here can be read as an inventory of them.
+      </InfoHint>
+    </div>
   )
 }
 
@@ -125,12 +129,11 @@ function PageHeaderRegion({ repoId }: { repoId: string }) {
     <div className="flex flex-col gap-section">
       <ControlBar
         action={
-          <Link
-            to={`/repositories/${encodeURIComponent(repoId)}/observed`}
-            className="text-body underline underline-offset-2"
-          >
-            Signals for this repository
-          </Link>
+          <Button asChild variant="outline" size="sm">
+            <Link to={`/repositories/${encodeURIComponent(repoId)}/observed`}>
+              Signals for this repository
+            </Link>
+          </Button>
         }
       >
         <div className="flex min-w-0 flex-col gap-field">

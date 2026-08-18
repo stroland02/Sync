@@ -44,6 +44,7 @@ import { useParams } from "react-router"
 
 import { useDetectors, useWorkspaceFindings } from "@/api/queries"
 import type { FindingOrder } from "@/api/types"
+import { InfoHint } from "@/components/info-hint"
 import { ErrorState, LoadingState } from "@/components/states"
 import { MetricPanel } from "@/components/metric-panel"
 import {
@@ -201,20 +202,21 @@ function FindingsBody({
     >
       <MetricPanel
         label="Errors and incidents"
+        // Explanation moves behind the ⓘ (owner direction 2026-08-18); the scope stays in the
+        // unit string, because a count that does not say what it counted over is the
+        // claim-about-everything this console refuses, and a tooltip is a disclosure.
+        hint={
+          <InfoHint label="About errors and incidents">
+            Call sites that an open finding touches in this workspace, and in no other. The rung
+            on each row says how the system knows the site is bound to the operation, and the
+            ordering applied is the one the API says it applied rather than the one the address
+            asked for.
+          </InfoHint>
+        }
         metric={{
           value: page.severity_total.toLocaleString(),
-          // The scope travels with the figure. A total that does not say what it counted over is
-          // the claim-about-everything this console refuses.
           unit: `open ${page.severity_total === 1 ? "finding" : "findings"} in ${repoId}`,
         }}
-        caption={
-          <p className="max-w-prose">
-            Call sites that an open finding touches in{" "}
-            <span className="font-mono">{repoId}</span>, and in no other workspace. The rung on each
-            row says how the system knows the site is bound to the operation, and the ordering
-            applied is the one the API says it applied rather than the one the address asked for.
-          </p>
-        }
       >
         <FindingsTable repoId={repoId} rows={page.items} />
         {/* Decision 60: with a filter on, `total` counts the narrowed set while `severity_total`

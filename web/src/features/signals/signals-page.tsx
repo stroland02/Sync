@@ -82,6 +82,8 @@ import { useParams } from "react-router"
 import { ObservedVolumeCard } from "@/features/dashboards/observed-volume-card"
 import type { ReactNode } from "react"
 
+import { InfoHint } from "@/components/info-hint"
+
 import { SignalSourcePanel } from "@/features/telemetry/signal-source-panel"
 import { NotAttachedState } from "@/features/signals/not-attached-state"
 import {
@@ -148,19 +150,12 @@ function SignalsDetail({ repoId }: { repoId: string }) {
   return (
     <section className="flex flex-col gap-8">
 
-      {/* The two sentences beside one another rather than stacked: the first says what the screen
-          draws, the second says which roles have anything behind it, and a reader checks the second
-          before believing the first. */}
-      <div className="grid gap-8 lg:grid-cols-2">
+      {/* What the screen draws moves behind the ⓘ (owner direction 2026-08-18); the sentence
+          that stays visible is the absence-versus-zero one, because which roles have anything
+          behind them is a claim, not an explanation, and a tooltip is a disclosure. */}
+      <div className="flex items-start gap-row">
         <p className="max-w-prose text-body text-muted-foreground">
-          Every integration attached to this repository's graph, grouped by the role it plays. One
-          card per integration below, and a card is not evidence that an integration stands behind
-          it.
-        </p>
-        <p className="max-w-prose text-body text-muted-foreground">
-          Roles with an integration attached to this deployment: {names(ATTACHED_ROLES)}. What
-          each of those has to say about this repository is its own group's answer, and a group
-          with no rows in it is a quiet integration rather than a missing one.
+          Roles with an integration attached to this deployment: {names(ATTACHED_ROLES)}.
           {UNATTACHED_ROLES.length > 0 && (
             <>
               {" "}
@@ -171,6 +166,11 @@ function SignalsDetail({ repoId }: { repoId: string }) {
             </>
           )}
         </p>
+        <InfoHint label="About signals">
+          Every integration attached to this repository&rsquo;s graph, grouped by the role it
+          plays. One card per integration, and a card is not evidence that an integration stands
+          behind it — a group with no rows is a quiet integration rather than a missing one.
+        </InfoHint>
       </div>
 
       {/* `repeat(3, minmax(0,1fr))`: the mock's own three-across row for the three M5 roles,

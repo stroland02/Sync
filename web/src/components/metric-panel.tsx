@@ -53,6 +53,7 @@ type Metric =
 
 export function MetricPanel({
   label,
+  hint,
   metric,
   caption,
   children,
@@ -60,6 +61,12 @@ export function MetricPanel({
 }: {
   /** The section's name, at `--text-section`. It heads everything below it in this panel. */
   label: ReactNode
+  /**
+   * Explanation on demand, rendered as an ⓘ beside the label. For prose about how the panel
+   * works — never for a protected honesty sentence, a count's scope, or an absence-versus-zero
+   * distinction, which stay in `caption` or in the panel body where they cannot be missed.
+   */
+  hint?: ReactNode
   /**
    * The panel's own figure and what it counts. Omitted when the fact rail already carries this
    * count — see above. `value` is never bare `null`: a panel with nothing to show renders
@@ -75,7 +82,10 @@ export function MetricPanel({
   return (
     <Card className={cn("flex min-w-0 flex-col", className)}>
       <CardHeader>
-        <h2 className="text-section">{label}</h2>
+        <div className="flex items-center gap-row">
+          <h2 className="text-section">{label}</h2>
+          {hint}
+        </div>
         {metric !== undefined && (
           <p className="flex flex-wrap items-baseline gap-row">
             <span className="text-figure text-foreground">{metric.value}</span>

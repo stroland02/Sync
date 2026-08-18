@@ -14,8 +14,10 @@ import { Link } from "react-router"
 import { DEFAULT_LIMIT } from "@/api/client"
 import { useRepositoryObserved } from "@/api/queries"
 import type { ObservedTelemetryResponse } from "@/api/types"
+import { InfoHint } from "@/components/info-hint"
 import { MetricPanel } from "@/components/metric-panel"
 import { RungBadge } from "@/components/provenance"
+import { Button } from "@/components/ui/button"
 import { EmptyState, ErrorState, LoadingState } from "@/components/states"
 import { formatTimestamp } from "@/lib/format"
 import { ErrorWindowsTable } from "@/features/telemetry/error-windows-table"
@@ -25,10 +27,22 @@ import { FooterBar } from "@/layouts/footer-bar"
 import { useOffsetParam } from "@/lib/use-offset-param"
 
 /** A section inside the telemetry panel. Furniture register, `h3` under the panel's own `h2`. */
-function TelemetrySection({ title, children }: { title: string; children: ReactNode }) {
+function TelemetrySection({
+  title,
+  hint,
+  children,
+}: {
+  title: string
+  /** Explanation on demand — never a protected sentence, which stays in the section body. */
+  hint?: ReactNode
+  children: ReactNode
+}) {
   return (
     <div className="flex flex-col gap-section">
-      <h3 className="furniture text-meta text-ink-muted">{title}</h3>
+      <div className="flex items-center gap-row">
+        <h3 className="furniture text-meta text-ink-muted">{title}</h3>
+        {hint}
+      </div>
       {children}
     </div>
   )
@@ -92,21 +106,29 @@ export function ObservedTelemetryCard({ repoId }: { repoId: string }) {
       {query.isSuccess && (
         <MetricPanel
           label="Observed telemetry"
-          caption={
-            <p className="max-w-prose">
+          // The one qualification stays in front of the data; the rest of the explanation moves
+          // behind the ⓘ and into Settings → Pages (owner direction 2026-08-18). The Signals
+          // screen keeps a visible route: the button below the panel label's row.
+          hint={
+            <InfoHint label="About observed telemetry">
               What traffic showed up for this repository, what shape it had, and how often it
-              failed. A row here is evidence a call site was exercised — it is not proof the
-              binding correlating it to an operation is correct. The specification's own Signals
-              level (design doc line 435) holds this traffic as the signal-source role's one panel,
-              beside the vendor role and the human-surface role —{" "}
-              <Link
-                to={`/repositories/${encodeURIComponent(repoId)}/observed`}
-                className="underline underline-offset-2"
-              >
-                see it grouped with the other two roles, on the Signals screen
-              </Link>{" "}
-              — rather than reading this card alone as the whole level.
-            </p>
+              failed. The Signals screen holds this traffic as the signal-source role&rsquo;s
+              panel, beside the vendor role and the human-surface role, rather than this card
+              being the whole level.
+            </InfoHint>
+          }
+          caption={
+            <div className="flex flex-wrap items-center justify-between gap-row">
+              <p className="max-w-prose">
+                A row here is evidence a call site was exercised — not proof the binding
+                correlating it to an operation is correct.
+              </p>
+              <Button asChild variant="outline" size="sm">
+                <Link to={`/repositories/${encodeURIComponent(repoId)}/observed`}>
+                  Open Signals
+                </Link>
+              </Button>
+            </div>
           }
         >
           <TelemetrySection title="Calls">
@@ -142,12 +164,20 @@ export function ObservedTelemetryCard({ repoId }: { repoId: string }) {
             <TelemetryRungNote data={query.data} />
           </TelemetrySection>
 
-          <TelemetrySection title="Shapes">
+          <TelemetrySection
+            title="Shapes"
+            hint={
+              <InfoHint label="About shapes">
+                What the operations this repository calls have looked like on the wire, scoped to
+                the vendor/operation pairs this repository&rsquo;s own calls name.
+              </InfoHint>
+            }
+          >
+            {/* The scope qualification stays visible: a shape is a vendor-wide fact, and a
+                reader who misses that reads vendor data as this repository's. */}
             <p className="max-w-prose text-body text-muted-foreground">
-              What the operations this repository calls have looked like on the wire, scoped
-              to the vendor/operation pairs this repository's own calls above name — a shape
-              is a vendor-wide fact, not a per-repository one, so nothing here belongs to this
-              repository alone.
+              A shape is a vendor-wide fact, not a per-repository one — nothing in this table
+              belongs to this repository alone.
             </p>
             {query.data.shapes.total === 0 ? (
               <EmptyState

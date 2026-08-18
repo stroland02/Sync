@@ -21,9 +21,16 @@ import { CodebasesSettingsPanel } from "@/features/settings/codebases-settings-p
 import { GithubConnectionSettingsPanel } from "@/features/settings/github-connection-settings-panel"
 import { AdaptersSettingsPanel } from "@/features/settings/adapters-settings-panel"
 import { AboutPlatformPanel } from "@/features/settings/about-platform-panel"
+import { PagesGuidePanel } from "@/features/settings/pages-guide-panel"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/vendor/supabase/ui/select"
 
-export type SettingsGroup = "pull-requests" | "codebases" | "adapters" | "github-connection" | "about"
+export type SettingsGroup =
+  | "pull-requests"
+  | "codebases"
+  | "adapters"
+  | "github-connection"
+  | "pages"
+  | "about"
 
 interface GroupDef {
   id: SettingsGroup
@@ -57,6 +64,11 @@ const SETTING_GROUPS: readonly GroupDef[] = [
     id: "github-connection",
     label: "Connection",
     description: "Forge authentication, local CLI status, and permissions",
+  },
+  {
+    id: "pages",
+    label: "Pages",
+    description: "How each screen works — the long form behind every ⓘ",
   },
   {
     id: "about",
@@ -158,6 +170,9 @@ export function SettingsPage() {
           )}
           {selectedGroup === "github-connection" && (
             <GithubConnectionSettingsPanel repoId={activeRepo} />
+          )}
+          {selectedGroup === "pages" && (
+            <PagesGuidePanel />
           )}
           {selectedGroup === "about" && (
             <AboutPlatformPanel />
