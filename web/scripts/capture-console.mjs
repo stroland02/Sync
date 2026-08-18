@@ -90,15 +90,23 @@ async function subjects() {
 const { repo, vendor, finding } = await subjects()
 const enc = encodeURIComponent
 
+// Every route is workspace-scoped as of `M14-W386`, which collapsed `routes.ts` from two regions
+// to one. Five of these were still written against the old shape and captured
+// "No screen at this address." instead of a screen -- and a capture directory full of 404s is
+// worse than an empty one, because a Gate 3 walk reads these images and would sign on them.
+// `/settings` stays unscoped: it configures the deployment rather than describing one workspace,
+// and `routes.ts` declares it as a destination rather than a level for that reason.
+const scoped = (path) => repo && `/repositories/${enc(repo)}${path}`
+
 const ROUTES = [
   ["01-fleet", "/"],
-  ["02-codebase", repo && `/repositories/${enc(repo)}`],
-  ["03-vendor", vendor && `/vendors/${enc(vendor)}`],
-  ["04-signals", repo && `/repositories/${enc(repo)}/observed`],
-  ["06-finding", finding && `/findings/${enc(finding)}`],
-  ["07-workflow", finding && `/findings/${enc(finding)}/workflow`],
-  ["08-pull-request", finding && `/findings/${enc(finding)}/workflow/pull-request`],
-  ["09-detectors", "/detectors"],
+  ["02-codebase", scoped("")],
+  ["03-vendor", vendor && scoped(`/vendors/${enc(vendor)}`)],
+  ["04-signals", scoped("/observed")],
+  ["06-finding", finding && scoped(`/findings/${enc(finding)}`)],
+  ["07-workflow", finding && scoped(`/findings/${enc(finding)}/workflow`)],
+  ["08-pull-request", finding && scoped(`/findings/${enc(finding)}/workflow/pull-request`)],
+  ["09-detectors", scoped("/detectors")],
   ["10-settings", "/settings"],
 ].filter(([, route]) => route !== null && route !== undefined)
 
