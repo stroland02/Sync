@@ -133,3 +133,7 @@ src/sync/graph/store.py:GraphStore.record_dismissal
 src/sync/graph/store.py:GraphStore.dismissal_state
 src/sync/graph/store.py:GraphStore.dismissal_history_count
 src/sync/graph/store.py:GraphStore.dismissal_reason_counts
+
+# Decision 76's event bus, added 2026-08-18. Built ahead of the `GET /api/events` route that
+# will subscribe to it; delete this line in the commit that wires that route.
+src/sync/graph/store.py:GraphStore.subscribe_events
