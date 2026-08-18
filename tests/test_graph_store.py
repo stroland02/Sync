@@ -1560,3 +1560,46 @@ def test_open_findings_severity_counts_narrows_to_one_vendor(store):
 
 def test_open_findings_severity_counts_for_a_vendor_with_nothing_open_is_empty(store):
     assert store.open_findings_severity_counts(vendor_id="stripe") == {}
+
+
+def _dismissable_finding(store) -> str:
+    site_id = store.upsert_call_site(_site())
+    return store.insert_finding(
+        Finding(
+            detector="vendor-change",
+            claim="response-field-type-changed",
+            call_site_id=site_id,
+            severity="warning",
+            rationale="the call reads a field whose type the vendor changed",
+            binding_rung="static",
+        )
+    )
+
+
+def test_replaying_one_dismissal_converges_on_one_row(store):
+    """`CLAUDE.md`: every table gets a natural key and an explicit conflict clause, and `efcc19d`
+    was this bug. One person dismissing one finding at one instant is one event however many
+    times the write is replayed -- a retry after a dropped connection must not leave two rows
+    that make `dismissal_history_count` report a decision taken twice."""
+    finding_id = _dismissable_finding(store)
+    at = datetime(2026, 7, 20, 12, tzinfo=timezone.utc)
+
+    store.record_dismissal(finding_id, reason="false_positive", actor="sebastian", at=at)
+    store.record_dismissal(finding_id, reason="false_positive", actor="sebastian", at=at)
+
+    assert store.dismissal_history_count(finding_id) == 1
+
+
+def test_two_genuine_decisions_at_different_times_are_two_rows(store):
+    """The key must not collapse a real change of mind. Dismissing, restoring and dismissing
+    again is three events, and the history is what shows somebody argued with themselves."""
+    finding_id = _dismissable_finding(store)
+    store.record_dismissal(
+        finding_id, reason="wont_fix", actor="a", at=datetime(2026, 7, 20, 12, tzinfo=timezone.utc)
+    )
+    store.record_dismissal(
+        finding_id, reason=None, actor="a", at=datetime(2026, 7, 21, 12, tzinfo=timezone.utc)
+    )
+
+    assert store.dismissal_history_count(finding_id) == 2
+    assert store.dismissal_state(finding_id)["dismissed"] is False
