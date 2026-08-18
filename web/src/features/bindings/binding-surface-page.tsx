@@ -63,6 +63,7 @@
  * second, which departs from Studio's anatomy on the console's own rule.
  */
 
+import { useState } from "react"
 import { useParams, useSearchParams } from "react-router"
 
 import { DEFAULT_LIMIT } from "@/api/client"
@@ -79,6 +80,12 @@ import {
 import { type Fact, FactList } from "@/components/fact-list"
 import { ActiveFilters, FacetChips, PrefixFilter } from "@/components/filters"
 import { RungBadge } from "@/components/provenance"
+import {
+  CALL_SITE_COLUMNS,
+  nextSortDirection,
+  sortCallSites,
+  type SortState,
+} from "./call-site-columns"
 import { Skeleton } from "@/components/skeleton"
 import { EmptyState, ErrorState, LoadingState } from "@/components/states"
 import { Absent, Formatted } from "@/components/status"
@@ -345,6 +352,17 @@ function BindingSurfaceDetail({
   // No `resets`, unlike every other parameter on this screen. Opening a detail does not change
   // which rows exist, so the page position measured against them is still the right one.
   const [openBinding, setBinding] = useFilterParam(BINDING_KEY)
+
+  /**
+   * Which column orders this page of call sites, if any.
+   *
+   * Component state rather than a search parameter, and that is a narrower claim than the
+   * filters beside it: those change *which* rows the server returns, so they belong in the
+   * address a reader can send to somebody. A sort reorders the page already on screen and does
+   * not reach the server at all, so putting it in the URL would promise that a shared link
+   * reproduces an ordering across a page boundary, which it would not.
+   */
+  const [sort, setSort] = useState<SortState | null>(null)
   const clearCallSiteFilters = useClearFilters([REPO_KEY, PATH_PREFIX_KEY], CALL_SITE_RESETS)
   const query = useBindingSurface(vendorId, operationId, {
     repoId: repoId ?? undefined,
@@ -440,25 +458,63 @@ function BindingSurfaceDetail({
                 offset={callSitesOffset}
               />
             ) : (
-              <Table>
+              /* The table scrolls inside itself rather than widening the page. Nine columns of
+                 real call-site data do not fit 1440px, and a page that scrolls horizontally takes
+                 the navigation and the header with it -- the reader loses the screen to read a
+                 cell. `min-w-max` lets the row keep its natural width inside that scroller. */
+              <div className="w-full overflow-x-auto">
+              <Table className="min-w-max">
                 <TableHeader>
                   <TableRow>
                     {/* Rung first, on `vendor-findings-table.tsx`'s argument: the call site is the
                         widest cell in this table and no fixture here is long enough to prove it, so
-                        a rung column further right is a column the layout does not protect. */}
-                    <TableHead>Rung</TableHead>
-                    <TableHead>Repository</TableHead>
-                    <TableHead>Call site</TableHead>
-                    <TableHead>Symbol</TableHead>
-                    <TableHead>SDK version</TableHead>
-                    <TableHead>Argument keys</TableHead>
-                    <TableHead>Response fields read</TableHead>
-                    <TableHead>Loop depth</TableHead>
-                    <TableHead>Indexed at</TableHead>
+                        a rung column further right is a column the layout does not protect.
+
+                        Each header states its column's type and, where ordering it means
+                        something, is the control that sorts it. `call-site-columns.ts` carries
+                        both and the argument for the type vocabulary being ours rather than a
+                        database's. */}
+                    {CALL_SITE_COLUMNS.map((column) => (
+                      <TableHead key={column.key}>
+                        {column.sortBy ? (
+                          <button
+                            type="button"
+                            onClick={() => setSort((current) => nextSortDirection(current, column.key))}
+                            className="flex items-baseline gap-1.5 text-left"
+                            aria-label={`Sort by ${column.label}`}
+                            aria-sort={
+                              sort?.key === column.key
+                                ? sort.direction === "asc"
+                                  ? "ascending"
+                                  : "descending"
+                                : "none"
+                            }
+                          >
+                            <span>{column.label}</span>
+                            <span className="text-muted-foreground text-xs font-normal">
+                              {column.type}
+                            </span>
+                            {/* The direction is drawn, not implied by the header moving. A reader
+                                arriving at a sorted table has to be able to see which column did
+                                it without pressing anything. */}
+                            <span aria-hidden className="text-muted-foreground">
+                              {sort?.key === column.key ? (sort.direction === "asc" ? "↑" : "↓") : ""}
+                            </span>
+                          </button>
+                        ) : (
+                          <span className="flex items-baseline gap-1.5">
+                            <span>{column.label}</span>
+                            <span className="text-muted-foreground text-xs font-normal">
+                              {column.type}
+                            </span>
+                          </span>
+                        )}
+                      </TableHead>
+                    ))}
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {query.data.call_sites.items.map((site) => (
+                  {sortCallSites(query.data.call_sites.items, sort).map((site) => (
                     <TableRow
                       key={bindingKey(site)}
                       data-state={openBinding === bindingKey(site) ? "selected" : undefined}
@@ -503,6 +559,7 @@ function BindingSurfaceDetail({
                   ))}
                 </TableBody>
               </Table>
+              </div>
             )}
             <RungNote data={query.data} filtered={activeFilters.length > 0} />
             <FooterBar
