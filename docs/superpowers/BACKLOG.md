@@ -4671,7 +4671,7 @@ change.
 **This is a design constraint rather than a defect**, and it is filed so the constraint is met
 deliberately rather than discovered halfway through building the screen.
 
-## B1 — the lane sweep prints a permanent MANUAL for a dispatch that can never be restarted
+### B189 — the lane sweep prints a permanent MANUAL for a dispatch that can never be restarted
 
 `scripts/orchestration/resume_lanes.py` reads Orca's dispatch records. A dispatch whose
 `worker-start` timed out stays `failed` forever, and when its terminal has since been re-dispatched
