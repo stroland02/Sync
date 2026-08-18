@@ -11,6 +11,7 @@ Shared credential gate matching the console's contract:
 from __future__ import annotations
 
 import base64
+import binascii
 import hashlib
 import hmac
 import os
@@ -48,7 +49,7 @@ def extract_credential(header: str | None) -> str | None:
             # Format username:password (username is ignored)
             _, _, password = decoded.partition(":")
             return password
-        except Exception:
+        except (binascii.Error, UnicodeDecodeError):
             return None
     return None
 

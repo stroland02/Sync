@@ -672,6 +672,39 @@ class RepoContext(BaseModel):
     body: str
     source: str
     updated_at: datetime | None = None
+    telemetry_attached_at: datetime | None = None
+
+
+MergePolicy = Literal["never", "when_checks_pass"]
+MergeMethod = Literal["squash", "merge", "rebase"]
+
+ALLOWED_MERGE_POLICIES: tuple[str, ...] = ("never", "when_checks_pass")
+ALLOWED_MERGE_METHODS: tuple[str, ...] = ("squash", "merge", "rebase")
+REFUSED_MERGE_POLICIES: dict[str, str] = {
+    "immediate": "Refused: violates invariant 'nothing reaches a pull request unverified'",
+    "always": "Refused: violates invariant 'nothing reaches a pull request unverified'",
+}
+
+
+class RepoSettings(BaseModel):
+    """Automation and merge settings for agent-opened pull requests against one repository.
+
+    The grain is one row per repository.
+
+    `merge_policy`: 'never' | 'when_checks_pass'. Immediate merge without verification is refused.
+    `merge_method`: 'squash' | 'merge' | 'rebase'.
+    `base_branch`: target base branch (default: 'main').
+    `merge_policy_refusals`: explicit accounting of refused merge policies.
+    """
+
+    repo_id: str
+    merge_policy: MergePolicy = "when_checks_pass"
+    merge_method: MergeMethod = "squash"
+    base_branch: str = "main"
+    merge_policy_refusals: dict[str, str] = Field(
+        default_factory=lambda: dict(REFUSED_MERGE_POLICIES)
+    )
+    updated_at: datetime | None = None
 
 
 class ObservedErrorWindow(BaseModel):

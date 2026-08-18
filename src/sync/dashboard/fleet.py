@@ -27,7 +27,7 @@ from sync.dashboard.queries import _FINISHED, _pending_node
 from sync.graph.store import GraphStore
 
 
-def _run_row(thread_id: str, checkpoint: dict) -> dict:
+def _run_row(thread_id: str, checkpoint: dict, repo_id: str | None = None) -> dict:
     values = checkpoint.get("channel_values") or {}
     versions = checkpoint.get("channel_versions") or {}
     seen = checkpoint.get("versions_seen") or {}
@@ -39,6 +39,7 @@ def _run_row(thread_id: str, checkpoint: dict) -> dict:
     return {
         "thread_id": thread_id,
         "finding_id": finding_id,
+        "repo_id": repo_id or values.get("repo_id"),
         "run_id": run_id,
         "current_node": None if outcome is not None else _pending_node(versions, seen),
         "outcome": outcome,
@@ -47,7 +48,14 @@ def _run_row(thread_id: str, checkpoint: dict) -> dict:
     }
 
 
-def runs(checkpointer_dsn: str, *, limit: int = 50, offset: int = 0) -> dict:
+def runs(
+    checkpointer_dsn: str,
+    *,
+    repo_id: str | None = None,
+    store: GraphStore | None = None,
+    limit: int = 50,
+    offset: int = 0,
+) -> dict:
     """Every run the checkpointer holds, one row per thread, newest first -- paginated by a real
     SQL `LIMIT`, plus a disposition roll-up computed across every run rather than the page.
 
@@ -55,21 +63,20 @@ def runs(checkpointer_dsn: str, *, limit: int = 50, offset: int = 0) -> dict:
     collapse them the way `workflow_state` does -- that answers a per-finding question and this
     answers a per-run one, so a retried finding is two rows here and one there.
 
-    Three round trips rather than one, on purpose: `total` is a `count(DISTINCT thread_id)` that
-    never fetches a checkpoint body, the page is a `LIMIT`/`OFFSET` over the same newest-per-
-    thread subquery the old single-query form used, and `by_disposition` reads only the one JSON
-    field it needs (`channel_values->>'outcome'`) across every thread rather than every column of
-    every checkpoint. The old form fetched every row's full JSONB into Python and sliced the
-    result -- `rows[offset : offset + limit]`, in a variable literally named after the mistake --
-    so a fleet of ten thousand runs read ten thousand rows to return fifty; this reads ten
-    thousand only for the roll-up, and only the one string column that roll-up needs.
-
-    `by_disposition` is `_grouped` over `outcome`, the same field `_run_row` derives per item,
-    computed independently across every thread rather than by tallying the current page -- the
-    same reasoning `app.py`'s `overview` route already applies to `total_findings`: a count over
-    a page and reported as a fleet-wide fact is the defect this milestone keeps closing.
+    `repo_id` narrows to runs belonging to that repository (B149).
     """
     limit = max(limit, 1)
+    repo_map = store.finding_repo_ids() if store is not None else {}
+
+    if repo_id is not None:
+        matching_fids = [fid for fid, r_id in repo_map.items() if r_id == repo_id]
+        if not matching_fids:
+            return {"items": [], "total": 0, "next_offset": None, "by_disposition": {}}
+        predicate = "checkpoint_ns = '' AND split_part(thread_id, ':', 1) = ANY(%s)"
+        params: list[Any] = [matching_fids]
+    else:
+        predicate = "checkpoint_ns = ''"
+        params = []
 
     with psycopg.connect(checkpointer_dsn, row_factory=dict_row) as conn:
         # A database no run has ever checkpointed into has no tables at all; that is the same
@@ -79,34 +86,43 @@ def runs(checkpointer_dsn: str, *, limit: int = 50, offset: int = 0) -> dict:
             return {"items": [], "total": 0, "next_offset": None, "by_disposition": {}}
 
         total = conn.execute(
-            "SELECT count(DISTINCT thread_id) AS n FROM checkpoints WHERE checkpoint_ns = ''"
+            f"SELECT count(DISTINCT thread_id) AS n FROM checkpoints WHERE {predicate}",
+            params,
         ).fetchone()["n"]
 
         rows = conn.execute(
-            """
+            f"""
             SELECT thread_id, checkpoint FROM (
                 SELECT DISTINCT ON (thread_id) thread_id, checkpoint_id, checkpoint
                   FROM checkpoints
-                 WHERE checkpoint_ns = ''
+                 WHERE {predicate}
                  ORDER BY thread_id, checkpoint_id DESC
             ) AS newest_per_thread
             ORDER BY checkpoint_id DESC
             LIMIT %s OFFSET %s
             """,
-            (limit, offset),
+            params + [limit, offset],
         ).fetchall()
 
         outcome_rows = conn.execute(
-            """
+            f"""
             SELECT DISTINCT ON (thread_id)
                    checkpoint->'channel_values'->>'outcome' AS outcome
               FROM checkpoints
-             WHERE checkpoint_ns = ''
+             WHERE {predicate}
              ORDER BY thread_id, checkpoint_id DESC
-            """
+            """,
+            params,
         ).fetchall()
 
-    items = [_run_row(row["thread_id"], row["checkpoint"]) for row in rows]
+    items = [
+        _run_row(
+            row["thread_id"],
+            row["checkpoint"],
+            repo_id=repo_map.get(row["thread_id"].split(":", 1)[0]),
+        )
+        for row in rows
+    ]
     consumed = offset + len(items)
     by_disposition = _grouped(
         [row["outcome"] if row["outcome"] in _FINISHED else None for row in outcome_rows]
@@ -130,15 +146,18 @@ def _grouped(values: list) -> dict:
     return dict(counts)
 
 
-def corpus_summary(store: GraphStore) -> dict:
+def corpus_summary(store: GraphStore, *, repo_id: str | None = None) -> dict:
     """The repair record, aggregated. `attempts` and `distinct_findings` are separate keys.
 
     One finding retried three times is three rows in `migration_outcome` and one finding here
     too -- `attempts == 3`, `distinct_findings == 1`. Counting findings by counting rows is the
     grain defect `CLAUDE.md` names for this table.
+
+    `repo_id` narrows to one repository's findings (B149).
     """
-    outcomes = store.migration_outcomes()
+    outcomes = store.migration_outcomes(repo_id=repo_id)
     return {
+        "repo_id": repo_id,
         "attempts": len(outcomes),
         "distinct_findings": len({outcome.finding_id for outcome in outcomes}),
         "by_terminal_status": _grouped([outcome.terminal_status for outcome in outcomes]),
