@@ -11,7 +11,7 @@
  */
 
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
-import { cleanup, render, screen, within } from "@testing-library/react"
+import { cleanup, render, screen } from "@testing-library/react"
 import { MemoryRouter } from "react-router"
 import { afterEach, describe, expect, it, vi } from "vitest"
 
@@ -68,12 +68,17 @@ describe("the overview screen", () => {
     expect(screen.getByRole("heading", { level: 1 }).textContent).toBe("Overview")
   })
 
-  it("leads with one row per repository, rather than a card each", () => {
-    const { container } = renderOverview()
+  it("does not list the codebases, because the Overview is one workspace's findings", () => {
+    const { container } = renderOverview("/?repo_id=org%2Fone")
 
-    const rows = container.querySelectorAll("tbody tr")
-    expect(rows.length).toBe(2)
-    expect(within(rows[0] as HTMLElement).getByText("org/one")).not.toBeNull()
+    // Ruled twice by the owner. The directory of codebases answers "which workspace am I in",
+    // which the scope switcher answers; this screen answers "what is true about the one I chose".
+    // The listing is not deleted -- it is the Codebases group in Settings, where choosing and
+    // configuring a codebase is the question being asked.
+    expect(screen.queryByRole("heading", { name: /monitored codebases/i })).toBeNull()
+    expect(
+      container.querySelector('a[href="/repositories/org%2Ftwo"]')
+    ).toBeNull()
   })
 
   it("carries no page-level review action, because that belongs to a change unit", () => {
@@ -124,14 +129,6 @@ describe("the overview screen", () => {
     expect(band).not.toBeNull()
     expect(band?.textContent).toContain("org/one")
 
-    // The band is above the repository list. The list is still on this screen — removing it is the
-    // owner's ruling and is sequenced after the specification amendment — but the codebase this
-    // screen is about comes first, not the directory of codebases it was chosen from.
-    const table = container.querySelector("table")
-    expect(table).not.toBeNull()
-    expect(
-      band!.compareDocumentPosition(table!) & Node.DOCUMENT_POSITION_FOLLOWING
-    ).toBeGreaterThan(0)
   })
 
   it("names no codebase, and states no figure, when the address selects none", () => {
@@ -146,12 +143,16 @@ describe("the overview screen", () => {
     expect(band?.textContent).not.toContain("Call sites indexed")
   })
 
-  it("still says the repository list is the thing absence is measured against", () => {
+  it("keeps absence-is-not-zero pointing at a list that is actually there", () => {
     const { container } = renderOverview()
 
-    // The absence footnote points at "the repository list below". The list stays on this screen, so
-    // the sentence keeps its referent and needs no rewording — which is why the list was not moved
-    // to the sidebar in this unit.
-    expect(container.textContent).toContain("no row in the repository list below")
+    // The sentence is protected: it may be restyled and re-placed, never shortened or deleted. Its
+    // referent moved with the listing, so the pointer moves with it. A protected sentence naming a
+    // list this screen no longer holds would be a true claim with a dead pointer, which is the
+    // quiet half of the same defect.
+    const text = container.textContent ?? ""
+    expect(text).toContain("absence is not zero")
+    expect(text).toContain("no row in the codebase list in Settings")
+    expect(text).not.toContain("the repository list below")
   })
 })
