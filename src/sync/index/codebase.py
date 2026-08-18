@@ -29,18 +29,16 @@ from sync.signals.registry import (
 
 log = logging.getLogger(__name__)
 
-# Known package name to registered vendor ID mapping
-_KNOWN_PACKAGES: dict[str, str] = {
-    "stripe": "stripe",
-    "twilio": "twilio",
-    "@anthropic-ai/sdk": "anthropic",
-    "anthropic": "anthropic",
-    "@vercel/sdk": "vercel",
-    "vercel": "vercel",
-    "openai": "openai",
-    "@cloudflare/ai": "cloudflare",
-    "cloudflare": "cloudflare",
-}
+def _package_to_vendor_map() -> dict[str, str]:
+    mapping: dict[str, str] = {}
+    for vendor_id, per_lang in vendor_sdk_bindings().items():
+        mapping[vendor_id.lower()] = vendor_id
+        for _lang, info in per_lang.items():
+            for key in ("package", "distribution", "module"):
+                val = info.get(key, "")
+                if val:
+                    mapping[val.lower()] = vendor_id
+    return mapping
 
 
 @dataclass(frozen=True)
@@ -114,21 +112,14 @@ def discover_codebase_vendors(repo_path: Path) -> list[str]:
             sub_declared, _ = read_declared_dependencies(manifest_file.parent)
             declared.extend(sub_declared)
 
-    bindings = vendor_sdk_bindings()
     discovered: set[str] = set()
-
+    pkg_map = _package_to_vendor_map()
     for dep in declared:
         name_lower = dep.name.lower()
-        for vendor_id, per_lang in bindings.items():
-            for lang, binding_info in per_lang.items():
-                pkg = binding_info.get("package", "")
-                if pkg and (pkg.lower() == name_lower or pkg.lower() == dep.name.lower()):
-                    discovered.add(vendor_id)
-
-        if dep.name in _KNOWN_PACKAGES:
-            discovered.add(_KNOWN_PACKAGES[dep.name])
-        elif name_lower in _KNOWN_PACKAGES:
-            discovered.add(_KNOWN_PACKAGES[name_lower])
+        if name_lower in pkg_map:
+            discovered.add(pkg_map[name_lower])
+        elif dep.name in pkg_map:
+            discovered.add(pkg_map[dep.name])
 
     return sorted(discovered)
 
@@ -141,18 +132,14 @@ class _FallbackIndexingAdapter:
 
     def __init__(self, vendor_id: str) -> None:
         self.vendor_id = vendor_id
-        if vendor_id == "stripe":
-            self.sdk_bindings = {
-                "typescript": {"package": "stripe"},
-                "python": {"distribution": "stripe", "module": "stripe"},
-            }
-        elif vendor_id == "twilio":
-            self.sdk_bindings = {
-                "typescript": {"package": "twilio"},
-                "python": {"distribution": "twilio", "module": "twilio"},
-            }
+        bindings = vendor_sdk_bindings().get(vendor_id)
+        if bindings:
+            self.sdk_bindings = bindings
         else:
-            self.sdk_bindings = {}
+            self.sdk_bindings = {
+                "typescript": {"package": vendor_id},
+                "python": {"distribution": vendor_id, "module": vendor_id},
+            }
 
     def operation_for_symbol(self, symbol: str, *, language: str | None = None) -> OperationRef | None:
         parts = symbol.split(".")
@@ -161,18 +148,22 @@ class _FallbackIndexingAdapter:
             action = parts[-1]
             method = "POST" if action in ("create", "post", "cancel", "refund", "update") else "GET"
             op_id = f"{action.capitalize()}{resource.capitalize()}"
-            return OperationRef(operation_id=op_id, http_method=method, path=f"/v1/{resource}")
-        return OperationRef(operation_id=symbol, http_method="POST", path=f"/{symbol}")
+            return OperationRef(operation_id=op_id, method=method, path=f"/v1/{resource}")
+        return None
 
 
 def _load_or_create_vendor_adapter(
     vendor_id: str,
-    cache_dir: Path | None,
-    from_version: str,
-    to_version: str,
-) -> Any:
+    cache_dir: Path | None = None,
+    from_version: str = "v2320",
+    to_version: str = "v2330",
+) -> Any | None:
     """Instantiate a VendorAdapter for indexing, from cache or fallback construction."""
-    candidate_caches = [cache_dir] if cache_dir is not None else [Path(".cache/specs"), Path(".cache")]
+    candidate_caches = (
+        [cache_dir]
+        if cache_dir is not None
+        else [Path(".cache/specs"), Path(".cache"), Path(f".cache/specs/{vendor_id}")]
+    )
     for candidate in candidate_caches:
         if candidate is not None and candidate.is_dir():
             context = VendorContext(
@@ -186,20 +177,6 @@ def _load_or_create_vendor_adapter(
                 try:
                     prepared = prepare_vendor(vendor_id, context)
                     return prepared.adapter
-                except Exception:
-                    pass
-
-    from sync.signals.stripe.adapter import StripeAdapter
-    if vendor_id == "stripe":
-        potential_symbol_maps = [
-            Path(".cache/stripe_symbols.json"),
-            Path(".cache/specs/stripe/symbols.json"),
-            Path(".cache/specs/symbols.json"),
-        ]
-        for map_path in potential_symbol_maps:
-            if map_path.is_file():
-                try:
-                    return StripeAdapter(spec_dir=map_path.parent, symbol_map_path=map_path)
                 except Exception:
                     pass
 

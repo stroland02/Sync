@@ -519,7 +519,9 @@ def create_app(
             methods=["GET"],
         ),
         Route("/api/repositories/{repo_id:path}/coverage", repository_coverage, methods=["GET"]),
+        Route("/api/repositories/{repo_id}/coverage", repository_coverage, methods=["GET"]),
         Route("/api/repositories/{repo_id:path}/observed", repository_observed, methods=["GET"]),
+        Route("/api/repositories/{repo_id}/observed", repository_observed, methods=["GET"]),
         Route("/api/detectors", detectors, methods=["GET"]),
         Route("/api/adapters", adapters, methods=["GET"]),
         # `{repo_id:path}` rather than `{repo_id}`: a `repo_id` is `host/owner/name` and

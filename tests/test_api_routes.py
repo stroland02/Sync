@@ -1709,6 +1709,7 @@ _LIMIT_OFFSET_COLLECTIONS = {
 _MULTI_CURSOR_COLLECTIONS = {
     "/api/vendors/{vendor_id}/operations/{operation_id}/bindings",
     "/api/repositories/{repo_id:path}/observed",
+    "/api/repositories/{repo_id}/observed",
 }
 
 # Routes that answer with a list but are not a page of it, each for a reason evidenced in the
@@ -1743,6 +1744,7 @@ _NOT_COLLECTIONS = {
     "/api/corpus/abandonment",
     "/api/repositories",
     "/api/repositories/{repo_id:path}/coverage",
+    "/api/repositories/{repo_id}/coverage",
     "/api/detectors",
     # Bounded by what the deployment registers plus what the graph has history for -- a number an
     # operator configured, not one a customer's traffic grows. A cursor over it would page a list
