@@ -1,0 +1,28 @@
+# Files that are executed inside a Linux container must arrive with LF endings.
+#
+# **This is not the `.gitattributes` CLAUDE.md tells you not to add.** That instruction is about
+# silencing the `LF will be replaced by CRLF` warning on every commit, and that warning is still
+# expected and still not silenced -- nothing here covers Python, TypeScript, Markdown or anything
+# else. This file exists because `core.autocrlf` is `true` on this machine and a shell script is
+# not text to a kernel: it is a program whose first line names its interpreter.
+#
+# Measured 2026-08-18, by cloning `main` from GitHub into a clean directory and running the result:
+#
+#     $ head -c 40 docker/entrypoint.sh | od -c
+#     #   !   /   u   s   r   /   b   i   n   /   e   n   v       b   a   s   h  \r  \n
+#
+#     $ docker run --rm -v .../docker:/x python:3.12-slim /x/entrypoint.sh
+#     env: 'bash\r': No such file or directory
+#
+# So the one-command install was broken for exactly the person it is written for -- somebody on
+# Windows cloning the repository for the first time -- while working perfectly in the worktree it
+# was built in, because that working copy happened to hold LF. A defect that only a fresh clone
+# can show is why the ship plan asks for fresh-clone bring-up to be verified by somebody who did
+# not build it.
+
+*.sh text eol=lf
+docker/entrypoint.sh text eol=lf
+
+# BuildKit tolerates CRLF in most instructions and then does not in a heredoc or a line
+# continuation. There is no reason to find out which on somebody else's machine.
+Dockerfile text eol=lf
