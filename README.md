@@ -470,8 +470,20 @@ docker compose -f docker-compose.demo.yml up --build
 ```
 
 Then open **http://127.0.0.1:4173** and sign in with the password the log prints — `sync-local-demo`
-unless you exported `SYNC_CONSOLE_PASSWORD` before starting. The first build takes a few minutes;
-after that it is seconds.
+unless you exported `SYNC_CONSOLE_PASSWORD` before starting.
+
+**Measured on a developer machine: 282 seconds the first time and 22 seconds after that.** The first
+run builds four toolchains — the console's dependencies, a production build of it, Node for the
+runtime image, and the Python tree — and every run after reuses all of it.
+
+**If you are about to show this to somebody, build it beforehand:**
+
+```bash
+docker compose -f docker-compose.demo.yml build
+```
+
+That is the same work moved earlier, and it turns a five-minute wait into a twenty-two second one.
+Nothing about the result differs.
 
 That brings up Postgres, applies the schema, starts the API, waits until the API actually answers,
 and only then serves the console. The order is deliberate: **half a stack is worse than no stack**,
