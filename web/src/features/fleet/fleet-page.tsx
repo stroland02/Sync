@@ -39,9 +39,11 @@
 
 import { useLocation } from "react-router"
 
-import { useRepositories } from "@/api/queries"
+import { useOverview, useRepositories, useRepositoryCoverage } from "@/api/queries"
 import { FactTile } from "@/components/fact-tile"
 import { CodebaseFactsBand, resolveCodebaseScope } from "@/features/fleet/codebase-facts"
+import { TotalsBar } from "@/features/fleet/totals-bar"
+import { VendorCardsGrid } from "@/features/fleet/vendor-cards-grid"
 import { OverviewGraphPanel } from "@/features/index-graph/overview-graph-panel"
 import { FleetFacts } from "@/features/fleet/fleet-facts"
 import { RungUpgradeCard } from "@/features/fleet/rung-upgrade-card"
@@ -67,6 +69,40 @@ export interface FleetPageProps {
  * be the console deciding what the operator is looking at, which is the claim the band refuses in
  * words and this panel refuses by not drawing.
  */
+/**
+ * The band below the fold: the totals line, then one card per vendor.
+ *
+ * Adopted from Lane F and scoped the way the graph is -- both describe one codebase, so neither
+ * draws until the address names one. `total_findings_bound_reached` is passed through rather than
+ * dropped, because past the route's bound the count is a floor, and printing a floor plain would
+ * overstate what was counted.
+ */
+function OverviewTotalsRegion() {
+  const { pathname, search } = useLocation()
+  const repositories = useRepositories()
+  const scope = resolveCodebaseScope(
+    scopeFromLocation(pathname, search).repoId,
+    repositories.data?.repo_ids
+  )
+  const repoId = scope.kind === "selected" || scope.kind === "only" ? scope.repoId : null
+
+  const coverage = useRepositoryCoverage(repoId ?? "")
+  const overview = useOverview(repoId ?? undefined)
+
+  if (repoId === null) return null
+
+  return (
+    <div className="flex flex-col gap-section">
+      <TotalsBar
+        totalCallSites={coverage.data?.total_call_sites ?? null}
+        totalFindings={overview.data?.total_findings ?? null}
+        findingsAreFloor={overview.data?.total_findings_bound_reached ?? false}
+      />
+      <VendorCardsGrid repoId={repoId} />
+    </div>
+  )
+}
+
 function OverviewGraphRegion() {
   const { pathname, search } = useLocation()
   const repositories = useRepositories()
@@ -117,6 +153,9 @@ export function FleetPage({ question = DEFAULT_QUESTION }: FleetPageProps) {
         <CodebaseFactsBand />
         <OverviewGraphRegion />
       </div>
+
+      {/* Decision 2's below-the-fold half: the totals, then the vendors they are made of. */}
+      <OverviewTotalsRegion />
 
       {/* 4-card metric strip */}
       <FleetFacts />
