@@ -658,3 +658,22 @@ raced. Message it with
 is wrong that your lane cannot fix.
 
 It does not review your work before you land it. The gate does that, and you ran it.
+
+## Trap: `orca orchestration check` without `--run` hides worker mail
+
+**Measured 2026-08-18, after a night of reading the board wrong.** The unscoped check returns only
+messages addressed to the coordinator's own terminal handle. Orca also delivers messages addressed
+to `run:<run_id>` — and a **rejected** `worker_done` goes there, not to the handle. So a lane that
+finishes real work against a dispatch whose capability was since revoked reports successfully, Orca
+rejects the report, and the rejection lands in a mailbox the coordinator is not reading. The
+coordinator sees 73 heartbeats and concludes nothing is waiting.
+
+**Always `orca orchestration check --run <run_id>`.** The unscoped form is not a lighter version of
+the scoped one; it is a different mailbox.
+
+**Two things follow.** Re-dispatching a lane revokes its current dispatch capability, so a report
+already in flight is rejected — expect the rejection in the run mailbox and read the body, because
+the work described in it is real and landed. And a worker whose terminal loses its run binding gets
+`consumer_fenced` on a scoped check and **silence on an unscoped one**, which is why Lane A spent
+turns diagnosing an empty inbox. The lane's own fix is `orca orchestration run-use --run <run_id>`;
+until it runs, `orca terminal send` is the only channel that reaches it.
