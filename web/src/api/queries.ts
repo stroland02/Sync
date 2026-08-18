@@ -21,6 +21,7 @@ import {
   fetchRepositoryObserved,
   fetchRuns,
   fetchAbandonment,
+  fetchVendorChangeVolume,
   fetchVendorChanges,
   fetchVendorOperations,
   fetchVendorFindings,
@@ -319,5 +320,13 @@ export function useAdapters() {
   return useQuery({
     queryKey: ["adapters"],
     queryFn: ({ signal }) => fetchAdapters(signal),
+  })
+}
+
+/** One vendor's whole change history, aggregated by the API rather than by whichever page loaded. */
+export function useVendorChangeVolume(vendorId: string) {
+  return useQuery({
+    queryKey: ["vendor-change-volume", vendorId],
+    queryFn: ({ signal }) => fetchVendorChangeVolume(vendorId, signal),
   })
 }

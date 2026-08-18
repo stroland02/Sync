@@ -102,7 +102,7 @@ export function VendorChangesCard({
         />
       ) : (
         <div className="flex flex-col gap-4">
-          <VendorChangeVolumeChart changes={page.items} vendorId={vendorId} />
+          <VendorChangeVolumeChart vendorId={vendorId} />
           <Table>
             <TableHeader>
               <TableRow>

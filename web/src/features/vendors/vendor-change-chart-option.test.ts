@@ -1,76 +1,62 @@
 import { describe, expect, it } from "vitest"
 
-import type { ChartTokens } from "@/components/charts/echart"
-import type { VendorChangeRow } from "@/api/types"
 import {
-  buildVendorChangeVolumeOption,
-  extractVendorChangeVolume,
+  vendorChangeVolume,
 } from "@/features/vendors/vendor-change-chart-option"
 
-const DUMMY_TOKENS: ChartTokens = {
-  ink: "#fff",
-  inkSecondary: "#aaa",
-  inkMuted: "#666",
-  surface: "#111",
-  grid: "#222",
-  axis: "#333",
-  labelOnLight: "#000",
-  series: ["#f00", "#0f0", "#00f", "#ff0"],
-}
+describe("the volume comes from the vendor's own answer, not from a page", () => {
+  /**
+   * The defect this closes, found by Lane H and handed over: the chart aggregated
+   * `VendorChangeRow[]` -- whichever page of the changes table happened to be loaded -- and printed
+   * the result as the vendor's total. It was wrong by an amount that CHANGED WHEN YOU PAGINATED,
+   * which is the worst shape a wrong number takes: plausible on every screen and never right.
+   *
+   * `GET /api/vendors/{vendor_id}/change-volume` counts `all_vendor_changes`, so the total is the
+   * vendor's and no page can move it. These tests hold the mapping, and the first one holds the
+   * property that was actually broken.
+   */
+  const payload = {
+    vendor_id: "stripe",
+    total_changes: 57,
+    by_kind: { breaking: 12, deprecation: 45 },
+    by_severity: {},
+    timeline: [
+      { period: "2026-06", count: 20, by_kind: { breaking: 5, deprecation: 15 } },
+      { period: "2026-07", count: 37, by_kind: { breaking: 7, deprecation: 30 } },
+    ],
+    newest_change_at: "2026-07-30T00:00:00Z",
+    oldest_change_at: "2026-06-01T00:00:00Z",
+  }
 
-describe("vendor-change-chart-option", () => {
-  it("extracts monthly buckets and kinds correctly", () => {
-    const items: VendorChangeRow[] = [
-      {
-        operation: "PostCharges",
-        change_kind: "breaking",
-        path_ptr: "/v1/charges",
-        severity: "breaking",
-        from_version: "v1",
-        to_version: "v2",
-        published_at: "2026-06-15T10:00:00Z",
-      },
-      {
-        operation: "GetCharges",
-        change_kind: "parameter_removed",
-        path_ptr: "/v1/charges",
-        severity: "warning",
-        from_version: "v2",
-        to_version: "v3",
-        published_at: "2026-06-20T14:00:00Z",
-      },
-      {
-        operation: "CreateCustomer",
-        change_kind: "breaking",
-        path_ptr: "/v1/customers",
-        severity: "breaking",
-        from_version: "v3",
-        to_version: "v4",
-        published_at: "2026-07-05T09:00:00Z",
-      },
-    ]
+  it("reports the vendor's total rather than the number of rows it was handed", () => {
+    const data = vendorChangeVolume(payload)
 
-    const data = extractVendorChangeVolume(items)
-    expect(data.periods).toEqual(["2026-06", "2026-07"])
-    expect(data.kinds).toEqual(["breaking", "parameter_removed"])
-    expect(data.totalChanges).toBe(3)
-    expect(data.countsByPeriodAndKind["2026-06"]["breaking"]).toBe(1)
-    expect(data.countsByPeriodAndKind["2026-06"]["parameter_removed"]).toBe(1)
-    expect(data.countsByPeriodAndKind["2026-07"]["breaking"]).toBe(1)
-
-    const option = buildVendorChangeVolumeOption(data, DUMMY_TOKENS)
-    expect(option.animation).toBe(false)
-    expect(option.series.length).toBe(2)
-    expect(option.xAxis.data).toEqual(["2026-06", "2026-07"])
+    // 57 across the vendor, while the timeline this render can see sums the same 57. A page of ten
+    // rows would once have made this say ten.
+    expect(data.totalChanges).toBe(57)
+    expect(data.periodTotals.reduce((a, b) => a + b, 0)).toBe(57)
   })
 
-  it("handles empty items safely", () => {
-    const data = extractVendorChangeVolume([])
+  it("keeps the periods in the order the answer gave them", () => {
+    const data = vendorChangeVolume(payload)
+
+    expect(data.periods).toEqual(["2026-06", "2026-07"])
+    expect(data.periodTotals).toEqual([20, 37])
+  })
+
+  it("names every kind the vendor published, not only those on one page", () => {
+    const data = vendorChangeVolume(payload)
+
+    expect([...data.kinds].sort()).toEqual(["breaking", "deprecation"])
+    expect(data.countsByPeriodAndKind["2026-07"]).toEqual({ breaking: 7, deprecation: 30 })
+  })
+
+  it("answers an empty vendor with a drawable shape rather than a zero-sized one", () => {
+    const data = vendorChangeVolume({ ...payload, total_changes: 0, by_kind: {}, timeline: [] })
+
+    expect(data.totalChanges).toBe(0)
     expect(data.periods).toEqual([])
     expect(data.kinds).toEqual([])
-    expect(data.totalChanges).toBe(0)
-
-    const option = buildVendorChangeVolumeOption(data, DUMMY_TOKENS)
-    expect(option.series).toEqual([])
   })
 })
+

@@ -28,6 +28,7 @@ import type {
   RunsPage,
   AbandonmentResponse,
   VendorChangeRow,
+  VendorChangeVolumeResponse,
   VendorOperationsResponse,
   FindingOrder,
   VendorFindingsPage,
@@ -164,6 +165,22 @@ export function fetchVendorFindings(
     order: params.order,
   })
   return getJson<VendorFindingsPage>(path, signal)
+}
+
+/**
+ * `GET /api/vendors/{vendor_id}/change-volume` -- the vendor's whole change history, aggregated.
+ *
+ * Deliberately unpaged. The console used to derive this from a page of `fetchVendorChanges` and
+ * print the result as the vendor's total, which moved when a reader paginated.
+ */
+export function fetchVendorChangeVolume(
+  vendorId: string,
+  signal?: AbortSignal,
+): Promise<VendorChangeVolumeResponse> {
+  return getJson<VendorChangeVolumeResponse>(
+    `/api/vendors/${encodeURIComponent(vendorId)}/change-volume`,
+    signal,
+  )
 }
 
 export function fetchVendorChanges(
