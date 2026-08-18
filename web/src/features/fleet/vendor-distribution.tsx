@@ -87,7 +87,7 @@ export function VendorFindingsTable({
 
 function vendorHref(vendorId: string, repoId: string): string {
   const path = `/vendors/${encodeURIComponent(vendorId)}`
-  return repoId === null ? path : `${path}?repo_id=${encodeURIComponent(repoId)}`
+  return `${path}?repo_id=${encodeURIComponent(repoId)}`
 }
 
 function byOpenFindingCountDescending(a: VendorSummary, b: VendorSummary): number {

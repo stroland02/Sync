@@ -1245,6 +1245,88 @@ class GraphStore:
         ).fetchall()
         return {row["rung"]: int(row["n"]) for row in rows}
 
+    def observed_edges_for_repository(self, repo_id: str) -> list[dict]:
+        """One row per (vendor, operation, rung) this repository's traffic actually named.
+
+        The telemetry rung as *edges* rather than as rows: the canvas draws one line per operation
+        the traffic reached, and `observed_call`'s grain is one row per unit of work, so drawing
+        it unaggregated would put a thousand identical lines between two nodes.
+
+        **An uncorrelated span is excluded here and counted by `off_path_counts` instead.** It
+        names no operation, so there is no node to draw an edge to; folding it into `observed`
+        would claim a correlation nothing made, and dropping it entirely would understate what
+        reached the vendor. It is off the path rather than absent, and off-path is a place on this
+        screen.
+        """
+        rows = self._connect().execute(
+            """
+            SELECT vendor_id,
+                   operation_id,
+                   binding_rung,
+                   count(*)            AS calls
+              FROM observed_call
+             WHERE repo_id = %s AND operation_id <> ''
+             GROUP BY vendor_id, operation_id, binding_rung
+             ORDER BY vendor_id, operation_id, binding_rung
+            """,
+            (repo_id,),
+        ).fetchall()
+        return [
+            {
+                "vendor_id": row["vendor_id"],
+                "operation_id": row["operation_id"],
+                "binding_rung": row["binding_rung"],
+                "calls": int(row["calls"]),
+            }
+            for row in rows
+        ]
+
+    def off_path_counts(self, repo_id: str) -> dict[str, int]:
+        """What this repository holds that no edge on the canvas can carry.
+
+        `unresolved` is a span that correlated to no operation. `unattributed` is a finding whose
+        rung predates the column that would have recorded one -- a value no binder emits and which
+        `BindingRung` deliberately excludes, so it cannot be drawn as a rung.
+
+        Both are returned as numbers rather than omitted when nought, because the tables were read
+        and held none, and that is a measurement. The never-indexed case is the one that answers
+        `None`, and it answers from `repository_indexed_at`.
+        """
+        unresolved = self._connect().execute(
+            """
+            SELECT count(*) AS n FROM observed_call
+             WHERE repo_id = %s AND (operation_id = '' OR binding_rung = 'unresolved')
+            """,
+            (repo_id,),
+        ).fetchone()
+        unattributed = self._connect().execute(
+            """
+            SELECT count(*) AS n
+              FROM finding
+              JOIN call_site ON call_site.id = finding.call_site_id
+             WHERE call_site.repo_id = %s AND finding.binding_rung = 'unattributed'
+            """,
+            (repo_id,),
+        ).fetchone()
+        return {"unresolved": int(unresolved["n"]), "unattributed": int(unattributed["n"])}
+
+    def repository_indexed_at(self, repo_id: str) -> datetime | None:
+        """When the index last wrote a call site for this repository, or `None` if it never has.
+
+        **Retracted rows count.** A repository whose calls have all since gone was still indexed,
+        and answering `None` there would say the index never ran -- a different and false claim.
+
+        `None` is honestly ambiguous and the screen must say so rather than resolve it: no call
+        site row has ever existed here, which is either an index that never ran or one that ran
+        and found no vendor call. Nothing records an index attempt, only its result, so this
+        cannot tell them apart -- the same limit `AdapterRow.last_change_at` carries for intake.
+        """
+        row = self._connect().execute(
+            "SELECT max(indexed_at) AS at FROM call_site WHERE repo_id = %s",
+            (repo_id,),
+        ).fetchone()
+        return row["at"]
+
     def findings_recorded_by_day_and_severity(
         self, *, repo_id: str | None = None
     ) -> list[dict]:

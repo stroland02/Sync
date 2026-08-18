@@ -24,7 +24,7 @@ grep -rn "repoId === null" web/src --include=*.tsx --include=*.ts     # excludin
 | `features/detectors/detector-accountability.tsx` | 2 | 1 | dead — one caller |
 | `features/vendors/vendor-exposure-card.tsx` | 1 | **0** | done |
 | `features/fleet/vendor-distribution.tsx` | 1 | 1 | dead — orphaned component |
-| `features/fleet/fleet-page.tsx` | 1 | 1 | dead — delete |
+| `features/fleet/fleet-page.tsx` | 1 | 1 | **LIVE — keep** (corrected, see below) |
 | `api/client.ts` | 1 | 1 | **not narrowed, by ruling** |
 
 ## Which bucket each remaining branch is in
@@ -49,9 +49,14 @@ Applied, with the caller counts measured rather than assumed
 - **`VendorDistributionCard` — 0 non-test callers.** Same. `M14-W400` gave it a required `repoId`
   because it called `useOverview()` with no argument at all, counting every repository the index has
   seen — the show-all in its purest form.
-- **The three pages** (`binding-surface-page`, `vendor-page`, `fleet-page`) hold branches that are
-  now unreachable: their `repoId` is typed `string` after `M14-W400`, so the comparison is always
-  false. Delete them.
+- **`binding-surface-page` and `vendor-page`** held branches unreachable after `M14-W400` typed
+  their `repoId` as `string`. Deleted in `M14-W405`.
+- **`fleet-page` is a CORRECTION to this table.** I bucketed its branch as dead; it is **live**. That
+  screen is the workspace *picker* at `/`, and its `repoId` comes from `resolveCodebaseScope`, which
+  genuinely returns `unselected`, `none`, `pending` and `unknown`. `if (repoId === null) return null`
+  is the guard that stops the fact band claiming a workspace nobody chose. Deleting it would have
+  been the absence-into-zero failure this sweep exists to avoid, reached by trusting my own table
+  over the code.
 - **`layouts/scope-switchers.tsx` — chrome, not a screen.** Its two branches describe an *unset*
   switcher, which is exactly where the coordinator said an unscoped state belongs. Keep.
 - **`api/client.ts` — deliberately not narrowed.** The transport may be asked an unscoped question by

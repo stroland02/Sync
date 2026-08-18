@@ -2,7 +2,23 @@
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
 One line per unit of work, in the form `M<milestone>-W<n>`. The number is a single sequence across
+
+
+
+
 
 
 
@@ -10,7 +26,23 @@ the whole project, never restarted per milestone — `M3-W125` and `M4-W126` are
 
 
 
+
+
+
+
 number identifies a piece of work without needing its milestone to disambiguate it.
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -18,7 +50,15 @@ The convention is not new. Work items ran from `W67` to `W125` under M3, in comm
 
 
 
+
+
+
+
 dispatch briefs, and the register lived in an orchestration board that is no longer readable. This
+
+
+
+
 
 
 
@@ -26,7 +66,23 @@ file is that register, in the tree, so the sequence survives a session ending.
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
 **Assigning one.** Take the next number, add the row before you start, and put the identifier in the
+
+
+
+
 
 
 
@@ -34,7 +90,15 @@ commit subject: `feat: M4-W131 ...`. A work item is one reviewable unit — the 
 
 
 
+
+
+
+
 or a tick takes — not one commit and not one file. Several commits under one number is normal; two
+
+
+
+
 
 
 
@@ -42,7 +106,23 @@ numbers for one change is not.
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
 **A row is a fact, not a plan.** `landed` means the commit is on the integration branch and gated —
+
+
+
+
 
 
 
@@ -50,7 +130,15 @@ numbers for one change is not.
 
 
 
+
+
+
+
 branch by fast-forward at least daily. Anything
+
+
+
+
 
 
 
@@ -58,7 +146,23 @@ else says what it actually is. A row whose state stops being true is a row to co
 
 
 
+
+
+
+
 it belongs to whoever notices.
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -66,7 +170,31 @@ M4 continues the sequence at 126. Everything before that is in `git log`.
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
 ## 2026-08-17: five parallel lanes, 72 work items
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -74,7 +202,15 @@ M4 continues the sequence at 126. Everything before that is in `git log`.
 
 
 
+
+
+
+
 work without anyone having to remember it. For *status* -- what is done, what is being worked now,
+
+
+
+
 
 
 
@@ -82,7 +218,23 @@ and what to do next -- read `BACKLOG.md`'s "Where development stands, 2026-08-17
 
 
 
+
+
+
+
 written against `git log` and a measurement rather than against memory.
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -90,7 +242,15 @@ Today's rows come from five lanes working concurrently under
 
 
 
+
+
+
+
 `orchestration/2026-08-17-lane-charters.md`. Reading them in file order is misleading, because five
+
+
+
+
 
 
 
@@ -98,11 +258,31 @@ lanes interleave; read them by prefix instead:
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
 | Prefix | Lane | What it covers |
 
 
 
+
+
+
+
 |---|---|---|
+
+
+
+
 
 
 
@@ -110,7 +290,15 @@ lanes interleave; read them by prefix instead:
 
 
 
+
+
+
+
 | `M5-W300`..`W308` | D | Signals, adapters, intake, and the two `B7` verification passes |
+
+
+
+
 
 
 
@@ -118,7 +306,15 @@ lanes interleave; read them by prefix instead:
 
 
 
+
+
+
+
 | `M12-W320`..`W324` | E | Graph, dashboard, API: the aggregates, the intake table, corpus health, merge-rate wiring |
+
+
+
+
 
 
 
@@ -126,7 +322,23 @@ lanes interleave; read them by prefix instead:
 
 
 
+
+
+
+
 | `CI-W233`..`W289` | C | CI, gates, and `beta_gates.py` |
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -134,7 +346,15 @@ lanes interleave; read them by prefix instead:
 
 
 
+
+
+
+
 happened five times in one afternoon before the blocks existed. The blocks are in the charter. A
+
+
+
+
 
 
 
@@ -142,7 +362,23 @@ commit subject may carry a pre-renumber number where a collision was found on la
 
 
 
+
+
+
+
 the authority, and it says so where that happened.
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -150,7 +386,15 @@ Three rows are worth reading even if you read nothing else, because each is a de
 
 
 
+
+
+
+
 found in itself rather than in the product: `M0-W244`, a safety net that reported success while
+
+
+
+
 
 
 
@@ -158,7 +402,15 @@ doing nothing; `M0-W250`, an arbitration that was unenforceable because the coor
 
 
 
+
+
+
+
 every lane to skip the test that enforced it; and `M0-W253`, the gate meter contradicting the
+
+
+
+
 
 
 
@@ -166,11 +418,31 @@ coordinator within minutes of landing.
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
 | Item | Subject | State | Where |
 
 
 
+
+
+
+
 |---|---|---|---|
+
+
+
+
 
 
 
@@ -178,7 +450,15 @@ coordinator within minutes of landing.
 
 
 
+
+
+
+
 | M4-W127 | The Signals level: three roles, and the fifth kind of nothing | landed | `3855fd4`, `b39dcde`, `87f0d7f`, merged `e4284ae` |
+
+
+
+
 
 
 
@@ -186,7 +466,15 @@ coordinator within minutes of landing.
 
 
 
+
+
+
+
 | M4-W129 | The npx race that reads as a bad patch, and B99 | landed | `6d1de98` |
+
+
+
+
 
 
 
@@ -194,7 +482,15 @@ coordinator within minutes of landing.
 
 
 
+
+
+
+
 | M4-W131 | The expansion slice and four cold-start briefs | landed | `7d8e798` |
+
+
+
+
 
 
 
@@ -202,7 +498,15 @@ coordinator within minutes of landing.
 
 
 
+
+
+
+
 | M4-W133 | The session record a worker can actually open | landed | `0c6eb94` |
+
+
+
+
 
 
 
@@ -210,7 +514,15 @@ coordinator within minutes of landing.
 
 
 
+
+
+
+
 | M4-W135 | Filters that compose with repository scope — B90 slice 1 | landed | `f84e334` |
+
+
+
+
 
 
 
@@ -218,7 +530,15 @@ coordinator within minutes of landing.
 
 
 
+
+
+
+
 | M4.5-W137 | The conformance measurement against the fourteen invariants | landed | `reports/2026-08-06-console-conformance.md`; gaps filed as B104-B107 |
+
+
+
+
 
 
 
@@ -226,7 +546,15 @@ coordinator within minutes of landing.
 
 
 
+
+
+
+
 | M4-W139 | The backlog stops describing a console that no longer exists | landed | five entries closed, B90 and B94 corrected, B99 collision resolved |
+
+
+
+
 
 
 
@@ -234,7 +562,15 @@ coordinator within minutes of landing.
 
 
 
+
+
+
+
 | M4-W146 | The quality milestone's items numbered and reserved | landed | this file |
+
+
+
+
 
 
 
@@ -242,7 +578,15 @@ coordinator within minutes of landing.
 
 
 
+
+
+
+
 | M4-W148 | One milestone table, and M4 says what is now true | landed | `BACKLOG.md` |
+
+
+
+
 
 
 
@@ -250,7 +594,15 @@ coordinator within minutes of landing.
 
 
 
+
+
+
+
 | M4-W150 | Briefs for the four defects the measurement found | landed | this file |
+
+
+
+
 
 
 
@@ -258,7 +610,15 @@ coordinator within minutes of landing.
 
 
 
+
+
+
+
 | CI-W154 | The CI optimization workstream: profiler, plan, daily tick, first profile | landed | `scripts/profile_ci.py`, `plans/2026-08-06-ci-optimization.md`, B111 and B112 |
+
+
+
+
 
 
 
@@ -266,7 +626,23 @@ coordinator within minutes of landing.
 
 
 
+
+
+
+
 | M4-W153 | The frontend test runner and the reachability guard — architecture Task 5 | landed | `briefs/2026-08-06-m4-frontend-test-runner.md` |
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -274,7 +650,23 @@ coordinator within minutes of landing.
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
 `docs/superpowers/plans/2026-08-06-m45-console-quality.md` carries the argument and the start
+
+
+
+
 
 
 
@@ -282,7 +674,15 @@ condition. **The milestone's first item is already running as M4.5-W137 above**,
 
 
 
+
+
+
+
 deliberately first: it is the measurement every task below closes against, so without it each of
+
+
+
+
 
 
 
@@ -290,7 +690,23 @@ them is an opinion.
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
 **All five landed and are merged to `main` as of 2026-08-07**, verified by
+
+
+
+
 
 
 
@@ -298,7 +714,15 @@ them is an opinion.
 
 
 
+
+
+
+
 merged" for a day after they were not. What remains of "worth looking at" moved into M7, which
+
+
+
+
 
 
 
@@ -306,7 +730,23 @@ rebuilt the presentation layer the measurements below were taken against; the me
 
 
 
+
+
+
+
 stand as the before-figures M7 is judged on.
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -314,7 +754,15 @@ stand as the before-figures M7 is judged on.
 
 
 
+
+
+
+
 |---|---|---|
+
+
+
+
 
 
 
@@ -322,7 +770,15 @@ stand as the before-figures M7 is judged on.
 
 
 
+
+
+
+
 | M4.5-W142 | Type, ink and space measured against rendered pixels — B104 and B107 closed, B108 filed | landed |
+
+
+
+
 
 
 
@@ -330,7 +786,15 @@ stand as the before-figures M7 is judged on.
 
 
 
+
+
+
+
 | M4.5-W144 | Density: the binding surface's rows 76px to 57px by factoring out the directory 2,500 rows shared. B110 closed, B115 filed | landed |
+
+
+
+
 
 
 
@@ -338,7 +802,31 @@ stand as the before-figures M7 is judged on.
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
 ## M7 — the console becomes a product
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -346,7 +834,15 @@ stand as the before-figures M7 is judged on.
 
 
 
+
+
+
+
 milestone exists because the console cleared eight of fourteen measured invariants and was still
+
+
+
+
 
 
 
@@ -354,7 +850,23 @@ flat; `reports/2026-08-06-why-the-console-came-out-flat.md` carries the six caus
 
 
 
+
+
+
+
 rules this repository wrote rather than mistakes anyone made.
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -362,7 +874,15 @@ rules this repository wrote rather than mistakes anyone made.
 
 
 
+
+
+
+
 `specs/2026-08-06-sync-console-supabase-substrate-design.md` is the standing design from `M7-W165`
+
+
+
+
 
 
 
@@ -370,7 +890,15 @@ onward: on the owner's ruling, Supabase's `packages/ui` is vendored at code leve
 
 
 
+
+
+
+
 two-tier, and the token contract became Supabase's. So `W157`–`W164` built a chassis from scratch
+
+
+
+
 
 
 
@@ -378,7 +906,15 @@ and `W165`–`W180` replaced it. The first pass is not dead work — it produced
 
 
 
+
+
+
+
 gate every later port is merged against, the before-measurements the substrate is judged by, and the
+
+
+
+
 
 
 
@@ -386,7 +922,15 @@ finding that the console's flatness was caused by our own rules, which is what m
 
 
 
+
+
+
+
 arguable at all. `reports/2026-08-07-m7-what-was-built-and-what-drove-it.md` carries the whole
+
+
+
+
 
 
 
@@ -394,7 +938,23 @@ account, and `reports/screens/2026-08-07/` shows what it produced.
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
 **Where M7 stands on 2026-08-07.** All nine levels are on the substrate. `M7-W182`, the fidelity
+
+
+
+
 
 
 
@@ -402,7 +962,23 @@ pass, is in flight. Phase 5 — the workflow as a narrative, and one binding dra
 
 
 
+
+
+
+
 write path, are unbuilt; Phase 6 needs auth and tenancy and belongs to M4's hosted half.
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -410,7 +986,15 @@ write path, are unbuilt; Phase 6 needs auth and tenancy and belongs to M4's host
 
 
 
+
+
+
+
 |---|---|---|---|
+
+
+
+
 
 
 
@@ -418,7 +1002,15 @@ write path, are unbuilt; Phase 6 needs auth and tenancy and belongs to M4's host
 
 
 
+
+
+
+
 | M7-W158 | The honesty sentences guarded before the screens they sit on are rewritten | landed | `7bef206` |
+
+
+
+
 
 
 
@@ -426,7 +1018,15 @@ write path, are unbuilt; Phase 6 needs auth and tenancy and belongs to M4's host
 
 
 
+
+
+
+
 | M7-W160 | The chassis: one sidebar at two widths, a page header, and the two DESIGN.md refusals reversed on measurement. B116 filed, B115 re-measured | landed | `briefs/2026-08-06-m7-the-chassis.md` |
+
+
+
+
 
 
 
@@ -434,7 +1034,15 @@ write path, are unbuilt; Phase 6 needs auth and tenancy and belongs to M4's host
 
 
 
+
+
+
+
 | M7-W162 | The console's API was answered by an eight-hour-old zombie — B117 and B118 | landed | `.claude/rules/console-dev-loop.md` |
+
+
+
+
 
 
 
@@ -442,7 +1050,15 @@ write path, are unbuilt; Phase 6 needs auth and tenancy and belongs to M4's host
 
 
 
+
+
+
+
 | M7-W164 | Phase 4: the Binding surface and Vendor levels. Type range 2.00 to 4.00, the rung column visible without a sideways scroll in all six configurations, and the `ControlBar` collision closed by deleting one. B119 closed, B115 re-measured — 1280 is one pixel short | landed | `briefs/2026-08-06-m7-phase4-binding-surface.md` |
+
+
+
+
 
 
 
@@ -450,7 +1066,15 @@ write path, are unbuilt; Phase 6 needs auth and tenancy and belongs to M4's host
 
 
 
+
+
+
+
 | M7-W168 | Task 1 of the substrate plan: the interface-originality carve-out, direction note 6's reversal amendment, and the M7 plan pointer | landed | plans/2026-08-06-console-supabase-substrate.md |
+
+
+
+
 
 
 
@@ -458,7 +1082,15 @@ write path, are unbuilt; Phase 6 needs auth and tenancy and belongs to M4's host
 
 
 
+
+
+
+
 | M7-W170 | Task 3 of the substrate plan: Supabase's dark palette, type ramp and radii become the declared token contract; DESIGN.md and its guard rewritten in one commit; contrast measured, deviations named | landed | `DESIGN.md` |
+
+
+
+
 
 
 
@@ -466,7 +1098,15 @@ write path, are unbuilt; Phase 6 needs auth and tenancy and belongs to M4's host
 
 
 
+
+
+
+
 | M7-W172 | Task 5 of the substrate plan: Fleet is the first level on the vendored components — mapping table first, fact tiles and metric panels, Studio table anatomy, completeness walk against the same seed | landed | `docs/superpowers/briefs/2026-08-07-substrate-fleet.md` |
+
+
+
+
 
 
 
@@ -474,7 +1114,15 @@ write path, are unbuilt; Phase 6 needs auth and tenancy and belongs to M4's host
 
 
 
+
+
+
+
 | M7-W174 | Task 6: the API Services level on the substrate — vendor changes and findings in Studio table anatomy, the at-least-once sentence kept, mapping table first | landed | `docs/superpowers/briefs/2026-08-07-substrate-api-services.md` |
+
+
+
+
 
 
 
@@ -482,7 +1130,15 @@ write path, are unbuilt; Phase 6 needs auth and tenancy and belongs to M4's host
 
 
 
+
+
+
+
 | M7-W176 | Task 6: the Binding surface on the substrate — the join in Studio anatomy, a binding's detail in a URL-addressable drawer, one binding drawn as cards with its rungs | landed | `docs/superpowers/briefs/2026-08-07-substrate-binding-surface.md` |
+
+
+
+
 
 
 
@@ -490,7 +1146,15 @@ write path, are unbuilt; Phase 6 needs auth and tenancy and belongs to M4's host
 
 
 
+
+
+
+
 | M7-W178 | Task 6: the Finding on the substrate — a fact rail beside the content column, the first detail-shaped level, the rung where a reference would put a score | landed | `docs/superpowers/briefs/2026-08-07-substrate-finding.md` |
+
+
+
+
 
 
 
@@ -498,7 +1162,15 @@ write path, are unbuilt; Phase 6 needs auth and tenancy and belongs to M4's host
 
 
 
+
+
+
+
 | M7-W180 | Task 6: the Pull Request on the substrate — the evidence bundle as titled blocks at one depth, the fact rail left, the ninth level closes | landed | `docs/superpowers/briefs/2026-08-07-substrate-pull-request.md` |
+
+
+
+
 
 
 
@@ -506,7 +1178,15 @@ write path, are unbuilt; Phase 6 needs auth and tenancy and belongs to M4's host
 
 
 
+
+
+
+
 | M7-W182 | The fidelity pass planned: six tasks from the gap report's five largest findings, before the final review | landed | `plans/2026-08-07-console-fidelity-pass.md` |
+
+
+
+
 
 
 
@@ -514,7 +1194,15 @@ write path, are unbuilt; Phase 6 needs auth and tenancy and belongs to M4's host
 
 
 
+
+
+
+
 | M7-W184 | The two registers say what is true: M7 added to the milestone table, M4.5's five items corrected to landed, and In flight rewritten against measurement. **Its commit `bf19a2b` carries `M7-W183` in the subject** — the number was taken concurrently by the console session and the row above merged first, so this row holds the correction rather than the history being rewritten | landed | `bf19a2b` |
+
+
+
+
 
 
 
@@ -522,7 +1210,15 @@ write path, are unbuilt; Phase 6 needs auth and tenancy and belongs to M4's host
 
 
 
+
+
+
+
 | M12-W186 | M12 proposed: the four questions a panel must answer, the two prescriptions refused with their reasons, and the colour rule the disposition bar earned | landed | `plans/2026-08-07-m12-dashboards-that-earn-their-screen.md` |
+
+
+
+
 
 
 
@@ -530,7 +1226,15 @@ write path, are unbuilt; Phase 6 needs auth and tenancy and belongs to M4's host
 
 
 
+
+
+
+
 | CI-W189 | The 2026-08-07 profile and the series: B112 closed by per-run evidence, and no timing item taken because CI-W167 is landed but unmeasured | landed | `reports/ci-profile-2026-08-07.md` |
+
+
+
+
 
 
 
@@ -538,7 +1242,15 @@ write path, are unbuilt; Phase 6 needs auth and tenancy and belongs to M4's host
 
 
 
+
+
+
+
 | M7-W191 | `ARCHITECTURE.md`: the remediation state machine node by node, the tier cascade, provenance rungs, durable execution, and the three mechanisms that contain the agent | landed | `ARCHITECTURE.md` |
+
+
+
+
 
 
 
@@ -546,7 +1258,15 @@ write path, are unbuilt; Phase 6 needs auth and tenancy and belongs to M4's host
 
 
 
+
+
+
+
 | M7-W188 | Fidelity Task 2: the type ramp's middle is populated — section headings take `--text-section`, labels stay furniture, the display step stays `PageHeader`'s alone. **Dispatched as `M7-W186`** — `M12-W186` and `M7-W187` had both landed on the integration branch before this reached a commit, so it takes the next free number rather than a third duplicate | landed | `DESIGN.md` |
+
+
+
+
 
 
 
@@ -554,7 +1274,15 @@ write path, are unbuilt; Phase 6 needs auth and tenancy and belongs to M4's host
 
 
 
+
+
+
+
 | CI-W167 | B111 closed: coverage into its own nightly job, the serial job off `pull_request` and onto every push to `main`, and `event_name` in the concurrency group so a schedule and a push stop cancelling each other. PR critical path 200s to 123s | landed | `.github/workflows/ci.yml`, `reports/ci-profile-2026-08-07.md` |
+
+
+
+
 
 
 
@@ -562,7 +1290,15 @@ write path, are unbuilt; Phase 6 needs auth and tenancy and belongs to M4's host
 
 
 
+
+
+
+
 | M7-W194 | The milestone table and a dated progress summary say what is true: M7 at 88 percent, M0 stale by 1,073 commits rather than 200, M6 unblocked by M7 rather than M4.5 | landed | `BACKLOG.md` |
+
+
+
+
 
 
 
@@ -570,7 +1306,15 @@ write path, are unbuilt; Phase 6 needs auth and tenancy and belongs to M4's host
 
 
 
+
+
+
+
 | M12-W197 | The route exemption cannot outlive its panel, and B128 files the free-text `abandon_reason` the first read-back exposed (renumbered from B126 on landing, which collided with the repo-context item) | landed | `tests/test_api_routes.py`, `BACKLOG.md` |
+
+
+
+
 
 
 
@@ -578,7 +1322,15 @@ write path, are unbuilt; Phase 6 needs auth and tenancy and belongs to M4's host
 
 
 
+
+
+
+
 | M7-W198 | M7-W195's review: the untrimmed `Fleet` crumbs are four named routes rather than one, and the binding surface's kept crumb is redundant like `/detectors`' rather than informative like Signals' — a correction to the brief, no code | landed | `briefs/2026-08-07-substrate-fidelity-task-4.md` |
+
+
+
+
 
 
 
@@ -586,7 +1338,15 @@ write path, are unbuilt; Phase 6 needs auth and tenancy and belongs to M4's host
 
 
 
+
+
+
+
 | M4-W200 | B78 Tasks 1 & 3: Local zero-remote rehearsal fixture and 'sync rehearse' driver with verified digest and depth control | landed | `src/sync/rehearse/fixture.py`, `src/sync/rehearse/driver.py`, `src/sync/cli.py`, `tests/test_rehearse_fixture.py`, `tests/test_rehearse_driver.py` |
+
+
+
+
 
 
 
@@ -594,7 +1354,15 @@ write path, are unbuilt; Phase 6 needs auth and tenancy and belongs to M4's host
 
 
 
+
+
+
+
 | M4-W202 | B78 Task 5: Rehearsals labelled in fleet runs table, outcome phrasing for local halts, tick verification updated to sync rehearse | landed | `web/src/features/fleet/runs-table.tsx`, `web/src/features/workflows/run-outcome.tsx`, `src/sync/dashboard/fleet.py`, `docs/superpowers/loops/console-improvement-tick.md` |
+
+
+
+
 
 
 
@@ -602,7 +1370,15 @@ write path, are unbuilt; Phase 6 needs auth and tenancy and belongs to M4's host
 
 
 
+
+
+
+
 | M4-W204 | B79: `is_rehearsal` joins `migration_outcome`'s natural key so a rehearsal row can no longer swallow a colliding production row | landed | `src/sync/graph/schema.sql`, `src/sync/graph/store.py`, `src/sync/core/models.py`, `src/sync/remediate/corpus.py`, `src/sync/remediate/graph.py`, `src/sync/rehearse/driver.py`, `tests/test_migration_corpus.py` |
+
+
+
+
 
 
 
@@ -610,7 +1386,15 @@ write path, are unbuilt; Phase 6 needs auth and tenancy and belongs to M4's host
 
 
 
+
+
+
+
 | M7-W206 | B125: Workflow state forwards repo_id to Pull Request screen fact rail with Codebase link, consolidated asHttpUrl boundary helper in lib/url.ts | landed | `src/sync/dashboard/queries.py`, `web/src/lib/url.ts`, `web/src/features/pullrequests/**`, `web/src/features/workflows/evidence.tsx`, `web/src/api/types.ts`, `tests/test_dashboard_queries.py`, `BACKLOG.md` |
+
+
+
+
 
 
 
@@ -618,7 +1402,15 @@ write path, are unbuilt; Phase 6 needs auth and tenancy and belongs to M4's host
 
 
 
+
+
+
+
 | M7-W208 | B124: Solution workflow returns generations list across threads and renders superseded attempts | landed | `src/sync/dashboard/queries.py`, `web/src/features/workflows/**`, `web/src/api/types.ts`, `tests/test_dashboard_queries.py`, `docs/superpowers/briefs/2026-08-07-substrate-workflow.md`, `BACKLOG.md` |
+
+
+
+
 
 
 
@@ -626,7 +1418,15 @@ write path, are unbuilt; Phase 6 needs auth and tenancy and belongs to M4's host
 
 
 
+
+
+
+
 | M7-W210 | B123: Solution workflow extracts checkpointer timestamps per node and renders node clock window; no-clock sentence removed; implementation plans ledger indexed in BACKLOG.md | landed | `src/sync/dashboard/queries.py`, `web/src/features/workflows/**`, `web/src/api/types.ts`, `tests/test_dashboard_queries.py`, `BACKLOG.md` |
+
+
+
+
 
 
 
@@ -634,7 +1434,15 @@ write path, are unbuilt; Phase 6 needs auth and tenancy and belongs to M4's host
 
 
 
+
+
+
+
 | M7-W212 | B97: the container network-cutoff primitive, proven against a real Docker Desktop, and the patch-sandbox image it will run in (renumbered from M7-W207 on landing, which collided with B127) | landed | `src/sync/remediate/sandbox.py`, `docker/patch-sandbox/Dockerfile`, `tests/test_sandbox.py`, `tests/test_patch_sandbox.py`, `pyproject.toml`, `BACKLOG.md` |
+
+
+
+
 
 
 
@@ -642,7 +1450,15 @@ write path, are unbuilt; Phase 6 needs auth and tenancy and belongs to M4's host
 
 
 
+
+
+
+
 | M7-W214 | Claude Design ground-truth UI mockups imported into `docs/console-mock/`; console upgraded to match demo layout with ChangeUnitsTable, Scope filter tabs, Review CTA button, and single Area navigation cards; `migration_outcome` schema applied to resolve 500 error | landed | `docs/console-mock/*`, `web/src/features/fleet/change-units-table.tsx`, `web/src/features/fleet/fleet-page.tsx`, `src/sync/graph/store.py`, `docs/superpowers/WORKLOG.md` |
+
+
+
+
 
 
 
@@ -650,7 +1466,15 @@ write path, are unbuilt; Phase 6 needs auth and tenancy and belongs to M4's host
 
 
 
+
+
+
+
 | M7-W216 | Sidebar naming and organization aligned with demo ground truth (`docs/console-mock/Sync Console.dc.html`); `sync.console` top branding, Area purposes, and hierarchy footer notes added to `ContextualSidebar`; workflow systematic structure reviewed | landed | `web/src/layouts/app-frame.tsx`, `docs/superpowers/plans/2026-08-08-console-mock-to-build.md`, `docs/superpowers/WORKLOG.md` |
+
+
+
+
 
 
 
@@ -658,7 +1482,15 @@ write path, are unbuilt; Phase 6 needs auth and tenancy and belongs to M4's host
 
 
 
+
+
+
+
 | M7-W218 | Loading stops being static, without claiming a shape: `LoadingState` gains an indeterminate sweep and, past two seconds, the elapsed wait in whole seconds. One component, 52 call sites. The sweep is registered in `MOTION_USAGES` under the bar that file sets -- a request in flight holds a real duration -- and is deliberately not a skeleton, which would assert rows the answer may not have. Reduced motion stops the sweep and keeps the count, because that is information rather than movement | landed | `web/src/components/states.tsx`, `web/src/lib/motion.ts` |
+
+
+
+
 
 
 
@@ -666,7 +1498,15 @@ write path, are unbuilt; Phase 6 needs auth and tenancy and belongs to M4's host
 
 
 
+
+
+
+
 | M7-W220 | Live database seeding and continuous test-driven validation loop enabled; verified real DB checkpointer checkpoints, call sites, and findings via `scripts/seed_console.py` | landed | `scripts/seed_console.py`, `docs/superpowers/WORKLOG.md` |
+
+
+
+
 
 
 
@@ -674,7 +1514,15 @@ write path, are unbuilt; Phase 6 needs auth and tenancy and belongs to M4's host
 
 
 
+
+
+
+
 | M7-W222 | The console tour becomes the landing page's lede and the mock precedes the shipped captures, on the owner's instruction; the two sets are separated into *Where it is going* and *What is running today* so the reordering cannot read as a claim that the mock ships (renumbered from M7-W200 on reconciliation) | landed | `README.md` |
+
+
+
+
 
 
 
@@ -682,7 +1530,15 @@ write path, are unbuilt; Phase 6 needs auth and tenancy and belongs to M4's host
 
 
 
+
+
+
+
 | M7-W224 | Staleness apart from liveness, on every polled surface rather than one: `FetchedAt` renders `dataUpdatedAt` as a ticking age and says whether a poll is still scheduled or has stopped, with the caller naming why it stopped. No dot and no pulse -- `CLAUDE.md` refuses a liveness pulse, and nothing in the data distinguishes a working poll from one whose last three attempts failed. The ticking clock is factored into `lib/elapsed.ts` at its second use | landed | `web/src/components/fetched-at.tsx`, `web/src/lib/elapsed.ts`, `web/src/features/fleet/runs-table.tsx`, `web/src/features/workflows/workflow-page.tsx` |
+
+
+
+
 
 
 
@@ -690,7 +1546,15 @@ write path, are unbuilt; Phase 6 needs auth and tenancy and belongs to M4's host
 
 
 
+
+
+
+
 | M7-W226 | Vitest coverage for `NodeEvidence` component across scalars, flags, language-tagged blocks, and unnamed properties; dev server verified live on port 5173 with proxy to 8787 | landed | `web/src/features/workflows/evidence.test.tsx`, `docs/superpowers/WORKLOG.md` |
+
+
+
+
 
 
 
@@ -698,7 +1562,15 @@ write path, are unbuilt; Phase 6 needs auth and tenancy and belongs to M4's host
 
 
 
+
+
+
+
 | M8-W228 | M8's runner seam: `PatchRunner` in `sync.core.protocols`, `sync.runner` owning every line that knows a model SDK exists, and an import-linter contract proving `sync.remediate` reaches none of it. `StaticRunner` replaces `monkeypatch.setattr(agent_patch, "query", ...)` across six test files, so the remediation suite needs no key. A full-depth rehearsal run then paid for itself three times: it found the refusal the runner was throwing away — `continue_: False` makes the CLI exit non-zero, so `query()` raised and the reason read after the loop never survived, leaving `Claude Code returned an error result: success` in `abandon_reason` — it found B135 — the clone's own `.claude/settings.json` was configuration Sync obeyed, so a `SessionStart` hook in a customer's repository ran arbitrary shell before `tool_gate`, a `PreToolUse` hook, was on the path at all, closed here with `setting_sources=[]` — and it filed B133 and B134, every `migration_outcome` write failing on any database created before B79 | landed | `src/sync/core/protocols.py`, `src/sync/runner/**`, `src/sync/remediate/agent_patch.py`, `src/sync/remediate/tool_gate.py`, `src/sync/remediate/tool_output.py`, `pyproject.toml`, `tests/test_patch_runner_seam.py`, `BACKLOG.md` |
+
+
+
+
 
 
 
@@ -706,7 +1578,15 @@ write path, are unbuilt; Phase 6 needs auth and tenancy and belongs to M4's host
 
 
 
+
+
+
+
 | M3-W229 | B131: the four generated-SDK vendors bind no call site and a run reported that as a clean scan; adapters now declare `unbindable_reason` and `cli.run` prints it before the finding count, so "we found no call sites" and "nothing here could be looked at" are no longer one output | on branch `b131-generated-vendors` | `src/sync/signals/generated/adapter.py`, `src/sync/signals/mcp_server/adapter.py`, `src/sync/cli.py`, `tests/test_unbindable_vendor_report.py`, `tests/test_shipped_conformance.py`, `BACKLOG.md` |
+
+
+
+
 
 
 
@@ -714,7 +1594,15 @@ write path, are unbuilt; Phase 6 needs auth and tenancy and belongs to M4's host
 
 
 
+
+
+
+
 | M10-W229 | Sync asks GitHub what became of a pull request it opened. `open_pull_request` returned a number and the run ended, so `pr_merged` was null on every corpus row and merge rate -- the direct test of the product claim -- had no numerator. `pull_request_outcome` reads `state`, `mergedAt` and the commit authors in one `gh pr view`, and answers with `PullRequestOutcome`. Three distinctions the corpus turns on are in the type rather than in a caller: an open pull request is `None` rather than `False`, because a reviewer who has not decided is not a reviewer who said no; a merge is read from `mergedAt` rather than from "not OPEN", because a merge is also a close; and a commit GitHub cannot attribute counts as somebody else's, so the untouched-patch figure is never flattered by missing data | landed | `src/sync/forge/github.py`, `tests/test_pull_request_outcome.py` |
+
+
+
+
 
 
 
@@ -722,7 +1610,15 @@ write path, are unbuilt; Phase 6 needs auth and tenancy and belongs to M4's host
 
 
 
+
+
+
+
 | M4-W231 | Mock-to-build Task 5: Settings exists, read-only, and is a destination rather than a tenth level. Full-stack, because the adapter table needed a read surface nothing had built: `registered_adapters` reads what the deployment configured without constructing an adapter, `GraphStore.vendor_intake_rollup` says what each has delivered, and `adapter_inventory` joins them. **An adapter the graph holds no row for answers `null`, never `0`** -- zero is a measurement and its absence is the state an operator looking for a silently-stopped adapter needs, and every step from that null to the cell has a `?? 0` in it. Two of the task's three interfaces are built as written; the merge policy panel is refused, because no merge policy exists in `sync.forge` and a panel naming one would assert a configured fact the system does not hold. A `decline_reason` is refused for the narrower reason that nothing records an intake **attempt**, only its result -- filed as B136 and held by a test asserting the field's absence | landed | `src/sync/signals/registry.py`, `src/sync/graph/store.py`, `src/sync/dashboard/adapters.py`, `src/sync/api/app.py`, `web/src/features/settings/**`, `web/src/lib/routes.ts`, `tests/test_adapter_inventory.py` |
+
+
+
+
 
 
 
@@ -730,7 +1626,15 @@ write path, are unbuilt; Phase 6 needs auth and tenancy and belongs to M4's host
 
 
 
+
+
+
+
 | M0-W234 | The development loop survives the session that started it: `scripts/orchestration/resume_lanes.py` re-attaches any lane whose worker stopped, and a scheduled task runs it every twenty minutes. Three stall shapes are distinguished because they look identical from the task list -- a dispatch that failed, one that reads `dispatched` but never attached to a terminal (`worker-start` gives up after a minute against a busy TUI, which is the common case), and one whose terminal has gone silent past the threshold. It re-attaches and never invents work, because choosing a lane's next item is a coordinator judgement | landed | `scripts/orchestration/resume_lanes.py`, `docs/superpowers/orchestration/2026-08-17-lane-charters.md` |
+
+
+
+
 
 
 
@@ -738,7 +1642,15 @@ write path, are unbuilt; Phase 6 needs auth and tenancy and belongs to M4's host
 
 
 
+
+
+
+
 | M0-W236 | The resume sweep can place a lane whose dispatch never recorded a terminal, which is the case it most needs to handle: a dispatch stores its assignee only once `worker-start` succeeds, and the common stall is that it never did against a busy agent's TUI -- so exactly the lanes needing resumption were the ones with no handle to resume onto. A coordinator-written map beside the script supplies the fallback, and an absent or unreadable map degrades to no fallback rather than stopping the sweep | landed | `scripts/orchestration/resume_lanes.py`, `scripts/orchestration/lane_terminals.json` |
+
+
+
+
 
 
 
@@ -746,7 +1658,15 @@ write path, are unbuilt; Phase 6 needs auth and tenancy and belongs to M4's host
 
 
 
+
+
+
+
 | M0-W238 | The resume sweep stops reporting a dropped response as a failed restart. Orca returns `runtime_unavailable` when it closes the connection before answering, and twice here the mutation had landed anyway -- the retry dispatch existed while the sweep printed FAILED. A safety net that misreports is worse than none, because the misreport is trusted precisely when nobody is watching. It now re-queries the dispatch after an error and distinguishes queued from failed | landed | `scripts/orchestration/resume_lanes.py` |
+
+
+
+
 
 
 
@@ -754,7 +1674,15 @@ write path, are unbuilt; Phase 6 needs auth and tenancy and belongs to M4's host
 
 
 
+
+
+
+
 | CI-W280 | B150: CI was red on `main` and its one scheduled run reported success over a failing suite. Five causes, each verified against the code before it was touched: a `gh` stub that ignored `--pattern` and so tested the platform its fixture was named for rather than the mapping B130 built; a corpus fetched four steps *after* the suite that refuses without it, and absent from `serial` and `coverage` entirely; a checkpointer migration ledger left behind by a module that never uses the checkpointer, which made every later `PostgresSaver.setup()` a silent no-op and cost fourteen `test_seed_console` tests under `-n0`; both B97 container positive controls disarmed on Linux because `host.docker.internal` is a Docker Desktop name, so the only evidence the network boundary holds was measuring nothing; and a nightly whose sole job re-raised pytest's exit code only above 1, recorded `success` over `5 failed, 3632 passed`. Fixed in the tests and the workflow, never in `sandbox.py` -- widening the thing under measurement to make the measurement work is the wrong direction on a security boundary. Two dead-link violations are left red on purpose and named, because they belong to a session mid-way through wiring them | landed | `.github/workflows/ci.yml`, `tests/test_ci_gates_what_it_runs.py`, `tests/test_oasdiff_pin.py`, `tests/test_rehearse_smoke.py`, `tests/test_patch_sandbox.py`, `BACKLOG.md` |
+
+
+
+
 
 
 
@@ -762,7 +1690,15 @@ write path, are unbuilt; Phase 6 needs auth and tenancy and belongs to M4's host
 
 
 
+
+
+
+
 | M9-W219 | M9's outcome vocabulary: five outcome tools (`report_findings`, `propose_patch`, `report_external_cause`, `ask_human`, `abandon`) with flat top-level schemas, 1..10 confidence calibration rubric, strict citation parsing with path:line and fenced quotes, model-directed validator with actionable feedback, retired redirects, and `external_cause` node distinct from abandonment | landed | `src/sync/core/outcomes.py`, `src/sync/runner/outcome_tools.py`, `src/sync/remediate/nodes.py`, `src/sync/remediate/graph.py`, `src/sync/remediate/state.py`, `tests/test_outcome_vocabulary.py`, `BACKLOG.md` |
+
+
+
+
 
 
 
@@ -770,7 +1706,15 @@ write path, are unbuilt; Phase 6 needs auth and tenancy and belongs to M4's host
 
 
 
+
+
+
+
 | M5-W300 | Twilio RequestCorrelator: route building from symbol map, instance & collection path resolution through URL templates with privacy boundary, case-insensitive method matching, and conformance kit verification | landed | `src/sync/signals/twilio/adapter.py`, `tests/test_twilio_adapter.py`, `tests/test_shipped_conformance.py`, `WORKLOG.md` |
+
+
+
+
 
 
 
@@ -778,7 +1722,15 @@ write path, are unbuilt; Phase 6 needs auth and tenancy and belongs to M4's host
 
 
 
+
+
+
+
 | M12-W321 | Gate 2 blocker: Wire `GitHubForge.pull_request_outcome` to the corpus. `GraphStore.set_merge_outcome` now records the exact instant GitHub holds in `mergedAt` (rather than stamping `now()`), and `GraphStore.repo_id_for_finding` / `repo_ids_for_findings` resolves repository per finding through call sites. `sync.benchmark.reconcile.reconcile_pull_request_outcomes` queries pending pull requests, updates `migration_outcome` rows with merge decisions and human edit counts, unlocking the numerator for `sync.benchmark.axes.compute_axes` merge rate | landed | `src/sync/graph/store.py`, `src/sync/benchmark/reconcile.py`, `src/sync/benchmark/__init__.py`, `tests/test_reconcile_merge_outcomes.py` |
+
+
+
+
 
 
 
@@ -786,7 +1738,15 @@ write path, are unbuilt; Phase 6 needs auth and tenancy and belongs to M4's host
 
 
 
+
+
+
+
 | M12-W323 | Corpus health view model and `/api/corpus/health` route. `sync.dashboard.fleet.corpus_health` aggregates quality axes from `migration_outcome` via `sync.benchmark.axes.compute_axes`, mapping each of the 5 quality axes (`merge_rate_by_change_kind`, `merge_rate_by_tier`, `routing_accuracy`, `tokens_per_merged_patch`, `wall_ms_per_merged_patch`) with distinct `status` ("measured" vs "unmeasured"), `has_samples`, `sample_count`, `value` (null vs measured float/breakdown), and `runs_contributed`. Wired to Starlette transport `/api/corpus/health` | landed | `src/sync/dashboard/fleet.py`, `src/sync/api/app.py`, `src/sync/api/__main__.py`, `tests/test_corpus_health_view.py`, `tests/test_api_routes.py` |
+
+
+
+
 
 
 
@@ -794,7 +1754,15 @@ write path, are unbuilt; Phase 6 needs auth and tenancy and belongs to M4's host
 
 
 
+
+
+
+
 | M12-W325 | Provenance and sample counts across all 5 quality axes: `Axis` and `corpus_health` now carry `provenance` alongside `value` and `sample_count` (`n`), distinguishing `production`, `rehearsal`, `mixed`, and `unmeasured` runs. Verified arithmetic of all 5 quality axes (`merge_rate_by_change_kind`, `merge_rate_by_tier`, `routing_accuracy`, `tokens_per_merged_patch`, `wall_ms_per_merged_patch`) with extensive unit tests over direct synthetic rows. Proved that `is_rehearsal` rows in `migration_outcome` are explicitly distinguishable via table/model columns and filtered out of production readers, preventing rehearsal data from contaminating live corpus metrics | landed | `src/sync/benchmark/axes.py`, `src/sync/dashboard/fleet.py`, `tests/test_benchmark_axes.py`, `tests/test_corpus_health_view.py` |
+
+
+
+
 
 
 
@@ -802,7 +1770,15 @@ write path, are unbuilt; Phase 6 needs auth and tenancy and belongs to M4's host
 
 
 
+
+
+
+
 | M14-W260 | Make ledgers true: reconcile console plan statuses against the tree before build work starts | landed | `docs/superpowers/BACKLOG.md`, `docs/superpowers/plans/2026-08-08-console-mock-to-build.md`, `docs/superpowers/plans/2026-08-16-sync-m13-dynamic-visuals-and-telemetry.md`, `docs/superpowers/WORKLOG.md` |
+
+
+
+
 
 
 
@@ -810,7 +1786,15 @@ write path, are unbuilt; Phase 6 needs auth and tenancy and belongs to M4's host
 
 
 
+
+
+
+
 | M14-W262 | Baseline mock-gap measurement across all nine console routes, seeded fixture against the running dev loop, compared to `docs/console-mock/screens/`; no code changed | landed | `docs/superpowers/reports/2026-08-17-console-mock-gaps.md` |
+
+
+
+
 
 
 
@@ -818,7 +1802,15 @@ write path, are unbuilt; Phase 6 needs auth and tenancy and belongs to M4's host
 
 
 
+
+
+
+
 | M14-W264 | Fleet back on the shared chassis: `PageHeader` carries the route's question and its one primary action, `ControlBar` carries the scope and the `chipSurface`-styled repository filters, `FactTile` carries the health-score-policy paragraph. `proposedPatchTarget` replaces the hardcoded CTA link to an invented finding id with the newest run whose outcome is `opened`, absent entirely when none has; five raw Tailwind utilities retired from the guard baseline | landed | `web/src/features/fleet/proposed-patch.ts`, `web/src/features/fleet/proposed-patch.test.ts`, `web/src/features/fleet/fleet-page.tsx`, `tests/console_raw_utilities_baseline.txt` |
+
+
+
+
 
 
 
@@ -826,7 +1818,15 @@ write path, are unbuilt; Phase 6 needs auth and tenancy and belongs to M4's host
 
 
 
+
+
+
+
 | M14-W266 | Conformance check rather than rebuild: `a4a0fd4` (M4-W231, Settings as a destination) and `ab5514d` (M7-W230, the palette's nine destinations) landed this plan's Tasks 13 and 14 independently. Both hold every structural requirement -- `DESTINATIONS` is its own array, `GRAPH_LEVELS` stays at nine with `test_console_hierarchy.py` green untouched, subject-taking routes render as lookups carrying `reachedFrom` and the route pattern. Two rulings recorded in the plan instead of code changes: Task 13's absence panels were superseded by `GET /api/adapters` actually being built, which is a better answer to the same honesty requirement and keeps null distinct from zero; and the shipped `DESTINATIONS` name stands against the plan's `DESTINATION_ROUTES`, because renaming a landed export to match a plan is churn | landed | `docs/superpowers/plans/2026-08-17-console-mock-parity.md` |
+
+
+
+
 
 
 
@@ -834,7 +1834,15 @@ write path, are unbuilt; Phase 6 needs auth and tenancy and belongs to M4's host
 
 
 
+
+
+
+
 | M0-W241 | A lane must confirm its lane before its first landing, because a dispatch delivering a spec is not an agent having read it. Lane A was mid-task when its charter arrived, never acted on it, and spent twenty-four minutes rebuilding the change-unit aggregate Lane E had already landed as `M12-W320` -- two lanes, one implementation, discovered only when a coordinator sweep read a terminal. It also stalled asking whether the coordinator was genuine, which was correct caution and cost nothing; the duplication cost the half hour. The charter now asks for a one-time acknowledgement naming lane, paths and number block, and says how to verify a coordinator instruction in two commands rather than stall on it | landed | `docs/superpowers/orchestration/2026-08-17-lane-charters.md` |
+
+
+
+
 
 
 
@@ -842,7 +1850,15 @@ write path, are unbuilt; Phase 6 needs auth and tenancy and belongs to M4's host
 
 
 
+
+
+
+
 | M0-W243 | Three defects in the sweep, all found by running it against five live lanes and all of them false alarms in the dangerous direction. `--retry-of` is only valid against a settled dispatch, so passing it to three active ones reported three healthy lanes as failures; a dispatch Orca still considers running is not the sweep's to restart at all, because forcing it is how a merely-quiet worker gets circuit-broken. The budget markers missed `Individual quota reached`, so a real two-hour outage read as a stall. And the dry-run branch sat above the staleness check exactly as it had above the budget check, so a preview again took a different path from the run it previews -- now every verdict is reached identically and only the mutation is skipped | landed | `scripts/orchestration/resume_lanes.py` |
+
+
+
+
 
 
 
@@ -850,7 +1866,15 @@ write path, are unbuilt; Phase 6 needs auth and tenancy and belongs to M4's host
 
 
 
+
+
+
+
 | M0-W245 | Two charter corrections forced by B151, the first of them mine to own. The trap note said a run failing in the hundreds is Postgres bouncing; `main` was then measured 60 tests red for a real reason with Postgres healthy throughout, so my own guidance would have sent every lane to the wrong conclusion. Environmental is now defined by the failure text -- `starting up`, `in recovery mode`, `connection failed` -- and anything else is a real regression wearing a large number. Second, a crashed xdist worker prints `F` against tests that never ran at `-n 4` too, so `-n 4` is a better default and not a cure, and a run without a summary line is not a result | landed | `docs/superpowers/orchestration/2026-08-17-lane-charters.md` |
+
+
+
+
 
 
 
@@ -858,7 +1882,15 @@ write path, are unbuilt; Phase 6 needs auth and tenancy and belongs to M4's host
 
 
 
+
+
+
+
 | CI-W282 | B152: a crashed xdist worker printed `F` against tests that never ran, and three runs of one tree read as 30 failures, 60 failures and 1 failure. `scripts/gate_verdict.py` answers whether a run's verdict can be believed at all, separately from whether the suite passed; proven against the four real captures from today's gating | landed | `scripts/gate_verdict.py`, `tests/test_gate_verdict.py`, `docs/superpowers/BACKLOG.md` |
+
+
+
+
 
 
 
@@ -866,7 +1898,15 @@ write path, are unbuilt; Phase 6 needs auth and tenancy and belongs to M4's host
 
 
 
+
+
+
+
 | M14-W268 | Vendor and Codebase say what contains them: the two routes of nine that rendered no breadcrumb now carry one. A vendor narrowed by a repository names that repository in its trail and an unnarrowed vendor does not, because inventing a crumb would claim a path the reader never took. `Crumb` takes `to`, not the `href` the plan's text guessed at | landed | `web/src/features/vendors/vendor-page.tsx`, `web/src/features/vendors/vendor-page.test.tsx`, `web/src/features/repositories/codebase-page.tsx`, `web/src/features/repositories/codebase-page.test.tsx` |
+
+
+
+
 
 
 
@@ -874,7 +1914,15 @@ write path, are unbuilt; Phase 6 needs auth and tenancy and belongs to M4's host
 
 
 
+
+
+
+
 | M0-W246 | Two honesty defects in how the sweep reports a budget outage. The banner was matched anywhere in the tail, so once a lane recovered its own scrollback would have held it for as long as the notice stayed in the buffer -- a stop condition with no end. It is now only believed within the last six lines, because a recovered agent pushes its banner up the scrollback and that movement is the proof. And the countdown inside the notice was captured when the agent stopped, not now, so a frozen `resets in 2h` read as live an hour later and overstated the outage by exactly the time already served; it is reported with how long ago it was captured | landed | `scripts/orchestration/resume_lanes.py` |
+
+
+
+
 
 
 
@@ -882,7 +1930,15 @@ write path, are unbuilt; Phase 6 needs auth and tenancy and belongs to M4's host
 
 
 
+
+
+
+
 | M14-W271 | The raw-utility guard stops reading prose as code, and two follow-ups on the activity timeline. The guard scanned whole file text, so a docstring quoting a class name tripped it and the reader's fix was to reword the docstring -- `evidence-bundle.tsx` had to stop naming the class M7-W179 changed, which is the guard making a file's history less accurate. Comments are now stripped before the scan and that sentence is restored verbatim; narrowing to `className=` attributes was rejected instead, because a class string held in a variable (`change-units-table.tsx` builds one per run outcome) would have escaped, proven by injecting one and watching the guard still catch it. `primaryDetail` now passes over an evidence value that is present but empty rather than surfacing a blank line under a timestamp, and the omitted-nodes sentence reads "One node has" rather than "1 nodes have" | landed | `tests/test_console_raw_utilities.py`, `web/src/features/pullrequests/evidence-bundle.tsx`, `web/src/features/workflows/activity.ts`, `web/src/features/workflows/activity.test.ts`, `web/src/features/workflows/activity-timeline.tsx` |
+
+
+
+
 
 
 
@@ -890,7 +1946,15 @@ write path, are unbuilt; Phase 6 needs auth and tenancy and belongs to M4's host
 
 
 
+
+
+
+
 | M0-W248 | The budget hold gains an expiry, which is the half of automatic resumption that was missing. An exhausted agent produces no output, so its banner never scrolls out of the window the previous fix bounded -- the hold had no way to end, and the mechanism built to survive an outage would have made it permanent. The sweep now parses the agent's own stated window from the notice, and once that long has passed since it was printed, stops believing the banner and retries. Only the duration form is parsed; a wall-clock reset needs a timezone, and guessing one ends a hold early. Every hold now reports how much of its window is left | landed | `scripts/orchestration/resume_lanes.py` |
+
+
+
+
 
 
 
@@ -898,7 +1962,15 @@ write path, are unbuilt; Phase 6 needs auth and tenancy and belongs to M4's host
 
 
 
+
+
+
+
 | CI-W284 | B150's adversarial review, run late because the first reviewer died on a session limit. Its MAJOR: the nightly gate was escapable by `continue-on-error` on the step or the job, or a script ending `exit 0`, with all four assertions staying green. Closed, with the reviewer's three mutants as negative controls. B132's superseded prediction about the container tests struck through against what was measured | landed | `tests/test_ci_gates_what_it_runs.py`, `docs/superpowers/BACKLOG.md` |
+
+
+
+
 
 
 
@@ -906,7 +1978,15 @@ write path, are unbuilt; Phase 6 needs auth and tenancy and belongs to M4's host
 
 
 
+
+
+
+
 | M14-W273 | Coverage restored for the text W272 rehomed. W272 correctly deleted the test asserting a "Reasoning & Strategy" disclosure inside `NodeEvidence`, because that placement was retired on a ruling -- static per-node text framed as reasoning the run recorded. It left no test behind for the rehomed form, so the claim its docstring makes is now asserted instead: the mechanics disclosure is not contained by the evidence panel, and a node the file does not name renders no description rather than inventing one. Proven to bite by moving the text inside the panel and watching the containment assertion fail | landed | `web/src/features/workflows/node-sequence.test.tsx` |
+
+
+
+
 
 
 
@@ -914,7 +1994,15 @@ write path, are unbuilt; Phase 6 needs auth and tenancy and belongs to M4's host
 
 
 
+
+
+
+
 | M5-W302 | Index tsc resolve_lock cache warming: skip lock once typescript npx cache is warm, eliminating test serialization and starvation across concurrent test runs and workers | landed | `src/sync/index/tsc.py`, `tests/test_tsc_npx_race.py`, `WORKLOG.md` |
+
+
+
+
 
 
 
@@ -922,7 +2010,19 @@ write path, are unbuilt; Phase 6 needs auth and tenancy and belongs to M4's host
 
 
 
+
+
+
+
+
+
+
+
 | CI-W285 | CI-W283's own defect, caught by CI within a minute of landing: `if: always()` ran the verdict check in a job that had exited seven steps earlier, so it failed with `suite-test.log does not exist` — a second red naming a file rather than what broke. Guarded with `hashFiles`, keeping the missing-path refusal that is correct on its own terms | landed | `.github/workflows/ci.yml`, `tests/test_ci_gates_what_it_runs.py` |
+
+
+
+
 
 
 
@@ -930,7 +2030,15 @@ write path, are unbuilt; Phase 6 needs auth and tenancy and belongs to M4's host
 
 
 
+
+
+
+
 | M14-W276 | B145 filed from the Gate 3 pass, and the pass's one pattern-matched claim replaced with direct evidence: `context_savings` is computed (`graph_views.py:467`, `:585`) so it clears Gate 3's question, but it is a row count times a fixed per-read constant with no tokens ever counted, and the console states that only on the bounded-scan branch | landed | `docs/superpowers/BACKLOG.md`, `docs/superpowers/reports/2026-08-17-gate-3-screen-pass.md` |
+
+
+
+
 
 
 
@@ -938,7 +2046,15 @@ write path, are unbuilt; Phase 6 needs auth and tenancy and belongs to M4's host
 
 
 
+
+
+
+
 | M5-W303 | B136 intake attempt record producer half: IntakeAttempt data model, closed vocabulary of 17 reason codes, IntakeAttemptSink port protocol, and execute_intake_attempt execution harness | landed | `src/sync/signals/intake_attempt.py`, `tests/test_intake_attempt.py`, `docs/superpowers/WORKLOG.md` |
+
+
+
+
 
 
 
@@ -946,7 +2062,15 @@ write path, are unbuilt; Phase 6 needs auth and tenancy and belongs to M4's host
 
 
 
+
+
+
+
 | CI-W286 | B153: a job that failed downloading `setup-uv` with a 429 reports as `failure` having run one step, which reads identically to a failed suite — B112's misreading with a different cause. Signature and the distinguishing `gh api` check recorded; not fixed, because retrying is already what the runner does | landed | `docs/superpowers/BACKLOG.md` |
+
+
+
+
 
 
 
@@ -954,7 +2078,15 @@ write path, are unbuilt; Phase 6 needs auth and tenancy and belongs to M4's host
 
 
 
+
+
+
+
 | M5-W304 | RequestCorrelator inventory completion and honest adapter correlation boundaries: StripeAdapter and TwilioAdapter verified as RequestCorrelators, and uncorrelatable_reason declared on GeneratedSpecAdapter and McpServerAdapter | landed | `src/sync/signals/generated/adapter.py`, `src/sync/signals/mcp_server/adapter.py`, `tests/test_shipped_conformance.py`, `docs/superpowers/WORKLOG.md` |
+
+
+
+
 
 
 
@@ -962,7 +2094,15 @@ write path, are unbuilt; Phase 6 needs auth and tenancy and belongs to M4's host
 
 
 
+
+
+
+
 | M14-W277 | Fleet reads the change-unit grain the payload computes: `change-units-table.tsx` synthesised its rows from `useOverview` and `useRuns`, deriving the same grouping `GET /api/change-units` (M12-W320, `sync.dashboard.fleet.change_units`) already computes -- two components answering one question the payload can answer once. Added `fetchChangeUnits`/`useChangeUnits` and the `ChangeUnitRow`/`ChangeUnitsPage` types, and rewrote the table to read the real endpoint, deleting the `deriveStanding`-over-`RunRow` synthesis and the `"acme/payments-api"`/`"Stripe"` fallbacks. `codebase-page.tsx` now passes `repoId` through so its table narrows the grouping itself rather than rendering the fleet's rows under one repository's name. `describeChangeUnitStanding` renders the payload's `standing` (`RunDisposition | "in_progress" | null`) through the console's one absence marker on `null` -- genuine absence, since the checkpointer read only runs when `SYNC_CHECKPOINTER_DSN` is configured -- and `describeChangeUnitRung` gives `_weaker_rung_summary`'s `"mixed"` its own honest sentence rather than falling into `describeRung`'s "not recognised" branch. The table is now Fleet's data centrepiece, placed above the repository cards; all three protected paragraphs at the foot of the screen are unchanged. Measured at 1440x900 against the seeded fixture: prose/(cells+figures) ratio 125.2 -> 25.0, data cells 4 -> 49, figures 7 -> 18 | landed | `web/src/api/client.ts`, `web/src/api/queries.ts`, `web/src/api/types.ts`, `web/src/features/fleet/change-units-table.tsx`, `web/src/features/fleet/change-units-table.test.ts`, `web/src/features/fleet/fleet-page.tsx`, `web/src/features/repositories/codebase-page.tsx`, `docs/superpowers/WORKLOG.md` |
+
+
+
+
 
 
 
@@ -970,7 +2110,15 @@ write path, are unbuilt; Phase 6 needs auth and tenancy and belongs to M4's host
 
 
 
+
+
+
+
 | M5-W305 | B136 scan path wiring: execute_intake_attempt wired into cli.py scan path with optional store sink passing, closing dead link and enabling intake attempt recording | landed | `src/sync/cli.py`, `docs/superpowers/WORKLOG.md` |
+
+
+
+
 
 
 
@@ -978,7 +2126,15 @@ write path, are unbuilt; Phase 6 needs auth and tenancy and belongs to M4's host
 
 
 
+
+
+
+
 | M14-W278 | The grid layout, closed on a measurement rather than the August complaint's scope. Re-ran Task 3/15's own snippet over all ten routes before touching anything: nine of ten already clear `sideBySideRegions >= 1` (Fleet 10->11 and Codebase 12->9 are both data-volume/scoping noise from W277, traced to `ChangeUnitRow`'s `StandingCell` row count -- not layout regressions, and neither was touched); `/settings` alone still measured 0, the same as Task 15's first reading of it. Ruled (per `.claude/rules/autonomous-development.md`, `/settings` being outside `GRAPH_LEVELS` bears on which hierarchy test governs it, not on whether it owes a region beside a region) to fix only that route: `settings-page.tsx` now wires `PageHeader`/`Merge policy`/`Adapters` onto `DetailGrid` (header spans both columns, `Merge policy` is the rail, `Adapters` keeps the wide column for its table) instead of three stacked `flex-col` divs -- no new grid literal, no sentence reworded, both refusal paragraphs and the Adapters intro guarded verbatim by a new test. `sideBySideRegions` on `/settings`: 0 -> 1. The other nine routes were left alone and reported with their number, per the brief's own warning against restyling a screen that already clears the bar | landed | `web/src/features/settings/settings-page.tsx`, `web/src/features/settings/settings-page.test.tsx`, `docs/superpowers/reports/2026-08-17-console-mock-gaps.md`, `docs/superpowers/WORKLOG.md` |
+
+
+
+
 
 
 
@@ -986,7 +2142,15 @@ write path, are unbuilt; Phase 6 needs auth and tenancy and belongs to M4's host
 
 
 
+
+
+
+
 | M0-W251 | A lane may fix a red it caused in another lane's file, ratified rather than granted as a one-off: the failure message must name the exact fix, the edit must be unambiguous, and the lane must declare it and offer the reversal. Lane B's Fleet panel expired an entry in a set that documents its own expiry, turning a drift guard red on `main` at the moment it landed; escalating would have left `main` broken on its account while it waited, and a charter producing that outcome is wrong at that point. The red must be yours and the fix must be the one the failure states -- anything needing judgement about another lane's design is still an escalation | landed | `docs/superpowers/orchestration/2026-08-17-lane-charters.md` |
+
+
+
+
 
 
 
@@ -994,7 +2158,15 @@ write path, are unbuilt; Phase 6 needs auth and tenancy and belongs to M4's host
 
 
 
+
+
+
+
 | M0-W252 | The lane boundary gets its own section after one lane crossed it three times in a day -- a duplicated aggregate, superseded panel wiring, and an edit to a file the owning lane was editing in the same minute. None was caught by the lane doing it or by review; each surfaced only because a coordinator read a terminal, and each cost three parties. Duplicated work is the most expensive failure here because from inside it looks like progress. Check the file against your path list before editing it, and note that a lane repeatedly outside its boundary is usually avoiding the harder item further down its own queue | landed | `docs/superpowers/orchestration/2026-08-17-lane-charters.md` |
+
+
+
+
 
 
 
@@ -1002,7 +2174,15 @@ write path, are unbuilt; Phase 6 needs auth and tenancy and belongs to M4's host
 
 
 
+
+
+
+
 | M14-W340 | The console becomes production-servable and is proven so locally, prepared rather than deployed per beta Ruling 1. `web/scripts/serve-console.mjs` serves the real `npm run build` output as static assets and proxies `/api` from the same origin, because the client fetches relative paths and `sync.api` declares no CORS -- split origins do not work and that is stated rather than discovered at deploy time. One shared credential in HTTP Basic gates every request including `/api`, fails closed on a missing, blank or under-length secret, and refuses a non-loopback bind without an explicit acknowledgement because base64 is not encryption. `scripts/shared-credential.ts` carries what one shared credential is NOT -- no identity, no revocation, no audit trail -- and its tests assert the two properties that would be invisible in a working console: an empty configured secret rejects everything rather than accepting everything, and a prefix of the secret is refused. Server-only code lives outside `src/` so the browser build never type-checks or bundles `node:crypto`; `vitest.config.ts` widened to keep its tests in the same gate | landed | `web/scripts/serve-console.mjs`, `web/scripts/shared-credential.ts`, `web/scripts/shared-credential.test.ts`, `web/vitest.config.ts`, `docs/superpowers/reports/2026-08-17-console-deployment-note.md` |
+
+
+
+
 
 
 
@@ -1010,7 +2190,15 @@ write path, are unbuilt; Phase 6 needs auth and tenancy and belongs to M4's host
 
 
 
+
+
+
+
 | M0-W254 | `B7`'s risk profile recorded as materially changed, because the reason it was frightening has been answered without spending anything. Its danger was that four of the pipeline's nodes postdated the last acceptance run, so authorising it risked discovering a months-old break while burning a real pull request and `xhigh` model time. `M5-W306` proved INDEX and SIGNAL clean; `M5-W307` drove all twelve remediation nodes and three compiled routing paths over the zero-remote fixture against a real corpus repository. The nodes work. `B7` still has not passed and only `B7` can pass it, but the decision is now an informed one rather than an experiment | landed | `docs/superpowers/plans/2026-08-17-sync-to-beta-scope.md` |
+
+
+
+
 
 
 
@@ -1018,7 +2206,15 @@ write path, are unbuilt; Phase 6 needs auth and tenancy and belongs to M4's host
 
 
 
+
+
+
+
 | M5-W308 | Gate 2 quality axes computation & rehearsal row isolation verification: verified sync.benchmark.axes computation across 5 axes and confirmed migration_outcome rehearsal row exclusion (is_rehearsal=True) | landed | `docs/superpowers/WORKLOG.md` |
+
+
+
+
 
 
 
@@ -1026,7 +2222,15 @@ write path, are unbuilt; Phase 6 needs auth and tenancy and belongs to M4's host
 
 
 
+
+
+
+
 | M14-W341 | Gate 3 re-signed after W277/W278/W279/W340, a re-walk of what moved rather than ten screens again. The substantive question was W340's production runtime: static assets behind Basic with `/api` proxied is not the dev-proxy path the first pass was signed against, and absence-versus-zero survives a rebuild without automatically surviving a different fetch path. Measured rather than reasoned -- six endpoints fetched direct from the API and through the proxy and compared byte for byte, all identical, and the comparison is meaningful because `/api/change-units` carries 23 nulls including `standing`; 404 passes through as 404, so not-found is not collapsed into absence. Walked in Chrome on the built assets: the new STANDING column names the two kinds of nothing it cannot separate, the workflow captions and Settings' merge-policy refusal render intact, and the ticking evidence-age correctly does not render on a run whose outcome is `reported`, verified against the payload rather than assumed. Also answers the coordinator's question on the staleness meter: it is too crude, it watches all of `web/` so it will fire on test, token and tooling commits that cannot change a claim, and the one-line refinement is to narrow the watched set to `features/`, `components/` and `api/` excluding tests -- routed to Lane C rather than taken, since `scripts/` is its file | landed | `docs/superpowers/reports/2026-08-17-gate-3-resign.md` |
+
+
+
+
 
 
 
@@ -1034,7 +2238,15 @@ write path, are unbuilt; Phase 6 needs auth and tenancy and belongs to M4's host
 
 
 
+
+
+
+
 | M14-W343 | The Gate 3 re-sign recorded in the file the meter actually reads. `beta_gates.py` dates a signature by the last commit touching `2026-08-17-gate-3-screen-pass.md`, so W341's re-sign written to a neighbouring file left the meter reading 11:10 and reporting `CANNOT TELL`. The note added here points at the re-sign evidence and states the mechanism, so the next lane is told to write into this file rather than beside it. Checked before writing rather than after: `web/src` has not changed since `6b68397` at 11:54:54, which is the tree W341 walked, so this signature covers the console as it stands rather than claiming coverage of later work | landed | `docs/superpowers/reports/2026-08-17-gate-3-screen-pass.md` |
+
+
+
+
 
 
 
@@ -1042,7 +2254,15 @@ write path, are unbuilt; Phase 6 needs auth and tenancy and belongs to M4's host
 
 
 
+
+
+
+
 | M14-W345 | Gate 3 signed under Lane C's new mechanism, which landed mid-iteration and replaced commit-time inference with an explicit `Signed:` line. The re-sign report carries it dated `2026-08-17T12:20:41-04:00`, the commit time of W341 -- the moment the verification was recorded rather than the moment the line was typed, because a signature should date the work and not the paperwork. The original screen-pass deliberately carries no such line: it is the superseded first signature, and the meter listing it as "not read" describes it correctly. Gate 3 now reads MET against the narrowed watch set Lane C adopted from W341's recommendation | landed | `docs/superpowers/reports/2026-08-17-gate-3-resign.md` |
+
+
+
+
 
 
 
@@ -1050,7 +2270,15 @@ write path, are unbuilt; Phase 6 needs auth and tenancy and belongs to M4's host
 
 
 
+
+
+
+
 | M14-W348 | The abandoned-run workflow screen rendered for the first time, and it is right -- no defect found and none manufactured. The outcome sits INSIDE the sequence immediately after `static_verify`, the last node the run reached, above the four that say "never ran" rather than "not yet"; the abandon reason renders in the closing bracket and again in the activity timeline, and `static_verify`'s evidence carries the real compiler diagnostic, so a reviewer sees why Sync gave up rather than being told that it did. Why nobody had rendered it IS the finding: `/api/workflows/{finding_id}` serves the NEWEST generation, and the seeded fixture pairs an abandoned generation 0 with an opened generation 1, so no URL produces the abandoned screen. Stood up by copying the seed into a throwaway database and deleting the opened generation's checkpoint, dropped after | landed | `docs/superpowers/reports/2026-08-17-abandoned-run-walk.md`, `docs/superpowers/BACKLOG.md` |
+
+
+
+
 
 
 
@@ -1058,7 +2286,15 @@ write path, are unbuilt; Phase 6 needs auth and tenancy and belongs to M4's host
 
 
 
+
+
+
+
 | M14-W350 | Gate 3 re-signed to cover W349, appended to the existing signature file rather than written to a fourth -- the one-accreting-report shape this lane recommended and Lane C's meter now supports. Signed rather than re-walked, with the reason checkable rather than asserted: the commit's diff over `web/src/features` contains only the `ErrorState` invocation gaining `onRetry`, proven by filtering for lines without that token and getting nothing, so the change adds a control and asserts no figure. The rendered result was observed on the built console in the same session | landed | `docs/superpowers/reports/2026-08-17-gate-3-empty-state.md` |
+
+
+
+
 
 
 
@@ -1066,7 +2302,15 @@ write path, are unbuilt; Phase 6 needs auth and tenancy and belongs to M4's host
 
 
 
+
+
+
+
 | M14-W352 | Focus follows the route, closing the last item of the console stock-take. `react-router` moves no focus, so a keyboard or screen-reader user who activated a destination stayed where they were -- and since this console's navigation hierarchy IS the API Dependency Graph, focus left behind makes the hierarchy itself unavailable, which `references/notes/roadmap-frontend-skills.md` argued and nothing had acted on. The content region takes focus rather than the page heading, because a heading belongs to the routed screen and one still loading has rendered none, which would leave focus nowhere on exactly the slowest navigations; `tabIndex={-1}` makes it a programmatic target without adding a tab stop. First paint is deliberately not a navigation. Tested through a real in-app navigation (the Observe rail link) rather than a contrived route swap, and proven to bite by deleting the focus call | landed | `web/src/layouts/app-frame.tsx`, `web/src/layouts/app-frame.test.tsx` |
+
+
+
+
 
 
 
@@ -1074,7 +2318,15 @@ write path, are unbuilt; Phase 6 needs auth and tenancy and belongs to M4's host
 
 
 
+
+
+
+
 | M14-W354 | The visual eval exists and has run: `web/scripts/visual-eval.mjs` measures the drawn mock and the built console with one probe and prints per-property deltas, and `capture-console.mjs` closes the stale-capture cause with nine routes at 1440x900 in a dated directory, subjects read off the API so a reseed cannot fill it with not-found screens. Zero dependencies -- both speak CDP over the WebSocket Node 22+ ships as a global -- and the trial verdict is measured rather than argued: the in-house script reached a real measurement in about ninety seconds against a target all four candidate extractors are built to crawl as a public site. FINDINGS: Fleet draws 4 side-by-side regions against the mock's 17 and carries 915 prose characters against 340, which is the owner's original complaint measured. Colour and radius match the mock EXACTLY, so what remains is composition rather than palette. THE HIERARCHY RULING IS WRONG FROM EVIDENCE: the plan says v2 supersedes v1, and v2 measures as a light theme with NO border-radius and a 1.45 type range -- three independent contradictions against a recorded dark-only ruling, DESIGN.md's two radius tokens, and the 3.4 bar -- while drawing 6 side-by-side regions to v1's 17. v1 is the appearance target; v2 supersedes only on vocabulary | landed | `web/scripts/visual-eval.mjs`, `web/scripts/capture-console.mjs`, `docs/superpowers/reports/2026-08-17-visual-eval-first-run.md`, `docs/superpowers/reports/screens/2026-08-17/` |
+
+
+
+
 
 
 
@@ -1082,7 +2334,15 @@ write path, are unbuilt; Phase 6 needs auth and tenancy and belongs to M4's host
 
 
 
+
+
+
+
 | M14-W356 | Plan written for the owner's instruction that the dev console show OUR OWN codebase and that our repairs be recorded through the systems we built, plus the codebase-and-testing taxonomy asked for alongside it. Grounded rather than aspirational: `runner/claude_sdk.py` calls `ClaudeAgentOptions`, a vendor surface `CLAUDE.md` records as having already broken this project twice, which is the honest dogfooding target. It states plainly what Sync CANNOT watch -- the API entrypoint `NameError` is a Python scoping bug, not vendor drift, and claiming it as a Sync catch would invent a capability. The recording half needs one link rather than a system: hand-made repairs get a `migration_outcome` row with a human-authored marker, since a corpus that cannot tell agent from human cannot answer what Sync does unattended; explicitly no second ledger. The taxonomy names four tiers -- systems codebase, per-vendor probes, the scored corpus, the synthetic fixture -- because tier 1 and tier 2 failures mean different things and today both read as "the corpus is red" | landed | `docs/superpowers/plans/2026-08-17-sync-watches-sync.md` |
+
+
+
+
 
 
 
@@ -1090,7 +2350,15 @@ write path, are unbuilt; Phase 6 needs auth and tenancy and belongs to M4's host
 
 
 
+
+
+
+
 | M14-W358 | Fleet re-audited on the fixed instrument, and the first prose cut this work has justified. `prose-audit.mjs` carried the SAME unsettled-readiness defect the eval had and was fixed the same way first, so the audit does not repeat what it was written to catch. Settled Fleet is 1777 characters: 1327 protected (change-unit grain twice, staleness-not-liveness, absence-is-not-zero, three-attempts-one-finding, the fleet-versus-codebase scope sentence) and 450 discretionary against the mock's 340 -- over by 110, the first real gap to survive a correct measurement. Cut: `Git repository - Monitored by Sync` rendered on every card, 170 of those 450 characters, carrying no distinction and telling a reader nothing they do not know from being on Sync's own repository list. Verified by re-running rather than asserting -- 1777 to 1607, discretionary 450 to 280, now UNDER the mock's 340, with all four protected sentences confirmed still present in the same run | landed | `web/src/features/fleet/codebases-panel.tsx`, `web/src/features/fleet/codebases-panel.test.tsx`, `web/scripts/prose-audit.mjs` |
+
+
+
+
 
 
 
@@ -1098,7 +2366,15 @@ write path, are unbuilt; Phase 6 needs auth and tenancy and belongs to M4's host
 
 
 
+
+
+
+
 | M14-W360 | Fetch audit across all seven screens, run ahead of the remaining prose audits because it changes how those are scored. Reports rather than fails, since over-fetching is a cost finding and a gate refusing on it would block correct work; no dependency added, because `Network.requestWillBeSent` over the same CDP-and-WebSocket transport the other two instruments use was already available. Findings: Fleet issues SIX `/api/overview` requests, one fleet-wide and one per repository, which is an N+1 that scales with the fleet -- and is not a bug, because the scoped call is what W265 added to stop every card showing the fleet-wide count; filed as B148 for Lane E, since the fix is a payload change. Fleet also fetches `/api/runs` twice with different limits, the coupling flagged as a Minor in W264's review and now measured. Every route pays two shell requests for the scope trail, which are read rather than wasted. No panel was found fetching a payload it does not read | landed | `web/scripts/fetch-audit.mjs`, `docs/superpowers/reports/2026-08-17-console-fetch-audit.md`, `docs/superpowers/BACKLOG.md` |
+
+
+
+
 
 
 
@@ -1106,7 +2382,15 @@ write path, are unbuilt; Phase 6 needs auth and tenancy and belongs to M4's host
 
 
 
+
+
+
+
 | M14-W362 | The landing page becomes the Overview and answers one question: which repository to open. Renamed in everything a reader sees -- it was titled "Repositories", labelled "Codebases" in the registry and sits at the `Fleet` level, three names for one screen -- while `GRAPH_LEVELS` keeps the specification's word, so `test_console_hierarchy.py` is untouched. The repository list is rows rather than five cards, which lets a reader compare down a column; the scoped-answer discipline is unchanged, one `/api/overview` per repository with `openFindings` null rather than zero until that repository answers. Removed: the page-level "Review proposed patch", which pointed at whichever run happened to be newest with an opened pull request and read as THE patch when nine change units are open, and the fleet-wide change-unit table and vendor distribution, both of which belong on the Codebase screen where they are scoped to one repository. Every protected sentence survives and is asserted by test, including the absence footnote whose referent -- "the repository list below" -- is why that list stays on this screen | landed | `web/src/features/fleet/fleet-page.tsx`, `web/src/features/fleet/fleet-page.test.tsx`, `web/src/features/fleet/codebases-panel.tsx` |
+
+
+
+
 
 
 
@@ -1114,7 +2398,15 @@ write path, are unbuilt; Phase 6 needs auth and tenancy and belongs to M4's host
 
 
 
+
+
+
+
 | M14-W364 | Gate 3 re-signed at `4a5ef47` after freezing `web/src`, which is the actual fix for a gate that had been `CANNOT TELL` all afternoon. The signature has to be newer than the newest console change, and three landings at 14:36, 15:32 and 16:40 each reset that -- so the answer was never to re-sign faster but to stop changing the console first. Nine screens walked in Chrome at 1440x900 on the production build behind the credential gate, `dist/` rebuilt first because the bundle predated a 31-commit merge and walking a stale bundle would sign a console that is not on disk. PASS with two findings. B145 unchanged: `CONTEXT SAVINGS` is `total_findings * a constant` (`types.ts:110`) rendered flat on three screens -- not a blocker, on the 11:10 walk's own precedent, which traced it, filed it and passed. NEW: Codebase and Signals each show two failed panels claiming "The API does not hold that identifier" for a repository `/api/repositories` lists and whose own route renders -- `app.py:422-423` declare `/coverage` and `/observed` with `{repo_id}`, the default converter, which cannot match a `host/owner/name` id, while `:426-429` already use `{repo_id:path}`. A clean reproduction of B147 with the survey's corrected cause confirmed rather than inferred; the copy overclaim beside it is a console defect of mine, left unnumbered rather than inventing an id. Verified positively: the band W363 repaired renders side by side, tile x=305 and limits x=845, measured through CDP. The `Signed:` line was written bold first and silently not read -- `beta_gates.py:242` anchors on `^Signed:` | landed | `docs/superpowers/reports/2026-08-17-gate-3-w363-walk.md` |
+
+
+
+
 
 
 
@@ -1122,7 +2414,15 @@ write path, are unbuilt; Phase 6 needs auth and tenancy and belongs to M4's host
 
 
 
+
+
+
+
 | M14-W368 | Task 8: the sidebar expands and minimises without moving a row. Measured in Chrome at 1440x900 in BOTH states -- 240px expanded, 48px minimised, 900px tall in each, nine destination rows in each, `rowsThatMoved: []`. Not one row's vertical offset changed, which is the whole constraint: minimising changes density, not navigation. The vendored `collapsible="icon"` path is deliberately NOT adopted -- it carries `transition-[width]` and is exempt from `test_nothing_transitions_geometry_anywhere` BY PATH, so it would animate for a default reader while CI stayed green; `collapsible="none"` is kept and the two widths are owned in `layouts/`, argued in `DESIGN.md` first as `M14-W367`. What keeps the rows still is a reserved heading row: at the narrow width a group heading's TEXT goes `sr-only` and the row keeps its height, rather than the row being removed and dragging every icon beneath it upward. Three things the jsdom guard structurally cannot see, all found by measuring: level labels and destination labels would still have rendered text at 48px and wrapped, and the footer carries a PROTECTED sentence -- `sr-only` there is recorded as a decision, since the rule forbids collapsing one behind a disclosure, and the argument is that the default is expanded, the sentence stays in the accessibility tree, and prose wrapping to a dozen lines in a 48px column is how a qualification actually gets lost. Near-miss worth keeping: `transitionProperty` computes as `all` on that element and reads like an animation; `transitionDuration` is `0s`, so there is none. The property alone is not evidence | landed | `web/src/layouts/sidebar-collapse.ts`, `web/src/layouts/sidebar-collapse.test.ts`, `web/src/layouts/app-frame.tsx`, `web/src/layouts/app-frame.test.tsx` |
+
+
+
+
 
 
 
@@ -1130,7 +2430,15 @@ write path, are unbuilt; Phase 6 needs auth and tenancy and belongs to M4's host
 
 
 
+
+
+
+
 | M0-W256 | The registers say what is true today rather than what was true a fortnight ago. `BACKLOG.md`'s milestone table is rewritten against `git log` and the gate meter: M5 from ~35% to ~80%, M12 from ~10% to ~55%, M8 and M9 to done, M10 to ~85%, and M8-M11 split into four rows because they no longer share a state. A dated status section carries the four measured gate verdicts, the order work should be done in and why, and who owns which paths right now. `WORKLOG.md` gains a preamble saying it is a register rather than a report, and how to read 72 interleaved rows by lane prefix instead of in file order | landed | `docs/superpowers/BACKLOG.md`, `docs/superpowers/WORKLOG.md` |
+
+
+
+
 
 
 
@@ -1138,7 +2446,15 @@ write path, are unbuilt; Phase 6 needs auth and tenancy and belongs to M4's host
 
 
 
+
+
+
+
 | M0-W258 | The coordinator was wrong about Gate 4 and the scope now says so. I pressed one lane for several cycles to *wire the sandbox*, reading the meter's `reached from nowhere` as somebody having forgotten a call; the lane declined, cited this repository's own re-scope of `B97`, and was right. Two of the four remaining items block hard -- an Anthropic-only forward proxy that is undesigned, and the unanswered question of which credential the CLI needs, which is the owner's to settle. A gate saying what is missing does not say why, and the lane owning the file had the answer throughout | landed | `docs/superpowers/plans/2026-08-17-sync-to-beta-scope.md` |
+
+
+
+
 
 
 
@@ -1146,7 +2462,15 @@ write path, are unbuilt; Phase 6 needs auth and tenancy and belongs to M4's host
 
 
 
+
+
+
+
 | CI-W292 | The Gate 3 staleness meter stops ignoring a real re-sign. It read one hardcoded report, so Lane B re-signing by landing a second document beside the first was invisible to it; it now reads every gate-3 report and takes the latest recorded `Signed:` date rather than a git timestamp, and the watched set narrows from all of `web/` to features, components and api excluding tests | landed | `scripts/beta_gates.py`, `tests/test_gate_beta_measurement.py` |
+
+
+
+
 
 
 
@@ -1154,7 +2478,15 @@ write path, are unbuilt; Phase 6 needs auth and tenancy and belongs to M4's host
 
 
 
+
+
+
+
 | M5-W309 | B97 patch agent container authentication contract & credential discovery research (B156): established exact SDK and CLI authentication precedence (ANTHROPIC_AUTH_TOKEN -> ANTHROPIC_API_KEY -> on-disk OAuth -> apiKeyHelper -> 3P providers -> failure) and documented the three sandbox authentication architectures | landed | `docs/superpowers/BACKLOG.md`, `docs/superpowers/WORKLOG.md` |
+
+
+
+
 
 
 
@@ -1162,7 +2494,15 @@ write path, are unbuilt; Phase 6 needs auth and tenancy and belongs to M4's host
 
 
 
+
+
+
+
 | M0-W261 | The empty-state gap is recorded as closed with what the walk actually found: one real defect, three zeros that were already honest and left alone, two screens quoted rather than reported as an absence of complaints, and one coordinator hypothesis disproved -- the failed fetch and the empty graph are not one defect, since Fleet renders *the API did not answer* in the figure slot with no bare zeros. The walk used a separate zero-row database rather than truncating the one five lanes were using | landed | `docs/superpowers/plans/2026-08-17-sync-to-beta-scope.md` |
+
+
+
+
 
 
 
@@ -1170,7 +2510,15 @@ write path, are unbuilt; Phase 6 needs auth and tenancy and belongs to M4's host
 
 
 
+
+
+
+
 | CI-W294 | The beta-gates job checked against real pushes rather than simulation: it runs, reads `needs.serial.result` (observed as `--suite-result "failure"`), leaves the build green on NOT MET, and Gate 3 came back MET once Lane B's `Signed:` line landed. The publication was the one part that could not be verified — GitHub's check-run API does not expose job summaries — so the job now reads its own summary back and fails if it is empty or missing a gate | landed | `.github/workflows/ci.yml`, `tests/test_ci_gates_what_it_runs.py` |
+
+
+
+
 
 
 
@@ -1178,7 +2526,15 @@ write path, are unbuilt; Phase 6 needs auth and tenancy and belongs to M4's host
 
 
 
+
+
+
+
 | M5-W310 | B168 closed: `intake_attempt.detail` write-time sanitization (path scrubbing and 500-char bounding) and `IntakeAttempt` closed vocabulary validation; Lane D beta stock-take report | landed | `src/sync/signals/intake_attempt.py`, `tests/test_intake_attempt.py`, `docs/superpowers/reports/2026-08-17-signals-index-beta-stock-take.md`, `docs/superpowers/BACKLOG.md`, `docs/superpowers/WORKLOG.md` |
+
+
+
+
 
 
 
@@ -1186,7 +2542,15 @@ write path, are unbuilt; Phase 6 needs auth and tenancy and belongs to M4's host
 
 
 
+
+
+
+
 | M0-W263 | The day-one coverage boundary recorded from Lane D's stock-take, plus the question it raises that crosses into the console. A partner wrapping the SDK in an internal module gets fewer static bindings, which is correct by design because the `observed` rung exists for it -- but that rung only produces bindings if telemetry is wired, so a partner with wrappers and no telemetry gets lower coverage from the same codebase, invisibly. Whether any screen separates *no call sites here* from *call sites behind an abstraction with no telemetry attached* is the absence-versus-zero rule applied to coverage | landed | `docs/superpowers/plans/2026-08-17-sync-to-beta-scope.md` |
+
+
+
+
 
 
 
@@ -1194,7 +2558,15 @@ write path, are unbuilt; Phase 6 needs auth and tenancy and belongs to M4's host
 
 
 
+
+
+
+
 | M0-W265 | `B169` closed, and the answer refines the pattern rather than confirming it: the documentation was not wrong, it was correct and INCOMPLETE. `scripts/fetch_corpus_repositories.py` appeared in no document in the repository, so no assertion about the prose could have caught it and anyone following the setup exactly still met the failures. Fixed by making the instructions true rather than the test pass, with a contract test that EXECUTES both refusal paths and asserts the script appears before the suite command -- proved able to fail. A cold-clone CI job was declined on the grounds that fifteen minutes of wall clock gets disabled the first flaky week | landed | `docs/superpowers/plans/2026-08-17-sync-to-beta-scope.md` |
+
+
+
+
 
 
 
@@ -1202,7 +2574,15 @@ write path, are unbuilt; Phase 6 needs auth and tenancy and belongs to M4's host
 
 
 
+
+
+
+
 | M0-W267 | The `-n 4` guidance is retired, because it was charging every lane 108 seconds a run to prevent a crash that no longer happens. Lane C measured it once `CI-W295` made a dead worker visible on a runner: `-n auto` is 185s on Linux and 125s here with no worker lost, against 233s for `-n 4`, and the npx-lock starvation it existed to avoid was fixed in `2cf2e62`. The lane proposed the edit rather than making it, because the charter is the coordinator's file. A workaround that outlives its cause is a tax nobody notices paying | landed | `docs/superpowers/orchestration/2026-08-17-lane-charters.md` |
+
+
+
+
 
 
 
@@ -1210,7 +2590,15 @@ write path, are unbuilt; Phase 6 needs auth and tenancy and belongs to M4's host
 
 
 
+
+
+
+
 | M0-W269 | Why the console is not getting visually better, audited against `git log` rather than guessed: fourteen console units landed today, seven were signing or re-signing Gate 3, and ZERO were visual fidelity. The lane executed well; it was asked the wrong question. Recorded with three coordinator fixes -- fidelity gets its own axis and sign-off separate from honesty, the demo is the bar and matching our own drawing is not an originality violation, and the dispatch mix alternates rather than filling a queue with correctness while expecting beauty. This project measured the same failure on 2026-08-06 and I re-created the conditions for it | landed | `docs/superpowers/plans/2026-08-17-reference-hierarchy-and-visual-eval.md` |
+
+
+
+
 
 
 
@@ -1218,7 +2606,15 @@ write path, are unbuilt; Phase 6 needs auth and tenancy and belongs to M4's host
 
 
 
+
+
+
+
 | M0-W271 | The eval plan gains the constraint that decides whether it can ever be a gate, from `CI-W300`: token-derived properties may gate, content counts may not. Colour and radius move only when a token changes, which is when a gate should fire; regions, prose and density move on every copy edit, and gating those makes it a snapshot test this repository already ruled gets deleted within a week. It runs in the `web` job rather than `beta-gates`, because `beta-gates` carries `--exit-zero` so a verdict cannot fail a build and an eval that gates needs the opposite | landed | `docs/superpowers/plans/2026-08-17-reference-hierarchy-and-visual-eval.md` |
+
+
+
+
 
 
 
@@ -1226,7 +2622,15 @@ write path, are unbuilt; Phase 6 needs auth and tenancy and belongs to M4's host
 
 
 
+
+
+
+
 | M0-W273 | The Fleet composition finding is withdrawn and the routing off it was wrong. Two measurement defects, both of which returned a plausible number rather than an error: the harness authenticated by URL credential, which Chrome does not attach to a page's own fetches, so three panels rendered their never-reached-a-server state and the eval scored error copy as console prose; and `sideBySide` counted markup technique, since the mock holds 0 `<table>` and 33 `grid-template-columns` and draws every table as grid rows, so each mock data row scored as a placement while our semantic `<tr>` scored nothing. 17-against-4 was almost entirely that. Lane B refused the layout pass I dispatched, replaced the metric with `regionsBeside`, and re-ran rather than asserting. Rule recorded: a visual metric is checked against a screen whose answer is already known before it may order work | landed | `docs/superpowers/plans/2026-08-17-reference-hierarchy-and-visual-eval.md` |
+
+
+
+
 
 
 
@@ -1234,7 +2638,15 @@ write path, are unbuilt; Phase 6 needs auth and tenancy and belongs to M4's host
 
 
 
+
+
+
+
 | M0-W275 | Third reversal on the visual eval, and this one the lane found against itself: two identical runs disagreed, so nothing measured before it can order work. On the fixed instrument the composition finding gets stronger -- the console is *ahead* of the drawing on `fleet` (12 regions to 0) and `api-services` (4 to 1), level on two more, behind by exactly one pairing on three -- and the prose finding is withdrawn, Fleet's 915 characters having been read mid-load against a settled 1777. Standing consequence recorded: a visual metric must repeat before it may order work, and must refuse rather than estimate when its subject is not in a measurable state. Charter also now carries that `worker-done` is rejected once a dispatch is superseded, which silently cost two Lane B reports | landed | `docs/superpowers/plans/2026-08-17-reference-hierarchy-and-visual-eval.md`, `docs/superpowers/orchestration/2026-08-17-lane-charters.md` |
+
+
+
+
 
 
 
@@ -1242,7 +2654,15 @@ write path, are unbuilt; Phase 6 needs auth and tenancy and belongs to M4's host
 
 
 
+
+
+
+
 | M0-W278 | A worker may fast-forward `main`; it still may not merge into it. Lane A held a full day of gated work locally, correctly, because `CLAUDE.md` said a worker never pushes `main` and `autonomous-development.md` lists that among the human's three. The rule was written for one integration branch and one coordinator and does not describe five lanes with disjoint file ownership. A fast-forward of a branch already containing `origin/main` creates no commit, resolves no conflict and cannot lose work -- publication, not integration -- and `git merge-base --is-ancestor` is the proof rather than a belief. Reversible; recorded as the coordinator's | landed | `CLAUDE.md` |
+
+
+
+
 
 
 
@@ -1250,7 +2670,15 @@ write path, are unbuilt; Phase 6 needs auth and tenancy and belongs to M4's host
 
 
 
+
+
+
+
 | M0-W280 | There are two inboxes and I had been reading one. Bare `check` drains the Run FIFO; `check --terminal <handle> --all` reads the terminal's own mailbox, which held 52 non-heartbeat messages including a Lane C `worker_done` on `CI-W299`/`CI-W300` that never appeared in the FIFO and was never answered -- while the FIFO read empty. `--all` marks nothing read, so `read_at` cannot separate handled from unhandled; sort by `created_at` instead. Recorded with the matching failure in the other direction: Lane A said plainly that mail was not reaching it, was right, and a ruling that unblocked a day of its held work needed `terminal send` to arrive | landed | `docs/superpowers/orchestration/2026-08-17-lane-charters.md` |
+
+
+
+
 
 
 
@@ -1258,7 +2686,15 @@ write path, are unbuilt; Phase 6 needs auth and tenancy and belongs to M4's host
 
 
 
+
+
+
+
 | M0-W282 | The owner's directive arrived in full and three parts had been lost to truncation, one of them load-bearing. A persistent background session against `localhost:5173` rather than one opened per measurement; React **hydration errors and warning flags**, which an `error`-level filter drops precisely because React reports hydration as a warning; and the affirmative check -- **inspect the DOM and confirm the change actually appears** -- which no error-only rule can supply. A remediation that breaks nothing and also did not take is a silent no-op, and an absent error is not evidence of an applied change. Governing sentence recorded: do not rely solely on static analysis or unit tests | landed | `docs/superpowers/plans/2026-08-17-reference-hierarchy-and-visual-eval.md` |
+
+
+
+
 
 
 
@@ -1266,7 +2702,15 @@ write path, are unbuilt; Phase 6 needs auth and tenancy and belongs to M4's host
 
 
 
+
+
+
+
 | M0-W284 | Caught a lane gating a merge in the wrong tree. Lane A ran the suite after `cd` to the *primary* worktree, which holds `main`, while its merge sat in `b97-patch-sandbox`. It would have passed, proved nothing about the branch, and read as success. Fifth defect of that shape today and I wrote one of them, so it is recorded as a trap rather than a fault. Charter now says gate from your own worktree and print `git rev-parse --show-toplevel` beside the result | landed | `docs/superpowers/orchestration/2026-08-17-lane-charters.md` |
+
+
+
+
 
 
 
@@ -1274,7 +2718,15 @@ write path, are unbuilt; Phase 6 needs auth and tenancy and belongs to M4's host
 
 
 
+
+
+
+
 | M0-W286 | Caught Lane E rewriting a fix that landed two hours earlier. Its worktree had not merged since `6a9637d`, so it read its own stale `src/sync/api/__main__.py`, saw a genuinely absent import, and started writing it again -- and nothing in that file could have told it otherwise. Rejected the edit mid-prompt and routed it to merge first, then B147, B148 and its share of the decode-handler red. Charter trap added: a stale worktree makes you rebuild what already landed, and the rebuild looks like progress -- you are reading a real file, seeing a real absence, and fixing a real bug that is already fixed somewhere you did not look | landed | `docs/superpowers/orchestration/2026-08-17-lane-charters.md` |
+
+
+
+
 
 
 
@@ -1282,7 +2734,15 @@ write path, are unbuilt; Phase 6 needs auth and tenancy and belongs to M4's host
 
 
 
+
+
+
+
 | M0-W288 | A backlog number collided for the first time since the blocks were allocated: two `B150` items, Lane C's CI-red one (fixed) and Lane B's *viewing the code means call sites*. Cause is not carelessness -- Lane B's block `B145-B149` was **full**, so the next number it took landed in Lane C's range, which is a defect in my allocation rather than in its counting. Lane B's item renumbered to `B173` with a note saying nothing about it changed, and its block extended to `B173-B182` alongside its second work-item block. `B97`'s two headings are an item plus a status section and are not a collision | landed | `docs/superpowers/BACKLOG.md`, `docs/superpowers/orchestration/2026-08-17-lane-charters.md` |
+
+
+
+
 
 
 
@@ -1290,7 +2750,15 @@ write path, are unbuilt; Phase 6 needs auth and tenancy and belongs to M4's host
 
 
 
+
+
+
+
 | CI-W298 | B170 measured in both environments now that `CI-W295` lets CI report a dead worker: `-n auto` is 185s on a runner and **125s** here, both TRUSTWORTHY with no worker lost, against 233s for `-n 4`. The workaround outlived its cause and charges every lane 108s a run; the charter guidance is the thing to retire, proposed rather than applied. B171 closed with it and was smaller than filed: the footer already refused absence-as-zero, and what was missing was that a structural `CANNOT TELL` reads the same forever | landed | `scripts/beta_gates.py`, `docs/superpowers/BACKLOG.md` |
+
+
+
+
 
 
 
@@ -1298,7 +2766,15 @@ write path, are unbuilt; Phase 6 needs auth and tenancy and belongs to M4's host
 
 
 
+
+
+
+
 | CI-W300 | What the visual eval needs from CI to be a gate rather than a one-off, advisory only and nothing built: it belongs in `web` and not in `beta-gates`, whose `--exit-zero` contract is the opposite of a gate; three to five minutes; token-derived properties may fail a build and content counts may not, because gating a count is a snapshot test. Filed B172 | landed | `docs/superpowers/reports/2026-08-17-visual-eval-what-ci-needs.md` |
+
+
+
+
 
 
 
@@ -1306,7 +2782,15 @@ write path, are unbuilt; Phase 6 needs auth and tenancy and belongs to M4's host
 
 
 
+
+
+
+
 | CI-W302 | The dev loop actually comes up, and running it found a defect `--check` never could: `npm` was spawned by bare name and on Windows that is `npm.CMD`, so the start path died with `WinError 2` from a launcher whose purpose is to turn missing preconditions into sentences. Now a resolved executable and a checked precondition. Verified end to end — API 200 serving 12 real findings, console 200 | landed | `scripts/dev_up.py`, `tests/test_gate_dev_loop.py` |
+
+
+
+
 
 
 
@@ -1314,7 +2798,15 @@ write path, are unbuilt; Phase 6 needs auth and tenancy and belongs to M4's host
 
 
 
+
+
+
+
 | CI-W304 | `main`'s decode-handler red closed by accounting for all four clauses, one judgement each: `store.py` decodes nothing (`fromisoformat` over a `str`), `reconcile.py` and `intake_attempt.py` are catch-alls where the read is elsewhere, and `auth.py::extract_credential` genuinely decodes an attacker-controlled `Authorization` header — accounted, wants narrowing, filed for Lane E rather than changed | landed | `tests/test_decode_handlers.py` |
+
+
+
+
 
 
 
@@ -1322,7 +2814,15 @@ write path, are unbuilt; Phase 6 needs auth and tenancy and belongs to M4's host
 
 
 
+
+
+
+
 | M0-W289 | Third handoff today that existed only in a report. Lane D landed `M5-W311` -- `unbound_import_paths` on both adapters, threaded into `reachability.py`, so a wrapper attributes its reason instead of reporting a false uncalled zero -- and said it had *defined* `telemetry_attached_at` for Lanes E and B. It appears nowhere in `src/` or `docs/`. Lane E is solving the same problem one layer down in `B147` right now, so within the hour there would have been two answers to *how does the API say nothing was ever recorded*. Routed both ways and recorded as a trap: a cross-lane contract goes in `BACKLOG.md` with a number, naming what a consumer must render differently for `null` versus zero | landed | `docs/superpowers/orchestration/2026-08-17-lane-charters.md` |
+
+
+
+
 
 
 
@@ -1330,7 +2830,15 @@ write path, are unbuilt; Phase 6 needs auth and tenancy and belongs to M4's host
 
 
 
+
+
+
+
 | CI-W305 | B174 filed for Lane E: `extract_credential`'s `except Exception` cannot tell malformed base64 from well-formed base64 carrying non-UTF-8 bytes, on the most attacker-controlled read in the tree. Behaviour is correct and must not change; the entry carries the one-line narrowing and the census key that has to go with it | landed | `docs/superpowers/BACKLOG.md` |
+
+
+
+
 
 
 
@@ -1338,7 +2846,15 @@ write path, are unbuilt; Phase 6 needs auth and tenancy and belongs to M4's host
 
 
 
+
+
+
+
 | M5-W313 | Ruling 4 / Gate 3 & Gate 2: implemented `CorrelatingGeneratedSpecAdapter` extending `GeneratedSpecAdapter` with runtime HTTP request correlation (`RequestCorrelator` protocol) over extracted SDK routes when SDK source is staged, wired in `registry.py`, added correlation conformance cases for staged generated vendors (Anthropic, Vercel) passing `check_request_correlator`, and proved that unstaged vendors (OpenAI, Cloudflare) explicitly declare `uncorrelatable_reason` | landed | `src/sync/signals/generated/adapter.py`, `src/sync/signals/registry.py`, `tests/test_generated_adapter.py`, `tests/test_shipped_conformance.py`, `docs/superpowers/WORKLOG.md` |
+
+
+
+
 
 
 
@@ -1346,7 +2862,15 @@ write path, are unbuilt; Phase 6 needs auth and tenancy and belongs to M4's host
 
 
 
+
+
+
+
 | M0-W293 | Found why Lane A held a day of gated work through three rulings: **a long `terminal send` arrives truncated**. It reported receiving *an ambiguous truncated message about main-landing authorization* and refused to act, which was right. Every send returned `ok: true` -- the sender sees success, the reader sees half a sentence. Fourth addressing failure today and the same shape as the other three. Re-sent as seven short lines. Charter: keep terminal sends to one or two sentences, or put the body in an `orchestration send` and use the terminal only to say mail is waiting | landed | `docs/superpowers/orchestration/2026-08-17-lane-charters.md` |
+
+
+
+
 
 
 
@@ -1354,7 +2878,15 @@ write path, are unbuilt; Phase 6 needs auth and tenancy and belongs to M4's host
 
 
 
+
+
+
+
 | M0-W295 | Second block exhaustion in one day: Lane C ran out at `B174` and stopped to ask, having filed straight through `B150-B154`. Granted `B183-B192` and a second work-item block. Blocks are now extended in tens rather than fives, and a lane two numbers from the end asks before it needs one -- running out mid-unit costs an iteration and taking the next number anyway costs a renumber plus everything citing it, which is what `M0-W288` had to undo. Lane C is also at **97% context**; told to write a resumable handoff onto `main` ahead of finishing its unit, naming commits rather than intentions | landed | `docs/superpowers/orchestration/2026-08-17-lane-charters.md` |
+
+
+
+
 
 
 
@@ -1362,7 +2894,15 @@ write path, are unbuilt; Phase 6 needs auth and tenancy and belongs to M4's host
 
 
 
+
+
+
+
 | M0-W297 | Board updated: **1 of 4 gates met, 1 cannot be told.** Gate 3 `MET` at 16:50:47 (`M14-W364`) -- the first gate to move today, and it took a freeze rather than more work, because the console-changed timestamp had climbed 14:36 to 15:32 to 16:40 while a lane tried to sign a console it was still changing. Recorded with the thing that makes it readable: **Gate 3 will flap and that is correct** -- it is a release gate, meaningful at the moment of release, and reading it as a steady-state health light would be the composite score this console refuses on the record | landed | `docs/superpowers/BACKLOG.md` |
+
+
+
+
 
 
 
@@ -1370,7 +2910,15 @@ write path, are unbuilt; Phase 6 needs auth and tenancy and belongs to M4's host
 
 
 
+
+
+
+
 | M0-W299 | Swept every worktree for unlanded work, which is the failure this workspace keeps hitting. **Result is good: only one worktree carries anything, and it is worthless.** `repo-context` holds three docs commits from 2026-08-06 and diffs against `main` at **67,430 deletions across 524 files** -- it predates the console rebuild. Compared file by file rather than assumed: the plan is byte-identical, and the spec and `B116` entry differ only by being *older* than `main`'s, which records the two-branch reconciliation of 2026-08-16 that the copy predates. Nothing recoverable, nothing lost. Every lane's work is on `main` | landed | `docs/superpowers/BACKLOG.md` |
+
+
+
+
 
 
 
@@ -1378,7 +2926,15 @@ write path, are unbuilt; Phase 6 needs auth and tenancy and belongs to M4's host
 
 
 
+
+
+
+
 | M0-W301 | Lane D reported an empty queue and named what it would take -- the first lane to do step 7's new half properly. Declined its offer to support Lane E on `B147`/`B148`, because two lanes in one file is the collision I arbitrated between A and C twenty minutes earlier. Assigned instead the thing upstream of the whole board: **Gate 2's routing-accuracy axis reads zero because nothing has ever been routed to tier 0**, and Lane A can run the cascade but has no tier-0 input to run it over. Producing that input is a signals question. Split stated so they cannot collide -- Lane D makes the finding exist, Lane A runs the cascade, neither touches the other's paths | landed | assignment, no code |
+
+
+
+
 
 
 
@@ -1386,7 +2942,15 @@ write path, are unbuilt; Phase 6 needs auth and tenancy and belongs to M4's host
 
 
 
+
+
+
+
 | M0-W303 | Corrected a stale figure of mine that five lanes were planning against. The charter and the beta scope plan both called the gate *eight to fourteen minutes* and *the single largest tax on this workspace*; `CI-W363` measured **152-230s, median about 175s** across eight runs -- about four times off. `CI-W287` and the `-n 4` to `-n auto` switch had already paid it down and nobody updated the number. Struck in both documents with the measurement, including the arithmetic showing nothing is left to attack | landed | `docs/superpowers/orchestration/2026-08-17-lane-charters.md`, `docs/superpowers/plans/2026-08-17-sync-to-beta-scope.md` |
+
+
+
+
 
 
 
@@ -1394,7 +2958,15 @@ write path, are unbuilt; Phase 6 needs auth and tenancy and belongs to M4's host
 
 
 
+
+
+
+
 | M0-W305 | Owner set a **Wednesday ship date** for a deployable product with the UI as highest priority. Reordered everything against it. The honest headline first: **Gates 1 and 2 cannot be met by Wednesday** -- both need a real pull request going green in somebody else's CI, which is elapsed time and an owner authorization, not schedulable work. That does not make the product unfinished; it ships with the meter reading `CANNOT TELL` on two axes and saying exactly why, which is the position this console exists to make legible. P0 is: `main` green, `B147`, the console IA, fresh-clone bring-up, and a named deployment target | landed | `docs/superpowers/plans/2026-08-18-ship-by-wednesday.md` |
+
+
+
+
 
 
 
@@ -1402,7 +2974,15 @@ write path, are unbuilt; Phase 6 needs auth and tenancy and belongs to M4's host
 
 
 
+
+
+
+
 | M0-W307 | Owner named the packaging target: installation must feel like `npx skills add superloglabs/skills --all` -- one command, from the repository, and it works. With hosting out, this *is* the deployment story. Recorded with the limit that keeps it honest: `npx` gives a Node entry point and **cannot conjure a Python toolchain**, so the promise is one command to type, one screen of output, and either the product is running or you know exactly what to install -- `dev_up.py` already refuses rather than dying, and the wrapper surfaces its messages rather than hiding them | landed | `docs/superpowers/plans/2026-08-18-ship-by-wednesday.md` |
+
+
+
+
 
 
 
@@ -1410,7 +2990,15 @@ write path, are unbuilt; Phase 6 needs auth and tenancy and belongs to M4's host
 
 
 
+
+
+
+
 | M0-W309 | Owner clarified that the Superlog command is a **method, not a feature list**: the point is *no assembly required*, not that it happens to index. One command sets up everything the product needs -- toolchain and shims, database and schema, harnesses and skills, the console build, the running services, the index of the target codebase. **The test is not whether the command exists but whether anything is left for a person to figure out afterwards**; every remaining step is a defect in the command rather than a note for the README | landed | `docs/superpowers/plans/2026-08-18-ship-by-wednesday.md` |
+
+
+
+
 
 
 
@@ -1418,7 +3006,15 @@ write path, are unbuilt; Phase 6 needs auth and tenancy and belongs to M4's host
 
 
 
+
+
+
+
 | M0-W311 | Scoped agent automation settings against two more reference documents. Checked what exists first: **project context is already ours and better placed** -- `.sync/context.md` read from the customer's repository, versioned with the code it describes, fenced by `B165`, needing documentation rather than implementation. Genuinely missing is the policy: merge policy, merge method, base branch, per **repository**. **The `immediately` value is refused on the record** -- merging before any check runs contradicts *nothing reaches a pull request unverified* and is the black box Sync was built against; the screen says why rather than omitting it, because an absent option reads as an oversight and a refused one reads as a position. GitHub App OAuth is P2 and out: we use the `gh` CLI and have no hosted callback by choice | landed | `docs/superpowers/plans/2026-08-18-ship-by-wednesday.md` |
+
+
+
+
 
 
 
@@ -1426,7 +3022,15 @@ write path, are unbuilt; Phase 6 needs auth and tenancy and belongs to M4's host
 
 
 
+
+
+
+
 | M0-W313 | **Corrected my own quickstart design against the code.** I had written step 2 as *attach telemetry and watch bindings move from `static` to `observed`* -- but **Sync has no OTLP listener**. `sync ingest` folds a *captured* payload from a file or stdin, and `cli.py:1519` records that as deliberate. Honest step 2 is *export a payload, then ingest it*. Ruled: **do not build a listener this week** -- it is a port, a supervisor and an operational surface, built for a demo rather than a user; `static` is what the one command delivers and a captured payload is enough to show the rung *moving*. Also checked: `LICENSE` and the Apache-2.0 declaration already exist, no work | landed | `docs/superpowers/plans/2026-08-18-ship-by-wednesday.md` |
+
+
+
+
 
 
 
@@ -1434,7 +3038,15 @@ write path, are unbuilt; Phase 6 needs auth and tenancy and belongs to M4's host
 
 
 
+
+
+
+
 | M0-W315 | Owner refined item 1 and the refinement resolves it: **codebase selection lives in the sidebar or Settings, and the Overview must not list codebases.** Sharper than my framing -- I had said *delete the fleet root*, which left open what replaces it; **selection is chrome, not content**, and `interface-originality.md` already names *a scope switcher that says what contains what* as a convention of the form. Directly contradicts `M14-W372`, landed an hour earlier, which put the repository list first on the Overview: **the argument was right and the container was wrong** -- value-before-configuration means the *selected* codebase's findings precede any setup prompt, not that a directory of codebases leads the page | landed | `docs/superpowers/plans/2026-08-18-owner-console-review.md` |
+
+
+
+
 
 
 
@@ -1442,7 +3054,15 @@ write path, are unbuilt; Phase 6 needs auth and tenancy and belongs to M4's host
 
 
 
+
+
+
+
 | CI-W309 | B183 filed: B97's two positive controls fail under `-n auto` and pass 8 of 8 alone, with a nine-hour leaked `sync-patch-sandbox` container on the host. The first durable suite record says `passed: false` on their strength — accurate about its run, not a statement about `main`, which is the staleness Gate 4 exists to refuse | landed | `docs/superpowers/BACKLOG.md` |
+
+
+
+
 
 
 
@@ -1450,7 +3070,15 @@ write path, are unbuilt; Phase 6 needs auth and tenancy and belongs to M4's host
 
 
 
+
+
+
+
 | CI-W360 | `B183` closed, and it was none of the three candidates. The container connected in **0.022s** and sent continuously; the host-side `accept()` had already raised `TimeoutError`, because its 10s deadline started when the socket was **bound** and 11.359s of Docker setup ran next. **The defect is the anchor, not the load.** Name collision eliminated from source (`uuid4` names), the nine-hour leaked container eliminated by measurement (3989/3989 passed while it was up), `CI-W280`'s cause eliminated by evidence (`host.docker.internal` resolved). Before: 2 failed/3987 passed. After: **3990 passed, 0 failed** under `-n auto`. Filed `B184` | landed | `tests/test_patch_sandbox.py`, `docs/superpowers/reports/2026-08-17-b183-a-deadline-anchored-to-the-wrong-event.md` |
+
+
+
+
 
 
 
@@ -1458,7 +3086,15 @@ write path, are unbuilt; Phase 6 needs auth and tenancy and belongs to M4's host
 
 
 
+
+
+
+
 | CI-W362 | The Postgres bounce measured, and it is none of the charter's three candidates: not a resource ceiling (`OOMKilled` false, no limit, `RestartCount` 0), not Docker Desktop (the leaked sandbox container ran straight through it), not the leaked-database volume. **Nor a stop-grace overrun** -- a scratch container with identical flags and 86 connections under write load stopped cleanly in **2427ms** against a 10s default, so `stop_grace_period` would have been decoration and was not added. Recovery is **2.74s**, not the three minutes the charter states. The real cost was `B185`: `CannotConnectNow` (57P03) is an `OperationalError` subclass, so a restart mid-collection read as "no Postgres" and ran the whole suite unisolated | landed | `tests/conftest.py`, `tests/test_gate_is_bounded.py`, `docs/superpowers/reports/2026-08-17-what-the-postgres-bounce-actually-is.md` |
+
+
+
+
 
 
 
@@ -1466,7 +3102,15 @@ write path, are unbuilt; Phase 6 needs auth and tenancy and belongs to M4's host
 
 
 
+
+
+
+
 | CI-W364 | `B172` re-measured against the tree rather than against its own filing: the original blocker is **gone** -- Lane B settled the extraction mechanism, `web/scripts/visual-eval.mjs` won and installs nothing -- and a different one is now load-bearing. **The eval cannot fail:** no `process.exit(1)`, no gate predicate, so wiring CI around it today would build a job that always passes, which is the shape test-discipline forbids. Second cost found: `serve-console.mjs` proxies `/api` to a live origin, so a CI run needs Postgres, the API and seed data before one property can be read. Both recorded with what Lane B must add | landed | `docs/superpowers/BACKLOG.md` |
+
+
+
+
 
 
 
@@ -1474,7 +3118,15 @@ write path, are unbuilt; Phase 6 needs auth and tenancy and belongs to M4's host
 
 
 
+
+
+
+
 | CI-W366 | Coordinator reported `main` red on both B97 controls. **Could not reproduce:** 4002 passed / 0 failed at `388c822` from this lane's worktree, and their run collected 3999 against `main`'s 4006, i.e. seven tests behind. Found the mechanism that *would* produce it under load anyway and hardened against it: `probe_connect` maps a 15s `docker exec` timeout to `reachable=False`, which is right for "is this blocked" and fatal for a positive control asserting the opposite. `_probe_until_reachable` retries so a timeout cannot read as a definite negative, with a guard test pinning that something genuinely unreachable still fails. Filed `B186` for the `ProbeResult.timed_out` half, which is Lane A's file | landed | `tests/test_patch_sandbox.py`, `docs/superpowers/BACKLOG.md` |
+
+
+
+
 
 
 
@@ -1482,7 +3134,15 @@ write path, are unbuilt; Phase 6 needs auth and tenancy and belongs to M4's host
 
 
 
+
+
+
+
 | CI-W368 | **P0: the product is containerised.** `Dockerfile` (two stages: console build, then Python 3.12 + Node 22 + `uv` runtime), `docker-compose.demo.yml`, `docker/entrypoint.sh` and a `.dockerignore` that did not exist. One command brings up Postgres, applies the schema, starts the API, waits for it to answer, and serves the console on `127.0.0.1:4173` -- **verified running, not asserted**: console 200, `/api/repositories` 200. Docker is the only prerequisite. Five build failures and one runtime defect were found by executing it, including `B187`, where the console's credential made every API panel 401. **Known gap: the console comes up empty because nothing indexes the target repository** -- no such entry point exists | landed | `Dockerfile`, `docker-compose.demo.yml`, `docker/entrypoint.sh`, `.dockerignore` |
+
+
+
+
 
 
 
@@ -1490,7 +3150,15 @@ write path, are unbuilt; Phase 6 needs auth and tenancy and belongs to M4's host
 
 
 
+
+
+
+
 | CI-W370 | Why the container comes up empty, scoped rather than guessed. There is **no `index` entry point** in the CLI; the composition exists only inside `run`. The blocker is not the wiring: indexing is per vendor, and `prepare_vendor` reaches the network **and shells out to `gh`** -- measured, failing with `gh: No commit found for the ref None (HTTP 404)`. A stranger's container has no `gh`, no credential and no staged spec. `load_vendor` is the offline twin but builds over artifacts something else staged. Filed `B188` with the three routes and what each trades, because the choice is not this lane's to make | landed | `docs/superpowers/BACKLOG.md` |
+
+
+
+
 
 
 
@@ -1633,18 +3301,9 @@ write path, are unbuilt; Phase 6 needs auth and tenancy and belongs to M4's host
 | CI-W386 | The README quickstart carries the measured numbers instead of my own vague ones. I had written *"a few minutes... after that it is seconds"*; it is **282s cold and 22s warm**, and the build-ahead step that turns one into the other now sits where somebody following the page will see it rather than in a report they will not read | claimed | `README.md` |
 
 
-
 | CI-W387 | **The dead-route gate earned its place within the hour**, catching a new `?repo_id=` link in `fleet/vendor-cards-grid.tsx` that arrived on a merge. Fixed rather than baselined -- the baseline records what was already broken, not new breakage -- and fixed by me because **my gate is what turned `main` red**, which is the charter's own exception for a red a lane caused where the failure names the exact fix. One line, declared, reversible | claimed | `web/src/features/fleet/vendor-cards-grid.tsx` |
 
-
-
 | CI-W388 | Gate 3 walked fresh and signed on evidence, against a named sha. Also corrects the premise of the request: `2026-08-17-gate-3-screen-pass.md` carries no `Signed:` line **deliberately** -- it is the historical record and `M0-W291` already resolved that contradiction -- so adding one would reverse a coordinator ruling and stamp a date for a walk nobody did | claimed | `docs/superpowers/reports/2026-08-18-gate-3-walk.md` |
-
-
-
-| CI-W389 | Gate 4's suite verdict can be recorded against `HEAD` at the cut, in one command, and **the record can no longer name a commit it did not test**. `head_commit()` was read *after* the four-minute run, so anything landing meanwhile produced a verdict attributed to a tree nobody measured -- the same failure the Gate 3 walk caught on itself, inside Gate 4's mechanism. `HEAD` is now pinned before the run and re-checked after, a dirty worktree is refused, and both refusals name what to do | claimed | `scripts/beta_gates.py` |
-
-| CI-W390 | `2026-08-17-gate-3-screen-pass.md` stops reading as an omission. It carries no `Signed:` line **by design** -- `M0-W291` resolved that after two reports disagreed about the mechanism -- but Gate 3 listed it under *"not read, because they record no signature date"*, which is indistinguishable from a report somebody forgot to sign. A `Historical:` line declares the intent and the gate now reports the two apart: **unmeasured is legitimate, ambiguous is not** | claimed | `scripts/beta_gates.py`, `docs/superpowers/reports/2026-08-17-gate-3-screen-pass.md` |
 | M14-W392 | One charting library, and it is echarts. `recharts` arrived with the shadcn `chart.tsx` in `M14-W388` while the console's dashboards already ran on `echarts` -- four modules use it and it has a jsdom stub. Nothing but `chart.tsx` imported recharts, so `chart.tsx` is deleted and recharts dropped from `package.json`; a shadcn chart is an echarts decision first if it is ever wanted. **Recorded because the reservation for this row was wrong:** it was opened against a report that `main` was red on three of `M14-W388`'s components, and the build was never red -- the report came from a stale `node_modules`, which is the same class of mistake as reading a stale dev server. The peer dependencies were declared correctly. `resizable` and `sonner` were briefly deleted on that false premise and are restored; only the charting choice, which stands on its own merits, survived the correction | landed | `web/src/components/ui/chart.tsx`, `web/package.json`, `web/NOTICE` |
 
 
@@ -1682,22 +3341,17 @@ write path, are unbuilt; Phase 6 needs auth and tenancy and belongs to M4's host
 
 
 | M14-W396 | **`vendor_change_volume` was reached from nowhere, and the console was computing the same aggregate over one page.** The dead-link gate flagged the Python view as unwired; the more useful finding was underneath it. `extractVendorChangeVolume` recomputes volume, kinds and the monthly timeline in TypeScript from whatever page of `/api/vendors/{id}/changes` happened to be loaded, so a vendor's *total changes* was the current page's count wearing the vendor's name -- and one fact now had two implementations free to disagree. Wires the Python view to `GET /api/vendors/{vendor_id}/change-volume`, which reads `all_vendor_changes` and is therefore scoped to the vendor rather than to a page. The console fetch is exempted with a reason naming its consumer: the chart that should read it lives in `web/src/features/vendors/`, another lane's screen, so the endpoint lands here and the swap is handed over rather than reached across | landed | `src/sync/api/app.py`, `src/sync/api/__main__.py`, `tests/test_api_routes.py` |
-
-
-
 | M0-W347 | **`orca orchestration check` without `--run` is a different mailbox, not a lighter one**, and reading the unscoped form cost most of a night. Mail addressed to `run:<run_id>` -- which is where a *rejected* `worker_done` goes -- never appears there. Re-dispatching Lane H revoked the capability its in-flight report was written against, so Orca rejected a report carrying three refusal violations it had caught in adopted code, and filed it where I was not looking while the unscoped check showed 73 heartbeats. Same root cause as Lane A's `consumer_fenced` terminal seen from the other side: scoped surfaces the fencing, unscoped returns empty, so a dead binding is indistinguishable from no mail. Also records that this row was added *after* its commit, breaking the push-is-the-lock rule I enforce on every lane | landed | `docs/superpowers/orchestration/2026-08-17-lane-charters.md` |
-
-
-
 | M0-W348 | **`orca terminal send` types without submitting, and truncates a long paste at the start.** Both found while reaching Lane A, whose mailbox was fenced -- so the fallback channel failed at exactly the moment nothing else worked. Without `--enter` the text sits in the input box unsubmitted and reads, through `terminal read`, as delivered and ignored. A ~2,000-character brief then arrived with its first half gone, so the lane got the tree-hygiene footer and neither work assignment; it said the message was truncated rather than guessing at the missing text, which is the only reason this was caught. Re-sent as three short numbered messages, all intact | landed | `docs/superpowers/orchestration/2026-08-17-lane-charters.md` |
-
-
-
 | M14-W398 | RESERVED before the work: the vendor change-volume chart computes its aggregate in TypeScript over whichever page happens to be loaded, so a vendor total is a count of the current page wearing the vendor's name -- wrong by an amount that changes when you paginate, which is the worst kind because it looks plausible on every screen and is never right. Swap it onto the vendor-scoped `GET /api/vendors/{vendor_id}/change-volume` and delete the client-side aggregation rather than leaving it beside the new call. Two refusals carried in with it from Lane H's read of the adopted code: a filled track at `openFindings / callSites` is a per-vendor composite AND a rate, and captioning it Clean or Active is a green dot and a liveness pulse written in words; and an unanswered count defaulted to zero is the absence-versus-zero conflation reached through a default rather than a render | reserved | `web/src/features/vendors/` |
-
-
-
 | M14-W397 | **Dashboard 2 had no source: `bindings_by_rung` on `/api/overview`, which Lane I was blocked on.** `overview_summary` carried `binding_source` -- the single rung every open finding shares, or null when they disagree -- which answers a different question and cannot be stacked. Adds `open_findings_rung_counts`, one `GROUP BY` over the closed rung vocabulary, and a `bindings_by_rung` tally beside it. **Deliberately unbounded**, for the reason the vendor breakdown already is: a distribution derived from a bounded page is the distribution of whichever rows the ordering reached, not of the population, so it stays whole even when `total_findings_bound_reached` is true. **Every rung is present at nought**, because a rung missing from the object and a rung at zero are different claims and a stacked bar cannot tell them apart. The vocabulary is now derived from the `FindingRung` type as `FINDING_RUNGS` rather than hand-written: `detector_accountability` had already restated it inline, which is the second use and therefore the place to factor -- a third copy is where they drift. The flat-query guard moves from four to five, and its point is the bound rather than the number: each of the five is one aggregate whose cost does not move with how many findings are open | landed | `src/sync/core/models.py`, `src/sync/graph/store.py`, `src/sync/dashboard/graph_views.py`, `web/src/api/types.ts` |
+
+
+
+
+
+
+
 
 
 
@@ -1705,7 +3359,15 @@ write path, are unbuilt; Phase 6 needs auth and tenancy and belongs to M4's host
 
 
 
+
+
+
+
 56px icon rail of four product areas beside a 240px contextual panel, and collapsing removed the
+
+
+
+
 
 
 
@@ -1713,7 +3375,15 @@ panel — two components, which is not what a sidebar collapsing to a thin width
 
 
 
+
+
+
+
 list at two widths: every destination is a row at both, the four areas are group headings rather than
+
+
+
+
 
 
 
@@ -1721,7 +3391,23 @@ a navigation level, and an icon holds its vertical position when the labels go. 
 
 
 
+
+
+
+
 human can reverse, each argued in `web/src/layouts/app-frame.tsx`'s docstring:
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -1729,7 +3415,15 @@ human can reverse, each argued in `web/src/layouts/app-frame.tsx`'s docstring:
 
 
 
+
+
+
+
   zero-height in both states. Zero-height would have meant no visible grouping expanded, which is
+
+
+
+
 
 
 
@@ -1737,7 +3431,15 @@ human can reverse, each argued in `web/src/layouts/app-frame.tsx`'s docstring:
 
 
 
+
+
+
+
 - **`area.purpose` and `reachedFrom` moved from rows of prose onto each row's `title` and accessible
+
+
+
+
 
 
 
@@ -1745,7 +3447,15 @@ human can reverse, each argued in `web/src/layouts/app-frame.tsx`'s docstring:
 
 
 
+
+
+
+
   beneath it. Neither is one of the twenty-four protected sentences; both were added by this item's
+
+
+
+
 
 
 
@@ -1753,7 +3463,15 @@ human can reverse, each argued in `web/src/layouts/app-frame.tsx`'s docstring:
 
 
 
+
+
+
+
 - **The sidebar's auto-collapse threshold is 1473px, corrected from 1440.** At exactly 1440 the old
+
+
+
+
 
 
 
@@ -1761,7 +3479,23 @@ human can reverse, each argued in `web/src/layouts/app-frame.tsx`'s docstring:
 
 
 
+
+
+
+
   binding surface.
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -1769,7 +3503,15 @@ human can reverse, each argued in `web/src/layouts/app-frame.tsx`'s docstring:
 
 
 
+
+
+
+
 history rather than current behaviour.** The chassis is two tiers again — a 40px rail of six areas
+
+
+
+
 
 
 
@@ -1777,7 +3519,15 @@ with Settings pinned last, and a 208px contextual sidebar on the vendored `sideb
 
 
 
+
+
+
+
 the collapse machinery is deleted rather than disabled. The defect that sank the first two-tier
+
+
+
+
 
 
 
@@ -1785,7 +3535,15 @@ attempt was reachability, not the arrangement: this one renders every one of the
 
 
 
+
+
+
+
 sidebar of the area that owns it, and the walk in `.superpowers/sdd/2026-08-06-console-supabase-substrate/task-4-report.md`
+
+
+
+
 
 
 
@@ -1793,36 +3551,23 @@ records all nine reached with the heading, the group labels and the active row c
 
 
 
+
+
+
+
 | CI-W399 | **Dashboard 7, and the console could not read the distinction it exists for.** `observed_telemetry` has always returned `telemetry_attached_at` and `ObservedTelemetryResponse` omitted it, so an empty calls page under attached telemetry and one with no attachment at all rendered identically -- **a measured nought and nobody-having-looked collapsed into the same screen** (B157), which is the substitution this console refuses everywhere else. Field added against the payload, and the two states now render as different empty states. **An aggregate over one page is not a total**: `calls` paginates, so the card asks for the 500-row ceiling and then says on screen what it counted over and that the ranking can change when the rest arrives, rather than printing a page sum as the operation's volume. Errors sit *beside* calls as a count, never divided into them -- a failure rate averages two facts. **Every rung an operation's rows arrived at is carried, never collapsed to the strongest**: a span that correlated and one that did not are two observations. A one-day series prints its figure instead of drawing a line, because a slope needs two points and a flat line invented from one reads as stability. Propless but scoped -- it reads `repoId` from the router as `signals-page.tsx` does, since telemetry attaches per repository and a fleet-wide version of this question has no single answer | landed | `web/src/features/dashboards/observed-volume-card.tsx`, `observed-volume-option.ts`, `web/src/api/types.ts` |
-
-
-
-| M14-W405 | RESERVED before the work: delete the eleven dead `repoId === null` branches the bucket table in `2026-08-18-lane-b-handoff.md` classified as unreachable. **Renumbered from `M14-W404` by the coordinator**: Lane H pushed that number at 03:50:11 and this row at 03:50:16, five seconds later, so the earlier push holds it. `scripts/check_worklog.py` caught the collision on `main` and failed every lane's gate until it was arbitrated, which is the guard doing exactly the job `M0-W346` built it for -- binding-surface-page 4, vendor-page 3, fleet-page 1, detector-accountability 1, vendor-changes-table 1, vendor-distribution 1. Unreachable because `M14-W400` typed their `repoId` as `string`, so the comparison is always false. **Left alone by the coordinator's ruling:** `VendorFindingsTable`'s six, because it has two callers with different scopes and the test is what a SCREEN renders rather than what a component could; `scope-switchers`' two, because chrome describing an unset switcher is where an unscoped state belongs; and `api/client.ts`, because the transport may be asked an unscoped question by something that is not a page. Nothing here may turn absence into zero: a deleted fleet-wide branch must not leave a screen silently empty where it used to say what it had checked | reserved | `web/src/features/` |
-
 | M14-W400 | RESERVED before the work: the fleet-wide show-all is still reachable, against the owner's mandatory ruling that every page corresponds to a workspace. 26 non-test branches keyed on `repoId === null` across 11 files render copy like *"Every repository the index has seen"*. The urgent part is not the copy: `detectors-page.tsx` reads its scope from a SEARCH PARAM while its route is `/repositories/:repoId/detectors`, so the page renders a fleet-wide claim while its own URL names a repository -- a screen contradicting its own address, on the product whose argument is that it tells the truth about what it checked. The route path param becomes the single source of scope; the null branches are deleted rather than defaulted. What must survive the deletion: absence is not zero and it is not show-all either -- removing a fleet-wide branch must not turn *we have not indexed this workspace* into a zero or an unexplained empty table | reserved | `web/src/features/`, `web/src/layouts/scope-switchers.tsx` |
-
-
-
 | M0-W349 | Filed `B189`: the lane sweep prints a permanent `MANUAL` for a dispatch that can never be restarted. Lane I's `worker-start` timed out, the task settled as `failed`, and the terminal was re-dispatched under a new id -- so every sweep now warns about a lane that is working fine. **A monitoring alarm that is always on is the cannot-fail test pointed the other way**: it trains the reader to skim the column a real stall would appear in. Not fixed here because coding was not the coordinator's this sweep, and `worker-release` takes a dispatch id `dispatch-list` would not yield. Standing reading until it is: one MANUAL is noise, two is real **I first filed it as `B1`, an id taken long ago** -- the next-id arithmetic grepped for `^## B` against a file that uses `###`, so an empty match became 1. That is the duplicate-number defect the register guard exists to catch, walked into while filing a note about alarms nobody reads | filed | `docs/superpowers/BACKLOG.md` |
-
-
-
 | M0-W350 | **The owner's mandatory no-show-all ruling is still open on eleven screens, and the show-all branch is reachable rather than dead.** Measured: 23 non-test branches keyed on `repoId === null` across 10 files -- `vendor-findings-table` 7, `binding-surface-page` 4, `vendor-page` 3, then `detectors-page`, `detector-accountability`, `vendor-changes-table` and `scope-switchers` at 2 each -- rendering copy like *every repository the index has seen*. **The reachability is the finding.** `detectors-page.tsx:71` takes scope from `searchParams.get(REPO_KEY)`, a query string, while the route is `/repositories/:repoId/detectors`. Navigate there without `?repo_id=` and the screen claims fleet scope **while its own URL names one repository** -- a screen contradicting its address, on the product whose argument is that it tells you what it checked. Ruled to Lane B as P0 ahead of everything it held: the path param becomes the single source of scope, the null branches are deleted rather than defaulted, and removing them must not turn never-indexed into a zero | dispatched | `web/src/features/**`, `web/src/layouts/scope-switchers.tsx` |
-
-
-
 | CI-W401 | **Dashboard 1, and the misreading it is built to pre-empt: the dates are Sync's, not the vendors'.** `finding.created_at` is when a detector first recorded a claim, and a reader looking at dated bars of API findings assumes the publication timeline -- nothing in the graph carries one, because the nearest field is a detection date too. Said on the card rather than in a docstring. The series is meaningful **only because `insert_finding` is `ON CONFLICT DO NOTHING`**: an upsert that touched the row would restamp the table on every DETECT run and draw the last run instead of the history. **A gap is not a zero** -- nothing records that a detector ran, so an absent day may be no changes or no run, and the axis is categorical over days that have rows rather than continuous over a calendar that would invent them. Counts findings **as produced, including ones since closed**, because a series filtered to still-open shrinks its own past as patches land; `still_open` sits beside it. Bands take categorical slots, never a red-to-green ramp -- severity is an *ordered* vocabulary, which is what makes that the tempting mistake here -- and every band is legible from its legend and tooltip without colour. `by_rung` travels with the window. **Also cleared a red `main` that was not mine**: `M14-W396` wired the console fetch for change-volume and left its `_NOT_YET_FETCHED_BY_CONSOLE` entry behind, so the parity guard failed on `main` for every lane; the guard's own message prescribes deleting the entry and that is all that was touched | landed | `src/sync/dashboard/graph_views.py`, `src/sync/graph/store.py`, `src/sync/api/app.py`, `web/src/features/dashboards/findings-over-time-card.tsx` |
-
-
-
 | CI-W402 | **The chart requirement made testable rather than read off the code.** `CI-W392` already met "every bar legible without its colour" -- one fill for every bar, the code on the category axis, the count in its own label -- but nothing held it. Now asserted three ways: every bar named on the axis, one shared fill so colour cannot quietly become load-bearing, and the plotted values are the real counts rather than any derived share. Proven able to fail by removing the shared fill | landed | `web/src/features/runs/abandon-reasons-option.test.ts` |
-
-| CI-W403 | The indexing canvas has been drawing open findings, not the index -- a route listing every indexed call site with its vendor, operation, file and rung, unresolved and unattributed carried as off-path rather than dropped | claimed | `src/sync/graph/`, `src/sync/dashboard/`, `src/sync/api/` |
-
+| CI-W403 | **The canvas payload could not express two of the three things the screen is for.** `repository_graph` drew `static` edges only -- correct about call sites, incomplete as a picture of what Sync knows. **The rest of the rung vocabulary now arrives as its own edges, never blended**: `observed_bindings` is one edge per (vendor, operation, rung), aggregated because `observed_call`'s grain is one row per unit of work and an unaggregated draw would put a thousand identical lines between two nodes. **Off-path is a place on the screen rather than an omission** -- an uncorrelated span names no operation so there is no node to draw it to, and `unattributed` is a value no binder emits and `BindingRung` excludes, so neither can be a rung and neither is nothing; both report as counts. **`indexed_at` is the one field allowed to be null and its null is ambiguous on purpose**: no call site row has ever existed here, which is either an index that never ran or one that ran and found no vendor call, and nothing records an index attempt -- so the payload refuses to pick and the screen says both. Retracted rows still count as indexed, because a repository whose calls have all gone was still indexed. The console type was extended in the same commit; **a payload the type cannot express is the `telemetry_attached_at` bug again** (`CI-W399`) | landed | `src/sync/dashboard/graph_views.py`, `src/sync/graph/store.py`, `web/src/api/types.ts` |
+| CI-W389 | Gate 4's suite verdict can be recorded against `HEAD` at the cut, in one command, and **the record can no longer name a commit it did not test**. `head_commit()` was read *after* the four-minute run, so anything landing meanwhile produced a verdict attributed to a tree nobody measured -- the same failure the Gate 3 walk caught on itself, inside Gate 4's mechanism. `HEAD` is now pinned before the run and re-checked after, a dirty worktree is refused, and both refusals name what to do | claimed | `scripts/beta_gates.py` |
 | M0-W351 | **I dispatched a screen the owner had already ruled against, and the lane refused it.** My indexing-canvas task cited the schema-visualiser reference and a vendor-first topology; **decision 8 names that shape and rejects it**, decision 19 makes the file tree the one-command install's payoff, and `M14-W386` had already deleted the vendor-first canvas on that ruling. Lane I escalated rather than complying -- second time tonight a lane caught me assigning work the record had settled, and both times reporting rather than obeying cost minutes instead of a rebuild. Ruled: build Lane I's reconciliation, `file -> operation -> vendor`, which keeps decision 8's *your codebase* framing and puts a rung on every edge rather than only the last. **The larger finding is underneath it**: the canvas is fed from open findings, so a screen about what the index saw draws what the detectors flagged -- a subset that shifts whenever a finding closes, redrawing itself when nothing about the codebase changed | ruled | `docs/superpowers/plans/2026-08-18-owner-ui-decisions.md` |
-
+| M14-W405 | RESERVED before the work: delete the eleven dead `repoId === null` branches the bucket table in `2026-08-18-lane-b-handoff.md` classified as unreachable -- binding-surface-page 4, vendor-page 3, fleet-page 1, detector-accountability 1, vendor-changes-table 1, vendor-distribution 1. Unreachable because `M14-W400` typed their `repoId` as `string`, so the comparison is always false. **Left alone by the coordinator's ruling:** `VendorFindingsTable`'s six, because it has two callers with different scopes and the test is what a SCREEN renders rather than what a component could; `scope-switchers`' two, because chrome describing an unset switcher is where an unscoped state belongs; and `api/client.ts`, because the transport may be asked an unscoped question by something that is not a page. Nothing here may turn absence into zero: a deleted fleet-wide branch must not leave a screen silently empty where it used to say what it had checked | reserved | `web/src/features/` |
 | M14-W404 | **Two finished cards mounted, and three empty states that had stopped being true.** Lane I shipped dashboards 1 and 7 as propless cards; a card nobody mounts is not shipped, so `FindingsOverTimeCard` goes on the Overview fleet-scoped and `ObservedVolumeCard` on Signals, where it reads `repoId` from the **path param** rather than the query string Lane B is removing. Each mount carries a test, because an unmounted card is invisible without one. **The larger half is what Lane I's payload change exposed on a screen I own.** `ObservedTelemetryResponse` gained `telemetry_attached_at`, and `codebase-page.tsx` collapsed measured-nought onto nobody-looked in *three* places, each saying so in prose: the calls empty state and the error-window empty state both said *this view cannot tell the two apart*, and the rung note said *nothing here says whether a traffic source was ever watching*. All three were honest when written and became false the moment the field landed -- a stated limit that no longer exists is worse than no statement, because a reader trusts it. Each now renders two states: absence of a measurement, or a measurement of nought, naming the attachment time in the second. The shapes empty state is deliberately left alone -- its ambiguity is about correlation, which this field does not resolve | landed | `web/src/features/fleet/fleet-page.tsx`, `web/src/features/signals/signals-page.tsx`, `web/src/features/repositories/codebase-page.tsx` |
+| CI-W406 | **The rung was `undefined` on every edge of the screen whose whole premise is that every edge carries one -- the third instance of this bug class.** `repository_graph` emitted `rung` while `RepositoryGraphBinding` declared `binding_rung` and `file-tree-canvas.tsx` read `binding_rung`; **TypeScript could not catch it because the type was right and the payload was wrong**, and no test compared the two. `binding_rung` is the convention in thirteen other places, so the payload was the outlier. Now pinned by a test asserting the exact key set, proven able to fail by reintroducing the outlier. My own new `observed_bindings` carried the same mismatch and would have shipped it again. **Also: the canvas stops rendering one nothing for two facts.** Its own empty state used to admit the limit -- *a repository the index never ran against shows the same nothing as one that calls no vendor* -- which was honest about a payload that could not tell them apart. `indexed_at` (`CI-W403`) can, so *never recorded* (the canvas is not evidence about this codebase) is now a different screen from *indexed and found none* (a measurement about it). **Off-path renders in every state including the empty ones**, because a repository whose call sites were all retracted still holds uncorrelated spans and unattributed findings, and nought is printed rather than hidden so a reader never guesses whether it was checked | landed | `src/sync/dashboard/graph_views.py`, `web/src/features/index-graph/index-state.ts`, `off-path-note.tsx`, `index-graph-page.tsx` |
+| CI-W390 | `2026-08-17-gate-3-screen-pass.md` stops reading as an omission. It carries no `Signed:` line **by design** -- `M0-W291` resolved that after two reports disagreed about the mechanism -- but Gate 3 listed it under *"not read, because they record no signature date"*, which is indistinguishable from a report somebody forgot to sign. A `Historical:` line declares the intent and the gate now reports the two apart: **unmeasured is legitimate, ambiguous is not** | claimed | `scripts/beta_gates.py`, `docs/superpowers/reports/2026-08-17-gate-3-screen-pass.md` |
 | M0-W353 | **A check joined with `;` cannot stop anything**, broadcast to every lane after Lane B self-reported it. `check_worklog.py` caught the `M14-W404` duplicate and the push ran regardless, because the check and the push were chained with `;` instead of `&&`. Lane B's own sentence is the rule and it generalises past numbering: *a check whose result cannot stop the next command is decoration*. **This is the cannot-fail test moved one level out** -- the check was real and the command made its result unable to matter. Charter item rather than a lane note because five lanes gate against one `main`: a lane that can push red hands four others a red tree, and twice today the lane that found the breakage spent its first minutes proving it was not the author | landed | `docs/superpowers/orchestration/2026-08-17-lane-charters.md` |
-
-
-
+| CI-W407 | The indexing canvas gains the operation level -- file to operation to vendor, every edge carrying the rung it was established at | claimed | `web/src/features/index-graph/` |
+| M0-W354 | **Three payload/type mismatches in one night is a gap, not three bugs**, and `tsc` was correct every time -- the type described a payload the Python did not emit, so the compiler checked the console against beliefs that were themselves the defect. `CI-W379`: `.repositories` absent, so the repository selector was always empty and always showed a hard-coded value. `CI-W399`: `telemetry_attached_at` absent, so telemetry-attached and never-attached rendered as one screen. `CI-W406`: the payload emits `rung` while the type and the canvas read `binding_rung`, so **every edge of the screen built to show rungs carried `undefined`, silently**. Lane I reports its own `observed_bindings` from an hour earlier carried the identical mismatch, so the rate is not falling. Commissioned to Lane C as a gate: compare emitted keys against declared keys and fail on disagreement **in either direction**, because a field the payload sends that no type declares is how a console silently ignores data it was given. Told to derive expected keys from the response models rather than a hand-written list, or it becomes a fourth place for one fact to disagree with itself | dispatched | `scripts/`, `web/src/api/types.ts` |

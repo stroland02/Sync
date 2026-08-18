@@ -774,6 +774,25 @@ def repository_graph(store: GraphStore, repo_id: str, *, limit: int | None = Non
     `truncated` says whether the drawn set is all of it, so a console holding a partial graph can
     say so. A graph silently missing edges misreports a codebase's exposure, which is the one
     thing this picture is for.
+
+    **The rest of the rung vocabulary arrives as its own edges, never blended into the static
+    ones.** `observed_bindings` is what traffic actually reached, aggregated to one edge per
+    (vendor, operation, rung) because `observed_call`'s grain is one row per unit of work and an
+    unaggregated draw would put a thousand identical lines between two nodes. `bindings` stays
+    exactly what it was -- what the static index found -- so a reader comparing the two sees two
+    kinds of evidence rather than one blended claim.
+
+    **`off_path` is a place on this screen rather than an omission.** An uncorrelated span names
+    no operation, so there is no node to draw it to; a finding carrying `unattributed` holds a
+    value no binder emits and which `BindingRung` excludes, so it cannot be drawn as a rung.
+    Neither is nothing, and both are reported as counts -- the tables were read and held what they
+    held.
+
+    **`indexed_at` is the one field here allowed to be `None`, and its `None` is ambiguous on
+    purpose.** No call site row has ever existed for this repository, which is either an index
+    that never ran or one that ran and found no vendor call. Nothing records an index attempt,
+    only its result, so this view refuses to pick -- the screen says both rather than asserting
+    either, which is the same limit `AdapterRow.last_change_at` carries for intake.
     """
     coverage = index_coverage(store, repo_id)
     by_vendor = coverage["by_vendor"]
@@ -789,7 +808,12 @@ def repository_graph(store: GraphStore, repo_id: str, *, limit: int | None = Non
             "path": site.path,
             "line": site.line,
             "symbol": site.symbol,
-            "rung": "static",
+            # `binding_rung`, not `rung`. Every other payload in this console names the field
+            # that way and `RepositoryGraphBinding` has always declared it so -- this key was the
+            # one outlier, which meant the console read `undefined` for the rung on every edge of
+            # the screen whose whole premise is that every edge carries one. TypeScript could not
+            # catch it: the type was right and the payload was wrong.
+            "binding_rung": "static",
         }
         for site in sites
     ]
@@ -803,10 +827,18 @@ def repository_graph(store: GraphStore, repo_id: str, *, limit: int | None = Non
         for vendor_id in sorted(by_vendor)
     ]
 
+    indexed_at = store.repository_indexed_at(repo_id)
+
     return {
         "repo_id": repo_id,
         "vendors": vendors,
         "bindings": bindings,
+        "observed_bindings": store.observed_edges_for_repository(repo_id),
+        "off_path": store.off_path_counts(repo_id),
+        # Echoed so a rung with no edge reads as a rung with no edge, rather than as one the
+        # payload cannot express.
+        "rungs": list(FINDING_RUNGS),
+        "indexed_at": indexed_at.isoformat() if indexed_at is not None else None,
         "total_bindings": total,
         "truncated": len(bindings) < total,
     }

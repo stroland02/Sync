@@ -160,12 +160,7 @@ function operationFacts(
     { label: "Operation", value: <span className="font-mono">{operationId}</span> },
     {
       label: "Repository scope",
-      value:
-        repoId === null ? (
-          "Every repository the index has seen"
-        ) : (
-          <span className="font-mono">{repoId}</span>
-        ),
+      value: <span className="font-mono">{repoId}</span>,
     },
     { label: "Call sites bound", value: counted(data ? boundCallSites(data) : 0, "w-16") },
     { label: "Repositories", value: counted(data ? data.repositories.length : 0, "w-10") },
@@ -186,12 +181,12 @@ function operationFacts(
 function ScopeNote({ repoId }: { repoId: string }) {
   return (
     <p className="max-w-prose text-body text-ink-muted">
-      {repoId === null ? null : (
-        <>
-          The call-site table below is scoped to <code className="font-mono">{repoId}</code>.{" "}
-        </>
-      )}
-      The counts beside this are taken across every repository the index has seen, whatever is
+      The call-site table below is scoped to <code className="font-mono">{repoId}</code>.{" "}
+      {/* This used to read "across every repository the index has seen", and that stopped being
+          true when the workspace became the only scope: the reader is narrowed by `repoId`, so the
+          counts are this workspace's. A sentence made false by a change elsewhere is the defect
+          `M14-W363` was about, and it is why the branch above could not simply be deleted. */}
+      The counts beside this are taken across every call site in this workspace, whatever is
       selected below — they are the choices available, not the rows on screen. The range under the
       table is the number that moves when a filter is set.
     </p>
@@ -321,11 +316,7 @@ function CallSitesEmptyState({
   return (
     <EmptyState
       headline="No call site in the index is bound to this operation."
-      detail={
-        repoId === null
-          ? "The API answered with an empty list. Either nothing in any indexed repository calls this operation, or nothing indexed does — the index cannot tell the two apart."
-          : `The API answered with an empty list scoped to ${repoId}. Either nothing in this repository calls the operation, or this repository has not been indexed at all — the index cannot tell the two apart.`
-      }
+      detail={`The API answered with an empty list scoped to ${repoId}. Either nothing in this workspace calls the operation, or this workspace has not been indexed at all — the index cannot tell the two apart.`}
     />
   )
 }
@@ -368,7 +359,7 @@ function BindingSurfaceDetail({
   })
 
   const activeFilters = [
-    ...(repoId === null ? [] : [{ label: "repository", value: repoId }]),
+    { label: "workspace", value: repoId },
     ...(pathPrefix === null ? [] : [{ label: "path", value: pathPrefix }]),
   ]
 
