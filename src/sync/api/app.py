@@ -72,6 +72,7 @@ ChangeUnitsReader = Callable[..., dict[str, Any]]
 BindingReader = Callable[..., dict[str, Any]]
 CoverageReader = Callable[[str], dict[str, Any]]
 RepositoryGraphReader = Callable[[str], dict[str, Any] | None]
+ChangeVolumeReader = Callable[[str], dict[str, Any]]
 ObservedReader = Callable[..., dict[str, Any]]
 # Exposure for one vendor: which of its operations this codebase calls, at which rung.
 # Takes the repository scope as a keyword so it composes with the vendor rather than
@@ -184,6 +185,7 @@ def create_app(
     binding_reader: BindingReader,
     coverage_reader: CoverageReader,
     graph_reader: RepositoryGraphReader,
+    change_volume_reader: ChangeVolumeReader,
     observed_reader: ObservedReader,
     vendor_operations_reader: VendorOperationsReader,
     detector_reader: DetectorReader,
@@ -390,6 +392,10 @@ def create_app(
             return _not_found("repository", repo_id)
         return JSONResponse(payload)
 
+    async def vendor_change_volume(request: Request) -> JSONResponse:
+        vendor_id = request.path_params["vendor_id"]
+        return JSONResponse(change_volume_reader(vendor_id))
+
     async def repository_graph(request: Request) -> JSONResponse:
         repo_id = request.path_params["repo_id"]
         payload = graph_reader(repo_id)
@@ -545,6 +551,7 @@ def create_app(
         ),
         Route("/api/repositories/{repo_id:path}/coverage", repository_coverage, methods=["GET"]),
         Route("/api/repositories/{repo_id}/coverage", repository_coverage, methods=["GET"]),
+        Route("/api/vendors/{vendor_id}/change-volume", vendor_change_volume, methods=["GET"]),
         Route("/api/repositories/{repo_id:path}/graph", repository_graph, methods=["GET"]),
         Route("/api/repositories/{repo_id}/graph", repository_graph, methods=["GET"]),
         Route("/api/repositories/{repo_id:path}/observed", repository_observed, methods=["GET"]),
