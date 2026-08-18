@@ -8,7 +8,6 @@ import {
   FolderTree,
   GitPullRequest,
   Layers,
-  PanelLeft,
   Plug,
   Radar,
   Radio,
@@ -27,7 +26,6 @@ import {
   railState,
   readPinned,
   sidebarState,
-  writePinned,
 } from "@/layouts/sidebar-collapse"
 import {
   DESTINATIONS,
@@ -43,7 +41,6 @@ import {
   SidebarContent,
   SidebarGroup,
   SidebarGroupContent,
-  SidebarGroupLabel,
   SidebarHeader,
   SidebarMenu,
   SidebarMenuButton,
@@ -174,9 +171,6 @@ function LevelGroup({
 
   return (
     <SidebarGroup className="px-row py-0">
-      <SidebarGroupLabel className="furniture h-5 px-0 text-meta text-ink-muted">
-        <span className={minimised ? "sr-only" : undefined}>{level}</span>
-      </SidebarGroupLabel>
       <SidebarGroupContent>
         <SidebarMenu className="gap-0">
           {routes.map((route) => (
@@ -234,7 +228,11 @@ function GroupHeading({ label, minimised }: { label: string; minimised: boolean 
  */
 function AppSidebar({ pathname }: { pathname: string }) {
   const bound = boundParams(pathname)
-  const [pinned, setPinned] = useState(readPinned)
+  // The pin is a stored preference with no control any more: the owner removed the button because
+  // hovering is the mechanism, and two ways to open one panel is what made this hard to reason
+  // about. It is still read, so a reader who set it before this change is not overruled by it, and
+  // nothing in the frame can set it. If it is still unset by anything a week from now it should go.
+  const pinned = readPinned()
   const [pointerInside, setPointerInside] = useState(false)
   const [focusInside, setFocusInside] = useState(false)
   const reserve = useRef<HTMLDivElement>(null)
@@ -279,14 +277,7 @@ function AppSidebar({ pathname }: { pathname: string }) {
   const state = sidebarState({ pinned, pointerInside, focusInside })
   const rail = railState({ pinned, pointerInside, focusInside })
   const minimised = state === "minimised"
-  const pinLabel = pinned ? "Unpin the sidebar" : "Pin the sidebar open"
 
-  function togglePin() {
-    setPinned((was) => {
-      writePinned(!was)
-      return !was
-    })
-  }
 
   return (
     // The box the content column gives up, and it is exactly the width the panel draws.
@@ -333,23 +324,6 @@ function AppSidebar({ pathname }: { pathname: string }) {
               >
                 console
               </span>
-              {/* The pin, not a collapse. The width is derived now — a pointer and a focus both move
-                  it — and this control says one thing only: hold it open regardless. `aria-pressed`
-                  carries the preference, `aria-expanded` carries what the panel is doing, and they
-                  are different facts that disagree whenever a pointer is inside an unpinned rail. */}
-              <button
-                type="button"
-                onClick={togglePin}
-                aria-pressed={pinned}
-                aria-expanded={state === "expanded"}
-                title={pinLabel}
-                className={`flex size-5 shrink-0 items-center justify-center rounded-control text-ink-muted hover:bg-surface-subtle hover:text-foreground ${
-                  minimised ? "mx-auto" : "ml-auto"
-                }`}
-              >
-                <PanelLeft aria-hidden="true" className="size-4 text-graphics" />
-                <span className="sr-only">{pinLabel}</span>
-              </button>
             </div>
           </SidebarHeader>
           {/* No scrollbar — owner review item 3, and the compaction above is what makes it honest

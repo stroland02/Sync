@@ -231,10 +231,6 @@ describe("the sidebar reveals itself on hover and returns to a rail", () => {
     return document.querySelector("[data-sidebar-reserve]") as HTMLElement
   }
 
-  function pin(): HTMLElement {
-    return screen.getByRole("button", { name: /pin the sidebar|unpin the sidebar/i })
-  }
-
   it("starts as a rail for a reader who has not pinned it", () => {
     renderAt("/")
     expect(panel().getAttribute("data-state")).toBe("minimised")
@@ -297,45 +293,8 @@ describe("the sidebar reveals itself on hover and returns to a rail", () => {
     expect(reserve().getAttribute("data-sidebar-reserve")).toBe("expanded")
   })
 
-  it("holds the panel open once pinned, and gives up the width to do it", () => {
-    renderAt("/")
 
-    fireEvent.click(pin())
 
-    expect(panel().getAttribute("data-state")).toBe("expanded")
-    expect(reserve().getAttribute("data-sidebar-reserve")).toBe("expanded")
-
-    // A pointer that never enters, and one that leaves, both leave a pinned panel alone.
-    fireEvent.pointerLeave(reserve())
-    expect(panel().getAttribute("data-state")).toBe("expanded")
-  })
-
-  it("says whether it is pinned, and offers the other state", () => {
-    renderAt("/")
-
-    // `aria-pressed` is the pin — a preference the reader sets. `aria-expanded` is what the panel
-    // is doing right now, which the pointer also moves. Both are true statements and neither
-    // substitutes for the other.
-    expect(pin().getAttribute("aria-pressed")).toBe("false")
-    expect(pin().getAttribute("aria-expanded")).toBe("false")
-
-    fireEvent.click(pin())
-
-    expect(pin().getAttribute("aria-pressed")).toBe("true")
-    expect(pin().getAttribute("aria-expanded")).toBe("true")
-  })
-
-  it("carries the pin control in the top row beside the wordmark", () => {
-    // Owner review item 4. It floated in the list; the reference convention is one top row holding
-    // the wordmark and the panel control together, and that is also what frees the list.
-    renderAt("/")
-
-    const wordmark = within(destinations()).getByText("sync")
-    const row = wordmark.parentElement
-
-    expect(row).not.toBeNull()
-    expect(row!.contains(pin())).toBe(true)
-  })
 })
 
 describe("the sidebar changes density without moving a row", () => {
@@ -378,17 +337,11 @@ describe("the sidebar changes density without moving a row", () => {
     expect(revealed).toEqual(rail)
   })
 
-  it("keeps the same elements in the same order across a pin", () => {
-    renderAt("/")
 
-    const rail = skeleton()
-    fireEvent.click(screen.getByRole("button", { name: /pin the sidebar|unpin the sidebar/i }))
-    const pinned = skeleton()
-
-    expect(rail.length).toBeGreaterThan(0)
-    expect(pinned).toEqual(rail)
-  })
-
+  // Four pin tests stood here and went with the control they exercised: the owner removed the
+  // button because hovering is the mechanism, and two ways to open one panel is what made this
+  // sidebar hard to reason about. Nothing they guaranteed is lost -- row stability across the
+  // reveal is asserted directly above against a pointer, which is now the only thing that opens it.
   it("keeps every destination reachable at the rail width", () => {
     // No hover, no pin, no click of any kind: this is the state the console loads in now.
     renderAt("/")
@@ -493,33 +446,39 @@ describe("the sidebar carries the destinations", () => {
     expect(order[0]).toEqual(REGIONS.flatMap((region) => routesOf(region).map((r) => r.path)))
   })
 
-  it("groups them under the graph levels the specification names", () => {
-    // The grouping is the specification's vocabulary rendered, not a second hierarchy: an area is a
-    // run of consecutive levels, and the sidebar prints the level names it holds. Read off the
-    // group labels rather than by text, because a level name and a destination's label are the same
-    // word on five of the nine routes.
-    // Every level, from one screen. The rail-era version rendered one area at a time and compared
-    // against that area's run; with one list the whole ladder is on screen, so the assertion is
-    // against the specification's nine in the order the areas declare them.
+  it("prints no level heading, because eleven of them is what forced the scrollbar", () => {
+    // Reversed after the owner opened the reference images and said the console "doesn't look much
+    // different". The reference rail carries NO section heading at all; ours carried thirteen for
+    // eleven rows, and several duplicated the row beneath them outright -- a "BINDING SURFACE"
+    // heading over a "Binding surface" row. That is what made the sidebar taller than the viewport
+    // and forced the scroll the owner asked twice to remove.
+    //
+    // The specification's vocabulary does not depend on this: `route.level` still carries it, and
+    // `tests/test_console_hierarchy.py` still holds it against the spec block. What is dropped is a
+    // second rendering of a word already on the row.
     renderAt("/")
 
-    const labels = [...destinations().querySelectorAll('[data-sidebar="group-label"]')].map(
-      (el) => el.textContent
-    )
-    // Every level, grouped by region in registry order.
-    // Deduped WITHIN a region, not across them. A level can legitimately appear in both: a vendor's
-    // detail is reachable fleet-wide while the vendors list is scoped to a repository, so
-    // "API Services" heads a group in each region. Deduping globally would assert the sidebar drops
-    // the second one, which would make a whole region's screen unreachable.
-    const expected: string[] = []
-    for (const region of REGIONS) {
-      const inRegion: string[] = []
-      for (const route of routesOf(region)) {
-        if (!inRegion.includes(route.level)) inRegion.push(route.level)
-      }
-      expected.push(...inRegion)
+    const labels = [...destinations().querySelectorAll('[data-sidebar="group-label"]')]
+    expect(labels.length).toBe(0)
+  })
+
+  it("keeps the two region headings, which are the one grouping a row does not repeat", () => {
+    renderAt("/")
+
+    const text = destinations().textContent ?? ""
+    for (const label of ["Across all repositories", "Within a repository"]) {
+      expect(text).toContain(label)
     }
-    expect(labels).toEqual(expected)
+  })
+
+  it("carries no pin control, because hovering is what opens it now", () => {
+    // The owner: "go with the hover method and remove the button at the top of the sidebar as it's
+    // no longer needed because we'll just be hovering". Two mechanisms for one behaviour is the
+    // thing that made this sidebar confusing to reason about, and the pointer is the one that was
+    // asked for.
+    renderAt("/")
+
+    expect(screen.queryByRole("button", { name: /pin|minimise the sidebar|expand the sidebar/i })).toBeNull()
   })
 
   it("marks the row for the current route, and marks only it", () => {
