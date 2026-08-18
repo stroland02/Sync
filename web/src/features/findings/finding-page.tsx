@@ -67,6 +67,7 @@ import {
 } from "@/features/findings/remediation"
 import { DetailTitleText, findingTitle } from "@/lib/detail-title"
 import { formatFindingBadge, orAbsent } from "@/lib/format"
+import { Button } from "@/components/ui/button"
 import { Breadcrumbs } from "@/layouts/breadcrumbs"
 import { DetailGrid } from "@/layouts/detail-grid"
 import { PageHeader } from "@/layouts/page-header"
@@ -327,6 +328,21 @@ function FindingDetailPage({
           trail={<Breadcrumbs trail={trail} />}
           title={title}
           question={question}
+          /* The mock draws one primary action on the header row, right of the title, and this
+             screen had none — its destinations were prose links down in the rail. Ported as the
+             arrangement rather than as the label: the mock's button says "Review proposed patch"
+             unconditionally, and this one exists only when a run actually reached a pull request,
+             because a button offering to review a patch that was never opened is the kind of
+             claim the rest of this console spends six screens refusing. */
+          actions={
+            reachedPullRequest(remediation) ? (
+              <Button asChild>
+                <Link to={`/findings/${encodeURIComponent(findingId)}/workflow/pull-request`}>
+                  Review proposed patch
+                </Link>
+              </Button>
+            ) : undefined
+          }
         />
       }
       rail={
@@ -343,30 +359,37 @@ function FindingDetailPage({
               finding whose run is most worth reading. The workflow lives in the checkpointer,
               which does not care whether the graph still holds the finding, so both links below
               can be live on a page whose finding is gone. */}
+          {/* The mock draws these two destinations as stacked, full-width controls rather than
+              as sentences with a link inside them, and that is the arrangement ported here: a
+              reader scanning a rail for somewhere to go finds a control at a glance and has to
+              read a paragraph to find a link.
+
+              **Every sentence stays.** The ruling is that where the drawn layout has no room for
+              a sentence the layout gets the room, not the sentence gets cut — so each caption
+              keeps its full wording underneath its control instead of being folded into a label
+              or moved into a tooltip. */}
           <div className="flex flex-col gap-field">
-            <p className="text-body">
-              <Link
-                to={`/findings/${encodeURIComponent(findingId)}/workflow`}
-                className="underline underline-offset-2"
-              >
-                Solution workflow
-              </Link>{" "}
-              <span className="text-muted-foreground">
-                — what Sync did about this finding, node by node.
-              </span>
-            </p>
-            {reachedPullRequest(remediation) && (
-              <p className="text-body">
-                <Link
-                  to={`/findings/${encodeURIComponent(findingId)}/workflow/pull-request`}
-                  className="underline underline-offset-2"
-                >
-                  Pull request
-                </Link>{" "}
-                <span className="text-muted-foreground">
-                  — the evidence bundle behind the patch this run opened.
-                </span>
+            <div className="flex flex-col gap-1.5">
+              <Button asChild variant="outline" className="w-full justify-start">
+                <Link to={`/findings/${encodeURIComponent(findingId)}/workflow`}>
+                  Open the solution workflow
+                </Link>
+              </Button>
+              <p className="text-body text-ink-muted">
+                What Sync did about this finding, node by node.
               </p>
+            </div>
+            {reachedPullRequest(remediation) && (
+              <div className="flex flex-col gap-1.5">
+                <Button asChild variant="outline" className="w-full justify-start">
+                  <Link to={`/findings/${encodeURIComponent(findingId)}/workflow/pull-request`}>
+                    Pull request
+                  </Link>
+                </Button>
+                <p className="text-body text-ink-muted">
+                  The evidence bundle behind the patch this run opened.
+                </p>
+              </div>
             )}
           </div>
         </div>
