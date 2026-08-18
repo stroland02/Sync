@@ -66,26 +66,26 @@ def test_the_manifest_is_the_reason_the_command_cannot_work():
     )
 
 
-def test_an_unpublishable_package_is_not_offered_as_a_working_way_in():
-    """The defect itself. A private manifest and a README offering `npx` is a promise nobody kept."""
+def test_an_unpublishable_command_is_not_printed_for_a_visitor_to_run(): 
+    """A command that cannot resolve must not appear as a command.
+
+    This began as *the README must say the command does not work*, which was too weak. The
+    manifest names an npm scope this project does not own -- a competitor's -- so the printed
+    command would either 404 or install somebody else's package, and a paragraph underneath
+    explaining that does not help a reader who copied the first line of a code block.
+
+    The README describes the one-command form and prints no command for it. That is the
+    honest shape while there is nothing to run.
+    """
     manifest = _manifest()
-    readme = _readme()
     if not manifest.get("private"):
         return
 
-    name = manifest["name"]
-    assert f"npx {name}" in readme, "the README no longer documents the command this guard is about"
-
-    # Scoped to the section offering the command. A disclaimer four hundred lines away is not
-    # read by somebody following the quickstart, and the quickstart is the whole exposure.
-    start = readme.index(f"npx {name}")
-    section = readme[start : start + 1200].lower()
-    assert any(phrase in section for phrase in _SAYS_IT_IS_NOT_PUBLISHED), (
-        f"package.json marks {name} private, so `npm publish` refuses and `npx {name}` cannot "
-        "resolve for anybody outside this checkout -- the README offers it as a way in and must "
-        "say plainly that it does not work yet"
+    assert f"npx {manifest['name']}" not in _readme(), (
+        f"the README prints `npx {manifest['name']}` as something to run, and that package "
+        "cannot be published from this manifest -- describe the one-command form without "
+        "printing a command that resolves to nothing, or to somebody else"
     )
-
 
 def test_the_readme_does_not_call_every_path_supported_while_one_is_unavailable():
     """The line that was actually wrong.
