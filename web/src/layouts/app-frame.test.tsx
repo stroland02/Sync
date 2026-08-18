@@ -280,15 +280,21 @@ describe("the sidebar reveals itself on hover and returns to a rail", () => {
     expect(panel().getAttribute("data-state")).toBe("expanded")
   })
 
-  it("never moves the width it has taken from the content column on a hover", () => {
-    // The reveal is an overlay. If the reserved box tracked the revealed one, the page beside it
-    // would jump every time a pointer crossed the rail on its way somewhere else.
+  it("takes the width it draws, so revealing pushes the page instead of covering it", () => {
+    // The inverse of what this file asserted until the owner saw it running. The reveal WAS an
+    // overlay, on the argument that reflowing the column under a reader is worse than covering it.
+    // The screenshot that settled it showed the page heading rendering as "W", the leading column of
+    // every table gone, and the repository names cut off mid-word — so the sidebar pushes the page,
+    // and the reserved box tracks the panel rather than disagreeing with it.
     renderAt("/")
 
     expect(reserve().getAttribute("data-sidebar-reserve")).toBe("minimised")
+    expect(panel().getAttribute("data-state")).toBe("minimised")
+
     fireEvent.pointerEnter(reserve())
-    expect(reserve().getAttribute("data-sidebar-reserve")).toBe("minimised")
+
     expect(panel().getAttribute("data-state")).toBe("expanded")
+    expect(reserve().getAttribute("data-sidebar-reserve")).toBe("expanded")
   })
 
   it("holds the panel open once pinned, and gives up the width to do it", () => {

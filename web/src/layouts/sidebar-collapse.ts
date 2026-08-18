@@ -111,7 +111,19 @@ export function sidebarState({ pinned, pointerInside, focusInside }: Reveal): Si
   return pinned || pointerInside || focusInside ? "expanded" : "minimised"
 }
 
-/** What the content column has given up. Only a pin moves it. */
-export function railState(pinned: boolean): SidebarState {
-  return pinned ? "expanded" : "minimised"
+/**
+ * What the content column has given up, which is exactly what the panel draws.
+ *
+ * **This used to disagree with `sidebarState` on purpose, and the owner ruled against it.** The
+ * panel was an overlay: a reveal drew 240px over a page that had reserved 48px, so it never
+ * reflowed the column. The argument was that reflowing under a reader is worse than covering them.
+ * Having seen it running, the owner's answer is the opposite -- the sidebar pushes the page and
+ * nothing is ever obscured. The screenshot that settled it showed the page heading rendering as
+ * "W", the table's first column gone, and the repository names cut off mid-word.
+ *
+ * Kept as its own function rather than folded into `sidebarState` because the two answer different
+ * questions and could diverge again. Today they agree, and the tests say so rather than assuming it.
+ */
+export function railState(reveal: Reveal): SidebarState {
+  return sidebarState(reveal)
 }

@@ -277,7 +277,7 @@ function AppSidebar({ pathname }: { pathname: string }) {
   }, [])
 
   const state = sidebarState({ pinned, pointerInside, focusInside })
-  const rail = railState(pinned)
+  const rail = railState({ pinned, pointerInside, focusInside })
   const minimised = state === "minimised"
   const pinLabel = pinned ? "Unpin the sidebar" : "Pin the sidebar open"
 
@@ -289,8 +289,14 @@ function AppSidebar({ pathname }: { pathname: string }) {
   }
 
   return (
-    // The box the content column gives up, and the only thing that governs its width is the pin.
-    // The panel draws over it when revealed, so a pointer crossing the rail never reflows the page.
+    // The box the content column gives up, and it is exactly the width the panel draws.
+    //
+    // **The panel does not overlay.** It did until the owner looked at the running console and
+    // ruled against it: revealing over the page hid the heading, the leading column of every table
+    // and the repository names under an opaque 240px panel laid over a page that had reserved 48px.
+    // The argument for the overlay was that reflowing the column under a reader is worse than
+    // covering it. Having seen both, the owner's answer is that it is not -- the sidebar pushes the
+    // page and nothing is ever obscured.
     <div
       ref={reserve}
       data-sidebar-reserve={rail}

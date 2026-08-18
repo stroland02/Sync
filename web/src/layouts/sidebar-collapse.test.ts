@@ -101,11 +101,36 @@ describe("what the panel draws", () => {
 })
 
 describe("what the frame reserves", () => {
-  it("reserves the rail width until the reader pins it, so a hover never reflows the content", () => {
-    // The reveal is an overlay. If the reserved width tracked the revealed one, the whole content
-    // column would jump 192px sideways every time a pointer crossed the rail on its way somewhere
-    // else — which is a worse fault than the width the rail was saving.
-    expect(railState(false)).toBe("minimised")
-    expect(railState(true)).toBe("expanded")
+  it("reserves the full width while focus is inside, so a clicked row does not sit on top of the page", () => {
+    // The defect this closes, seen in a screenshot of the running console: clicking a destination
+    // leaves focus inside the sidebar, `sidebarState` keeps the panel expanded because focus holds
+    // it open, and the frame had reserved only the rail — so a 240px panel sat on top of a page
+    // laid out from x=48. The heading rendered as "W".
+    //
+    // The distinction that fixes it is transient versus persistent, not hover versus pin. A POINTER
+    // is transient: the reader is looking at the sidebar, the overlay is what they are reading, and
+    // reflowing the page under them would be worse. FOCUS is persistent: it survives the pointer
+    // leaving, it survives a click, and while it is inside the sidebar the reader may be reading the
+    // page. Persistent reveals reserve their width; only the pointer overlays.
+    expect(railState({ pinned: false, pointerInside: false, focusInside: true })).toBe("expanded")
+    expect(railState({ pinned: true, pointerInside: false, focusInside: false })).toBe("expanded")
+    expect(railState({ pinned: false, pointerInside: false, focusInside: false })).toBe("minimised")
+  })
+
+  it("reserves exactly what the panel draws, on every input, so nothing is ever covered", () => {
+    // The owner ruled against the overlay after seeing it: the sidebar pushes the page. So the
+    // reserved box and the drawn panel must agree on every combination of inputs, not merely on the
+    // ones a test happened to pick — a single disagreeing case is a state where the panel covers
+    // content, which is the defect.
+    for (const pinned of [true, false]) {
+      for (const pointerInside of [true, false]) {
+        for (const focusInside of [true, false]) {
+          const reveal = { pinned, pointerInside, focusInside }
+          expect(railState(reveal)).toBe(sidebarState(reveal))
+        }
+      }
+    }
+    expect(railState({ pinned: false, pointerInside: false, focusInside: false })).toBe("minimised")
+    expect(railState({ pinned: true, pointerInside: false, focusInside: false })).toBe("expanded")
   })
 })
