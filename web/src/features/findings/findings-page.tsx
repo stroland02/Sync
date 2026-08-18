@@ -87,14 +87,11 @@ export function FindingsPage() {
   if (repoId === undefined) return <UnknownRoute />
 
   return (
-    <section className="flex flex-col gap-section min-w-0">
+    <section className="flex min-w-0 flex-col gap-8">
       <div className="flex flex-col gap-field">
-        <Breadcrumbs
-          trail={[
-            { label: repoId, to: `/repositories/${encodeURIComponent(repoId)}` },
-            { label: "Findings" },
-          ]}
-        />
+        {/* Level name only: the scope trail in the top bar already draws the repository, and
+            M7-W195 trimmed exactly this repetition from five other routes. */}
+        <Breadcrumbs trail={[{ label: "Findings" }]} />
         <p className="text-meta text-muted-foreground">{QUESTION}</p>
       </div>
 

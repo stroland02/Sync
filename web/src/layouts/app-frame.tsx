@@ -474,8 +474,16 @@ export function AppFrame() {
             <CommandPaletteTrigger />
           </header>
 
-          <main ref={contentRef} tabIndex={-1} className="flex flex-1 flex-col gap-8 p-frame outline-none">
-            <Outlet />
+          {/* The routed screen renders inside a centred column capped at 1400px — a page-layout
+              number, argued here and spelled in layouts/ per DESIGN.md's own rule for those. At
+              the 1440×900 reference size the cap never engages (1440 − 240 sidebar − 80 frame
+              = 1120), so nothing measured changes; on a wide monitor it stops every page hugging
+              the sidebar with dead space to the right, which reads as a misaligned screen rather
+              than a large one. `w-full` keeps narrow viewports exactly as they were. */}
+          <main ref={contentRef} tabIndex={-1} className="flex flex-1 flex-col outline-none">
+            <div className="mx-auto flex w-full max-w-[1400px] flex-1 flex-col gap-8 p-frame">
+              <Outlet />
+            </div>
           </main>
 
           <ChassisQualifications />

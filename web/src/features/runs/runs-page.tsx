@@ -57,14 +57,12 @@ export function RunsPage() {
   if (repoId === undefined) return <UnknownRoute />
 
   return (
-    <section className="flex flex-col gap-section">
+    <section className="flex flex-col gap-8">
       <div className="flex flex-col gap-field">
-        <Breadcrumbs
-          trail={[
-            { label: repoId, to: `/repositories/${encodeURIComponent(repoId)}` },
-            { label: "Runs" },
-          ]}
-        />
+        {/* Level name only: the scope trail in the top bar already draws the repository, and
+            M7-W195 trimmed exactly this repetition from five other routes — the page keeps the
+            segments the bar does not reach, which here is one. */}
+        <Breadcrumbs trail={[{ label: "Runs" }]} />
         <p className="text-meta text-muted-foreground">{QUESTION}</p>
       </div>
 
@@ -83,7 +81,7 @@ export function RunsPage() {
 
       <RunsCard />
 
-      <div className="grid gap-section xl:grid-cols-2">
+      <div className="grid gap-8 xl:grid-cols-2">
         <AbandonReasonsCard />
         <TierOutcomesCard />
       </div>

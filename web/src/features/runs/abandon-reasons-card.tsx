@@ -51,8 +51,11 @@ export function AbandonReasonsCard() {
   }
   if (distribution === null) return null
 
+  // `h-full`, because this card shares a grid row with its sibling: two panels in one row at
+  // two heights read as a mistake rather than as two answers.
   return (
     <MetricPanel
+      className="h-full"
       label="Why runs gave up"
       caption={
         <p className="max-w-prose">

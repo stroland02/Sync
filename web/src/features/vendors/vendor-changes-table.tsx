@@ -65,6 +65,7 @@ export function VendorChangesCard({
 
   return (
     <MetricPanel
+      className="h-full"
       label="Vendor changes"
       caption={
         <>

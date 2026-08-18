@@ -77,8 +77,11 @@ export function VendorPage() {
         <VendorFindingsCard vendorId={vendorId} repoId={repoId} />
       </div>
 
+      {/* No `items-start`: the two cards share this row, and stretching them to one height is
+          what keeps the pairing legible as a pairing rather than as two blocks that happen to
+          be adjacent. The page gap, because this row sits between panels, not inside one. */}
       <div
-        className="grid grid-cols-1 lg:grid-cols-2 gap-section items-start"
+        className="grid grid-cols-1 gap-8 lg:grid-cols-2"
         data-testid="vendor-history"
       >
         <VendorChangesCard vendorId={vendorId} repoId={repoId} />

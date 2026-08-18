@@ -50,6 +50,7 @@ export function TierOutcomesCard() {
 
   return (
     <MetricPanel
+      className="h-full"
       label="How each tier's attempts ended"
       caption={
         <p className="max-w-prose">
@@ -67,7 +68,7 @@ export function TierOutcomesCard() {
         />
       ) : (
         <div className="flex flex-col gap-field">
-          <div className="h-56 w-full">
+          <div className="h-64 w-full">
             <EChart
               buildOption={build}
               ariaLabel="Repair attempts by routing tier, settled against abandoned"

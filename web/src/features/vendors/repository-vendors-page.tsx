@@ -58,7 +58,7 @@ export function RepositoryVendorsPage() {
 
   if (overview.isPending) {
     return (
-      <section className="flex flex-col gap-section">
+      <section className="flex flex-col gap-8">
         <LoadingState what="the vendors attached to this repository" />
       </section>
     )
@@ -66,7 +66,7 @@ export function RepositoryVendorsPage() {
 
   if (overview.isError) {
     return (
-      <section className="flex flex-col gap-section">
+      <section className="flex flex-col gap-8">
         <ErrorState
           error={overview.error}
           what="the vendors attached to this repository"
@@ -92,7 +92,7 @@ export function RepositoryVendorsPage() {
   })
 
   return (
-    <section className="flex flex-col gap-section min-w-0">
+    <section className="flex min-w-0 flex-col gap-8">
 
       {!scopeMatches ? (
         <EmptyState

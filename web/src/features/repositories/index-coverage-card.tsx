@@ -40,14 +40,17 @@ export function IndexCoverageCard({ repoId }: { repoId: string }) {
   const query = useRepositoryCoverage(repoId)
 
   return (
-    <div className="flex min-w-0 flex-col gap-section">
+    <div className="flex h-full min-w-0 flex-col gap-section">
       {query.isPending && <LoadingState what={`index coverage for ${repoId}`} />}
       {query.isError && (
         <ErrorState error={query.error} what={`index coverage for ${repoId}`} onRetry={() => void query.refetch()} />
       )}
 
+      {/* `flex-1` on the panel: the same reasoning as the sibling card — the paired row holds
+          one height. */}
       {query.isSuccess && (
         <MetricPanel
+          className="flex-1"
           label="Index coverage"
           metric={
             query.data.total_call_sites === 0

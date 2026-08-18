@@ -13,7 +13,7 @@ import { cleanup, render, screen } from "@testing-library/react"
 import { MemoryRouter } from "react-router"
 import { afterEach, describe, expect, it, vi } from "vitest"
 
-import { ObservedTelemetryCard } from "@/features/repositories/codebase-page"
+import { ObservedTelemetryCard } from "@/features/telemetry/observed-telemetry-card"
 
 afterEach(() => {
   cleanup()

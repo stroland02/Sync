@@ -126,7 +126,7 @@ function OverviewGraphRegion() {
 
 export function FleetPage({ question = DEFAULT_QUESTION }: FleetPageProps) {
   return (
-    <section className="flex flex-col gap-section">
+    <section className="flex flex-col gap-8">
       {/* "Overview", once. This destination was titled "Repositories", labelled "Codebases" in the
           route registry and sits at the "Fleet" level — three names for one screen, which is its own
           kind of clutter. The *level* keeps the specification's word; only what a reader sees

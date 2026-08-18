@@ -69,7 +69,7 @@ export function RepositoryServicesPage() {
 
   if (overview.isPending || coverage.isPending) {
     return (
-      <section className="flex flex-col gap-section">
+      <section className="flex flex-col gap-8">
         <LoadingState what="the API services this repository calls" />
       </section>
     )
@@ -77,7 +77,7 @@ export function RepositoryServicesPage() {
 
   if (overview.isError) {
     return (
-      <section className="flex flex-col gap-section">
+      <section className="flex flex-col gap-8">
         <ErrorState
           error={overview.error}
           what="the API services this repository calls"
@@ -116,7 +116,7 @@ export function RepositoryServicesPage() {
     : []
 
   return (
-    <section className="flex flex-col gap-section">
+    <section className="flex flex-col gap-8">
 
       <p className="max-w-prose text-body text-muted-foreground">
         A service is listed here when the index bound a call site in this repository to it, or when
