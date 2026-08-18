@@ -536,13 +536,14 @@ async function runNoAdmin() {
   const web = consoleDependenciesVerdict(existsSync(join(REPO_ROOT, "web", "node_modules")))
   process.stdout.write(`${web.message}\n`)
   if (web.action === "install") {
-    mustRun("Installing the console dependencies", "npm", ["install", "--prefix", "web"], {
-      cwd: REPO_ROOT,
-      // npm is npm.cmd on Windows, and Node refuses to spawn a .cmd without a shell
-      // (CVE-2024-27980); the no-admin path is Windows-only today, so this is the rule
-      // here rather than the edge.
-      shell: process.platform === "win32",
-    })
+    // On Windows npm is npm.cmd, which Node will not spawn without a shell (CVE-2024-27980),
+    // and a shell spawn with an args array prints DEP0190 into the middle of the first-run
+    // output -- so the command goes as one string there, and as a plain binary elsewhere.
+    if (process.platform === "win32") {
+      mustRun("Installing the console dependencies", "npm install --prefix web", [], { cwd: REPO_ROOT, shell: true })
+    } else {
+      mustRun("Installing the console dependencies", "npm", ["install", "--prefix", "web"], { cwd: REPO_ROOT })
+    }
   }
 
   process.stdout.write(`\nIn short: ${summarise({ postgres: cluster, cache })}.\n`)
