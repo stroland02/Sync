@@ -159,6 +159,9 @@ def app_factory() -> Starlette:
     def coverage_reader(repo_id: str):
         return graph_views.index_coverage(store, repo_id)
 
+    def change_volume_reader(vendor_id: str):
+        return graph_views.vendor_change_volume(store, vendor_id)
+
     def graph_reader(repo_id: str):
         return graph_views.repository_graph(store, repo_id, limit=GRAPH_BINDING_LIMIT)
 
@@ -268,6 +271,7 @@ def app_factory() -> Starlette:
         binding_reader=binding_reader,
         coverage_reader=coverage_reader,
         graph_reader=graph_reader,
+        change_volume_reader=change_volume_reader,
         observed_reader=observed_reader,
         vendor_operations_reader=vendor_operations_reader,
         detector_reader=detector_reader,

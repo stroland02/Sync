@@ -162,6 +162,18 @@ def _fake_coverage_reader(repo_id: str) -> dict[str, Any]:
     return {"repo_id": repo_id, "by_vendor": {}, "total_call_sites": 0}
 
 
+def _fake_change_volume_reader(vendor_id: str) -> dict[str, Any]:
+    return {
+        "vendor_id": vendor_id,
+        "total_changes": 0,
+        "by_kind": {},
+        "by_severity": {},
+        "timeline": [],
+        "newest_change_at": None,
+        "oldest_change_at": None,
+    }
+
+
 def _fake_graph_reader(repo_id: str) -> dict[str, Any] | None:
     return {
         "repo_id": repo_id,
@@ -305,6 +317,7 @@ def _build_app(
     binding_reader=_fake_binding_reader,
     coverage_reader=_fake_coverage_reader,
     graph_reader=_fake_graph_reader,
+    change_volume_reader=_fake_change_volume_reader,
     observed_reader=_fake_observed_reader,
     vendor_operations_reader=_fake_vendor_operations_reader,
     detector_reader=_fake_detector_reader,
@@ -339,6 +352,7 @@ def _build_app(
         binding_reader=binding_reader,
         coverage_reader=coverage_reader,
         graph_reader=graph_reader,
+        change_volume_reader=change_volume_reader,
         observed_reader=observed_reader,
         vendor_operations_reader=vendor_operations_reader,
         detector_reader=detector_reader,
@@ -1555,6 +1569,7 @@ def _recording_client(**graph_kw) -> _RecordingClient:
         binding_reader=binding_reader,
         coverage_reader=coverage_reader,
         graph_reader=_fake_graph_reader,
+        change_volume_reader=_fake_change_volume_reader,
         observed_reader=observed_reader,
         vendor_operations_reader=vendor_operations_reader,
         detector_reader=detector_reader,
@@ -1793,6 +1808,9 @@ _NOT_COLLECTIONS = {
     # the edges out of a drawing whose whole job is showing the shape they make.
     "/api/repositories/{repo_id:path}/graph",
     "/api/repositories/{repo_id}/graph",
+    # One aggregate over every change a vendor has, which is the point of it: paging
+    # this is what the console was already doing wrong client-side.
+    "/api/vendors/{vendor_id}/change-volume",
 }
 
 _PAGE_ENVELOPE_KEYS = {"items", "total", "next_offset"}
@@ -2101,6 +2119,10 @@ _NOT_YET_FETCHED_BY_CONSOLE = {
     "/api/repos/{param}/findings",
     "/api/repositories/{param}/settings",
     "/api/repos/{param}/settings",
+    # M14-W396: endpoint only. Its consumer is the vendor change chart in
+    # `web/src/features/vendors/`, which recomputes this aggregate over one page and
+    # belongs to another lane; the swap is handed over rather than reached across.
+    "/api/vendors/{param}/change-volume",
 }
 
 
@@ -2509,3 +2531,44 @@ def test_vendor_operations_route_passes_the_repository_scope_through():
     TestClient(app).get("/api/vendors/stripe/operations?repo_id=org%2Fpayments")
 
     assert seen == [{"vendor_id": "stripe", "repo_id": "org/payments"}]
+
+
+def test_change_volume_route_answers_one_vendors_whole_history():
+    """The aggregate is scoped to the vendor, never to a page. The console computed the same
+    numbers from whatever page of `/changes` was loaded, so `total_changes` was a page count
+    wearing the vendor's name."""
+    payload = {
+        "vendor_id": "stripe",
+        "total_changes": 412,
+        "by_kind": {"response-field-type-changed": 412},
+        "by_severity": {"warning": 412},
+        "timeline": [{"period": "2026-08", "count": 412, "by_kind": {}}],
+        "newest_change_at": "2026-08-16T12:00:00+00:00",
+        "oldest_change_at": "2026-01-02T00:00:00+00:00",
+    }
+    app = _build_app(
+        surface=GraphSurface(FakeGraph(), feed_fetched_at=FETCHED),
+        change_volume_reader=lambda vendor_id: payload,
+    )
+
+    response = TestClient(app).get("/api/vendors/stripe/change-volume")
+
+    assert response.status_code == 200
+    assert response.json() == payload
+
+
+def test_change_volume_route_passes_the_vendor_through():
+    seen: list[str] = []
+
+    def reader(vendor_id: str):
+        seen.append(vendor_id)
+        return _fake_change_volume_reader(vendor_id)
+
+    app = _build_app(
+        surface=GraphSurface(FakeGraph(), feed_fetched_at=FETCHED),
+        change_volume_reader=reader,
+    )
+
+    TestClient(app).get("/api/vendors/openai/change-volume")
+
+    assert seen == ["openai"]
