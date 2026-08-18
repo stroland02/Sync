@@ -9,7 +9,7 @@
 import { describe, expect, it } from "vitest"
 
 import type { AbandonmentResponse } from "@/api/types"
-import type { ChartTokens } from "@/components/charts/echart"
+import { CHART_TOKENS, expectQuietChart } from "@/components/charts/chart-test-support"
 import {
   ABANDON_REASON_CODES,
   abandonReasonDistribution,
@@ -109,25 +109,8 @@ describe("abandonReasonDistribution", () => {
   })
 })
 
-/**
- * Sentinels rather than colours, and that is the honest fixture.
- *
- * What these assertions prove is that the builder reads a token through, never what the token's
- * value is — a real colour here would be a colour invented outside `index.css`, which is the one
- * place `DESIGN.md` governs them from, and it would also imply this suite has an opinion about
- * the palette. It does not: `echart.tsx` resolves every chart colour from the stylesheet at
- * render time, so the value that arrives is whatever the theme says.
- */
-const TOKENS: ChartTokens = {
-  ink: "token:ink",
-  inkSecondary: "token:ink-secondary",
-  inkMuted: "token:ink-muted",
-  surface: "token:surface",
-  grid: "token:grid",
-  axis: "token:axis",
-  labelOnLight: "token:label-on-light",
-  series: Array.from({ length: 8 }, (_, i) => `token:series-${i + 1}`),
-}
+/** The shared sentinel fixture. `chart-test-support.ts` carries why they are not colours. */
+const TOKENS = CHART_TOKENS
 
 describe("buildAbandonReasonsOption", () => {
   const option = () =>
@@ -172,5 +155,9 @@ describe("buildAbandonReasonsOption", () => {
     const built = option()
 
     expect(built.series[0].data).toEqual([1, 3])
+  })
+
+  it("draws a quiet chart: no gridlines, and no legend for its single series (decision 58)", () => {
+    expectQuietChart(option())
   })
 })

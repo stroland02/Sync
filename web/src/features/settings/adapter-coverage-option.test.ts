@@ -8,9 +8,11 @@
 import { describe, expect, it } from "vitest"
 
 import type { AdapterRow } from "@/api/types"
+import { CHART_TOKENS, expectQuietChart } from "@/components/charts/chart-test-support"
 import {
   SERVING_TIERS,
   adapterCoverageByTier,
+  buildAdapterCoverageOption,
 } from "@/features/settings/adapter-coverage-option"
 
 const row = (vendor_id: string, kind: AdapterRow["kind"]): AdapterRow => ({
@@ -86,5 +88,16 @@ describe("adapterCoverageByTier", () => {
     expect(coverage.totalServing).toBe(0)
     expect(coverage.unregistered).toBe(0)
     expect(coverage.serving.every((slice) => slice.count === 0)).toBe(true)
+  })
+})
+
+describe("buildAdapterCoverageOption", () => {
+  it("draws a quiet chart: no gridlines, and no legend for its single series (decision 58)", () => {
+    const option = buildAdapterCoverageOption(
+      adapterCoverageByTier([row("stripe", "coded")]),
+      CHART_TOKENS,
+    ) as Record<string, any>
+
+    expectQuietChart(option)
   })
 })
