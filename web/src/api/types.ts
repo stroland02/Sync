@@ -705,6 +705,16 @@ export interface ObservedErrorWindowRow {
  */
 export interface ObservedTelemetryResponse {
   repo_id: string
+  /**
+   * When telemetry was attached to this repository, or `null` when it never was.
+   *
+   * `observed_telemetry` has always returned this and the type omitted it, so the console could
+   * not read the one distinction this rung exists to make: an empty `calls` page under attached
+   * telemetry is a measured nought, and the same empty page with no attachment is nobody having
+   * looked (B157). Without this field the two render identically, which is the substitution the
+   * console refuses everywhere else.
+   */
+  telemetry_attached_at: string | null
   calls: ItemPage<ObservedCallRow>
   shapes: ItemPage<ObservedShapeRow>
   error_windows: ItemPage<ObservedErrorWindowRow>
