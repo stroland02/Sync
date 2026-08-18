@@ -764,6 +764,43 @@ export interface AdapterInventoryResponse {
   adapters: AdapterRow[]
 }
 
+/** One edge of the dependency graph: a place this repository calls a vendor operation. */
+export interface RepositoryGraphBinding {
+  vendor_id: string
+  operation_id: string
+  path: string
+  line: number
+  symbol: string
+  /**
+   * Always `"static"` here. A call site is what the static index found, and nothing about this
+   * edge rests on a resolution or a correlation step. A stronger rung for the same operation is
+   * a fact about the repository's telemetry and is never blended into this row.
+   */
+  binding_rung: "static"
+}
+
+/** One vendor node, with what the index knows about this repository's calls to it. */
+export interface RepositoryGraphVendor {
+  vendor_id: string
+  indexed_call_sites: number
+  /**
+   * The newest `indexed_at` among this vendor's call sites, or `null` when none was read.
+   * Staleness, never a promise that the index is current.
+   */
+  last_indexed: string | null
+}
+
+/** `GET /api/repositories/{repo_id}/graph`. The picture the Overview draws. */
+export interface RepositoryGraphResponse {
+  repo_id: string
+  vendors: RepositoryGraphVendor[]
+  bindings: RepositoryGraphBinding[]
+  /** How many current call sites the repository holds, whether or not all of them were drawn. */
+  total_bindings: number
+  /** Whether `bindings` is all of them. A partial picture says so rather than implying whole. */
+  truncated: boolean
+}
+
 /**
  * One operation this codebase calls on a vendor, from
  * `GET /api/vendors/{vendor_id}/operations`.
