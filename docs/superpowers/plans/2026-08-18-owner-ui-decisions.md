@@ -527,3 +527,44 @@ never abbreviates**, because a CSV is the artifact somebody sums.
 **Second: tabular figures still apply.** Whatever is shown, digits align in a column. A right-aligned
 column of numbers that do not line up is harder to compare than one that does, and comparison is the
 only reason to put them in a column.
+
+## Round twelve: decisions 61-64, mined from references no plan had cited
+
+**Fifteen of the reference images are cited in no plan or spec.** These four come from two of them,
+opened for this round: `direction/supabase-10-auth-users-empty.png` and
+`direction/supabase-18-query-performance-drawer.png`.
+
+**61. An empty table keeps its column headers, states what was checked, and names one next action.**
+`No findings — 4 detectors ran 14 minutes ago and none of them matched`, then `[Re-run detectors]`
+and *attach telemetry to reach the observed rung*.
+
+**Headers staying is the part worth naming.** The shape of the data is legible before there is data,
+so a reader learns what a finding *is* from a screen that has none. And the next action teaches the
+rung ladder at the moment somebody is looking at an empty screen and wondering whether the product
+works.
+
+**62. A slash-separated metrics strip above every large table** — `31 open / 4 breaking / 12
+dismissed` — each term explaining itself on an info icon. **Rejected: rendering them as fact tiles**,
+which costs vertical space on screens whose value is rows.
+
+**63. A screen states how it was computed, behind an info icon on the screen's title.**
+
+**The boundary this must not cross, and it is written into `CLAUDE.md` by hand.** That rule says of
+the twenty-four protected sentences: *"Restyling one is allowed. Deleting one, shortening one,
+collapsing one behind a disclosure, or moving one into a tooltip is not."*
+
+**Decision 63 authorises a new provenance note and nothing else.** It does not license moving any
+existing on-screen sentence into the icon. The twenty-four stay where they are, at full length, on
+the screen. **If a lane finds itself moving an existing sentence into an info popover and citing
+decision 63, it has misread it** — the test is whether the sentence was on the screen before this
+decision. New note: popover. Existing sentence: stays.
+
+**64. Where a figure has a share and a magnitude, write the magnitude and draw the share.** The
+number in the cell is the count; proportion is bar length. **Rejected: writing both**, in either
+order.
+
+**This stays inside the standing refusal because of what the bar is over.** A bar showing one
+vendor's share of a real total is a measurement rendered proportionally. It does not become a
+composite unless it starts averaging two different facts — which is what `M14-W394` caught in the
+adopted cards, where a filled track over `openFindings / callSites` was a rate wearing a bar's
+clothes.
