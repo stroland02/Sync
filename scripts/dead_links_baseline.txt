@@ -53,17 +53,15 @@ src/sync/obs/log.py:_SafeStreamHandler.emit
 src/sync/obs/log.py:_BorrowedTextIOWrapper.close
 
 # `sync.remediate.sandbox` (B97) is the container-level network boundary proven against a real
-# Docker Desktop in `tests/test_patch_sandbox.py` -- finished and tested, and reachable from
-# nowhere in `src/` on purpose rather than by oversight, the same shape this file's own header
-# describes. `AgentRemediator._drive_agent` still runs on the host; wiring a real patch attempt
-# through `ephemeral_container`, `disconnect_network`, and `copy_between_containers` needs the
-# production image `docker/patch-sandbox/Dockerfile` describes, built and pre-warmed, plus the
-# Anthropic-only forward proxy the design's own open risks name as unbuilt -- neither is this
-# commit's job. `docs/superpowers/BACKLOG.md`'s B97 entry carries the full accounting of what
-# landed and what did not. All five entries below come out together, in the commit that adds
-# the caller.
+# Docker Desktop in `tests/test_patch_sandbox.py`. `ephemeral_container` came out of this list
+# when `sync.runner.docker_sdk.DockerSdkRunner` (below) started calling it directly -- the first
+# real caller. `disconnect_network`, `probe_connect` and `copy_between_containers` stay: none of
+# the three composes into `DockerSdkRunner`'s own shape (it uses `copy_into_container`/
+# `copy_out_of_container` instead, and destroys rather than disconnects). `build_container_env`
+# also stays -- `DockerSdkRunner` builds its containers' environments through `exec_in_container`'s
+# `env=` per-call rather than at `docker create` time, since it needs different variables on the
+# proxy container (`SYNC_PROXY_CREDENTIAL`) than on the sandboxed one (`ANTHROPIC_BASE_URL` only).
 src/sync/remediate/sandbox.py:build_container_env
-src/sync/remediate/sandbox.py:ephemeral_container
 src/sync/remediate/sandbox.py:disconnect_network
 src/sync/remediate/sandbox.py:probe_connect
 src/sync/remediate/sandbox.py:copy_between_containers
@@ -104,35 +102,35 @@ src/sync/forge/webhook.py:dispatch_webhook_event
 # will be wired in Lane E's subsequent intake status dashboard work item.
 src/sync/graph/store.py:GraphStore.intake_attempts
 
-# `running_proxy` (B97) is the real socket server around `build_forward_request` --
-# `docs/superpowers/specs/2026-08-17-sync-b97-forward-proxy-design.md`'s second slice. Finished
-# and tested against real listening sockets (`tests/test_forward_proxy_server.py`, five tests):
-# a real request reaches a real upstream with the real credential attached, an absolute-URI
-# target is refused before a byte reaches upstream, and the server survives more than one
-# request and shuts down cleanly. `build_forward_request` came out of this list the day this
-# entry was added -- `running_proxy` calls it, so it is reachable now. Unreachable on purpose:
-# nothing in this tree yet starts this server as part of a real patch attempt or attaches a
-# sandboxed container to the isolated network that would make it the only thing that container
-# can reach. That composition -- `ephemeral_container`, the network topology, and this proxy,
-# assembled into one orchestrated attempt -- is the next unit, not this one.
+# `running_proxy` (B97) is the real socket server around `build_forward_request`. Finished and
+# tested against real listening sockets (`tests/test_forward_proxy_server.py`, five tests).
+# **Composed now, and unreached only because of how.** `docker/patch-sandbox/run_proxy.py`
+# imports and calls it, and `DockerSdkRunner` copies that file into a real container and execs
+# it -- but `run_proxy.py` lives under `docker/`, outside this lint's `src/` scan root, so the
+# call is real and invisible to static analysis at once. `tests/test_run_proxy.py` and
+# `tests/test_docker_sdk_runner.py` are where that composition is actually proven.
 src/sync/remediate/forward_proxy_server.py:running_proxy
-
-# `isolated_network` (B97) is the third primitive: a Docker network with `--internal`, which
-# structurally removes routing to anything outside the network's own local subnet -- not merely
-# the internet. Finished and tested against real Docker (`tests/test_isolated_network.py`, three
-# tests): the flag is present in the CLI invocation, a container attached to it genuinely cannot
-# reach the internet (positive control first), and the network is removed on exit. What that
-# same test file's own module docstring records as a corrected assumption rather than a quiet
-# gap: `--add-host=host.docker.internal:host-gateway` was expected to let a container on this
-# network reach a bare host process and measured not to -- DNS resolution and routing are
-# different facts, and `--internal` blocks the second even where the first succeeds. So the
-# proxy has to be a container on this same isolated network rather than a host process, and
-# nothing in this tree yet composes that pairing. Unreachable on purpose until it does.
-src/sync/remediate/isolated_network.py:isolated_network
 
 # `index_codebase` (M5-W314) provides multi-vendor, multi-language arbitrary codebase
 # indexing across TypeScript/TSX/JS and Python for customer repositories. Finished and tested
 # in `tests/test_codebase_index.py`.
 src/sync/index/codebase.py:index_codebase
+
+# `DockerSdkRunner` (B97 Decision 1) is a complete `PatchRunner`: it drives the agent turn inside
+# two ephemeral containers -- a proxy holding the real Anthropic credential and a sandboxed
+# container that never does -- composing `ephemeral_container`, `isolated_network`,
+# `attach_network`, `copy_into_container`/`copy_out_of_container` and `exec_in_container` into
+# one orchestrated attempt. Tested against real Docker at the primitive level
+# (`tests/test_sandbox_attach_network.py`, `tests/test_sandbox_host_copy.py`) and at the
+# orchestration level against mocked `sandbox` calls (`tests/test_docker_sdk_runner.py`) --
+# proven to hold the one property that matters most: the sandboxed container's own `exec`
+# carries `ANTHROPIC_BASE_URL` and nothing else, never the credential. **Not wired into
+# `AgentRemediator` in this commit, deliberately.** `AgentRemediator.__init__`'s default stays
+# `ClaudeSdkRunner` -- the seam is a one-line change once this class is trusted, but trusting it
+# needs a real end-to-end run with a real model call, which is a spend decision this commit does
+# not make for the owner. `docs/superpowers/specs/2026-07-25-sync-threat-model.md`'s own ledger
+# records precisely what this closes (mitigations 1 and 3) and what it does not (mitigation 5:
+# read-only root, a per-container wall-clock kill -- `ephemeral_container` still grants neither).
+src/sync/runner/docker_sdk.py:DockerSdkRunner
 
 

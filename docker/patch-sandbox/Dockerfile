@@ -16,10 +16,13 @@
 # for this Dockerfile and its build args, and builds it idempotently -- once at worker
 # startup and once on a schedule, never on a real patch attempt's own critical path.
 #
-# STILL NOT WIRED: nothing in `sync.remediate.nodes` or `AgentRemediator` starts a
-# container from this image during an actual patch attempt yet. That is B97
-# Decision 1, a separate and larger piece of work this Dockerfile and its build
-# mechanism are specified against but do not themselves close.
+# B97 Decision 1: `claude_agent_sdk` (below) is what lets an agent turn run inside this image
+# at all -- verified against this exact base, not assumed. `pip install claude_agent_sdk` on
+# `python:3.12-slim-bookworm` resolves the Linux-platform wheel, which bundles a real Linux
+# `claude` binary at `_bundled/claude` (no `.exe`, the Windows host's own copy) and it runs:
+# `claude --version` inside a fresh container from this base printed a real version, no missing
+# shared library, no architecture mismatch. `sync.runner.docker_sdk` (not yet written) is the
+# in-container driver that calls it; this Dockerfile only proves the binary is reachable.
 
 # Pinned by digest, not by the mutable `python:3.12-slim-bookworm` tag: a content
 # hash of this file's bytes is only a meaningful "is my image current" check if the
@@ -44,6 +47,13 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/*
 
 RUN pip install --no-cache-dir uv
+
+ARG CLAUDE_AGENT_SDK_VERSION=0.2.128
+# Pinned to the version this repository's own pyproject.toml/uv.lock resolve on the host --
+# `sync.runner.claude_sdk`'s ClaudeAgentOptions surface is exact-version-sensitive per CLAUDE.md's
+# own model-configuration section, and an unpinned image could silently drift to a newer SDK the
+# host-side code was never checked against.
+RUN pip install --no-cache-dir "claude_agent_sdk==${CLAUDE_AGENT_SDK_VERSION}"
 
 # Non-root: the threat model's mitigation 1 asks for a container with no credential on
 # its filesystem and a user that cannot escalate inside it even if a permitted command

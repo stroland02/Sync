@@ -224,6 +224,21 @@ def ephemeral_container(
         _docker("rm", "-f", container_id)
 
 
+def _attach_network_args(network: str, container_id: str) -> list[str]:
+    return ["network", "connect", network, container_id]
+
+
+def attach_network(container: Container, network: str) -> None:
+    """Give an already-running container a second network, alongside whatever it was created
+    with -- B97 Decision 1's proxy container: the isolated network it shares with the sandboxed
+    container is named at `ephemeral_container` time, and its own egress leg out to Anthropic is
+    attached after, since `docker create --network` takes exactly one name.
+    """
+    result = _docker(*_attach_network_args(network, container.id))
+    if result.returncode != 0:
+        raise RuntimeError(f"docker network connect failed: {result.stderr.strip()}")
+
+
 def disconnect_network(container: Container, network: str = "bridge") -> None:
     """Detach `container` from `network`, and do not return until the engine
     confirms it. Blocks *new* connection attempts from `container`; does **not**
@@ -340,3 +355,55 @@ def copy_between_containers(source: Container, dest: Container, path: str) -> No
         copy_in = _docker("cp", staged_path, f"{dest.id}:{path}")
         if copy_in.returncode != 0:
             raise RuntimeError(f"docker cp into {dest.id}:{path} failed: {copy_in.stderr.strip()}")
+
+
+def copy_into_container(container: Container, host_path: str, container_path: str) -> None:
+    """Move `host_path` (a file or a directory) from the host straight into `container` at
+    `container_path` -- B97 Decision 1's own need: the driver, the gate and the fence files, and
+    the finding's clone, all have to reach the sandboxed container from the host that cloned the
+    repository, not from another container.
+
+    No staging directory: `docker cp` already reaches the host filesystem directly on this side,
+    unlike `copy_between_containers`, where neither endpoint is the host and a temp directory is
+    what lets one `docker cp` hand off to another.
+    """
+    parent = posixpath.dirname(container_path) or "/"
+    mkdir = _docker("exec", container.id, "mkdir", "-p", parent)
+    if mkdir.returncode != 0:
+        raise RuntimeError(f"mkdir -p {parent} in {container.id} failed: {mkdir.stderr.strip()}")
+    copy_in = _docker("cp", host_path, f"{container.id}:{container_path}")
+    if copy_in.returncode != 0:
+        raise RuntimeError(f"docker cp into {container.id}:{container_path} failed: {copy_in.stderr.strip()}")
+
+
+def copy_out_of_container(container: Container, container_path: str, host_path: str) -> None:
+    """Move `container_path` out of `container` to `host_path` on the host -- the return half of
+    `copy_into_container`: a patch attempt's clone goes back to the host path `AgentRemediator`
+    already holds, so `static_verify` and everything after it read the same tree they always did.
+    """
+    copy_out = _docker("cp", f"{container.id}:{container_path}", host_path)
+    if copy_out.returncode != 0:
+        raise RuntimeError(f"docker cp out of {container.id}:{container_path} failed: {copy_out.stderr.strip()}")
+
+
+def exec_in_container(
+    container: Container,
+    args: list[str],
+    *,
+    env: dict[str, str] | None = None,
+    workdir: str | None = None,
+    detach: bool = False,
+) -> subprocess.CompletedProcess[str]:
+    """`docker exec` with the flags a caller outside this module cannot reach otherwise --
+    B97 Decision 1's `sync.runner.docker_sdk` needs `-e`, `-w` and `-d`, and reaching into
+    this module's own `_docker` for them would couple a caller to a private helper rather
+    than to a stated contract.
+    """
+    flags: list[str] = []
+    if detach:
+        flags.append("-d")
+    for key, value in (env or {}).items():
+        flags += ["-e", f"{key}={value}"]
+    if workdir is not None:
+        flags += ["-w", workdir]
+    return _docker("exec", *flags, container.id, *args)
