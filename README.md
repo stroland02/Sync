@@ -44,20 +44,19 @@ exported `SYNC_CONSOLE_PASSWORD` first.
 
 ### 1. One command
 
-```bash
-npx @superloglabs/sync
-```
+**Not available yet, and it is not a command you can be given today.** The one-command form is
+built -- `bin/sync-up.mjs` checks the single prerequisite and hands over to exactly the
+`docker compose` invocation below, reimplementing none of it, because npm delivers a Node
+program and a wrapper claiming to install Python and a database would fail in front of the
+person being shown it.
 
-**This does not work yet, and the reason is one line in our own manifest.** `@superloglabs/sync`
-is not published — the registry answers 404, and `package.json` carries `"private": true`, so
-`npm publish` refuses. That is a decision nobody has taken rather than a step nobody has got to.
-**Use [2. From a checkout](#2-from-a-checkout--one-prerequisite-and-it-is-docker) instead; it is
-the same work and it runs today.**
+What it does not have is a name we own. The manifest currently carries an npm scope belonging
+to somebody else, so there is nothing to publish and nothing to run; naming it is the owner's
+decision and publishing it needs a credential. No command is printed here rather than one that
+would resolve to a stranger's package.
 
-The program itself is real and is what publishing would ship: `bin/sync-up.mjs` checks the one
-prerequisite and hands over to `docker compose`. It deliberately reimplements none of the real
-steps — npm delivers a Node program, and a wrapper claiming to install Python and a database
-would fail in front of the person being shown it.
+**Use [2. From a checkout](#2-from-a-checkout--one-prerequisite-and-it-is-docker). It is the
+same work, it is two lines, and it runs today.**
 
 ### 2. From a checkout — one prerequisite, and it is Docker
 
@@ -118,13 +117,14 @@ sits.
   vendor specification staged that a fresh container does not have. `B188` in
   `docs/superpowers/BACKLOG.md` carries the three ways out and what each one costs. Until that
   lands, this shows you that the product runs, not what it finds in your code.
-- **The one-command form exists and is `npx @superloglabs/sync`.** `bin/sync-up.mjs` checks the
+- **The one-command form is built but has no publishable name.** `bin/sync-up.mjs` checks the
   single prerequisite and hands over to exactly the `docker compose` invocation above — it
   deliberately reimplements none of it, because npm delivers a Node program and a wrapper claiming
   to install Python and a database would fail in front of the person being shown it. **The
-  published path has now been measured and it does not exist**: the registry answers 404 and
-  `package.json` marks the package private, so `npm publish` refuses. Publishing it is a decision
-  and a credential, not a task.
+  published path has been measured and it does not exist**: the registry answers 404, the
+  manifest is marked private so `npm publish` refuses, and the scope it names is not ours to
+  publish under. Naming it is a decision and publishing it is a credential, neither of which is
+  a task.
 
 To stop it, and to remove its database with it:
 
