@@ -55,12 +55,9 @@ import { useSearchParams } from "react-router"
 
 import { Button } from "@/components/ui/button"
 import { DetectorAccountability } from "@/features/detectors/detector-accountability"
-import { Breadcrumbs } from "@/layouts/breadcrumbs"
 import { ControlBar } from "@/layouts/control-bar"
-import { PageHeader } from "@/layouts/page-header"
 import { useClearFilters } from "@/lib/use-filter-param"
 
-const DEFAULT_QUESTION = "Which detector is producing my false positives?"
 
 /** The scope key, the only parameter `GET /api/detectors` takes. */
 const REPO_KEY = "repo_id"
@@ -69,7 +66,7 @@ export interface DetectorsPageProps {
   readonly question?: string
 }
 
-export function DetectorsPage({ question = DEFAULT_QUESTION }: DetectorsPageProps) {
+export function DetectorsPage() {
   const [searchParams] = useSearchParams()
   const repoId = searchParams.get(REPO_KEY)
   // No offsets to reset: this route paginates nothing, so widening the scope changes which rows
@@ -79,14 +76,6 @@ export function DetectorsPage({ question = DEFAULT_QUESTION }: DetectorsPageProp
   return (
     <section className="flex flex-col gap-8">
       <div className="flex flex-col gap-section">
-        <PageHeader
-          title="Detectors"
-          question={question}
-          // Fleet and the repository are the top bar's, derived from this same address. What is
-          // left is the level this screen is, which the bar does not reach — its trail stops at
-          // the vendor. M7-W195.
-          trail={<Breadcrumbs trail={[{ label: "Detectors" }]} />}
-        />
         <ControlBar>
           <div className="flex min-w-0 flex-col gap-field">
             <span className="furniture text-meta text-ink-muted">Scope</span>

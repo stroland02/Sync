@@ -16,8 +16,6 @@ import { useState } from "react"
 import { useSearchParams } from "react-router"
 
 import { useRepositories } from "@/api/queries"
-import { Breadcrumbs } from "@/layouts/breadcrumbs"
-import { PageHeader } from "@/layouts/page-header"
 import { PullRequestsSettingsPanel } from "@/features/settings/pull-requests-settings-panel"
 import { CodebasesSettingsPanel } from "@/features/settings/codebases-settings-panel"
 import { GithubConnectionSettingsPanel } from "@/features/settings/github-connection-settings-panel"
@@ -67,14 +65,12 @@ const SETTING_GROUPS: readonly GroupDef[] = [
   },
 ] as const
 
-const DEFAULT_QUESTION =
-  "What does this deployment watch, what policy is in force when a patch is ready, and how is the forge connected?"
 
 export interface SettingsPageProps {
   readonly question?: string
 }
 
-export function SettingsPage({ question = DEFAULT_QUESTION }: SettingsPageProps) {
+export function SettingsPage() {
   const [searchParams, setSearchParams] = useSearchParams()
   const initialGroup = (searchParams.get("group") as SettingsGroup) || "codebases"
   const [selectedGroup, setSelectedGroup] = useState<SettingsGroup>(
@@ -101,11 +97,6 @@ export function SettingsPage({ question = DEFAULT_QUESTION }: SettingsPageProps)
 
   return (
     <div className="flex flex-col gap-section min-w-0">
-      <PageHeader
-        title="Settings"
-        question={question}
-        trail={<Breadcrumbs trail={[{ label: "Settings" }]} />}
-      />
 
       <div className="flex flex-col md:flex-row gap-section items-start">
         {/* Left Sub-Navigation */}

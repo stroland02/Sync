@@ -45,12 +45,8 @@ import {
 import { Absent, Formatted } from "@/components/status"
 import { EmptyState, ErrorState, LoadingState, NotFoundState } from "@/components/states"
 import { Badge } from "@/vendor/supabase/ui/badge"
-import { Breadcrumbs } from "@/layouts/breadcrumbs"
-import { PageHeader } from "@/layouts/page-header"
 import { formatTimestamp } from "@/lib/format"
 
-const DEFAULT_QUESTION =
-  "Which API services does this repository call, and what does the graph hold about each?"
 
 /** What the index-coverage answer turned out to be, once its scope and its 404 are accounted for. */
 type CoverageState =
@@ -63,27 +59,16 @@ export interface RepositoryServicesPageProps {
   readonly question?: string
 }
 
-export function RepositoryServicesPage({ question = DEFAULT_QUESTION }: RepositoryServicesPageProps) {
+export function RepositoryServicesPage() {
   const { repoId } = useParams<{ repoId: string }>()
   const overview = useOverview(repoId)
   const coverage = useRepositoryCoverage(repoId ?? "")
 
-  const trail = (
-    <Breadcrumbs
-      trail={[
-        { label: "Overview", to: "/" },
-        { label: repoId ?? "", to: `/repositories/${encodeURIComponent(repoId ?? "")}` },
-        { label: "API services" },
-      ]}
-    />
-  )
 
-  const header = <PageHeader title="API services" question={question} trail={trail} />
 
   if (overview.isPending || coverage.isPending) {
     return (
       <section className="flex flex-col gap-section">
-        {header}
         <LoadingState what="the API services this repository calls" />
       </section>
     )
@@ -92,7 +77,6 @@ export function RepositoryServicesPage({ question = DEFAULT_QUESTION }: Reposito
   if (overview.isError) {
     return (
       <section className="flex flex-col gap-section">
-        {header}
         <ErrorState
           error={overview.error}
           what="the API services this repository calls"
@@ -132,7 +116,6 @@ export function RepositoryServicesPage({ question = DEFAULT_QUESTION }: Reposito
 
   return (
     <section className="flex flex-col gap-section">
-      {header}
 
       <p className="max-w-prose text-body text-muted-foreground">
         A service is listed here when the index bound a call site in this repository to it, or when

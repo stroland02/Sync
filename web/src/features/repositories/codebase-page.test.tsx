@@ -37,16 +37,11 @@ function renderCodebase(path: string) {
   )
 }
 
-describe("CodebasePage's breadcrumb", () => {
-  it("names what contains this repository, ending on the repository itself", () => {
-    renderCodebase("/repositories/org%2Fpayments")
-
-    const trail = screen.getByLabelText("Breadcrumb")
-    expect(trail.textContent).toContain("Repositories")
-    expect(trail.querySelector('[aria-current="page"]')?.textContent).toBe("org/payments")
-  })
-})
-
+// Three per-page breadcrumb tests stood here and in `vendor-page.test.tsx`, and went with the
+// page header that carried them (`M14-W391`, owner decision 7). The console drew two trails for
+// one question; the page's was the duplicate. What they guaranteed -- what contains what, ending
+// on the subject -- is now asserted in `layouts/scope-switchers.test.tsx` against the trail that
+// survived, which also carries the page's name and the page's only `h1`.
 describe("CodebasePage's outbound links", () => {
   /**
    * `/repositories/:repoId/vendors` is routed and built, and nothing in the application linked to

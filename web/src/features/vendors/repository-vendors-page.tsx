@@ -35,12 +35,8 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/data-table"
-import { Breadcrumbs } from "@/layouts/breadcrumbs"
-import { PageHeader } from "@/layouts/page-header"
 import { VendorCard, ADAPTER_TIERS } from "@/features/vendors/vendor-card"
 
-const DEFAULT_QUESTION =
-  "Which API vendors does this repository call, and how much is open against each?"
 
 export interface RepositoryVendorsPageProps {
   readonly question?: string
@@ -49,7 +45,7 @@ export interface RepositoryVendorsPageProps {
 type ViewMode = "table" | "cards"
 type TierFilter = "all" | AdapterRow["kind"]
 
-export function RepositoryVendorsPage({ question = DEFAULT_QUESTION }: RepositoryVendorsPageProps) {
+export function RepositoryVendorsPage() {
   const { repoId } = useParams<{ repoId: string }>()
   const overview = useOverview(repoId)
   const adaptersQuery = useAdapters()
@@ -57,22 +53,11 @@ export function RepositoryVendorsPage({ question = DEFAULT_QUESTION }: Repositor
   const [viewMode, setViewMode] = useState<ViewMode>("table")
   const [tierFilter, setTierFilter] = useState<TierFilter>("all")
 
-  const trail = (
-    <Breadcrumbs
-      trail={[
-        { label: "Overview", to: "/" },
-        { label: repoId ?? "", to: `/repositories/${encodeURIComponent(repoId ?? "")}` },
-        { label: "Vendors" },
-      ]}
-    />
-  )
 
-  const header = <PageHeader title="Vendors" question={question} trail={trail} />
 
   if (overview.isPending) {
     return (
       <section className="flex flex-col gap-section">
-        {header}
         <LoadingState what="the vendors attached to this repository" />
       </section>
     )
@@ -81,7 +66,6 @@ export function RepositoryVendorsPage({ question = DEFAULT_QUESTION }: Repositor
   if (overview.isError) {
     return (
       <section className="flex flex-col gap-section">
-        {header}
         <ErrorState
           error={overview.error}
           what="the vendors attached to this repository"
@@ -108,7 +92,6 @@ export function RepositoryVendorsPage({ question = DEFAULT_QUESTION }: Repositor
 
   return (
     <section className="flex flex-col gap-section min-w-0">
-      {header}
 
       {!scopeMatches ? (
         <EmptyState

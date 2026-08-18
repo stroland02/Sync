@@ -67,7 +67,6 @@ import { Link, useParams } from "react-router"
 import { NotFoundError } from "@/api/errors"
 import { WORKFLOW_POLL_MS, isRunTerminal, useWorkflow } from "@/api/queries"
 import { MetricPanel } from "@/components/metric-panel"
-import { Skeleton } from "@/components/skeleton"
 import { ErrorState, LoadingState, NotFoundState } from "@/components/states"
 import { Absent, Formatted } from "@/components/status"
 import { Button } from "@/components/ui/button"
@@ -79,17 +78,11 @@ import { runIdentity } from "@/features/workflows/run-identity"
 import { RunOutcome, type BelowThisPanel } from "@/features/workflows/run-outcome"
 import { SettledOutput } from "@/features/workflows/settled-output"
 import { SupersededGenerations } from "@/features/workflows/superseded-generations"
-import { Breadcrumbs } from "@/layouts/breadcrumbs"
 import { DetailGrid } from "@/layouts/detail-grid"
-import { PageHeader } from "@/layouts/page-header"
 import { UnknownRoute } from "@/layouts/unknown-route"
-import { DetailTitleText, runTitle } from "@/lib/detail-title"
-import { formatFindingBadge } from "@/lib/format"
 import { formatTimestamp } from "@/lib/format"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/vendor/supabase/ui/tabs"
 
-const DEFAULT_QUESTION =
-  "What did Sync's remediation graph do about this finding, node by node?"
 
 /**
  * The rail's "Node by node" panel, stated before the sequence it wraps rather than left implicit
@@ -103,11 +96,11 @@ export interface WorkflowPageProps {
   readonly question?: string
 }
 
-export function WorkflowPage({ question = DEFAULT_QUESTION }: WorkflowPageProps) {
+export function WorkflowPage() {
   // The identifier comes out of the URL, so it is checked before a request is made for it.
   const { findingId } = useParams<{ findingId: string }>()
   if (findingId === undefined) return <UnknownRoute />
-  return <Workflow findingId={findingId} question={question} />
+  return <Workflow findingId={findingId} />
 }
 
 /**
@@ -213,7 +206,7 @@ function Arrival({ findingId }: { findingId: string }) {
   )
 }
 
-function Workflow({ findingId, question }: { findingId: string; question: string }) {
+function Workflow({ findingId }: { findingId: string }) {
   const query = useWorkflow(findingId)
   const data = query.data
   const terminal = isRunTerminal(data)
@@ -228,33 +221,10 @@ function Workflow({ findingId, question }: { findingId: string; question: string
     )
   ) : null
 
-  const title =
-    data !== undefined ? (
-      <DetailTitleText title={runTitle(data.generation_count)} />
-    ) : failure !== null ? (
-      failure
-    ) : (
-      <Skeleton width="w-40" />
-    )
 
   return (
     <DetailGrid
       railSide="narrow"
-      header={
-        <PageHeader
-          trail={
-            <Breadcrumbs
-              trail={[
-                { label: "Repositories", to: "/" },
-                { label: formatFindingBadge(findingId), to: `/findings/${encodeURIComponent(findingId)}` },
-                { label: "Solution workflow" },
-              ]}
-            />
-          }
-          title={title}
-          question={question}
-        />
-      }
       rail={<RunFactRail findingId={findingId} data={data} failure={failure} />}
     >
       <div className="flex min-w-0 flex-col gap-8">

@@ -258,3 +258,40 @@ describe("the trail on screen", () => {
     expect(address()).toBe("/vendors/shopify?repo_id=seed-console")
   })
 })
+
+describe("the trail names the page, so a page does not have to", () => {
+  /**
+   * `M14-W391`. Owner decision 7 removes the header above every page. That header carried a
+   * breadcrumb, and the top bar already carried a scope trail doing the same job -- what contains
+   * what -- so the console drew two trails for one question and the page's copy was the duplicate.
+   * Rather than relocate a component, the trail that already exists gains the one segment it was
+   * missing: the page's own name.
+   *
+   * It is the `h1` because every page still owes a reader one accessible heading, and this is now
+   * the only place the subject is named. One heading in chrome, rather than twelve in twelve pages.
+   */
+  it("ends with the current page's name", () => {
+    renderAt("/repositories/seed-console/observed")
+
+    const trail = screen.getByRole("navigation", { name: /scope/i })
+    expect(within(trail).getByText("Signals")).toBeTruthy()
+  })
+
+  it("makes that name the page's only top-level heading", () => {
+    renderAt("/repositories/seed-console/observed")
+
+    const headings = screen.getAllByRole("heading", { level: 1 })
+    expect(headings.length).toBe(1)
+    expect(headings[0].textContent).toContain("Signals")
+  })
+
+  it("names a page the registry does not declare without inventing a label for it", () => {
+    // An address no route matches still renders the chassis. The trail says nothing rather than
+    // guessing, which is the same refusal the switchers already make about an unknown subject.
+    renderAt("/a-screen-nobody-declared")
+
+    const trail = screen.getByRole("navigation", { name: /scope/i })
+    expect(within(trail).queryByRole("heading", { level: 1 })).toBeNull()
+  })
+})
+

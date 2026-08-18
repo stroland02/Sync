@@ -49,7 +49,7 @@ import {
   CommandList,
 } from "@/components/ui/command"
 import { ErrorState } from "@/components/states"
-import { ROUTES } from "@/lib/routes"
+import { DESTINATIONS, ROUTES } from "@/lib/routes"
 import { cn } from "@/lib/utils"
 import { Popover, PopoverContent, PopoverTrigger } from "@/vendor/supabase/ui/popover"
 
@@ -93,6 +93,21 @@ interface Matched {
  * `matchPath` matches to the end, so `/findings/:findingId` cannot claim the workflow nested under
  * it and two routes can never both answer.
  */
+/**
+ * The label the registry gives this address, or `null` where it declares none.
+ *
+ * Reads `ROUTES` and then `DESTINATIONS`, because Settings is a destination rather than a level and
+ * a reader on it still needs the page named. `null` at an address nothing declares: `UnknownRoute`
+ * renders inside this chassis like any other screen, and a trail that invented a name for it would
+ * be the console asserting something nothing computed.
+ */
+function labelFor(pathname: string): string | null {
+  const route = ROUTES.find((entry) => matchPath(entry.path, pathname) !== null)
+  if (route !== undefined) return route.label
+  const destination = DESTINATIONS.find((entry) => matchPath(entry.path, pathname) !== null)
+  return destination?.label ?? null
+}
+
 function matchedRoute(pathname: string): Matched | null {
   for (const route of ROUTES) {
     const match = matchPath(route.path, pathname)
@@ -261,6 +276,10 @@ export function ScopeTrail() {
   const { pathname, search } = useLocation()
   const { repoId, vendorId } = scopeFromLocation(pathname, search)
 
+  // `null` on an address the registry does not declare -- `UnknownRoute` renders inside this
+  // chassis like any other screen, and a trail that invented a name for it would be the console
+  // asserting something nothing computed.
+  const pageLabel = labelFor(pathname)
   const repositories = useRepositories()
   const overview = useOverview()
 
@@ -304,6 +323,22 @@ export function ScopeTrail() {
         hrefFor={(id) => vendorHref(id, repoId)}
         skeletonWidth="w-20"
       />
+
+      {/* The page's own name, and the reason it lives here rather than above the page.
+          Owner decision 7 removed the header from every screen. That header carried a breadcrumb,
+          and this trail was already answering the same question -- what contains what -- so the
+          console drew two trails and the page's was the duplicate. This is the segment the chrome
+          trail was missing, not a relocation of the other one.
+
+          It is the `h1` because a page still owes a reader one top-level heading, and with the
+          header gone this is the only place the page is named. One heading in chrome beats twelve
+          in twelve pages, and it cannot drift from the registry the way a per-page copy did. */}
+      {pageLabel !== null && (
+        <>
+          <Divider />
+          <h1 className="min-w-0 truncate text-body font-medium text-foreground">{pageLabel}</h1>
+        </>
+      )}
     </nav>
   )
 }
