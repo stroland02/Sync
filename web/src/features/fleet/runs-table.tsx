@@ -25,6 +25,7 @@ import {
 } from "@/components/data-table"
 import { FetchedAt } from "@/components/fetched-at"
 import { MetricPanel } from "@/components/metric-panel"
+import { RelativeTime } from "@/components/relative-time"
 import { EmptyState, ErrorState, LoadingState } from "@/components/states"
 import { Formatted } from "@/components/status"
 import { FooterBar } from "@/layouts/footer-bar"
@@ -33,7 +34,7 @@ import {
   describeCardinality,
   isCompleteListing,
 } from "@/features/fleet/cardinality"
-import { formatElapsed, orAbsent } from "@/lib/format"
+import { orAbsent } from "@/lib/format"
 import { useOffsetParam } from "@/lib/use-offset-param"
 
 /** "in flight" for a run with no disposition yet — never "running", which never arrives here. */
@@ -162,7 +163,7 @@ export function RunsCard() {
                         )}
                       </TableCell>
                       <TableCell className="font-mono text-meta">
-                        <Formatted value={formatElapsed(run.last_checkpoint_at)} />
+                        <RelativeTime iso={run.last_checkpoint_at} />
                       </TableCell>
                     </TableRow>
                   ))}

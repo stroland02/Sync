@@ -11,14 +11,8 @@
 
 import { afterEach, describe, expect, it, vi } from "vitest"
 
-import { describeRung, formatElapsed, pathAfter } from "@/lib/format"
+import { describeRung, pathAfter } from "@/lib/format"
 import type { BindingSource } from "@/api/types"
-
-const NOW = new Date("2026-08-06T12:00:00.000Z")
-
-function ago(ms: number): string {
-  return new Date(NOW.getTime() - ms).toISOString()
-}
 
 afterEach(() => {
   vi.useRealTimers()
@@ -59,48 +53,6 @@ describe("describeRung", () => {
   })
 })
 
-describe("formatElapsed", () => {
-  it("returns null for an absent timestamp rather than a duration since the epoch", () => {
-    expect(formatElapsed(null)).toBeNull()
-    expect(formatElapsed(undefined)).toBeNull()
-    expect(formatElapsed("")).toBeNull()
-  })
-
-  it("returns null for a string that is not a timestamp", () => {
-    expect(formatElapsed("last Tuesday")).toBeNull()
-  })
-
-  it("reads zero elapsed as zero seconds", () => {
-    vi.useFakeTimers()
-    vi.setSystemTime(NOW)
-    expect(formatElapsed(NOW.toISOString())).toBe("0s ago")
-  })
-
-  it("never reports a negative duration for a timestamp in the future", () => {
-    // Clock skew between the customer's checkpointer and this browser is ordinary, and
-    // "-3s ago" reads as a bug in the console rather than as a fact about two clocks.
-    vi.useFakeTimers()
-    vi.setSystemTime(NOW)
-    expect(formatElapsed(new Date(NOW.getTime() + 90_000).toISOString())).toBe("0s ago")
-  })
-
-  it("climbs to the coarsest unit that stays readable", () => {
-    vi.useFakeTimers()
-    vi.setSystemTime(NOW)
-    expect(formatElapsed(ago(45_000))).toBe("45s ago")
-    expect(formatElapsed(ago(90_000))).toBe("2m ago")
-    expect(formatElapsed(ago(3 * 3_600_000))).toBe("3h ago")
-    expect(formatElapsed(ago(50 * 3_600_000))).toBe("2d ago")
-  })
-
-  it("crosses each unit boundary rather than reporting 60 of the smaller one", () => {
-    vi.useFakeTimers()
-    vi.setSystemTime(NOW)
-    expect(formatElapsed(ago(60_000))).toBe("1m ago")
-    expect(formatElapsed(ago(3_600_000))).toBe("1h ago")
-    expect(formatElapsed(ago(24 * 3_600_000))).toBe("1d ago")
-  })
-})
 
 describe("pathAfter", () => {
   it("returns what follows a shared directory, so the row carries what distinguishes it", () => {

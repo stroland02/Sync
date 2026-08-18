@@ -34,10 +34,11 @@ import {
   TableRow,
 } from "@/components/data-table"
 import { MetricPanel } from "@/components/metric-panel"
+import { RelativeTime } from "@/components/relative-time"
 import { EmptyState, ErrorState, LoadingState } from "@/components/states"
 import { Absent, Formatted } from "@/components/status"
 import { FooterBar } from "@/layouts/footer-bar"
-import { describeRung, formatElapsed, orAbsent } from "@/lib/format"
+import { describeRung, orAbsent } from "@/lib/format"
 import { useOffsetParam } from "@/lib/use-offset-param"
 
 export interface ChangeUnitStanding {
@@ -132,8 +133,7 @@ function StandingCell({ unit }: { unit: ChangeUnitRow }) {
 
 function CheckpointCell({ unit }: { unit: ChangeUnitRow }) {
   if (unit.last_checkpoint_at === null) return <Absent>no checkpoint recorded</Absent>
-  const age = formatElapsed(unit.last_checkpoint_at)
-  return <Formatted value={age} />
+  return <RelativeTime iso={unit.last_checkpoint_at} />
 }
 
 function ChangeUnitEmptyState({ repoId }: { repoId?: string }) {
