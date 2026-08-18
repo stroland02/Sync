@@ -1,56 +1,95 @@
 /**
- * Where every node on the file-tree canvas sits, and which of them a given viewport needs to
- * render. Positioning reuses `file-tree-graph.ts`'s derivation; `fitViewport`/`zoomViewport`/
- * `panViewport` are `graph-layout.ts`'s own, unchanged -- viewport arithmetic does not depend on
- * what the nodes mean, so this module does not re-derive it.
+ * Where every node on the indexing canvas sits, and which of them a given viewport needs to
+ * render. Positioning reuses the derivations in `file-tree-graph.ts` and `operation-graph.ts`;
+ * `fitViewport`/`zoomViewport`/`panViewport` are unchanged -- viewport arithmetic does not depend
+ * on what the nodes mean, so this module does not re-derive it.
+ *
+ * The column order is the assertion that matters: files, then the operations they call, then the
+ * vendors publishing them. Left to right is the reader's code reaching outward.
  */
 
 import { describe, expect, it } from "vitest"
 
-import { buildFileTreeGraph } from "@/features/index-graph/file-tree-graph"
-import { layoutFileTree, visibleNodes } from "@/features/index-graph/file-tree-layout"
+import { buildFileTree } from "@/features/index-graph/file-tree-graph"
+import { layoutOperationGraph, visibleNodes } from "@/features/index-graph/file-tree-layout"
+import { buildOperationGraph, type CallBindingRow } from "@/features/index-graph/operation-graph"
 
-describe("layoutFileTree", () => {
-  it("gives every tree node and every vendor node a position", () => {
-    const graph = buildFileTreeGraph([{ file: "src/a.ts", vendor: "stripe", binding_source: "static" }])
-    const layout = layoutFileTree(graph)
+const binding = (over: Partial<CallBindingRow> = {}): CallBindingRow => ({
+  file: "src/a.ts",
+  vendorId: "stripe",
+  operationId: "PostCharges",
+  rung: "static",
+  ...over,
+})
 
-    const ids = layout.nodes.map((n) => n.id)
+function layoutOf(rows: CallBindingRow[]) {
+  return layoutOperationGraph(
+    buildFileTree(rows.map((r) => r.file)),
+    buildOperationGraph(rows),
+  )
+}
+
+describe("layoutOperationGraph", () => {
+  it("gives every tree node, operation and vendor a position", () => {
+    const ids = layoutOf([binding()]).nodes.map((n) => n.id)
+
     expect(ids).toContain("path:src")
     expect(ids).toContain("path:src/a.ts")
+    expect(ids).toContain("operation:stripe:PostCharges")
     expect(ids).toContain("vendor:stripe")
   })
 
   it("places a file strictly to the right of its parent folder", () => {
-    const graph = buildFileTreeGraph([{ file: "src/a.ts", vendor: "stripe", binding_source: "static" }])
-    const layout = layoutFileTree(graph)
+    const layout = layoutOf([binding()])
 
     const folder = layout.nodes.find((n) => n.id === "path:src")!
     const file = layout.nodes.find((n) => n.id === "path:src/a.ts")!
     expect(file.x).toBeGreaterThan(folder.x)
   })
 
-  it("places the vendor column to the right of every file column", () => {
-    const graph = buildFileTreeGraph([{ file: "deeply/nested/a.ts", vendor: "stripe", binding_source: "static" }])
-    const layout = layoutFileTree(graph)
+  /** Files, then operations, then vendors. The order is the picture's argument. */
+  it("places the three columns left to right", () => {
+    const layout = layoutOf([binding({ file: "deeply/nested/a.ts" })])
 
-    const vendor = layout.nodes.find((n) => n.id === "vendor:stripe")!
     const fileXs = layout.nodes.filter((n) => n.id.startsWith("path:")).map((n) => n.x)
-    expect(vendor.x).toBeGreaterThan(Math.max(...fileXs))
+    const operation = layout.nodes.find((n) => n.kind === "operation")!
+    const vendor = layout.nodes.find((n) => n.id === "vendor:stripe")!
+
+    expect(operation.x).toBeGreaterThan(Math.max(...fileXs))
+    expect(vendor.x).toBeGreaterThan(operation.x)
   })
 
-  it("draws one edge per file-vendor pair at the derivation's own positions", () => {
-    const graph = buildFileTreeGraph([{ file: "a.ts", vendor: "stripe", binding_source: "static" }])
-    const layout = layoutFileTree(graph)
+  it("routes a file to its vendor through the operation rather than straight across", () => {
+    const layout = layoutOf([binding({ file: "a.ts" })])
 
-    expect(layout.edges).toHaveLength(1)
-    expect(layout.edges[0].from).toBe("path:a.ts")
-    expect(layout.edges[0].to).toBe("vendor:stripe")
+    expect(layout.edges).toHaveLength(2)
+    expect(layout.edges).toContainEqual({
+      id: "edge:a.ts->stripe:PostCharges",
+      from: "path:a.ts",
+      to: "operation:stripe:PostCharges",
+    })
+    expect(layout.edges).toContainEqual({
+      id: "edge:stripe:PostCharges->stripe",
+      from: "operation:stripe:PostCharges",
+      to: "vendor:stripe",
+    })
+    expect(layout.edges.some((e) => e.from.startsWith("path:") && e.to.startsWith("vendor:"))).toBe(
+      false,
+    )
+  })
+
+  it("draws one operation node per vendor even when two vendors share an operation name", () => {
+    const layout = layoutOf([
+      binding({ vendorId: "stripe", operationId: "Charge" }),
+      binding({ vendorId: "adyen", operationId: "Charge" }),
+    ])
+
+    const operations = layout.nodes.filter((n) => n.kind === "operation")
+    expect(operations).toHaveLength(2)
   })
 
   it("returns empty nodes and edges for an empty graph, not a crash", () => {
-    const graph = buildFileTreeGraph([])
-    const layout = layoutFileTree(graph)
+    const layout = layoutOf([])
 
     expect(layout.nodes).toEqual([])
     expect(layout.edges).toEqual([])

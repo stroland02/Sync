@@ -31,10 +31,11 @@ import { BINDING_SOURCES, type RepositoryGraphBinding } from "@/api/types"
 import { Button } from "@/components/ui/button"
 import { describeRung } from "@/lib/format"
 import { cn } from "@/lib/utils"
-import { buildFileTreeGraph, type FileVendorRow } from "@/features/index-graph/file-tree-graph"
+import { buildFileTree } from "@/features/index-graph/file-tree-graph"
+import { buildOperationGraph, type CallBindingRow } from "@/features/index-graph/operation-graph"
 import {
   fitViewport,
-  layoutFileTree,
+  layoutOperationGraph,
   panViewport,
   visibleNodes,
   zoomViewport,
@@ -53,11 +54,26 @@ export const EMPTY_GRAPH_NOTE =
 
 const CANVAS_HEIGHT = "h-[36rem]"
 
-function rowToFileVendorRow(row: RepositoryGraphBinding): FileVendorRow {
-  return { file: row.path, vendor: row.vendor_id, binding_source: row.binding_rung }
+function rowToBinding(row: RepositoryGraphBinding): CallBindingRow {
+  return {
+    file: row.path,
+    vendorId: row.vendor_id,
+    operationId: row.operation_id,
+    rung: row.binding_rung,
+  }
 }
 
 function NodeLabel({ node }: { node: FileTreeLayoutNode }) {
+  if (node.kind === "operation") {
+    // The operation carries the vendor's name as well as its own: two vendors may both publish
+    // `Charge`, and a node showing only the id would read as one operation in two places.
+    return (
+      <div className="flex h-full w-full flex-col justify-center rounded-control border border-line bg-surface-muted px-field">
+        <span className="min-w-0 truncate font-mono text-meta text-ink">{node.operationId}</span>
+        <span className="min-w-0 truncate text-meta text-ink-muted">{node.vendorId}</span>
+      </div>
+    )
+  }
   if (node.kind === "vendor") {
     return (
       <div className="flex h-full w-full items-center justify-center rounded-surface border border-line bg-surface px-field text-emphasis">
@@ -129,15 +145,17 @@ export function FileTreeCanvas({
   className,
 }: {
   rows: RepositoryGraphBinding[]
-  /** Every vendor the caller already knows exists, so a truncated response cannot silently drop one -- see `buildFileTreeGraph`'s own docstring. */
+  /** Every vendor the caller already knows exists, so a truncated response cannot silently drop one -- see `buildOperationGraph`'s own docstring. */
   knownVendorIds?: string[]
   className?: string
 }) {
+  const bindings = useMemo(() => rows.map(rowToBinding), [rows])
+  const tree = useMemo(() => buildFileTree(bindings.map((b) => b.file)), [bindings])
   const graph = useMemo(
-    () => buildFileTreeGraph(rows.map(rowToFileVendorRow), knownVendorIds),
-    [rows, knownVendorIds]
+    () => buildOperationGraph(bindings, knownVendorIds),
+    [bindings, knownVendorIds]
   )
-  const layout = useMemo(() => layoutFileTree(graph), [graph])
+  const layout = useMemo(() => layoutOperationGraph(tree, graph), [tree, graph])
   const fit = useMemo(() => fitViewport(layout.bounds), [layout.bounds])
   const [panned, setPanned] = useState<Viewport | null>(null)
   const drag = useRef<{ x: number; y: number } | null>(null)
@@ -174,7 +192,21 @@ export function FileTreeCanvas({
     drag.current = null
   }
 
-  const rungsByEdgeId = useMemo(() => new Map(graph.edges.map((e) => [`edge:${e.file}->${e.vendorId}`, e.rungs])), [graph.edges])
+  // Both hops, keyed by the ids `layoutOperationGraph` builds. Every edge on this canvas has a
+  // rung, which is what the operation level bought: a file drawn straight to a vendor spanned two
+  // bindings and a rung on that hop named neither of them.
+  const rungsByEdgeId = useMemo(
+    () =>
+      new Map<string, typeof graph.fileEdges[number]["rungs"]>([
+        ...graph.fileEdges.map(
+          (e) => [`edge:${e.file}->${e.vendorId}:${e.operationId}`, e.rungs] as const
+        ),
+        ...graph.vendorEdges.map(
+          (e) => [`edge:${e.vendorId}:${e.operationId}->${e.vendorId}`, e.rungs] as const
+        ),
+      ]),
+    [graph.fileEdges, graph.vendorEdges]
+  )
 
   return (
     <section className={cn("flex min-w-0 flex-col gap-section", className)}>
@@ -232,6 +264,19 @@ export function FileTreeCanvas({
           <Minimap nodes={layout.nodes} frame={fit} view={view} />
         </div>
       </div>
+
+      {graph.unroutable.length > 0 && (
+        <p className="text-meta text-ink-muted leading-relaxed">
+          <span className="furniture rounded-control border border-line px-field text-meta">
+            not drawn
+          </span>{" "}
+          {graph.unroutable.length}{" "}
+          {graph.unroutable.length === 1 ? "binding names" : "bindings name"} no operation, so
+          there is no node to route {graph.unroutable.length === 1 ? "it" : "them"} through.{" "}
+          {graph.unroutable.map((b) => b.file).join(", ")} — held by the graph and left off the
+          picture rather than given an invented node.
+        </p>
+      )}
 
       <ul aria-label="Provenance rungs" className="flex flex-wrap gap-section">
         {BINDING_SOURCES.map((rung) => (
