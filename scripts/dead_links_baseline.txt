@@ -50,7 +50,6 @@ src/sync/obs/log.py:_SafeStreamHandler.emit
 # scanner cannot see. Deleting the override to satisfy this lint would restore the defect it
 # fixes, which `tests/test_obs_log.py` holds by writing to the borrowed stream after a second
 # `configure` and a forced collection.
-src/sync/obs/log.py:_BorrowedTextIOWrapper.close
 
 # `sync.remediate.sandbox` (B97) is the container-level network boundary proven against a real
 # Docker Desktop in `tests/test_patch_sandbox.py`. `ephemeral_container` came out of this list
@@ -122,7 +121,6 @@ src/sync/index/codebase.py:index_codebase
 # not make for the owner. `docs/superpowers/specs/2026-07-25-sync-threat-model.md`'s own ledger
 # records precisely what this closes (mitigations 1 and 3) and what it does not (mitigation 5:
 # read-only root, a per-container wall-clock kill -- `ephemeral_container` still grants neither).
-src/sync/runner/docker_sdk.py:DockerSdkRunner
 
 # Owner decision 45, added 2026-08-18. Dismissal was ruled explicitly NOT a rendering change,
 # so the schema, its closed vocabulary and the reads over it landed first and the write path
