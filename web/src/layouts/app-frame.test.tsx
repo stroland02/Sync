@@ -342,6 +342,43 @@ describe("the sidebar changes density without moving a row", () => {
   // button because hovering is the mechanism, and two ways to open one panel is what made this
   // sidebar hard to reason about. Nothing they guaranteed is lost -- row stability across the
   // reveal is asserted directly above against a pointer, which is now the only thing that opens it.
+  it("never renders a destination as something that absorbs a click", () => {
+    // The defect the owner hit running the console: nine of twelve routes need a bound parameter,
+    // so `destinationHref` returned null for most of the sidebar and the row rendered as a <span>
+    // that looked like a button and swallowed the press. A vanished control is honest; one that
+    // takes the click and does nothing reads as broken software.
+    //
+    // It also contradicted the owner's own instruction from the same review -- do not limit buttons
+    // by where you are currently looking -- and it is the worse half of that failure.
+    renderAt("/")
+
+    const rows = [...destinations().querySelectorAll("[data-destination]")]
+    expect(rows.length).toBeGreaterThan(0)
+    for (const row of rows) {
+      expect(row.tagName).toBe("A")
+      expect(row.getAttribute("href")).toBeTruthy()
+    }
+  })
+
+  it("sends a row whose subject is unbound to the place that selects one", () => {
+    // The codebase is the independent variable, so a route needing :repoId with none selected goes
+    // to where a codebase is chosen rather than nowhere. The row still says what it needs.
+    renderAt("/")
+
+    const unbound = destinations().querySelector('[data-destination="/repositories/:repoId"]')
+    expect(unbound).not.toBeNull()
+    expect(unbound!.getAttribute("href")).toBe("/")
+    expect(unbound!.getAttribute("aria-label")).toMatch(/reached from/i)
+  })
+
+  it("binds the subject from the selected codebase when the address carries one", () => {
+    renderAt("/repositories/org%2Fone")
+
+    const bound = destinations().querySelector('[data-destination="/repositories/:repoId/vendors"]')
+    expect(bound).not.toBeNull()
+    expect(bound!.getAttribute("href")).toBe("/repositories/org%2Fone/vendors")
+  })
+
   it("keeps every destination reachable at the rail width", () => {
     // No hover, no pin, no click of any kind: this is the state the console loads in now.
     renderAt("/")
@@ -551,23 +588,15 @@ describe("the sidebar carries the destinations", () => {
   })
 
   it("says where to go instead, on a row the address supplies no subject for", () => {
-    // Standing on `/detectors`, the Observe sidebar holds two rows and only one of them can link:
-    // no vendor and no operation are in the address, and generating one anyway would produce
-    // `/bindings/vendors//operations/`. `reachedFrom` is what a reader gets instead.
-    renderAt("/detectors")
+    // Inverted on 2026-08-18. This used to assert the row was a SPAN, which was the defect: it
+    // looked pressable and swallowed the click. The sentence it guards -- the row names what it is
+    // reached from -- survives and is what still matters; only the element changed.
+    renderAt("/")
 
-    const rows = destinationRows()
-    const binding = rows.find(
-      (row) =>
-        row.getAttribute("data-destination") ===
-        "/bindings/vendors/:vendorId/operations/:operationId"
-    )
-
-    expect(binding?.tagName).toBe("SPAN")
-    expect(binding?.getAttribute("href")).toBeNull()
-    expect(binding?.getAttribute("aria-label")).toContain(
-      "an operation on a vendor's findings table"
-    )
+    const unbound = destinations().querySelector('[data-destination="/findings/:findingId"]')
+    expect(unbound).not.toBeNull()
+    expect(unbound!.tagName).toBe("A")
+    expect(unbound!.getAttribute("aria-label")).toMatch(/reached from/i)
   })
 
   it("drops the sentence about where to look once the row is a link", () => {
