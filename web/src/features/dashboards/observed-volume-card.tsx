@@ -31,7 +31,8 @@ import {
 import type { ChartTokens } from "@/components/charts/echart"
 import { EChart } from "@/components/charts/echart"
 import { MetricPanel } from "@/components/metric-panel"
-import { EmptyState, ErrorState, LoadingState } from "@/components/states"
+import { ErrorState, LoadingState } from "@/components/states"
+import { TableEmptyState } from "@/components/table-empty"
 import { Absent } from "@/components/status"
 import {
   buildOperationSparklineOption,
@@ -90,18 +91,7 @@ export function ObservedVolumeCard() {
         </p>
       }
     >
-      {!volume.telemetryAttached ? (
-        <EmptyState
-          headline="Never measured."
-          detail="No telemetry has been attached to this repository, so nothing has looked at its traffic. This is the absence of a measurement rather than a measurement of nothing — an operation with no calls here would look identical, and the two are not the same fact."
-        />
-      ) : volume.operations.length === 0 ? (
-        <EmptyState
-          headline="Telemetry is attached and has seen no calls."
-          detail={`Attached ${formatTimestamp(volume.attachedAt) ?? "at an unrecorded time"}. This is a measured nought: something looked and found no traffic, which is a different answer from never having looked.`}
-        />
-      ) : (
-        <div className="flex flex-col gap-field">
+      <div className="flex flex-col gap-field">
           <Table>
             <TableHeader>
               <TableRow>
@@ -113,6 +103,19 @@ export function ObservedVolumeCard() {
                 <TableHead>Over time</TableHead>
               </TableRow>
             </TableHeader>
+            {!volume.telemetryAttached ? (
+              <TableEmptyState
+                columns={6}
+                headline="Never measured."
+                detail="No telemetry has been attached to this repository, so nothing has looked at its traffic. This is the absence of a measurement rather than a measurement of nothing — an operation with no calls here would look identical, and the two are not the same fact."
+              />
+            ) : volume.operations.length === 0 ? (
+              <TableEmptyState
+                columns={6}
+                headline="Telemetry is attached and has seen no calls."
+                detail={`Attached ${formatTimestamp(volume.attachedAt) ?? "at an unrecorded time"}. This is a measured nought: something looked and found no traffic, which is a different answer from never having looked.`}
+              />
+            ) : (
             <TableBody>
               {volume.operations.map((operation) => (
                 <TableRow key={`${operation.vendorId}-${operation.operationId}`}>
@@ -139,8 +142,10 @@ export function ObservedVolumeCard() {
                 </TableRow>
               ))}
             </TableBody>
+            )}
           </Table>
 
+          {volume.operations.length > 0 && (
           <p className="text-meta text-ink-muted leading-relaxed">
             {volume.complete ? (
               <>Counted over all {volume.totalRows.toLocaleString()} observed-call rows.</>
@@ -159,8 +164,8 @@ export function ObservedVolumeCard() {
             rung arrived at both: a span that correlated to it and a span that did not are two
             observations, not one stronger one.
           </p>
-        </div>
-      )}
+          )}
+      </div>
     </MetricPanel>
   )
 }
