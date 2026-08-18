@@ -677,3 +677,26 @@ not built.
 findings, then `✓ http://localhost:5170`. **Rejected: the URL alone**, and **rejected: adding a
 not-measured-yet block** — which would have put the console's honesty discipline into a terminal
 before anybody has seen a screen.
+
+### 73 settled by owner reaffirmation: motion and live progress are wanted
+
+**The owner reaffirmed after the objection was raised**, and asked for live progress and motion
+across the console. **That is the decision.** What follows is the distinction that lets it be built
+without reintroducing the thing `CLAUDE.md:63` refuses, because the two are separable and the
+separation makes the interface *more* alive rather than less:
+
+- **Motion driven by a received event is honest.** A stage transition that actually arrived, a row
+  that actually inserted, a count that actually changed — animating those is showing something true,
+  and it is the kind of motion that makes a console feel connected to a running system.
+- **Motion driven by a timer is the pulse that was refused.** A spinner on `awaiting CI` rotates
+  identically whether CI is running or the run died forty minutes ago. It looks like information and
+  is not.
+
+**So the rule is: animation is bound to the event stream, never to a clock.** A run that has produced
+no event within its own stage's expected window **stops animating and says how long it has been
+silent**. That is strictly more informative than a perpetual spinner, and it is what a reviewer
+actually needs to know.
+
+`CLAUDE.md:63` is amended by the owner to this extent and no further: **motion reflecting a received
+transition is permitted. A composite score, a health figure, a traffic light and a green dot standing
+for aggregate wellness remain refused.**
