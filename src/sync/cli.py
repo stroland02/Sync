@@ -41,6 +41,7 @@ from sync.forge.webhook import (
 from sync.graph.store import DEFAULT_DSN, GraphStore
 from sync.graph.heartbeat import RunHeartbeat
 from sync.index.codebase import _resolve_repo_ref, index_codebase, remote_repo_id
+from sync.index.facts import compute_facts
 from sync.index.literals import index_operation_literals
 from sync.index.python_lang import PythonAdapter
 from sync.index.typescript import TypeScriptAdapter
@@ -2315,6 +2316,12 @@ def index_repository(args: argparse.Namespace) -> int:
         finished_at=datetime.now(timezone.utc),
         call_sites=len(report.call_sites),
     )
+
+    # The technical census, in the same pass: languages, lines, git history, declared
+    # dependencies, toolchain markers. Computed here because indexing is the moment the tree
+    # is in hand and provably current -- a census on a different schedule would describe a
+    # checkout the call sites might not.
+    store.upsert_codebase_facts(repo_id, compute_facts(repo_path))
 
     print(f"indexed {report.repo.repo_id}: {len(report.call_sites)} call sites")
     if report.vendors:

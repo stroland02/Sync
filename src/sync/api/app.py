@@ -229,6 +229,7 @@ def create_app(
     setup_reader: SetupReader | None = None,
     staging_reader: StagingReader | None = None,
     staging_writer: StagingWriter | None = None,
+    facts_reader: Callable[[str], dict[str, Any] | None] | None = None,
     api_password: str | None = None,
 ) -> Starlette:
     """Build the Starlette app bound to a particular surface and readers.
@@ -494,6 +495,15 @@ def create_app(
             return JSONResponse({"error": "Setup reader not configured"}, status_code=501)
         return JSONResponse(setup_reader(repo_id=request.query_params.get("repo_id")))
 
+    async def codebase_facts_route(request: Request) -> JSONResponse:
+        """One repository's technical census. `facts: null` is an answer -- indexed never, or
+        before the census existed -- and deliberately not a 404, which B147 measured reading
+        as a repository that does not exist."""
+        if facts_reader is None:
+            return JSONResponse({"error": "Facts reader not configured"}, status_code=501)
+        repo_id = request.path_params["repo_id"]
+        return JSONResponse({"repo_id": repo_id, "facts": facts_reader(repo_id)})
+
     async def get_staging(request: Request) -> JSONResponse:
         """A vendor's declared staging fields and their current values (B195). An empty schema
         is an answer -- the vendor has nothing to configure -- and never a 404."""
@@ -739,6 +749,7 @@ def create_app(
         Route("/api/workflows/{finding_id}", workflow, methods=["GET"]),
         Route("/api/runs", runs, methods=["GET"]),
         Route("/api/setup", setup, methods=["GET"]),
+        Route("/api/repositories/{repo_id:path}/facts", codebase_facts_route, methods=["GET"]),
         Route("/api/adapters/{vendor_id}/staging", get_staging, methods=["GET"]),
         Route("/api/adapters/{vendor_id}/staging", set_staging, methods=["POST"]),
         Route("/api/corpus", corpus, methods=["GET"]),

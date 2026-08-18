@@ -2899,6 +2899,30 @@ class GraphStore:
             ],
         )
 
+    def upsert_codebase_facts(self, repo_id: str, facts: dict) -> None:
+        """Replace one repository's technical census with the pass that just ran."""
+        self._connect().execute(
+            """
+            INSERT INTO codebase_facts (repo_id, facts, computed_at)
+            VALUES (%s, %s, now())
+            ON CONFLICT (repo_id) DO UPDATE SET
+               facts = EXCLUDED.facts,
+               computed_at = now()
+            """,
+            [repo_id, json.dumps(facts)],
+        )
+
+    def codebase_facts(self, repo_id: str) -> dict | None:
+        """The newest census for one repository, or None when no index pass has written one."""
+        row = self._connect().execute(
+            "SELECT facts, computed_at FROM codebase_facts WHERE repo_id = %s",
+            [repo_id],
+        ).fetchone()
+        if row is None:
+            return None
+        facts = row["facts"] if isinstance(row["facts"], dict) else json.loads(row["facts"])
+        return {**facts, "computed_at": row["computed_at"].isoformat()}
+
     def begin_run_heartbeat(self, thread_id: str, *, expire_after_secs: int = 90) -> None:
         """Open (or re-open, on resume) the heartbeat row for one run.
 

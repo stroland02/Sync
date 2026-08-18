@@ -312,7 +312,10 @@ function AppSidebar({ pathname }: { pathname: string }) {
                 two borders meet as one continuous line at the sidebar's right edge — the owner
                 measured them out of parallel when this header stacked ad-hoc rows inside its own
                 padding. Everything below the line is content; this row alone is chrome. */}
-            <div className="flex h-12 shrink-0 items-center gap-field border-b border-line px-row">
+            {/* `px-section`, because a destination row's label sits at group padding plus the
+                button's own — 16px — and every block in this column shares that left edge, or
+                the sidebar reads as three misaligned grids. */}
+            <div className="flex h-12 shrink-0 items-center gap-field border-b border-line px-section">
               <span
                 className={
                   minimised
@@ -339,7 +342,7 @@ function AppSidebar({ pathname }: { pathname: string }) {
               className={
                 minimised
                   ? "sr-only"
-                  : "flex min-w-0 flex-col gap-field border-b border-line px-row py-row"
+                  : "flex min-w-0 flex-col gap-field border-b border-line px-section py-row"
               }
             >
               {workspace !== null && (
@@ -394,26 +397,27 @@ function AppSidebar({ pathname }: { pathname: string }) {
               inventing a name. */}
           <div className="flex flex-col gap-0 border-t border-line px-row py-row">
             <SidebarMenu className="gap-0">
-              <SidebarMenuItem>
-                <SidebarMenuButton asChild className="h-7 text-body">
-                  <Link
-                    to="/settings?group=github-connection"
-                    title={
-                      forgeLogin !== null
-                        ? `Signed in to the forge as ${forgeLogin}`
-                        : "No forge account connected"
-                    }
-                    aria-label="Account"
-                  >
-                    <CircleUserRound aria-hidden="true" className="size-4 text-graphics" />
-                    <span className={minimised ? "sr-only" : "min-w-0 truncate font-mono text-meta"}>
-                      {setupQuery.isPending
-                        ? "asking…"
-                        : (forgeLogin ?? "no forge account")}
-                    </span>
-                  </Link>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
+              {/* Identity, not navigation: there is no account page, so this row does not
+                  pretend to open one — the owner caught it landing on the same screen as
+                  Settings. It states who the forge credential speaks as, at the exact metrics
+                  of the rows around it so the column stays one grid. */}
+              <div
+                className="flex h-7 items-center gap-row px-row"
+                title={
+                  forgeLogin !== null
+                    ? `Signed in to the forge as ${forgeLogin}`
+                    : "No forge account connected"
+                }
+              >
+                <CircleUserRound aria-hidden="true" className="size-4 shrink-0 text-graphics" />
+                <span
+                  className={
+                    minimised ? "sr-only" : "min-w-0 truncate font-mono text-meta text-ink-muted"
+                  }
+                >
+                  {setupQuery.isPending ? "asking…" : (forgeLogin ?? "no forge account")}
+                </span>
+              </div>
               {DESTINATIONS.map((entry) => (
                 <SidebarMenuItem key={entry.path}>
                   <SidebarMenuButton

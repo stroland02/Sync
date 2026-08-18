@@ -524,6 +524,18 @@ CREATE TABLE IF NOT EXISTS repo_settings (
 -- database that predates it -- this is the one statement that reaches them.
 ALTER TABLE repo_settings ADD COLUMN IF NOT EXISTS remote_url TEXT;
 
+-- Grain: one row per repository -- the newest technical census of its checkout.
+--
+-- Converged rather than accumulated: `sync index` recomputes the whole document each pass, so
+-- the upsert replaces it, and `computed_at` says when the census ran. History is deliberately
+-- not kept here -- a fact document per pass would be a second, quieter copy of `index_run`'s
+-- timeline with none of its outcome discipline.
+CREATE TABLE IF NOT EXISTS codebase_facts (
+    repo_id     TEXT PRIMARY KEY,
+    facts       JSONB NOT NULL,
+    computed_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
 -- Grain: one row per checkpoint thread -- the same grain as a run, one generation of one finding.
 --
 -- The liveness the checkpointer cannot carry (B194). A checkpoint records progress, so a run

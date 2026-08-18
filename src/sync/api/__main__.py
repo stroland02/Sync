@@ -163,6 +163,9 @@ def app_factory() -> Starlette:
     def repositories_reader():
         return fleet.repositories(store)
 
+    def facts_reader(repo_id: str):
+        return store.codebase_facts(repo_id)
+
     def staging_reader(vendor_id: str):
         return {
             "vendor_id": vendor_id,
@@ -367,6 +370,7 @@ def app_factory() -> Starlette:
         setup_reader=setup_reader,
         staging_reader=staging_reader,
         staging_writer=staging_writer,
+        facts_reader=facts_reader,
         api_password=configured_api_password(),
     )
 
