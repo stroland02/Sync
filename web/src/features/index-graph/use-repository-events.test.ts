@@ -64,8 +64,12 @@ describe("useRepositoryEvents", () => {
     expect(result.current.indexedCount).toBe(2)
   })
 
-  /** A heartbeat says the stream is alive and nothing else. It must never move a domain count. */
-  it("does not count a heartbeat as work", () => {
+  /**
+   * The heartbeat is an SSE comment now, so it never reaches a handler and this hook cannot see
+   * it. Asserted from the other side: an unrecognised event moves nothing, which is what stops a
+   * future frame type quietly inflating a count.
+   */
+  it("counts nothing it does not recognise", () => {
     const { result } = renderHook(() => useRepositoryEvents("r1"))
 
     act(() => {

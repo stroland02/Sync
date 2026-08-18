@@ -378,6 +378,12 @@ def create_app(
                 # Two newlines end an SSE frame; one separates its fields. Written as
                 # escapes rather than a multi-line literal so the framing cannot be
                 # reformatted away by an editor that trims trailing whitespace.
+                if event["kind"] == "heartbeat":
+                    # A comment line. It reaches no handler and carries no fact -- it exists
+                    # so a proxy does not close an idle connection and make silence look
+                    # like a drop.
+                    yield ": heartbeat\n\n"
+                    continue
                 frame = "event: " + event["kind"] + "\n"
                 frame += "data: " + json.dumps(event) + "\n\n"
                 yield frame

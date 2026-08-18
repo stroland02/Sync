@@ -24,6 +24,7 @@
  * this; picked up once nothing else owned that file.
  */
 
+import { useEffect } from "react"
 import { useParams } from "react-router"
 
 import { useRepositoryGraph } from "@/api/queries"
@@ -48,9 +49,18 @@ export function IndexGraphPage() {
 
 function IndexGraphDetail({ repoId }: { repoId: string }) {
   const query = useRepositoryGraph(repoId)
-  // The banner carries the aliveness; the graph below stays settled until the reader asks,
-  // which is decision 87 applied to the canvas deliberately rather than 78 being dropped.
+  // The canvas builds visibly and the banner accompanies it. Decision 87 protects a reader
+  // *reading* a table; this is a surface you are *watching build*, and freezing it removes the
+  // one moment the one-command install exists to create.
   const stream = useRepositoryEvents(repoId)
+
+  // Each arrival re-reads the settled graph, so the picture grows from the same source of
+  // truth every other screen uses rather than from a second one assembled off the wire. The
+  // event says *something landed*; the read says *what the graph now holds*.
+  useEffect(() => {
+    if (stream.indexedCount === 0) return
+    void query.refetch()
+  }, [stream.indexedCount, query])
 
   if (query.isPending) return <LoadingState what={`the indexed graph for ${repoId}`} />
   if (query.isError) {
@@ -71,7 +81,7 @@ function IndexGraphDetail({ repoId }: { repoId: string }) {
       <IndexStreamBanner
         indexedCount={stream.indexedCount}
         status={stream.status}
-        onShow={() => void query.refetch()}
+        onReread={() => void query.refetch()}
       />
       {state.kind === "never-recorded" && (
         <div className="flex flex-col gap-field rounded-surface border border-line bg-surface p-section">

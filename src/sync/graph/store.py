@@ -1541,6 +1541,34 @@ class GraphStore:
             (finding_id, reason, actor, at),
         )
 
+        # Emitted now rather than when a write path lands, because the write path is in flight
+        # rather than anticipated -- this is not the dead usage `lib/motion.ts` recorded.
+        #
+        # A restore is its own kind rather than a dismissal carrying a null reason. They are
+        # opposite decisions, and a console told only that *something changed* would have to
+        # re-read to learn which. The reason travels on a dismissal because it is the one signal
+        # feeding detector accuracy, and a toast that could not say why a row left the list would
+        # be reporting a disappearance rather than a decision.
+        site = self._connect().execute(
+            """
+            SELECT call_site.repo_id AS repo_id
+              FROM finding
+              JOIN call_site ON call_site.id = finding.call_site_id
+             WHERE finding.id = %s
+            """,
+            (finding_id,),
+        ).fetchone()
+        if site is not None:
+            event = {
+                "kind": "finding.dismissed" if reason is not None else "finding.restored",
+                "repo_id": site["repo_id"],
+                "finding_id": finding_id,
+                "actor": actor,
+            }
+            if reason is not None:
+                event["reason"] = reason
+            self._publish(event)
+
     def dismissal_state(self, finding_id: str) -> dict:
         """Whether this finding stands dismissed right now, and on whose word.
 
