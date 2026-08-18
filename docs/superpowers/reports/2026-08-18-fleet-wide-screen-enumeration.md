@@ -120,3 +120,72 @@ amendment is what makes it buildable, and that is the owner's to record.**
 3. Group B is then three console changes and no API work.
 4. **Only then** the chrome items (3–8). The owner's own sequencing note is right: compacting a
    sidebar whose contents are about to change is work done twice.
+
+---
+
+# Amendment, same day: re-enumerated against the ladder the owner actually gave
+
+Everything above was written against *"a workspace connected to one codebase"*, which I read as a
+**new level above Codebase**. The owner then gave the positive definition and it is not that:
+
+> The Overview **is** the codebase — all findings and everything pertaining to the selected codebase.
+> Ladder: `[switcher] → Overview → API Services → Signals/Bindings/Errors → Finding → Workflow → PR`.
+
+**That collapses a level rather than adding one.** Overview and the specification's `Codebase` become
+one screen, and `Fleet` does not become a workspace — it **disappears into the scope switcher**, which
+is chrome rather than a rung. Selection stops being a destination.
+
+## What the amendment to the specification actually is
+
+Surgical, and smaller than the first reading implied. In the authoritative block at
+`specs/2026-07-25-sync-self-maintaining-apis-design.md:427-445`:
+
+- **Delete the `Fleet` node.** Its stated job — *"an index into the level below, never a substitute
+  for it"* — is precisely the show-all the owner is removing.
+- **`Codebase (the selected repository)` becomes the root.**
+- `GRAPH_LEVELS` goes from **nine to eight**. Nothing is renamed, nothing is reparented, nothing is
+  invented.
+
+**The screen title is not the level.** The owner calls the screen "Overview" and the level stays
+`Codebase`. That is the precedent `M14-W362` already set and `tests/test_console_hierarchy.py` already
+tolerates: a display rename is not a hierarchy change.
+
+**Why this cannot be done from the console side first.** `test_console_hierarchy.py` parses that
+fenced block and asserts `GRAPH_LEVELS` matches it in order. Removing `Fleet` from the array before
+the block loses it turns the test red, and editing the array to match a spec that still says nine is
+exactly the drift the rule exists to catch. **The specification is the only door.**
+
+## What changes in the enumeration above
+
+**Groups A, B and C are unchanged.** Scoping detectors, the service detail and the binding surface is
+the same work under either reading, and B147 blocks the same screen either way.
+
+**Group E changes completely.** The Overview is not repurposed into a workspace picker; it *merges
+with* `/repositories/:repoId`. Two consequences:
+
+- **The four fleet counts do not get a workspace-scoped version — they get deleted or moved.** Two of
+  the four (`/api/runs`, `/api/corpus`) are in Group D and cannot be scoped at all. Under the old
+  reading they might have lived on a fleet-level workspace screen. Under this ladder **there is no
+  fleet level for them to live on.**
+- **The protected absence sentence loses its referent outright.** *"no row in the repository list
+  below"* names a list that will not be on this screen at all. It does not survive a re-placement; it
+  needs a new referent, and the switcher already states the same absence in its own words
+  (`scope-switchers.tsx`: *"One that was configured but never indexed writes no call site, so it has
+  no entry here either"*). **That is where the sentence has to point**, and rewording it is
+  constrained: `.claude/rules/console-surface.md` permits restyling and re-placing, never shortening.
+
+**Group D gets sharper, and it is now the blocking decision rather than one of several.** Collapsing
+`Fleet` leaves Runs and the repair record with **nowhere to go**. They cannot be scoped — no column
+exists — and the level they currently sit on is being deleted. So the three options in Group D are no
+longer "which scope should these have"; they are:
+
+1. **Add the columns** (`repo_id` on `migration_outcome` and on the run payload) so they belong to the
+   codebase like everything else.
+2. **Delete the screens**, which loses the repair record — Gate 1's whole subject.
+3. **Admit a deployment scope beside the codebase**, reachable from Settings rather than from the
+   ladder. `app.py:76-78` already argues exactly this for adapters and argues it correctly.
+
+**My recommendation is unchanged and now more strongly held:** option 3 for adapters, option 1 for
+runs and the repair record, option 2 for nothing. But the collapse makes this urgent rather than
+tidy — **it is the one decision that blocks the amendment**, because the amendment deletes the level
+those screens stand on.
