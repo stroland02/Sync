@@ -57,7 +57,6 @@ Added 2026-08-18 (M0-W326):
   src/components/ui/accordion.tsx
   src/components/ui/alert.tsx
   src/components/ui/avatar.tsx
-  src/components/ui/chart.tsx
   src/components/ui/checkbox.tsx
   src/components/ui/collapsible.tsx
   src/components/ui/hover-card.tsx
@@ -67,11 +66,20 @@ Added 2026-08-18 (M0-W326):
   src/components/ui/pagination.tsx
   src/components/ui/progress.tsx
   src/components/ui/radio-group.tsx
-  src/components/ui/resizable.tsx
-  src/components/ui/sonner.tsx
   src/components/ui/switch.tsx
   src/components/ui/toggle-group.tsx
   src/components/ui/toggle.tsx
+
+`chart` was added by `M14-W388` and REMOVED by `M14-W392`, with `recharts`
+dropped from package.json alongside it. It was the only importer of recharts,
+while this console's dashboards are built on echarts -- four modules use it and it
+already has a jsdom stub. Two charting libraries is weight for no gain, so the
+console has one, and it is echarts. A shadcn chart is an echarts decision first if
+it is ever wanted.
+
+`resizable` and `sonner` are kept. Their peer dependencies were declared correctly
+by `M14-W388` and both have named upcoming consumers -- split panes and drawers,
+transient notices.
 
 `form` was requested and is absent: `npx shadcn@latest add form` reports success
 and creates nothing, twice, with no error. `toggle` was not requested and is

@@ -743,6 +743,68 @@ def vendor_change_volume(store: GraphStore, vendor_id: str) -> dict:
     }
 
 
+def repository_graph(store: GraphStore, repo_id: str, *, limit: int | None = None) -> dict:
+    """This repository's call sites and the vendors they reach: the graph the Overview draws.
+
+    Owner decision 2 puts the dependency graph beside the fact tiles on the first screen, which
+    makes it not optional. `DependencyCanvas` already draws one; what did not exist was a scoped
+    read answering the whole graph at once. The console cannot know which operations to ask about
+    before it has the graph naming them, so composing this from the per-operation route would be
+    a round trip per node to draw one picture.
+
+    **Every binding carries its rung, and here that rung is always `static`.** A call site is what
+    the static index found; nothing about it rests on a resolution or a correlation step. A
+    stronger rung for the same operation is a fact about this repository's telemetry and belongs
+    to `observed_telemetry`, never blended into an edge drawn here.
+
+    `last_indexed` is repeated from `index_coverage` rather than recomputed, and it is staleness
+    rather than a promise of currency: a repository scanned three weeks ago reports the same value
+    every day until another pass moves it. No age is derived, because a duration computed at
+    response time goes wrong the moment the payload is cached and the timestamp it came from does
+    not.
+
+    **A bound is declared rather than applied quietly.** `total_bindings` counts what exists and
+    `truncated` says whether the drawn set is all of it, so a console holding a partial graph can
+    say so. A graph silently missing edges misreports a codebase's exposure, which is the one
+    thing this picture is for.
+    """
+    coverage = index_coverage(store, repo_id)
+    by_vendor = coverage["by_vendor"]
+    last_indexed = coverage["last_indexed"]
+
+    sites = store.call_sites_for_repository(repo_id, limit=limit)
+    total = store.call_sites_for_repository_count(repo_id)
+
+    bindings = [
+        {
+            "vendor_id": site.vendor_id,
+            "operation_id": site.operation_id,
+            "path": site.path,
+            "line": site.line,
+            "symbol": site.symbol,
+            "rung": "static",
+        }
+        for site in sites
+    ]
+
+    vendors = [
+        {
+            "vendor_id": vendor_id,
+            "indexed_call_sites": by_vendor[vendor_id],
+            "last_indexed": last_indexed.get(vendor_id),
+        }
+        for vendor_id in sorted(by_vendor)
+    ]
+
+    return {
+        "repo_id": repo_id,
+        "vendors": vendors,
+        "bindings": bindings,
+        "total_bindings": total,
+        "truncated": len(bindings) < total,
+    }
+
+
 def vendor_operation_exposure(
     store: GraphStore, vendor_id: str, *, repo_id: str | None = None
 ) -> dict:
