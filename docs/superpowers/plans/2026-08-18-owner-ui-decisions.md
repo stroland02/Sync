@@ -976,3 +976,45 @@ scoreboard beside it.** Step 6 is a pull request that a run actually opened — 
 has never produced a CI-green pull request, which is why Gates 1 and 2 read NOT MET and CANNOT TELL.
 **The demo path and the gate list are now the same list.** Step 2 needs the event bus wired, which
 is Gate 4's newest dead link. Nothing here is decorative.
+
+## Round twenty-two: decisions 97-99 — the install needs no prerequisites
+
+**Owner, 2026-08-18:** *"setup still doesn't work because command needs docker, we need to build the
+setup so it doesn't need anything just like the references I provided."*
+
+**Measured before scoping.** Docker carries exactly two things in `docker-compose.demo.yml`:
+`postgres:16`, and the `sync` app image. And the schema is genuinely Postgres-shaped — **22
+`timestamptz`, 8 GIN indexes, 6 `jsonb`, 4 `text[]` across 642 lines** — so a SQLite port is a
+rewrite of the schema *and* every query, and it would break the one-database property. **SQLite was
+ruled out on measurement, not preference.**
+
+**97. Postgres comes from embedded binaries the installer fetches**, run as a subprocess on a free
+port. **Rejected: PGlite**, the WASM build, despite needing no download — because it is
+single-connection and drops some extensions, and *"it IS Postgres"* was worth 55MB. **Rejected:
+keeping Docker.**
+
+**What this makes ours to own, and it is the real cost:** a process lifecycle. Start, stop, and
+**orphans** — a Postgres left running after a crash is the failure mode that makes the second run
+worse than the first. Idempotence matters as much as the first run: a second `npx sync` must not
+re-download 55MB.
+
+**98. Python arrives by bootstrapping `uv`**, which fetches a pinned 3.12 and the dependencies.
+**Rejected: a frozen per-platform binary**, which needs a three-platform build matrix before
+Wednesday. **Rejected: requiring Python**, which is the Docker problem moved rather than solved.
+
+**The repository already uses `uv`, so this is the same tool fetching itself** — not a new
+dependency, and the pinned-Python guarantee is one the project already relies on.
+
+**99. Both paths run in parallel and the owner gets a measured list on Wednesday morning** — what a
+stranger can do, what still needs Docker, and what does not work yet. **Rejected: protecting only
+the zero-prerequisite install**, and **rejected: protecting only the full demo loop.**
+
+**This is the decision that binds hardest on reporting rather than on building.** It forbids the
+comfortable Wednesday summary. Every line is measured or it is marked as not measured, and
+**nothing is reported working that has not been run on a clean machine.** The `docker compose` path
+stays supported throughout — it works today, and removing it while the replacement is unproven would
+trade a working install for a hoped-for one.
+
+**One dependency that decides whether any of this matters.** `sync index --repo` still does not
+exist, so a zero-prerequisite install that comes up perfectly still shows an empty console. The
+install work and the index command are one deliverable, not two.
