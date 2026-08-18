@@ -178,6 +178,15 @@ s.charges.create({ amount: 100, currency: 'usd' });
             self.replaced[repo_id] = list(sites)
             return [f"cs-{i}" for i in range(len(sites))]
 
+
+        # The scan opens and closes an `index_run` row around the pass; a double that
+        # indexes has to accept both, or the store surface it stands in for is a
+        # narrower thing than the one the CLI actually calls.
+        def start_index_run(self, repo_id, *, started_at):
+            return None
+
+        def finish_index_run(self, repo_id, *, started_at, finished_at, call_sites):
+            return None
     fake_store = FakeStore()
     report = index_codebase(repo_dir, store=fake_store, cache_dir=staged_cache)
 

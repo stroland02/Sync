@@ -494,6 +494,15 @@ class _RecordingStore:
     def replace_call_sites(self, repo_id, sites) -> list[str]:
         return [f"cs-{index}" for index, _ in enumerate(sites)]
 
+
+    # The scan opens and closes an `index_run` row around the pass; a double that
+    # indexes has to accept both, or the store surface it stands in for is a
+    # narrower thing than the one the CLI actually calls.
+    def start_index_run(self, repo_id, *, started_at):
+        return None
+
+    def finish_index_run(self, repo_id, *, started_at, finished_at, call_sites):
+        return None
     def upsert_call_site(self, site) -> str:
         return "cs-1"
 

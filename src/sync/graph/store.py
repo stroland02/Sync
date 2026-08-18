@@ -854,6 +854,69 @@ class GraphStore:
         ).fetchall()
         return [CallSite(**row) for row in rows]
 
+    def start_index_run(self, repo_id: str, *, started_at: datetime) -> None:
+        """Record that an index pass began, before it is known whether it will finish.
+
+        Written at the start rather than the end on purpose: a pass that dies leaves a row saying
+        it started and never finished, which is the fact a reader needs before trusting the call
+        sites it left behind. A table written only on success could not say anything had been
+        attempted at all.
+        """
+        self._connect().execute(
+            """
+            INSERT INTO index_run (repo_id, started_at) VALUES (%s, %s)
+            ON CONFLICT (repo_id, started_at) DO NOTHING
+            """,
+            [repo_id, started_at],
+        )
+
+    def finish_index_run(
+        self, repo_id: str, *, started_at: datetime, finished_at: datetime, call_sites: int
+    ) -> None:
+        """Close the pass `started_at` opened, with what it actually wrote.
+
+        `DO UPDATE` rather than a plain insert so a replayed finish converges: re-running INDEX
+        over the same input must reach the same rows, which is what `CLAUDE.md` binds every stage
+        to.
+        """
+        self._connect().execute(
+            """
+            INSERT INTO index_run (repo_id, started_at, finished_at, call_sites)
+                 VALUES (%s, %s, %s, %s)
+            ON CONFLICT (repo_id, started_at)
+              DO UPDATE SET finished_at = EXCLUDED.finished_at, call_sites = EXCLUDED.call_sites
+            """,
+            [repo_id, started_at, finished_at, call_sites],
+        )
+
+    def latest_index_run(self, repo_id: str) -> dict | None:
+        """The newest pass this repository has, finished or not, or `None` if it has never been
+        indexed.
+
+        `None` is never-indexed, and it is a different fact from a pass that ran and found
+        nothing -- which is a row with `call_sites = 0`. Collapsing those two is the conflation
+        this console exists to refuse, and here it would tell an operator their codebase calls no
+        vendor when nothing had ever looked.
+        """
+        row = self._connect().execute(
+            """
+            SELECT repo_id, started_at, finished_at, call_sites
+              FROM index_run
+             WHERE repo_id = %s
+             ORDER BY started_at DESC
+             LIMIT 1
+            """,
+            [repo_id],
+        ).fetchone()
+        return dict(row) if row is not None else None
+
+    def index_run_count(self, repo_id: str) -> int:
+        """How many passes this repository has had. One row is one pass, never one repository."""
+        row = self._connect().execute(
+            "SELECT count(*) AS n FROM index_run WHERE repo_id = %s", [repo_id]
+        ).fetchone()
+        return int(row["n"])
+
     def call_sites_for_repository(
         self, repo_id: str, *, limit: int | None = None
     ) -> list[CallSite]:
