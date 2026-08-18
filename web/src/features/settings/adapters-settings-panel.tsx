@@ -1,5 +1,6 @@
 import { useAdapters } from "@/api/queries"
 import { ErrorState, LoadingState } from "@/components/states"
+import { AdapterCoverageChart } from "@/features/settings/adapter-coverage-chart"
 import { AdapterTable } from "@/features/settings/adapter-table"
 
 export function AdaptersSettingsPanel() {
@@ -24,7 +25,12 @@ export function AdaptersSettingsPanel() {
           onRetry={() => void query.refetch()}
         />
       )}
-      {query.isSuccess && <AdapterTable adapters={query.data.adapters} />}
+      {query.isSuccess && (
+        <>
+          <AdapterCoverageChart adapters={query.data.adapters} />
+          <AdapterTable adapters={query.data.adapters} />
+        </>
+      )}
     </div>
   )
 }

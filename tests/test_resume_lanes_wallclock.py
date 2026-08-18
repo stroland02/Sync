@@ -87,3 +87,19 @@ def test_a_reset_just_after_midnight_read_before_midnight_still_rolls():
     """Rolling forward is still right when the gap is plausibly one window."""
     notice = "resets 1:20am (America/New_York)"
     assert resume_lanes.reset_seconds(notice, now=_at(23, 20)) == 2 * 3600
+
+
+def test_an_unresolvable_zone_is_reported_rather_than_silently_held():
+    """Windows ships no IANA database, so `ZoneInfo` needs the `tzdata` package.
+
+    Measured 2026-08-18: the sweep run under bare `python` could not resolve `America/New_York`,
+    `reset_seconds` caught `ZoneInfoNotFoundError` and returned `None`, and a `None` window means a
+    hold with no deadline — so two lanes were held indefinitely on a reset ten minutes away. The
+    project environment has `tzdata 2026.3` and the system interpreter does not, so **the safety
+    net behaved differently depending on which python ran it, and said nothing.**
+
+    An environment that cannot answer must say so rather than answer wrongly.
+    """
+    assert resume_lanes.timezone_database_available() is True, (
+        "run the sweep with `uv run python`; the system interpreter lacks tzdata"
+    )

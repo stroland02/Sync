@@ -178,6 +178,18 @@ not take the same unit.
   cannot be measured at all**. The sweep says so now rather than guessing; **read those two terminals
   by hand every sweep.** Nothing else in this file substitutes for that. They are also the two lanes
   whose budget outages are longest, which is the worst pairing: least observable, most often stopped.
+- **Run the sweep with `uv run python`, never bare `python`.** Windows ships no IANA database, so
+  `zoneinfo` needs the `tzdata` package: the project environment has it, the system interpreter does
+  not. Under bare `python` every stamped reset time silently returned `None`, and a `None` window is
+  a hold with no deadline — two lanes were held indefinitely on a reset ten minutes away. It now
+  refuses with the fix named instead of degrading. **The same script gave different answers depending
+  on which interpreter ran it, and said nothing.**
+- **`npx shadcn add` replaces a file, it does not merge.** Twenty-two Supabase components were
+  vendored before the 2026-08-18 batch, each with local amendments. Running the CLI over an existing
+  one **silently discards them**: it overwrote `button.tsx` and deleted a recorded focus-ring
+  decision, caught only because the lane diffed afterwards. Before each add, check whether the target
+  already exists; after each add, diff and restore what the CLI dropped; and say in the commit which
+  files were already present. **A vendored file is not upstream's alone once we have amended it.**
 - **A stale worktree makes you rebuild what already landed, and the rebuild looks like progress.**
   Step 1 of the loop is `git fetch origin && git merge origin/main --no-edit`, and it is first for
   this reason rather than for tidiness. Measured twice on 2026-08-17: Lane A gated a merge and held
