@@ -545,6 +545,61 @@ def suite_from_record(path: Path = SUITE_RECORD, *, head: str | None = None):
     )
 
 
+def worktree_dirty() -> bool:
+    """Whether anything is uncommitted, tracked or not.
+
+    A commit names a tree. If the worktree differs from it, the suite measured something no commit
+    holds, so a verdict recorded against `HEAD` would claim that commit is green when what passed
+    was the commit plus somebody's unsaved work -- and nothing later can tell the two apart.
+    """
+    try:
+        result = subprocess.run(
+            ["git", "status", "--porcelain"],
+            cwd=REPO_ROOT, capture_output=True, text=True,
+            encoding="utf-8", errors="replace", timeout=60,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return False
+    return bool(result.stdout.strip())
+
+
+def suite_outcome(
+    *, started_at: str | None, finished_at: str | None, dirty: bool,
+    returncode: int, trustworthy: bool, summary: str,
+) -> tuple[bool | None, str]:
+    """Whether this run may be recorded against a commit, and what to say if not.
+
+    Split out from the run itself so the decision can be tested without spending four minutes on
+    the suite. The judgement is not "did the tests pass" -- that is `returncode` -- but **"is there
+    a commit this result honestly describes"**.
+
+    Two ways there is not, and both were silently ignored before. The tree can move during the run,
+    because the suite takes minutes and four lanes land in them; `head_commit()` was read *after*
+    the run, so a merge landing meanwhile produced a record naming a commit whose tree nobody
+    measured. And the worktree can be dirty, in which case the tested tree is no commit at all.
+
+    Neither refusal is a failing gate. They are `CANNOT_TELL`, which is what this script says
+    everywhere else when it could not look.
+    """
+    if started_at is None or finished_at is None:
+        return None, "the suite ran but the commit could not be read, so nothing was recorded"
+    if started_at != finished_at:
+        return None, (
+            f"the tree moved during the run -- started at {started_at[:9]}, finished at "
+            f"{finished_at[:9]} -- so this measured a tree that is now no commit's. Nothing was "
+            "recorded; re-run on a quiet tree"
+        )
+    if dirty:
+        return None, (
+            "the worktree had uncommitted changes, so the suite measured something no commit "
+            f"holds and {started_at[:9]} cannot be said to be green. Nothing was recorded; "
+            "commit or stash first"
+        )
+    if not trustworthy:
+        return None, f"the suite ran but its verdict cannot be believed: {summary}"
+    return returncode == 0, f"suite: {summary}"
+
+
 def _suite_green() -> tuple[bool | None, str]:
     """Run the suite and judge it with `gate_verdict`, which is the point of that script.
 
@@ -555,6 +610,8 @@ def _suite_green() -> tuple[bool | None, str]:
 
     log = REPO_ROOT / ".cache" / "beta-gates-suite.log"
     log.parent.mkdir(parents=True, exist_ok=True)
+    # Before the run, not after: this is the commit whose tree pytest is about to read.
+    started = head_commit()
     try:
         result = subprocess.run(
             # `-n auto`, measured rather than assumed: 125s here and 185s on a Linux runner,
@@ -574,21 +631,25 @@ def _suite_green() -> tuple[bool | None, str]:
     output = (result.stdout or "") + (result.stderr or "")
     log.write_text(output, encoding="utf-8")
     verdict = read_verdict(output)
-    commit = head_commit()
-    if commit:
-        # Recorded whatever the answer, including an untrustworthy one. A run that died is a fact
-        # about this commit too, and storing only the good ones would make the record's silence
-        # mean two different things.
+
+    ok, detail = suite_outcome(
+        started_at=started, finished_at=head_commit(), dirty=worktree_dirty(),
+        returncode=result.returncode, trustworthy=verdict.trustworthy,
+        summary=verdict.summary or verdict.reason or "no summary line",
+    )
+    # Recorded only when the result describes a commit. An untrustworthy run is still recorded,
+    # because "this commit produced a run that died" is a fact about that commit -- but a run whose
+    # commit is unknown has nothing to be a fact about, and writing it against either end would be
+    # the record asserting something nobody measured.
+    if started is not None and started == head_commit() and not worktree_dirty():
         record_suite_verdict(
             SUITE_RECORD,
-            commit=commit,
+            commit=started,
             trustworthy=verdict.trustworthy,
             passed=result.returncode == 0,
             summary=verdict.summary or "no summary line",
         )
-    if not verdict.trustworthy:
-        return None, f"the suite ran but its verdict cannot be believed: {verdict.reason}"
-    return result.returncode == 0, f"suite: {verdict.summary}"
+    return ok, detail
 
 
 def render(verdicts: Sequence[Verdict]) -> str:

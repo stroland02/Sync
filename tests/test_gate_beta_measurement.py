@@ -693,3 +693,73 @@ def test_run_suite_is_reachable_when_invoked_as_a_script() -> None:
     )
 
     assert "importable" in result.stdout, result.stdout + result.stderr
+
+
+# --- what has to be true for a suite verdict to describe HEAD ------------------------
+
+
+def test_a_verdict_is_refused_when_the_tree_moved_during_the_run() -> None:
+    """`CI-W389`: the suite takes minutes and four lanes land during them.
+
+    `head_commit()` was read *after* the run, so a merge landing meanwhile produced a record
+    attributed to a commit whose tree was never measured. That is the same failure the Gate 3 walk
+    caught on itself -- a signature newer than the change it claims to cover -- sitting inside
+    Gate 4's own mechanism, where nothing would have contradicted it.
+
+    Refused rather than recorded against either commit: the run measured a tree that is now no
+    commit's, so there is no honest thing to write down.
+    """
+    from scripts.beta_gates import suite_outcome
+
+    ok, detail = suite_outcome(
+        started_at="aaaaaaa1", finished_at="bbbbbbb2", dirty=False,
+        returncode=0, trustworthy=True, summary="4000 passed",
+    )
+
+    assert ok is None
+    assert "moved" in detail.lower()
+    assert "aaaaaaa1" in detail and "bbbbbbb2" in detail, (
+        f"a refusal has to name both commits so a reader can decide what to re-run: {detail}"
+    )
+
+
+def test_a_verdict_is_refused_when_the_worktree_was_dirty() -> None:
+    """A commit names a tree. An uncommitted edit means the suite measured something else.
+
+    Recording it against `HEAD` would claim that commit is green when what passed was the commit
+    plus somebody's unsaved work -- and the reader has no way to see the difference later.
+    """
+    from scripts.beta_gates import suite_outcome
+
+    ok, detail = suite_outcome(
+        started_at="aaaaaaa1", finished_at="aaaaaaa1", dirty=True,
+        returncode=0, trustworthy=True, summary="4000 passed",
+    )
+
+    assert ok is None
+    assert "uncommitted" in detail.lower() or "dirty" in detail.lower()
+
+
+def test_a_clean_unchanged_tree_records_the_verdict() -> None:
+    """The ordinary case still works, or the guards above would have closed the gate for good."""
+    from scripts.beta_gates import suite_outcome
+
+    ok, detail = suite_outcome(
+        started_at="aaaaaaa1", finished_at="aaaaaaa1", dirty=False,
+        returncode=0, trustworthy=True, summary="4000 passed",
+    )
+
+    assert ok is True
+    assert "4000 passed" in detail
+
+
+def test_a_failing_suite_on_a_clean_tree_is_a_real_answer() -> None:
+    """Red is a measurement. Only "which tree was this" is in doubt above, never the verdict."""
+    from scripts.beta_gates import suite_outcome
+
+    ok, _ = suite_outcome(
+        started_at="aaaaaaa1", finished_at="aaaaaaa1", dirty=False,
+        returncode=1, trustworthy=True, summary="3 failed, 3997 passed",
+    )
+
+    assert ok is False

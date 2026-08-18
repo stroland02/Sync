@@ -425,9 +425,7 @@ export function DetectorAccountability({ repoId }: { repoId: string }) {
       <div className="flex flex-col gap-section">
         <EmptyState
           headline={
-            repoId === null
-              ? "No open finding is attributed to any detector."
-              : `No open finding in ${repoId} is attributed to any detector.`
+            `No open finding in ${repoId} is attributed to any detector.`
           }
           detail="The API answered, and the graph holds no open findings in this scope right now. That is an answer, not a failure -- nothing indexed here is currently flagged by any detector."
         />
