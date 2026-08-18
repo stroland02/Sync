@@ -407,3 +407,44 @@ still says so rather than reading as passed.
 **48. Below its threshold the sidebar collapses itself and the content keeps its width.** Tables keep
 every column and scroll horizontally **inside their own container**, never the page body. **Rejected:
 dropping columns by priority**, which decides for the reader which column mattered.
+
+## Round nine: decisions 49-52, owner-selected 2026-08-18
+
+**49. Every filter, sort and page lives in the URL now; named saved views come after Wednesday.**
+`[Copy link]` on each table; back and refresh both work.
+
+**The distinction that must not be lost, because `M14-W400` just spent a unit fixing its opposite.**
+**Scope is the path. Filters are the query string.** `/w/checkout/findings` says which workspace;
+`?kind=breaking&rung=observed` says which rows. A screen reading its *scope* from the query string is
+the defect that let a page claim fleet scope while its URL named one repository. Filters in the
+query string are correct and are not a reversal of that.
+
+**50. `Export CSV` on every table now; a token-authenticated read API documented after.**
+
+**The CSV header carries the filters and the counts** — workspace, filters applied, export time with
+offset, and `4 of 31 rows`. A CSV that does not say what it excluded is a screenshot of a filter
+somebody will later read as the whole set.
+
+**51. A `Since the last index` panel** — call sites added and removed, and rungs that strengthened or
+weakened, with the date of the first index. **Rejected: a pick-any-two comparison screen**, which is
+the larger build.
+
+**A first-ever index has no previous, and that is the fourth state again.** The panel says *this is
+the first index* rather than rendering `+0 / −0`, which would read as *nothing changed* about a
+codebase nothing had ever looked at.
+
+**52. One outbound webhook, configured in Settings, on finding-opened and pull-request-opened.**
+**Rejected: a digest email**, and **rejected: relying on the pull request to notify.**
+
+**The conflict, and how it resolves.** `CLAUDE.md` says *we never hold customer secrets*, and that
+one is unqualified. **A Slack incoming-webhook URL is a credential** — it grants post access to a
+channel — so a Settings field that accepts and stores one would break the invariant, in the product's
+own console, in a field labelled Endpoint.
+
+**It resolves against a pattern already in the tree.** `sync.cli._webhook_secret` reads GitHub's
+inbound secret from a named file or an environment variable and never stores it. The outbound
+endpoint takes the same shape: **Settings names the environment variable, says whether it is set, and
+offers `Send test` — it never accepts the value and never displays it.** This is the same answer
+already given for `.sync/context.md`: *show it, say where it comes from, never write it.* The
+screen states that difference rather than hiding it, because it is a better answer than the
+reference's, not a missing feature.
