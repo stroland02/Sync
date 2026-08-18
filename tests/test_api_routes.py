@@ -2169,9 +2169,6 @@ def _normalized(path: str) -> str:
 # it the day its panel lands and `client.ts` fetches the path, so this set cannot quietly become
 # a place routes go to be exempted from the drift guard forever.
 _NOT_YET_FETCHED_BY_CONSOLE = {
-    # CI-W427: the route exists; decision 47's pull request screen that leads with the diff
-    # is the console half and is a separate item.
-    "/api/findings/{param}/patch",
     "/api/corpus/health",  # M12-W323: corpus health view model and route only, panel not yet scheduled
     "/api/repos/{param}/context",  # B126 Task 5: route only, the console screen is M7's line
     "/api/findings",  # Scoped codebase findings: route ready for upcoming Codebase Overview findings view
