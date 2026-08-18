@@ -1,4 +1,4 @@
-# Sync backlog
+﻿# Sync backlog
 
 The queue an autonomous tick pulls from. Ordered by what unblocks the most, not by
 size. When a tick has nothing else to do, it takes the topmost unclaimed item, dispatches
@@ -4318,7 +4318,7 @@ The workaround in place was to dereference at render instead of at module scope.
 **Closed in `M7-W205`**: `App.tsx` now passes `question={route.question}` directly into each `<RoutedScreen>`, all nine feature pages receive `question` (defaulting to the screen's question when rendered in unit tests outside the router), and zero files under `web/src/features/` import from `@/lib/routes`. Guarded by `test_no_feature_page_imports_routes_registry` in `tests/test_console_design_tokens.py`.
 
 
-### B121 - The Fleet screen's fact rail costs six table rows above the fold
+### B121 - The Fleet screen's fact rail costs six table rows above the fold - CLOSED
 
 M7-W163 put a page header at the 48px display step, a control bar, and a four-tile fact rail at the top
 of the Fleet screen. Measured at `--scale 10000`, before and after, with the sidebar at its default for
@@ -4747,7 +4747,7 @@ already reads correctly as a crash rather than a clean slate).
 without `uv` reaches the console, and a Windows reboot followed by `--no-admin` adopts or restarts
 the cluster without a manual `pg_ctl`.
 
-### B192 — the typecheck baseline dies on TypeScript 7 and on repositories whose tsconfig is nested
+### B192 — the typecheck baseline dies on TypeScript 7 and on repositories whose tsconfig is nested - CLOSED
 
 **Measured 2026-08-18, on the first full `sync run` against this repository itself.** 25 findings
 were raised (12 vendor-change, 13 anthropic model-deprecation via the generated tier); the first
@@ -4795,3 +4795,5 @@ schema (title, description, pattern, example, enum, secret, order), one schema-d
 the Adapters settings group draws every form, and a per-vendor credential-verification probe
 joins the Setup checklist. **Evidence that closes it:** the Twilio product list editable from
 Settings through the declared schema, with no Twilio-specific component in `web/src`.
+
+**B192 closed 2026-08-18:** the pinned major (`typescript@5` -- a major is a CLI contract, `latest` is not) and nested-project discovery (`_project_dir`, root first, then depth-two, `node_modules` excluded, deterministic order) landed in `sync.index.tsc`, with the compiler nearest the project winning and a repository with no project refused in a sentence rather than a help screen. Proven against this repository: project resolved to `web`, its own tsc ran, baseline ok. B121 closed the same day by inspection: the fact rail has been four tiles beside one another since the M14 rework.

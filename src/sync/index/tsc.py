@@ -117,6 +117,33 @@ def introduced_diagnostics(
     return introduced
 
 
+# The major this gate is verified against, pinned rather than `latest` (B192). `latest` drifted
+# to TypeScript 7, whose native CLI answers `--noEmit --pretty false` over a missing project with
+# its help text -- a usage error the parser reads as a compiler that could not run, which
+# abandoned the first real remediation on this repository at the baseline. A major is a CLI
+# contract; adopting a new one is a deliberate act with a measurement attached, not a drift.
+_TYPESCRIPT_SPEC = "typescript@5"
+
+
+def _project_dir(repo_path: Path) -> Path | None:
+    """The directory whose `tsconfig.json` this repository's typecheck should run against.
+
+    The root when it has one; otherwise the nearest nested project, depth two at most, chosen
+    deterministically -- this repository's own console lives at `web/tsconfig.json`, and a
+    baseline pointed at the root abandoned the run (B192). `node_modules` is excluded because
+    every dependency ships a tsconfig and none of them is the customer's project.
+    """
+    if (repo_path / "tsconfig.json").is_file():
+        return repo_path
+    nested = sorted(
+        candidate.parent
+        for pattern in ("*/tsconfig.json", "*/*/tsconfig.json")
+        for candidate in repo_path.glob(pattern)
+        if "node_modules" not in candidate.parts
+    )
+    return nested[0] if nested else None
+
+
 def run_tsc(repo_path: Path, timeout: float = _TSC_TIMEOUT_SECONDS) -> VerifyResult:
     """Typecheck a project with `tsc --noEmit`.
 
@@ -145,28 +172,47 @@ def run_tsc(repo_path: Path, timeout: float = _TSC_TIMEOUT_SECONDS) -> VerifyRes
     this call reads from is guaranteed warm.
     """
     repo_path = Path(repo_path)
-    local_tsc = repo_path / "node_modules" / ".bin" / ("tsc.cmd" if _on_windows() else "tsc")
+    project = _project_dir(repo_path)
+    if project is None:
+        # An honest refusal rather than a compiler usage error: without a project there is no
+        # baseline to establish, and "this repository declares no TypeScript project" is an
+        # answer the caller can act on where TS7's help text was not (B192).
+        return VerifyResult(
+            ok=False,
+            diagnostics="no tsconfig.json found at the repository root or up to two directories deep, "
+            "so there is no TypeScript project to typecheck",
+        )
+
+    # The compiler nearest the project wins: a nested project's own `node_modules` first, the
+    # repository root's second -- executing the binary the customer's lockfile resolved is the
+    # standing decision, and a nested console's lockfile lives beside its tsconfig.
+    tsc_name = "tsc.cmd" if _on_windows() else "tsc"
+    local_candidates = [
+        project / "node_modules" / ".bin" / tsc_name,
+        repo_path / "node_modules" / ".bin" / tsc_name,
+    ]
+    local_tsc = next((candidate for candidate in local_candidates if candidate.exists()), None)
 
     try:
-        if local_tsc.exists():
+        if local_tsc is not None:
             # `--pretty false` is not cosmetic. `parse_diagnostics` matches tsc's plain form,
             # `file(line,column): error TSxxxx:`, and left to itself tsc prints the pretty form
             # wrapped in ANSI colour, which matches nothing. `typescript.py` reads a non-zero
             # exit that parses to zero diagnostics as a compiler that could not run, so ordinary
             # type errors surfaced as a broken toolchain and raised.
-            command = [str(local_tsc), "--noEmit", "--pretty", "false"]
+            command = [str(local_tsc), "--noEmit", "--pretty", "false", "-p", str(project)]
         else:
             npx = shutil.which("npx")
             if npx is None:
                 raise FileNotFoundError("npx not found on PATH")
             _ensure_typescript_resolved(npx, timeout=timeout)
-            # `--package=` (not a positional `typescript@latest`) is required here:
+            # `--package=` (not a positional package spec) is required here:
             # this npm's npx resolves a positional package followed by a same-named
             # bin by re-appending the bin name as an argument, which turns into a
             # stray `tsc` positional file argument and makes tsc ignore tsconfig.json.
             command = [
-                npx, "--yes", "--silent", "--package=typescript@latest",
-                "tsc", "--noEmit", "--pretty", "false",
+                npx, "--yes", "--silent", f"--package={_TYPESCRIPT_SPEC}",
+                "tsc", "--noEmit", "--pretty", "false", "-p", str(project),
             ]
 
         # `errors="replace"` because this output is a diagnostic, and because the compiler that
@@ -193,7 +239,9 @@ def run_tsc(repo_path: Path, timeout: float = _TSC_TIMEOUT_SECONDS) -> VerifyRes
     return VerifyResult(ok=False, diagnostics=(result.stdout + result.stderr).strip())
 
 
-_NPX_RESOLVE_MARKER = "sync-npx-typescript-resolved.marker"
+# Carries the pinned major, so moving the pin re-resolves rather than trusting a marker another
+# major wrote.
+_NPX_RESOLVE_MARKER = "sync-npx-typescript5-resolved.marker"
 
 
 def _marker_path() -> Path:
@@ -227,7 +275,7 @@ def _ensure_typescript_resolved(npx: str, timeout: float) -> None:
         if marker.exists():
             return
         subprocess.run(
-            [npx, "--yes", "--silent", "--package=typescript@latest", "tsc", "--version"],
+            [npx, "--yes", "--silent", f"--package={_TYPESCRIPT_SPEC}", "tsc", "--version"],
             capture_output=True,
             text=True,
             encoding="utf-8",
