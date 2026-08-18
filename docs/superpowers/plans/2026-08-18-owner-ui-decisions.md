@@ -334,3 +334,38 @@ identifier. **Rejected: infinite scroll**, which drops the footer count — and 
 ornament here: `1,204 rows` is how a reader knows the page they are looking at is a page.
 `interface-originality.md` lists *a footer bar owning pagination and the record count* among the
 conventions of the form, and this is why.
+
+## Round seven: decisions 41-44, owner-selected 2026-08-18
+
+**41. A toast in the bottom corner when a long-running action finishes**, carrying the result and a
+link to it. **Rejected: a count on the sidebar row**, and **rejected: silence**.
+
+**The constraint this puts on the toast, because a toast is transient and this product refuses
+transient truth.** A toast may *announce* a fact but may never be the only place it exists. `Index
+finished — 1,204 call sites` must be readable on the Overview a minute later without having caught
+the toast. And a toast never reports something the screens cannot corroborate: no `all clear`, no
+`healthy`, no completion claim for a run parked on the customer's CI.
+
+**42. Findings default to newest first, flat, with kind as a column you can sort and filter.**
+
+**This supersedes decision 15's grouping and is recorded as a reversal rather than reconciled
+quietly.** Decision 15 read *"findings group by kind, breaking first, under a triage header carrying
+each count."* The grouping is withdrawn; **the triage header with its counts is retained** as filter
+chrome above the flat table, because the counts answer *what would I get if I clicked* and that is
+the part decision 15 was actually buying. **The retention is a coordinator ruling and the owner can
+reverse it**; the grouping's withdrawal is the owner's.
+
+Any screen currently rendering the grouped shape changes. `M14`'s finding work was dispatched
+against 15 and must be re-read against this.
+
+**43. A command palette for navigation only.** Screens, workspaces, vendors, findings, files. **No
+actions in it at all** — not even safe ones. So it cannot become the surface where somebody triggers
+a run by typing three letters and pressing return.
+
+**44. The workspace switcher carries the list, a filter field, `Add workspace`, and `Manage in
+Settings`.** **Rejected: per-item last-indexed facts in the switcher** — the switcher is for changing
+scope, and a stale-vs-live judgement belongs on the screen that can explain it. **Rejected: a bare
+list**, which would have made adding a workspace reachable only through Settings.
+
+This is decision 1's *selection is chrome, not content* carried to its component: the switcher is
+where you change scope and start a workspace, Settings is where you manage what exists.
