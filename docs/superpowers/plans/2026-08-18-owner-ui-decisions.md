@@ -106,3 +106,40 @@ it.** So, highest first:
 **Recorded conflicts to resolve the mock's way losing:** it draws a Fleet root (answer: workspace-
 scoped) and page headers (answer: removed). A lane finding a new conflict records it here rather than
 resolving it silently.
+
+## Round three — eight more, and one revises a round-two answer
+
+**21. A finding's drawer opens on the code, call site highlighted.** *Consequence:* the drawer needs
+real source with the line marked — what a developer wants first is their own code, not our account of
+it.
+
+**22. The install command is `npx`, from the repo.** *Consequence:* confirms `M0-W312`'s target and
+kills the alternatives. Docker stays the one prerequisite; `npx` is the doorbell.
+
+**23-24. Auto-remediation: tier 0 runs free, agent tiers ask first — and this supersedes the
+round-two answer.** Round two selected *run everything, stop before the PR*; the follow-up on spend
+selected *tier 0 free, ask before agent tiers*. **The later answer governs**, and it is the better
+one: codemods cost nothing and demonstrate the loop, while agent runs are a spend the owner approves
+in one click knowing the count.
+
+> `✓ 4 fixed by codemod (no model cost)` · `11 findings need an agent run — [Run all] [Run selected]`
+
+**25. A stale index re-indexes automatically on open**, with progress and findings appearing as it
+completes. *Consequence:* the console never shows findings against code that has moved without
+saying so — but it costs time on every open, so the progress state must be good.
+
+**26. The Findings tab reads narrative, then diff, then evidence.** *Consequence:* this mirrors the
+reference incident view's summary → root cause → code order, **and the narrative is where the rung
+goes instead of a confidence score.**
+
+**27. One command palette holds everything** — workspaces, pages, vendors, findings, call sites.
+*Consequence:* the palette becomes the primary find surface, so its index must cover data and not
+only routes.
+
+**28. Notifications are a toast plus a persistent sidebar count.** *Consequence:* the count is a
+number, not a dot — which keeps it on the right side of the no-status-dot rule.
+
+## Standing constraint on all of the above
+
+**Nothing here relaxes the three refusals.** Auto-run makes more runs; it does not make a confidence
+score. A sidebar count is a count; it is not a health indicator. The narrative carries the rung.
