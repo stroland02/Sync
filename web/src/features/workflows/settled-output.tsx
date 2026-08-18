@@ -99,6 +99,20 @@ export function SettledOutput({
           </Link>{" "}
           carries it. Nothing here scores how sure a model felt.
         </p>
+        <p className="max-w-prose text-body text-ink-muted">
+          {/* Argued rather than merely omitted, because an omission is invisible to a reader who has
+              seen a competitor's screen. The scale quoted is Superlog's own documentation of its
+              `rootCause.confidence` field, read on 2026-08-18. */}
+          A confidence score is not a different answer to this question — it is this one compressed.
+          The scales that carry it read “ten means direct, verbatim evidence: a line of code, a
+          matching stacktrace, a clear log message; zero means speculative.” That is a{" "}
+          <strong>class of evidence</strong>, which is what the rung records — a line of code is{" "}
+          <code className="font-mono">static</code>, a matching trace is{" "}
+          <code className="font-mono">observed</code>, and nothing found is{" "}
+          <code className="font-mono">unresolved</code>. Collapsing those onto a number loses which
+          one it was, and then needs a footnote telling you where to cut the scale. We keep the
+          class and skip the number.
+        </p>
       </MetricPanel>
 
       {settled.length === 0 ? (
