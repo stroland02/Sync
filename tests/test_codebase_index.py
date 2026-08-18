@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import tempfile
 import json
 from pathlib import Path
 
@@ -340,33 +341,43 @@ export async function GET() {
 
 
 
-def test_the_fallback_adapter_builds_a_usable_operation_reference():
-    """`_FallbackIndexingAdapter` is what stands in when no real adapter serves a vendor, and it
-    raised on every symbol it was asked about.
+def test_an_unresolvable_vendor_yields_no_adapter_rather_than_a_fabricated_one():
+    """The third of the coordinator's three, and the one that actually removes the defect class.
 
-    `OperationRef` requires `http_method`; this passed `method=`, which pydantic neither accepts
-    nor silently ignores -- it reports `http_method` missing and the index pass dies. The path is
-    only reached when no real adapter loads, which is why it survived: whether one loads depends
-    on what else has run, so the failure is order-dependent and shows up on CI's worker split
-    while a local run happens to miss it.
+    A total load failure used to return `_FallbackIndexingAdapter`, which answered
+    `operation_for_symbol` by inventing an operation id out of the symbol's own words --
+    `CreateCharges` where the specification says `PostCharges`. That is worse than a crash: a
+    finding built on it names an operation no vendor has, and a pull request would be opened
+    against it. Making the invented name *correct* would have been the same move as making the
+    field optional; the answer is not to answer.
+
+    `index_codebase` already skips a vendor whose adapter is `None`, so the honest outcome was
+    one line away the whole time: no adapter, no call sites for that vendor, and the report says
+    which vendor it could not resolve.
     """
-    from sync.index.codebase import _FallbackIndexingAdapter
+    import sync.index.codebase as codebase
+    from sync.index.codebase import _load_or_create_vendor_adapter
 
-    ref = _FallbackIndexingAdapter("stripe").operation_for_symbol("stripe.charges.create")
+    def _no_network(*args, **kwargs):
+        raise RuntimeError("network refused")
 
-    assert ref is not None
-    assert ref.operation_id == "CreateCharges"
-    assert ref.http_method == "POST"
-    assert ref.path == "/v1/charges"
+    original = codebase.prepare_vendor
+    codebase.prepare_vendor = _no_network
+    try:
+        adapter = _load_or_create_vendor_adapter("stripe", Path(tempfile.mkdtemp()))
+    finally:
+        codebase.prepare_vendor = original
+
+    assert adapter is None
 
 
-def test_the_fallback_adapter_reads_the_verb_from_the_action():
-    from sync.index.codebase import _FallbackIndexingAdapter
+def test_no_fabricating_adapter_remains_in_the_module():
+    """Deleted rather than left unused. A dead path still typechecks, still gets read, and still
+    gets maintained by somebody who cannot tell it is dead -- and this one answered questions it
+    was never qualified to answer."""
+    import sync.index.codebase as codebase
 
-    adapter = _FallbackIndexingAdapter("stripe")
-
-    assert adapter.operation_for_symbol("stripe.charges.retrieve").http_method == "GET"
-    assert adapter.operation_for_symbol("stripe.charges.cancel").http_method == "POST"
+    assert not hasattr(codebase, "_FallbackIndexingAdapter")
 
 
 def test_an_explicitly_staged_per_vendor_cache_is_found(tmp_path, staged_cache):
@@ -382,7 +393,7 @@ def test_an_explicitly_staged_per_vendor_cache_is_found(tmp_path, staged_cache):
     the tests pass. That is the whole of the local-versus-CI difference.
     """
     import sync.index.codebase as codebase
-    from sync.index.codebase import _FallbackIndexingAdapter, _load_or_create_vendor_adapter
+    from sync.index.codebase import _load_or_create_vendor_adapter
 
     # The network is the escape hatch that hid this: with it available `prepare_vendor` fetches
     # the specification and the test passes for the wrong reason. Closed here, so the only route
@@ -397,9 +408,7 @@ def test_an_explicitly_staged_per_vendor_cache_is_found(tmp_path, staged_cache):
     finally:
         codebase.prepare_vendor = original
 
-    assert not isinstance(adapter, _FallbackIndexingAdapter), (
-        "fell back to the fabricating adapter instead of loading the staged cache"
-    )
+    assert adapter is not None, "the staged cache was not found, so no adapter loaded at all"
 
 
 def test_the_real_adapter_answers_with_the_operation_the_spec_names(tmp_path, staged_cache):
@@ -436,7 +445,7 @@ def test_falling_back_says_why_rather_than_swallowing_the_reason(tmp_path, caplo
     names the real problem instead of a week of bisecting.
     """
     import sync.index.codebase as codebase
-    from sync.index.codebase import _FallbackIndexingAdapter, _load_or_create_vendor_adapter
+    from sync.index.codebase import _load_or_create_vendor_adapter
 
     empty = tmp_path / "empty-cache"
     empty.mkdir()
@@ -452,12 +461,13 @@ def test_falling_back_says_why_rather_than_swallowing_the_reason(tmp_path, caplo
     finally:
         codebase.prepare_vendor = original
 
-    assert isinstance(adapter, _FallbackIndexingAdapter)
+    assert adapter is None
     text = caplog.text
     assert "stripe" in text
     # Both causes, because either alone leaves the reader guessing which half failed.
     assert "network refused" in text
-    assert "fallback" in text.lower()
+    # And it says what follows from the failure, rather than only that one happened.
+    assert "skipped" in text.lower()
 
 
 def test_a_relative_cache_path_is_resolved_rather_than_left_to_the_working_directory(tmp_path):

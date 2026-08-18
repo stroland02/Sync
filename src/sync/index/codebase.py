@@ -129,31 +129,6 @@ def discover_codebase_vendors(repo_path: Path) -> list[str]:
 from sync.core import OperationRef
 
 
-class _FallbackIndexingAdapter:
-    """Minimal indexing adapter when no staged specification cache exists."""
-
-    def __init__(self, vendor_id: str) -> None:
-        self.vendor_id = vendor_id
-        bindings = vendor_sdk_bindings().get(vendor_id)
-        if bindings:
-            self.sdk_bindings = bindings
-        else:
-            self.sdk_bindings = {
-                "typescript": {"package": vendor_id},
-                "python": {"distribution": vendor_id, "module": vendor_id},
-            }
-
-    def operation_for_symbol(self, symbol: str, *, language: str | None = None) -> OperationRef | None:
-        parts = symbol.split(".")
-        if len(parts) >= 3:
-            resource = parts[-2]
-            action = parts[-1]
-            method = "POST" if action in ("create", "post", "cancel", "refund", "update") else "GET"
-            op_id = f"{action.capitalize()}{resource.capitalize()}"
-            return OperationRef(operation_id=op_id, http_method=method, path=f"/v1/{resource}")
-        return None
-
-
 def _cache_candidates(vendor_id: str, cache_dir: Path | None) -> list[Path]:
     """Where a staged specification cache for this vendor might be, most specific first.
 
@@ -185,7 +160,19 @@ def _load_or_create_vendor_adapter(
     from_version: str = "v2320",
     to_version: str = "v2330",
 ) -> Any | None:
-    """Instantiate a VendorAdapter for indexing, from cache or fallback construction."""
+    """The adapter for this vendor, or `None` when none can be resolved.
+
+    **`None` rather than a stand-in.** This used to return a fallback that answered
+    `operation_for_symbol` by deriving an operation id from the symbol's own words -- so a symbol
+    the specification calls `PostCharges` came back as `CreateCharges`, an operation no vendor
+    has. A finding built on that names something that does not exist, and the patch agent would
+    open a pull request against it. That is worse than crashing, because it looks like an answer.
+
+    Making the derived name correct was never the fix: the adapter had no specification to be
+    correct against. `index_codebase` already skips a vendor whose adapter is `None`, so the
+    honest outcome costs nothing -- no adapter, no call sites for that vendor, and the log says
+    which vendor could not be resolved and why both routes to it failed.
+    """
     failures: list[tuple[Path, Exception, Exception]] = []
     for candidate in _cache_candidates(vendor_id, cache_dir):
         if candidate is not None and candidate.is_dir():
@@ -210,8 +197,7 @@ def _load_or_create_vendor_adapter(
     for candidate, load_failure, prepare_failure in failures:
         _LOG.warning(
             "no adapter loaded for %s from %s: load failed with %r, prepare failed with %r; "
-            "using the fallback, whose operation ids are derived from symbol names rather than "
-            "read from a specification",
+            "so this vendor is skipped and contributes no call sites",
             vendor_id,
             candidate,
             load_failure,
@@ -219,12 +205,12 @@ def _load_or_create_vendor_adapter(
         )
     if not failures:
         _LOG.warning(
-            "no staged cache found for %s in any of %s; using the fallback, whose operation ids "
-            "are derived from symbol names rather than read from a specification",
+            "no staged cache found for %s in any of %s; this vendor is skipped and contributes "
+            "no call sites",
             vendor_id,
             [str(c) for c in _cache_candidates(vendor_id, cache_dir)],
         )
-    return _FallbackIndexingAdapter(vendor_id)
+    return None
 
 
 def index_codebase(
