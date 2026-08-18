@@ -491,6 +491,31 @@ _GEOMETRY_TRANSITION = re.compile(
 )
 
 
+# Selectors that make a class string's motion a response to the reader's own hand rather than a
+# claim about the system. **Owner ruling, 2026-08-18:** direct manipulation of a control is not a
+# statement about state, so interaction feedback is permitted and motion implying liveness stays
+# banned. A switch whose thumb does not slide reads as broken; a progress bar that animates its
+# fill is a claim, and the difference is whether the reader caused it.
+_INTERACTION_SELECTORS = (
+    "hover:", "focus:", "focus-visible:", "focus-within:", "active:", "disabled:",
+    "data-checked:", "data-unchecked:", "data-disabled:", "data-[state=",
+    "group-data-open", "group-data-popup-open", "peer-checked",
+)
+
+
+def _enclosing_class_string(text: str, position: int) -> str:
+    """The double-quoted literal `position` sits inside, which is the element's own class string.
+
+    Class strings in this codebase carry no escaped quotes, so the nearest quote on each side
+    bounds the literal. A match outside any literal yields the empty string and is not exempt.
+    """
+    start = text.rfind('"', 0, position)
+    end = text.find('"', position)
+    if start == -1 or end == -1:
+        return ""
+    return text[start + 1 : end]
+
+
 def _geometry_transition_violations(root: Path, *, skip_vendored: bool = False) -> list[str]:
     violations = []
     for path in _iter_source_files(root):
@@ -498,6 +523,9 @@ def _geometry_transition_violations(root: Path, *, skip_vendored: bool = False) 
             continue
         text = _read_stripped(path)
         for match in _GEOMETRY_TRANSITION.finditer(text):
+            classes = _enclosing_class_string(text, match.start())
+            if any(selector in classes for selector in _INTERACTION_SELECTORS):
+                continue
             violations.append(f"{path}:{_line_at(text, match.start())}: {match.group(0)!r}")
     return violations
 
@@ -517,8 +545,45 @@ def test_nothing_transitions_geometry_anywhere():
 
 
 def test_the_geometry_guard_rejects_transition_all(tmp_path: Path) -> None:
-    (tmp_path / "control.tsx").write_text(
-        '<button className="transition-all hover:opacity-80" />\n', encoding="utf-8"
+    # No interaction selector, so nothing about this element's motion is the reader's doing.
+    # The fixture read `hover:opacity-80`, which the owner's ruling now exempts -- so it had
+    # stopped proving the guard rejects anything and is replaced rather than deleted.
+    (tmp_path / "banner.tsx").write_text(
+        '<div className="w-full transition-all" />\n', encoding="utf-8"
+    )
+
+    violations = _geometry_transition_violations(tmp_path)
+
+    assert violations and "transition-all" in violations[0]
+
+
+def test_the_geometry_guard_permits_motion_the_reader_caused(tmp_path: Path) -> None:
+    """Owner ruling, 2026-08-18: direct manipulation of a control is not a claim about state.
+
+    A switch whose thumb does not slide reads as broken, and the thumb slides because
+    somebody flipped it. This is the narrowing that ruling authorises, and nothing wider.
+    """
+    (tmp_path / "switch.tsx").write_text(
+        '<span className="transition-transform data-checked:translate-x-4" />\n'
+        '<button className="transition-all hover:bg-muted focus-visible:ring-ring" />\n',
+        encoding="utf-8",
+    )
+
+    violations = _geometry_transition_violations(tmp_path)
+
+    assert not violations
+
+
+def test_the_geometry_guard_still_catches_motion_bound_to_a_value(tmp_path: Path) -> None:
+    """The half of the ruling that is a refusal, and the reason the narrowing is safe.
+
+    This is `components/ui/progress.tsx` as it stood: an indicator translated by a measured
+    value, animating whenever that value moves. Nobody touched it -- so it is the console
+    asserting something, which is the motion that stays banned. It was the one violation of
+    eight left standing when the exemption landed, and it was removed rather than exempted.
+    """
+    (tmp_path / "progress.tsx").write_text(
+        '<div className="size-full flex-1 bg-primary transition-all" />\n', encoding="utf-8"
     )
 
     violations = _geometry_transition_violations(tmp_path)
