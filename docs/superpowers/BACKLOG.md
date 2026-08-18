@@ -4670,3 +4670,25 @@ change.
 
 **This is a design constraint rather than a defect**, and it is filed so the constraint is met
 deliberately rather than discovered halfway through building the screen.
+
+### B189 — the lane sweep prints a permanent MANUAL for a dispatch that can never be restarted
+
+`scripts/orchestration/resume_lanes.py` reads Orca's dispatch records. A dispatch whose
+`worker-start` timed out stays `failed` forever, and when its terminal has since been re-dispatched
+under a new task the old record has no live terminal to check — so the sweep prints
+`MANUAL … coordinator must place it` on every run, for a lane that is working fine under a
+different task id.
+
+**Why this is worth retiring rather than remembering.** It is a monitoring alarm that is always on.
+The sweep's whole value is that a `MANUAL` line means look now; one permanent false one trains the
+reader to skim past the column where a real stall would appear. That is the same defect as a test
+that cannot fail, pointed the other way.
+
+**What retires it:** the sweep skips a dispatch whose Task is itself settled (`failed` or
+`completed`), because a settled task cannot be restarted and needs no placement. Orca's
+`worker-release` takes `--dispatch <id>`, and `dispatch-list` returned nothing usable for the
+failed record, so retiring the stale dispatch through the CLI is not currently a route.
+
+**Found 2026-08-18** after `task_7da1be4ca230` failed and Lane I was re-dispatched as
+`task_682298ebace4`. Until this is fixed, the standing reading is: **one known MANUAL line is
+noise; two means something real.**

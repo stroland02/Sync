@@ -846,6 +846,13 @@ def test_overview_summary_with_no_findings_is_empty_not_an_error(store):
         "indexed_at": None,
         "feed_fetched_at": None,
         "binding_source": None,
+        "bindings_by_rung": {
+            "static": 0,
+            "resolved": 0,
+            "observed": 0,
+            "unresolved": 0,
+            "unattributed": 0,
+        },
         "context_savings": 0,
         "context_savings_bound_reached": False,
         "repositories": [],
@@ -865,7 +872,10 @@ def test_overview_summary_reaches_the_store_in_a_flat_number_of_queries(store, m
     result = overview_summary(store)
 
     assert result["total_findings"] == 10
-    assert len(calls) <= 4, f"expected at most four queries for ten findings, made {len(calls)}"
+    # Five since `bindings_by_rung` landed, and the bound is what this guard is about rather than
+    # the number: each of the five is a single aggregate or `GROUP BY` whose cost does not move
+    # with how many findings are open, so ten and ten thousand cost the same five.
+    assert len(calls) <= 5, f"expected at most five queries for ten findings, made {len(calls)}"
 
 
 # -- repository scope, across every view a console level below Codebase reads -----------------
@@ -1643,3 +1653,63 @@ def test_vendor_operation_exposure_separates_never_measured_from_not_observed(st
     observed = {row["operation_id"]: row["observed"] for row in result["operations"]}
     assert observed == {"PostCharges": True, "GetCharges": False}
     assert result["telemetry_attached_at"] == SEEN.isoformat()
+
+
+class TestOverviewBindingsByRung:
+    """Dashboard 2's source: open findings tallied by the rung their binding was established at.
+
+    `docs/superpowers/plans/2026-08-18-dashboards.md` names `/api/overview` as where this comes
+    from, and its standing rule is that a count of bindings is not a count of bindings -- it is a
+    count *at a rung*, and the rung goes on the chart.
+    """
+
+    def test_every_rung_in_the_vocabulary_is_present_even_at_nought(self, store):
+        """A rung absent from the payload and a rung at nought are different claims, and a chart
+        that stacks five segments cannot tell them apart from a dict missing three keys. The
+        vocabulary is closed, so the whole of it is reported."""
+        by_rung = overview_summary(store)["bindings_by_rung"]
+
+        assert by_rung == {
+            "static": 0,
+            "resolved": 0,
+            "observed": 0,
+            "unresolved": 0,
+            "unattributed": 0,
+        }
+
+    def test_it_tallies_each_finding_at_the_rung_it_was_bound_at(self, store):
+        site = store.upsert_call_site(_site())
+        store.insert_finding(_finding(site, binding_rung="static"))
+        store.insert_finding(_finding(site, claim="deprecation", binding_rung="observed"))
+
+        by_rung = overview_summary(store)["bindings_by_rung"]
+
+        assert by_rung["static"] == 1
+        assert by_rung["observed"] == 1
+        assert by_rung["resolved"] == 0
+
+    def test_the_distribution_narrows_with_the_scope_it_is_rendered_under(self, store):
+        one = store.upsert_call_site(_site(repo_id="r1"))
+        two = store.upsert_call_site(_site(repo_id="r2", path="other/pay.ts"))
+        store.insert_finding(_finding(one, binding_rung="static"))
+        store.insert_finding(_finding(two, binding_rung="observed"))
+
+        # A fleet-wide distribution rendered under one repository's name is a false claim about
+        # that repository -- the same reason `repo_id` is echoed back on this payload.
+        scoped = overview_summary(store, repo_id="r1")["bindings_by_rung"]
+
+        assert scoped["static"] == 1
+        assert scoped["observed"] == 0
+
+    def test_the_distribution_is_not_bounded_by_the_total_beside_it(self, store):
+        """`total_findings` stops counting at its bound; this must not. A distribution derived
+        from a bounded page is the distribution of whichever rows the ordering reached, which
+        `overview_summary`'s own docstring refuses for the vendor breakdown for the same reason."""
+        site = store.upsert_call_site(_site())
+        for i in range(5):
+            store.insert_finding(_finding(site, claim=f"k{i}", binding_rung="static"))
+
+        payload = overview_summary(store, bound=2)
+
+        assert payload["total_findings_bound_reached"] is True
+        assert payload["bindings_by_rung"]["static"] == 5

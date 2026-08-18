@@ -44,7 +44,7 @@ from __future__ import annotations
 from collections import Counter
 
 from sync.core import ALLOWED_MERGE_METHODS, ALLOWED_MERGE_POLICIES
-from sync.core.models import SEVERITY_ORDER
+from sync.core.models import FINDING_RUNGS, SEVERITY_ORDER
 from sync.graph.store import DEFAULT_FINDING_ORDER, FINDING_ORDERS, GraphStore
 from sync.mcp.tools import DEFAULT_LIMIT, _TOKENS_PER_AVOIDED_READ
 
@@ -560,6 +560,12 @@ def overview_summary(
       estimated (a per-finding cost rather than a flat multiplier, say) would not silently strand
       a render site that had learned to read `total_findings_bound_reached` for both.
 
+    - `bindings_by_rung` is dashboard 2's source, and it is unbounded for the same reason the
+      vendor breakdown is. Every rung in the closed vocabulary is present even at nought: a rung
+      missing from the dict and a rung at nought are different claims, and a stacked bar cannot
+      tell them apart. `binding_source` beside it is a different fact -- the one rung every open
+      finding shares, or null when they disagree -- and neither is derived from the other.
+
     `repo_id` narrows every one of those reads together and is echoed back in the payload. It is
     `None` on the fleet screen, which is the level above Codebase and the one place a fleet-wide
     answer is the answer; anywhere below it, a null here rendered under a repository's name is a
@@ -567,6 +573,7 @@ def overview_summary(
     """
     total, bound_reached = store.open_findings_count_bounded(bound, repo_id=repo_id)
     vendor_counts = store.open_findings_vendor_counts(repo_id=repo_id)
+    rung_counts = store.open_findings_rung_counts(repo_id=repo_id)
     summary = store.open_findings_summary(repo_id=repo_id)
     indexed_at = summary["indexed_at"]
     payload = {
@@ -581,6 +588,7 @@ def overview_summary(
         "indexed_at": indexed_at.isoformat() if indexed_at else None,
         "feed_fetched_at": None,
         "binding_source": summary["binding_rung"],
+        "bindings_by_rung": {rung: rung_counts.get(rung, 0) for rung in FINDING_RUNGS},
         "context_savings": total * _TOKENS_PER_AVOIDED_READ,
         "context_savings_bound_reached": bound_reached,
     }
@@ -688,9 +696,8 @@ def detector_accountability(store: GraphStore, *, repo_id: str | None = None) ->
 
     # -- Grain: One count per distinct open finding across all detectors, broken down by binding_rung.
     # Open findings are counted once each across the whole scope.
-    # Every known rung ('static', 'resolved', 'observed', 'unresolved', 'unattributed') is explicitly present in the tally.
-    known_rungs = ("static", "resolved", "observed", "unresolved", "unattributed")
-    rung_tally: dict[str, int] = {rung: 0 for rung in known_rungs}
+    # Every rung in `FINDING_RUNGS` is explicitly present in the tally.
+    rung_tally: dict[str, int] = {rung: 0 for rung in FINDING_RUNGS}
     for finding in findings:
         rung_tally[finding.binding_rung] = rung_tally.get(finding.binding_rung, 0) + 1
 
