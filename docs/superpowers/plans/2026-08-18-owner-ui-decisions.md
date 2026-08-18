@@ -219,3 +219,42 @@ its last two days. *Owner asked for several; this delivers several without betti
 repository, watch the canvas draw. *Consequence, and it reorders the board:* **Lane C's `npx` → Docker
 chain is now the literal first thirty seconds of Wednesday.** It stops being packaging and becomes the
 opening argument — if that command does not work, nothing after it is seen.
+
+---
+
+## Ledger: the indexing canvas keeps decision 8's framing and gains the operation level
+
+**Ruled 2026-08-18 by the coordinator, on Lane I's escalation, and reversible.**
+
+**What happened.** I dispatched the indexing canvas citing
+`references/direction/supabase-05-schema-visualizer.png` and a vendor to operation to call site
+topology. Lane I refused to build it and escalated, because **decision 8 does not merely prefer the
+file tree -- it names that shape and rejects it**: *"This is a different build from the
+schema-visualiser shape and closer to what a reader already understands."* Decision 19 makes the file
+tree the payoff screen for the one-command install, and `M14-W386` had already deleted
+`dependency-canvas.tsx` on exactly that ruling.
+
+**Decided.** Build `file -> operation -> vendor` -- `src/api/billing.ts -> PostCharges -> stripe`.
+
+**Decided against**, and this is the part worth keeping: rebuilding the vendor-first canvas. It would
+have reverted `M14-W386` and decisions 8 and 19 on a coordinator's dispatch, which is not an
+authority that outranks an owner decision.
+
+**Why the reconciliation is better than what I asked for.** The screen stays the reader's own
+codebase rather than Sync's model of it, which is decision 8's whole point. Adding the operation
+level puts a rung on **every** edge; the two-level `file -> vendor` shape could only carry one at the
+end. My constraint was that every edge carries its rung, and Lane I's shape satisfies it more
+completely than mine did.
+
+**Not a conflict, on inspection.** Colour on the rung: `DESIGN.md:114` keeps it monochrome but
+allows *"a single-hue ordinal ramp with no good end, never the status hues"*. That and the dispatch's
+"colour may encode the rung" are the same requirement, with the word always present so the label
+survives without colour.
+
+**The finding underneath, which is larger than the topology question.** The canvas is fed by
+`use-repository-risk-rows.ts`, composed from **open findings**. A screen whose job is to show what
+the *index* saw is drawing what the *detectors* flagged -- a subset that moves every time a finding
+closes. **It would quietly redraw itself when nothing about the codebase had changed.** Lane I is
+building the route that lists every indexed call site regardless of finding status; the `SCOPE_NOTE`
+stays until that is true and is deleted then, not left beside the fixed thing.
+
