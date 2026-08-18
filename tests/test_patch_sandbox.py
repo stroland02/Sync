@@ -93,7 +93,18 @@ _TEST_IMAGE = "python:3.12-slim"
 
 # `docker exec` timeouts for the small, fast operations these tests issue --
 # not `sandbox._DOCKER_TIMEOUT_SECONDS`, which is sized for a real install.
-_EXEC_TIMEOUT_SECONDS = 15
+#
+# **Raised from 15s on evidence, 2026-08-18.** A full `-n auto` run produced
+# `subprocess.TimeoutExpired` on `docker exec ... python3 -c` after exactly 15 seconds, inside
+# `_host_addresses` -- an error rather than an assertion, so it read as a broken test rather than
+# a busy daemon. These calls are "small and fast" against an idle daemon and not against this one:
+# a bare `docker version` was measured at 432-2552ms during a full run, against roughly 100-200ms
+# idle, and every call here also starts a Python interpreter inside the container.
+#
+# The number is deliberately far above the observed cost rather than just above it, because the
+# thing being bounded is a hang and the cost of waiting longer on a healthy run is zero -- nothing
+# here reaches the bound unless something is genuinely stuck.
+_EXEC_TIMEOUT_SECONDS = 60
 
 
 def _run_docker(*args: str, timeout: float = _EXEC_TIMEOUT_SECONDS) -> subprocess.CompletedProcess[str]:

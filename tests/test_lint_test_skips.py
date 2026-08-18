@@ -115,10 +115,10 @@ def test_repository_is_clean() -> None:
 
 
 def test_current_skip_sites_are_a_pinned_baseline() -> None:
-    """Fourteen skip sites exist in this tree today, and every one is accepted on purpose.
+    """Fifteen skip sites exist in this tree today, and every one is accepted on purpose.
 
-    A count rather than a name-by-name list, because the point is not which fourteen -- it is
-    that a fifteenth arriving silently is impossible: this test goes red until whoever
+    A count rather than a name-by-name list, because the point is not which fifteen -- it is
+    that a sixteenth arriving silently is impossible: this test goes red until whoever
     added it either states a qualifying reason or takes the count up deliberately.
 
     Ten held before `tests/test_console_design_tokens.py`; that file added two, both naming
@@ -136,6 +136,12 @@ def test_current_skip_sites_are_a_pinned_baseline() -> None:
     covers. `scripts/` is written for bash, so on a machine without one the file has nothing to
     assert against rather than something failing — the same shape as the four console skips above,
     naming an absent tool instead of an absent checkout.
+
+    The fifteenth is `tests/test_container_install.py`, added by `CI-W371`. It executes the `npx`
+    doorbell's own JavaScript to prove that a missing Docker and a stopped Docker produce different
+    messages, so it needs `node` — the same absent-toolchain shape as the fourteenth, and for the
+    same reason: asserting that the two phrases merely *appear* in the file would pass on a source
+    that never reaches the branch printing them.
     """
     from scripts.lint_test_skips import find_skip_sites
 
@@ -143,7 +149,7 @@ def test_current_skip_sites_are_a_pinned_baseline() -> None:
     for path in sorted((REPO_ROOT / "tests").rglob("test_*.py")):
         sites.extend(find_skip_sites(path.read_text(encoding="utf-8"), str(path)))
 
-    assert len(sites) == 14, [f"{s.filename}:{s.line}" for s in sites]
+    assert len(sites) == 15, [f"{s.filename}:{s.line}" for s in sites]
     assert all(s.permitted for s in sites)
 
 

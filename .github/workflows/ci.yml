@@ -559,3 +559,70 @@ jobs:
           done
           echo "published summary, $(wc -l < "$GITHUB_STEP_SUMMARY") lines:"
           cat "$GITHUB_STEP_SUMMARY"
+
+  # The one-command install, executed rather than described.
+  #
+  # `docs/superpowers/plans/2026-08-18-four-surfaces-status.md` recorded the gap precisely: a
+  # Dockerfile and compose files existed and **nothing verified that one command brings the
+  # product up**. `tests/test_container_install.py` holds the structural half and costs every
+  # lane nothing; this is the half that costs minutes, so it is paid once per push here rather
+  # than once per iteration in five worktrees. `CI-W363` measured the local suite at about three
+  # minutes and a container build would have been the largest single tax in the workspace.
+  #
+  # It asserts the claim a stranger is being sold: that after one command the console answers on
+  # localhost. Not that the image builds -- a build that produced a container serving nothing
+  # would pass that and fail the person typing it.
+  container:
+    runs-on: ubuntu-latest
+    if: github.event_name != 'schedule'
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Bring the whole product up with one command
+        run: docker compose -f docker-compose.demo.yml up -d --build
+
+      # Bounded, and it reports the container's own log on failure. A bring-up that fails here
+      # without the entrypoint's messages tells the reader the console is down and not which of
+      # its four steps never finished -- which is the diagnosis, not the symptom.
+      - name: Wait for the console to answer
+        run: |
+          set -euo pipefail
+          for _ in $(seq 1 60); do
+            if curl -fsS -u "sync:sync-local-demo" -o /dev/null http://127.0.0.1:4173/; then
+              echo "the console answered"
+              exit 0
+            fi
+            sleep 5
+          done
+          echo "the console never answered within 300s"
+          docker compose -f docker-compose.demo.yml logs --no-color
+          exit 1
+
+      # The console rendering is half the claim. A console whose panels are all 401 renders
+      # perfectly and shows nothing, which is exactly what B187 was, so the API is asked through
+      # the proxy the console actually uses rather than directly.
+      - name: The API answers through the console's own proxy
+        run: |
+          set -euo pipefail
+          status=$(curl -s -o /dev/null -w '%{http_code}' \
+            -u "sync:sync-local-demo" http://127.0.0.1:4173/api/repositories)
+          test "$status" = "200" || {
+            echo "the API returned $status through the console proxy, so every panel is empty"
+            docker compose -f docker-compose.demo.yml logs --no-color
+            exit 1
+          }
+          echo "the API answered 200 through the proxy"
+
+      # Unauthenticated must be refused. The console is the only published surface and its
+      # credential is the only boundary in front of it.
+      - name: The credential is actually required
+        run: |
+          set -euo pipefail
+          status=$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:4173/)
+          test "$status" = "401" || { echo "expected 401 without a credential, got $status"; exit 1; }
+          echo "unauthenticated requests are refused"
+
+      - name: Tear down
+        if: always()
+        run: docker compose -f docker-compose.demo.yml down -v

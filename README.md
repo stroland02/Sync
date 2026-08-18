@@ -458,6 +458,75 @@ These are enforced rather than encouraged, because each one failed silently at l
 
 ## Quick start
 
+### Run it — one prerequisite, and it is Docker
+
+Nothing below this heading needs Python, `uv`, Node, `gh` or a Postgres on your machine. The image
+carries all of them.
+
+```bash
+git clone https://github.com/stroland02/sync.git
+cd sync
+docker compose -f docker-compose.demo.yml up --build
+```
+
+Then open **http://127.0.0.1:4173** and sign in with the password the log prints — `sync-local-demo`
+unless you exported `SYNC_CONSOLE_PASSWORD` before starting. The first build takes a few minutes;
+after that it is seconds.
+
+That brings up Postgres, applies the schema, starts the API, waits until the API actually answers,
+and only then serves the console. The order is deliberate: **half a stack is worse than no stack**,
+because a console pointed at an API that never came up presents as a console bug and sends you
+debugging the wrong thing.
+
+Nothing is exposed except the console, and it is bound to `127.0.0.1` rather than every interface.
+The API is reached only through the console's own `/api` proxy, which is where the credential gate
+sits.
+
+**Two things this does not do yet, stated here rather than discovered.**
+
+- **The console comes up empty.** It renders correctly and has no data in it, because nothing yet
+  indexes a repository you point it at — the CLI has no indexing subcommand, and indexing needs a
+  vendor specification staged that a fresh container does not have. `B188` in
+  `docs/superpowers/BACKLOG.md` carries the three ways out and what each one costs. Until that
+  lands, this shows you that the product runs, not what it finds in your code.
+- **It is three commands, not one.** `git clone`, `cd`, `docker compose up`. The single-command
+  form is a thin `npx` wrapper over exactly this, and it is not built yet.
+
+To stop it, and to remove its database with it:
+
+```bash
+docker compose -f docker-compose.demo.yml down -v
+```
+
+This is deliberately a separate file from `docker-compose.yml`, which serves only the development
+Postgres on port 5433 that the section below uses.
+
+### The journey, and why it runs in this order
+
+Most tools in this space need instrumentation before they can show you anything: install an SDK,
+get a key, wire an exporter, wait for an event. **Sync does not, and that is the strongest thing
+about it.** The API dependency graph's first rung is `static` — call sites read straight out of
+your code — so there is something true to show before you have configured anything.
+
+1. **Index your repository.** Your call sites, your vendors, your findings. Every binding marked
+   `static`, and the console saying plainly that `static` is what it is. No key, no SDK, no signup.
+   *(Blocked today — see the note above and `B188`.)*
+2. **Attach telemetry, if you want to, and watch bindings move from `static` to `observed`.** The
+   screen shows the upgrade, so you can see exactly what instrumenting bought you. It is an
+   argument for instrumenting rather than a precondition for being allowed in. In practice this is
+   `sync ingest` over a payload you exported — Sync has no listener and does not ask you to point
+   an exporter at a URL.
+3. **Let it open a pull request, once you trust it.** Last, not first — after you have seen its
+   reasoning on your own code.
+
+**Value before configuration**, and it is not a trick: the provenance rung means the console can
+say exactly how much that free first answer is worth.
+
+### Working on Sync itself
+
+Everything from here down is the from-source path, which is a different job with different
+prerequisites.
+
 ### What you need before the first command
 
 - **Python 3.12** and [uv](https://docs.astral.sh/uv/). The interpreter is `python`.
