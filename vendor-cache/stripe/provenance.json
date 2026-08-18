@@ -1,0 +1,8 @@
+{
+  "vendor_id": "stripe",
+  "tag": "v2330",
+  "digest": "5f71dcd3bec1302cf70cba56bc9ebf043b38a1727acb43cee9e20fa08ead6be7",
+  "symbols": 272,
+  "baked_at": "2026-08-18T16:11:45.437307+00:00",
+  "note": "Baked from the vendor's specification at the tag above. This snapshot ages: a finding derived from it reflects the vendor as of that tag, not today. Re-baking is a maintained task, not an automatic one."
+}
