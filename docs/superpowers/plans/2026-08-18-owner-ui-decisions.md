@@ -784,3 +784,55 @@ already know about, while an arriving row, a changing value and a building graph
 system* did that you would otherwise miss. **The entire motion budget goes to what changed rather
 than to where you went**, which is the same argument as every other refusal in this document,
 applied to milliseconds instead of pixels.
+
+## Round eighteen: decisions 84-87 — and 79 is substantially superseded
+
+**84. `lib/motion.ts`'s bar stands unchanged: motion is permitted where the data holds a time, and
+on a surface the operator meets occasionally rather than crosses on every pointer move.** **Rejected:
+splitting it into a strict class and a looser interaction class**, and **rejected: replacing it with
+taste.**
+
+**This is the decision that reshapes the whole motion round, so the supersession is written out
+rather than left to be discovered.** Decision 79 was *maximum motion — staggered entrances, charts
+drawing in, panels springing, page cross-fades*. Against decision 84:
+
+| 79 promised | status now | why |
+|---|---|---|
+| staggered row entrance on page load | **withdrawn** | a page load is not a time the data holds |
+| charts drawing in on mount | **withdrawn** | same; mount is not an event |
+| panels springing on mount | **withdrawn** | same |
+| page cross-fades | already withdrawn by 83 | navigation is something you did |
+| numbers rolling | already withdrawn by 77 | renders a figure nothing measured |
+| hover easing | **withdrawn** | crossed on every pointer move |
+
+**What survives is not less alive — it is differently alive.** Every animation left in the console
+points at something that actually happened: a stage transition arriving, a value changing, the canvas
+building as files are read, the new-findings banner appearing. **Nothing moves because a page
+rendered.** The console feels alive exactly when the system is doing something, and still when it is
+not — which is information rather than decoration.
+
+**The bar is also load-bearing evidence rather than a slogan:** `lib/motion.ts` records that its
+third sanctioned usage was **measured and deleted** after it was found never to have run once.
+
+**85. Overlays split along a real line: the panel is a framer `motion.div` on the spring; the scrim
+is Radix `[data-state]` opacity in CSS.** **Rejected: framer for both via `forceMount`**, and
+**rejected: CSS keyframes for both.**
+
+**One honest note on 84 and 85 together.** A drawer opening is *not* a time the data holds, so it
+fails the bar's first clause and passes its second. **It is granted deliberately as a named register
+entry rather than by reinterpreting the bar** — which is precisely what decision 80's
+name-every-instance register is for. The bar governs whether a motion earns an entry; the register is
+the authority on what exists.
+
+**86. A dismissed or filtered-out row is gone on the next render.** No exit animation. The toast says
+what happened and why — `PostRefunds dismissed · not used here`. **Rejected: collapse-and-settle**,
+and **rejected: fade-in-place.** Exit animation on a virtualised list is the easiest thing here to
+make janky, and the row leaving is something *you* did.
+
+**87. New rows arriving on the stream are held behind a banner — `↓ 2 new findings [Show]`.** The
+table does not move while you read it; **the count is live even so.** **Rejected: inserting at the
+top**, and **rejected: inserting only when scrolled to the top.**
+
+**This is the log-tail problem answered in the reader's favour**, and it is the same instinct as
+decision 34's drawer: content that shifts under your eyes while you are reading it costs more than
+freshness buys. The banner is the arrival animation.
