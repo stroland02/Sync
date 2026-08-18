@@ -1,9 +1,15 @@
 """The documented first run, checked against the code it documents.
 
-A README is prose until something reads it. These tests read the one block a new user types
-verbatim -- the Quick start -- and hold it against the argparse surface, the two entry points
-that resolve a graph, and the value `--repo` refuses. None of them needs the network, Docker
-or a model call; the two that need Postgres reach only `information_schema`.
+Documentation is prose until something reads it. These tests read the block a new user types
+verbatim -- the first-run region of `docs/developing.md` -- and hold it against the argparse
+surface, the two entry points that resolve a graph, and the value `--repo` refuses. None of
+them needs the network, Docker or a model call; the two that need Postgres reach only
+`information_schema`.
+
+**They read `docs/developing.md` rather than `README.md` as of `CI-W442`**, because `CI-W435`
+made the README the install page for a visitor and moved the developer first run out. The
+subject never changed -- what somebody performs on a fresh checkout -- so the tests followed
+the content rather than the filename.
 
 The failure they exist to stop is drift rather than a bug. An audit on 2026-08-16 walked the
 Quick start as a new user would and found three of its eight commands unable to work and two
@@ -27,6 +33,11 @@ from sync.graph.store import GraphStore
 
 README = Path(__file__).resolve().parents[1] / "README.md"
 
+# The developer first run moved here when `CI-W435` turned the README into the install page.
+# These tests follow the content rather than the filename: what they check is the run somebody
+# performs on a fresh checkout, and that is a different document from the one a visitor reads.
+FIRST_RUN = Path(__file__).resolve().parents[1] / "docs" / "developing.md"
+
 # The database this run was given, which is not the default: `conftest` builds one per process.
 DSN = os.environ.get("SYNC_DSN", DEFAULT_DSN)
 
@@ -39,12 +50,32 @@ def _fenced_bash_blocks(markdown: str) -> list[str]:
     return re.findall(r"^```bash\n(.*?)^```", markdown, flags=re.MULTILINE | re.DOTALL)
 
 
-def _quick_start(markdown: str) -> str:
-    """The section a new user types, from its heading to the next one."""
-    start = markdown.index("\n## Quick start\n")
-    end = markdown.index("\n## ", start + 1)
-    return markdown[start:end]
+def _first_run_doc() -> str:
+    return FIRST_RUN.read_text(encoding="utf-8")
 
+
+def _quick_start(markdown: str) -> str:
+    """The section a new user performs, from the prerequisites to the end of the console block.
+
+    A region rather than one heading, because the documented first run is four consecutive
+    sections -- what you need, install, run, console -- and checking only one of them would let
+    a prerequisite drift out of the other three unnoticed.
+
+    **This raised `ValueError` for three tests when the section moved**, which reads as a crash
+    rather than as the rename it was. Missing markers now fail with a sentence saying which
+    document was searched and for what.
+    """
+    opening = "\n### What you need before the first command\n"
+    closing = "\n## Quality gates"
+    if opening not in markdown:
+        raise AssertionError(
+            f"{FIRST_RUN.name} no longer opens the documented first run with {opening.strip()!r}"
+            " -- if that section moved again, point this at where it went rather than deleting"
+            " the check"
+        )
+    start = markdown.index(opening)
+    end = markdown.index(closing, start) if closing in markdown[start:] else len(markdown)
+    return markdown[start:end]
 
 def _sync_invocations(block: str) -> list[list[str]]:
     """Every `uv run sync ...` in a shell block, as argv the parser can be handed.
@@ -99,7 +130,7 @@ def test_every_command_in_the_quick_start_is_a_command_the_cli_has():
     """
     invocations = [
         argv
-        for block in _fenced_bash_blocks(_quick_start(_readme()))
+        for block in _fenced_bash_blocks(_quick_start(_first_run_doc()))
         for argv in _sync_invocations(block)
     ]
     assert invocations, "the Quick start block invokes no `uv run sync` command at all"
@@ -133,7 +164,7 @@ def test_the_readme_names_every_authenticated_tool_the_first_run_shells_out_to()
     the cascade's last tier is the Claude Agent SDK, which runs the `claude` binary. Both were
     undocumented, and the second was named nowhere in the repository's front matter.
     """
-    quick_start = _quick_start(_readme())
+    quick_start = _quick_start(_first_run_doc())
 
     for tool in ("gh", "claude", "npm"):
         assert re.search(rf"`{tool}`", quick_start), (
@@ -149,7 +180,7 @@ def test_the_console_block_installs_and_seeds_before_it_starts_anything():
     of the seed, which is the order that leaves it reading a database with no schema.
     """
     console = next(
-        block for block in _fenced_bash_blocks(_quick_start(_readme()))
+        block for block in _fenced_bash_blocks(_quick_start(_first_run_doc()))
         if "npm run dev" in block
     )
 
