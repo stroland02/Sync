@@ -67,6 +67,9 @@ const DESTINATION_ICON: Record<string, LucideIcon> = {
  */
 const SETTINGS_NOTE = "Settings — read-only until the write path lands"
 
+/** Where a row goes when its own subject is not bound: the screen a codebase is selected on. */
+const SUBJECT_PICKER = "/"
+
 
 
 function DestinationRow({
@@ -82,9 +85,19 @@ function DestinationRow({
 }) {
   const Icon = DESTINATION_ICON[route.path] ?? Layers
   const current = isActiveMenuItem(route, pathname)
-  const href = destinationHref(route, bound)
+  const bound_href = destinationHref(route, bound)
+  // **Never null, and never a span.** Nine of twelve routes need a bound parameter, so
+  // `destinationHref` answers null for most of the sidebar most of the time. That used to render a
+  // <span> styled as a row: it looked pressable, absorbed the click and did nothing, which is the
+  // worse half of the failure the owner named -- a control that vanishes is honest, one that eats
+  // the press reads as broken.
+  //
+  // Where the subject is missing, the row goes to where a subject is chosen. The codebase is the
+  // independent variable, so that is the Overview; the row's accessible name still says what it is
+  // reached from, so the reader learns why they were taken there rather than being dropped.
+  const href = bound_href ?? SUBJECT_PICKER
   const described =
-    href === null && route.reachedFrom !== null
+    bound_href === null && route.reachedFrom !== null
       ? `${route.label} — reached from ${route.reachedFrom}`
       : route.label
   const body = (
@@ -93,27 +106,6 @@ function DestinationRow({
       <span className={minimised ? "sr-only" : undefined}>{route.label}</span>
     </>
   )
-
-  if (href === null) {
-    return (
-      <SidebarMenuItem>
-        <SidebarMenuButton
-          asChild
-          isActive={current}
-          className="h-7 text-body hover:bg-transparent hover:text-foreground-lighter"
-        >
-          <span
-            data-destination={route.path}
-            title={described}
-            aria-label={described}
-            aria-current={current ? "page" : undefined}
-          >
-            {body}
-          </span>
-        </SidebarMenuButton>
-      </SidebarMenuItem>
-    )
-  }
 
   return (
     <SidebarMenuItem>
