@@ -487,3 +487,43 @@ decision to revisit rather than a bug to report.
 **This binds decision 40.** Dense tables at 50 rows per page now means 32px rows, and
 `--spacing-row` already names 8px — the guards that failed on `main` tonight exist to keep exactly
 these values in one place. **No screen spells 32px raw.**
+
+## Round eleven: decisions 57-60, components. Owner-selected 2026-08-18
+
+**57. The table gets a sticky header, a sticky first column, and column sort whose state is in the
+URL.** **Not selected: row multi-select with bulk actions**, and **not selected: filter chips.**
+
+**Not selecting chips leaves a gap that must be closed elsewhere, because it is an honesty gap rather
+than a convenience one.** Decision 49 puts filters in the URL; with no chips, a filtered table looks
+exactly like an unfiltered one. **The footer count from decision 40 carries it: `showing 4 of 31 ·
+27 filtered out`, and never a bare `4 rows` when a filter is active.** That is a coordinator ruling
+and reversible — but *something* must say it, because a subset presented as a set is the failure this
+console exists to prevent.
+
+**Bulk dismissal not being selected also settles a question decision 45 raised**: dismissal is
+one finding at a time, so every dismissal has a reason somebody actually chose.
+
+**58. Charts get a quiet baseline and tick labels. No gridlines, no legend unless there are multiple
+series.**
+
+**59. Radix primitives, styled by us — which is already the architecture, so this decision changes
+nothing and deletes something.** All three existing overlays already import `radix-ui` directly:
+`components/ui/dialog.tsx`, and the vendored `dialog.tsx` and `sheet.tsx`. Nothing new to install.
+
+**What it does settle: `web/src/vendor/supabase/ui/dialog.tsx` has zero importers.** Our own
+`components/ui/dialog.tsx` has one, and the vendored `sheet.tsx` has one. **Delete the dead one** —
+delete rather than deprecate, and two dialog implementations for one job is the fact-written-twice
+defect wearing a component's clothes. The Supabase carve-out is unaffected: `sheet.tsx` stays,
+attributed in `web/NOTICE`.
+
+**60. Counts group with separators and abbreviate above ten thousand**, with the exact value on
+hover — `892k`, hover `892,317`.
+
+**Two consequences, and the first is the same shape as decision 38's.** **Hover does not exist on
+touch, in a screenshot, or for a keyboard user who never points at it.** So the exact value goes in
+the `title` attribute and in the accessible name, not only in a floating tooltip — and **`Export CSV`
+never abbreviates**, because a CSV is the artifact somebody sums.
+
+**Second: tabular figures still apply.** Whatever is shown, digits align in a column. A right-aligned
+column of numbers that do not line up is harder to compare than one that does, and comparison is the
+only reason to put them in a column.
