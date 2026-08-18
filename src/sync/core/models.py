@@ -76,6 +76,13 @@ written that way -- `GraphStore.insert_finding` refuses one, which puts the chec
 # that disagrees with the type the first time a rung is added.
 FINDING_RUNGS: tuple[str, ...] = get_args(BindingRung) + (UNATTRIBUTED,)
 
+# Why somebody set a finding aside. Closed for the reason `abandon_reason_code` is closed: a
+# promise to learn from dismissals needs a schema that can answer the question, and free text
+# cannot be aggregated. `false-positive` is the only honest source of detector accuracy this
+# system has, so it is a member of a vocabulary rather than a phrase somebody typed.
+DismissalReason = Literal["not-used-here", "intentional", "false-positive", "wont-fix"]
+DISMISSAL_REASONS: tuple[str, ...] = get_args(DismissalReason)
+
 
 def _now() -> datetime:
     return datetime.now(timezone.utc)
