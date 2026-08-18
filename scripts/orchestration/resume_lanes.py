@@ -182,10 +182,23 @@ def reset_seconds(notice: str, now: int | None = None) -> int | None:
     moment = datetime.fromtimestamp(now if now is not None else time.time(), zone)
     deadline = moment.replace(hour=hour, minute=int(minute), second=0, microsecond=0)
     if deadline <= moment:
-        # Already past today, so the agent means tomorrow's occurrence rather than a negative hold.
-        deadline += timedelta(days=1)
+        # Already past today. Rolling to tomorrow is right only when the gap is plausibly one
+        # session window; otherwise the notice describes a reset that has **already happened**.
+        # Measured 2026-08-18: Lane A printed `resets 1:20am` and the sweep read it at 01:23, three
+        # minutes after the limit lifted. Rolling forward held a free lane for 1436 minutes.
+        # **Session windows are hours, not days** -- Claude's is five, Gemini's about two -- so a
+        # rolled-forward window longer than any real one is an expired notice rather than a future
+        # reset, and an expired hold is zero.
+        rolled = deadline + timedelta(days=1)
+        if (rolled - moment).total_seconds() > LONGEST_PLAUSIBLE_WINDOW_SECONDS:
+            return 0
+        deadline = rolled
     return int((deadline - moment).total_seconds())
 
+
+# No agent CLI here publishes a limit window longer than about five hours. A reset computed to be
+# further out than this came from rolling a past wall clock forward, which means it already lifted.
+LONGEST_PLAUSIBLE_WINDOW_SECONDS = 6 * 3600
 
 HOLD_CLOCK = Path(__file__).resolve().parent / "hold_clock.json"
 
