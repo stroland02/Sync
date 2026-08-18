@@ -248,6 +248,9 @@ CONSOLE_CLAIM_PATHS = (
 # two apart.
 _SIGNED = re.compile(r"^Signed:\s*(?P<when>\S+)\s*$", re.MULTILINE)
 
+HISTORICAL = re.compile(r"^Historical:", re.MULTILINE)
+"""A report that is unsigned on purpose, and says so, rather than one missing a signature."""
+
 SIGNATURE_LINE = "Signed: <ISO 8601 timestamp>"
 
 
@@ -290,13 +293,23 @@ def gate_three_console_truth(reports_dir: Path, *, console_changed_at: str | Non
 
     signed: list[tuple[str, Path]] = []
     unsigned: list[Path] = []
+    historical: list[Path] = []
     for report in reports:
         try:
-            recorded = signature_date(report.read_text(encoding="utf-8"))
+            text = report.read_text(encoding="utf-8")
         except OSError:
-            recorded = None
+            text = ""
+        recorded = signature_date(text) if text else None
         if recorded:
             signed.append((recorded, report))
+        elif HISTORICAL.search(text):
+            # Unsigned on purpose. `M0-W291` settled that the screen-pass report is the historical
+            # record and carries no signature, after two reports disagreed about the mechanism that
+            # reads them -- but the gate still listed it as missing one, which is what it would say
+            # about a report somebody forgot to sign. A reader could not tell a deliberate omission
+            # from a mistake, so every sweep re-asked the same question. Unmeasured is a legitimate
+            # verdict here; ambiguous is not.
+            historical.append(report)
         else:
             unsigned.append(report)
 
@@ -308,6 +321,12 @@ def gate_three_console_truth(reports_dir: Path, *, console_changed_at: str | Non
             f"typo fix. Add a line reading `{SIGNATURE_LINE}` to the pass that is current"
         )
         return Verdict(gate="3", name=name, status=CANNOT_TELL, evidence=evidence)
+
+    if historical:
+        evidence.append(
+            "carries no signature by design, so not read and not missing one: "
+            + ", ".join(r.name for r in historical)
+        )
 
     if unsigned:
         evidence.append(
@@ -328,9 +347,12 @@ def gate_three_console_truth(reports_dir: Path, *, console_changed_at: str | Non
     )
     if console_changed_at > latest:
         evidence.append(
-            "the recorded signature date is older than the console change, so this reads as "
-            "stale. If the console was re-signed since, the report's `Signed:` line was not "
-            "updated -- update that line rather than re-walking the screens"
+            "the recorded signature date is older than the console change, so the signature "
+            "describes a tree that is no longer here. **Walk the screens again and sign with the "
+            "date you walked them**, in this report's `Signed:` line. Moving that date without walking "
+            "produces a green nobody can "
+            "trace to a check, which is the failure this console exists to replace -- and the "
+            "gate said the opposite here until CI-W390"
         )
         return Verdict(gate="3", name=name, status=CANNOT_TELL, evidence=evidence)
     return Verdict(gate="3", name=name, status=MET, evidence=evidence)
