@@ -65,6 +65,7 @@ import {
   type RemediationStanding,
   type RemediationState,
 } from "@/features/findings/remediation"
+import { workspacePath } from "@/features/findings/workspace-path"
 import { DetailTitleText, findingTitle } from "@/lib/detail-title"
 import { formatFindingBadge, orAbsent } from "@/lib/format"
 import { Button } from "@/components/ui/button"
@@ -171,6 +172,7 @@ function standingWord(standing: RemediationStanding, outcome: string | null): Re
  * copies rather than reads — `lib/detail-title.tsx` carries what it cost to have it at 46px instead.
  */
 function findingFacts(
+  repoId: string | undefined,
   findingId: string,
   data: FindingDetail | null,
   failure: ReactNode | null,
@@ -224,7 +226,7 @@ function findingFacts(
       label: "Vendor",
       value: fact("w-32", (found) => (
         <Link
-          to={`/vendors/${encodeURIComponent(found.vendor)}`}
+          to={`${workspacePath(repoId)}/vendors/${encodeURIComponent(found.vendor)}`}
           className="font-mono underline underline-offset-2"
         >
           {found.vendor}
@@ -270,15 +272,21 @@ export interface FindingPageProps {
 export function FindingPage({ question = DEFAULT_QUESTION }: FindingPageProps) {
   // A URL is user input, so the identifier is checked here rather than assumed. The query
   // lives one level down so that check happens before a request is made for it.
-  const { findingId } = useParams<{ findingId: string }>()
+  // `repoId` arrives because every route is workspace-scoped as of `M14-W386`. Links built
+  // without it resolved to the collapsed region's old addresses and rendered
+  // "No screen at this address." -- caught by opening the screen rather than by a type error,
+  // because a path is a string and every one of these compiled perfectly.
+  const { repoId, findingId } = useParams<{ repoId: string; findingId: string }>()
   if (findingId === undefined) return <UnknownRoute />
-  return <FindingDetailPage findingId={findingId} question={question} />
+  return <FindingDetailPage repoId={repoId} findingId={findingId} question={question} />
 }
 
 function FindingDetailPage({
+  repoId,
   findingId,
   question,
 }: {
+  repoId: string | undefined
   findingId: string
   question: string
 }) {
@@ -337,7 +345,7 @@ function FindingDetailPage({
           actions={
             reachedPullRequest(remediation) ? (
               <Button asChild>
-                <Link to={`/findings/${encodeURIComponent(findingId)}/workflow/pull-request`}>
+                <Link to={`${workspacePath(repoId)}/findings/${encodeURIComponent(findingId)}/workflow/pull-request`}>
                   Review proposed patch
                 </Link>
               </Button>
@@ -348,7 +356,7 @@ function FindingDetailPage({
       rail={
         <div className="flex min-w-0 flex-col gap-section">
           <FactList
-            facts={findingFacts(findingId, query.isSuccess ? query.data : null, failure, remediation)}
+            facts={findingFacts(repoId, findingId, query.isSuccess ? query.data : null, failure, remediation)}
           />
           <p className="text-body text-ink-muted">
             What this call site calls, and how the system knows it does.
@@ -371,7 +379,7 @@ function FindingDetailPage({
           <div className="flex flex-col gap-field">
             <div className="flex flex-col gap-field">
               <Button asChild variant="outline" className="w-full justify-start">
-                <Link to={`/findings/${encodeURIComponent(findingId)}/workflow`}>
+                <Link to={`${workspacePath(repoId)}/findings/${encodeURIComponent(findingId)}/workflow`}>
                   Open the solution workflow
                 </Link>
               </Button>
@@ -382,7 +390,7 @@ function FindingDetailPage({
             {reachedPullRequest(remediation) && (
               <div className="flex flex-col gap-field">
                 <Button asChild variant="outline" className="w-full justify-start">
-                  <Link to={`/findings/${encodeURIComponent(findingId)}/workflow/pull-request`}>
+                  <Link to={`${workspacePath(repoId)}/findings/${encodeURIComponent(findingId)}/workflow/pull-request`}>
                     Pull request
                   </Link>
                 </Button>
