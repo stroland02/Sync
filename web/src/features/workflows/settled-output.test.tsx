@@ -93,3 +93,30 @@ describe("what this payload cannot settle", () => {
     expect(screen.getByText(/provenance rung/i)).not.toBeNull()
   })
 })
+
+describe("the refusal is argued, not merely performed", () => {
+  /**
+   * From `superlog-02`, read 2026-08-18. Their `rootCause.confidence` is documented as a 0-10 scale
+   * where *"10 means the agent found direct, verbatim evidence (a line of code, a matching
+   * stacktrace, a clear log message)"* and 0 means speculative.
+   *
+   * That is the provenance rung with the information thrown away: a line of code is `static`, a
+   * matching log is `observed`, speculative is `unresolved`. Omitting a number is invisible to a
+   * reader who has seen the competitor's screen; saying what the number compresses is not.
+   */
+  it("says a confidence score compresses the class of evidence the rung names", () => {
+    renderTab(state([]))
+
+    const text = document.body.textContent ?? ""
+    expect(text).toContain("class of evidence")
+    expect(text).toMatch(/compress|collaps/i)
+  })
+
+  it("still carries no scalar of its own while making that argument", () => {
+    renderTab(state([]))
+
+    const text = document.body.textContent ?? ""
+    expect(text).not.toMatch(/\b\d{1,2}\s*\/\s*(?:5|10)\b/)
+    expect(text).not.toMatch(/confidence[:\s]+\d/i)
+  })
+})

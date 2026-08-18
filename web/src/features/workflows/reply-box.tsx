@@ -27,7 +27,19 @@ import { Textarea } from "@/components/ui/textarea"
 /** The route a reply needs, named so the gap is a work item rather than a shrug. */
 export const REPLY_ROUTE = "POST /api/workflows/{finding_id}/reply"
 
-export function ReplyBox() {
+export interface ReplyBoxProps {
+  /**
+   * The node the graph still owes a visit, or `null` on a run that reached a terminal outcome.
+   *
+   * This decides WHICH refusal applies, and the distinction came out of `superlog-02`: their run
+   * states carry `awaiting_human`, and a reply in that state resumes the investigation in place
+   * rather than starting a new run. A reply box on a waiting run and a reply box on a finished one
+   * are two different refusals, and naming only the missing route collapses them into one.
+   */
+  readonly waitingOn: string | null
+}
+
+export function ReplyBox({ waitingOn }: ReplyBoxProps) {
   const fieldId = useId()
   const explanationId = useId()
   const [draft, setDraft] = useState("")
@@ -49,6 +61,24 @@ export function ReplyBox() {
           placeholder="Narrow the patch to the call site, and leave the helper alone."
         />
       </div>
+
+      {/* Which refusal applies, before the one about the route. The route is missing either way;
+          whether a reply would achieve anything if it existed depends on the run. */}
+      <p className="max-w-prose text-body text-ink-muted">
+        {waitingOn === null ? (
+          <>
+            This run <strong>reached a terminal outcome</strong>. Even with the route below, a reply
+            would not resume it -- there is no node left for the graph to visit, so a reply would be
+            the start of something else, and nothing here decides what that is.
+          </>
+        ) : (
+          <>
+            This run <strong>has not finished</strong>: the graph still owes{" "}
+            <code className="font-mono">{waitingOn}</code> a visit. This is the state a reply is for
+            -- a reviewer's turn that re-enters the run in place rather than starting a second one.
+          </>
+        )}
+      </p>
 
       <p id={explanationId} className="max-w-prose text-body text-ink-muted">
         This cannot be sent. Sync's API is read-only — no route mutates a run, and the only write
