@@ -2,10 +2,11 @@
 
 ## The defect this exists to catch, which shipped and stayed green
 
-`M14-W386` moved all ten routes under `/repositories/:repoId/`. Twelve link sites went on building
-the old unscoped `/findings/{id}` and `/vendors/{id}` paths, and `App.tsx` ends its table with
-`<Route path="*" element={UnknownRoute}>` and carries no legacy redirect -- so every one of them
-rendered *No screen at this address*. Clicking a finding anywhere in the console 404'd.
+`M14-W386` moved all ten routes under `/repositories/:repoId/`. Nineteen link sites went on building
+the old unscoped `/findings/{id}`, `/vendors/{id}` and `/bindings/vendors/{id}/operations/{id}`
+paths, and `App.tsx` ends its table with `<Route path="*" element={UnknownRoute}>` and carries no
+legacy redirect -- so every one of them rendered *No screen at this address*. Clicking a finding
+anywhere in the console 404'd.
 
 **Nothing caught it, and nothing could have.** `npm run build` was clean, 771 console tests passed,
 `lint` reported no errors, and the Python guards were green: a `<Link to=...>` is a string, and no
@@ -29,6 +30,20 @@ occurred, and does not pretend to verify parameters it cannot see.
 name. That is a stated limit of this guard, not an oversight -- `destinationHref` in
 `layouts/app-frame.tsx` builds paths from the registry itself, which is the pattern that cannot
 drift and the one more code should use.
+
+## There are no exemptions, and there was nearly one for a reason that was wrong
+
+`M14-W436` shipped this guard with two links exempted, on the reasoning that a run cannot know its
+workspace because `migration_outcome` stores no `repo_id`. The schema fact was right and the
+conclusion did not follow: `sync.dashboard.fleet._run_row` has always carried the repository, and
+`types.ts` simply omitted the field, so the console built links without a value it was being sent.
+`M14-W438` added the field and the link resolved with no lookup at all. The second exempted link was
+in a module with no caller -- `proposedPatchTarget`, kept alive by its own test after the action it
+served was removed -- and `M14-W444` deleted it.
+
+Both entries are gone and the set with them. The lesson worth keeping is that the exemption was
+argued from a real constraint one layer away from the code that actually built the row, and that a
+guard is the wrong place to record a belief about why something cannot be fixed.
 """
 
 from __future__ import annotations
@@ -55,25 +70,6 @@ ASSIGNED = re.compile(r"""(?:=|return)\s+(?:"(/[^"]*)"|`(/[^`]*)`)""")
 # `/api/...` is a transport path, not a route. It is the one prefix that legitimately starts with a
 # segment no route declares, and `api/client.ts` is where those belong.
 TRANSPORT = "api"
-
-# The two links that cannot be built from the data in hand, named individually so the exemption
-# cannot quietly widen.
-#
-# Both link from a *run* to its finding, and `RunRow` carries no repository -- `migration_outcome`
-# stores none, by the schema decision that makes the corpus safe to aggregate across customers. The
-# destination is genuinely underdetermined: the run's finding may belong to a workspace other than
-# the one the reader is in, so taking the workspace from the address would render a finding under a
-# workspace that does not contain it.
-#
-# **What retires this:** the owner ruled these resolve by asking `/api/findings/{id}` which
-# workspace the finding belongs to and navigating with the answer. When that lands, both entries
-# come out of this set and the set goes with them. Until then these two links are known-broken
-# rather than believed-working, which is the distinction the entry buys.
-UNRESOLVABLE_UNTIL_LOOKUP = {
-    ("features/fleet/proposed-patch.ts", 14),
-    ("features/fleet/runs-table.tsx", 153),
-}
-
 
 def declared_roots() -> set[str]:
     """The first path segment of every route the application serves."""
@@ -127,8 +123,6 @@ def test_every_internal_link_starts_at_a_declared_route_root() -> None:
                 if first.startswith("${"):
                     continue  # Built from the registry; see this module's docstring.
                 if first == TRANSPORT:
-                    continue
-                if (path.relative_to(WEB_SRC).as_posix(), line_number) in UNRESOLVABLE_UNTIL_LOOKUP:
                     continue
                 if first not in roots:
                     violations.append(
