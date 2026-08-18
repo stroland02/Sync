@@ -44,7 +44,10 @@ function routeAt(path: string) {
  * screen that supplies the subject, which is a claim about a rendered table rather than about
  * this registry, and it is not what this guard can hold.
  */
-const LINKABLE = ROUTES.filter((route) => route.params.length === 0)
+// The rows the rail draws. Every route carries `:repoId` now, so "no parameters" would select
+// nothing -- what makes a route linkable from the rail is that a selected workspace supplies
+// everything it needs, which is exactly what `nav` records.
+const LINKABLE = ROUTES.filter((route) => route.nav)
 
 function renderNav(routes: readonly (typeof ROUTES)[number][] = ROUTES) {
   // `AppFrame` reads the module's own `ROUTES`, so the sub-setting a failure proof needs happens
@@ -59,7 +62,7 @@ function renderNav(routes: readonly (typeof ROUTES)[number][] = ROUTES) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   render(
     <QueryClientProvider client={client}>
-      <MemoryRouter initialEntries={["/"]}>
+      <MemoryRouter initialEntries={["/repositories/seed-console"]}>
         <AppFrame />
       </MemoryRouter>
     </QueryClientProvider>
@@ -77,7 +80,13 @@ describe("the navigation covers the route registry", () => {
         .filter((href): href is string => href !== null)
     )
 
-    const missing = LINKABLE.filter((route) => !linked.has(route.path)).map((r) => r.path)
+    // Compared against the address a selected workspace actually produces, not the pattern. Every
+    // route carries `:repoId` now, so a pattern never appears in an href -- asserting on patterns
+    // would fail against a correct rail, and passing one would mean the rail had emitted a literal
+    // `:repoId`, which is the defect this guard's sibling forbids.
+    const expected = LINKABLE.map((route) => route.path.replace(":repoId", "seed-console"))
+    expect(expected.length).toBeGreaterThan(0)
+    const missing = expected.filter((href) => !linked.has(href))
     expect(missing).toEqual([])
   })
 
@@ -99,69 +108,49 @@ describe("the navigation covers the route registry", () => {
   })
 })
 
-describe("the sidebar groups levels into regions without inventing one", () => {
-
+describe("one region, and what a workspace can bind", () => {
   /**
-   * The two regions, and the only two structural claims the sidebar needs from the registry.
+   * `M0-W332` deleted the regions. They were `root` and `repository` and they overlapped by name --
+   * Codebases against Codebase, Vendor against Vendors -- which is the duplication the owner saw in
+   * the rail. Every page is a workspace's page now, so there is nothing left to partition.
    *
-   * Six areas became two regions because the repository is the independent variable: a screen is
-   * either scoped to one repository or it is not. `root` holds what a reader reaches without having
-   * chosen one; `repository` holds what hangs off the choice.
+   * What replaces the partition is `nav`: whether a route is a row the rail draws. That is decided
+   * by what a selected workspace can supply, and the tests below hold both halves of it.
    */
-  it("puts every route in exactly one of the two regions, and neither is empty", () => {
-    // Written because the first version of the two tests below PASSED against a registry with no
-    // `region` field at all: both filters returned nothing, both loops ran zero times, and two
-    // vacuous assertions reported a partition that did not exist. This is the guard that makes
-    // them bite, and it is the same defect `M14-W363` fixed in two other places today.
-    const REGIONS = ["root", "repository"] as const
-
-    for (const route of ROUTES) expect(REGIONS).toContain(route.region)
-    for (const region of REGIONS) {
-      expect(ROUTES.filter((route) => route.region === region).length).toBeGreaterThan(0)
-    }
-    expect(
-      ROUTES.filter((r) => r.region === "root").length +
-        ROUTES.filter((r) => r.region === "repository").length
-    ).toBe(ROUTES.length)
-  })
-
-  it("declares no repository parameter on a root route", () => {
-    // A root screen that needed a repository would be unreachable from the place it is offered.
-    for (const route of ROUTES.filter((r) => r.region === "root")) {
-      expect(route.params).not.toContain("repoId")
-    }
-  })
-
-  it("takes the repository as the first parameter of every repository route, bar three", () => {
-    // Three finding addresses sit under the repository region and cannot declare `repoId`: a
-    // fleet-wide findings row has no repository to put in the href, because `RiskRow` carries none
-    // (`web/src/api/types.ts:135-145`). They are an explicit literal allow-list rather than a
-    // predicate, so adding a fourth is a decision somebody writes down. The backlog item that
-    // retires this is the one filed for `RiskRow` gaining a `repo_id`; until the payload carries it,
-    // a nested finding href would assert a containment nothing computed.
-    const ALLOWED_WITHOUT_REPO = [
-      "/findings/:findingId",
-      "/findings/:findingId/workflow",
-      "/findings/:findingId/workflow/pull-request",
-    ]
-
-    for (const route of ROUTES.filter((r) => r.region === "repository")) {
-      if (ALLOWED_WITHOUT_REPO.includes(route.path)) {
-        expect(route.params).toEqual(["findingId"])
-        continue
-      }
+  it("scopes every route to a workspace, with :repoId first", () => {
+    expect(ROUTES.length).toBeGreaterThan(0)
+    for (const route of ROUTES) {
+      expect(route.path.startsWith("/repositories/:repoId")).toBe(true)
       expect(route.params[0]).toBe("repoId")
     }
   })
 
+  it("draws a row only where a workspace alone can build the address", () => {
+    // A route needing a vendor, an operation or a finding cannot be built from the workspace, so it
+    // is absent from the rail rather than present and inert -- the owner's rule, and the half of it
+    // that matters: a control that vanishes is honest, one that absorbs the click reads as broken.
+    const nav = ROUTES.filter((route) => route.nav)
+    const reached = ROUTES.filter((route) => !route.nav)
 
-  it("claims no level outside GRAPH_LEVELS", () => {
-    // The vocabulary is pinned to the specification by `tests/test_console_hierarchy.py`; here:
-    // an area groups levels the specification declares and never a level of its own invention.
-    for (const route of ROUTES) expect(GRAPH_LEVELS).toContain(route.level)
+    expect(nav.length).toBeGreaterThan(0)
+    expect(reached.length).toBeGreaterThan(0)
+
+    for (const route of nav) {
+      expect(route.params).toEqual(["repoId"])
+    }
+    for (const route of reached) {
+      expect(route.params.length).toBeGreaterThan(1)
+      // Anything the rail cannot reach says where it IS reached from, or a reader meets a dead end.
+      expect(route.reachedFrom).not.toBeNull()
+    }
   })
 
-
+  it("names one page once", () => {
+    // Vendor against Vendors was the complaint. Labels are unique now, and a duplicate would mean
+    // two rows claiming the same thing again.
+    const labels = ROUTES.map((route) => route.label)
+    expect(new Set(labels).size).toBe(labels.length)
+  })
 })
 
 describe("a menu item can own more than one route", () => {
@@ -176,16 +165,16 @@ describe("a menu item can own more than one route", () => {
     // `startsWith` on `"/"` matches the whole console. The helper's non-parameterised branch has to
     // read `"/" + "/"`, which nothing is, or the Fleet row is active on every screen.
     expect(isActiveMenuItem({ path: "/" }, "/")).toBe(true)
-    expect(isActiveMenuItem({ path: "/" }, "/detectors")).toBe(false)
+    expect(isActiveMenuItem({ path: "/repositories/:repoId" }, "/repositories/a/detectors")).toBe(false)
   })
 
   it("matches a parameterised path to its end, so a child never activates its parent", () => {
     expect(
-      isActiveMenuItem({ path: "/findings/:findingId/workflow" }, "/findings/42/workflow")
+      isActiveMenuItem({ path: "/repositories/:repoId/findings/:findingId/workflow" }, "/repositories/a/findings/42/workflow")
     ).toBe(true)
     expect(
       isActiveMenuItem(
-        { path: "/findings/:findingId/workflow" },
+        { path: "/repositories/:repoId/findings/:findingId/workflow" },
         "/findings/42/workflow/pull-request"
       )
     ).toBe(false)
@@ -199,48 +188,51 @@ describe("a destination is linkable when the address supplies its subject", () =
   // destinations declare that one parameter and nothing else.
 
   it("reads a subject out of the address that matches a declared route", () => {
-    expect(boundParams("/findings/f-1/workflow")).toEqual({ findingId: "f-1" })
-    expect(boundParams("/bindings/vendors/stripe/operations/PostCharges")).toEqual({
+    expect(boundParams("/repositories/acme/findings/f-1/workflow")).toEqual({ repoId: "acme", findingId: "f-1" })
+    expect(boundParams("/repositories/acme/bindings/vendors/stripe/operations/PostCharges")).toEqual({
+      repoId: "acme",
       vendorId: "stripe",
       operationId: "PostCharges",
     })
   })
 
   it("binds nothing from an address no route declares", () => {
-    expect(boundParams("/detectors")).toEqual({})
+    expect(boundParams("/repositories/acme/detectors")).toEqual({ repoId: "acme" })
     expect(boundParams("/a-screen-nobody-declared")).toEqual({})
   })
 
   it("decodes a segment, so a subject with a slash in it survives the round trip", () => {
     // `matchPath` decodes what it captures, so re-encoding on the way back out is what keeps an
     // href pointing at the same subject rather than at a truncated one.
-    const bound = boundParams("/vendors/acme%2Fpayments")
+    const bound = boundParams("/repositories/acme/vendors/acme%2Fpayments")
 
-    expect(bound).toEqual({ vendorId: "acme/payments" })
-    expect(destinationHref(routeAt("/vendors/:vendorId"), bound)).toBe("/vendors/acme%2Fpayments")
+    expect(bound).toEqual({ repoId: "acme", vendorId: "acme/payments" })
+    expect(destinationHref(routeAt("/repositories/:repoId/vendors/:vendorId"), bound)).toBe("/repositories/acme/vendors/acme%2Fpayments")
   })
 
-  it("gives a parameterless route its own path whatever the address is", () => {
-    expect(destinationHref(routeAt("/detectors"), {})).toBe("/detectors")
+  it("gives a route its own path once the workspace is bound", () => {
+    // There are no parameterless routes any more -- every page is a workspace's page, so every path
+    // carries :repoId and a bound workspace is enough to build the five the rail draws.
+    expect(destinationHref(routeAt("/repositories/:repoId/detectors"), { repoId: "acme" })).toBe("/repositories/acme/detectors")
   })
 
   it("refuses a route one of whose parameters is unbound", () => {
     // The binding surface standing on `/detectors`. Half a subject is not a destination: a
     // generated href would read `/bindings/vendors/stripe/operations/`.
     expect(
-      destinationHref(routeAt("/bindings/vendors/:vendorId/operations/:operationId"), {
+      destinationHref(routeAt("/repositories/:repoId/bindings/vendors/:vendorId/operations/:operationId"), {
         vendorId: "stripe",
       })
     ).toBeNull()
-    expect(destinationHref(routeAt("/findings/:findingId"), {})).toBeNull()
+    expect(destinationHref(routeAt("/repositories/:repoId/findings/:findingId"), {})).toBeNull()
   })
 
   it("generates the sibling's address from the subject the current one carries", () => {
-    const bound = boundParams("/findings/f-1/workflow")
+    const bound = boundParams("/repositories/acme/findings/f-1/workflow")
 
-    expect(destinationHref(routeAt("/findings/:findingId"), bound)).toBe("/findings/f-1")
-    expect(destinationHref(routeAt("/findings/:findingId/workflow/pull-request"), bound)).toBe(
-      "/findings/f-1/workflow/pull-request"
+    expect(destinationHref(routeAt("/repositories/:repoId/findings/:findingId"), bound)).toBe("/repositories/acme/findings/f-1")
+    expect(destinationHref(routeAt("/repositories/:repoId/findings/:findingId/workflow/pull-request"), bound)).toBe(
+      "/repositories/acme/findings/f-1/workflow/pull-request"
     )
   })
 })

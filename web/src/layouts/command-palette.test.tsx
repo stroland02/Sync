@@ -69,9 +69,13 @@ describe("paletteGroups", () => {
   })
 
   it("never produces a path with an empty parameter in it", () => {
+    // The invariant read the other way round after M0-W332. Every route carries `:repoId` now, so
+    // with no workspace selected every row is a lookup rather than a link -- which is correct, and
+    // is why the assertion is that an UNBOUND row says where to look, not that a followable row has
+    // no parameter. A row offering `/repositories//vendors` would be the defect either way.
     for (const row of rows()) {
       expect(row.pattern).not.toMatch(/\/\//)
-      if (row.lookUpFrom === null) expect(row.pattern).not.toContain(":")
+      if (row.pattern.includes(":")) expect(row.lookUpFrom).not.toBeNull()
     }
   })
 })
@@ -79,7 +83,7 @@ describe("paletteGroups", () => {
 describe("CommandPalette", () => {
   it("offers a subject-taking destination as a lookup a reader cannot follow", async () => {
     render(
-      <MemoryRouter initialEntries={["/detectors"]}>
+      <MemoryRouter initialEntries={["/repositories/org%2Fone/detectors"]}>
         <CommandPaletteProvider>
           <div />
         </CommandPaletteProvider>
@@ -90,7 +94,7 @@ describe("CommandPalette", () => {
 
     // Scoped by role rather than by text: several route labels equal their level's group heading,
     // so a bare text query matches the heading too and fails on the ambiguity rather than the rule.
-    const lookup = ROUTES.find((route) => route.params.length > 0)!
+    const lookup = ROUTES.find((route) => route.reachedFrom !== null)!
     const options = await screen.findAllByRole("option")
     const row = options.find((option) => option.textContent?.includes(lookup.path))
     expect(row).toBeTruthy()

@@ -47,3 +47,24 @@ describe("VendorPage's breadcrumb", () => {
     expect(trail.textContent).toContain("org/payments")
   })
 })
+
+/**
+ * Decision 29 settles this page's order: exposure first, the vendor's history below it as the
+ * reason findings appeared. The mock draws it the other way round and the decision wins.
+ *
+ * Asserted on document order rather than on which components exist, because both orders render
+ * exactly the same set of cards.
+ */
+describe("VendorPage's order, per decision 29", () => {
+  it("leads with what this vendor costs, before what it has done", () => {
+    renderVendor("/vendors/stripe")
+
+    const exposure = screen.getByTestId("vendor-exposure")
+    const history = screen.getByTestId("vendor-history")
+
+    // DOCUMENT_POSITION_FOLLOWING: history comes after exposure in document order.
+    expect(exposure.compareDocumentPosition(history) & Node.DOCUMENT_POSITION_FOLLOWING).toBe(
+      Node.DOCUMENT_POSITION_FOLLOWING,
+    )
+  })
+})

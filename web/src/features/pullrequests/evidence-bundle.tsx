@@ -29,6 +29,23 @@
  *
  * `docs/superpowers/briefs/2026-08-07-substrate-pull-request.md` is still the mapping table that
  * port was gated on; this supersedes its ruling 3 for this file alone.
+ *
+ * ## What each node *is* is not described here, `CI-W379`
+ *
+ * Each stage carried a sentence explaining what that node does. `features/workflows/node-sequence
+ * .tsx` already carries one for every node of the graph, including all five of these, and the two
+ * were written in different words for the same fact — which `CLAUDE.md` calls the most expensive
+ * debt in this repository precisely because the disagreement is silent.
+ *
+ * Measured before removing them: this screen carried 1,309 characters of prose against the drawn
+ * mock's 282–579 across its own screens, and these five sentences were 757 of them — 58% of the
+ * screen, in one constant. Removing them lands it at roughly 552, inside the mock's range.
+ *
+ * **This is a deduplication rather than a cut, and the distinction is load-bearing** — `M0-W329`
+ * says the prose ratio names the problem and does not license deletion. Nothing was lost: the
+ * canonical description is one click away on the Solution Workflow screen, which this file's own
+ * opening paragraph already points at. What stays here is each node's *verdict*, which is the
+ * question a reviewer opened this bundle to ask.
  */
 
 import type { WorkflowNode, WorkflowNodeName, WorkflowOutcome } from "@/api/types"
@@ -45,37 +62,28 @@ type BundleNodeName = Extract<
 interface BundleStage {
   name: BundleNodeName
   title: string
-  blurb: string
 }
 
 const BUNDLE_STAGES: BundleStage[] = [
   {
     name: "static_verify",
     title: "What the compiler said",
-    blurb:
-      "Whether the tree this pull request would carry actually compiles, using the clone's own tsc.",
   },
   {
     name: "replay",
     title: "What replay found",
-    blurb:
-      "Whether the patched call path behaves correctly against a mock of the vendor's new response — stronger than a typecheck, and cheaper than spending a CI run to find out.",
   },
   {
     name: "push_branch",
     title: "Where it was pushed",
-    blurb: "The branch the patch was pushed to, in the customer's own repository.",
   },
   {
     name: "await_ci",
     title: "What the customer's CI said",
-    blurb: "The customer's own pipeline, watched rather than trusted — the long pole of the run.",
   },
   {
     name: "open_pr",
     title: "The pull request",
-    blurb:
-      "What Sync opened, on a run that reached this node. The bundle it assembles for a reviewer — the spec diff, the changelog entry, and the call sites it touched — is not exposed by this transport beyond the two fields below: sync.dashboard.queries reads only pr_url and pr_number out of the checkpoint, so that is all this page can show.",
   },
 ]
 
@@ -123,7 +131,7 @@ function EmptyStage({ node }: { node: WorkflowNode | undefined }) {
 /**
  * What this bundle is, on a run that did not open a pull request.
  *
- * The stage blurbs below are written for a run that reached them, and rendering them
+ * The stage titles below are written for a run that reached them, and rendering them
  * unconditionally headed a `reported` run's page with "What Sync actually opened." and five
  * "Never reached" rows — a page asserting a pull request that routing had decided against.
  * The outcome is on the payload, so the framing follows it rather than presupposing the happy
@@ -238,7 +246,6 @@ function BundleStages({
                 )}
               </span>
             </div>
-            <p className="mt-field max-w-prose text-body text-muted-foreground">{stage.blurb}</p>
             {node?.standing === "due_again" && (
               <p className="mt-field max-w-prose text-body">{STANDING_SENTENCE.due_again}</p>
             )}

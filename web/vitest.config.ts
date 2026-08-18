@@ -18,7 +18,17 @@ import react from "@vitejs/plugin-react"
 
 export default defineConfig({
   plugins: [react()],
-  resolve: { alias: { "@": path.resolve(import.meta.dirname, "./src") } },
+  resolve: {
+    alias: {
+      "@": path.resolve(import.meta.dirname, "./src"),
+      // echarts measures a canvas jsdom never lays out and throws in its own teardown.
+      // `echarts-jsdom-stub.tsx` carries why stubbing beats shimming a canvas here.
+      "echarts-for-react": path.resolve(
+        import.meta.dirname,
+        "./src/components/charts/echarts-jsdom-stub.tsx",
+      ),
+    },
+  },
   test: {
     environment: "jsdom",
     include: ["src/**/*.test.{ts,tsx}", "scripts/**/*.test.ts"],

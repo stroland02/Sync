@@ -1,12 +1,15 @@
 /**
  * Settings: what this deployment watches, and what it lets you configure.
  *
- * Organized into five primary setting groups matching the system's operational architecture:
- * 1. Pull requests — Automated merge policies (with refusal notice for immediate/always), merge methods, base branches.
- * 2. Codebases — Repository scope, project context (.sync/context.md), and static analysis configuration.
+ * A left sub-nav showing one group at a time, per owner decision 17, which also fixes the order:
+ * 1. Codebases — Repository scope, project context (.sync/context.md), and static analysis configuration.
+ * 2. Pull requests — Automated merge policies (with refusal notice for immediate/always), merge methods, base branches.
  * 3. Adapters — Inventory of registered signal feeds and vendor adapters.
- * 4. GitHub Connection — Local gh CLI authentication status, monitored repository permissions, and local-only forge notes.
- * 5. About Sync — Foundational platform explanations (provenance rungs, adapter tiers, abandon reasons, verification gates).
+ * 4. Connection — Local gh CLI authentication status, monitored repository permissions, and local-only forge notes.
+ * 5. About — Foundational platform explanations (provenance rungs, adapter tiers, abandon reasons, verification gates).
+ *
+ * The selected group rides in the `group` query parameter so a chosen group survives a reload and
+ * can be linked to.
  */
 
 import { useState } from "react"
@@ -30,16 +33,22 @@ interface GroupDef {
   description: string
 }
 
+/**
+ * Decision 17's five groups, in decision 17's order.
+ *
+ * The order is part of the decision rather than a rendering detail: Codebases leads because
+ * what this deployment watches precedes what it does when it finds something.
+ */
 const SETTING_GROUPS: readonly GroupDef[] = [
-  {
-    id: "pull-requests",
-    label: "Pull requests",
-    description: "Merge policy, merge methods, and base branch automation",
-  },
   {
     id: "codebases",
     label: "Codebases",
     description: "Repository context (.sync/context.md) and analysis rules",
+  },
+  {
+    id: "pull-requests",
+    label: "Pull requests",
+    description: "Merge policy, merge methods, and base branch automation",
   },
   {
     id: "adapters",
@@ -48,12 +57,12 @@ const SETTING_GROUPS: readonly GroupDef[] = [
   },
   {
     id: "github-connection",
-    label: "GitHub Connection",
+    label: "Connection",
     description: "Forge authentication, local CLI status, and permissions",
   },
   {
     id: "about",
-    label: "About Sync",
+    label: "About",
     description: "Platform architecture, provenance rungs, adapter tiers, and gates",
   },
 ] as const
@@ -67,9 +76,9 @@ export interface SettingsPageProps {
 
 export function SettingsPage({ question = DEFAULT_QUESTION }: SettingsPageProps) {
   const [searchParams, setSearchParams] = useSearchParams()
-  const initialGroup = (searchParams.get("group") as SettingsGroup) || "pull-requests"
+  const initialGroup = (searchParams.get("group") as SettingsGroup) || "codebases"
   const [selectedGroup, setSelectedGroup] = useState<SettingsGroup>(
-    SETTING_GROUPS.some((g) => g.id === initialGroup) ? initialGroup : "pull-requests"
+    SETTING_GROUPS.some((g) => g.id === initialGroup) ? initialGroup : "codebases"
   )
 
   const reposQuery = useRepositories()

@@ -102,19 +102,22 @@ describe("the scope a trail is derived from", () => {
     })
   })
 
-  it("names the vendor the address is inside", () => {
-    expect(scopeFromLocation("/vendors/stripe", "")).toEqual({
-      repoId: null,
+  it("names the workspace and the vendor the address is inside", () => {
+    // Both, now. A vendor page used to be unscoped and answered `repoId: null`; under M0-W332 every
+    // page is a workspace's page, so the address carries the workspace and the trail reads it.
+    expect(scopeFromLocation("/repositories/seed-console/vendors/stripe", "")).toEqual({
+      repoId: "seed-console",
       vendorId: "stripe",
     })
   })
 
-  it("reads the repository out of the scope a screen was opened with", () => {
-    // `?repo_id=` is how three screens already carry a repository scope. The trail reads the same
-    // key rather than a second one, so the bar and the screen under it cannot disagree.
-    expect(scopeFromLocation("/vendors/stripe", "?repo_id=seed-console")).toEqual({
+  it("reads the workspace out of the path rather than a query string", () => {
+    // `?repo_id=` carried the scope for the three routes that had no path segment for it. All three
+    // are path-scoped now, so the query form is retired along with REPO_SCOPED_PATHS and the trail
+    // has one source instead of two that could disagree.
+    expect(scopeFromLocation("/repositories/seed-console/observed", "")).toEqual({
       repoId: "seed-console",
-      vendorId: "stripe",
+      vendorId: null,
     })
   })
 
@@ -122,12 +125,13 @@ describe("the scope a trail is derived from", () => {
     expect(scopeFromLocation("/repositories/acme%2Fweb", "").repoId).toBe("acme/web")
   })
 
-  it("names neither below the vendor level", () => {
+  it("names the workspace but no vendor below the vendor level", () => {
     // A finding's vendor is in the payload, not in the address. The bar stops where the URL stops
-    // and the page's own breadcrumb carries the rest — a bar that fetched a finding to fill itself
-    // would be a second, slower copy of that page's own answer.
-    expect(scopeFromLocation("/findings/9f176dea", "")).toEqual({
-      repoId: null,
+    // and the page's own breadcrumb carries the rest -- a bar that fetched a finding to fill itself
+    // would be a second, slower copy of that page's own answer. The workspace is in the path now,
+    // so it is read; the vendor still is not there to read.
+    expect(scopeFromLocation("/repositories/seed-console/findings/9f176dea", "")).toEqual({
+      repoId: "seed-console",
       vendorId: null,
     })
   })
@@ -149,8 +153,8 @@ describe("where a switcher sends you", () => {
   })
 
   it("rewrites the scope in place on a screen that takes one", () => {
-    expect(repositoryHref("other", "/vendors/stripe", "?repo_id=seed-console")).toBe(
-      "/vendors/stripe?repo_id=other"
+    expect(repositoryHref("other", "/repositories/seed-console/vendors/stripe", "")).toBe(
+      "/repositories/other/vendors/stripe"
     )
   })
 
@@ -159,12 +163,17 @@ describe("where a switcher sends you", () => {
     // navigated away from it would mean the one screen the ruling is about could never be scoped by
     // the control that exists to scope things — and the codebase fact band would only ever fill
     // from a hand-typed address.
-    expect(repositoryHref("other", "/", "")).toBe("/?repo_id=other")
-    expect(repositoryHref("other", "/", "?repo_id=seed-console")).toBe("/?repo_id=other")
+    // `/` is the workspace picker and no longer a registry entry, so there is no scope to rewrite
+    // in place: switching from there opens the chosen workspace.
+    expect(repositoryHref("other", "/", "")).toBe("/repositories/other")
   })
 
   it("opens the repository's own screen from anywhere else", () => {
-    expect(repositoryHref("other", "/findings/9f176dea", "")).toBe("/repositories/other")
+    // Every page keeps its level when the workspace changes, because every path carries :repoId.
+    // The old behaviour dropped a reader back to the repository root from anywhere unscoped.
+    expect(repositoryHref("other", "/repositories/seed-console/findings/9f176dea", "")).toBe(
+      "/repositories/other/findings/9f176dea"
+    )
   })
 
   it("carries the repository scope onto the vendor it switches to", () => {
@@ -183,7 +192,7 @@ describe("the trail on screen", () => {
   it("renders the current repository and vendor as the address names them", () => {
     withRepositories(["seed-console", "other"])
     withVendors(["stripe"])
-    renderAt("/vendors/stripe?repo_id=seed-console")
+    renderAt("/repositories/seed-console/vendors/stripe")
 
     expect(within(trail()).getByText("seed-console")).toBeTruthy()
     expect(within(trail()).getByText("stripe")).toBeTruthy()
@@ -195,7 +204,7 @@ describe("the trail on screen", () => {
     // list cannot see. Rendering the list's answer here would blank the trail on a real screen.
     withRepositories([])
     withVendors([])
-    renderAt("/vendors/stripe")
+    renderAt("/repositories/seed-console/vendors/stripe")
 
     expect(within(trail()).getByText("stripe")).toBeTruthy()
   })
@@ -230,12 +239,12 @@ describe("the trail on screen", () => {
   it("changes the scope in place when a repository is picked on a screen that takes one", () => {
     withRepositories(["seed-console", "other"])
     withVendors(["stripe"])
-    renderAt("/vendors/stripe?repo_id=seed-console")
+    renderAt("/repositories/seed-console/vendors/stripe")
 
     const popover = openSwitcher(/repository/i)
     fireEvent.click(within(popover).getByRole("option", { name: "other" }))
 
-    expect(address()).toBe("/vendors/stripe?repo_id=other")
+    expect(address()).toBe("/repositories/other/vendors/stripe")
   })
 
   it("carries the repository onto a vendor picked from the bar", () => {

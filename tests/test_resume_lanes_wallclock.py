@@ -38,10 +38,17 @@ def test_a_wall_clock_later_today_is_the_gap_until_then():
     assert resume_lanes.reset_seconds(notice, now=_at(19, 20)) == 3600
 
 
-def test_a_wall_clock_already_past_rolls_to_tomorrow():
-    """20:49 against a 20:20 reset is tomorrow's, not a negative hold."""
+def test_a_wall_clock_already_past_is_expired_rather_than_tomorrow():
+    """**This test asserted the defect and had to be rewritten.**
+
+    It originally required 20:49 against a 20:20 reset to return 23h31m -- tomorrow's occurrence --
+    on the reasoning that a past time cannot mean a negative hold. That is true and it is not the
+    only alternative: a reset twenty-nine minutes in the past means it has already lifted. The
+    original expectation was written from the arithmetic rather than from what an agent CLI means
+    when it prints one, and it held a free lane for a day before anybody read the number.
+    """
     notice = "resets 8:20pm (America/New_York)"
-    assert resume_lanes.reset_seconds(notice, now=_at(20, 49)) == pytest.approx(23 * 3600 + 31 * 60, abs=60)
+    assert resume_lanes.reset_seconds(notice, now=_at(20, 49)) == 0
 
 
 def test_a_midnight_form_parses():
@@ -56,3 +63,43 @@ def test_an_unknown_zone_is_not_guessed():
 def test_a_wall_clock_with_no_zone_is_not_guessed():
     """The original refusal stands: without a zone there is nothing to compute against."""
     assert resume_lanes.reset_seconds("resets 10:20am", now=_at(9, 20)) is None
+
+
+def test_a_reset_that_just_passed_is_expired_not_tomorrow():
+    """The regression: a hold extended by a full day three minutes after it lifted.
+
+    Lane A printed `resets 1:20am (America/New_York)` and the sweep read it at 01:23. Rolling a
+    past time to tomorrow's occurrence gave 1436 minutes, so a lane that had been free for three
+    minutes was held for a day. **Session windows are hours, not days** -- Claude's is five, Gemini's
+    about two -- so a rolled-forward window longer than any real one means the notice has already
+    expired rather than describing a future reset.
+    """
+    notice = "You've hit your session limit  resets 1:20am (America/New_York)"
+    assert resume_lanes.reset_seconds(notice, now=_at(1, 23)) == 0
+
+
+def test_a_genuine_future_reset_later_today_is_unaffected():
+    notice = "resets 8:20pm (America/New_York)"
+    assert resume_lanes.reset_seconds(notice, now=_at(19, 20)) == 3600
+
+
+def test_a_reset_just_after_midnight_read_before_midnight_still_rolls():
+    """Rolling forward is still right when the gap is plausibly one window."""
+    notice = "resets 1:20am (America/New_York)"
+    assert resume_lanes.reset_seconds(notice, now=_at(23, 20)) == 2 * 3600
+
+
+def test_an_unresolvable_zone_is_reported_rather_than_silently_held():
+    """Windows ships no IANA database, so `ZoneInfo` needs the `tzdata` package.
+
+    Measured 2026-08-18: the sweep run under bare `python` could not resolve `America/New_York`,
+    `reset_seconds` caught `ZoneInfoNotFoundError` and returned `None`, and a `None` window means a
+    hold with no deadline — so two lanes were held indefinitely on a reset ten minutes away. The
+    project environment has `tzdata 2026.3` and the system interpreter does not, so **the safety
+    net behaved differently depending on which python ran it, and said nothing.**
+
+    An environment that cannot answer must say so rather than answer wrongly.
+    """
+    assert resume_lanes.timezone_database_available() is True, (
+        "run the sweep with `uv run python`; the system interpreter lacks tzdata"
+    )
