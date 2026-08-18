@@ -56,6 +56,25 @@
  * claim a lifecycle state this data does not hold: attachment is a fact about configuration and
  * says nothing about whether anything reported recently. A source that has not reported is rendered
  * as the sentence it already has.
+ *
+ * ## Layout extracted from the mock, 2026-08-18 (`docs/superpowers/plans/2026-08-18-mock-layout-
+ * extraction.md`)
+ *
+ * `docs/console-mock/index.html`'s `isSignals` section (line 519) draws three role cards side by
+ * side in one `grid-template-columns:repeat(3, minmax(0,1fr))` row, each a bordered card with an
+ * eyebrow-plus-title header and a footer note pinned to the card's bottom edge with `margin-top:
+ * auto`. That is the structure this file now uses in place of the three stacked full-width
+ * sections it had before: one `RoleGroup` per grid column rather than one per vertical block.
+ *
+ * The mock's fixture draws exactly one integration per role card, with a fixed row-list of its
+ * recent reports. Real data does not hold that shape — the vendor role can carry zero, one, or
+ * several vendors — so `RoleGroup` takes the mock's *card* (border, radius, eyebrow, title slot,
+ * footer note) rather than the mock's *row list*: `AttachmentChip` and the relationship sentence
+ * fill the header where the mock puts an integration's own name, and the same real components
+ * this level already rendered (`SubjectCatalogue`, `SignalSourcePanel`, `NotAttachedState`) fill
+ * the body, unmodified. The two protected intro paragraphs stay above the grid — the mock's
+ * fixture screen has no equivalent sentence, and the layout gains the room for them rather than
+ * dropping them to match a drawing with no data behind it.
  */
 
 import { useParams } from "react-router"
@@ -100,17 +119,17 @@ function AttachmentChip({ attached }: { attached: boolean }) {
 
 function RoleGroup({ role, children }: { role: SignalRole; children: ReactNode }) {
   return (
-    <div className="flex min-w-0 flex-col gap-section">
+    <div className="flex min-w-0 flex-col gap-section rounded-surface border border-line bg-card p-section">
+      {/* A role group contains panels, so the two cannot share a step: levelling them renders a
+          container and its contents at one weight. The role name was `--text-section` while a
+          panel heading was furniture; M7-W188 moved the panel heading onto the section step, so
+          the role name moves up to `--text-page` to keep the ordering it always had. */}
       <div className="flex flex-col gap-field">
-        {/* A role group contains panels, so the two cannot share a step: levelling them renders a
-            container and its contents at one weight. The role name was `--text-section` while a
-            panel heading was furniture; M7-W188 moved the panel heading onto the section step, so
-            the role name moves up to `--text-page` to keep the ordering it always had. */}
         <div className="flex flex-wrap items-center gap-row">
           <h2 className="text-page">{role.role}</h2>
           <AttachmentChip attached={role.source !== null} />
         </div>
-        <p className="max-w-prose text-body text-muted-foreground">{role.relationship}</p>
+        <p className="text-body text-muted-foreground">{role.relationship}</p>
       </div>
       {children}
     </div>
@@ -164,17 +183,24 @@ function SignalsDetail({ repoId, question }: { repoId: string; question: string 
         </p>
       </div>
 
-      <RoleGroup role={VENDOR_ROLE}>
-        <SubjectCatalogue repoId={repoId} />
-      </RoleGroup>
+      {/* `repeat(3, minmax(0,1fr))`: the mock's own three-across row for the three M5 roles,
+          rather than the three stacked full-width sections this screen drew before the
+          2026-08-18 layout extraction. `xl:` guards the same content from collapsing three
+          data-heavy cards into an unreadable single column below that breakpoint -- the mock
+          renders at a fixed desktop width and does not have to make that call. */}
+      <div className="grid gap-section xl:grid-cols-3">
+        <RoleGroup role={VENDOR_ROLE}>
+          <SubjectCatalogue repoId={repoId} />
+        </RoleGroup>
 
-      <RoleGroup role={SIGNAL_SOURCE_ROLE}>
-        <SignalSourcePanel repoId={repoId} />
-      </RoleGroup>
+        <RoleGroup role={SIGNAL_SOURCE_ROLE}>
+          <SignalSourcePanel repoId={repoId} />
+        </RoleGroup>
 
-      <RoleGroup role={HUMAN_SURFACE_ROLE}>
-        <NotAttachedState detail={HUMAN_SURFACE_ROLE.absence} />
-      </RoleGroup>
+        <RoleGroup role={HUMAN_SURFACE_ROLE}>
+          <NotAttachedState detail={HUMAN_SURFACE_ROLE.absence} />
+        </RoleGroup>
+      </div>
     </section>
   )
 }
