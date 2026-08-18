@@ -803,8 +803,21 @@ def _drive_extract_credential(root: Path) -> None:
     assert extract_credential(f"Basic {valid_token}") == "secret-pass"
 
 
+def _drive_index_codebase(root: Path) -> None:
+    from sync.index.codebase import index_codebase
+
+    repo_dir = root / "repo"
+    repo_dir.mkdir()
+    (repo_dir / "package.json").write_text("{}", encoding="utf-8")
+    bad_file = repo_dir / "bad.ts"
+    bad_file.write_bytes(b"\xff\xfe\x00\x00")
+    report = index_codebase(repo_dir)
+    assert "bad.ts" in report.unread_paths
+
+
 DRIVERS: dict[str, Callable[[Path], None]] = {
     "sync/api/auth.py::extract_credential::Error+UnicodeDecodeError": _drive_extract_credential,
+    "sync/index/codebase.py::index_codebase::UnicodeDecodeError": _drive_index_codebase,
     "sync/benchmark/checkout.py::read_checkout::UnicodeDecodeError": _drive_checkout,
     "sync/index/python_lang.py::PythonAdapter._readable_sources::UnicodeDecodeError":
         _drive_python_sources,
@@ -1063,6 +1076,10 @@ _WHOLE_STAGE_CATCH_ALL = (
     "sync/core/conformance.py::_correlate::Exception",
     "sync/forge/github.py::GitHubForge.delete_branch::Exception",
     "sync/index/literals.py::index_operation_literals::Exception",
+    "sync/index/codebase.py::_load_or_create_vendor_adapter::Exception",
+    "sync/index/codebase.py::_resolve_repo_ref::Exception",
+    "sync/index/python_lang.py::PythonAdapter._read_manifests::Exception",
+    "sync/index/typescript.py::TypeScriptAdapter._read_manifest::Exception",
     "sync/mcp/server.py::_call::Exception",
     "sync/rehearse/driver.py::_scan::Exception",
     "sync/remediate/corpus.py::CorpusRecorder.__call__::Exception",
