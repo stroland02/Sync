@@ -122,4 +122,44 @@ describe("VendorExposureCard", () => {
 
     expect(screen.getByText(/does not call/i)).toBeTruthy()
   })
+
+  /**
+   * Decision 40: a table states its record count, because the count is how a reader knows what
+   * they are looking at. This table is not paged -- the route is an aggregate bounded by the
+   * vendor's operation surface -- so the honest count says *all of them* rather than implying a
+   * page whose remainder the reader is missing.
+   *
+   * Matched on the container's text: the count is interpolated, so the sentence is split across
+   * nodes and an element-scoped matcher would miss it.
+   */
+  it("says how many operations it is showing, and that it is all of them", () => {
+    const { container } = renderCard(
+      payload({
+        operations: [
+          {
+            operation_id: "PostCharges",
+            call_site_count: 2,
+            repository_count: 1,
+            binding_rung: "static",
+            observed: null,
+          },
+          {
+            operation_id: "GetCharges",
+            call_site_count: 1,
+            repository_count: 1,
+            binding_rung: "static",
+            observed: null,
+          },
+        ],
+      })
+    )
+
+    expect(container.textContent).toMatch(/Showing all 2 operations/i)
+  })
+
+  it("counts one operation in the singular", () => {
+    const { container } = renderCard(payload())
+
+    expect(container.textContent).toMatch(/Showing all 1 operation /i)
+  })
 })
