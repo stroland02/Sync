@@ -49,15 +49,16 @@ import {
 } from "@/vendor/supabase/ui/sidebar"
 
 const DESTINATION_ICON: Record<string, LucideIcon> = {
-  "/": Radar,
-  "/repositories/:repoId": FolderTree,
-  "/vendors/:vendorId": Plug,
+  "/repositories/:repoId": Radar,
+  "/repositories/:repoId/services": Plug,
+  "/repositories/:repoId/vendors": FolderTree,
   "/repositories/:repoId/observed": Radio,
-  "/bindings/vendors/:vendorId/operations/:operationId": Layers,
-  "/detectors": FileWarning,
-  "/findings/:findingId": Wrench,
-  "/findings/:findingId/workflow": Workflow,
-  "/findings/:findingId/workflow/pull-request": GitPullRequest,
+  "/repositories/:repoId/detectors": FileWarning,
+  "/repositories/:repoId/vendors/:vendorId": Plug,
+  "/repositories/:repoId/bindings/vendors/:vendorId/operations/:operationId": Layers,
+  "/repositories/:repoId/findings/:findingId": Wrench,
+  "/repositories/:repoId/findings/:findingId/workflow": Workflow,
+  "/repositories/:repoId/findings/:findingId/workflow/pull-request": GitPullRequest,
 }
 
 /**
@@ -125,40 +126,41 @@ function DestinationRow({
 }
 
 /**
- * The two regions the sidebar draws, in the order it draws them.
+ * The destinations a selected workspace can reach, in registry order.
  *
- * Six areas became two because the repository is the independent variable: a screen is either
- * scoped to one repository or it is not. The labels say which, plainly, and they are honest while
- * no repository is selected — nothing here claims a repository has been chosen.
+ * **One region, because one region is what the data supports.** The rail used to draw `root` and
+ * `repository` groups, and they overlapped by name -- Codebases against Codebase, Vendor against
+ * Vendors -- which is the duplication the owner saw. Every page is a workspace's page now.
+ *
+ * `nav` decides membership rather than a parameter count: a route needing a vendor, an operation or
+ * a finding cannot be built from the selected workspace alone, so it is reached from the page that
+ * holds its subject and is absent here. Absent is honest; present and inert reads as broken.
  */
-const REGIONS = [
-  { id: "root", label: "Across all repositories" },
-  { id: "repository", label: "Within a repository" },
-] as const
+function navRoutes(): RouteEntry[] {
+  return ROUTES.filter((route) => route.nav)
+}
 
-/** The graph levels present in one region, in registry order, without repeats. */
-function levelsIn(region: RouteEntry["region"]): GraphLevel[] {
+/** The graph levels the navigable destinations sit at, in registry order, without repeats. */
+function navLevels(): GraphLevel[] {
   const seen: GraphLevel[] = []
-  for (const route of ROUTES) {
-    if (route.region === region && !seen.includes(route.level)) seen.push(route.level)
+  for (const route of navRoutes()) {
+    if (!seen.includes(route.level)) seen.push(route.level)
   }
   return seen
 }
 
 function LevelGroup({
   level,
-  region,
   pathname,
   bound,
   minimised,
 }: {
   level: GraphLevel
-  region: RouteEntry["region"]
   pathname: string
   bound: Record<string, string>
   minimised: boolean
 }) {
-  const routes = ROUTES.filter((route) => route.level === level && route.region === region)
+  const routes = navRoutes().filter((route) => route.level === level)
   if (routes.length === 0) return null
 
   return (
@@ -325,21 +327,17 @@ function AppSidebar({ pathname }: { pathname: string }) {
               destination is unreachable and no route test would catch it, which is a worse fault
               than a scrollbar the owner did not want. */}
           <SidebarContent className="gap-0 overflow-y-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-            {REGIONS.map((region) => (
-              <div key={region.id} className="flex flex-col">
-                <GroupHeading label={region.label} minimised={minimised} />
-                {levelsIn(region.id).map((level) => (
-                  <LevelGroup
-                    key={level}
-                    level={level}
-                    region={region.id}
-                    pathname={pathname}
-                    bound={bound}
-                    minimised={minimised}
-                  />
-                ))}
-              </div>
-            ))}
+          {/* One flat set, grouped by the level each destination sits at. The workspace is
+              chosen above; everything here is that workspace's. */}
+          {navLevels().map((level) => (
+            <LevelGroup
+              key={level}
+              level={level}
+              pathname={pathname}
+              bound={bound}
+              minimised={minimised}
+            />
+          ))}
 
             {/* `DESTINATIONS` is a separate registry from `ROUTES` and its entries sit at no graph
                 level, so `LevelGroup` — which filters `ROUTES` by level — renders none of them. The

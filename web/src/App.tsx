@@ -14,6 +14,11 @@ import { Route, Routes, useLocation } from "react-router"
 
 import { ErrorBoundary } from "@/components/error-boundary"
 import { DESTINATIONS, ROUTES } from "@/lib/routes"
+import { FleetPage } from "@/features/fleet/fleet-page"
+
+/** What the index asks, since it is no longer a registry entry with a question of its own. */
+const WORKSPACE_PICKER_QUESTION =
+  "Which workspace do you want to look at? Everything else in this console is one workspace's."
 import { AppFrame } from "@/layouts/app-frame"
 import { UnknownRoute } from "@/layouts/unknown-route"
 
@@ -45,21 +50,22 @@ export default function App() {
   return (
     <Routes>
       <Route element={<AppFrame />}>
-        {ROUTES.map((route) =>
-          route.path === "/" ? (
-            <Route
-              key={route.path}
-              index
-              element={<RoutedScreen element={route.element} question={route.question} />}
-            />
-          ) : (
-            <Route
-              key={route.path}
-              path={route.path.slice(1)}
-              element={<RoutedScreen element={route.element} question={route.question} />}
-            />
-          )
-        )}
+        {/* The index is the workspace picker and it is deliberately NOT in `ROUTES`.
+            Every registry entry is a page of the selected workspace now; choosing one is chrome,
+            and a chooser listed beside the pages it chooses between is the duplication the owner
+            saw. It is routed here so `/` resolves and so a reader with no workspace selected lands
+            somewhere that can give them one. */}
+        <Route
+          index
+          element={<RoutedScreen element={FleetPage} question={WORKSPACE_PICKER_QUESTION} />}
+        />
+        {ROUTES.map((route) => (
+          <Route
+            key={route.path}
+            path={route.path.slice(1)}
+            element={<RoutedScreen element={route.element} question={route.question} />}
+          />
+        ))}
         {/* A destination is not a level, and the router does not care: both arrays declare a
             path, an element and the question the header renders. Serving them from one place is
             what keeps `/settings` from being the tenth screen only a typed URL reaches. */}

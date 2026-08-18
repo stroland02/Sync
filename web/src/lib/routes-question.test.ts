@@ -16,12 +16,15 @@ import { ROUTES, routeQuestion } from "@/lib/routes"
 
 describe("routeQuestion", () => {
   it("hands a route its own sentence rather than a neighbour's", () => {
-    const vendor = ROUTES.find((route) => route.path === "/vendors/:vendorId")
-    const fleet = ROUTES.find((route) => route.path === "/")
+    // Both addresses moved under the workspace in `M0-W332`; `/` is the workspace picker now and
+    // is deliberately not a registry entry, so the neighbour compared against is the workspace's
+    // own Overview rather than a fleet root that no longer exists.
+    const vendor = ROUTES.find((route) => route.path === "/repositories/:repoId/vendors/:vendorId")
+    const overview = ROUTES.find((route) => route.path === "/repositories/:repoId")
     expect(vendor).toBeDefined()
-    expect(fleet).toBeDefined()
-    expect(routeQuestion("/vendors/:vendorId")).toBe(vendor?.question)
-    expect(routeQuestion("/vendors/:vendorId")).not.toBe(fleet?.question)
+    expect(overview).toBeDefined()
+    expect(routeQuestion("/repositories/:repoId/vendors/:vendorId")).toBe(vendor?.question)
+    expect(routeQuestion("/repositories/:repoId/vendors/:vendorId")).not.toBe(overview?.question)
   })
 
   it("answers for every route the registry declares", () => {

@@ -25,7 +25,7 @@ import { afterEach, describe, expect, it, vi } from "vitest"
 import { AppFrame } from "@/layouts/app-frame"
 import { shortcutHint } from "@/layouts/command-palette"
 import { KINDS_SHOWN, clearErrors, reportError } from "@/lib/error-log"
-import { DESTINATIONS, ROUTES, type RouteEntry } from "@/lib/routes"
+import { DESTINATIONS, ROUTES } from "@/lib/routes"
 
 // The top bar's switchers read the same two queries the list screens read. Mocked rather than
 // served through a client, for the reason `fleet-facts.test.tsx` gives: this file is about the
@@ -69,15 +69,16 @@ function destinations(): HTMLElement {
   return screen.getByRole("navigation", { name: /destinations/i })
 }
 
-/** Every destination row, in document order, as the element that actually renders it. */
-function destinationRows(): Element[] {
-  return [...destinations().querySelectorAll("[data-destination]")]
-}
-
-const REGIONS = ["root", "repository"] as const
-
-function routesOf(region: RouteEntry["region"]) {
-  return ROUTES.filter((route) => route.region === region)
+/**
+ * The destinations the rail draws.
+ *
+ * One region as of `M14-W386`. The registry used to carry `root` and `repository` and they
+ * overlapped by name -- Codebases against Codebase, Vendor against Vendors -- which is the
+ * duplication the owner saw in the sidebar. Every page is a workspace's page now, and a route whose
+ * subject a workspace cannot supply is absent from the rail rather than inert in it.
+ */
+function navRoutes() {
+  return ROUTES.filter((route) => route.nav)
 }
 
 /** A concrete URL for a route, since `:findingId` matches nothing on its own. */
@@ -135,12 +136,12 @@ describe("the top bar sits above the chassis", () => {
   })
 
   it("carries the scope trail, and it names the subject the address is inside", () => {
-    renderAt("/vendors/stripe?repo_id=seed-console")
+    renderAt("/repositories/org%2Fone/vendors/stripe")
 
     const banner = screen.getByRole("banner")
     const trail = within(banner).getByRole("navigation", { name: /scope/i })
 
-    expect(within(trail).getByText("seed-console")).toBeTruthy()
+    expect(within(trail).getByText("org/one")).toBeTruthy()
     expect(within(trail).getByText("stripe")).toBeTruthy()
   })
 
@@ -360,16 +361,11 @@ describe("the sidebar changes density without moving a row", () => {
     }
   })
 
-  it("sends a row whose subject is unbound to the place that selects one", () => {
-    // The codebase is the independent variable, so a route needing :repoId with none selected goes
-    // to where a codebase is chosen rather than nowhere. The row still says what it needs.
-    renderAt("/")
-
-    const unbound = destinations().querySelector('[data-destination="/repositories/:repoId"]')
-    expect(unbound).not.toBeNull()
-    expect(unbound!.getAttribute("href")).toBe("/")
-    expect(unbound!.getAttribute("aria-label")).toMatch(/reached from/i)
-  })
+  // Three tests stood here and went with their subject. They asserted what an UNBOUND row does --
+  // where it points, what it says, when it stops saying it -- and there are no unbound rows now.
+  // A route whose subject a workspace cannot supply is absent from the rail rather than present and
+  // pointing somewhere else, which is the owner's rule and the stronger half of it. What they
+  // guaranteed survives directly above: every row is a link with a real href.
 
   it("binds the subject from the selected codebase when the address carries one", () => {
     renderAt("/repositories/org%2Fone")
@@ -380,20 +376,21 @@ describe("the sidebar changes density without moving a row", () => {
   })
 
   it("keeps every destination reachable at the rail width", () => {
-    // No hover, no pin, no click of any kind: this is the state the console loads in now.
-    renderAt("/")
+    // No hover, no click of any kind: this is the state the console loads in.
+    renderAt("/repositories/org%2Fone")
 
     const reachable = [...destinations().querySelectorAll("a[href]")].map((el) =>
       el.getAttribute("href")
     )
-    const parameterless = ROUTES.filter((r) => !r.path.includes(":"))
-    expect(parameterless.length).toBeGreaterThan(0)
+    expect(navRoutes().length).toBeGreaterThan(0)
     expect(DESTINATIONS.length).toBeGreaterThan(0)
-    for (const route of parameterless) {
-      expect(reachable).toContain(route.path)
-    }
     for (const entry of DESTINATIONS) {
       expect(reachable).toContain(entry.path)
+    }
+    // Every navigable row resolved its workspace, so none of them is the picker fallback.
+    for (const route of navRoutes()) {
+      const row = destinations().querySelector(`[data-destination="${route.path}"]`)
+      expect(row?.getAttribute("href")).toContain("/repositories/org%2Fone")
     }
   })
 })
@@ -416,15 +413,16 @@ describe("one sidebar carries every area", () => {
     // Every route in the registry, from one screen, with nothing to hover and nothing to select.
     // Grouped by region rather than in raw registry order: root first, then repository, which is
     // the order the sidebar draws them and the order a reader meets them.
-    expect(shown).toEqual(REGIONS.flatMap((region) => routesOf(region).map((r) => r.path)))
+    expect(shown).toEqual(navRoutes().map((r) => r.path))
   })
 
-  it("names every area as a group, so the run of levels under it still reads as one area", () => {
-    renderAt("/")
+  it("names every navigable destination the workspace can reach", () => {
+    renderAt("/repositories/org%2Fone")
 
     const text = destinations().textContent ?? ""
-    for (const label of ["Across all repositories", "Within a repository"]) {
-      expect(text).toContain(label)
+    expect(navRoutes().length).toBeGreaterThan(0)
+    for (const route of navRoutes()) {
+      expect(text).toContain(route.label)
     }
   })
 
@@ -467,8 +465,7 @@ describe("the sidebar carries the destinations", () => {
     // longer hides the others -- both were properties of the two-tier chassis. What survives, and
     // is worth more, is that the list does not reorder under the reader as they navigate.
     const order: string[][] = []
-    for (const region of REGIONS) {
-      const route = routesOf(region)[0]
+    for (const route of navRoutes()) {
       renderAt(concrete(route.path))
       order.push(
         [...destinations().querySelectorAll("[data-destination]")].map(
@@ -480,7 +477,7 @@ describe("the sidebar carries the destinations", () => {
     for (const shown of order) {
       expect(shown).toEqual(order[0])
     }
-    expect(order[0]).toEqual(REGIONS.flatMap((region) => routesOf(region).map((r) => r.path)))
+    expect(order[0]).toEqual(navRoutes().map((r) => r.path))
   })
 
   it("prints no level heading, because eleven of them is what forced the scrollbar", () => {
@@ -499,13 +496,15 @@ describe("the sidebar carries the destinations", () => {
     expect(labels.length).toBe(0)
   })
 
-  it("keeps the two region headings, which are the one grouping a row does not repeat", () => {
-    renderAt("/")
+  it("draws one flat set of destinations, with no region heading above them", () => {
+    // The regions are deleted, not relabelled. They overlapped by name -- Codebases against
+    // Codebase, Vendor against Vendors -- which is the duplication the owner saw. Every page is a
+    // workspace's page now, so there is no second grouping left for a heading to name.
+    renderAt("/repositories/org%2Fone")
 
     const text = destinations().textContent ?? ""
-    for (const label of ["Across all repositories", "Within a repository"]) {
-      expect(text).toContain(label)
-    }
+    expect(text).not.toContain("Across all repositories")
+    expect(text).not.toContain("Within a repository")
   })
 
   it("carries no pin control, because hovering is what opens it now", () => {
@@ -519,7 +518,11 @@ describe("the sidebar carries the destinations", () => {
   })
 
   it("marks the row for the current route, and marks only it", () => {
-    for (const route of ROUTES) {
+    // Navigable routes only. A route the rail does not draw — a finding, a workflow, a binding
+    // surface — marks nothing, because it has no row to mark. Being on one of those screens leaves
+    // the rail showing the workspace's pages with none of them current, which is honest: the reader
+    // is somewhere the rail cannot take them, reached from the page that held the subject.
+    for (const route of navRoutes()) {
       renderAt(concrete(route.path))
 
       const current = [...destinations().querySelectorAll('[aria-current="page"]')].map((el) =>
@@ -532,10 +535,10 @@ describe("the sidebar carries the destinations", () => {
   })
 
   it("names every destination for a screen reader", () => {
-    for (const region of REGIONS) {
-      renderAt(concrete(routesOf(region)[0].path))
+    for (const subject of navRoutes()) {
+      renderAt(concrete(subject.path))
 
-      for (const route of routesOf(region)) {
+      for (const route of navRoutes()) {
         const row = destinations().querySelector(`[data-destination="${route.path}"]`)
         expect(row?.getAttribute("aria-label")).toContain(route.label)
         // The tooltip is the sighted reader's equivalent of the accessible name, so it carries the
@@ -557,80 +560,30 @@ describe("the sidebar carries the destinations", () => {
    * survives is both halves of the original claim, split by the condition that actually governs.
    */
   it("links a row whose subject the address already supplies", () => {
-    // The three deepest destinations all need one parameter, and any of the three finding
-    // addresses binds it. This is the whole of Surface 2's fourth row.
-    for (const at of [
-      "/findings/f-1",
-      "/findings/f-1/workflow",
-      "/findings/f-1/workflow/pull-request",
-    ]) {
-      renderAt(at)
+    renderAt("/repositories/org%2Fone/observed")
 
-      // Scoped to the three finding rows. The rail-era version could assert over every row on
-      // screen, because only the active area rendered; one list puts all nine there, and the rows
-      // whose subject the address does NOT supply are still correctly spans. Widening this to the
-      // whole list would assert the opposite of the contract it is checking.
-      const rows = [
-        "/findings/:findingId",
-        "/findings/:findingId/workflow",
-        "/findings/:findingId/workflow/pull-request",
-      ].map((path) => destinations().querySelector(`[data-destination="${path}"]`)!)
-
-      expect(rows.map((row) => row.tagName)).toEqual(["A", "A", "A"])
-      expect(rows.map((row) => row.getAttribute("href"))).toEqual([
-        "/findings/f-1",
-        "/findings/f-1/workflow",
-        "/findings/f-1/workflow/pull-request",
-      ])
-
-      cleanup()
-    }
+    const row = destinations().querySelector('[data-destination="/repositories/:repoId/observed"]')
+    expect(row).not.toBeNull()
+    expect(row!.tagName).toBe("A")
+    expect(row!.getAttribute("href")).toBe("/repositories/org%2Fone/observed")
   })
 
-  it("says where to go instead, on a row the address supplies no subject for", () => {
-    // Inverted on 2026-08-18. This used to assert the row was a SPAN, which was the defect: it
-    // looked pressable and swallowed the click. The sentence it guards -- the row names what it is
-    // reached from -- survives and is what still matters; only the element changed.
-    renderAt("/")
 
-    const unbound = destinations().querySelector('[data-destination="/findings/:findingId"]')
-    expect(unbound).not.toBeNull()
-    expect(unbound!.tagName).toBe("A")
-    expect(unbound!.getAttribute("aria-label")).toMatch(/reached from/i)
-  })
-
-  it("drops the sentence about where to look once the row is a link", () => {
-    // `reached from the finding it remediates` beside a working link tells a reader to go and find
-    // something they are standing on. It renders on every row where it is still true, and nowhere
-    // else.
-    renderAt("/findings/f-1")
-
-    const workflow = destinationRows().find(
-      (row) => row.getAttribute("data-destination") === "/findings/:findingId/workflow"
-    )
-
-    expect(workflow?.getAttribute("aria-label")).toBe("Solution workflow")
-  })
 })
 
 describe("every declared destination is reachable without an activation", () => {
-  it("shows all nine specification levels from one screen, with nothing to click first", () => {
-    // The reachability claim the whole chassis exists to make, and the one the first version of
-    // this shell failed: four area icons remained and the nine specification levels could not be
-    // reached. The rail-era version of this test needed six clicks to prove it. One sidebar needs
-    // none, which is the point of collapsing the tiers -- so the assertion gets strictly stronger
-    // while the setup gets simpler.
-    renderAt("/")
+  it("shows every destination a workspace can reach, with nothing to click first", () => {
+    // The reachability claim the chassis exists to make. It used to say "all nine specification
+    // levels", which stopped being the right claim when the regions collapsed: four of the ten
+    // routes need a vendor, an operation or a finding, and a workspace supplies none of those. Those
+    // levels still exist in GRAPH_LEVELS and their screens are still reachable -- from the page that
+    // holds their subject, not from the rail. What the rail owes is every destination it CAN bind.
+    renderAt("/repositories/org%2Fone")
 
-    const seen = new Set<string>()
-    for (const region of REGIONS) {
-      for (const route of routesOf(region)) {
-        expect(destinations().querySelector(`[data-destination="${route.path}"]`)).toBeTruthy()
-        seen.add(route.path)
-      }
+    expect(navRoutes().length).toBeGreaterThan(0)
+    for (const route of navRoutes()) {
+      expect(destinations().querySelector(`[data-destination="${route.path}"]`)).toBeTruthy()
     }
-
-    expect([...seen].sort()).toEqual(ROUTES.map((route) => route.path).sort())
   })
 })
 
@@ -707,7 +660,7 @@ describe("focus follows the route", () => {
   })
 
   it("moves focus to the content when the route actually changes", async () => {
-    renderAt("/")
+    renderAt("/repositories/org%2Fone")
     expect(document.activeElement).not.toBe(document.querySelector("main"))
 
     // Detectors is a real link in the sidebar, because it needs no subject from the address.

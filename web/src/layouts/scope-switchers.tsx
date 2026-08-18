@@ -62,16 +62,17 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/vendor/supabase/ui/po
  * differently depending on how the operator arrived. `scope-switchers.test.tsx` asserts every entry
  * is still a path the registry declares, which is the drift that would otherwise be silent.
  */
-export const REPO_SCOPED_PATHS: readonly string[] = [
-  // The Overview takes a scope in place rather than being navigated away from, because the owner
-  // ruled it IS the selected codebase rather than a directory of codebases. Without this entry the
-  // switcher sends a reader to `/repositories/{id}` and the codebase fact band on `/` can only ever
-  // be filled by typing `?repo_id=` into the address bar.
-  "/",
-  "/vendors/:vendorId",
-  "/detectors",
-  "/bindings/vendors/:vendorId/operations/:operationId",
-]
+/**
+ * RETIRED 2026-08-18 by the workspace ruling, and empty rather than deleted while the switcher is
+ * rewritten.
+ *
+ * Every route carries `:repoId` in its path now, so `repositoryHref` fills the parameter directly
+ * and there is nothing left for a query-string scope to do. The array named the three routes that
+ * took their scope in `?repo_id=` because they had no path segment for it; all three are scoped by
+ * path today (`/repositories/:repoId/detectors`, `/repositories/:repoId/vendors/:vendorId`,
+ * `/repositories/:repoId/bindings/...`).
+ */
+export const REPO_SCOPED_PATHS: readonly string[] = []
 
 /** The `repo_id` key three screens already carry a repository scope in. */
 const REPO_KEY = "repo_id"
