@@ -738,3 +738,49 @@ followed by the finished graph**, which hides the moment worth watching.
 arriving. **The stagger caps at the first 12 rows and the remainder appear together** — the effect
 is entirely in the first few anyway, and a demo that visibly crawls on real data is worse than one
 that never staggered.
+
+## Round seventeen: decisions 80-83, the framer-motion contract
+
+**The mechanism already exists and this expands it rather than introducing it.** `framer-motion`
+`12.43.0` is installed, `lib/motion.ts` drives it, and `test_nothing_transitions_geometry_anywhere`
+bans **Tailwind's** `transition`/`transition-all`/`transition-transform`/`transition-shadow` while
+**explicitly permitting framer's `transition={{ … }}` prop**. Opacity is not geometry;
+`transition-colors` stays legal. **So a motion system is buildable without touching the guard, and
+anything animating geometry through a Tailwind class is still a failure.**
+
+**80. Every motion instance stays named in `DESIGN.md`'s Motion section**, as the three sanctioned
+ones are today. **Rejected: named primitives with composed instances**, and **rejected: relaxing the
+guard.**
+
+**This is the strictest of the three and it is the one consistent with everything else here.** The
+register is the same discipline as `abandon_reason` and the dismissal vocabulary: **a closed set,
+auditable, where adding an entry is a deliberate act.** It also means motion cannot creep — a screen
+that wants a new animation adds a line to the contract first, which is exactly how `--spacing-row`
+and the colour tokens already work.
+
+**81. Springs, stiff and damped** — `stiffness: 400, damping: 40, mass: 0.8`, settling in about
+250ms with almost no overshoot, and reacting instantly when interrupted. **Rejected: expressive
+springs with visible rebound**, and **rejected: fixed durations with a cubic-bezier.**
+
+**Interruption is the reason this matters more than the numbers.** Rows arrive from a live event
+stream, so a second event can land mid-animation. A duration-and-easing transition restarts or
+jumps; a stiff spring absorbs it and keeps its velocity. **Motion bound to real events needs physics
+that survive being interrupted by more real events.**
+
+**82. Shared-element layout animation on the canvas only.** A node morphs into its detail via
+`layoutId`; a table row opens a drawer that **slides in from the right with no morph**. **Rejected:
+morphing table rows**, and **rejected: no shared layout at all.**
+
+**The split is where the morph earns its cost.** On the canvas the morph *explains* something — the
+detail is that node, in that position, in a graph you are looking at. In a table it is decoration,
+and `layoutId` across a 50-row virtualised list is the easiest way to make framer thrash.
+
+**83. Route changes are instant. No transition between screens at all.** **Rejected: cross-fade**,
+and **rejected: a directional slide.**
+
+**This is the sharpest decision in the set and it is not a reduction of decision 79.** Maximum
+motion, and **zero of it spent on navigation** — because a route change is something *you* did and
+already know about, while an arriving row, a changing value and a building graph are things *the
+system* did that you would otherwise miss. **The entire motion budget goes to what changed rather
+than to where you went**, which is the same argument as every other refusal in this document,
+applied to milliseconds instead of pixels.
