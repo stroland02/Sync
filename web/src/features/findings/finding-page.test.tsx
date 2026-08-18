@@ -25,6 +25,16 @@ function renderScreen(findingId = "f1") {
 }
 
 describe("FindingPage", () => {
+  it("carries no page header, which is the twelfth page and the last exception", () => {
+    renderScreen()
+
+    // Answer 7 removed page headers, and Lane B converted eleven of twelve. This page was the
+    // one held back, because it passed an action the others did not have. The action is now in
+    // the rail beside the two destinations already there, which is where a reader on this screen
+    // already scans for somewhere to go, so the exception has nothing left holding it open.
+    expect(screen.queryByRole("heading", { level: 1 })).toBeNull()
+  })
+
   it("renders severity, repository link, and call site path and line in fact rail", () => {
     const mockFinding: FindingDetail = {
       finding: {
