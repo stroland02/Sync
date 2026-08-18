@@ -102,11 +102,7 @@ export function SettingsPage() {
         {/* Left Sub-Navigation */}
         <aside className="w-full md:w-64 shrink-0 flex flex-col gap-field">
           {/* Target Codebase Selector */}
-<<<<<<< HEAD
-          <div className="flex flex-col gap-field p-3 rounded-surface border border-line bg-surface">
-=======
           <div className="flex flex-col gap-field p-row rounded-surface border border-line bg-surface">
->>>>>>> origin/main
             <span className="text-meta font-medium text-ink">Target Codebase</span>
             <Select value={activeRepo} onValueChange={setSelectedRepoId}>
               <SelectTrigger className="w-full text-meta font-mono bg-surface border-line">
@@ -135,11 +131,7 @@ export function SettingsPage() {
                   key={group.id}
                   type="button"
                   onClick={() => handleSelectGroup(group.id)}
-<<<<<<< HEAD
-                  className={`flex flex-col items-start px-3 py-row rounded-surface text-left transition-colors ${
-=======
                   className={`flex flex-col items-start px-row py-row rounded-surface text-left transition-colors ${
->>>>>>> origin/main
                     isSelected
                       ? "bg-surface-muted text-ink font-medium shadow-sm"
                       : "text-ink-muted hover:text-ink hover:bg-surface-muted/50"

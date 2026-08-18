@@ -92,11 +92,7 @@ export function PullRequestsSettingsPanel({ repoId }: PullRequestsSettingsPanelP
           </>
         }
         refusalNotice={
-<<<<<<< HEAD
-          <div className="rounded-surface border border-line bg-surface-muted/40 p-3 text-meta text-ink-muted space-y-field">
-=======
           <div className="rounded-surface border border-line bg-surface-muted/40 p-row text-meta text-ink-muted space-y-field">
->>>>>>> origin/main
             <div className="flex items-center gap-row">
               <Badge>Refused Option: Immediate</Badge>
             </div>
@@ -114,11 +110,7 @@ export function PullRequestsSettingsPanel({ repoId }: PullRequestsSettingsPanelP
             <button
               type="button"
               onClick={() => setMergePolicy("when_checks_pass")}
-<<<<<<< HEAD
-              className={`flex items-start gap-3 p-3 rounded-surface border text-left transition-colors ${
-=======
               className={`flex items-start gap-row p-row rounded-surface border text-left transition-colors ${
->>>>>>> origin/main
                 mergePolicy === "when_checks_pass"
                   ? "border-foreground/30 bg-surface-muted/80 shadow-sm"
                   : "border-border hover:bg-surface-muted/40"
@@ -142,11 +134,7 @@ export function PullRequestsSettingsPanel({ repoId }: PullRequestsSettingsPanelP
             <button
               type="button"
               onClick={() => setMergePolicy("never")}
-<<<<<<< HEAD
-              className={`flex items-start gap-3 p-3 rounded-surface border text-left transition-colors ${
-=======
               className={`flex items-start gap-row p-row rounded-surface border text-left transition-colors ${
->>>>>>> origin/main
                 mergePolicy === "never"
                   ? "border-foreground/30 bg-surface-muted/80 shadow-sm"
                   : "border-border hover:bg-surface-muted/40"
@@ -285,11 +273,7 @@ export function PullRequestsSettingsPanel({ repoId }: PullRequestsSettingsPanelP
 
       {/* Repository Overrides Card — from console-mock 10-settings */}
       {repos.length > 0 && (
-<<<<<<< HEAD
-        <div className="rounded-surface border border-line bg-surface p-section flex flex-col gap-3">
-=======
         <div className="rounded-surface border border-line bg-surface p-section flex flex-col gap-row">
->>>>>>> origin/main
           <div className="flex flex-col gap-field">
             <h3 className="text-meta font-semibold uppercase tracking-wider text-ink-muted">
               Repository Overrides

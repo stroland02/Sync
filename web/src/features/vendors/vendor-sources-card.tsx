@@ -29,11 +29,7 @@ export function VendorSourcesCard({ vendorId }: VendorSourcesCardProps) {
   return (
     <div className="flex flex-col gap-section rounded-surface border border-border bg-surface p-section">
       <div className="flex flex-col gap-field">
-<<<<<<< HEAD
-        <h2 className="text-lg font-semibold tracking-tight text-foreground">Where it was read from</h2>
-=======
         <h2 className="text-emphasis font-semibold tracking-tight text-foreground">Where it was read from</h2>
->>>>>>> origin/main
         <p className="text-meta text-muted-foreground">
           The adapter serving {vendorId}, and what the graph holds from it.
         </p>
@@ -48,13 +44,8 @@ export function VendorSourcesCard({ vendorId }: VendorSourcesCardProps) {
         <div className="flex flex-col gap-section divide-y divide-border">
           <div className="flex flex-col gap-field pt-3 first:pt-0">
             <div className="flex items-baseline justify-between gap-row">
-<<<<<<< HEAD
-              <span className="text-sm font-semibold text-foreground">{adapter.kind} adapter</span>
-              <span className="text-xs text-muted-foreground">
-=======
               <span className="text-body font-semibold text-foreground">{adapter.kind} adapter</span>
               <span className="text-meta text-muted-foreground">
->>>>>>> origin/main
                 {adapter.last_change_at === null ? (
                   "no change recorded"
                 ) : (
@@ -75,13 +66,8 @@ export function VendorSourcesCard({ vendorId }: VendorSourcesCardProps) {
 
           <div className="flex flex-col gap-field pt-3">
             <div className="flex items-baseline justify-between gap-row">
-<<<<<<< HEAD
-              <span className="text-sm font-semibold text-foreground">What it has delivered</span>
-              <span className="text-xs text-muted-foreground">
-=======
               <span className="text-body font-semibold text-foreground">What it has delivered</span>
               <span className="text-meta text-muted-foreground">
->>>>>>> origin/main
                 {adapter.changes === null ? (
                   "never delivered"
                 ) : (
@@ -98,11 +84,7 @@ export function VendorSourcesCard({ vendorId }: VendorSourcesCardProps) {
 
           <div className="flex flex-col gap-field pt-3">
             <div className="flex items-baseline justify-between gap-row">
-<<<<<<< HEAD
-              <span className="text-sm font-semibold text-foreground">Recorded sources</span>
-=======
               <span className="text-body font-semibold text-foreground">Recorded sources</span>
->>>>>>> origin/main
             </div>
             <div className="font-mono text-meta text-muted-foreground break-all">
               <Formatted value={adapter.sources === null ? null : adapter.sources.join(" · ")} />
