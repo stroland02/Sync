@@ -73,6 +73,10 @@ BindingReader = Callable[..., dict[str, Any]]
 CoverageReader = Callable[[str], dict[str, Any]]
 RepositoryGraphReader = Callable[[str], dict[str, Any] | None]
 ObservedReader = Callable[..., dict[str, Any]]
+# Exposure for one vendor: which of its operations this codebase calls, at which rung.
+# Takes the repository scope as a keyword so it composes with the vendor rather than
+# replacing it -- the same rule the severity breakdown follows one route above.
+VendorOperationsReader = Callable[..., dict[str, Any]]
 DetectorReader = Callable[[], dict[str, Any]]
 
 # The adapter inventory backs `sync.dashboard.adapters.adapter_inventory`. It takes no
@@ -181,6 +185,7 @@ def create_app(
     coverage_reader: CoverageReader,
     graph_reader: RepositoryGraphReader,
     observed_reader: ObservedReader,
+    vendor_operations_reader: VendorOperationsReader,
     detector_reader: DetectorReader,
     adapters_reader: AdaptersReader,
     severity_reader: SeverityReader,
@@ -321,6 +326,16 @@ def create_app(
         since = request.query_params.get("since")
         page = surface.whats_changed(vendor=vendor_id, since=since, limit=limit, offset=offset)
         return JSONResponse(page)
+
+    async def vendor_operations(request: Request) -> JSONResponse:
+        # Decision 29's opening answer for the vendor page. `repo_id` narrows and is optional:
+        # absent means every repository the index has seen, which is a wider true answer rather
+        # than a missing one, and the payload echoes back which it gave.
+        vendor_id = request.path_params["vendor_id"]
+        payload = vendor_operations_reader(
+            vendor_id, repo_id=request.query_params.get("repo_id")
+        )
+        return JSONResponse(payload)
 
     async def workflow(request: Request) -> JSONResponse:
         finding_id = request.path_params["finding_id"]
@@ -514,6 +529,7 @@ def create_app(
         Route("/api/repos/{repo_id:path}/findings", findings_list, methods=["GET"]),
         Route("/api/vendors/{vendor_id}", vendor_detail, methods=["GET"]),
         Route("/api/vendors/{vendor_id}/changes", vendor_changes, methods=["GET"]),
+        Route("/api/vendors/{vendor_id}/operations", vendor_operations, methods=["GET"]),
         Route("/api/findings/{finding_id}", finding_detail, methods=["GET"]),
         Route("/api/workflows/{finding_id}", workflow, methods=["GET"]),
         Route("/api/runs", runs, methods=["GET"]),

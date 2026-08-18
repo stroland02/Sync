@@ -27,6 +27,7 @@ import type {
   RepositoriesResponse,
   RunsPage,
   VendorChangeRow,
+  VendorOperationsResponse,
   FindingOrder,
   VendorFindingsPage,
   WorkflowState,
@@ -174,6 +175,18 @@ export function fetchVendorChanges(
     params,
   )
   return getJson<Page<VendorChangeRow>>(path, signal)
+}
+
+export function fetchVendorOperations(
+  vendorId: string,
+  repoId: string | null,
+  signal?: AbortSignal,
+): Promise<VendorOperationsResponse> {
+  const path = `/api/vendors/${encodeURIComponent(vendorId)}/operations`
+  return getJson<VendorOperationsResponse>(
+    repoId === null ? path : `${path}?repo_id=${encodeURIComponent(repoId)}`,
+    signal,
+  )
 }
 
 export function fetchFinding(

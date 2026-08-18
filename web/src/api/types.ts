@@ -800,3 +800,38 @@ export interface RepositoryGraphResponse {
   /** Whether `bindings` is all of them. A partial picture says so rather than implying whole. */
   truncated: boolean
 }
+
+/**
+ * One operation this codebase calls on a vendor, from
+ * `GET /api/vendors/{vendor_id}/operations`.
+ *
+ * `binding_rung` is always `"static"`: a call site is what the static index found. Telemetry is
+ * reported beside it in `observed` rather than blended into it, so a reader sees both facts
+ * instead of an average of them.
+ */
+export interface VendorOperationExposure {
+  operation_id: string
+  /** Current call sites naming this operation. A retracted site is not counted. */
+  call_site_count: number
+  /** How many repositories hold those sites. `1` under a repository scope, by construction. */
+  repository_count: number
+  binding_rung: "static"
+  /**
+   * Whether traffic named this operation. **Three-valued, and the third value is the point.**
+   *
+   * `null` means nothing looked — no telemetry is attached to the repository, or the question
+   * was asked across every repository at once, where attachment differs per repository and no
+   * single answer exists. Rendering `null` as "not observed" would report a measurement nobody
+   * took.
+   */
+  observed: boolean | null
+}
+
+export interface VendorOperationsResponse {
+  vendor_id: string
+  /** The repository this was narrowed to, or `null` for every repository the index has seen. */
+  repo_id: string | null
+  /** When telemetry was attached to that repository, or `null` when it never was. */
+  telemetry_attached_at: string | null
+  operations: VendorOperationExposure[]
+}

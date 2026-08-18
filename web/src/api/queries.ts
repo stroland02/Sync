@@ -21,6 +21,7 @@ import {
   fetchRepositoryObserved,
   fetchRuns,
   fetchVendorChanges,
+  fetchVendorOperations,
   fetchVendorFindings,
   fetchWorkflow,
   fetchRepositoryGraph,
@@ -82,6 +83,13 @@ export function useVendorFindings(vendorId: string, params: VendorFindingsParams
         { limit, offset, repoId: params.repoId, severity, path, order },
         signal,
       ),
+  })
+}
+
+export function useVendorOperations(vendorId: string, repoId: string | null) {
+  return useQuery({
+    queryKey: ["vendors", vendorId, "operations", repoId],
+    queryFn: ({ signal }) => fetchVendorOperations(vendorId, repoId, signal),
   })
 }
 
