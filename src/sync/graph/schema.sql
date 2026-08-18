@@ -500,6 +500,21 @@ CREATE TABLE IF NOT EXISTS repo_context (
     telemetry_attached_at  TIMESTAMPTZ
 );
 
+-- Grain: one row per repository.
+--
+-- Automation and merge settings for agent-opened pull requests against this repository.
+-- `merge_policy`: 'never' | 'when_checks_pass'. Immediate merge without verification is refused.
+-- `merge_method`: 'squash' | 'merge' | 'rebase'.
+-- `base_branch`: target base branch (default: 'main').
+CREATE TABLE IF NOT EXISTS repo_settings (
+    repo_id                 TEXT PRIMARY KEY,
+    merge_policy            TEXT NOT NULL DEFAULT 'when_checks_pass',
+    merge_method            TEXT NOT NULL DEFAULT 'squash',
+    base_branch             TEXT NOT NULL DEFAULT 'main',
+    merge_policy_refusals   JSONB NOT NULL DEFAULT '{"immediate": "Refused: violates invariant ''nothing reaches a pull request unverified''"}'::jsonb,
+    updated_at              TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
 -- Grain: one row per attempt (not per adapter).
 --
 -- Identity is (vendor_id, attempted_at, COALESCE(from_version, ''), COALESCE(to_version, ''))

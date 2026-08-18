@@ -22,7 +22,7 @@ from starlette.applications import Starlette
 
 from sync.api.app import create_app
 from sync.api.auth import configured_api_password, validate_bind_security
-from sync.core.models import RepoContext
+from sync.core.models import RepoContext, RepoSettings
 from sync.dashboard import fleet, graph_views
 from sync.dashboard.adapters import adapter_inventory
 from sync.dashboard.queries import workflow_state
@@ -197,6 +197,27 @@ def app_factory() -> Starlette:
             limit=limit, offset=offset,
         )
 
+    def findings_reader(
+        *,
+        repo_id: str | None = None,
+        vendor_id: str | None = None,
+        severity: str | None = None,
+        path: str | None = None,
+        order: str | None = None,
+        limit: int = 50,
+        offset: int = 0,
+    ):
+        return graph_views.findings_page(
+            store,
+            repo_id=repo_id,
+            vendor_id=vendor_id,
+            severity=severity,
+            path=path,
+            order=order,
+            limit=limit,
+            offset=offset,
+        )
+
     def adapters_reader():
         return adapter_inventory(store)
 
@@ -208,6 +229,23 @@ def app_factory() -> Starlette:
 
     def context_writer(repo_id: str, body: str) -> None:
         store.upsert_repo_context(RepoContext(repo_id=repo_id, body=body, source="operator"))
+
+    def settings_reader(repo_id: str):
+        return graph_views.repo_settings(store, repo_id)
+
+    def settings_writer(repo_id: str, payload: dict) -> None:
+        current = store.repo_settings(repo_id)
+        merge_policy = payload.get("merge_policy", current.merge_policy)
+        merge_method = payload.get("merge_method", current.merge_method)
+        base_branch = payload.get("base_branch", current.base_branch)
+        store.upsert_repo_settings(
+            RepoSettings(
+                repo_id=repo_id,
+                merge_policy=merge_policy,
+                merge_method=merge_method,
+                base_branch=base_branch.strip() if isinstance(base_branch, str) and base_branch.strip() else current.base_branch,
+            )
+        )
 
     return create_app(
         surface=surface,
@@ -228,6 +266,9 @@ def app_factory() -> Starlette:
         change_units_reader=change_units_reader,
         context_reader=context_reader,
         context_writer=context_writer,
+        findings_reader=findings_reader,
+        settings_reader=settings_reader,
+        settings_writer=settings_writer,
         api_password=configured_api_password(),
     )
 

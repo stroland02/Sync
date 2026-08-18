@@ -214,11 +214,49 @@ def _fake_vendor_findings_reader(
     }
 
 
+def _fake_findings_reader(
+    *,
+    repo_id=None,
+    vendor_id=None,
+    severity=None,
+    path=None,
+    order=None,
+    limit=DEFAULT_LIMIT,
+    offset=0,
+) -> dict[str, Any]:
+    return {
+        **_EMPTY_PAGE,
+        "repo_id": repo_id,
+        "vendor_id": vendor_id,
+        "indexed_at": None,
+        "feed_fetched_at": None,
+        "binding_source": None,
+        "context_savings": 0,
+    }
+
+
 def _fake_context_reader(repo_id: str) -> dict[str, Any]:
     return {"repo_id": repo_id, "body": "", "source": None, "updated_at": None}
 
 
 def _fake_context_writer(repo_id: str, body: str) -> None:
+    pass
+
+
+def _fake_settings_reader(repo_id: str) -> dict[str, Any]:
+    return {
+        "repo_id": repo_id,
+        "merge_policy": "when_checks_pass",
+        "merge_method": "squash",
+        "base_branch": "main",
+        "allowed_merge_policies": ["never", "when_checks_pass"],
+        "allowed_merge_methods": ["squash", "merge", "rebase"],
+        "merge_policy_refusals": {"immediate": "Refused: violates invariant 'nothing reaches a pull request unverified'"},
+        "updated_at": None,
+    }
+
+
+def _fake_settings_writer(repo_id: str, payload: dict[str, Any]) -> None:
     pass
 
 
@@ -256,6 +294,9 @@ def _build_app(
     change_units_reader=_fake_change_units_reader,
     context_reader=_fake_context_reader,
     context_writer=_fake_context_writer,
+    findings_reader=None,
+    settings_reader=_fake_settings_reader,
+    settings_writer=_fake_settings_writer,
     api_password: str | None = None,
 ) -> Starlette:
     """`create_app` with every reader defaulted to a fake, so a test naming one override is
@@ -285,6 +326,9 @@ def _build_app(
         change_units_reader=change_units_reader,
         context_reader=context_reader,
         context_writer=context_writer,
+        findings_reader=findings_reader,
+        settings_reader=settings_reader,
+        settings_writer=settings_writer,
         api_password=api_password,
     )
 
@@ -462,6 +506,29 @@ def test_the_vendor_route_hands_the_ordering_to_the_reader():
     client.get("/api/vendors/stripe?order=severity")
 
     assert calls[0]["order"] == "severity"
+
+
+def test_the_findings_route_forwards_repo_id_and_filters():
+    calls: list[dict[str, Any]] = []
+
+    def reader(**kwargs):
+        calls.append(kwargs)
+        return _fake_findings_reader(**kwargs)
+
+    client = TestClient(
+        _build_app(
+            surface=GraphSurface(FakeGraph(), feed_fetched_at=FETCHED),
+            findings_reader=reader,
+        )
+    )
+
+    client.get("/api/findings?repo_id=github.com/acme/storefront&severity=breaking")
+    assert calls[0]["repo_id"] == "github.com/acme/storefront"
+    assert calls[0]["severity"] == "breaking"
+
+    client.get("/api/repositories/github.com/acme/storefront/findings?order=severity")
+    assert calls[1]["repo_id"] == "github.com/acme/storefront"
+    assert calls[1]["order"] == "severity"
 
 
 def test_the_vendor_route_defaults_the_ordering_when_the_url_names_none():
@@ -1619,6 +1686,9 @@ _LIMIT_OFFSET_COLLECTIONS = {
     # graph's own data rather than with anything fixed in code or configuration.
     "/api/vendors/{vendor_id}",
     "/api/vendors/{vendor_id}/changes",
+    "/api/findings",
+    "/api/repositories/{repo_id:path}/findings",
+    "/api/repos/{repo_id:path}/findings",
     # Every remediation run across the fleet -- grows with usage, unboundedly.
     "/api/runs",
     # Every open finding grouped into a change unit (`sync.dashboard.fleet.change_units`) --
@@ -1679,6 +1749,8 @@ _NOT_COLLECTIONS = {
     # whose length is a property of the configuration file.
     "/api/adapters",
     "/api/repos/{repo_id:path}/context",
+    "/api/repositories/{repo_id:path}/settings",
+    "/api/repos/{repo_id:path}/settings",
 }
 
 _PAGE_ENVELOPE_KEYS = {"items", "total", "next_offset"}
@@ -1983,6 +2055,11 @@ _NOT_YET_FETCHED_BY_CONSOLE = {
     "/api/corpus/abandonment",  # M12-W196: aggregate and route only, panel not yet scheduled
     "/api/corpus/health",  # M12-W323: corpus health view model and route only, panel not yet scheduled
     "/api/repos/{param}/context",  # B126 Task 5: route only, the console screen is M7's line
+    "/api/findings",  # Scoped codebase findings: route ready for upcoming Codebase Overview findings view
+    "/api/repositories/{param}/findings",
+    "/api/repos/{param}/findings",
+    "/api/repositories/{param}/settings",
+    "/api/repos/{param}/settings",
 }
 
 
@@ -2237,5 +2314,68 @@ def test_app_factory_readers_accept_what_their_routes_actually_pass(monkeypatch)
         "/api/detectors?repo_id=r1",
         "/api/corpus",
         "/api/corpus/health",
+        "/api/findings",
+        "/api/findings?repo_id=r1",
+        "/api/repositories/r1/findings",
+        "/api/repos/r1/findings",
+        "/api/repositories/r1/settings",
+        "/api/repos/r1/settings",
     ):
         assert client.get(path).status_code == 200, path
+
+
+def test_settings_route_get_returns_settings():
+    client = TestClient(_build_app(surface=GraphSurface(FakeGraph(), feed_fetched_at=FETCHED)))
+    resp = client.get("/api/repositories/github.com/acme/storefront/settings")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["repo_id"] == "github.com/acme/storefront"
+    assert data["merge_policy"] == "when_checks_pass"
+    assert data["merge_method"] == "squash"
+
+
+def test_settings_route_post_updates_settings():
+    written = []
+
+    def writer(repo_id: str, payload: dict):
+        written.append((repo_id, payload))
+
+    client = TestClient(
+        _build_app(
+            surface=GraphSurface(FakeGraph(), feed_fetched_at=FETCHED),
+            settings_writer=writer,
+        )
+    )
+
+    resp = client.post(
+        "/api/repositories/github.com/acme/storefront/settings",
+        json={"merge_policy": "never", "merge_method": "rebase", "base_branch": "main"},
+    )
+    assert resp.status_code == 200
+    assert written == [("github.com/acme/storefront", {"merge_policy": "never", "merge_method": "rebase", "base_branch": "main"})]
+
+
+def test_settings_route_post_refuses_immediate_merge_policy():
+    client = TestClient(_build_app(surface=GraphSurface(FakeGraph(), feed_fetched_at=FETCHED)))
+
+    resp = client.post(
+        "/api/repositories/github.com/acme/storefront/settings",
+        json={"merge_policy": "immediate"},
+    )
+    assert resp.status_code == 400
+    data = resp.json()
+    assert "refused" in data["error"].lower()
+    assert "refusal_reason" in data
+    assert data["allowed_merge_policies"] == ["never", "when_checks_pass"]
+
+
+def test_settings_route_post_rejects_invalid_method():
+    client = TestClient(_build_app(surface=GraphSurface(FakeGraph(), feed_fetched_at=FETCHED)))
+
+    resp = client.post(
+        "/api/repositories/github.com/acme/storefront/settings",
+        json={"merge_method": "invalid-method"},
+    )
+    assert resp.status_code == 400
+    data = resp.json()
+    assert "Invalid merge_method" in data["error"]

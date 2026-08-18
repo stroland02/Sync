@@ -1102,6 +1102,7 @@ _WHOLE_STAGE_CATCH_ALL = (
 # harmless. Both say so where they sit. The docstring above carries what is known about each.
 _GUARDS_A_READ = (
     "sync/api/app.py::create_app.set_repo_context::ValueError",
+    "sync/api/app.py::create_app.set_settings::ValueError",
     "sync/cli.py::benchmark::KeyError+LookupError+ValueError",
     "sync/index/python_lang.py::PythonAdapter._syntax_errors::ValueError",
 )

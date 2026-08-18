@@ -15,14 +15,16 @@ from datetime import datetime, timezone
 
 import pytest
 
-from sync.core import CallSite, Finding, ObservedCall, ObservedErrorWindow, ObservedShape, VendorChange
+from sync.core import CallSite, Finding, ObservedCall, ObservedErrorWindow, ObservedShape, RepoSettings, VendorChange
 from sync.core.models import SEVERITY_ORDER
 from sync.dashboard.graph_views import (
     binding_surface,
     detector_accountability,
+    findings_page,
     index_coverage,
     observed_telemetry,
     overview_summary,
+    repo_settings,
     severity_rollup,
     vendor_findings,
 )
@@ -988,6 +990,27 @@ def test_vendor_findings_scoped_to_a_repository(store):
     assert vendor_findings(store, "stripe")["total"] == 2
 
 
+def test_findings_page_scoped_to_repository_across_vendors(store):
+    """The Codebase Overview findings view: all open findings for ONE selected codebase across all vendors."""
+    stripe_r1 = store.upsert_call_site(_site(repo_id="r1", path="src/a.ts", line=1, vendor_id="stripe"))
+    twilio_r1 = store.upsert_call_site(_site(repo_id="r1", path="src/b.ts", line=2, vendor_id="twilio", operation_id="SendSms"))
+    stripe_r2 = store.upsert_call_site(_site(repo_id="r2", path="src/c.ts", line=3, vendor_id="stripe"))
+
+    store.insert_finding(_finding(stripe_r1, claim="c1"))
+    store.insert_finding(_finding(twilio_r1, claim="c2"))
+    store.insert_finding(_finding(stripe_r2, claim="c3"))
+
+    page = findings_page(store, repo_id="r1")
+
+    assert page["total"] == 2
+    assert page["repo_id"] == "r1"
+    assert {row["vendor"] for row in page["items"]} == {"stripe", "twilio"}
+
+    fleet_page = findings_page(store)
+    assert fleet_page["total"] == 3
+    assert fleet_page["repo_id"] is None
+
+
 def test_vendor_findings_scoped_by_severity_and_by_path_prefix(store):
     billing = store.upsert_call_site(_site(path="src/billing/pay.ts", line=1))
     other = store.upsert_call_site(_site(path="src/other/pay.ts", line=2))
@@ -1287,3 +1310,66 @@ def test_severity_rollup_total_and_breakdown_are_two_aggregates_under_one_scope(
 
     assert result["by_severity"] == {"breaking": 1, "warning": 2}
     assert result["total"] == 3
+
+
+# -- repo_settings ------------------------------------------------------------------
+
+
+def test_repo_settings_returns_defaults_for_unconfigured_repo(store):
+    result = repo_settings(store, "github.com/acme/new-repo")
+
+    assert result["repo_id"] == "github.com/acme/new-repo"
+    assert result["merge_policy"] == "when_checks_pass"
+    assert result["merge_method"] == "squash"
+    assert result["base_branch"] == "main"
+    assert result["allowed_merge_policies"] == ["never", "when_checks_pass"]
+    assert result["allowed_merge_methods"] == ["squash", "merge", "rebase"]
+    assert "immediate" in result["merge_policy_refusals"]
+    assert result["updated_at"] is None
+
+
+def test_repo_settings_persists_and_retrieves_settings(store):
+    store.upsert_repo_settings(
+        RepoSettings(
+            repo_id="github.com/acme/configured-repo",
+            merge_policy="never",
+            merge_method="rebase",
+            base_branch="develop",
+        )
+    )
+
+    result = repo_settings(store, "github.com/acme/configured-repo")
+
+    assert result["repo_id"] == "github.com/acme/configured-repo"
+    assert result["merge_policy"] == "never"
+    assert result["merge_method"] == "rebase"
+    assert result["base_branch"] == "develop"
+    assert result["updated_at"] is not None
+
+
+def test_upsert_repo_settings_refuses_immediate_merge_policy(store):
+    # System invariant: "nothing reaches a pull request unverified".
+    # An immediate merge policy without verification is explicitly refused and raises ValueError.
+    with pytest.raises(ValueError, match="violates invariant 'nothing reaches a pull request unverified'"):
+        store.upsert_repo_settings(
+            RepoSettings.model_construct(
+                repo_id="github.com/acme/bad-repo",
+                merge_policy="immediate",
+                merge_method="squash",
+                base_branch="main",
+                merge_policy_refusals={"immediate": "Refused: violates invariant 'nothing reaches a pull request unverified'"},
+            )
+        )
+
+
+def test_upsert_repo_settings_refuses_invalid_merge_method(store):
+    with pytest.raises(ValueError, match="Invalid merge_method"):
+        store.upsert_repo_settings(
+            RepoSettings.model_construct(
+                repo_id="github.com/acme/bad-repo",
+                merge_policy="when_checks_pass",
+                merge_method="fast-forward-only",
+                base_branch="main",
+                merge_policy_refusals={},
+            )
+        )

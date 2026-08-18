@@ -38,6 +38,8 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse
 from starlette.routing import Route
 
+from sync.core import ALLOWED_MERGE_METHODS, ALLOWED_MERGE_POLICIES, REFUSED_MERGE_POLICIES
+
 from sync.core.models import CONTEXT_BODY_MAX
 from sync.mcp.tools import DEFAULT_LIMIT, GraphSurface
 
@@ -98,6 +100,7 @@ SeverityReader = Callable[..., dict[str, Any]]
 # repository. The reader also fixes the same scan `overview_reader` did: `whats_at_risk` walks
 # every open finding doing one `get_call_site` round trip per row before slicing in Python.
 VendorFindingsReader = Callable[..., dict[str, Any]]
+FindingsReader = Callable[..., dict[str, Any]]
 
 # The overview reader backs `sync.dashboard.graph_views.overview_summary`: the fleet screen's
 # vendor distribution and its bounded total, read straight from `GraphStore` in real SQL rather
@@ -113,6 +116,8 @@ OverviewReader = Callable[[], dict[str, Any]]
 # substitutes fakes without reaching into module state.
 ContextReader = Callable[[str], dict[str, Any]]
 ContextWriter = Callable[[str, str], None]
+SettingsReader = Callable[[str], dict[str, Any]]
+SettingsWriter = Callable[[str, dict[str, Any]], Any]
 
 
 # Ceiling on a page a caller may ask for. "Paginate every list" is a frozen rule of the graph
@@ -182,6 +187,9 @@ def create_app(
     change_units_reader: ChangeUnitsReader,
     context_reader: ContextReader,
     context_writer: ContextWriter,
+    findings_reader: FindingsReader | None = None,
+    settings_reader: SettingsReader | None = None,
+    settings_writer: SettingsWriter | None = None,
     api_password: str | None = None,
 ) -> Starlette:
     """Build the Starlette app bound to a particular surface and readers.
@@ -193,6 +201,7 @@ def create_app(
     at start-up with a `TypeError` naming the missing argument, not serve a route that 500s the
     first time a customer opens it.
     """
+    effective_findings_reader = findings_reader if findings_reader is not None else vendor_findings_reader
 
     async def overview(request: Request) -> JSONResponse:
         # `overview_reader` answers "what open findings do we hold, grouped by vendor, and how
@@ -214,6 +223,27 @@ def create_app(
         payload = overview_reader(repo_id=repo_id)
         severity = severity_reader(repo_id=repo_id)
         return JSONResponse({**payload, "severity_counts": severity["by_severity"]})
+
+    async def findings_list(request: Request) -> JSONResponse:
+        repo_id = request.path_params.get("repo_id") or request.query_params.get("repo_id")
+        vendor_id = request.query_params.get("vendor_id")
+        page = effective_findings_reader(
+            repo_id=repo_id,
+            vendor_id=vendor_id,
+            severity=request.query_params.get("severity"),
+            path=request.query_params.get("path"),
+            order=request.query_params.get("order"),
+            limit=_limit_param(request),
+            offset=_offset_param(request),
+        )
+        breakdown = severity_reader(repo_id=repo_id, vendor_id=vendor_id)
+        return JSONResponse(
+            {
+                **page,
+                "severity_counts": breakdown["by_severity"],
+                "severity_total": breakdown["total"],
+            }
+        )
 
     async def vendor_detail(request: Request) -> JSONResponse:
         # `severity_reader` is scoped to the repository and the vendor the URL names, and to
@@ -410,8 +440,69 @@ def create_app(
         context_writer(repo_id, body.strip())
         return JSONResponse(context_reader(repo_id))
 
+    async def get_settings(request: Request) -> JSONResponse:
+        repo_id = request.path_params["repo_id"]
+        if settings_reader is None:
+            return JSONResponse({"error": "Settings reader not configured"}, status_code=501)
+        return JSONResponse(settings_reader(repo_id))
+
+    async def set_settings(request: Request) -> JSONResponse:
+        repo_id = request.path_params["repo_id"]
+        if settings_writer is None:
+            return JSONResponse({"error": "Settings writer not configured"}, status_code=501)
+        try:
+            payload = await request.json()
+        except ValueError:
+            return JSONResponse({"error": "body must be JSON"}, status_code=400)
+        if not isinstance(payload, dict):
+            return JSONResponse({"error": "body must be a JSON object"}, status_code=400)
+        merge_policy = payload.get("merge_policy")
+        if merge_policy is not None:
+            if merge_policy in REFUSED_MERGE_POLICIES:
+                return JSONResponse(
+                    {
+                        "error": f"Merge policy '{merge_policy}' is refused: violates invariant 'nothing reaches a pull request unverified'",
+                        "refusal_reason": REFUSED_MERGE_POLICIES[merge_policy],
+                        "allowed_merge_policies": list(ALLOWED_MERGE_POLICIES),
+                    },
+                    status_code=400,
+                )
+            if merge_policy not in ALLOWED_MERGE_POLICIES:
+                return JSONResponse(
+                    {
+                        "error": f"Invalid merge_policy '{merge_policy}'",
+                        "allowed_merge_policies": list(ALLOWED_MERGE_POLICIES),
+                    },
+                    status_code=400,
+                )
+        merge_method = payload.get("merge_method")
+        if merge_method is not None and merge_method not in ALLOWED_MERGE_METHODS:
+            return JSONResponse(
+                {
+                    "error": f"Invalid merge_method '{merge_method}'",
+                    "allowed_merge_methods": list(ALLOWED_MERGE_METHODS),
+                },
+                status_code=400,
+            )
+        base_branch = payload.get("base_branch")
+        if base_branch is not None and (not isinstance(base_branch, str) or not base_branch.strip()):
+            return JSONResponse(
+                {"error": "base_branch must be a non-empty string"},
+                status_code=400,
+            )
+        try:
+            settings_writer(repo_id, payload)
+        except ValueError as e:
+            return JSONResponse({"error": str(e)}, status_code=400)
+        if settings_reader is not None:
+            return JSONResponse(settings_reader(repo_id))
+        return JSONResponse({"ok": True})
+
     routes = [
         Route("/api/overview", overview, methods=["GET"]),
+        Route("/api/findings", findings_list, methods=["GET"]),
+        Route("/api/repositories/{repo_id:path}/findings", findings_list, methods=["GET"]),
+        Route("/api/repos/{repo_id:path}/findings", findings_list, methods=["GET"]),
         Route("/api/vendors/{vendor_id}", vendor_detail, methods=["GET"]),
         Route("/api/vendors/{vendor_id}/changes", vendor_changes, methods=["GET"]),
         Route("/api/findings/{finding_id}", finding_detail, methods=["GET"]),
@@ -435,6 +526,10 @@ def create_app(
         # contains slashes, so the default converter would never match one.
         Route("/api/repos/{repo_id:path}/context", repo_context, methods=["GET"]),
         Route("/api/repos/{repo_id:path}/context", set_repo_context, methods=["POST"]),
+        Route("/api/repositories/{repo_id:path}/settings", get_settings, methods=["GET"]),
+        Route("/api/repos/{repo_id:path}/settings", get_settings, methods=["GET"]),
+        Route("/api/repositories/{repo_id:path}/settings", set_settings, methods=["POST"]),
+        Route("/api/repos/{repo_id:path}/settings", set_settings, methods=["POST"]),
     ]
 
     from starlette.middleware import Middleware

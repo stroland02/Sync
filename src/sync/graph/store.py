@@ -6,14 +6,25 @@ import hashlib
 import json
 from collections.abc import Collection, Iterator, Sequence
 from contextlib import contextmanager
-from datetime import datetime
+from datetime import datetime, timezone
 from importlib import resources
 
 import psycopg
 from psycopg.conninfo import conninfo_to_dict
 from psycopg.rows import dict_row
 
-from sync.core import CallSite, Finding, FindingStatus, MigrationOutcome, RepoContext, VendorChange
+from sync.core import (
+    CallSite,
+    Finding,
+    FindingStatus,
+    MigrationOutcome,
+    RepoContext,
+    RepoSettings,
+    VendorChange,
+    ALLOWED_MERGE_POLICIES,
+    ALLOWED_MERGE_METHODS,
+    REFUSED_MERGE_POLICIES,
+)
 from sync.core.models import (
     SEVERITY_ORDER,
     UNATTRIBUTED,
@@ -2164,6 +2175,64 @@ class GraphStore:
             [repo_id],
         ).fetchone()
         return RepoContext(**row) if row is not None else None
+
+    def repo_settings(self, repo_id: str) -> RepoSettings:
+        """One repository's automation and merge settings, or default settings if none recorded.
+
+        Default settings:
+        `merge_policy`: 'when_checks_pass'
+        `merge_method`: 'squash'
+        `base_branch`: 'main'
+        """
+        row = self._connect().execute(
+            "SELECT * FROM repo_settings WHERE repo_id = %s",
+            [repo_id],
+        ).fetchone()
+        if row is None:
+            return RepoSettings(repo_id=repo_id)
+        d = dict(row)
+        if isinstance(d.get("merge_policy_refusals"), str):
+            d["merge_policy_refusals"] = json.loads(d["merge_policy_refusals"])
+        return RepoSettings(**d)
+
+    def upsert_repo_settings(self, settings: RepoSettings) -> None:
+        """Persist automation and merge settings for one repository.
+
+        Enforces system invariants: immediate merge without verification is refused.
+        """
+        if settings.merge_policy not in ALLOWED_MERGE_POLICIES:
+            refusal = settings.merge_policy_refusals.get(
+                settings.merge_policy,
+                "Refused: violates invariant 'nothing reaches a pull request unverified'",
+            )
+            raise ValueError(
+                f"Invalid or refused merge_policy '{settings.merge_policy}': {refusal}. "
+                f"Permitted policies: {ALLOWED_MERGE_POLICIES}"
+            )
+        if settings.merge_method not in ALLOWED_MERGE_METHODS:
+            raise ValueError(
+                f"Invalid merge_method '{settings.merge_method}'. Permitted methods: {ALLOWED_MERGE_METHODS}"
+            )
+        refusals_json = json.dumps(settings.merge_policy_refusals)
+        self._connect().execute(
+            """
+            INSERT INTO repo_settings (repo_id, merge_policy, merge_method, base_branch, merge_policy_refusals, updated_at)
+            VALUES (%s, %s, %s, %s, %s, now())
+            ON CONFLICT (repo_id) DO UPDATE SET
+               merge_policy = EXCLUDED.merge_policy,
+               merge_method = EXCLUDED.merge_method,
+               base_branch = EXCLUDED.base_branch,
+               merge_policy_refusals = EXCLUDED.merge_policy_refusals,
+               updated_at = now()
+            """,
+            [
+                settings.repo_id,
+                settings.merge_policy,
+                settings.merge_method,
+                settings.base_branch,
+                refusals_json,
+            ],
+        )
 
     def record_intake_attempt(self, attempt: IntakeAttempt) -> str:
         """Persist one intake attempt record.
