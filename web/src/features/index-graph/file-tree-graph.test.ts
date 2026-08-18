@@ -110,4 +110,13 @@ describe("buildFileTreeGraph", () => {
 
     expect(graph.tree.children.map((c) => c.name)).toEqual(["a-folder", "a.ts", "b.ts"])
   })
+
+  it("keeps a vendor named in knownVendorIds even when the graph drew none of its edges", () => {
+    // A truncated response can name a vendor whose every edge was cut. Dropping the node would
+    // shrink the codebase the picture claims to show -- deriving vendors from rows alone cannot
+    // tell "no edges drawn" apart from "no bindings at all".
+    const graph = buildFileTreeGraph([row("a.ts", "stripe")], ["stripe", "twilio"])
+
+    expect(graph.vendors.map((v) => v.vendorId).sort()).toEqual(["stripe", "twilio"])
+  })
 })

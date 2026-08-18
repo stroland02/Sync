@@ -12,9 +12,12 @@
  * with ten thousand indexed files never mounts more DOM than the viewport can hold at once. The
  * layout itself is computed once; culling is a filter over it, never a second layout pass.
  *
- * **Scope is honest, not aspirational.** `rows` names call sites with an *open finding* --
- * `GET /api/vendors/{id}`'s only per-call-site source today -- not every file the index holds.
- * `SCOPE_NOTE` says so, the same discipline `dependency-canvas.tsx` held for its own inputs.
+ * **Scope, and why it changed since this canvas was first written.** `rows` was first drawn from
+ * `GET /api/vendors/{id}`'s open findings -- an honest but partial picture, since most call sites
+ * carry no open finding. `GET /api/repositories/{repo_id}/graph` (`RepositoryGraphBinding`)
+ * landed after and is what this canvas draws now: every indexed call site, whether or not a
+ * detector has claimed it, bounded and reporting its own truncation rather than silently drawing
+ * a partial graph as if it were complete.
  *
  * A rung is drawn as a word on the edge, never a colour, for the same reason
  * `dependency-canvas.tsx`'s docstring gives: `DESIGN.md` holds the provenance rung monochrome at
@@ -24,7 +27,7 @@
 import { useMemo, useRef, useState } from "react"
 import type { PointerEvent as ReactPointerEvent } from "react"
 
-import { BINDING_SOURCES, type RiskRow } from "@/api/types"
+import { BINDING_SOURCES, type RepositoryGraphBinding } from "@/api/types"
 import { Button } from "@/components/ui/button"
 import { describeRung } from "@/lib/format"
 import { cn } from "@/lib/utils"
@@ -43,15 +46,15 @@ export const CANVAS_LABEL = "Your codebase, and what it calls"
 export const MINIMAP_LABEL = "The whole tree, with the current view marked"
 
 export const SCOPE_NOTE =
-  "This tree draws the files Sync currently has an open finding against, not every file the index holds -- no route yet lists a repository's whole call-site set regardless of finding status."
+  "This tree draws every call site the index currently holds for this repository, whether or not a detector has claimed it."
 
 export const EMPTY_GRAPH_NOTE =
   "Nothing was passed to this canvas. That is a statement about what this view was given, not about what the index holds."
 
 const CANVAS_HEIGHT = "h-[36rem]"
 
-function rowToFileVendorRow(row: RiskRow): FileVendorRow {
-  return { file: row.file, vendor: row.vendor, binding_source: row.binding_source }
+function rowToFileVendorRow(row: RepositoryGraphBinding): FileVendorRow {
+  return { file: row.path, vendor: row.vendor_id, binding_source: row.binding_rung }
 }
 
 function NodeLabel({ node }: { node: FileTreeLayoutNode }) {
@@ -120,8 +123,20 @@ function Minimap({ nodes, frame, view }: { nodes: FileTreeLayoutNode[]; frame: V
   )
 }
 
-export function FileTreeCanvas({ rows, className }: { rows: RiskRow[]; className?: string }) {
-  const graph = useMemo(() => buildFileTreeGraph(rows.map(rowToFileVendorRow)), [rows])
+export function FileTreeCanvas({
+  rows,
+  knownVendorIds,
+  className,
+}: {
+  rows: RepositoryGraphBinding[]
+  /** Every vendor the caller already knows exists, so a truncated response cannot silently drop one -- see `buildFileTreeGraph`'s own docstring. */
+  knownVendorIds?: string[]
+  className?: string
+}) {
+  const graph = useMemo(
+    () => buildFileTreeGraph(rows.map(rowToFileVendorRow), knownVendorIds),
+    [rows, knownVendorIds]
+  )
   const layout = useMemo(() => layoutFileTree(graph), [graph])
   const fit = useMemo(() => fitViewport(layout.bounds), [layout.bounds])
   const [panned, setPanned] = useState<Viewport | null>(null)

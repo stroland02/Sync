@@ -1,24 +1,25 @@
 /**
- * The indexing canvas as a page: `FileTreeCanvas` fed real data through `useRepositoryRiskRows`.
+ * The indexing canvas as a page: `FileTreeCanvas` fed `GET /api/repositories/{repo_id}/graph`
+ * through `useRepositoryGraph`, the same route `overview-graph-panel.tsx` draws its own copy of
+ * the graph from.
  *
  * **Not registered in `routes.ts`.** `docs/superpowers/plans/2026-08-18-workspace-is-the-only-
  * scope.md` gives that file to Lane B exclusively -- this component is built and ready, and the
- * route entry (path, region, level, question) is Lane B's to add once the workspace-scoped
- * routing shape it describes lands. `level: "API Services"` is the fit if a citation is needed:
- * this canvas aggregates over that level's vendors the same way `/detectors` aggregates over
- * Errors & Incidents, per `.claude/rules/console-hierarchy.md`.
+ * route entry (path, region, level, question) is Lane B's to add. `level: "API Services"` is the
+ * fit if a citation is needed: this canvas aggregates over that level's vendors the same way
+ * `/detectors` aggregates over Errors & Incidents, per `.claude/rules/console-hierarchy.md`.
  */
 
 import { useParams } from "react-router"
 
+import { useRepositoryGraph } from "@/api/queries"
 import { EmptyState, ErrorState, LoadingState } from "@/components/states"
 import { FileTreeCanvas } from "@/features/index-graph/file-tree-canvas"
-import { useRepositoryRiskRows } from "@/features/index-graph/use-repository-risk-rows"
 import { Breadcrumbs } from "@/layouts/breadcrumbs"
 import { PageHeader } from "@/layouts/page-header"
 import { UnknownRoute } from "@/layouts/unknown-route"
 
-const DEFAULT_QUESTION = "What does this codebase actually call, and what has Sync found there?"
+const DEFAULT_QUESTION = "What does this codebase actually call, and what has the index found there?"
 
 export interface IndexGraphPageProps {
   readonly question?: string
@@ -31,7 +32,7 @@ export function IndexGraphPage({ question = DEFAULT_QUESTION }: IndexGraphPagePr
 }
 
 function IndexGraphDetail({ repoId, question }: { repoId: string; question: string }) {
-  const query = useRepositoryRiskRows(repoId)
+  const query = useRepositoryGraph(repoId)
 
   return (
     <section className="flex flex-col gap-8">
@@ -45,22 +46,25 @@ function IndexGraphDetail({ repoId, question }: { repoId: string; question: stri
       {query.isError && (
         <ErrorState error={query.error} what={`the file tree for ${repoId}`} onRetry={() => void query.refetch()} />
       )}
-      {query.isSuccess && query.data.rows.length === 0 && (
+      {query.isSuccess && query.data.bindings.length === 0 && (
         <EmptyState
-          headline={`Nothing to draw for ${repoId} yet.`}
-          detail="Either the index has not found a call site here, or none of them currently have an open finding -- this canvas draws call sites with an open finding, not every file the index holds."
+          headline={`No call site has been indexed for ${repoId} yet.`}
+          detail="A vendor call appears here once INDEX has run against this repository and found one. A repository the index never ran against shows the same nothing as one that calls no vendor, and neither is a claim that it calls none."
         />
       )}
-      {query.isSuccess && query.data.rows.length > 0 && (
+      {query.isSuccess && query.data.bindings.length > 0 && (
         <>
           {query.data.truncated && (
             <p className="max-w-prose text-body text-muted-foreground">
-              This repository has more open findings than this canvas fetched in one page. The
-              tree below is a real subset, not the whole graph -- say so rather than silently
-              drawing an incomplete picture as if it were complete.
+              Drawing {query.data.bindings.length} of {query.data.total_bindings} call sites. The
+              rest are indexed and reachable from the call-site tables; they are not drawn here
+              because the picture stops being legible before the codebase stops having edges.
             </p>
           )}
-          <FileTreeCanvas rows={query.data.rows} />
+          <FileTreeCanvas
+            rows={query.data.bindings}
+            knownVendorIds={query.data.vendors.map((v) => v.vendor_id)}
+          />
         </>
       )}
     </section>

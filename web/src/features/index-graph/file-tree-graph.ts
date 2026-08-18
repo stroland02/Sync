@@ -84,9 +84,16 @@ function sortTree(node: FolderNode): void {
   }
 }
 
-export function buildFileTreeGraph(rows: FileVendorRow[]): FileTreeGraph {
+/**
+ * `knownVendorIds` names every vendor the caller already knows exists, independent of what the
+ * rows happen to draw -- a truncated response can cut every edge for a vendor while still naming
+ * it in its own vendor list, and deriving vendors from rows alone cannot tell that apart from a
+ * vendor with no bindings at all. Omit it when the caller has no such list; every vendor named in
+ * a row is included either way.
+ */
+export function buildFileTreeGraph(rows: FileVendorRow[], knownVendorIds: string[] = []): FileTreeGraph {
   const root: FolderNode = { kind: "folder", name: "", path: "", children: [] }
-  const vendorIds = new Set<string>()
+  const vendorIds = new Set<string>(knownVendorIds)
   // Nested by file then vendor, rather than a joined string key: a real file path may legally
   // contain any separator character this module could pick, and a joined key that collided
   // across two distinct (file, vendor) pairs would silently merge their edges' rungs.
