@@ -391,3 +391,26 @@ def test_the_api_is_started_without_the_console_credential(monkeypatch):
     # whatever else the shell set, and starting it from an empty environment would trade one
     # silent failure for another.
     assert environment.get("SYNC_API_PORT") == "8801"
+
+
+def test_the_readiness_url_follows_the_port_the_api_was_told_to_use(monkeypatch):
+    """`dev_up` honours `SYNC_API_PORT` when it starts the API and must honour it when it checks.
+
+    The check's own failure message says a busy port means "a readiness check would answer from
+    whatever is already there", and its suggested fix is to set `SYNC_API_PORT`. Taking that advice
+    while the readiness URL stays pinned to 8787 walks straight into the sentence: the new API
+    binds to the new port, the probe hits the old one, and a stack reports ready on the strength
+    of somebody else's server. Measured on a machine where another lane genuinely held 8787.
+    """
+    monkeypatch.setenv("SYNC_API_PORT", "8811")
+
+    import importlib
+
+    import scripts.dev_up as dev_up
+
+    importlib.reload(dev_up)
+
+    assert "8811" in dev_up.api_url(), (
+        f"the readiness URL is {dev_up.api_url()!r}, which does not name the port the API was "
+        "told to bind"
+    )
