@@ -26,6 +26,7 @@ import {
   fetchVendorChanges,
   fetchVendorOperations,
   fetchVendorFindings,
+  fetchWorkspaceFindings,
   fetchPatch,
   fetchWorkflow,
   fetchRepositoryGraph,
@@ -85,6 +86,36 @@ export function useVendorFindings(vendorId: string, params: VendorFindingsParams
       fetchVendorFindings(
         vendorId,
         { limit, offset, repoId: params.repoId, severity, path, order },
+        signal,
+      ),
+  })
+}
+
+/**
+ * Every open finding in one workspace.
+ *
+ * The key carries the workspace and all three narrowings for the reason `useVendorFindings`'s
+ * does: two orderings of one set are two different pages, and a shared key would serve one
+ * ordering's rows under the other's name straight out of the cache.
+ */
+export function useWorkspaceFindings(repoId: string, params: VendorFindingsParams = {}) {
+  const limit = params.limit ?? DEFAULT_LIMIT
+  const offset = params.offset ?? 0
+  return useQuery({
+    queryKey: [
+      "repositories",
+      repoId,
+      "findings",
+      limit,
+      offset,
+      params.severity ?? null,
+      params.path ?? null,
+      params.order ?? null,
+    ],
+    queryFn: ({ signal }) =>
+      fetchWorkspaceFindings(
+        repoId,
+        { limit, offset, severity: params.severity, path: params.path, order: params.order },
         signal,
       ),
   })
