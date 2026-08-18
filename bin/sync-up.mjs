@@ -114,16 +114,65 @@ export function startRoute(docker, noAdmin) {
 }
 
 /**
- * The console's dependency tree, decided the same way as the venv and the cluster: a verdict,
- * then the install only when the tree is missing. Before this, `dev_up.py` refused on an
+ * Whether this checkout builds today's code, decided where automation cannot lose work.
+ *
+ * Owner's ruling, 2026-08-18: the build commands always build the most recent code, and the
+ * person never wonders whether the screen is behind `main`. So a clean checkout that is only
+ * behind fast-forwards on its own. The other three cases stay a person's: local changes are
+ * never pulled over, a divergence is named rather than resolved, and an unreachable origin is
+ * stated and stepped past, because offline is a place people run software. Every branch says
+ * what it decided -- five dev servers once ran stale on this machine and nothing said so.
+ */
+export function updateVerdict({ fetched, behind, ahead, dirty }) {
+  if (!fetched) {
+    return { action: "keep", message: "Could not reach origin to check for updates. Building the code exactly as it is." }
+  }
+  if (behind === 0) {
+    return {
+      action: "keep",
+      message: ahead > 0
+        ? `The checkout is current with origin/main, and ${ahead} commit(s) ahead of it.`
+        : "The checkout is current with origin/main.",
+    }
+  }
+  if (dirty) {
+    return {
+      action: "hold",
+      message:
+        `The checkout is ${behind} commit(s) behind origin/main, but it carries local changes and ` +
+        "nothing is pulled over somebody's work. Building as it is; `git pull` when you are ready.",
+    }
+  }
+  if (ahead > 0) {
+    return {
+      action: "hold",
+      message:
+        `The checkout and origin/main have diverged (${ahead} ahead, ${behind} behind). ` +
+        "Nothing is pulled; resolve that deliberately, then run this again.",
+    }
+  }
+  return {
+    action: "pull",
+    message: `The checkout is ${behind} commit(s) behind origin/main. Fast-forwarding, so this run builds today's code.`,
+  }
+}
+
+/**
+ * The console's dependency tree, decided the same way as the venv and the cluster: a verdict
+ * on the lockfile digest, never an mtime. Absent installs; a changed lockfile reinstalls; an
+ * unknown digest on either side keeps what is there rather than churning a tree that was just
+ * built -- the record catches up at the end of the run. Before this, `dev_up.py` refused on an
  * absent `web/node_modules` and named the command -- a correct refusal that was still a
  * defect in the one command, by the owner's own bar: after it, nothing is left to figure out.
  */
-export function consoleDependenciesVerdict(present) {
-  if (present) {
-    return { action: "keep", message: "The console dependencies are already installed. Nothing was fetched." }
+export function consoleDependenciesVerdict(present, lockDigest, recordedDigest) {
+  if (!present) {
+    return { action: "install", message: "The console dependencies are absent (web/node_modules). Installing them once." }
   }
-  return { action: "install", message: "The console dependencies are absent (web/node_modules). Installing them once." }
+  if (lockDigest && recordedDigest && lockDigest !== recordedDigest) {
+    return { action: "install", message: "The console lockfile changed since the last install. Reinstalling to match it." }
+  }
+  return { action: "keep", message: "The console dependencies are already installed. Nothing was fetched." }
 }
 
 /**
@@ -437,10 +486,40 @@ function startCluster() {
   ])
 }
 
-function writeInstallRecord(lockDigest) {
+/** The freshness action: fetch, measure, and fast-forward only where nothing can be lost. */
+function freshenCheckout() {
+  if (!existsSync(join(REPO_ROOT, ".git"))) return
+  const git = (args, capture) =>
+    spawnSync("git", args, {
+      cwd: REPO_ROOT, shell: false, timeout: 30000,
+      ...(capture ? { encoding: "utf-8" } : { stdio: "ignore" }),
+    })
+  const fetch = git(["fetch", "origin", "main"])
+  const counts = git(["rev-list", "--left-right", "--count", "HEAD...origin/main"], true)
+  const fetched = !fetch.error && fetch.status === 0 && !counts.error && counts.status === 0
+  let ahead = 0
+  let behind = 0
+  const m = /(\d+)\s+(\d+)/.exec(counts.stdout ?? "")
+  if (fetched && m) [ahead, behind] = [Number(m[1]), Number(m[2])]
+  const status = git(["status", "--porcelain"], true)
+  const dirty = Boolean((status.stdout ?? "").trim())
+  const verdict = updateVerdict({ fetched, behind, ahead, dirty })
+  process.stdout.write(`${verdict.message}\n`)
+  if (verdict.action === "pull") {
+    mustRun("Fast-forwarding to origin/main", "git", ["merge", "--ff-only", "origin/main"], { cwd: REPO_ROOT })
+  }
+}
+
+function webLockDigest() {
+  const lock = join(REPO_ROOT, "web", "package-lock.json")
+  return existsSync(lock) ? createHash("sha256").update(readFileSync(lock)).digest("hex") : null
+}
+
+function writeInstallRecord(lockDigest, webDigest) {
   const postmaster = postmasterRecord()
   const record = {
     lockDigest,
+    webLockDigest: webDigest,
     postgres: postmaster
       ? { pid: postmaster.pid, port: postmaster.port, version: pgBinariesVersion() ?? WANTED_POSTGRES }
       : null,
@@ -531,9 +610,11 @@ async function runNoAdmin() {
     ])
   }
 
-  writeInstallRecord(lockDigest)
-
-  const web = consoleDependenciesVerdict(existsSync(join(REPO_ROOT, "web", "node_modules")))
+  const web = consoleDependenciesVerdict(
+    existsSync(join(REPO_ROOT, "web", "node_modules")),
+    webLockDigest(),
+    previous?.webLockDigest ?? null,
+  )
   process.stdout.write(`${web.message}\n`)
   if (web.action === "install") {
     // On Windows npm is npm.cmd, which Node will not spawn without a shell (CVE-2024-27980),
@@ -545,6 +626,9 @@ async function runNoAdmin() {
       mustRun("Installing the console dependencies", "npm", ["install", "--prefix", "web"], { cwd: REPO_ROOT })
     }
   }
+  // After the install, deliberately: a record claiming the new lockfile before the install
+  // succeeded would tell the next run there is nothing to do.
+  writeInstallRecord(lockDigest, webLockDigest())
 
   process.stdout.write(`\nIn short: ${summarise({ postgres: cluster, cache })}.\n`)
   process.stdout.write("Handing over to the dev bring-up, which starts the API and the console.\n\n")
@@ -570,6 +654,7 @@ function main() {
   }
 
   if (process.argv.includes("--no-admin")) {
+    freshenCheckout()
     runNoAdmin().catch((error) => {
       process.stderr.write(`\nThe no-admin install stopped: ${error.message}\n`)
       process.exit(1)
@@ -599,6 +684,8 @@ function main() {
     process.stderr.write(`\n${source.message}\n\n`)
     process.exit(1)
   }
+
+  if (!process.argv.includes("down")) freshenCheckout()
 
   const diagnosis = dockerDiagnosis(probe(["compose", "version"]), probe(["info"]))
   const route = startRoute(diagnosis, noAdminSupport(process.platform))

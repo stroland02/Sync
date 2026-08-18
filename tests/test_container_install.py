@@ -260,22 +260,30 @@ def test_plain_start_routes_instead_of_refusing(docker_ok, no_admin_ok, expected
 
 
 @pytest.mark.parametrize(
-    "present, expected_action",
-    [(True, "keep"), (False, "install")],
+    "call, expected_action",
+    [
+        ("consoleDependenciesVerdict(false, 'aa', 'aa')", "install"),
+        ("consoleDependenciesVerdict(true, 'aa', 'aa')", "keep"),
+        ("consoleDependenciesVerdict(true, 'aa', 'bb')", "install"),
+        ("consoleDependenciesVerdict(true, 'aa', null)", "keep"),
+        ("consoleDependenciesVerdict(true, null, 'bb')", "keep"),
+    ],
 )
 @conftest.requires_node
-def test_the_no_admin_path_installs_the_console_dependencies(present, expected_action):
+def test_the_no_admin_path_installs_the_console_dependencies(call, expected_action):
     """The last assembly step a fresh clone still asked a person to do: `dev_up.py` refuses
     on an absent `web/node_modules` and names `npm install --prefix web` -- a correct
     refusal that is still a defect in the one command, by the owner's own bar (*after this
     one command, is there anything a person still has to figure out?*). The no-admin flow
-    now decides it the same way it decides the venv and the cluster: a verdict, then the
-    install only when the tree is missing.
+    now decides it the same way it decides the venv and the cluster: a verdict on the
+    lockfile digest, never an mtime -- absent installs, a changed lockfile reinstalls, and
+    an unknown digest on either side keeps what is there rather than churning a tree that
+    was just built (the record catches up at the end of the run).
     """
     node = _node()
     script = (
         f"import {{ consoleDependenciesVerdict }} from {DOORBELL.as_uri()!r};"
-        f"console.log(JSON.stringify(consoleDependenciesVerdict({str(present).lower()})));"
+        f"console.log(JSON.stringify({call}));"
     )
     result = subprocess.run(
         [node, "--input-type=module", "-e", script],
@@ -287,6 +295,47 @@ def test_the_no_admin_path_installs_the_console_dependencies(present, expected_a
     verdict = json.loads(result.stdout.strip())
     assert verdict["action"] == expected_action
     assert verdict["message"], "every verdict says what it decided; silence reads as a hang"
+
+
+@pytest.mark.parametrize(
+    "state, expected_action, expected_phrase",
+    [
+        ("{fetched: false, behind: 0, ahead: 0, dirty: false}", "keep", "Could not reach"),
+        ("{fetched: true, behind: 0, ahead: 0, dirty: false}", "keep", "current"),
+        ("{fetched: true, behind: 3, ahead: 0, dirty: false}", "pull", "3"),
+        ("{fetched: true, behind: 3, ahead: 0, dirty: true}", "hold", "local changes"),
+        ("{fetched: true, behind: 3, ahead: 2, dirty: false}", "hold", "diverged"),
+    ],
+)
+@conftest.requires_node
+def test_the_bring_up_freshens_the_checkout_and_says_what_it_decided(
+    state, expected_action, expected_phrase
+):
+    """Owner's ruling, 2026-08-18: the build commands always build the most recent code --
+    the person never wonders whether the screen they are looking at is behind `main`. The
+    verdict is automatic exactly where automation cannot lose work: a clean checkout that is
+    only behind fast-forwards; local changes are never pulled over; a divergence is named
+    and left for a person; an unreachable origin is stated and the bring-up continues,
+    because offline is a place people run software. Every branch says what it decided --
+    silence here is how five stale dev servers happened.
+    """
+    node = _node()
+    script = (
+        f"import {{ updateVerdict }} from {DOORBELL.as_uri()!r};"
+        f"console.log(JSON.stringify(updateVerdict({state})));"
+    )
+    result = subprocess.run(
+        [node, "--input-type=module", "-e", script],
+        capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=60,
+        env={**os.environ, "PYTHONIOENCODING": "utf-8"},
+    )
+    assert result.returncode == 0, f"the doorbell would not load: {result.stderr}"
+
+    verdict = json.loads(result.stdout.strip())
+    assert verdict["action"] == expected_action
+    assert expected_phrase in verdict["message"], (
+        f"the decision is not legible from the message: {verdict['message']!r}"
+    )
 
 
 @pytest.mark.parametrize("cli_status, daemon_status", [(1, 0), (0, 1)])
