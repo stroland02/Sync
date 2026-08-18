@@ -836,3 +836,49 @@ top**, and **rejected: inserting only when scrolled to the top.**
 **This is the log-tail problem answered in the reader's favour**, and it is the same instinct as
 decision 34's drawer: content that shifts under your eyes while you are reading it costs more than
 freshness buys. The banner is the arrival animation.
+
+## Round nineteen: decisions 88-89, and two questions answered from the tree
+
+**88. A run that cannot produce a safe patch abandons with a reason code and opens no pull request.**
+The finding stays open, the reason is recorded and queryable, and the screen offers `Retry` and
+`Open manually ↗`. **Rejected: a draft PR carrying an unverified diff**, and **rejected: an
+unverified suggested diff shown inside the finding.**
+
+**This is `CLAUDE.md`'s *nothing reaches a pull request unverified* held at the moment it costs
+something.** Both rejected options are the same trade — put a diff in front of a human with a label
+saying it does not compile — and both would have made the invariant conditional. The abandon reason
+is not a failure to hide; `CLAUDE.md` already says **abandoned runs are data**, and they are where
+routing learns which change kinds are not mechanically safe.
+
+**89. Production is a self-hosted container on the customer's infrastructure** — their Postgres,
+their tokens, running beside their CI. **Rejected: a hosted GitHub App**, and **rejected: self-host
+now with hosted later as a stated plan.**
+
+**This keeps the one unqualified invariant intact.** A hosted app means holding a GitHub App
+installation token, which is a customer credential, and `CLAUDE.md`'s *we never hold customer
+secrets* has no qualification on it. Self-hosting is not a smaller version of the hosted product —
+**it is the deployment shape in which that sentence stays true.**
+
+### Two owner questions, answered from the tree rather than re-asked
+
+**"Was there anything planned for reading many codebases?"** — **Yes, and it is built.**
+`LanguageAdapter` is a protocol at `core/protocols.py:12` with **two implementations already wired**:
+`TypeScriptAdapter` and `PythonAdapter`, both returned by `cli.py:198`. `core/conformance.py:361`
+checks an adapter against every guarantee the protocol states but cannot enforce, and the design spec
+records why Python exists at all — *"to prove `LanguageAdapter` generalizes past TypeScript."*
+
+**The real shape is therefore: indexing is polyglot, remediation is not.** The verification gate is
+`tsc`, so Sync can *see* Python call sites and cannot *fix* them. That is a live distinction the
+console does not yet render, and it is exactly the kind of gap that reads as zero findings.
+
+**"How did we plan for adding different vendors?"** — **Also built, deliberately without a plugin
+scan.** `signals/registry.py` holds `_CODED_ADAPTERS` (`stripe`, `twilio`) beside configured vendors
+served by `GeneratedSpecAdapter` and `McpServerAdapter`, with `available_vendors()` returning both.
+Its own docstring states the choice: *"No entry-point discovery and no plugin scan. A third party's
+adapter is registered by adding a line to `_BUILDERS`... Discovery would be the right shape once an
+adapter ships outside this repository and is guesswork until then."* That is *build for the case that
+exists*, applied and written down.
+
+**And it already reports its own gap honestly**: a configured vendor's *specifications* are
+discoverable while its *call sites* are not, so it binds nothing — and `signals/intake` reports that
+as missing configuration rather than hiding it behind a vendor that appears served.
