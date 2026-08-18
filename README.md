@@ -12,17 +12,10 @@
 [![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-blue)](LICENSE)
 [![Status: pre-alpha](https://img.shields.io/badge/status-pre--alpha-orange)](#status)
 
-</div>
-
-<div align="center">
-
 <img src="docs/console-mock/demo.gif" width="92%" alt="A tour of the Sync operator console: the fleet, a call-site drawer, the command palette, detector attribution, codebase, API service, signals, the binding surface, a finding, the solution workflow, a pull request and the adapter settings" />
 
-**The operator console — every screen in one pass.** Fleet → drawer → palette → detectors →
-codebase → vendor → signals → binding surface → finding → workflow → pull request → settings.
-
-*This is the design mock, not shipped code.* [What is built today](docs/why-sync.md#the-operator-console) ·
-[the mock](docs/console-mock/) · [the plan that builds it](docs/superpowers/plans/2026-08-08-console-mock-to-build.md)
+**The operator console — every screen in one pass.** *This is the design mock, not shipped code.*
+[What is built today](docs/why-sync.md#the-operator-console) · [the mock](docs/console-mock/)
 
 </div>
 
@@ -33,39 +26,13 @@ vendor ships a breaking change  →  Sync finds every call site that depends on 
                                 →  opens a PR carrying the evidence
 ```
 
----
-
 ## Run it
 
-**Every command on this page runs in an ordinary terminal** — Command Prompt, PowerShell, or a
-shell. None of it needs a coding agent, and none of it carries a prefix: if you met a command
-here inside an agent conversation, whatever punctuation the agent's own prompt uses (`!`, `/`)
-belongs to the agent, not to the command.
+Every command here runs in an ordinary terminal — no coding agent, no prefix. Every path ends at
+the same console: **http://127.0.0.1:4173**, password `sync-local-demo` unless you exported
+`SYNC_CONSOLE_PASSWORD` first.
 
-**Three ways in. Two of them work today, and the third is written down because it is where this
-is going.** Every one of them ends at the same console on
-**http://127.0.0.1:4173**, signed in with the password the log prints — `sync-local-demo` unless you
-exported `SYNC_CONSOLE_PASSWORD` first.
-
-### 1. One command
-
-**Named and publishable, but the package is not published, so no command is printed here yet.**
-The manifest carries the bin's own name — `sync-up`, verified free on the registry — so once it
-is on npm, the whole instruction is `npx` plus that one word (`CI-W451`). Two steps remain, and
-the second is the real one: `npm publish` needs the owner's credential, and until a prebuilt
-image exists to pull, the registry form prints the clone that works rather than starting the
-product — the published tarball carries the launcher and the compose file, not the source tree
-the compose file builds from. `B190` in `docs/superpowers/BACKLOG.md` carries what closes that,
-ending at one measured sentence: the one command reaching the console password prompt on a
-machine that has never seen this repository.
-
-**Until then, use [2. From a checkout](#2-from-a-checkout--one-prerequisite-and-it-is-docker).
-It is the same work, it is two lines, and it runs today.**
-
-### 2. From a checkout — one prerequisite, and it is Docker
-
-Nothing here needs Python, `uv`, Node, `gh` or a Postgres on your machine. The image carries all of
-them.
+### From a checkout — one prerequisite, and it is Docker
 
 ```bash
 git clone https://github.com/stroland02/sync.git
@@ -73,159 +40,55 @@ cd sync
 npm start
 ```
 
-`pnpm start` is the same command — both hand over to `docker compose`, reimplementing nothing.
+`pnpm start` is the same command; both hand over to `docker compose`, which brings up Postgres,
+the schema, the API, and only then the console. First run builds everything (282 s measured, 22 s
+after); `docker compose -f docker-compose.demo.yml build` moves that wait earlier. Only the
+console is exposed, on loopback. `npm run down` stops it and removes its database.
 
-`docker compose -f docker-compose.demo.yml up --build` is the same command with the doorbell's
-diagnosis removed; `npm run down` (or `pnpm down`) stops it and removes its database. The script
-is `start` rather than `up` because `pnpm up` is pnpm's own alias for `update` — a script named
-`up` runs something different under each package manager.
+**Stated here rather than discovered: the console comes up empty.** Nothing yet indexes a
+repository into a fresh container — `B188` in `docs/superpowers/BACKLOG.md` carries the ways out.
+Until that lands, this shows you that the product runs, not what it finds in your code.
 
 ### No admin rights? No Docker? Still runs.
-
-On a locked-down Windows machine every container runtime is closed — Docker Desktop, WSL2 and
-the rest all need an elevated Windows feature. From a checkout:
 
 ```bash
 npm run no-admin
 ```
 
-runs everything in user space instead: an embedded Postgres in `~/.sync-postgres`, a pinned
-Python built by `uv`, the schema, a fixture, and the same console — nothing elevated, nothing
-installed machine-wide. It adopts what a previous run (or you, by hand) already set up rather
-than rebuilding it, and says which it did. Windows-only today; `B191` carries the rest.
+Everything in user space from a checkout: an embedded Postgres in `~/.sync-postgres`, a pinned
+Python built by `uv`, the schema, a fixture, the same console. Nothing elevated, nothing
+machine-wide, and it adopts what a previous run already set up rather than rebuilding it.
+Windows-only today; `B191` carries the rest.
 
-### 3. From source, for working on Sync itself
+### One command
 
-Python 3.12, `uv`, Node 22.22+, and Postgres on 5433. **[docs/developing.md](docs/developing.md)**
+The package is named — `sync-up`, the same word as the bin it installs — but it **is not published**,
+so no command is printed here for a visitor to copy. `npm publish` is one step;
+a prebuilt image for the registry form to pull is the other, and `B190` names what closes it.
+
+### From source, for working on Sync itself
+
+Python 3.12, `uv`, Node 22.22+, Postgres on 5433 — **[docs/developing.md](docs/developing.md)**
 carries the prerequisites, the install, and the quality gates.
-
-### Run it — one prerequisite, and it is Docker
-
-Nothing below this heading needs Python, `uv`, Node, `gh` or a Postgres on your machine. The image
-carries all of them.
-
-```bash
-git clone https://github.com/stroland02/sync.git
-cd sync
-docker compose -f docker-compose.demo.yml up --build
-```
-
-Then open **http://127.0.0.1:4173** and sign in with the password the log prints — `sync-local-demo`
-unless you exported `SYNC_CONSOLE_PASSWORD` before starting.
-
-**Measured on a developer machine: 282 seconds the first time and 22 seconds after that.** The first
-run builds four toolchains — the console's dependencies, a production build of it, Node for the
-runtime image, and the Python tree — and every run after reuses all of it.
-
-**If you are about to show this to somebody, build it beforehand:**
-
-```bash
-docker compose -f docker-compose.demo.yml build
-```
-
-That is the same work moved earlier, and it turns a five-minute wait into a twenty-two second one.
-Nothing about the result differs.
-
-That brings up Postgres, applies the schema, starts the API, waits until the API actually answers,
-and only then serves the console. The order is deliberate: **half a stack is worse than no stack**,
-because a console pointed at an API that never came up presents as a console bug and sends you
-debugging the wrong thing.
-
-Nothing is exposed except the console, and it is bound to `127.0.0.1` rather than every interface.
-The API is reached only through the console's own `/api` proxy, which is where the credential gate
-sits.
-
-**Two things this does not do yet, stated here rather than discovered.**
-
-- **The console comes up empty.** It renders correctly and has no data in it, because nothing yet
-  indexes a repository you point it at — the CLI has no indexing subcommand, and indexing needs a
-  vendor specification staged that a fresh container does not have. `B188` in
-  `docs/superpowers/BACKLOG.md` carries the three ways out and what each one costs. Until that
-  lands, this shows you that the product runs, not what it finds in your code.
-- **The one-command form is publishable and not yet published.** `bin/sync-up.mjs` checks the
-  single prerequisite and hands over to exactly the `docker compose` invocation above — it
-  deliberately reimplements none of it, because npm delivers a Node program and a wrapper claiming
-  to install Python and a database would fail in front of the person being shown it. The name
-  question is settled — the package is `sync-up`, the same word as the command it installs — but
-  the registry answers 404 until the owner runs `npm publish`, and even then the registry form
-  refuses with directions rather than starting the product, because no prebuilt image exists for
-  it to pull. `B190` names what closes that.
-
-To stop it, and to remove its database with it:
-
-```bash
-docker compose -f docker-compose.demo.yml down -v
-```
-
-This is deliberately a separate file from `docker-compose.yml`, which serves only the development
-Postgres on port 5433 that the section below uses.
-
-### The journey, and why it runs in this order
-
-Most tools in this space need instrumentation before they can show you anything: install an SDK,
-get a key, wire an exporter, wait for an event. **Sync does not, and that is the strongest thing
-about it.** The API dependency graph's first rung is `static` — call sites read straight out of
-your code — so there is something true to show before you have configured anything.
-
-1. **Index your repository.** Your call sites, your vendors, your findings. Every binding marked
-   `static`, and the console saying plainly that `static` is what it is. No key, no SDK, no signup.
-   *(Blocked today — see the note above and `B188`.)*
-2. **Attach telemetry, if you want to, and watch bindings move from `static` to `observed`.** The
-   screen shows the upgrade, so you can see exactly what instrumenting bought you. It is an
-   argument for instrumenting rather than a precondition for being allowed in. In practice this is
-   `sync ingest` over a payload you exported — Sync has no listener and does not ask you to point
-   an exporter at a URL.
-3. **Let it open a pull request, once you trust it.** Last, not first — after you have seen its
-   reasoning on your own code.
-
-**Value before configuration**, and it is not a trick: the provenance rung means the console can
-say exactly how much that free first answer is worth.
 
 ## Status
 
-## Status: pre-alpha, and specific about it
-
-M0's definition of done was one thing: a real breaking change producing a CI-green pull request
-against a real repository, unattended.
-
-**That has happened once.** One `sync run` against a fork of `stripe/stripe-connect-furever-demo`
-produced [pull request #1](https://github.com/stroland02/stripe-connect-furever-demo/pull/1) — two
-deletions in one file, removing a withdrawn request argument at both call sites that passed it,
-typecheck green on the branch, no human between detection and pull request.
-
-Three qualifications, because they change what the result means:
-
-- **The acceptance run has not re-executed since the pipeline changed underneath it.** It is
-  `@pytest.mark.e2e` and deselected by default. Since it last ran, the pipeline gained the tier
-  cascade, a push guard, branch deletion on abandonment, the dependency-edit guard and more —
-  every one of them on the acceptance path.
-- **The vendor change was constructed**: a property removed from a real pinned specification
-  rather than one Stripe withdrew, because no window of Stripe's history examined here contains a
-  top-level breaking change this application would notice.
-- **Three of the five quality axes have never had a sample.** Merge rate, routing accuracy and
-  cost per merged patch need pull requests that have not been opened yet. They report `null`
-  rather than zero, deliberately.
-
-What *is* measured is measured properly — see [Quality gates](docs/developing.md#quality-gates).
-
----
+Pre-alpha, and specific about it: the full loop — real breaking change to CI-green pull request,
+unattended — **has happened once**, with three qualifications that change what that means.
+[Where it stands](docs/why-sync.md#where-it-stands-and-specific-about-it) carries the result, the
+qualifications, and what is actually measured.
 
 ## Read further
 
-The argument, the mechanism and the architecture live under `docs/` so this page can get you
-running. Nothing was shortened in the move.
-
-- **[Why Sync exists](docs/why-sync.md)** — the problem nobody owns, what actually makes this
-  different, and the honesty discipline the console is built on. **Start here if you want to know
-  why a graph of your own code is the product rather than a feature.**
+- **[Why Sync exists](docs/why-sync.md)** — the problem nobody owns, the journey, the honesty
+  discipline, and where it stands. **Start here.**
 - **[How it works](docs/how-it-works.md)** — provenance rungs, the remediation state machine, the
-  tier cascade, durable execution, containing the agent, and the two invariants.
-- **[Architecture and stack](docs/architecture.md)** — the shape of the system and the engineering
-  constraints behind it.
-- **[Working on Sync itself](docs/developing.md)** — from-source setup, the quality gates, and how
-  the work is done.
+  tier cascade, durable execution, containing the agent.
+- **[Architecture and stack](docs/architecture.md)** — the shape of the system and the constraints
+  behind it.
+- **[Working on Sync itself](docs/developing.md)** — from-source setup and the quality gates.
 - **[Beta readiness](docs/superpowers/plans/2026-08-18-beta-readiness.md)** — what stands between
-  here and a stranger running this, measured rather than asserted.
+  here and a stranger running this.
 
 ## License
 

@@ -127,3 +127,51 @@ deliberately **not file-pinned** — a sentence may move into a new composition;
 shortening one fails the build.
 
 ---
+
+## The journey, and why it runs in this order
+
+Most tools in this space need instrumentation before they can show you anything: install an SDK,
+get a key, wire an exporter, wait for an event. **Sync does not, and that is the strongest thing
+about it.** The API dependency graph's first rung is `static` — call sites read straight out of
+your code — so there is something true to show before you have configured anything.
+
+1. **Index your repository.** Your call sites, your vendors, your findings. Every binding marked
+   `static`, and the console saying plainly that `static` is what it is. No key, no SDK, no signup.
+   *(Blocked in the demo container today — `B188` in `docs/superpowers/BACKLOG.md` carries the
+   three ways out and what each one costs.)*
+2. **Attach telemetry, if you want to, and watch bindings move from `static` to `observed`.** The
+   screen shows the upgrade, so you can see exactly what instrumenting bought you. It is an
+   argument for instrumenting rather than a precondition for being allowed in. In practice this is
+   `sync ingest` over a payload you exported — Sync has no listener and does not ask you to point
+   an exporter at a URL.
+3. **Let it open a pull request, once you trust it.** Last, not first — after you have seen its
+   reasoning on your own code.
+
+**Value before configuration**, and it is not a trick: the provenance rung means the console can
+say exactly how much that free first answer is worth.
+
+## Where it stands, and specific about it
+
+M0's definition of done was one thing: a real breaking change producing a CI-green pull request
+against a real repository, unattended.
+
+**That has happened once.** One `sync run` against a fork of `stripe/stripe-connect-furever-demo`
+produced [pull request #1](https://github.com/stroland02/stripe-connect-furever-demo/pull/1) — two
+deletions in one file, removing a withdrawn request argument at both call sites that passed it,
+typecheck green on the branch, no human between detection and pull request.
+
+Three qualifications, because they change what the result means:
+
+- **The acceptance run has not re-executed since the pipeline changed underneath it.** It is
+  `@pytest.mark.e2e` and deselected by default. Since it last ran, the pipeline gained the tier
+  cascade, a push guard, branch deletion on abandonment, the dependency-edit guard and more —
+  every one of them on the acceptance path.
+- **The vendor change was constructed**: a property removed from a real pinned specification
+  rather than one Stripe withdrew, because no window of Stripe's history examined here contains a
+  top-level breaking change this application would notice.
+- **Three of the five quality axes have never had a sample.** Merge rate, routing accuracy and
+  cost per merged patch need pull requests that have not been opened yet. They report `null`
+  rather than zero, deliberately.
+
+What *is* measured is measured properly — see
+[Quality gates](developing.md#quality-gates).
