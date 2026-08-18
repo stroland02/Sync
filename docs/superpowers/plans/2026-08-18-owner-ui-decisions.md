@@ -642,3 +642,38 @@ the same basename truncate to the same string. So the **full path goes in the `t
 the accessible name** — as decisions 60 and 65 already require for hovered precision — and the source
 drawer shows it whole. **Where two visible rows would truncate identically, the column widens rather
 than lying**; identical-looking rows that are different records is a worse table than a wide one.
+
+## Round fifteen: decisions 72-75, and one raised back to the owner
+
+**72. Signals rows are vendors, expandable to their changes.** `stripe — 312 changes · 31 matched`,
+expanding to the matched changes and the operation each touched. **Rejected: one row per vendor
+change**, and **rejected: only changes that touched this workspace.**
+
+**The unmatched count is the valuable half and must not be dropped.** `312 changes · 31 matched` says
+Sync read three hundred and twelve things and can account for why two hundred and eighty-one of them
+are not your problem. A screen showing only matches would look identical whether the other 281 were
+checked or never fetched.
+
+**73. RAISED BACK TO THE OWNER, NOT RECORDED AS SETTLED.** The selection was *stage plus a live
+progress indicator*, `●○○ awaiting CI` with motion on running rows. **`CLAUDE.md:63` refuses a
+liveness pulse by name, rejected on the record three times**, and gives this exact case as the
+reason: *"nothing in our data tells a run parked on the customer's CI from one that has died."* An
+animated indicator on `awaiting CI` asserts liveness the data cannot establish. **The owner may
+overrule their own document — but it is their document, so it is raised rather than absorbed.**
+
+**74. Settings gets four editable groups**: Codebases (add, remove, select), Pull request policy with
+`immediately` still refused and the reason shown, the notification webhook naming its environment
+variable without ever accepting the value, and — **added by the owner in this round — AI model
+configuration.**
+
+**Model settings are a new group and they inherit a constraint from `CLAUDE.md`.** The model, the
+thinking mode and the effort are already fixed project-wide — `claude-opus-5`, adaptive, `xhigh` —
+and the two SDK surfaces spell them differently and are not interchangeable. **The screen shows what
+is configured and where it comes from; the API key is an environment variable and is never accepted
+by a form**, exactly as the webhook endpoint is. **Detector enable/disable was not selected** and is
+not built.
+
+**75. The install command prints what it found, then the URL.** Files read, call sites, vendors,
+findings, then `✓ http://localhost:5170`. **Rejected: the URL alone**, and **rejected: adding a
+not-measured-yet block** — which would have put the console's honesty discipline into a terminal
+before anybody has seen a screen.
