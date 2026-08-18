@@ -165,6 +165,8 @@ export function NotFoundState({
 interface Explanation {
   headline: string
   detail: string
+  /** What came back, quoted rather than interpreted. Rendered verbatim, below the prose. */
+  evidence?: string
 }
 
 function explain(error: unknown, what: string): Explanation {
@@ -199,9 +201,17 @@ function explain(error: unknown, what: string): Explanation {
     }
   }
   if (error instanceof NotFoundError) {
+    // Two different failures arrive as one status and the response cannot tell them apart, so
+    // this must not choose between them. B147 is the proof: /api/repositories/{repo_id}/coverage
+    // takes the default path converter, which cannot match a repo_id containing slashes, so a
+    // repository /api/repositories does list answers 404 anyway. Copy asserting the API does not
+    // hold the identifier was false on that screen.
     return {
-      headline: "The API does not hold that identifier.",
-      detail: `${error.message} (${error.identifier})`,
+      headline: "The API answered 404 for this request.",
+      detail:
+        `The request for ${what} did not resolve. Either this URL matches no route, or the ` +
+        "API holds no record behind it — a 404 does not say which.",
+      evidence: `${error.message} — ${error.path}`,
     }
   }
   return {
@@ -233,10 +243,11 @@ export function ErrorState({
   what: string
   onRetry?: () => void
 }) {
-  const { headline, detail } = explain(error, what)
+  const { headline, detail, evidence } = explain(error, what)
   return (
     <Panel status="critical" headline={headline}>
       <p>{detail}</p>
+      {evidence !== undefined && <p className="mt-1 font-mono text-meta">{evidence}</p>}
       {onRetry !== undefined && (
         <p>
           <button

@@ -40,6 +40,7 @@ import { Button } from "@/components/ui/button"
 import { FactTile } from "@/components/fact-tile"
 import { CodebasesPanel, type CodebaseFilter } from "@/features/fleet/codebases-panel"
 import { FleetFacts } from "@/features/fleet/fleet-facts"
+import { RungUpgradeCard } from "@/features/fleet/rung-upgrade-card"
 import { ScreenLimitsCard } from "@/features/fleet/screen-limits"
 import { Breadcrumbs } from "@/layouts/breadcrumbs"
 import { ControlBar } from "@/layouts/control-bar"
@@ -108,6 +109,14 @@ export function FleetPage({ question = DEFAULT_QUESTION }: FleetPageProps) {
           asked: the fleet-wide change-unit table to the Codebase screen, where it is scoped to one
           repository and therefore actionable, and the vendor distribution with it. */}
       <CodebasesPanel filter={filter} />
+
+      {/* Value before configuration, and the order on this screen is the argument. The repository
+          list and its counts come first: real findings, read from source, before anything was
+          attached. Only then does this panel say what that evidence rests on and what the next rung
+          would take. Putting it above the list would make the first thing a reader meets a setup
+          instruction, which is the onboarding every telemetry product has and the one Sync does not
+          need — its screen is not empty before traces arrive. */}
+      <RungUpgradeCard />
 
       {/* Two columns, and the second one is load-bearing rather than decorative. The health-refusal
           sentence ends "the panel beside them names what none of these figures can tell you at

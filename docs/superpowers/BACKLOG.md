@@ -553,6 +553,123 @@ collapsed onto "there is nothing here."** Worth carrying as a class, not three s
 **A fourth was then found by looking for it, and that is the argument for treating it as a class.** `CI-W365` audited this lane's surface for the same shape and found `scripts/beta_gates.py::_resume_path_exists` returning `False` on `OSError` -- an unreadable file reported as a missing resume path, which made Gate 1 fail with a specific claim about code it had not read. The same script argues the opposite of itself six hundred lines earlier for the database it cannot reach. Fixed there; the audit's other candidates were each checked and found deliberate.
 
 
+### B186 — `probe_connect` cannot say "I could not find out", and a positive control needs it — Lane A
+
+**Filed 2026-08-17 by `CI-W366`, and the test-side half is already done so this is not blocking
+anybody.** `src/sync/remediate/sandbox.py` is Lane A's file, hence a backlog entry rather than an
+edit.
+
+`probe_connect` returns `ProbeResult(reachable=False, detail="docker exec timed out after 15s")`
+when its own `docker exec` runs out of time. **That is right for the question it was written for**
+— a caller asking "is this blocked" is correct to treat a hung connect and a refused one alike, and
+the docstring says so deliberately.
+
+It is wrong for the other caller. A **positive control** asserts the container *can* reach
+something, so a probe that ran out of time manufactures "positive control failed" out of a
+container that was reachable throughout. Measured on this host: a bare `docker version` took
+432–2552ms during a full `-n auto` run against roughly 100–200ms idle, so the 15s budget is far
+less margin than it looks, and `test_container_network_cutoff_blocks_arbitrary_egress`'s control
+sits directly on it.
+
+**The shape wanted**, matching what `tests/conftest.py` already does for Docker and Postgres:
+
+```python
+@dataclass(frozen=True)
+class ProbeResult:
+    reachable: bool
+    detail: str
+    timed_out: bool = False   # the probe did not answer; `reachable` says nothing
+```
+
+`timed_out` is written only by the `subprocess.TimeoutExpired` branch. `False` everywhere else,
+including every present caller, so nothing existing changes meaning. **A consumer asking "is this
+blocked" reads `reachable` exactly as today and may ignore the new field; a consumer asking "can
+this reach" must treat `timed_out=True` as *no measurement* and retry or fail saying so — never as
+`reachable=False`.**
+
+**Closes when** `ProbeResult` carries the distinction and
+`tests/test_patch_sandbox.py::_probe_until_reachable` reads it instead of retrying blind. Until
+then the retry is the mitigation and it is honest: something genuinely unreachable still reports
+unreachable on every attempt and still fails at the deadline.
+
+**This is the fifth instance of one class today**, after `B183`, `B184`, `B185` and `CI-W365`:
+a transient or unknown condition recorded as a definite negative.
+
+
+### B187 — the console's credential silently makes every API panel 401, and only the container shows it
+
+**Found 2026-08-18 by `CI-W368`, by running the API and the console in one image for the first
+time.** Neither component is wrong on its own and together they serve a console with no data in it.
+
+- `sync.api.auth.configured_api_password` falls back to `SYNC_CONSOLE_PASSWORD` when
+  `SYNC_API_PASSWORD` is unset, so *having the console's credential in the environment* is enough
+  to make the API demand one.
+- `web/scripts/serve-console.mjs` deliberately deletes `authorization` before proxying to `/api`,
+  on the stated grounds that the console's shared credential is not the API's and the API does not
+  check it.
+
+**Measured:** console `200`, `/api/repositories` `401`, `{"error":"unauthorized"}` — a fully
+rendered console whose every panel is empty for an authentication reason no screen can show. That
+is the "half a stack" failure `dev_up.py` exists to prevent, arriving through a door nobody had
+opened, because until this image the two had never run in one process tree.
+
+**Worked around, not fixed.** `docker/entrypoint.sh` starts the API with
+`env -u SYNC_CONSOLE_PASSWORD`, so the API sees no credential, binds loopback inside the container,
+and is never published. The console's HTTP Basic gate stays the only boundary and it sits in front
+of both the console and the proxied API.
+
+**Closes when** the two agree in code rather than by an unset variable: either the API stops
+reading `SYNC_CONSOLE_PASSWORD` as its own (Lane E, `src/sync/api/auth.py`), or the proxy forwards
+a credential the API accepts (Lane B, `web/scripts/serve-console.mjs`). **Whichever way it goes, a
+test must run the pair together** — the reason this survived is that every existing test runs one
+or the other.
+
+
+### B188 — the container comes up empty, and indexing needs a decision nobody has made
+
+**Measured 2026-08-18 by `CI-W370`, against the running container from `CI-W368`.**
+`/api/repositories` returns `{"repo_ids":[]}`. The console renders correctly and has nothing in it,
+which the ship plan names as the biggest UI risk: *a screen with real data and plain styling
+survives the question; a beautifully composed empty state does not.*
+
+**There is no index entry point.** `sync` has `run`, `ingest`, `shapes`, `merge`, `publish`,
+`intake`, `benchmark`, `reconcile`, `rehearse` and `context`. It has no `index`. The pieces exist
+and the composition is already written inside `run` (`cli.py:1095-1101`):
+
+```python
+prepared = prepare_vendor(vendor_id, VendorContext(cache_dir=..., from_version=..., to_version=...))
+adapter  = select_language_adapter(repo, prepared.adapter)   # matches on the repo's own manifest
+sites    = list(adapter.index(repo)) + literal_sites
+store.replace_call_sites(repo.repo_id, sites)
+```
+
+**The blocking fact, and it is why this is a decision rather than a task.** Indexing is
+*per vendor* — a call site is a call to a named vendor's API — so it needs a vendor adapter, and
+building one needs that vendor's specification staged. Measured directly:
+
+- `prepare_vendor` **reaches the network and shells out to `gh`**: `_prepare_stripe` calls
+  `fetch_spec(context.from_version, ...)`, which failed here with
+  `gh: No commit found for the ref None (HTTP 404)` because it takes an explicit spec tag.
+- `load_vendor` is the offline twin and **reaches no network**, by design — but it builds over
+  artifacts something else already staged.
+
+**So a stranger's container cannot index anything as it stands**: it has no `gh`, no GitHub
+credential, and no staged spec. Three routes, and the choice is the owner's or the coordinator's
+because each trades something different:
+
+1. **Bake a pinned vendor spec into the image at build time.** First run is offline and instant;
+   the image carries a vendor snapshot that ages, and the pinned tags become a thing to maintain.
+2. **Fetch at first run over plain HTTPS**, not `gh`. Keeps the image small and current, adds a
+   network dependency to the demo and a failure mode in front of an audience.
+3. **Ship `--repo` indexing without a vendor**, recording call sites the language adapter can bind
+   from the manifest alone. Cheapest, and it is a different and smaller claim than the quickstart
+   makes.
+
+**Closes when** one command indexes a repository the user names and the console shows that
+repository's own call sites. **Not closed by seeding** — the plan is explicit that seed data is a
+fallback and that the console must never show somebody else's data where the user's should be.
+
+
 ### B174 — `extract_credential` cannot tell malformed base64 from non-UTF-8 credentials — Lane E
 
 **Accounted rather than broken, and filed rather than fixed.** `CI-W304` added this clause to

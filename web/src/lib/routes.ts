@@ -49,6 +49,8 @@ import { FleetPage } from "@/features/fleet/fleet-page"
 import { PullRequestPage } from "@/features/pullrequests/pull-request-page"
 import { SettingsPage } from "@/features/settings/settings-page"
 import { SignalsPage } from "@/features/signals/signals-page"
+import { RepositoryServicesPage } from "@/features/vendors/repository-services-page"
+import { RepositoryVendorsPage } from "@/features/vendors/repository-vendors-page"
 import { VendorPage } from "@/features/vendors/vendor-page"
 import { WorkflowPage } from "@/features/workflows/workflow-page"
 
@@ -138,6 +140,28 @@ export const ROUTES: readonly RouteEntry[] = [
     question: "What is at risk from this vendor, and what did it change?",
     params: ["vendorId"],
     element: VendorPage,
+  },
+  {
+    path: "/repositories/:repoId/services",
+    region: "repository",
+    reachedFrom: "a repository on the overview",
+    label: "API services",
+    level: "API Services",
+    question:
+      "Which API services does this repository call, and what does the index know about each?",
+    params: ["repoId"],
+    element: RepositoryServicesPage,
+  },
+  {
+    path: "/repositories/:repoId/vendors",
+    region: "repository",
+    reachedFrom: "a repository on the overview",
+    label: "Vendors",
+    level: "API Services",
+    question:
+      "Which API vendors does this repository call, and how much is open against each?",
+    params: ["repoId"],
+    element: RepositoryVendorsPage,
   },
   {
     path: "/repositories/:repoId/observed",
