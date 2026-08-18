@@ -49,6 +49,7 @@ import { CodebasePage } from "@/features/repositories/codebase-page"
 import { PullRequestPage } from "@/features/pullrequests/pull-request-page"
 import { SettingsPage } from "@/features/settings/settings-page"
 import { SignalsPage } from "@/features/signals/signals-page"
+import { RunsPage } from "@/features/runs/runs-page"
 import { RepositoryServicesPage } from "@/features/vendors/repository-services-page"
 import { RepositoryVendorsPage } from "@/features/vendors/repository-vendors-page"
 import { VendorPage } from "@/features/vendors/vendor-page"
@@ -127,6 +128,23 @@ export const ROUTES: readonly RouteEntry[] = [
     question: "What does this workspace's whole indexed call graph look like, file by file?",
     params: ["repoId"],
     element: IndexGraphPage,
+  },
+  {
+    // Second in the rail by the owner's ruling: what is in flight and what gave up is the thing an
+    // operator checks most often, so it earns the slot next to the Overview rather than closing the
+    // list. Its `level` is `Solution Workflow` and that is not a promotion -- this screen aggregates
+    // over that level the way detector attribution aggregates over Errors & Incidents, and
+    // `.claude/rules/console-hierarchy.md` is explicit that an aggregate is not a rung. `GRAPH_LEVELS`
+    // is untouched, so no specification amendment was owed before this landed.
+    path: "/repositories/:repoId/runs",
+    reachedFrom: "a workspace in the switcher",
+    nav: true,
+    label: "Runs",
+    level: "Solution Workflow",
+    question:
+      "What did the remediation pipeline attempt, what did it abandon, and which change kinds does it not handle mechanically?",
+    params: ["repoId"],
+    element: RunsPage,
   },
   {
     path: "/repositories/:repoId/services",
