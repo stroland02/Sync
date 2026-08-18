@@ -280,7 +280,20 @@ def render(checks: Sequence[Check]) -> str:
     return "\n".join(lines)
 
 
-API_URL = "http://127.0.0.1:8787/api/overview"
+def api_url() -> str:
+    """Where readiness is checked, derived from the port the API was told to bind.
+
+    **This was hardcoded to 8787 while `API_PORT` honoured `SYNC_API_PORT`**, so following this
+    script's own advice -- its busy-port message says *"set SYNC_API_PORT to a free port"* -- moved
+    the API and left the probe behind. The same message says a busy port means *"a readiness check
+    would answer from whatever is already there"*, which is exactly what then happened: the probe
+    hit the old port, another lane's API answered it, and the stack reported ready on the strength
+    of somebody else's server. Measured on a machine where another lane genuinely held 8787.
+
+    A function rather than a module constant because `API_PORT` is read at import time, and a
+    constant computed beside it would freeze the first value any test or caller happened to set.
+    """
+    return f"http://127.0.0.1:{API_PORT}/api/overview"
 CONSOLE_URL = "http://localhost:5173"
 """`localhost` rather than `127.0.0.1`, and that is not cosmetic.
 
@@ -293,13 +306,16 @@ exists to prevent.
 API_READY_TIMEOUT_SECONDS = 30
 
 
-def wait_for_api(process, url: str = API_URL, timeout: float = API_READY_TIMEOUT_SECONDS):
+def wait_for_api(process, url: str | None = None, timeout: float = API_READY_TIMEOUT_SECONDS):
     """Whether the API is actually serving, or why it is not.
 
     Preconditions passing says the API *can* start. It does not say it did, and the realistic
     failure — a port already in use because somebody has the loop running in another terminal —
     happens after every check has passed.
     """
+    # Resolved here rather than in the signature: a default evaluated at import time would
+    # freeze the port before any caller could set it.
+    url = api_url() if url is None else url
     import urllib.error
     import urllib.request
 
