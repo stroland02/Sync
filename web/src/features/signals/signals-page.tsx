@@ -78,6 +78,8 @@
  */
 
 import { useParams } from "react-router"
+
+import { ObservedVolumeCard } from "@/features/dashboards/observed-volume-card"
 import type { ReactNode } from "react"
 
 import { SignalSourcePanel } from "@/features/telemetry/signal-source-panel"
@@ -189,6 +191,12 @@ function SignalsDetail({ repoId }: { repoId: string }) {
           <NotAttachedState detail={HUMAN_SURFACE_ROLE.absence} />
         </RoleGroup>
       </div>
+
+      {/* Dashboard 7. Propless: it reads `repoId` from the path param, as this page does, because
+          telemetry attaches per repository and a fleet-wide version of the question has no single
+          answer. It holds two refusals of its own -- it states what it counted over rather than
+          summing a page, and it prints the figure instead of drawing a slope through one day. */}
+      <ObservedVolumeCard />
     </section>
   )
 }

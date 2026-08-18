@@ -42,6 +42,7 @@ import { useLocation } from "react-router"
 import { useOverview, useRepositories, useRepositoryCoverage } from "@/api/queries"
 import { FactTile } from "@/components/fact-tile"
 import { CodebaseFactsBand, resolveCodebaseScope } from "@/features/fleet/codebase-facts"
+import { FindingsOverTimeCard } from "@/features/dashboards/findings-over-time-card"
 import { TotalsBar } from "@/features/fleet/totals-bar"
 import { VendorCardsGrid } from "@/features/fleet/vendor-cards-grid"
 import { OverviewGraphPanel } from "@/features/index-graph/overview-graph-panel"
@@ -156,6 +157,10 @@ export function FleetPage({ question = DEFAULT_QUESTION }: FleetPageProps) {
 
       {/* Decision 2's below-the-fold half: the totals, then the vendors they are made of. */}
       <OverviewTotalsRegion />
+
+      {/* Dashboard 1, fleet-scoped and propless. It reads no scope of its own, which is why it
+          sits outside the regions above rather than inside one. */}
+      <FindingsOverTimeCard />
 
       {/* 4-card metric strip */}
       <FleetFacts />
