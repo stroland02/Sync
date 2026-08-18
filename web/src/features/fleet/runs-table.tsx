@@ -149,12 +149,20 @@ export function RunsCard() {
                   {query.data.items.map((run) => (
                     <TableRow key={run.thread_id}>
                       <TableCell className="font-mono">
-                        <Link
-                          to={`/findings/${encodeURIComponent(run.finding_id)}/workflow`}
-                          className="underline underline-offset-2"
-                        >
-                          {run.finding_id}
-                        </Link>
+                        {/* Workspace-scoped, because `/findings/:id/workflow` is not a route the
+                            router serves. Without a repository there is no scoped address to
+                            build, and guessing one would send a reader to another workspace's
+                            finding — so the id is stated and not linked. */}
+                        {run.repo_id === null ? (
+                          run.finding_id
+                        ) : (
+                          <Link
+                            to={`/repositories/${encodeURIComponent(run.repo_id)}/findings/${encodeURIComponent(run.finding_id)}/workflow`}
+                            className="underline underline-offset-2"
+                          >
+                            {run.finding_id}
+                          </Link>
+                        )}
                       </TableCell>
                       <TableCell className="font-mono text-meta">
                         {isRehearsal(run) ? "rehearsal" : "live"}
