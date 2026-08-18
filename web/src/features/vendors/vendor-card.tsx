@@ -2,12 +2,12 @@
  * One vendor as a card: who it is, which adapter serves it, what that adapter has delivered, and
  * how much is open against it.
  *
- * **Identity is the vendor id, in monospace, and nothing else.** The owner asked for "the company
- * logo and their information". A logo is a third-party mark, and Sync holds no image, no brand
- * colour and no display name for a vendor — only the id the graph, the registry and every payload
- * key on. Rendering an id is honest and rendering a redrawn mark would be both a claim about a
- * relationship we do not have and a rendering taken from somebody else's surface
- * (`.claude/rules/interface-originality.md`).
+ * **Identity is the vendor id. The mark beside it is an aid to finding the card, not the
+ * identity.** This card refused to show a mark at all, reasoning that Sync holds no image and no
+ * brand colour for a vendor. Owner decision 6 overruled that: marks are shown, small, fetched.
+ * The part of the refusal the decision keeps is kept literally — nothing is redrawn, and a vendor
+ * with no mark at the endpoint gets letters rather than an approximation. `vendor-mark.tsx`
+ * carries the rest, including what the fetch discloses and how to turn it off.
  *
  * **The tier vocabulary is the registry's.** `sync/signals/registry.py` constructs
  * `RegisteredAdapter` with `coded`, `generated` or `mcp`, and `sync/dashboard/adapters.py` adds
@@ -33,6 +33,7 @@ import type { AdapterRow } from "@/api/types"
 import { FactList, type Fact } from "@/components/fact-list"
 import { Absent, Formatted } from "@/components/status"
 import { NEVER_DELIVERED_NOTE } from "@/features/settings/adapter-table"
+import { VendorMark } from "@/features/vendors/vendor-mark"
 import { formatTimestamp, orAbsent } from "@/lib/format"
 import { Badge } from "@/vendor/supabase/ui/badge"
 
@@ -143,7 +144,8 @@ export function VendorCard({ vendorId, adapter, openFindingCount }: VendorCardPr
 
   return (
     <article className="flex min-w-0 flex-col gap-section rounded-surface border border-line bg-surface p-section">
-      <header className="flex min-w-0 flex-wrap items-baseline gap-section">
+      <header className="flex min-w-0 flex-wrap items-center gap-section">
+        <VendorMark vendorId={vendorId} />
         <h3 className="min-w-0 font-mono text-emphasis break-words">{vendorId}</h3>
         {adapter === null ? (
           <span className="text-meta">

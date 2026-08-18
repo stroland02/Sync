@@ -29,6 +29,7 @@ import { EmptyState } from "@/components/states"
 import { Formatted } from "@/components/status"
 import type { AdapterRow } from "@/api/types"
 import { formatTimestamp } from "@/lib/format"
+import { VendorMark } from "@/features/vendors/vendor-mark"
 
 /**
  * What a row says instead of a count.
@@ -80,7 +81,12 @@ export function AdapterTable({ adapters }: { adapters: AdapterRow[] }) {
       <TableBody>
         {adapters.map((adapter) => (
           <TableRow key={adapter.vendor_id}>
-            <TableCell className="font-mono">{adapter.vendor_id}</TableCell>
+            <TableCell className="font-mono">
+              <span className="flex items-center gap-2">
+                <VendorMark vendorId={adapter.vendor_id} />
+                {adapter.vendor_id}
+              </span>
+            </TableCell>
             <TableCell>
               <span className="font-mono">{adapter.kind}</span>
               <div className="mt-field text-meta text-muted-foreground">
