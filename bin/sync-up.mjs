@@ -204,7 +204,7 @@ export function sourceTreeDiagnosis(sourceTreePresent) {
       "the repository, and no prebuilt image is published yet.\n\n" +
       "  git clone https://github.com/stroland02/Sync\n" +
       "  cd Sync\n" +
-      "  npm run up        (or: pnpm up)\n\n" +
+      "  npm start         (or: pnpm start)\n\n" +
       "The clone is the supported path today. A published image retires this message.",
   }
 }
@@ -361,6 +361,19 @@ function mustRun(label, command, args, options = {}) {
   }
 }
 
+/**
+ * The extractor, named absolutely rather than resolved from PATH. This code path is
+ * Windows-only, and Windows' own `tar` (bsdtar) is the only one guaranteed to read both a
+ * `C:\` archive path and the zip format: a Git Bash PATH puts GNU tar first, which parses the
+ * drive letter as a remote hostname -- `tar: Cannot connect to C: resolve failed` -- and
+ * cannot read zip at all. Measured on the first no-admin install run from such a shell.
+ */
+export function tarExecutable(systemRoot = process.env.SystemRoot, present = existsSync) {
+  if (!systemRoot) return "tar"
+  const system = join(systemRoot, "System32", "tar.exe")
+  return present(system) ? system : "tar"
+}
+
 async function downloadPostgresBinaries() {
   mkdirSync(PG_HOME, { recursive: true })
   const archive = join(PG_HOME, "postgresql-binaries.zip")
@@ -373,7 +386,7 @@ async function downloadPostgresBinaries() {
   // A stale `pgsql/` of another version would shadow the one just fetched; the archive itself
   // is deleted because the extracted tree is the cache, not the zip.
   rmSync(join(PG_HOME, "pgsql"), { recursive: true, force: true })
-  mustRun("Extracting the Postgres binaries", "tar", ["-xf", archive, "-C", PG_HOME])
+  mustRun("Extracting the Postgres binaries", tarExecutable(), ["-xf", archive, "-C", PG_HOME])
   rmSync(archive, { force: true })
 }
 

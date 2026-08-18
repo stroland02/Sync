@@ -517,6 +517,39 @@ def test_the_embedded_cluster_is_held_to_the_shipped_database_settings():
         )
 
 
+@conftest.requires_node
+def test_the_binaries_extractor_is_windows_own_tar_and_not_whatever_path_serves():
+    """The first real no-admin install died at extraction with `tar: Cannot connect to C:
+    resolve failed`: bare `tar` resolves through PATH, a Git Bash environment puts GNU tar
+    first, and GNU tar parses a `C:\\` archive path as a remote hostname -- and cannot read
+    zip at all. The no-admin path is Windows-only by design, so the extractor is System32's
+    bsdtar named absolutely, with bare `tar` only for a machine that does not have it.
+    """
+    node = _node()
+    script = (
+        f"import {{ tarExecutable }} from {DOORBELL.as_uri()!r};"
+        "console.log(JSON.stringify(["
+        "tarExecutable('ROOT', () => true),"
+        "tarExecutable('ROOT', () => false),"
+        "tarExecutable(null, () => true),"
+        "]));"
+    )
+    result = subprocess.run(
+        [node, "--input-type=module", "-e", script],
+        capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=60,
+        env={**os.environ, "PYTHONIOENCODING": "utf-8"},
+    )
+    assert result.returncode == 0, f"the doorbell would not load: {result.stderr}"
+
+    with_system, without_system, no_root = json.loads(result.stdout.strip())
+    assert "System32" in with_system and with_system.endswith("tar.exe"), (
+        "with a SystemRoot and the binary present, the extractor must be Windows' own tar, "
+        "named absolutely rather than resolved from PATH"
+    )
+    assert without_system == "tar", "a machine missing System32 tar falls back to PATH"
+    assert no_root == "tar", "no SystemRoot means nothing absolute to name; fall back to PATH"
+
+
 @pytest.mark.parametrize("source_tree_present, expected_ok", [(True, True), (False, False)])
 @conftest.requires_node
 def test_a_registry_install_without_the_source_tree_is_refused_with_directions(
@@ -553,4 +586,18 @@ def test_a_registry_install_without_the_source_tree_is_refused_with_directions(
         assert "image" in verdict["message"], (
             "the refusal must say why: no prebuilt image is published yet"
         )
+        # The hand-over must be typeable. Every `npm <x>` / `npm run <x>` the refusal prints
+        # has to resolve against the scripts package.json actually defines -- `npm run up`
+        # shipped here once, handed to exactly the reader with no checkout to debug it in.
+        scripts = json.loads(PACKAGE_JSON.read_text(encoding="utf-8"))["scripts"]
+        package_manager_builtins = {"install", "ci", "exec"}
+        handed_over = re.findall(r"(?:npm|pnpm)(?: run)?\s+([a-z][a-z-]*)", verdict["message"])
+        assert handed_over, "the refusal must hand over a runnable command, not only a URL"
+        for target in handed_over:
+            if target in package_manager_builtins:
+                continue
+            assert target in scripts, (
+                f"the refusal recommends `{target}`, which package.json defines no script for; "
+                "a hand-over the reader cannot type is a traceback with better manners"
+            )
 
