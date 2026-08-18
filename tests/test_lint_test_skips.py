@@ -149,6 +149,14 @@ def test_current_skip_sites_are_a_pinned_baseline() -> None:
     compare against and nothing to assert. **I added that skip and did not raise this count in the
     same change** -- which is the exact omission this baseline exists to force into the open, and
     it caught its author two work items later.
+
+    The seventeenth is `tests/test_console_honesty_sentences.py`, and it is the first shape a
+    third time: it asserts that each of the protected honesty sentences is still rendered
+    somewhere under `web/src`, so a checkout with no console has nothing to search and nothing to
+    conclude. **I did not add that skip and it arrived on `main` without this count moving with
+    it** -- which is the same omission the paragraph above records, caught by the same guard, one
+    author later. That is twice now, so the guard is earning its place rather than merely
+    existing.
     """
     from scripts.lint_test_skips import find_skip_sites
 
@@ -156,7 +164,7 @@ def test_current_skip_sites_are_a_pinned_baseline() -> None:
     for path in sorted((REPO_ROOT / "tests").rglob("test_*.py")):
         sites.extend(find_skip_sites(path.read_text(encoding="utf-8"), str(path)))
 
-    assert len(sites) == 16, [f"{s.filename}:{s.line}" for s in sites]
+    assert len(sites) == 17, [f"{s.filename}:{s.line}" for s in sites]
     assert all(s.permitted for s in sites)
 
 

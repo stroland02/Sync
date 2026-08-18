@@ -1068,6 +1068,11 @@ _WHOLE_STAGE_CATCH_ALL = (
     "sync/cli.py::_model_deprecations::Exception",
     "sync/cli.py::_parameter_deprecations::Exception",
     "sync/cli.py::_scan::Exception",
+    # Wraps the whole index pass so a run that dies closes its `index_run` row with a
+    # terminal state instead of leaving it open forever. It re-raises immediately and
+    # decodes nothing itself -- the reads that can produce undecodable bytes are inside
+    # the adapter and carry their own handlers.
+    "sync/cli.py::run::Exception",
     "sync/core/conformance.py::_check_fetch_changes::Exception",
     "sync/core/conformance.py::_check_matches::Exception",
     "sync/core/conformance.py::_check_operation_for_symbol::Exception",

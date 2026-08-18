@@ -337,3 +337,32 @@ export async function GET() {
     assert report.call_sites[0].operation_id == "PostCharges"
 
 
+
+
+def test_the_fallback_adapter_builds_a_usable_operation_reference():
+    """`_FallbackIndexingAdapter` is what stands in when no real adapter serves a vendor, and it
+    raised on every symbol it was asked about.
+
+    `OperationRef` requires `http_method`; this passed `method=`, which pydantic neither accepts
+    nor silently ignores -- it reports `http_method` missing and the index pass dies. The path is
+    only reached when no real adapter loads, which is why it survived: whether one loads depends
+    on what else has run, so the failure is order-dependent and shows up on CI's worker split
+    while a local run happens to miss it.
+    """
+    from sync.index.codebase import _FallbackIndexingAdapter
+
+    ref = _FallbackIndexingAdapter("stripe").operation_for_symbol("stripe.charges.create")
+
+    assert ref is not None
+    assert ref.operation_id == "CreateCharges"
+    assert ref.http_method == "POST"
+    assert ref.path == "/v1/charges"
+
+
+def test_the_fallback_adapter_reads_the_verb_from_the_action():
+    from sync.index.codebase import _FallbackIndexingAdapter
+
+    adapter = _FallbackIndexingAdapter("stripe")
+
+    assert adapter.operation_for_symbol("stripe.charges.retrieve").http_method == "GET"
+    assert adapter.operation_for_symbol("stripe.charges.cancel").http_method == "POST"

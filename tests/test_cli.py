@@ -139,6 +139,9 @@ class _RecordingStore:
 
     def finish_index_run(self, repo_id, *, started_at, finished_at, call_sites):
         return None
+
+    def fail_index_run(self, repo_id, *, started_at, at, outcome):
+        return None
     def upsert_call_site(self, site):
         self.calls.append("upsert_call_site")
 
@@ -599,6 +602,9 @@ class _TwoFindingStore:
         return None
 
     def finish_index_run(self, repo_id, *, started_at, finished_at, call_sites):
+        return None
+
+    def fail_index_run(self, repo_id, *, started_at, at, outcome):
         return None
 
     def upsert_call_site(self, site):

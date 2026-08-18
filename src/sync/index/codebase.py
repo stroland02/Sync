@@ -148,7 +148,7 @@ class _FallbackIndexingAdapter:
             action = parts[-1]
             method = "POST" if action in ("create", "post", "cancel", "refund", "update") else "GET"
             op_id = f"{action.capitalize()}{resource.capitalize()}"
-            return OperationRef(operation_id=op_id, method=method, path=f"/v1/{resource}")
+            return OperationRef(operation_id=op_id, http_method=method, path=f"/v1/{resource}")
         return None
 
 

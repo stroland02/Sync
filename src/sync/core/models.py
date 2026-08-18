@@ -76,6 +76,13 @@ written that way -- `GraphStore.insert_finding` refuses one, which puts the chec
 # that disagrees with the type the first time a rung is added.
 FINDING_RUNGS: tuple[str, ...] = get_args(BindingRung) + (UNATTRIBUTED,)
 
+# How an index pass ended. Closed for the reason `abandon_reason_code` is: a promise to learn
+# which repositories fail to index needs a schema that can answer it, and free text cannot be
+# aggregated. `None` is not a member -- it means the pass has not reached a terminal state, which
+# is a fourth thing beside these three rather than one of them.
+IndexRunOutcome = Literal["completed", "failed", "abandoned"]
+INDEX_RUN_OUTCOMES: tuple[str, ...] = get_args(IndexRunOutcome)
+
 
 def _now() -> datetime:
     return datetime.now(timezone.utc)

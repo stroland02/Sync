@@ -1670,3 +1670,39 @@ def test_replaying_the_same_pass_converges(store):
     store.finish_index_run("r1", started_at=SEEN, finished_at=SEEN, call_sites=3)
 
     assert store.index_run_count("r1") == 1
+
+
+def test_a_pass_that_died_is_distinguishable_from_one_still_running(store):
+    """The coordinator's ruling on `index_run`, and it is a real gap in the first cut.
+
+    `finished_at IS NULL` alone cannot tell a pass that died from one still going, so a reader
+    looking at a stale unfinished row has no way to know whether to wait. An explicit terminal
+    state from a closed set says which -- the same discipline as `migration_outcome`'s outcome
+    and `abandon_reason`, and the fourth state again: not finished, not failed, not absent.
+    """
+    store.start_index_run("r1", started_at=SEEN)
+    assert store.latest_index_run("r1")["outcome"] is None
+
+    store.fail_index_run("r1", started_at=SEEN, at=SEEN, outcome="failed")
+
+    run = store.latest_index_run("r1")
+    assert run["outcome"] == "failed"
+    assert run["finished_at"] is not None
+    # A pass that died wrote no trustworthy count, and a partial one is not a smaller count.
+    assert run["call_sites"] is None
+
+
+def test_a_completed_pass_says_completed(store):
+    store.start_index_run("r1", started_at=SEEN)
+    store.finish_index_run("r1", started_at=SEEN, finished_at=SEEN, call_sites=12)
+
+    assert store.latest_index_run("r1")["outcome"] == "completed"
+
+
+def test_an_outcome_outside_the_closed_set_is_refused(store):
+    store.start_index_run("r1", started_at=SEEN)
+
+    # Closed for the reason `abandon_reason_code` is: a promise to learn which repositories fail
+    # to index needs a schema that can answer it, and free text cannot be aggregated.
+    with pytest.raises(ValueError):
+        store.fail_index_run("r1", started_at=SEEN, at=SEEN, outcome="it broke")

@@ -625,6 +625,15 @@ CREATE TABLE IF NOT EXISTS index_run (
     finished_at TIMESTAMPTZ,
     -- How many current call sites the pass wrote. NULL while unfinished, for the same reason.
     call_sites  INTEGER,
+    -- The terminal state, from `sync.core.models.INDEX_RUN_OUTCOMES`, or NULL while the pass is
+    -- still going. **`finished_at IS NULL` alone could not tell a pass that died from one still
+    -- running**, and a reader looking at a stale unfinished row had no way to know whether to
+    -- wait -- so the row says which, the way `migration_outcome` does. Four states, none
+    -- collapsing into another: no row at all is never-indexed, a NULL outcome is in flight,
+    -- `completed` carries a count worth trusting, and `failed`/`abandoned` say the rows this pass
+    -- left behind are partial. Named in a comment rather than a CHECK, for the reason `severity`
+    -- is: `CREATE TABLE IF NOT EXISTS` never reaches a database that already has the table.
+    outcome     TEXT,
     recorded_at TIMESTAMPTZ NOT NULL DEFAULT now(),
 
     PRIMARY KEY (repo_id, started_at)

@@ -1103,12 +1103,25 @@ def run(args: argparse.Namespace, today: date | None = None) -> int:
             index_started_at = datetime.now(timezone.utc)
             store.start_index_run(repo.repo_id, started_at=index_started_at)
 
-            literal_sites, literal_unread = _literal_call_sites(repo)
-            call_sites = list(adapter.index(repo)) + literal_sites
-            for site, site_id in zip(
-                call_sites, store.replace_call_sites(repo.repo_id, call_sites)
-            ):
-                site.id = site_id
+            # The failure path writes a terminal state rather than leaving the row open. An
+            # abandoned row and a still-running row look identical otherwise, and a reader
+            # meeting a stale unfinished pass has no way to tell whether to wait -- which is the
+            # distinction `index_run`'s outcome column exists to carry.
+            try:
+                literal_sites, literal_unread = _literal_call_sites(repo)
+                call_sites = list(adapter.index(repo)) + literal_sites
+                for site, site_id in zip(
+                    call_sites, store.replace_call_sites(repo.repo_id, call_sites)
+                ):
+                    site.id = site_id
+            except Exception:
+                store.fail_index_run(
+                    repo.repo_id,
+                    started_at=index_started_at,
+                    at=datetime.now(timezone.utc),
+                    outcome="failed",
+                )
+                raise
 
             store.finish_index_run(
                 repo.repo_id,

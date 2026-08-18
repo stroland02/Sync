@@ -27,6 +27,7 @@ from sync.core import (
     REFUSED_MERGE_POLICIES,
 )
 from sync.core.models import (
+    INDEX_RUN_OUTCOMES,
     SEVERITY_ORDER,
     UNATTRIBUTED,
     ObservedCall,
@@ -881,12 +882,41 @@ class GraphStore:
         """
         self._connect().execute(
             """
-            INSERT INTO index_run (repo_id, started_at, finished_at, call_sites)
-                 VALUES (%s, %s, %s, %s)
+            INSERT INTO index_run (repo_id, started_at, finished_at, call_sites, outcome)
+                 VALUES (%s, %s, %s, %s, 'completed')
             ON CONFLICT (repo_id, started_at)
-              DO UPDATE SET finished_at = EXCLUDED.finished_at, call_sites = EXCLUDED.call_sites
+              DO UPDATE SET finished_at = EXCLUDED.finished_at,
+                            call_sites = EXCLUDED.call_sites,
+                            outcome = EXCLUDED.outcome
             """,
             [repo_id, started_at, finished_at, call_sites],
+        )
+
+    def fail_index_run(
+        self, repo_id: str, *, started_at: datetime, at: datetime, outcome: str
+    ) -> None:
+        """Close the pass `started_at` opened without a trustworthy count.
+
+        `call_sites` is deliberately left NULL rather than written with whatever the pass had
+        managed: a partial count is not a smaller count, it is not a count, and a number here
+        would be read as the size of the codebase.
+
+        The outcome is refused unless it is in the closed set, at this boundary rather than as a
+        CHECK, for the same reason `record_dismissal` refuses a reason here.
+        """
+        if outcome not in INDEX_RUN_OUTCOMES:
+            raise ValueError(
+                f"{outcome!r} is not an index-run outcome; the closed set is "
+                f"{', '.join(INDEX_RUN_OUTCOMES)}"
+            )
+        self._connect().execute(
+            """
+            INSERT INTO index_run (repo_id, started_at, finished_at, outcome)
+                 VALUES (%s, %s, %s, %s)
+            ON CONFLICT (repo_id, started_at)
+              DO UPDATE SET finished_at = EXCLUDED.finished_at, outcome = EXCLUDED.outcome
+            """,
+            [repo_id, started_at, at, outcome],
         )
 
     def latest_index_run(self, repo_id: str) -> dict | None:
@@ -900,7 +930,7 @@ class GraphStore:
         """
         row = self._connect().execute(
             """
-            SELECT repo_id, started_at, finished_at, call_sites
+            SELECT repo_id, started_at, finished_at, call_sites, outcome
               FROM index_run
              WHERE repo_id = %s
              ORDER BY started_at DESC
