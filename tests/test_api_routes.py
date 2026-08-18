@@ -1750,6 +1750,12 @@ _MULTI_CURSOR_COLLECTIONS = {
 #   rather than a page of records.
 # - `/api/repos/{repo_id:path}/context` answers one repository's context row -- one body, one
 #   source, one timestamp. There is nothing here that grows with usage the way a page does.
+# - `/api/vendors/{vendor_id}/operations` is one entry per distinct operation this codebase calls
+#   on one vendor, bounded by that vendor's operation surface rather than by traffic: calling the
+#   same operation from a thousand places is one row with a count of a thousand, not a thousand
+#   rows. Its consumer renders the whole distribution, and a page of a distribution is a
+#   truncated picture that reads as a complete one -- the same reason `/api/overview` was made
+#   unpaginated deliberately.
 _NOT_COLLECTIONS = {
     "/api/overview",
     "/api/findings/{finding_id}",
@@ -1766,6 +1772,7 @@ _NOT_COLLECTIONS = {
     # whose length is a property of the configuration file.
     "/api/adapters",
     "/api/repos/{repo_id:path}/context",
+    "/api/vendors/{vendor_id}/operations",
     "/api/repositories/{repo_id:path}/settings",
     "/api/repos/{repo_id:path}/settings",
 }
