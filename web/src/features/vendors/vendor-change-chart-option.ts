@@ -7,7 +7,7 @@
 
 import type { ChartTokens } from "@/components/charts/echart"
 import { escapeHtml } from "@/components/charts/chart-text"
-import type { VendorChangeRow } from "@/api/types"
+import type { VendorChangeVolumeResponse } from "@/api/types"
 
 export interface VendorChangeVolumeData {
   periods: string[]
@@ -17,45 +17,37 @@ export interface VendorChangeVolumeData {
   totalChanges: number
 }
 
-export function extractVendorChangeVolume(items: VendorChangeRow[]): VendorChangeVolumeData {
-  const periodMap = new Map<string, Record<string, number>>()
-  const kindSet = new Set<string>()
-
-  for (const item of items) {
-    const kind = item.change_kind || "other"
-    kindSet.add(kind)
-    let period = "unknown"
-    if (item.published_at) {
-      const d = new Date(item.published_at)
-      if (!isNaN(d.getTime())) {
-        period = `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`
-      }
-    }
-    const current = periodMap.get(period) ?? {}
-    current[kind] = (current[kind] ?? 0) + 1
-    periodMap.set(period, current)
-  }
-
-  const periods = Array.from(periodMap.keys()).sort()
-  const kinds = Array.from(kindSet).sort()
+/**
+ * The vendor's own answer, shaped for the chart.
+ *
+ * **This replaces a client-side aggregate and the difference is not cosmetic.** The old
+ * `extractVendorChangeVolume` counted `VendorChangeRow[]` -- one page of the changes table -- and
+ * the chart printed the result as the vendor's total. It was wrong by an amount that changed when
+ * the reader paginated, which is the worst shape a wrong figure takes: plausible on every screen and
+ * never right. It is deleted rather than left beside this, per delete-rather-than-deprecate.
+ *
+ * Nothing is computed here that the payload does not already state. The periods keep the order the
+ * API sorted them into, and the kinds are every kind the vendor published rather than every kind a
+ * page happened to contain.
+ */
+export function vendorChangeVolume(
+  payload: VendorChangeVolumeResponse
+): VendorChangeVolumeData {
+  const periods = payload.timeline.map((bucket) => bucket.period)
+  const periodTotals = payload.timeline.map((bucket) => bucket.count)
   const countsByPeriodAndKind: Record<string, Record<string, number>> = {}
-  const periodTotals: number[] = []
-
-  for (const p of periods) {
-    const counts = periodMap.get(p) ?? {}
-    countsByPeriodAndKind[p] = counts
-    const total = Object.values(counts).reduce((a, b) => a + b, 0)
-    periodTotals.push(total)
+  for (const bucket of payload.timeline) {
+    countsByPeriodAndKind[bucket.period] = { ...bucket.by_kind }
   }
-
   return {
     periods,
-    kinds,
+    kinds: Object.keys(payload.by_kind),
     countsByPeriodAndKind,
     periodTotals,
-    totalChanges: items.length,
+    totalChanges: payload.total_changes,
   }
 }
+
 
 export function buildVendorChangeVolumeOption(
   data: VendorChangeVolumeData,

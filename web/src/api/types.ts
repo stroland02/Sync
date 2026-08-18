@@ -892,3 +892,22 @@ export interface AbandonmentGroup {
 export interface AbandonmentResponse {
   groups: AbandonmentGroup[]
 }
+
+/**
+ * `GET /api/vendors/{vendor_id}/change-volume` -- how often this vendor publishes, and of what kind.
+ *
+ * **Counted over every change the vendor has, not over a page.** The console used to derive this
+ * from whichever page of `VendorChangeRow` happened to be loaded, so the total was a page count
+ * wearing the vendor's name and it moved when a reader paginated. `total_changes` here is
+ * `len(all_vendor_changes)` and no view can move it.
+ */
+export interface VendorChangeVolumeResponse {
+  vendor_id: string
+  total_changes: number
+  by_kind: Tally
+  by_severity: Tally
+  timeline: { period: string; count: number; by_kind: Tally }[]
+  /** `null` where the vendor has no change at all -- absence, never a zero date. */
+  newest_change_at: string | null
+  oldest_change_at: string | null
+}
