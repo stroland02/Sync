@@ -480,7 +480,7 @@ function BindingSurfaceDetail({
                           <button
                             type="button"
                             onClick={() => setSort((current) => nextSortDirection(current, column.key))}
-                            className="flex items-baseline gap-1.5 text-left"
+                            className="flex items-baseline gap-field text-left"
                             aria-label={`Sort by ${column.label}`}
                             aria-sort={
                               sort?.key === column.key
@@ -491,7 +491,7 @@ function BindingSurfaceDetail({
                             }
                           >
                             <span>{column.label}</span>
-                            <span className="text-muted-foreground text-xs font-normal">
+                            <span className="text-muted-foreground text-meta font-normal">
                               {column.type}
                             </span>
                             {/* The direction is drawn, not implied by the header moving. A reader
@@ -502,9 +502,9 @@ function BindingSurfaceDetail({
                             </span>
                           </button>
                         ) : (
-                          <span className="flex items-baseline gap-1.5">
+                          <span className="flex items-baseline gap-field">
                             <span>{column.label}</span>
-                            <span className="text-muted-foreground text-xs font-normal">
+                            <span className="text-muted-foreground text-meta font-normal">
                               {column.type}
                             </span>
                           </span>

@@ -369,7 +369,7 @@ function FindingDetailPage({
               keeps its full wording underneath its control instead of being folded into a label
               or moved into a tooltip. */}
           <div className="flex flex-col gap-field">
-            <div className="flex flex-col gap-1.5">
+            <div className="flex flex-col gap-field">
               <Button asChild variant="outline" className="w-full justify-start">
                 <Link to={`/findings/${encodeURIComponent(findingId)}/workflow`}>
                   Open the solution workflow
@@ -380,7 +380,7 @@ function FindingDetailPage({
               </p>
             </div>
             {reachedPullRequest(remediation) && (
-              <div className="flex flex-col gap-1.5">
+              <div className="flex flex-col gap-field">
                 <Button asChild variant="outline" className="w-full justify-start">
                   <Link to={`/findings/${encodeURIComponent(findingId)}/workflow/pull-request`}>
                     Pull request
