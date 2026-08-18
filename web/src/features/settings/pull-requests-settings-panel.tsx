@@ -1,0 +1,233 @@
+import { useState } from "react"
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
+
+import { SettingCard } from "@/features/settings/setting-card"
+import { fetchRepoSettings, updateRepoSettings, type RepoSettingsPayload } from "@/features/settings/api"
+import { Badge } from "@/vendor/supabase/ui/badge"
+import { Button } from "@/vendor/supabase/ui/button"
+import { Input } from "@/vendor/supabase/ui/input"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/vendor/supabase/ui/select"
+import { LoadingState, ErrorState } from "@/components/states"
+
+export interface PullRequestsSettingsPanelProps {
+  repoId: string
+}
+
+export function PullRequestsSettingsPanel({ repoId }: PullRequestsSettingsPanelProps) {
+  const queryClient = useQueryClient()
+  const settingsQuery = useQuery({
+    queryKey: ["repo-settings", repoId],
+    queryFn: ({ signal }) => fetchRepoSettings(repoId, signal),
+  })
+
+  const [mergePolicy, setMergePolicy] = useState<"never" | "when_checks_pass">("never")
+  const [mergeMethod, setMergeMethod] = useState<"squash" | "merge" | "rebase">("squash")
+  const [baseBranch, setBaseBranch] = useState<string>("main")
+  const [syncedData, setSyncedData] = useState<RepoSettingsPayload | null>(null)
+
+  // Sync state when data loads
+  if (settingsQuery.data && settingsQuery.data !== syncedData) {
+    setSyncedData(settingsQuery.data)
+    setMergePolicy(settingsQuery.data.merge_policy)
+    setMergeMethod(settingsQuery.data.merge_method)
+    setBaseBranch(settingsQuery.data.base_branch)
+  }
+
+  const mutation = useMutation({
+    mutationFn: (params: Parameters<typeof updateRepoSettings>[1]) =>
+      updateRepoSettings(repoId, params),
+    onSuccess: (data) => {
+      setSyncedData(data)
+      queryClient.setQueryData(["repo-settings", repoId], data)
+    },
+  })
+
+  if (settingsQuery.isPending) {
+    return <LoadingState what={`settings for ${repoId}`} />
+  }
+
+  if (settingsQuery.isError) {
+    return (
+      <ErrorState
+        error={settingsQuery.error}
+        what={`settings for ${repoId}`}
+        onRetry={() => void settingsQuery.refetch()}
+      />
+    )
+  }
+
+  const hasPolicyChanged = mergePolicy !== syncedData?.merge_policy
+  const hasMethodChanged = mergeMethod !== syncedData?.merge_method
+  const hasBranchChanged = baseBranch !== syncedData?.base_branch
+
+  return (
+    <div className="flex flex-col gap-section">
+      <div className="flex flex-col gap-1 pb-field border-b border-line">
+        <h2 className="text-emphasis font-medium text-ink">Pull Request Automation Settings</h2>
+        <p className="text-body text-ink-muted">
+          Configure how Sync opens, tests, and merges pull requests for repository{" "}
+          <span className="font-mono text-ink font-medium">{repoId}</span>.
+        </p>
+      </div>
+
+      {/* Setting 1: Merge Policy */}
+      <SettingCard
+        title="Merge Policy"
+        description={
+          <>
+            <p>
+              Controls when Sync is permitted to automatically merge verified remediation pull
+              requests after verification.
+            </p>
+            <p className="text-meta text-ink-muted">
+              Select <code className="font-mono text-ink">when_checks_pass</code> to allow merging
+              once customer CI gates turn green, or{" "}
+              <code className="font-mono text-ink">never</code> to require manual human review.
+            </p>
+          </>
+        }
+        refusalNotice={
+          <div className="rounded-surface border border-line bg-surface-muted/40 p-3 text-meta text-ink-muted space-y-1">
+            <div className="flex items-center gap-2">
+              <Badge>Refused Option: Immediate</Badge>
+            </div>
+            <p>
+              Sync strictly refuses <code className="font-mono text-ink">immediate</code> /{" "}
+              <code className="font-mono text-ink">always</code> merge policies. Unverified patches
+              will never merge automatically because doing so directly violates the invariant{" "}
+              <em>&ldquo;nothing reaches a pull request unverified&rdquo;</em>.
+            </p>
+          </div>
+        }
+        control={
+          <Select
+            value={mergePolicy}
+            onValueChange={(val) => setMergePolicy(val as "never" | "when_checks_pass")}
+          >
+            <SelectTrigger className="w-64 bg-surface border-line">
+              <SelectValue placeholder="Select merge policy" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="never">Never (Human review required)</SelectItem>
+              <SelectItem value="when_checks_pass">When CI checks pass</SelectItem>
+            </SelectContent>
+          </Select>
+        }
+        footer={
+          <>
+            <span>Current policy: <strong className="text-ink font-mono">{syncedData?.merge_policy}</strong></span>
+            <div className="flex items-center gap-2">
+              {hasPolicyChanged && (
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => setMergePolicy(syncedData?.merge_policy ?? "never")}
+                >
+                  Reset
+                </Button>
+              )}
+              <Button
+                size="sm"
+                disabled={!hasPolicyChanged || mutation.isPending}
+                onClick={() => mutation.mutate({ merge_policy: mergePolicy })}
+              >
+                {mutation.isPending ? "Saving..." : "Save Policy"}
+              </Button>
+            </div>
+          </>
+        }
+      />
+
+      {/* Setting 2: Merge Method */}
+      <SettingCard
+        title="Merge Method"
+        description={
+          <p>
+            The git merge strategy used when merging approved pull requests into the base branch.
+            Squash is recommended to maintain clean, bisectable commit history.
+          </p>
+        }
+        control={
+          <Select
+            value={mergeMethod}
+            onValueChange={(val) => setMergeMethod(val as "squash" | "merge" | "rebase")}
+          >
+            <SelectTrigger className="w-64 bg-surface border-line">
+              <SelectValue placeholder="Select merge method" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="squash">Squash and merge (recommended)</SelectItem>
+              <SelectItem value="merge">Merge commit</SelectItem>
+              <SelectItem value="rebase">Rebase and merge</SelectItem>
+            </SelectContent>
+          </Select>
+        }
+        footer={
+          <>
+            <span>Current method: <strong className="text-ink font-mono">{syncedData?.merge_method}</strong></span>
+            <div className="flex items-center gap-2">
+              {hasMethodChanged && (
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => setMergeMethod(syncedData?.merge_method ?? "squash")}
+                >
+                  Reset
+                </Button>
+              )}
+              <Button
+                size="sm"
+                disabled={!hasMethodChanged || mutation.isPending}
+                onClick={() => mutation.mutate({ merge_method: mergeMethod })}
+              >
+                {mutation.isPending ? "Saving..." : "Save Method"}
+              </Button>
+            </div>
+          </>
+        }
+      />
+
+      {/* Setting 3: Base Branch Override */}
+      <SettingCard
+        title="Base Branch"
+        description={
+          <p>
+            The default repository branch Sync targets when proposing remediation pull requests.
+            Defaults to <code className="font-mono text-ink">main</code>.
+          </p>
+        }
+        control={
+          <Input
+            value={baseBranch}
+            onChange={(e) => setBaseBranch(e.target.value)}
+            className="w-64 font-mono bg-surface border-line"
+            placeholder="main"
+          />
+        }
+        footer={
+          <>
+            <span>Target branch: <strong className="text-ink font-mono">{syncedData?.base_branch}</strong></span>
+            <div className="flex items-center gap-2">
+              {hasBranchChanged && (
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => setBaseBranch(syncedData?.base_branch ?? "main")}
+                >
+                  Reset
+                </Button>
+              )}
+              <Button
+                size="sm"
+                disabled={!hasBranchChanged || !baseBranch.trim() || mutation.isPending}
+                onClick={() => mutation.mutate({ base_branch: baseBranch.trim() })}
+              >
+                {mutation.isPending ? "Saving..." : "Save Branch"}
+              </Button>
+            </div>
+          </>
+        }
+      />
+    </div>
+  )
+}

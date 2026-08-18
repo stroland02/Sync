@@ -1,42 +1,42 @@
 /**
- * Settings measured as the one route still a single stack (M14-W278): `sideBySideRegions` read
- * 0 against the same snippet every other route clears at 4 or higher. `DetailGrid` already owns
- * the console's one two-column detail shape, so this wires the page onto it rather than adding a
- * sixth grid literal — Merge policy (the shorter refusal) as the rail, Adapters (the table) as
- * the wider content column.
- *
- * This is composition, not content: every sentence asserted here is the same sentence the
- * stacked layout rendered, in the same words, just no longer alone on its own row.
+ * Settings test suite for sub-navigation, card-scoped settings, and refusal contracts.
  */
 
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
-import { cleanup, render, screen } from "@testing-library/react"
+import { cleanup, fireEvent, render, screen } from "@testing-library/react"
 import { MemoryRouter } from "react-router"
 import { afterEach, describe, expect, it, vi } from "vitest"
 
 import * as queries from "@/api/queries"
-import type { AdapterInventoryResponse } from "@/api/types"
+import * as settingsApi from "@/features/settings/api"
+import type { AdapterInventoryResponse, RepositoriesResponse } from "@/api/types"
 import { SettingsPage } from "@/features/settings/settings-page"
 
 afterEach(cleanup)
 
-function renderSettings() {
+function renderSettings(initialEntry = "/settings") {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
-  const data: AdapterInventoryResponse = {
+  const adapterData: AdapterInventoryResponse = {
     adapters: [
       {
-        vendor_id: "seed-console-stripe",
+        vendor_id: "stripe",
         kind: "coded",
         source: null,
-        changes: 2,
-        operations: 2,
+        changes: 4,
+        operations: 12,
         last_change_at: "2026-08-16T10:04:00+00:00",
         sources: ["oasdiff"],
       },
     ],
   }
+  const reposData: RepositoriesResponse = {
+    repositories: [
+      { repo_id: "stroland02/Sync", call_sites: 42, vendors: 3 },
+    ],
+  }
+
   vi.spyOn(queries, "useAdapters").mockReturnValue({
-    data,
+    data: adapterData,
     isPending: false,
     isError: false,
     isSuccess: true,
@@ -44,40 +44,77 @@ function renderSettings() {
     refetch: vi.fn(),
   } as any)
 
+  vi.spyOn(queries, "useRepositories").mockReturnValue({
+    data: reposData,
+    isPending: false,
+    isError: false,
+    isSuccess: true,
+    error: null,
+    refetch: vi.fn(),
+  } as any)
+
+  vi.spyOn(settingsApi, "fetchRepoSettings").mockResolvedValue({
+    repo_id: "stroland02/Sync",
+    merge_policy: "never",
+    merge_method: "squash",
+    base_branch: "main",
+  })
+
   return render(
     <QueryClientProvider client={client}>
-      <MemoryRouter>
+      <MemoryRouter initialEntries={[initialEntry]}>
         <SettingsPage />
       </MemoryRouter>
     </QueryClientProvider>,
   )
 }
 
-describe("SettingsPage's composition", () => {
-  it("renders Merge policy as a rail beside Adapters, not Adapters then Merge policy stacked below it", () => {
-    const { container } = renderSettings()
-    const text = container.textContent!
-    // DetailGrid's own contract (detail-grid.test.tsx) is that the rail precedes the content
-    // column in DOM order when railSide is left at its default. Merge policy is the rail here —
-    // the stacked layout this replaces rendered Adapters first, so this only passes once the
-    // page is actually wired onto DetailGrid rather than two flex-col divs in source order.
-    expect(text.indexOf("Merge policy")).toBeLessThan(text.indexOf("Adapters"))
+describe("SettingsPage sub-navigation and setting cards", () => {
+  it("renders the left sub-navigation with all four setting groups", () => {
+    renderSettings()
+    expect(screen.getByRole("button", { name: /Pull requests/i })).toBeTruthy()
+    expect(screen.getByRole("button", { name: /Codebases/i })).toBeTruthy()
+    expect(screen.getByRole("button", { name: /Adapters/i })).toBeTruthy()
+    expect(screen.getByRole("button", { name: /GitHub Connection/i })).toBeTruthy()
   })
 
-  it("keeps both refusal sentences verbatim -- moving them is allowed, rewording them is not", () => {
+  it("renders Pull requests settings with merge policy, method, branch cards and refusal notice", async () => {
     renderSettings()
-    expect(
-      screen.getByText(
-        /Sync has no merge policy to show\. Nothing in the pull-request path reads a configured/,
-      ),
-    ).toBeTruthy()
-    expect(
-      screen.getByText(/What has to land first is the write path this whole screen is read-only for/),
-    ).toBeTruthy()
-    expect(
-      screen.getByText(
-        /Every adapter this deployment registers, beside what the graph has received from it/,
-      ),
-    ).toBeTruthy()
+    expect(await screen.findByText("Merge Policy")).toBeTruthy()
+    expect(screen.getByText("Merge Method")).toBeTruthy()
+    expect(screen.getByText("Base Branch")).toBeTruthy()
+    // Refusal notice must state why immediate is refused
+    expect(screen.getByText(/Refused Option: Immediate/i)).toBeTruthy()
+    expect(screen.getByText(/nothing reaches a pull request unverified/i)).toBeTruthy()
+  })
+
+  it("renders Codebases group with read-only .sync/context.md notice", async () => {
+    renderSettings()
+    const codebasesBtn = screen.getByRole("button", { name: /Codebases/i })
+    fireEvent.click(codebasesBtn)
+
+    expect(await screen.findByText("Project Context (.sync/context.md)")).toBeTruthy()
+    expect(screen.getByText(/read-only in the console/i)).toBeTruthy()
+    expect(screen.getByText(/Source of Truth: Customer Git Repository/i)).toBeTruthy()
+  })
+
+  it("renders GitHub Connection group with local gh CLI status and OAuth absence note", async () => {
+    renderSettings()
+    const githubBtn = screen.getByRole("button", { name: /GitHub Connection/i })
+    fireEvent.click(githubBtn)
+
+    expect(await screen.findByText("Forge Authentication (Local CLI)")).toBeTruthy()
+    expect(screen.getByText(/Authenticated via gh CLI/i)).toBeTruthy()
+    expect(screen.getByText(/Hosted GitHub App OAuth \(Absent by Design\)/i)).toBeTruthy()
+    expect(screen.getByText(/Local-Only Architecture/i)).toBeTruthy()
+  })
+
+  it("renders Adapters group with the adapter inventory table", async () => {
+    renderSettings()
+    const adaptersBtn = screen.getByRole("button", { name: /Adapters/i })
+    fireEvent.click(adaptersBtn)
+
+    expect(await screen.findByText("Registered Adapters & Vendor Feeds")).toBeTruthy()
+    expect(screen.getByText("stripe")).toBeTruthy()
   })
 })
