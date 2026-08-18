@@ -143,3 +143,31 @@ number, not a dot — which keeps it on the right side of the no-status-dot rule
 
 **Nothing here relaxes the three refusals.** Auto-run makes more runs; it does not make a confidence
 score. A sidebar count is a count; it is not a health indicator. The narrative carries the rung.
+
+## Round four — four more, and two are structural rather than visual
+
+**29. The Vendor page leads with your exposure, then their change history.** Operations you call with
+site counts and rungs first; their version and deprecation timeline below as the reason findings
+appeared. *Consequence:* the page answers *what does this vendor cost me* before *what has this
+vendor done*.
+
+**30. Runs gets its own page in the sidebar**, filterable by outcome and tier, alongside the
+per-finding path. *Consequence:* a new route, so it is Lane B's — and it is the natural home for the
+abandon-reason distribution from the dashboard plan.
+
+**31. A workspace may hold several repositories — and this is a data-model change, not a UI one.**
+
+**This amends `M0-W332`, which said a workspace is backed by a codebase.** It is backed by *one or
+more*. The console today scopes through `call_site.repo_id`, which reaches exactly one repository;
+a workspace spanning three needs an entity above that, and every scoped query becomes *the
+repositories in this workspace* rather than *this repository*.
+
+**Ship the one-repository case first and build the model to hold N.** The URLs, the schema and the
+scoped queries take a workspace identifier now, even while every workspace contains exactly one
+repository — because retrofitting a level above a scope is the migration this project least wants in
+its last two days. *Owner asked for several; this delivers several without betting Wednesday on it.*
+
+**32. The demo opens by typing the install command.** `npx sync-console`, cold start, point it at a
+repository, watch the canvas draw. *Consequence, and it reorders the board:* **Lane C's `npx` → Docker
+chain is now the literal first thirty seconds of Wednesday.** It stops being packaging and becomes the
+opening argument — if that command does not work, nothing after it is seen.
