@@ -595,3 +595,39 @@ CREATE TABLE IF NOT EXISTS finding_dismissal (
 
 CREATE INDEX IF NOT EXISTS finding_dismissal_latest_idx
     ON finding_dismissal (finding_id, created_at DESC);
+
+-- Grain: one row per index PASS, per repository -- not one per repository, and not one per call
+-- site. A repository indexed nightly for a week has seven rows and `latest_index_run` is the one
+-- that answers "when was this last read"; counting passes to count repositories is wrong for the
+-- same reason it is wrong on `migration_outcome`.
+--
+-- Identity is (repo_id, started_at), which is the conflict target on both writes. Re-running INDEX
+-- over the same input converges on the same row rather than accumulating one per attempt --
+-- `CLAUDE.md` binds every stage to that, and `efcc19d` was this bug.
+--
+-- **`finished_at IS NULL` is a pass that has not finished, and that is the whole reason this table
+-- exists rather than a timestamp column on `call_site`.** Owner decision 41 asks that
+-- "Index finished, 1,204 call sites" be readable on the Overview a minute after the toast that
+-- announced it. `call_site.indexed_at` cannot answer it: it says rows exist, and rows exist just
+-- as much after a pass that died halfway through a repository. A count read from those rows would
+-- render as a completed index of a smaller codebase, which is a false claim reached by arithmetic
+-- rather than by anybody asserting it. `call_sites` is likewise NULL until the pass finishes,
+-- because a partial count is not a smaller count -- it is not a count at all.
+--
+-- This is also what decision 61's empty table needs to say what was checked and when: an empty
+-- findings list under "the index last ran 14 minutes ago" is a different fact from the same list
+-- under "the index has never run here", and nothing else in the schema separates them.
+CREATE TABLE IF NOT EXISTS index_run (
+    repo_id     TEXT NOT NULL,
+    started_at  TIMESTAMPTZ NOT NULL,
+    -- NULL until the pass completes. Never backfilled by a later pass: an unfinished run stays
+    -- unfinished, because that is the evidence somebody needs to distrust the rows it left.
+    finished_at TIMESTAMPTZ,
+    -- How many current call sites the pass wrote. NULL while unfinished, for the same reason.
+    call_sites  INTEGER,
+    recorded_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+
+    PRIMARY KEY (repo_id, started_at)
+);
+
+CREATE INDEX IF NOT EXISTS index_run_latest_idx ON index_run (repo_id, started_at DESC);

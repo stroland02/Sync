@@ -248,3 +248,19 @@ def test_a_scan_still_clears_what_it_re_derives(store, scan):
     assert store.open_findings() == []
     # Only what this scan upserted. `_StubVendor` yields the one change `_change()` builds.
     assert [c.operation_id for c in store.all_vendor_changes("stripe")] == ["PostRefunds"]
+
+
+def test_a_scan_records_the_pass_it_just_ran(store, scan):
+    """Decision 41's durable half, written by the thing that actually indexes.
+
+    A toast announcing "Index finished, 1,204 call sites" must not be the only place that fact
+    exists. Without this the Overview can say rows exist and cannot say a pass completed, which
+    is the difference between a count worth trusting and one left by a run that died.
+    """
+    assert scan() == 0
+
+    run = store.latest_index_run(SCANNED)
+
+    assert run is not None, "a completed scan left no index_run row"
+    assert run["finished_at"] is not None, "the pass finished but the row does not say so"
+    assert run["call_sites"] == len(store.call_sites_for_repository(SCANNED))
