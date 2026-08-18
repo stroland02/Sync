@@ -45,7 +45,6 @@ import { BindingSurfacePage } from "@/features/bindings/binding-surface-page"
 import { CodebasePage } from "@/features/repositories/codebase-page"
 import { DetectorsPage } from "@/features/detectors/detectors-page"
 import { FindingPage } from "@/features/findings/finding-page"
-import { FleetPage } from "@/features/fleet/fleet-page"
 import { PullRequestPage } from "@/features/pullrequests/pull-request-page"
 import { SettingsPage } from "@/features/settings/settings-page"
 import { SignalsPage } from "@/features/signals/signals-page"
@@ -80,18 +79,15 @@ export interface RouteEntry {
   label: string
   level: GraphLevel
   /**
-   * Which of the two sidebar regions this destination sits in.
+   * Whether this destination is a row in the navigation.
    *
-   * `repository` is scoped to one repository -- the independent variable the console is organised
-   * around. `root` is what a reader reaches without having chosen one. Two regions replace six
-   * areas because that is the only distinction the sidebar actually needs to draw.
-   *
-   * Three finding addresses sit in `repository` while declaring `findingId` rather than `repoId`.
-   * That is deliberate and checked as a literal allow-list in `routes.test.tsx`: a fleet-wide
-   * findings row has no repository to build a nested href from, because `RiskRow` carries none
-   * (`api/types.ts:135-145`). It retires when that payload gains a `repo_id`.
+   * **Not every route is a destination.** A workspace supplies `:repoId` and nothing else, so a
+   * route needing a vendor, an operation or a finding cannot be built from the selected workspace
+   * alone. Those are reached from the page that holds the subject, and they are absent from the
+   * rail rather than present and inert -- the owner's rule, and the correct half of it: a control
+   * that vanishes is honest about being unavailable, one that absorbs the press reads as broken.
    */
-  region: "root" | "repository"
+  nav: boolean
   /** What an operator opens this screen to find out, in one sentence. */
   question: string
   /**
@@ -112,116 +108,105 @@ export interface RouteEntry {
 
 export const ROUTES: readonly RouteEntry[] = [
   {
-    path: "/",
-    region: "root",
-    reachedFrom: null,
-    label: "Codebases",
-    level: "Fleet",
-    question: "All code repositories monitored by Sync, their attached API vendors, and active migrations.",
-    params: [],
-    element: FleetPage,
-  },
-  {
     path: "/repositories/:repoId",
-    region: "repository",
-    reachedFrom: "a repository on the codebases screen",
-    label: "Codebase",
+    reachedFrom: "a workspace in the switcher",
+    nav: true,
+    label: "Overview",
     level: "Codebase",
-    question: "Is this repository actually covered, and what does Sync not see in it?",
+    question: "What does Sync see in this workspace, and what does it not?",
     params: ["repoId"],
     element: CodebasePage,
   },
   {
-    path: "/vendors/:vendorId",
-    region: "root",
-    reachedFrom: "a vendor on the codebases screen",
-    label: "Vendor",
-    level: "API Services",
-    question: "What is at risk from this vendor, and what did it change?",
-    params: ["vendorId"],
-    element: VendorPage,
-  },
-  {
     path: "/repositories/:repoId/services",
-    region: "repository",
-    reachedFrom: "a repository on the overview",
+    reachedFrom: "a workspace in the switcher",
+    nav: true,
     label: "API services",
     level: "API Services",
     question:
-      "Which API services does this repository call, and what does the index know about each?",
+      "Which API services does this workspace call, and what does the index know about each?",
     params: ["repoId"],
     element: RepositoryServicesPage,
   },
   {
     path: "/repositories/:repoId/vendors",
-    region: "repository",
-    reachedFrom: "a repository on the overview",
+    reachedFrom: "a workspace in the switcher",
+    nav: true,
     label: "Vendors",
     level: "API Services",
-    question:
-      "Which API vendors does this repository call, and how much is open against each?",
+    question: "Which API vendors does this workspace call, and how much is open against each?",
     params: ["repoId"],
     element: RepositoryVendorsPage,
   },
   {
     path: "/repositories/:repoId/observed",
-    region: "repository",
-    reachedFrom: "a repository on the codebases screen",
+    reachedFrom: "a workspace in the switcher",
+    nav: true,
     label: "Signals",
     level: "Signals",
     question:
-      "What vendor, signal source and human surface does this repository have attached, and what has each reported?",
+      "What vendor, signal source and human surface does this workspace have attached, and what has each reported?",
     params: ["repoId"],
     element: SignalsPage,
   },
   {
-    path: "/bindings/vendors/:vendorId/operations/:operationId",
-    region: "root",
-    reachedFrom: "an operation on a vendor's findings table",
-    label: "Binding surface",
-    level: "Binding surface",
-    question: "A vendor shipped a breaking change — what call sites does it hit?",
-    params: ["vendorId", "operationId"],
-    element: BindingSurfacePage,
-  },
-  {
-    path: "/detectors",
-    region: "root",
-    reachedFrom: null,
+    path: "/repositories/:repoId/detectors",
+    reachedFrom: "a workspace in the switcher",
+    nav: true,
     label: "Detectors",
     level: "Errors & Incidents",
-    question: "Which detector is producing my false positives?",
-    params: [],
+    question: "Which detector is producing this workspace's false positives?",
+    params: ["repoId"],
     element: DetectorsPage,
   },
   {
-    path: "/findings/:findingId",
-    region: "repository",
-    reachedFrom: "a call site on a vendor or binding surface",
+    path: "/repositories/:repoId/vendors/:vendorId",
+    reachedFrom: "a vendor on the Vendors page",
+    nav: false,
+    label: "Vendor",
+    level: "API Services",
+    question: "What is at risk from this vendor in this workspace, and what did it change?",
+    params: ["repoId", "vendorId"],
+    element: VendorPage,
+  },
+  {
+    path: "/repositories/:repoId/bindings/vendors/:vendorId/operations/:operationId",
+    reachedFrom: "an operation on a vendor page",
+    nav: false,
+    label: "Binding surface",
+    level: "Binding surface",
+    question: "Which call sites bind this operation, and what rung established each?",
+    params: ["repoId", "vendorId", "operationId"],
+    element: BindingSurfacePage,
+  },
+  {
+    path: "/repositories/:repoId/findings/:findingId",
+    reachedFrom: "a finding on a vendor or detector page",
+    nav: false,
     label: "Finding",
     level: "Finding",
     question: "What is this finding, and what binding does it rest on?",
-    params: ["findingId"],
+    params: ["repoId", "findingId"],
     element: FindingPage,
   },
   {
-    path: "/findings/:findingId/workflow",
-    region: "repository",
-    reachedFrom: "the finding it remediates",
+    path: "/repositories/:repoId/findings/:findingId/workflow",
+    reachedFrom: "a finding",
+    nav: false,
     label: "Solution workflow",
     level: "Solution Workflow",
     question: "What did Sync's remediation graph do about this finding, node by node?",
-    params: ["findingId"],
+    params: ["repoId", "findingId"],
     element: WorkflowPage,
   },
   {
-    path: "/findings/:findingId/workflow/pull-request",
-    region: "repository",
-    reachedFrom: "the solution workflow that opened it",
+    path: "/repositories/:repoId/findings/:findingId/workflow/pull-request",
+    reachedFrom: "a solution workflow that opened one",
+    nav: false,
     label: "Pull request",
     level: "Pull Request",
-    question: "Did Sync open a pull request for this finding, and what proof backs it?",
-    params: ["findingId"],
+    question: "Did Sync open a pull request for this finding, and what evidence went with it?",
+    params: ["repoId", "findingId"],
     element: PullRequestPage,
   },
 ] as const
