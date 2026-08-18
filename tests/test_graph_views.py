@@ -2278,3 +2278,46 @@ def test_the_burst_cost_of_per_call_site_events_is_measured_rather_than_assumed(
     # benchmark that fails on a slow machine. `written`/`drained_in` go in the register.
     assert drained_in < 30.0
     print(f"\nburst: {count} events written in {written:.2f}s, drained in {drained_in:.2f}s")
+
+
+def test_dismissing_a_finding_publishes_an_event(store):
+    """Revised: emit now, because the write path is in flight rather than anticipated.
+
+    The reason travels because a dismissal is the one signal that feeds detector accuracy, and a
+    banner or toast that could not say *why* something left the list would be reporting a
+    disappearance rather than a decision.
+    """
+    store.upsert_call_site(_site())
+    sites = store.replace_call_sites("r1", [_site()])
+    finding_id = store.insert_finding(_finding(sites[0], claim="c1"))
+
+    with store.subscribe_events("r1") as events:
+        store.record_dismissal(finding_id, reason="false_positive", actor="ada")
+
+        received = events.next(timeout=5.0)
+
+    assert received == {
+        "kind": "finding.dismissed",
+        "repo_id": "r1",
+        "finding_id": finding_id,
+        "reason": "false_positive",
+        "actor": "ada",
+    }
+
+
+def test_restoring_a_finding_publishes_its_own_event_rather_than_a_dismissal_with_no_reason(store):
+    """A restore is not a dismissal carrying `None`. They are opposite decisions, and a console
+    told only that *something changed* would have to re-read to find out which."""
+    store.upsert_call_site(_site())
+    sites = store.replace_call_sites("r1", [_site()])
+    finding_id = store.insert_finding(_finding(sites[0], claim="c1"))
+    store.record_dismissal(finding_id, reason="wont_fix", actor="ada")
+
+    with store.subscribe_events("r1") as events:
+        store.record_dismissal(finding_id, reason=None, actor="bo")
+
+        received = events.next(timeout=5.0)
+
+    assert received["kind"] == "finding.restored"
+    assert received["actor"] == "bo"
+    assert "reason" not in received

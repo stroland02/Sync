@@ -1,10 +1,11 @@
 /**
  * What the stream is doing, above a canvas that does not move while you read it.
  *
- * **The graph behind this stays settled and the banner carries the aliveness.** Decision 87's
- * rule — content shifting under your eyes costs more than freshness buys — was applied to the
- * canvas deliberately, so decision 78's watch-it-index moment lives in a ticking count rather
- * than in a graph rearranging itself. `Show` is the reader choosing when the picture changes.
+ * **The banner accompanies the canvas; it never replaces it.** Revised: an earlier pass had the
+ * graph stay settled until the reader asked, which made decision 87 govern a surface 87 was not
+ * written for. 87 protects a reader *reading* a table; decision 78's canvas is a surface you are
+ * *watching build*, and freezing it removes the one moment the one-command install exists to
+ * create. So the canvas builds visibly and this strip says what is arriving beside it.
  *
  * **A drop names the loss and refuses the cause.** Nothing in this graph records whether an index
  * run is still going, so the console cannot say whether the work continues — only that it can no
@@ -27,14 +28,18 @@ import type { StreamStatus } from "@/features/index-graph/use-repository-events"
 export interface IndexStreamBannerProps {
   readonly indexedCount: number
   readonly status: StreamStatus
-  /** Reveals what has arrived. Absent while nothing has. */
-  readonly onShow?: () => void
+  /**
+   * Fetches the settled graph after a drop. Optional because it must be an action the reader
+   * takes: swapping a live view for a static one without being asked would hide that the screen
+   * stopped being live.
+   */
+  readonly onReread?: () => void
 }
 
-export function IndexStreamBanner({ indexedCount, status, onShow }: IndexStreamBannerProps) {
+export function IndexStreamBanner({ indexedCount, status, onReread }: IndexStreamBannerProps) {
   if (status === "dropped") {
     return (
-      <p
+      <div
         role="status"
         className="flex flex-col gap-field rounded-surface border border-line bg-surface p-row text-meta text-ink-muted"
       >
@@ -44,7 +49,20 @@ export function IndexStreamBanner({ indexedCount, status, onShow }: IndexStreamB
           {indexedCount > 0 ? ` — ${indexedCount.toLocaleString()} call sites` : ""}. The index may
           still be running and this screen can no longer tell you.
         </span>
-      </p>
+        {onReread !== undefined && (
+          <span>
+            <button
+              type="button"
+              onClick={onReread}
+              className="rounded-control border border-line px-field text-meta text-ink underline-offset-2 hover:underline"
+            >
+              Load the settled graph
+            </button>{" "}
+            — a complete answer you asked for, rather than one swapped in behind the frozen
+            picture.
+          </span>
+        )}
+      </div>
     )
   }
 
@@ -59,15 +77,7 @@ export function IndexStreamBanner({ indexedCount, status, onShow }: IndexStreamB
         ↓ {indexedCount.toLocaleString()} call{" "}
         {indexedCount === 1 ? "site" : "sites"} indexed since you opened this
       </span>
-      {onShow !== undefined && (
-        <button
-          type="button"
-          onClick={onShow}
-          className="rounded-control border border-line px-field text-meta text-ink underline-offset-2 hover:underline"
-        >
-          Show
-        </button>
-      )}
+
     </p>
   )
 }

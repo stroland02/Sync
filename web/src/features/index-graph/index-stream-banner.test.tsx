@@ -17,10 +17,9 @@ describe("IndexStreamBanner", () => {
   })
 
   it("carries the live count so the aliveness is in the banner, not the graph", () => {
-    render(<IndexStreamBanner indexedCount={214} status="live" onShow={vi.fn()} />)
+    render(<IndexStreamBanner indexedCount={214} status="live" />)
 
     expect(screen.getByText(/214 call sites indexed since you opened this/)).toBeTruthy()
-    expect(screen.getByRole("button", { name: "Show" })).toBeTruthy()
   })
 
   /**
@@ -52,6 +51,26 @@ describe("IndexStreamBanner", () => {
     render(<IndexStreamBanner indexedCount={12} status="dropped" />)
 
     expect(screen.getByText(/12 call sites/)).toBeTruthy()
+  })
+
+  /**
+   * Revised: the re-read is offered rather than performed. Swapping a live view for a static one
+   * without being asked would hide that the screen stopped being live.
+   */
+  it("offers a re-read the reader triggers, rather than swapping the view for them", () => {
+    const onReread = vi.fn()
+    render(<IndexStreamBanner indexedCount={12} status="dropped" onReread={onReread} />)
+
+    const control = screen.getByRole("button", { name: "Load the settled graph" })
+    control.click()
+
+    expect(onReread).toHaveBeenCalledOnce()
+  })
+
+  it("offers no re-read when the caller gave no way to do one", () => {
+    render(<IndexStreamBanner indexedCount={12} status="dropped" />)
+
+    expect(screen.queryByRole("button")).toBeNull()
   })
 
   it("makes no reconnect claim, because nobody has heard from the server", () => {

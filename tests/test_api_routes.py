@@ -2695,15 +2695,19 @@ def test_each_event_is_framed_with_its_type_so_a_client_can_dispatch_on_it():
     assert '"path":"src/a.ts"' in body.replace(" ", "")
 
 
-def test_the_heartbeat_is_a_named_event_so_silence_is_not_a_drop():
-    """Owner-selected over an SSE comment. It carries no domain fact, and it is named so nobody
-    mistakes it for one -- what it asserts is that the stream is alive, nothing more."""
+def test_the_heartbeat_is_a_comment_so_it_reaches_no_handler():
+    """Revised from a typed event, and the objection that decided it was mine: an event named
+    `heartbeat` puts something on the wire corresponding to nothing that happened, which is the
+    property decision 84 says an event should have. A comment keeps the connection warm through a
+    proxy and never reaches a message handler, so the transport stays alive and the event
+    vocabulary stays honest."""
     app = _build_app(surface=GraphSurface(FakeGraph(), feed_fetched_at=FETCHED))
 
     with TestClient(app) as client:
         body = client.get("/api/repositories/r1/events").text
 
-    assert "event: heartbeat" in body
+    assert ": heartbeat" in body
+    assert "event: heartbeat" not in body
 
 
 def test_the_events_route_is_scoped_by_the_path_and_not_a_query_string():
