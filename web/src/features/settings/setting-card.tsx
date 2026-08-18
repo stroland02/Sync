@@ -5,8 +5,13 @@ export interface SettingCardProps {
   title: string
   /** Detailed prose explanation of what the setting controls and what constraints apply */
   description: ReactNode
-  /** The interactive control or read-only value rendered on the right side */
-  control: ReactNode
+  /**
+   * The interactive control or read-only value rendered on the right side.
+   *
+   * Optional because a card that only explains something has nothing to put there, and a
+   * required-but-empty control reserves a 240px column against no content.
+   */
+  control?: ReactNode
   /** Optional refusal or invariant notice explaining refused configuration states */
   refusalNotice?: ReactNode
   /** Optional footer with card-scoped actions (Save, Cancel, Status) */
@@ -28,9 +33,11 @@ export function SettingCard({
           <div className="text-body text-ink-muted leading-relaxed space-y-2">{description}</div>
           {refusalNotice && <div className="mt-2">{refusalNotice}</div>}
         </div>
-        <div className="flex flex-col items-start lg:items-end gap-2 shrink-0 min-w-[240px]">
-          {control}
-        </div>
+        {control !== undefined && (
+          <div className="flex flex-col items-start lg:items-end gap-2 shrink-0 min-w-[240px]">
+            {control}
+          </div>
+        )}
       </div>
       {footer && (
         <div className="flex items-center justify-between border-t border-line/60 bg-surface-muted/30 px-section py-field text-meta text-ink-muted">

@@ -39,20 +39,20 @@ export async function fetchRepoSettings(
     })
   } catch (cause) {
     if (signal?.aborted) throw cause
-    throw new UnreachableApiError(path, cause)
+    throw new UnreachableApiError(path, { cause })
   }
 
   if (response.status === 404) {
-    throw new NotFoundError(path, { error: "not_found", resource: "repository", identifier: repoId })
+    throw new NotFoundError(`no repository ${repoId}`, repoId, path)
   }
   if (!response.ok) {
-    throw new ApiStatusError(path, response.status, await response.text())
+    throw new ApiStatusError(response.status, path)
   }
 
   try {
     return (await response.json()) as RepoSettingsPayload
   } catch (cause) {
-    throw new MalformedResponseError(path, cause)
+    throw new MalformedResponseError(path, { cause })
   }
 }
 
@@ -75,17 +75,16 @@ export async function updateRepoSettings(
     })
   } catch (cause) {
     if (signal?.aborted) throw cause
-    throw new UnreachableApiError(path, cause)
+    throw new UnreachableApiError(path, { cause })
   }
 
   if (!response.ok) {
-    const errorBody = await response.text()
-    throw new ApiStatusError(path, response.status, errorBody)
+    throw new ApiStatusError(response.status, path)
   }
 
   try {
     return (await response.json()) as RepoSettingsPayload
   } catch (cause) {
-    throw new MalformedResponseError(path, cause)
+    throw new MalformedResponseError(path, { cause })
   }
 }

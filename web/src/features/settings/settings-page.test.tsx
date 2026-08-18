@@ -30,9 +30,7 @@ function renderSettings(initialEntry = "/settings") {
     ],
   }
   const reposData: RepositoriesResponse = {
-    repositories: [
-      { repo_id: "stroland02/Sync", call_sites: 42, vendors: 3 },
-    ],
+    repo_ids: ["stroland02/Sync"],
   }
 
   vi.spyOn(queries, "useAdapters").mockReturnValue({

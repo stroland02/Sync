@@ -40,6 +40,7 @@ import { MetricPanel } from "@/components/metric-panel"
 import { ProvenanceStrip } from "@/components/provenance"
 import { EmptyState, ErrorState, LoadingState } from "@/components/states"
 import { Formatted } from "@/components/status"
+import { VendorChangeVolumeChart } from "@/features/vendors/vendor-change-chart"
 import { FooterBar } from "@/layouts/footer-bar"
 import { formatTimestamp, orAbsent } from "@/lib/format"
 import { useOffsetParam } from "@/lib/use-offset-param"
@@ -100,7 +101,8 @@ export function VendorChangesCard({
           detail="The API answered with an empty page. Either no feed has been ingested for this vendor, or it has published nothing Sync tracks."
         />
       ) : (
-        <>
+        <div className="flex flex-col gap-4">
+          <VendorChangeVolumeChart changes={page.items} vendorId={vendorId} />
           <Table>
             <TableHeader>
               <TableRow>
@@ -160,7 +162,7 @@ export function VendorChangesCard({
             busy={query.isFetching}
             onOffsetChange={setOffset}
           />
-        </>
+        </div>
       )}
       <ProvenanceStrip
         provenance={page}

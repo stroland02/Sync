@@ -9,6 +9,7 @@ import { Button } from "@/vendor/supabase/ui/button"
 import { Input } from "@/vendor/supabase/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/vendor/supabase/ui/select"
 import { LoadingState, ErrorState } from "@/components/states"
+import { Formatted } from "@/components/status"
 
 export interface PullRequestsSettingsPanelProps {
   repoId: string
@@ -22,7 +23,7 @@ export function PullRequestsSettingsPanel({ repoId }: PullRequestsSettingsPanelP
   })
 
   const reposQuery = useRepositories()
-  const repos = reposQuery.data?.repositories ?? []
+  const repos = reposQuery.data?.repo_ids ?? []
 
   const [mergePolicy, setMergePolicy] = useState<"never" | "when_checks_pass">("never")
   const [mergeMethod, setMergeMethod] = useState<"squash" | "merge" | "rebase">("squash")
@@ -278,20 +279,28 @@ export function PullRequestsSettingsPanel({ repoId }: PullRequestsSettingsPanelP
               Repository Overrides
             </h3>
             <p className="text-meta text-ink-muted">
-              Active pull request merge policies across monitored repositories in this deployment.
+              The policy in force for the repository selected above. Every other repository is
+              shown without one because this screen has not read its settings, which is different
+              from having read them and found no override.
             </p>
           </div>
           <div className="flex flex-col divide-y divide-border">
-            {repos.map((r) => (
+            {repos.map((otherRepoId) => (
               <div
-                key={r.repo_id}
+                key={otherRepoId}
                 className="flex items-center justify-between py-2 text-meta first:pt-0"
               >
-                <span className="font-mono text-ink">{r.repo_id}</span>
+                <span className="font-mono text-ink">{otherRepoId}</span>
                 <span className="text-ink-muted">
-                  {r.repo_id === repoId
-                    ? `${mergePolicy === "when_checks_pass" ? "merge when green" : "open only"}`
-                    : "open only"}
+                  {otherRepoId === repoId ? (
+                    mergePolicy === "when_checks_pass" ? (
+                      "merge when green"
+                    ) : (
+                      "open only"
+                    )
+                  ) : (
+                    <Formatted value={null} />
+                  )}
                 </span>
               </div>
             ))}

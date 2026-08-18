@@ -700,3 +700,44 @@ def detector_accountability(store: GraphStore, *, repo_id: str | None = None) ->
         "by_rung": rung_tally,
         "total_open_findings": len(findings),
     }
+
+
+def vendor_change_volume(store: GraphStore, vendor_id: str) -> dict:
+    """Aggregated change volume and timeline for one vendor: M0-W329 dashboard 4.
+
+    Answers 'how often does this vendor publish changes, and what kind' over time.
+    Draws from `vendor_change` alone.
+    """
+    changes = store.all_vendor_changes(vendor_id)
+    by_kind: Counter[str] = Counter()
+    by_severity: Counter[str] = Counter()
+    monthly: dict[str, dict] = {}
+
+    for change in changes:
+        by_kind[change.kind] += 1
+        if change.severity:
+            by_severity[change.severity] += 1
+        period = change.detected_at.strftime("%Y-%m")
+        bucket = monthly.setdefault(
+            period, {"period": period, "count": 0, "by_kind": Counter()}
+        )
+        bucket["count"] += 1
+        bucket["by_kind"][change.kind] += 1
+
+    timeline = [
+        {"period": p, "count": b["count"], "by_kind": dict(b["by_kind"])}
+        for p, b in sorted(monthly.items())
+    ]
+
+    newest_at = max((c.detected_at for c in changes), default=None)
+    oldest_at = min((c.detected_at for c in changes), default=None)
+
+    return {
+        "vendor_id": vendor_id,
+        "total_changes": len(changes),
+        "by_kind": dict(by_kind),
+        "by_severity": dict(by_severity),
+        "timeline": timeline,
+        "newest_change_at": newest_at.isoformat() if newest_at else None,
+        "oldest_change_at": oldest_at.isoformat() if oldest_at else None,
+    }

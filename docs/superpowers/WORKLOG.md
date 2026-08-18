@@ -25536,3 +25536,6 @@ records all nine reached with the heading, the group labels and the active row c
 
 
 
+
+
+| CI-W378 | **The build was red on `main` and two of the twenty-four errors were silent runtime bugs rather than typing nits.** `settings-page.tsx` and `pull-requests-settings-panel.tsx` read `.repositories` off `RepositoriesResponse`, which carries `repo_ids: string[]` and nothing else -- the repository selector was therefore always empty and always fell through to a hard-coded `stroland02/Sync`. `vendor-sources-card.tsx` read `last_intake_at`, `feed` and `operations_named` off `AdapterRow`, none of which exist; all three rendered `undefined` and fell through to invented strings. **`AdapterRow` forbids that first relabel in its own docstring** -- nothing records an intake attempt, only its result, so an intake label turns staleness into liveness. Root cause of the silence found in the test: the fixture was typed `unknown` and hand-wrote all three absent fields, so the suite went green against a payload the API never produces. Fixture now typed `AdapterRow`, and proven able to fail by reintroducing the intake label. Also stopped the repository-override list asserting `open only` for repositories whose settings it never fetched | landed | `web/src/features/settings/`, `web/src/features/vendors/vendor-sources-card.tsx` |
