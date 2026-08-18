@@ -27,6 +27,7 @@ from sync.dashboard.graph_views import (
     repo_settings,
     severity_rollup,
     vendor_change_volume,
+    vendor_operation_exposure,
     vendor_findings,
 )
 from sync.graph.store import GraphStore
@@ -1449,3 +1450,114 @@ def test_vendor_change_volume_aggregates_timeline_and_kinds(store):
     assert empty_vol["vendor_id"] == "nonexistent"
     assert empty_vol["total_changes"] == 0
     assert empty_vol["timeline"] == []
+
+
+# --- Decision 29: operations you call, with site counts and rungs ---------------------------
+#
+# The vendor page leads with exposure. What it leads with is this: which of a vendor's
+# operations this codebase actually calls, how many places call each, and on what evidence.
+
+
+def test_vendor_operation_exposure_counts_call_sites_per_operation(store):
+    store.upsert_call_site(_site(path="src/a.ts", line=1))
+    store.upsert_call_site(_site(path="src/b.ts", line=2))
+    store.upsert_call_site(_site(operation_id="GetCharges", path="src/c.ts", line=3))
+
+    result = vendor_operation_exposure(store, "stripe")
+
+    assert [(row["operation_id"], row["call_site_count"]) for row in result["operations"]] == [
+        ("PostCharges", 2),
+        ("GetCharges", 1),
+    ]
+
+
+def test_vendor_operation_exposure_orders_by_exposure_then_name(store):
+    """Most-called first, because the screen's question is where the exposure is. Ties break on
+    the operation id so the order is total rather than whatever the planner returned."""
+    store.upsert_call_site(_site(operation_id="B", path="src/a.ts", line=1))
+    store.upsert_call_site(_site(operation_id="A", path="src/b.ts", line=2))
+    store.upsert_call_site(_site(operation_id="C", path="src/c.ts", line=3))
+    store.upsert_call_site(_site(operation_id="C", path="src/d.ts", line=4))
+
+    result = vendor_operation_exposure(store, "stripe")
+
+    assert [row["operation_id"] for row in result["operations"]] == ["C", "A", "B"]
+
+
+def test_vendor_operation_exposure_narrows_to_one_repository(store):
+    store.upsert_call_site(_site(repo_id="r1", path="src/a.ts", line=1))
+    store.upsert_call_site(_site(repo_id="r2", path="src/b.ts", line=2))
+
+    result = vendor_operation_exposure(store, "stripe", repo_id="r1")
+
+    assert result["operations"] == [
+        {
+            "operation_id": "PostCharges",
+            "call_site_count": 1,
+            "repository_count": 1,
+            "binding_rung": "static",
+            "observed": None,
+        }
+    ]
+
+
+def test_vendor_operation_exposure_reports_how_many_repositories_call_an_operation(store):
+    store.upsert_call_site(_site(repo_id="r1", path="src/a.ts", line=1))
+    store.upsert_call_site(_site(repo_id="r2", path="src/b.ts", line=2))
+
+    result = vendor_operation_exposure(store, "stripe")
+
+    assert result["operations"][0]["repository_count"] == 2
+
+
+def test_vendor_operation_exposure_carries_the_static_rung_on_every_row(store):
+    """A call site is what the static index found. The rung is a column rather than a join, and
+    an exposure row that could not name one would be unattributable."""
+    store.upsert_call_site(_site())
+
+    result = vendor_operation_exposure(store, "stripe")
+
+    assert result["operations"][0]["binding_rung"] == "static"
+
+
+def test_vendor_operation_exposure_excludes_a_retracted_call_site(store):
+    """A call the last index pass stopped finding is not current exposure."""
+    store.upsert_call_site(_site(path="src/a.ts", line=1))
+    store.upsert_call_site(_site(path="src/b.ts", line=2))
+    store.replace_call_sites("r1", [_site(path="src/a.ts", line=1)])
+
+    result = vendor_operation_exposure(store, "stripe")
+
+    assert result["operations"][0]["call_site_count"] == 1
+
+
+def test_vendor_operation_exposure_on_a_vendor_nobody_calls_is_empty(store):
+    result = vendor_operation_exposure(store, "stripe")
+
+    assert result["operations"] == []
+
+
+def test_vendor_operation_exposure_reports_observed_as_never_measured_without_a_repository(store):
+    """Telemetry attaches per repository. Asked across every repository, whether an operation was
+    observed has no single answer, and `None` says so rather than defaulting to `False`."""
+    store.upsert_call_site(_site())
+
+    result = vendor_operation_exposure(store, "stripe")
+
+    assert result["operations"][0]["observed"] is None
+    assert result["telemetry_attached_at"] is None
+
+
+def test_vendor_operation_exposure_separates_never_measured_from_not_observed(store):
+    """B157's distinction, on this screen. With telemetry attached, an operation no span named is
+    a measured `False`. Without it, every operation is `None` -- nothing looked."""
+    store.upsert_call_site(_site(operation_id="PostCharges", path="src/a.ts", line=1))
+    store.upsert_call_site(_site(operation_id="GetCharges", path="src/b.ts", line=2))
+    store.mark_telemetry_attached("r1", SEEN)
+    store.record_observed_call(_observed_call(operation_id="PostCharges"))
+
+    result = vendor_operation_exposure(store, "stripe", repo_id="r1")
+
+    observed = {row["operation_id"]: row["observed"] for row in result["operations"]}
+    assert observed == {"PostCharges": True, "GetCharges": False}
+    assert result["telemetry_attached_at"] == SEEN.isoformat()

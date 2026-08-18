@@ -162,6 +162,15 @@ def _fake_coverage_reader(repo_id: str) -> dict[str, Any]:
     return {"repo_id": repo_id, "by_vendor": {}, "total_call_sites": 0}
 
 
+def _fake_vendor_operations_reader(vendor_id: str, *, repo_id=None) -> dict[str, Any]:
+    return {
+        "vendor_id": vendor_id,
+        "repo_id": repo_id,
+        "telemetry_attached_at": None,
+        "operations": [],
+    }
+
+
 def _fake_observed_reader(
     repo_id: str,
     *,
@@ -286,6 +295,7 @@ def _build_app(
     binding_reader=_fake_binding_reader,
     coverage_reader=_fake_coverage_reader,
     observed_reader=_fake_observed_reader,
+    vendor_operations_reader=_fake_vendor_operations_reader,
     detector_reader=_fake_detector_reader,
     adapters_reader=_fake_adapters_reader,
     severity_reader=_fake_severity_reader,
@@ -318,6 +328,7 @@ def _build_app(
         binding_reader=binding_reader,
         coverage_reader=coverage_reader,
         observed_reader=observed_reader,
+        vendor_operations_reader=vendor_operations_reader,
         detector_reader=detector_reader,
         adapters_reader=adapters_reader,
         severity_reader=severity_reader,
@@ -1518,6 +1529,9 @@ def _recording_client(**graph_kw) -> _RecordingClient:
         change_units_reads.append({"repo_id": repo_id, "limit": limit, "offset": offset})
         return _fake_change_units_reader(repo_id=repo_id, limit=limit, offset=offset)
 
+    def vendor_operations_reader(vendor_id: str, *, repo_id=None):
+        return _fake_vendor_operations_reader(vendor_id, repo_id=repo_id)
+
     app = create_app(
         surface=surface,
         workflow_reader=workflow_reader,
@@ -1529,6 +1543,7 @@ def _recording_client(**graph_kw) -> _RecordingClient:
         binding_reader=binding_reader,
         coverage_reader=coverage_reader,
         observed_reader=observed_reader,
+        vendor_operations_reader=vendor_operations_reader,
         detector_reader=detector_reader,
         adapters_reader=_fake_adapters_reader,
         severity_reader=severity_reader,
@@ -2381,3 +2396,49 @@ def test_settings_route_post_rejects_invalid_method():
     assert resp.status_code == 400
     data = resp.json()
     assert "Invalid merge_method" in data["error"]
+
+
+def test_vendor_operations_route_answers_exposure_for_a_vendor():
+    """Decision 29's opening answer: which operations this codebase calls on one vendor."""
+    payload = {
+        "vendor_id": "stripe",
+        "repo_id": None,
+        "telemetry_attached_at": None,
+        "operations": [
+            {
+                "operation_id": "PostCharges",
+                "call_site_count": 4,
+                "repository_count": 2,
+                "binding_rung": "static",
+                "observed": None,
+            }
+        ],
+    }
+    app = _build_app(
+        surface=GraphSurface(FakeGraph(), feed_fetched_at=FETCHED),
+        vendor_operations_reader=lambda vendor_id, **_: payload,
+    )
+
+    response = TestClient(app).get("/api/vendors/stripe/operations")
+
+    assert response.status_code == 200
+    assert response.json() == payload
+
+
+def test_vendor_operations_route_passes_the_repository_scope_through():
+    """The scope composes with the vendor rather than replacing it. Dropping it would put a
+    fleet-wide exposure count under one repository's heading."""
+    seen: list[dict[str, Any]] = []
+
+    def reader(vendor_id: str, *, repo_id=None):
+        seen.append({"vendor_id": vendor_id, "repo_id": repo_id})
+        return _fake_vendor_operations_reader(vendor_id, repo_id=repo_id)
+
+    app = _build_app(
+        surface=GraphSurface(FakeGraph(), feed_fetched_at=FETCHED),
+        vendor_operations_reader=reader,
+    )
+
+    TestClient(app).get("/api/vendors/stripe/operations?repo_id=org%2Fpayments")
+
+    assert seen == [{"vendor_id": "stripe", "repo_id": "org/payments"}]
