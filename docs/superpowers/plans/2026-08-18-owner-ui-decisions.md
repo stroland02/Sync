@@ -63,3 +63,46 @@ workflow, and the workflow gets whatever time is left rather than being traded a
 The three refusals stand: no confidence scalar on the workflow, no health tile on the Overview, no
 status dots in the rail. Answer 5 makes colour richer and answer 6 overturns a lane's judgement, but
 neither touches what the console is allowed to claim.
+
+## Round two — eight more, 2026-08-18
+
+**13. The dependency graph draws everything, with pan, zoom and a minimap.** *Consequence:* it needs
+a real canvas with viewport culling, not a static SVG. This is the largest single build on the list
+and it sits above the fold on the first screen, so it is not deferrable.
+
+**14. The Activity tab shows node summaries that expand to their tool calls.** One line per graph
+node with its outcome; click to open the detail beneath. *Consequence:* scannable first, complete on
+demand — and the expansion is where the evidence lives.
+
+**15. Findings group by kind, breaking first**, under a triage header carrying each count. *That is
+the advisor shape*, applied to the thing this product exists to surface.
+
+**16. Creating a workspace accepts a local path or a git URL.** *Consequence:* Sync clones when given
+a URL — which is the demo case, pointing it at something public on the spot.
+
+**17. Settings uses a left sub-nav, one group at a time.** Codebases, Pull requests, Adapters,
+Connection, About.
+
+**18. Signals leads with attached integrations grouped by role** — vendor, signal source, human
+surface — which is what the screen is already built around, so this confirms rather than changes it.
+
+**19. Indexing finishes on the canvas**, not the Overview. *Consequence, and it raises the canvas's
+priority again:* the file tree with its vendor edges is the payoff screen for the one-command
+install. **The `is this real` moment lands here.**
+
+**20. Where the mock conflicts with any of these answers, the answer wins.**
+
+## The authority order, now settled end to end
+
+`M0-W325` raised the mock to primary for everything it draws. **Answer 20 puts these decisions above
+it.** So, highest first:
+
+1. **The owner's decisions in this document.**
+2. **The specification** for the hierarchy (`console-hierarchy.md`), and `CLAUDE.md` for what may be
+   claimed. *Neither is overridden by anything above.*
+3. **The mock**, for layout — grid tracks, gaps, adjacency, composition.
+4. **Everything else.**
+
+**Recorded conflicts to resolve the mock's way losing:** it draws a Fleet root (answer: workspace-
+scoped) and page headers (answer: removed). A lane finding a new conflict records it here rather than
+resolving it silently.
