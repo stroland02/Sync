@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 import time
+from collections import deque
 from collections.abc import Collection, Iterator, Sequence
 from contextlib import contextmanager
 from datetime import datetime, timezone
@@ -378,35 +379,51 @@ class _EventStream:
 
     Filtering happens here rather than in the publisher because Postgres channel names are
     identifiers and a `repo_id` is not one. A subscriber therefore sees every repository's
-    notification on the wire and forwards only its own -- which is why this class exists at all
-    rather than the route reading the connection directly.
+    notification on the wire and forwards only its own.
+
+    **Notifications land in a deque via a handler rather than being read from a generator, and
+    that is the third shape this took.** A single long-lived `notifies()` generator opened with no
+    timeout blocked forever on a quiet channel, so the heartbeat could never fire -- the transport
+    looked dead exactly when the system was idle. A fresh generator per call with `stop_after=1`
+    fixed the blocking and lost every notification after the first, because closing the generator
+    discards what it had buffered -- and an index run is precisely a burst. A handler owns neither
+    problem: it appends as notifications arrive, and reading is just draining a deque.
     """
 
     def __init__(self, connection, repo_id: str) -> None:
         self._connection = connection
         self._repo_id = repo_id
-        # One generator for the stream's whole life. A fresh `notifies()` per call drops every
-        # notification that arrived while no generator was open, so a burst -- which is exactly
-        # what an index run is -- loses everything after the first.
-        self._notices = connection.notifies()
+        self._pending: deque[dict] = deque()
+        connection.add_notify_handler(self._receive)
+
+    def _receive(self, notice) -> None:
+        self._pending.append(json.loads(notice.payload))
 
     def next(self, timeout: float) -> dict | None:
         """The next event for this repository, or `None` when the timeout passes with none.
 
-        `None` is a real answer rather than an error: a quiet index is quiet, and the caller
-        needs to tell that apart from a broken stream so it can send an SSE keep-alive instead of
-        reporting a drop.
+        `None` is a real answer rather than an error: a quiet index is quiet, and the caller needs
+        to tell that apart from a broken stream so it can send a heartbeat instead of reporting a
+        drop.
+
+        The `SELECT 1` is what makes the handler run. psycopg reads pending notifications while
+        processing a result, so a connection issuing no queries never notices what arrived -- the
+        poll is the price of not holding a blocking generator open.
         """
         deadline = time.monotonic() + timeout
-        while time.monotonic() < deadline:
-            try:
-                notice = next(self._notices)
-            except StopIteration:
+        while True:
+            while self._pending:
+                event = self._pending.popleft()
+                if event.get("repo_id") == self._repo_id:
+                    return event
+            if time.monotonic() >= deadline:
                 return None
-            event = json.loads(notice.payload)
-            if event.get("repo_id") == self._repo_id:
-                return event
-        return None
+            self._connection.execute("SELECT 1")
+            time.sleep(_POLL_SECONDS)
+
+
+# Short enough that an event feels immediate, long enough that a quiet stream is not a busy loop.
+_POLL_SECONDS = 0.05
 
 
 EVENT_CHANNEL = "sync_events"
@@ -780,7 +797,13 @@ class GraphStore:
         finding_id = _stable_id(
             finding.detector, finding.call_site_id, finding.vendor_change_id or "", finding.claim
         )
-        self._connect().execute(
+        site = self._connect().execute(
+            "SELECT repo_id, vendor_id FROM call_site WHERE id = %s", (finding.call_site_id,)
+        ).fetchone()
+        repo_id = site["repo_id"] if site is not None else None
+        vendor_id = site["vendor_id"] if site is not None else None
+
+        cursor = self._connect().execute(
             """
             INSERT INTO finding (id, detector, claim, call_site_id, vendor_change_id, severity,
                                  rationale, status, binding_rung)
@@ -799,6 +822,29 @@ class GraphStore:
                 finding.binding_rung,
             ),
         )
+        # Decision 76's second publisher, and what decision 87's new-findings banner needs to
+        # exist at all.
+        #
+        # `cursor.rowcount` rather than an unconditional publish: `insert_finding` is
+        # `ON CONFLICT DO NOTHING`, so a converging DETECT re-run writes nothing, and an event
+        # tied to the call rather than the write would announce findings nobody opened on every
+        # scheduled pass. A banner that cries wolf once is a banner people turn off.
+        #
+        # The severity travels because 87's banner is a triage prompt: a reader deciding whether
+        # to interrupt themselves needs to know whether the arrival was breaking or an addition,
+        # and a banner that made them open the table to find out would be the worse interruption.
+        # The rung travels for the reason every artifact derived from a binding carries one.
+        if cursor.rowcount:
+            self._publish(
+                {
+                    "kind": "finding.opened",
+                    "repo_id": repo_id,
+                    "finding_id": finding_id,
+                    "vendor_id": vendor_id,
+                    "severity": finding.severity,
+                    "binding_rung": finding.binding_rung,
+                }
+            )
         return finding_id
 
     def call_sites_for_operation(
