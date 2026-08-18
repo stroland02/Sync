@@ -369,3 +369,41 @@ list**, which would have made adding a workspace reachable only through Settings
 
 This is decision 1's *selection is chrome, not content* carried to its component: the switcher is
 where you change scope and start a workspace, Settings is where you manage what exists.
+
+## Round eight: decisions 45-48, owner-selected 2026-08-18
+
+**45. A finding can be dismissed with a reason from a closed vocabulary** — `not used here`,
+`intentional`, `false positive`, `won't fix`. **Dismissed findings stay listed and are filtered out
+by default.**
+
+**This is the first decision in this set that is not a rendering change, and it must not be built as
+one.** It needs a write path and a stored column, so:
+
+- **`schema.sql` declares the grain before the column exists.** One row is one *dismissal of one
+  finding by one person at one time*, not a property of the finding — a finding dismissed and later
+  un-dismissed has two rows and the current state is the latest, because otherwise the console cannot
+  show that somebody changed their mind.
+- **Dismissal is not deletion.** The finding remains, filtered out. `interface-originality.md`'s
+  rule that we take a vocabulary's *shape* and not its *values* applies: this vocabulary comes from
+  Sync's own reviewers, and it is deliberately the same discipline as `abandon_reason` — a closed set
+  because *a promise to learn from dismissals needs a schema that can answer the question*, and free
+  text cannot be aggregated.
+- **`false positive` feeds detector accuracy and nothing else does.** It is the only honest source of
+  that number, and it is exactly what Gate 2's quality axes have no samples for today.
+
+**46. The sidebar rests collapsed and expands on hover.** Icons at rest, full labels when reached
+for. The explicit collapse control stays for pinning it open.
+
+**47. The Pull Request screen leads with the diff**, with `3 files · +12 −9` and the check line
+beneath it. **Rejected: leading with the verification chain**, and **rejected: leading with the
+finding it answers.**
+
+**The constraint that keeps this honest.** Leading with the diff is the reviewer's instinct and it is
+right — but the verification chain is *why this product is different from a bot that opens pull
+requests*, so it sits **visibly below the diff, not behind a disclosure and not in a tooltip**.
+`tsc passed · customer CI: running` is on screen without a click. A run parked on the customer's CI
+still says so rather than reading as passed.
+
+**48. Below its threshold the sidebar collapses itself and the content keeps its width.** Tables keep
+every column and scroll horizontally **inside their own container**, never the page body. **Rejected:
+dropping columns by priority**, which decides for the reader which column mattered.
