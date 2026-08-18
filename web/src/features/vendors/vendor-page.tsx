@@ -48,16 +48,11 @@ export function VendorPage() {
               { label: "Vendor", value: <span className="font-mono">{vendorId}</span> },
               {
                 label: "Repository scope",
-                value:
-                  repoId === null ? (
-                    "Nothing selected one on the way here"
-                  ) : (
-                    <span className="font-mono">{repoId}</span>
-                  ),
+                value: <span className="font-mono">{repoId}</span>,
               },
               {
                 label: "Findings counted over",
-                value: repoId === null ? "Every repository the index has seen" : repoId,
+                value: repoId,
               },
               {
                 label: "Changes counted over",
@@ -68,20 +63,11 @@ export function VendorPage() {
         }
       >
         <div className="flex min-w-0 flex-col gap-section">
-          {repoId === null ? (
-            <p className="max-w-prose text-body text-muted-foreground">
-              Every open finding and every published change for {vendorId}, across every
-              repository the index has seen. Nothing selected a repository on the way here, so
-              this page is in the fleet&apos;s scope rather than one codebase&apos;s — open it from a
-              repository to narrow the findings below.
-            </p>
-          ) : (
-            <p className="max-w-prose text-body text-muted-foreground">
-              Open findings for {vendorId} in <span className="font-mono">{repoId}</span> alone.
-              The vendor changes below are the exception and say so: what {vendorId} published is
-              a fact about the vendor, not about this repository.
-            </p>
-          )}
+          <p className="max-w-prose text-body text-muted-foreground">
+            Open findings for {vendorId} in <span className="font-mono">{repoId}</span> alone. The
+            vendor changes below are the exception and say so: what {vendorId} published is a fact
+            about the vendor, not about this workspace.
+          </p>
         </div>
       </DetailGrid>
 

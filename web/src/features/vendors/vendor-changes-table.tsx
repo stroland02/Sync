@@ -75,12 +75,10 @@ export function VendorChangesCard({
           <p className="max-w-prose">
             What {vendorId} published, whether or not this codebase is affected. Every change
             the feed has recorded, and{" "}
-            {repoId === null ? "not narrowed to any repository" : (
-              <>
-                <span className="font-mono">not</span> narrowed to{" "}
-                <span className="font-mono">{repoId}</span>
-              </>
-            )}
+            <>
+              <span className="font-mono">not</span> narrowed to{" "}
+              <span className="font-mono">{repoId}</span>
+            </>
             : a vendor publishes a change once, to everyone, so this list is the same whichever
             repository you reached it from. To see what it hits here, open an operation's
             binding surface from the table above.
