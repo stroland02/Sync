@@ -18,6 +18,7 @@ import {
 } from "lucide-react"
 import { Link, NavLink, Outlet, useLocation } from "react-router"
 
+import { useRepositories } from "@/api/queries"
 import { ErrorSurface } from "@/components/error-surface"
 import { CommandPaletteProvider, CommandPaletteTrigger } from "@/layouts/command-palette"
 import { ScopeTrail } from "@/layouts/scope-switchers"
@@ -223,7 +224,20 @@ function GroupHeading({ label, minimised }: { label: string; minimised: boolean 
  * content column never moves under a pointer that was only passing through.
  */
 function AppSidebar({ pathname }: { pathname: string }) {
-  const bound = boundParams(pathname)
+  const routeBound = boundParams(pathname)
+  // The install story: this console is set up beside one codebase, so when the graph holds
+  // exactly one repository the sidebar binds every destination through it rather than sending
+  // unbound rows to the picker — a reader is never asked to choose among one. Several
+  // repositories keep the picker, because choosing among several is the operator's act, and
+  // an unanswered repositories query binds nothing rather than guessing.
+  const repositories = useRepositories()
+  const repoIds = repositories.data?.repo_ids ?? []
+  const soleRepoId = repoIds.length === 1 ? repoIds[0] : null
+  const bound =
+    routeBound.repoId === undefined && soleRepoId !== null
+      ? { ...routeBound, repoId: soleRepoId }
+      : routeBound
+  const workspace = bound.repoId ?? null
   // The pin is a stored preference with no control any more: the owner removed the button because
   // hovering is the mechanism, and two ways to open one panel is what made this hard to reason
   // about. It is still read, so a reader who set it before this change is not overruled by it, and
@@ -321,6 +335,15 @@ function AppSidebar({ pathname }: { pathname: string }) {
                 console
               </span>
             </div>
+            {/* Which codebase this console is working with — the install sets it up beside one,
+                so the chrome names it rather than saying "repository" in the abstract. */}
+            {workspace !== null && (
+              <div className={minimised ? "sr-only" : "flex min-w-0 items-center pt-field"}>
+                <span className="truncate font-mono text-meta text-ink-muted" title={workspace}>
+                  {workspace}
+                </span>
+              </div>
+            )}
           </SidebarHeader>
           {/* No scrollbar — owner review item 3, and the compaction above is what makes it honest
               rather than a concealment. The list measures under the viewport at the console's
