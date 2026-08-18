@@ -9,9 +9,11 @@
 import { describe, expect, it } from "vitest"
 
 import type { AbandonmentResponse } from "@/api/types"
+import type { ChartTokens } from "@/components/charts/echart"
 import {
   ABANDON_REASON_CODES,
   abandonReasonDistribution,
+  buildAbandonReasonsOption,
 } from "@/features/runs/abandon-reasons-option"
 
 const response = (groups: AbandonmentResponse["groups"]): AbandonmentResponse => ({ groups })
@@ -104,5 +106,62 @@ describe("abandonReasonDistribution", () => {
 
     expect(result.ranked).toEqual([{ code: "something_new", attempts: 1 }])
     expect(result.undeclaredCodes).toEqual(["something_new"])
+  })
+})
+
+const TOKENS: ChartTokens = {
+  ink: "#fff",
+  inkSecondary: "#ddd",
+  inkMuted: "#aaa",
+  surface: "#000",
+  grid: "#222",
+  axis: "#333",
+  labelOnLight: "#000",
+  series: ["#1", "#2", "#3", "#4", "#5", "#6", "#7", "#8"],
+}
+
+describe("buildAbandonReasonsOption", () => {
+  const option = () =>
+    buildAbandonReasonsOption(
+      abandonReasonDistribution({
+        groups: [
+          {
+            change_kind: "k",
+            tier: 0,
+            attempt_count: 0,
+            distinct_finding_count: 0,
+            abandoned_attempt_count: 0,
+            abandoned_distinct_finding_count: 0,
+            abandon_reason_codes: { locate_failed: 3, push_failed: 1 },
+          },
+        ],
+      }),
+      TOKENS,
+    ) as Record<string, any>
+
+  /**
+   * The requirement, as a test rather than as a reading of the code: colour carries nothing
+   * here. Every bar is named on the category axis and valued by its own label, so the chart
+   * survives a reader who cannot separate two hues — and every bar shares one fill, which is
+   * what makes it impossible for colour to become load-bearing later without this failing.
+   */
+  it("names every bar on the axis, so none depends on its colour", () => {
+    const built = option()
+
+    expect(built.yAxis.data).toEqual(["push_failed", "locate_failed"])
+    expect(built.series[0].label.show).toBe(true)
+  })
+
+  it("gives every bar the same fill, so colour cannot become load-bearing", () => {
+    const built = option()
+
+    expect(built.series).toHaveLength(1)
+    expect(built.series[0].itemStyle.color).toBe(TOKENS.series[0])
+  })
+
+  it("plots the real counts rather than any derived share", () => {
+    const built = option()
+
+    expect(built.series[0].data).toEqual([1, 3])
   })
 })
