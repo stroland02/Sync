@@ -49,11 +49,12 @@ import {
 } from "@/api/types"
 import { FactTile } from "@/components/fact-tile"
 import { Skeleton } from "@/components/skeleton"
+import { RelativeTime } from "@/components/relative-time"
 import { Absent, Formatted } from "@/components/status"
 import { EmptyState, ErrorState, LoadingState } from "@/components/states"
 import { boundedTotalCaveat, describeBoundedTotal } from "@/features/fleet/cardinality"
 import { scopeFromLocation } from "@/layouts/scope-switchers"
-import { formatElapsed, formatTimestamp } from "@/lib/format"
+import { formatTimestamp } from "@/lib/format"
 
 /**
  * Which codebase this screen is about, and how that was decided.
@@ -373,11 +374,18 @@ export function CodebaseFacts({ repoId, scopeNote }: CodebaseFactsProps) {
           note={
             checkpoint === null
               ? "A run is attributed through the change units this codebase's open findings group into, because a run row carries no repository of its own."
-              : `Newest checkpoint ${formatElapsed(checkpoint.at) ?? "at an unreadable time"}. A checkpoint age is staleness, not liveness — it says how old the evidence is, not whether the run is still going.${
-                  checkpoint.complete
-                    ? ""
-                    : " Read across the change units on the first page, ordered by newest finding, not across every change unit in this codebase."
-                }`
+              : (
+                  /* The age is a component rather than an interpolated string, because a string
+                     is formatted once and this note can sit on screen for hours. Decision 38. */
+                  <>
+                    Newest checkpoint <RelativeTime iso={checkpoint.at} />. A checkpoint age is
+                    staleness, not liveness — it says how old the evidence is, not whether the run
+                    is still going.
+                    {checkpoint.complete
+                      ? ""
+                      : " Read across the change units on the first page, ordered by newest finding, not across every change unit in this codebase."}
+                  </>
+                )
           }
         />
       </div>
