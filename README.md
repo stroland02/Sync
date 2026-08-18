@@ -60,17 +60,19 @@ Python built by `uv`, the schema, a fixture, the same console. Nothing elevated,
 machine-wide, and it adopts what a previous run already set up rather than rebuilding it.
 Windows-only today; `B191` carries the rest.
 
-### One command — the goal, and it does not work yet
+### One command — published, and honest about what remains
 
 ```bash
-npx sync-up
+npx @stroland02/sync-up
 ```
 
 This is where the install story ends: that one command, on a machine that has never seen this
-repository, reaching the console password prompt. It is printed as the destination rather than
-an instruction — the package **is not published**, and two steps close the gap: `npm publish`,
-and a prebuilt image for the registry form to pull (`B190`). Until then, the checkout above is
-the same work and runs today.
+repository, reaching the console password prompt. The package is published and the command
+resolves — the registry refused the bare name `sync-up` as too similar to an existing package,
+so it lives under the owner's scope, and the command it installs is still `sync-up`. What it
+can do without a checkout is check your machine and hand you the clone that works; one step
+closes the rest of the gap: a prebuilt image for the registry form to pull (`B190`). Until
+then, the checkout above is the same work and runs today.
 
 ### From source, for working on Sync itself
 

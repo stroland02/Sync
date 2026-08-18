@@ -274,25 +274,38 @@ def test_the_check_never_prints_an_absence_as_a_value():
 
 # -- `CI-W451`: the commands are ours to type ----------------------------------------------
 #
-# The package takes the command's own name, so `npx sync-up` is the whole instruction. What
-# these pin is the decision, so a future edit that quietly re-privatises the package or
-# renames it away from the bin it installs fails a test rather than a demo.
+# The package carries the command's name inside the owner's scope, so `npx @stroland02/sync-up`
+# is the whole instruction and the command it installs is still `sync-up`. What these pin is
+# the decision, so a future edit that quietly re-privatises the package or renames it away
+# from the bin it installs fails a test rather than a demo.
 
 
 def test_the_manifest_is_publishable_under_its_own_name():
     """`private: true` was the right guard while the manifest carried a name that was not ours
-    to publish under. It carries the bin's own name now, verified free on the registry, so the
-    only remaining step is a credential -- and a manifest that still refuses `npm publish`
-    turns the owner's publish into a debugging session."""
+    to publish under. The unscoped name turned out not to be ours either: the first real PUT
+    was refused 403, `sync-up` too similar to an existing `syncup` -- a rule no absent-name
+    lookup reveals, so "verified free on the registry" was true and insufficient. The name is
+    the account-scoped form; the bin keeps the command; and `publishConfig.access` is public
+    because a scoped package defaults to restricted, and a manifest that still refuses
+    `npm publish` turns the owner's publish into a debugging session."""
     manifest = json.loads(PACKAGE_JSON.read_text(encoding="utf-8"))
 
-    assert manifest["name"] == "sync-up", (
-        "the package and the command it installs share a name, so `npx sync-up` is the whole "
-        "instruction; renaming one without the other splits them"
+    assert manifest["name"] == "@stroland02/sync-up", (
+        "the registry refused the unscoped name (403: too similar to `syncup`), so the "
+        "publishable identity is the owner-scoped one; renaming it silently splits the "
+        "README's instruction from what npx can resolve"
     )
-    assert manifest["name"] in manifest["bin"], (
-        "npx runs the bin matching the package name without guessing; a package named after "
-        "no bin makes the one command ambiguous"
+    bare = manifest["name"].rpartition("/")[2]
+    assert bare in manifest["bin"], (
+        "the scope is address, not identity: the command a reader types after install is "
+        "still the bare name, so the bin must carry it"
+    )
+    assert len(manifest["bin"]) == 1, (
+        "npx runs a scoped package's bin without guessing only while there is exactly one"
+    )
+    assert manifest.get("publishConfig", {}).get("access") == "public", (
+        "a scoped package publishes restricted by default; without this, `npm publish` is "
+        "a 402 in front of the owner"
     )
     assert not manifest.get("private", False), (
         "the manifest still refuses to publish; the name is ours and the guard is stale"

@@ -1,6 +1,9 @@
 {
-  "name": "sync-up",
+  "name": "@stroland02/sync-up",
   "version": "0.1.0",
+  "publishConfig": {
+    "access": "public"
+  },
   "description": "Watches the third-party APIs a codebase calls and opens verified pull requests when one breaks. One prerequisite: Docker.",
   "license": "Apache-2.0",
   "type": "module",
