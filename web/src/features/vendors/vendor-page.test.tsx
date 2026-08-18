@@ -22,7 +22,7 @@ function renderVendor(path: string) {
     <QueryClientProvider client={client}>
       <MemoryRouter initialEntries={[path]}>
         <Routes>
-          <Route path="/vendors/:vendorId" element={<VendorPage />} />
+          <Route path="/repositories/:repoId/vendors/:vendorId" element={<VendorPage />} />
         </Routes>
       </MemoryRouter>
     </QueryClientProvider>
@@ -44,7 +44,7 @@ function renderVendor(path: string) {
  */
 describe("VendorPage's order, per decision 29", () => {
   it("leads with what this vendor costs, before what it has done", () => {
-    renderVendor("/vendors/stripe")
+    renderVendor("/repositories/seed-console/vendors/stripe")
 
     const exposure = screen.getByTestId("vendor-exposure")
     const history = screen.getByTestId("vendor-history")

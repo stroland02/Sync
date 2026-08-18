@@ -64,7 +64,7 @@
  */
 
 import { useState } from "react"
-import { useParams, useSearchParams } from "react-router"
+import { useParams } from "react-router"
 
 import { DEFAULT_LIMIT } from "@/api/client"
 import { useBindingSurface } from "@/api/queries"
@@ -146,7 +146,7 @@ function boundCallSites(data: BindingSurfaceResponse): number {
 function operationFacts(
   vendorId: string,
   operationId: string,
-  repoId: string | null,
+  repoId: string,
   data: BindingSurfaceResponse | null,
   failed: boolean
 ): Fact[] {
@@ -183,7 +183,7 @@ function operationFacts(
  * list narrowed by the filter it sets collapses to whatever is already selected. So the screen says
  * which number answers which question instead of leaving a reader to assume they agree.
  */
-function ScopeNote({ repoId }: { repoId: string | null }) {
+function ScopeNote({ repoId }: { repoId: string }) {
   return (
     <p className="max-w-prose text-body text-ink-muted">
       {repoId === null ? null : (
@@ -290,7 +290,7 @@ function CallSitesEmptyState({
   offset,
 }: {
   data: BindingSurfaceResponse
-  repoId: string | null
+  repoId: string
   filters: { label: string; value: string }[]
   offset: number
 }) {
@@ -337,7 +337,7 @@ function BindingSurfaceDetail({
 }: {
   vendorId: string
   operationId: string
-  repoId: string | null
+  repoId: string
 }) {
   const [callSitesOffset, setCallSitesOffset] = useOffsetParam(CALL_SITES_OFFSET_KEY)
   const [changesOffset, setChangesOffset] = useOffsetParam("changes_offset")
@@ -638,10 +638,17 @@ export interface BindingSurfacePageProps {
 }
 
 export function BindingSurfacePage() {
-  const { vendorId, operationId } = useParams<{ vendorId: string; operationId: string }>()
-  const [searchParams] = useSearchParams()
-  if (vendorId === undefined || operationId === undefined) return <UnknownRoute />
-  const repoId = searchParams.get("repo_id")
+  const { vendorId, operationId, repoId } = useParams<{
+    vendorId: string
+    operationId: string
+    repoId: string
+  }>()
+  if (vendorId === undefined || operationId === undefined || repoId === undefined) {
+    return <UnknownRoute />
+  }
+  // **The route is the scope**, and it used to be a query string: this read
+  // `searchParams.get("repo_id")` while the route carries `:repoId`, so an address naming a
+  // workspace could still render a fleet-wide claim -- the screen contradicting its own URL.
   return (
     <BindingSurfaceDetail
       vendorId={vendorId}

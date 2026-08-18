@@ -12,7 +12,7 @@
  * what the vendor published beside where it was read from.
  */
 
-import { useParams, useSearchParams } from "react-router"
+import { useParams } from "react-router"
 
 import { FactList } from "@/components/fact-list"
 import { VendorChangesCard } from "@/features/vendors/vendor-changes-table"
@@ -31,10 +31,11 @@ export interface VendorPageProps {
 }
 
 export function VendorPage() {
-  const { vendorId } = useParams<{ vendorId: string }>()
-  const [searchParams] = useSearchParams()
-  if (vendorId === undefined) return <UnknownRoute />
-  const repoId = searchParams.get("repo_id")
+  // **The route is the scope**, and it used to be a query string: this read
+  // `searchParams.get("repo_id")` while the route carries `:repoId`, so an address naming a
+  // workspace could still render a fleet-wide claim -- the screen contradicting its own URL.
+  const { vendorId, repoId } = useParams<{ vendorId: string; repoId: string }>()
+  if (vendorId === undefined || repoId === undefined) return <UnknownRoute />
 
   return (
     <section className="flex flex-col gap-8">

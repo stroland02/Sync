@@ -358,7 +358,7 @@ function RegistryNote() {
  * page, two panels above the cards it is about, and the second once inside every card. They are
  * one copy each, here, beside the rows they qualify.
  */
-function DetectorCatalogue({ rows, repoId }: { rows: DetectorRow[]; repoId: string | null }) {
+function DetectorCatalogue({ rows, repoId }: { rows: DetectorRow[]; repoId: string }) {
   return (
     <section className="flex min-w-0 flex-col gap-section">
       <div className="flex flex-col gap-field">
@@ -370,11 +370,7 @@ function DetectorCatalogue({ rows, repoId }: { rows: DetectorRow[]; repoId: stri
             and the sentence says so rather than letting the link imply otherwise. */}
         <p className="max-w-prose text-body text-muted-foreground">
           No route filters findings by detector yet. Every open finding, by vendor, is on{" "}
-          {repoId === null ? (
-            <Link to="/" className="underline underline-offset-2">
-              the fleet screen
-            </Link>
-          ) : (
+          {(
             <Link
               to={`/repositories/${encodeURIComponent(repoId)}`}
               className="underline underline-offset-2"
@@ -416,7 +412,7 @@ function DetectorCatalogue({ rows, repoId }: { rows: DetectorRow[]; repoId: stri
   )
 }
 
-export function DetectorAccountability({ repoId = null }: { repoId?: string | null }) {
+export function DetectorAccountability({ repoId }: { repoId: string }) {
   const query = useDetectors(repoId ?? undefined)
 
   if (query.isPending) return <LoadingState what="detector accountability" />

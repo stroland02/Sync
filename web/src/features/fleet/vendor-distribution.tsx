@@ -53,10 +53,10 @@ import { FooterBar } from "@/layouts/footer-bar"
  */
 export function VendorFindingsTable({
   vendors,
-  repoId = null,
+  repoId,
 }: {
   vendors: readonly VendorSummary[]
-  repoId?: string | null
+  repoId: string
 }) {
   return (
     <Table>
@@ -85,7 +85,7 @@ export function VendorFindingsTable({
   )
 }
 
-function vendorHref(vendorId: string, repoId: string | null): string {
+function vendorHref(vendorId: string, repoId: string): string {
   const path = `/vendors/${encodeURIComponent(vendorId)}`
   return repoId === null ? path : `${path}?repo_id=${encodeURIComponent(repoId)}`
 }
@@ -94,8 +94,10 @@ function byOpenFindingCountDescending(a: VendorSummary, b: VendorSummary): numbe
   return b.open_finding_count - a.open_finding_count || a.vendor_id.localeCompare(b.vendor_id)
 }
 
-export function VendorDistributionCard() {
-  const query = useOverview()
+export function VendorDistributionCard({ repoId }: { repoId: string }) {
+  // Scoped, because every page is a workspace's page. This asked `useOverview()` with no argument
+  // and counted every repository the index has seen, which is the show-all the owner ruled out.
+  const query = useOverview(repoId)
 
   return (
     <div className="flex flex-col gap-section">
@@ -133,6 +135,7 @@ export function VendorDistributionCard() {
           ) : (
             <>
               <VendorFindingsTable
+                repoId={repoId}
                 vendors={sliceForDisplay(
                   [...query.data.vendors].sort(byOpenFindingCountDescending),
                 )}

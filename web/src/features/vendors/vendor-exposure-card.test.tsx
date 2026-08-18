@@ -55,7 +55,7 @@ function renderCard(data: VendorOperationsResponse) {
   return render(
     <QueryClientProvider client={client}>
       <MemoryRouter>
-        <VendorExposureCard vendorId="stripe" repoId={data.repo_id} />
+        <VendorExposureCard vendorId="stripe" repoId={data.repo_id ?? "seed-console"} />
       </MemoryRouter>
     </QueryClientProvider>
   )

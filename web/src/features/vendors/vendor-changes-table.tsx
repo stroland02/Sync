@@ -45,17 +45,17 @@ import { FooterBar } from "@/layouts/footer-bar"
 import { formatTimestamp, orAbsent } from "@/lib/format"
 import { useOffsetParam } from "@/lib/use-offset-param"
 
-function bindingSurfaceHref(vendorId: string, operation: string, repoId: string | null): string {
+function bindingSurfaceHref(vendorId: string, operation: string, repoId: string): string {
   const path = `/bindings/vendors/${encodeURIComponent(vendorId)}/operations/${encodeURIComponent(operation)}`
-  return repoId === null ? path : `${path}?repo_id=${encodeURIComponent(repoId)}`
+  return `${path}?repo_id=${encodeURIComponent(repoId)}`
 }
 
 export function VendorChangesCard({
   vendorId,
-  repoId = null,
+  repoId,
 }: {
   vendorId: string
-  repoId?: string | null
+  repoId: string
 }) {
   const [offset, setOffset] = useOffsetParam("changes_offset")
   const query = useVendorChanges(vendorId, { limit: DEFAULT_LIMIT, offset })

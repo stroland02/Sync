@@ -128,9 +128,9 @@ function useVendorFindingFilters() {
   return { severity, setSeverity, pathPrefix, setPathPrefix, order, setOrder, activeFilters, clearAll }
 }
 
-function bindingSurfaceHref(vendorId: string, operation: string, repoId: string | null): string {
+function bindingSurfaceHref(vendorId: string, operation: string, repoId: string): string {
   const path = `/bindings/vendors/${encodeURIComponent(vendorId)}/operations/${encodeURIComponent(operation)}`
-  return repoId === null ? path : `${path}?repo_id=${encodeURIComponent(repoId)}`
+  return `${path}?repo_id=${encodeURIComponent(repoId)}`
 }
 
 function severityOptions(page: VendorFindingsPage): FacetOption[] {
@@ -157,7 +157,7 @@ function FindingsEmptyState({
   offset,
 }: {
   vendorId: string
-  repoId: string | null
+  repoId: string
   page: VendorFindingsPage
   filters: { label: string; value: string }[]
   offset: number
@@ -209,7 +209,7 @@ function FindingsEmptyState({
  */
 function useFindingsPage(
   vendorId: string,
-  repoId: string | null,
+  repoId: string,
   filters: ReturnType<typeof useVendorFindingFilters>,
   offset: number,
 ) {
@@ -240,10 +240,10 @@ function useFindingsPage(
  */
 export function VendorFindingsControls({
   vendorId,
-  repoId = null,
+  repoId,
 }: {
   vendorId: string
-  repoId?: string | null
+  repoId: string
 }) {
   const [offset] = useOffsetParam(OFFSET_KEY)
   const filters = useVendorFindingFilters()
@@ -293,10 +293,10 @@ export function VendorFindingsControls({
 
 export function VendorFindingsCard({
   vendorId,
-  repoId = null,
+  repoId,
 }: {
   vendorId: string
-  repoId?: string | null
+  repoId: string
 }) {
   const [offset, setOffset] = useOffsetParam(OFFSET_KEY)
   const filters = useVendorFindingFilters()
