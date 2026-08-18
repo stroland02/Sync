@@ -297,3 +297,40 @@ true.
 
 **This is a fourth state, and it must not collapse into the other three.** Never-measured, measured
 zero, cannot-tell, and now *not-yet-arrived* are four different facts and each renders as itself.
+
+## Round six: decisions 37-40, owner-selected 2026-08-18
+
+**37. The reply box re-enters the live run.** The agent takes the reply as a turn and keeps working;
+the transcript shows `agent picked this up — running`. **Rejected: posting to the pull request**,
+which would have reused `M10`'s resume-on-review-comment path and kept one channel — rejected because
+it routes a console action through GitHub and back, and the reviewer is already here. **Rejected:
+queue-for-next-attempt.**
+
+**The consequence, and it is not optional to answer.** Re-entering a *live* run says nothing about a
+run that has finished or abandoned, and those are the runs a reviewer most wants to argue with. **The
+control does not disappear** — decision 2's rule stands: *state the refusal, do not omit the
+control*. A finished run shows the box disabled with the reason, and `Retry` beside it. Queuing
+guidance for the next attempt is not built; the box says so rather than pretending.
+
+**38. Relative time, with the exact timestamp on hover and in the `title` attribute.** `14 minutes
+ago`, `3 hours ago`, `Aug 16`.
+
+**The consequence, and this one is a defect if ignored.** A relative string is computed against *now*
+and a console tab is left open for hours. **A component that formats once and never recomputes will
+say `14 minutes ago` at nine in the morning about something from four.** That is the console stating
+a falsehood with total confidence, which is the failure this product exists to replace, arrived at
+through a formatting helper. Relative times **re-render on an interval**, or they are not relative.
+The absolute value carries its offset and is the thing in the `title`, so a copy-paste or a
+screenshot-with-tooltip is unambiguous.
+
+**39. One page-level banner when the API is unreachable, and the panels below render `—`.** Not
+per-panel messages, not stale figures kept on screen. **The banner's sentence is the load-bearing
+part: *nothing on this page is current*.** A dash under a label is the fourth state again — not
+zero, not never-measured, not loading — and the banner is what names it, so the banner is not
+decoration and may not be dismissed while the condition holds.
+
+**40. Dense tables, 50 rows per page, with the footer record count.** Monospace where the cell is an
+identifier. **Rejected: infinite scroll**, which drops the footer count — and the count is not
+ornament here: `1,204 rows` is how a reader knows the page they are looking at is a page.
+`interface-originality.md` lists *a footer bar owning pagination and the record count* among the
+conventions of the form, and this is why.
