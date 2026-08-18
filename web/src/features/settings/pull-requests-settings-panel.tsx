@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 
 import { SettingCard } from "@/features/settings/setting-card"
 import { fetchRepoSettings, updateRepoSettings, type RepoSettingsPayload } from "@/features/settings/api"
+import { useRepositories } from "@/api/queries"
 import { Badge } from "@/vendor/supabase/ui/badge"
 import { Button } from "@/vendor/supabase/ui/button"
 import { Input } from "@/vendor/supabase/ui/input"
@@ -19,6 +20,9 @@ export function PullRequestsSettingsPanel({ repoId }: PullRequestsSettingsPanelP
     queryKey: ["repo-settings", repoId],
     queryFn: ({ signal }) => fetchRepoSettings(repoId, signal),
   })
+
+  const reposQuery = useRepositories()
+  const repos = reposQuery.data?.repositories ?? []
 
   const [mergePolicy, setMergePolicy] = useState<"never" | "when_checks_pass">("never")
   const [mergeMethod, setMergeMethod] = useState<"squash" | "merge" | "rebase">("squash")
@@ -70,7 +74,7 @@ export function PullRequestsSettingsPanel({ repoId }: PullRequestsSettingsPanelP
         </p>
       </div>
 
-      {/* Setting 1: Merge Policy */}
+      {/* Setting 1: Merge Policy — styled matching 10-settings mock */}
       <SettingCard
         title="Merge Policy"
         description={
@@ -100,18 +104,55 @@ export function PullRequestsSettingsPanel({ repoId }: PullRequestsSettingsPanelP
           </div>
         }
         control={
-          <Select
-            value={mergePolicy}
-            onValueChange={(val) => setMergePolicy(val as "never" | "when_checks_pass")}
-          >
-            <SelectTrigger className="w-64 bg-surface border-line">
-              <SelectValue placeholder="Select merge policy" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="never">Never (Human review required)</SelectItem>
-              <SelectItem value="when_checks_pass">When CI checks pass</SelectItem>
-            </SelectContent>
-          </Select>
+          <div className="flex flex-col gap-2 w-full max-w-md">
+            {/* Option 1: when_checks_pass */}
+            <button
+              type="button"
+              onClick={() => setMergePolicy("when_checks_pass")}
+              className={`flex items-start gap-3 p-3 rounded-surface border text-left transition-all ${
+                mergePolicy === "when_checks_pass"
+                  ? "border-foreground/30 bg-surface-muted/80 shadow-sm"
+                  : "border-border hover:bg-surface-muted/40"
+              }`}
+            >
+              <div className="mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full border border-primary">
+                {mergePolicy === "when_checks_pass" && (
+                  <div className="h-2 w-2 rounded-full bg-primary" />
+                )}
+              </div>
+              <div className="flex flex-col">
+                <span className="text-body font-medium text-ink">Merge when CI is green</span>
+                <span className="text-meta text-ink-muted">
+                  Approval is a standing instruction: the merge happens automatically once customer
+                  CI checks pass.
+                </span>
+              </div>
+            </button>
+
+            {/* Option 2: never */}
+            <button
+              type="button"
+              onClick={() => setMergePolicy("never")}
+              className={`flex items-start gap-3 p-3 rounded-surface border text-left transition-all ${
+                mergePolicy === "never"
+                  ? "border-foreground/30 bg-surface-muted/80 shadow-sm"
+                  : "border-border hover:bg-surface-muted/40"
+              }`}
+            >
+              <div className="mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full border border-primary">
+                {mergePolicy === "never" && (
+                  <div className="h-2 w-2 rounded-full bg-primary" />
+                )}
+              </div>
+              <div className="flex flex-col">
+                <span className="text-body font-medium text-ink">Open the pull request only</span>
+                <span className="text-meta text-ink-muted">
+                  Sync stops at the door. Pull requests are opened for manual human review and merge
+                  on the forge.
+                </span>
+              </div>
+            </button>
+          </div>
         }
         footer={
           <>
@@ -228,6 +269,35 @@ export function PullRequestsSettingsPanel({ repoId }: PullRequestsSettingsPanelP
           </>
         }
       />
+
+      {/* Repository Overrides Card — from console-mock 10-settings */}
+      {repos.length > 0 && (
+        <div className="rounded-surface border border-line bg-surface p-4 flex flex-col gap-3">
+          <div className="flex flex-col gap-1">
+            <h3 className="text-meta font-semibold uppercase tracking-wider text-ink-muted">
+              Repository Overrides
+            </h3>
+            <p className="text-meta text-ink-muted">
+              Active pull request merge policies across monitored repositories in this deployment.
+            </p>
+          </div>
+          <div className="flex flex-col divide-y divide-border">
+            {repos.map((r) => (
+              <div
+                key={r.repo_id}
+                className="flex items-center justify-between py-2 text-meta first:pt-0"
+              >
+                <span className="font-mono text-ink">{r.repo_id}</span>
+                <span className="text-ink-muted">
+                  {r.repo_id === repoId
+                    ? `${mergePolicy === "when_checks_pass" ? "merge when green" : "open only"}`
+                    : "open only"}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   )
 }
