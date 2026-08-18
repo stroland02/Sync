@@ -71,25 +71,29 @@ def test_the_readme_states_the_publication_fact_one_way_or_the_other():
     )
 
 
-def test_an_unpublished_command_is_not_printed_for_a_visitor_to_run():
-    """A command that cannot resolve must not appear as a command.
+def test_an_unpublished_command_is_printed_only_beside_its_own_status():
+    """The command may appear before it works, but never without saying so.
 
-    This began as *the README must say the command does not work*, which was too weak: a
-    paragraph underneath does not help a reader who copied the first line of a code block. An
-    unpublished name is also a squattable one, so the printed command would either 404 or
-    install whatever somebody else registered under it in the meantime.
+    An earlier form forbade printing the command at all while unpublished. **Overruled by the
+    owner on 2026-08-18: the one command is the product's headline, and a goal stated as a goal
+    is honest.** What survives the ruling is the pairing — a reader who copies the block must
+    have just read, in the same section, that it does not work yet. The heading carries it, so
+    it cannot be skipped the way a paragraph underneath can.
 
-    Publishing retires this by one edit: remove the not-published sentence, print the command,
-    and both tests flip together.
+    Publishing retires this by one edit: remove the not-published sentence and the goal marker
+    together, and the guard goes quiet on its own.
     """
     if not _readme_says_it_is_not_published():
         return
 
     manifest = _manifest()
-    assert f"npx {manifest['name']}" not in _readme(), (
-        f"the README prints `npx {manifest['name']}` as something to run while also saying the "
-        "package is not published -- one of the two statements is wrong, and a visitor acts on "
-        "the code block"
+    if f"npx {manifest['name']}" not in _readme():
+        return
+
+    assert "does not work yet" in _readme(), (
+        f"the README prints `npx {manifest['name']}` while the package is unpublished and "
+        "nothing beside it says so -- a visitor acts on the code block, so the block's own "
+        "section must carry the status in plain words"
     )
 
 
