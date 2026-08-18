@@ -66,6 +66,7 @@ import type { ObservedTelemetryResponse } from "@/api/types"
 import { MetricPanel } from "@/components/metric-panel"
 import { RungBadge } from "@/components/provenance"
 import { EmptyState, ErrorState, LoadingState } from "@/components/states"
+import { formatTimestamp } from "@/lib/format"
 import { ErrorWindowsTable } from "@/features/telemetry/error-windows-table"
 import { ObservedCallsTable } from "@/features/telemetry/observed-calls-table"
 import { ObservedShapesTable } from "@/features/telemetry/observed-shapes-table"
@@ -100,8 +101,9 @@ function TelemetryRungNote({ data }: { data: ObservedTelemetryResponse }) {
   if (data.calls.total === 0) {
     return (
       <p className="max-w-prose text-body text-muted-foreground">
-        No call has ever been observed for this repository — silence, not a measured zero:
-        nothing here says whether a traffic source was ever watching.
+        {data.telemetry_attached_at === null
+          ? "No call has ever been observed for this repository — silence, not a measured zero: no traffic source was ever attached to watch."
+          : "No call has been observed for this repository, and a traffic source was watching — a measured zero rather than silence."}
       </p>
     )
   }
@@ -122,7 +124,7 @@ function TelemetryRungNote({ data }: { data: ObservedTelemetryResponse }) {
   )
 }
 
-function ObservedTelemetryCard({ repoId }: { repoId: string }) {
+export function ObservedTelemetryCard({ repoId }: { repoId: string }) {
   const [callsOffset, setCallsOffset] = useOffsetParam("calls_offset")
   const [shapesOffset, setShapesOffset] = useOffsetParam("shapes_offset")
   const [errorWindowsOffset, setErrorWindowsOffset] = useOffsetParam("error_windows_offset")
@@ -164,10 +166,20 @@ function ObservedTelemetryCard({ repoId }: { repoId: string }) {
         >
           <TelemetrySection title="Calls">
             {query.data.calls.total === 0 ? (
-              <EmptyState
-                headline="No call has been observed for this repository."
-                detail="The API answered with an empty list. Either nothing has watched this repository's traffic, or nothing arrived while it was watching — this view cannot tell the two apart."
-              />
+              /* Two facts, and they are not the same screen. `telemetry_attached_at` is what
+                 separates them, and before the payload carried it this card genuinely could not
+                 and said so. Saying so now would be claiming a limit that no longer exists. */
+              query.data.telemetry_attached_at === null ? (
+                <EmptyState
+                  headline="Telemetry was never attached to this repository."
+                  detail="Nothing has watched this repository's traffic, so there is nothing to have observed. This is the absence of a measurement rather than a measurement of nought — no call site here has been shown unexercised, only unwatched."
+                />
+              ) : (
+                <EmptyState
+                  headline="Telemetry is attached, and no call arrived."
+                  detail={`Traffic has been watched for this repository since ${formatTimestamp(query.data.telemetry_attached_at)}, and nothing arrived in the window this answer covers. That is a measured nought: the call sites the index found were not exercised, rather than not looked at.`}
+                />
+              )
             ) : (
               <>
                 <ObservedCallsTable calls={query.data.calls.items} />
@@ -219,10 +231,17 @@ function ObservedTelemetryCard({ repoId }: { repoId: string }) {
               this view does not compute one.
             </p>
             {query.data.error_windows.total === 0 ? (
-              <EmptyState
-                headline="No error window recorded for this repository."
-                detail="Either nothing has tracked errors for this repository, or nothing tracked ever recorded a window — this view cannot tell the two apart."
-              />
+              query.data.telemetry_attached_at === null ? (
+                <EmptyState
+                  headline="Telemetry was never attached, so no error window could be recorded."
+                  detail="Nothing has watched this repository's traffic. An empty table here is the absence of a measurement, not a repository that ran without failing."
+                />
+              ) : (
+                <EmptyState
+                  headline="No error window recorded for this repository."
+                  detail="A traffic source has been watching and recorded no failure window in the period this answer covers. That is a measured nought, and it is still not a success rate — this view has no denominator and does not compute one."
+                />
+              )
             ) : (
               <>
                 <ErrorWindowsTable windows={query.data.error_windows.items} />
