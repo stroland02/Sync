@@ -3555,3 +3555,4 @@ records all nine reached with the heading, the group labels and the active row c
 
 
 
+| CI-W399 | Dashboard 7 -- observed-call volume per operation -- as a propless mountable card against `GET /api/repositories/{id}/observed`, never-measured rendered apart from zero | claimed | `web/src/features/dashboards/` |
