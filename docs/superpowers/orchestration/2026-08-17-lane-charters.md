@@ -39,6 +39,27 @@ that was already stale in their working tree.
 
 Take your numbers from your own block. Nobody else will.
 
+**Superseded 2026-08-18: the register allocates, not the block.** Pre-allocated blocks are what
+this section describes and they failed twice by exhaustion (`M0-W288`, `M0-W295`) and then failed a
+third way: with five lanes landing several units an hour, a lane computing *the next number* by
+reading `WORKLOG` on `main` reads a value that is stale before it writes. `CI-W378`, `CI-W379` and
+`CI-W380` each name **two different changes** on `main` right now.
+
+**So the row is the allocation, and the push is the lock:**
+
+1. **Append your row to `WORKLOG.md` first**, before the work — which is what `CLAUDE.md` already
+   says.
+2. **Push that one-line commit immediately**, on its own.
+3. **Then do the work.**
+
+A second lane taking the same number now loses the race at `git push` and picks another. **The
+collision becomes a push conflict instead of two rows nobody notices**, which is the whole point: a
+number that identifies two changes fails silently, and a rejected push does not.
+
+The blocks below stay as a starting hint for where to look. They are no longer a guarantee.
+
+
+
 | Lane | Work items | Backlog items |
 |---|---|---|
 | A -- remediation loop | W240-W259 | B140-B144 |
