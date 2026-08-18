@@ -871,3 +871,50 @@ def vendor_operation_exposure(
             for row in operations
         ],
     }
+
+
+def findings_by_kind_over_time(store: GraphStore, *, repo_id: str | None = None) -> dict:
+    """Dashboard 1: what Sync produced, by severity, by the day it was recorded.
+
+    **The date is when Sync first recorded the claim, not when the vendor published the change
+    behind it**, and that is the misreading this view exists to pre-empt. A reader looking at
+    dated bars of API findings assumes the vendor's timeline; what this draws is Sync's. The two
+    diverge by however long a feed took to arrive and a detector took to run, and nothing here
+    can close that gap -- `vendor_change.detected_at` is the nearest thing to a publication date
+    and it is a detection date too.
+
+    The date is meaningful at all only because `upsert_finding` is `ON CONFLICT DO NOTHING`. Were
+    it an upsert that touched the row, every re-run of DETECT would restamp the whole table to
+    today and this series would be a picture of the last run rather than of the history.
+
+    **Counts every finding recorded, including ones since closed.** A series filtered to still-open
+    findings rewrites its own past as work lands. `still_open` carries the other question rather
+    than replacing this one.
+
+    **A day with no findings is absent, not a zero.** Nothing in this graph records that DETECT
+    ran, so a gap is a day nothing was recorded -- which may be a day with no changes or a day
+    with no run, and those are different facts. Emitting a zero would assert the first. The same
+    rule holds inside a day: `counts` carries only the severities that occurred, because filling
+    the closed vocabulary out to five zeroes would assert four measurements nobody took.
+
+    `severities` echoes the closed vocabulary so a reader can tell a kind at nought from a kind
+    that does not exist, and `by_rung` carries what the whole window's findings rest on, because
+    every derived figure carries its rung and a stacked bar cannot show one per bar and stay
+    readable.
+    """
+    rows = store.findings_recorded_by_day_and_severity(repo_id=repo_id)
+
+    days: list[dict] = []
+    for row in rows:
+        if not days or days[-1]["day"] != row["day"]:
+            days.append({"day": row["day"], "counts": {}})
+        days[-1]["counts"][row["severity"]] = row["n"]
+
+    return {
+        "repo_id": repo_id,
+        "severities": list(SEVERITY_ORDER),
+        "days": days,
+        "by_rung": store.findings_rung_counts(repo_id=repo_id),
+        "total": sum(row["n"] for row in rows),
+        "still_open": store.findings_still_open_count(repo_id=repo_id),
+    }

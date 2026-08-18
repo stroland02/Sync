@@ -92,6 +92,33 @@ changes the page already fetches. The lane that owns the dashboards owns the API
 this is one lane's plan rather than two — but that ownership was the reason to check, not a licence
 to assume.
 
+## Ruling, 2026-08-18 (`CI-W401`): three of the nine are not built, and that is the answer
+
+Coordinator-confirmed after Lane I assessed each against what the tree already renders. **These
+are closed rather than outstanding**, and a later reader should not pick them up as gaps.
+
+- **8, index freshness — already built.** `web/src/features/fleet/codebase-facts.tsx` renders the
+  newest `indexed_at` across the vendors a codebase's coverage reports, with its age. The plan
+  already said this one is "not a chart: a single dated fact with its age", and that is what
+  exists.
+- **3, call sites per vendor — refused as a duplicate.** `by_vendor` already renders on the
+  Codebase screen in `web/src/features/repositories/index-coverage-card.tsx`. A second per-vendor
+  visual of the same figure is the fact-written-twice defect, and this repository has a ruling
+  against exactly that shape on the record: `corpus-chart.tsx`'s own docstring records two KPI
+  figures being removed from it for putting one number on screen twice at the same weight.
+  Whether that list should *become* bars is a question about that card, and it belongs to the lane
+  that owns it.
+- **2, bindings by rung — partially built, and the rest needs API work.**
+  `web/src/features/detectors/rung-composition-chart.tsx` already charts rung composition, per
+  detector, on the Detectors screen. The plan wants it on Overview and Codebase, and
+  `OverviewResponse` carries no bindings-by-rung field, so the remainder is a payload change on a
+  screen this lane does not own rather than a chart nobody drew.
+
+**Built by `CI-W399` and `CI-W401`:** 7 (observed-call volume per operation) and 1 (findings by
+kind over time). **Built earlier:** 4, 5, 6 and 9. With 8 already present, the plan's nine are
+answered except for 2's Overview half and 3's chart form, both of which are now a question for the
+lanes owning those screens.
+
 ## Component
 
 `chart` is in the batch Lane B is vendoring (`M0-W326`). **Do not hand-roll SVG** while that lands.

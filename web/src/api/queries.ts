@@ -21,6 +21,7 @@ import {
   fetchRepositoryObserved,
   fetchRuns,
   fetchAbandonment,
+  fetchFindingsOverTime,
   fetchVendorChangeVolume,
   fetchVendorChanges,
   fetchVendorOperations,
@@ -85,6 +86,13 @@ export function useVendorFindings(vendorId: string, params: VendorFindingsParams
         { limit, offset, repoId: params.repoId, severity, path, order },
         signal,
       ),
+  })
+}
+
+export function useFindingsOverTime(repoId: string | null) {
+  return useQuery({
+    queryKey: ["findings", "over-time", repoId],
+    queryFn: ({ signal }) => fetchFindingsOverTime(repoId, signal),
   })
 }
 

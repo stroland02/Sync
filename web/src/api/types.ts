@@ -911,3 +911,30 @@ export interface VendorChangeVolumeResponse {
   newest_change_at: string | null
   oldest_change_at: string | null
 }
+
+/**
+ * `GET /api/findings/over-time`: what Sync produced, by severity, by the day it recorded it.
+ *
+ * **The day is when Sync first recorded the claim, not when the vendor published the change.**
+ * A reader looking at dated bars of API findings assumes the vendor's timeline; this is Sync's,
+ * and the two diverge by however long a feed took to arrive and a detector took to run.
+ */
+export interface FindingsOverTimeDay {
+  day: string
+  /** Only the severities that occurred. A severity absent here had none that day. */
+  counts: Record<string, number>
+}
+
+export interface FindingsOverTimeResponse {
+  repo_id: string | null
+  /** The closed severity vocabulary, echoed so a kind at nought differs from one that cannot be. */
+  severities: string[]
+  /** Only days something was recorded. A gap is a day nothing was recorded, never a zero. */
+  days: FindingsOverTimeDay[]
+  /** What the window's findings rest on. Every derived figure carries its rung. */
+  by_rung: Record<string, number>
+  /** Every finding recorded, including ones since closed. */
+  total: number
+  /** How many of them are still open, reported beside the series rather than folded into it. */
+  still_open: number
+}

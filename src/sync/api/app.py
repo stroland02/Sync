@@ -78,6 +78,8 @@ ObservedReader = Callable[..., dict[str, Any]]
 # Takes the repository scope as a keyword so it composes with the vendor rather than
 # replacing it -- the same rule the severity breakdown follows one route above.
 VendorOperationsReader = Callable[..., dict[str, Any]]
+# Dashboard 1's dated aggregate. Keyword-only scope, like every other narrowing reader.
+FindingsOverTimeReader = Callable[..., dict[str, Any]]
 DetectorReader = Callable[[], dict[str, Any]]
 
 # The adapter inventory backs `sync.dashboard.adapters.adapter_inventory`. It takes no
@@ -188,6 +190,7 @@ def create_app(
     change_volume_reader: ChangeVolumeReader,
     observed_reader: ObservedReader,
     vendor_operations_reader: VendorOperationsReader,
+    findings_over_time_reader: FindingsOverTimeReader,
     detector_reader: DetectorReader,
     adapters_reader: AdaptersReader,
     severity_reader: SeverityReader,
@@ -328,6 +331,13 @@ def create_app(
         since = request.query_params.get("since")
         page = surface.whats_changed(vendor=vendor_id, since=since, limit=limit, offset=offset)
         return JSONResponse(page)
+
+    async def findings_over_time(request: Request) -> JSONResponse:
+        # `repo_id` narrows and is optional: absent means every repository the index has
+        # seen, which is a wider true answer rather than a missing one.
+        return JSONResponse(
+            findings_over_time_reader(repo_id=request.query_params.get("repo_id"))
+        )
 
     async def vendor_operations(request: Request) -> JSONResponse:
         # Decision 29's opening answer for the vendor page. `repo_id` narrows and is optional:
@@ -536,6 +546,9 @@ def create_app(
         Route("/api/vendors/{vendor_id}", vendor_detail, methods=["GET"]),
         Route("/api/vendors/{vendor_id}/changes", vendor_changes, methods=["GET"]),
         Route("/api/vendors/{vendor_id}/operations", vendor_operations, methods=["GET"]),
+        # Before `{finding_id}`: Starlette matches in declaration order, so a literal
+        # segment registered after a path parameter is swallowed by it.
+        Route("/api/findings/over-time", findings_over_time, methods=["GET"]),
         Route("/api/findings/{finding_id}", finding_detail, methods=["GET"]),
         Route("/api/workflows/{finding_id}", workflow, methods=["GET"]),
         Route("/api/runs", runs, methods=["GET"]),
