@@ -211,3 +211,62 @@ def test_a_missing_docker_and_a_stopped_docker_are_told_apart(cli_status, daemon
         assert expected in verdict["message"], (
             f"a reader gets the wrong explanation for this failure: {verdict['message']!r}"
         )
+
+
+# -- `--check`: what this machine needs, before anything is fetched -----------------------
+#
+# `CI-W445` and `CI-W446` decided both install lifecycles and nothing called either, which by
+# the standing rule means neither shipped. This is their caller. It is also the only honest
+# thing buildable before the download and the process spawn exist -- the decisions are real
+# now, the actions are not, and the output has to keep that difference.
+
+
+def _run_check() -> subprocess.CompletedProcess:
+    node = _node()
+    if node is None:
+        pytest.skip("node is absent from this machine, and this executes the doorbell itself")
+    return subprocess.run(
+        [node, str(DOORBELL), "--check"],
+        capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=120,
+        env={**os.environ, "PYTHONIOENCODING": "utf-8"},
+    )
+
+
+def test_the_check_reports_what_an_install_would_do_rather_than_what_it_did():
+    """Every action is framed as a `would`, because none of it is implemented.
+
+    A check that listed four confident lines would read as a readiness report, and the
+    install it describes cannot yet download anything or start a process.
+    """
+    result = _run_check()
+
+    assert result.returncode == 0, result.stderr
+    assert "would:" in result.stdout
+
+
+def test_the_check_states_what_is_not_built_every_time():
+    """Stated unconditionally rather than only when something is missing.
+
+    Decision 99 forbids reporting anything working that has not been run on a clean machine.
+    A caveat that appeared only on failure would be absent exactly when the output looks
+    most like success.
+    """
+    stdout = _run_check().stdout
+
+    assert "has been done" in stdout
+    assert "not written yet" in stdout
+    assert "never had this repository" in stdout
+
+
+def test_the_check_never_prints_an_absence_as_a_value():
+    """`runs Python null` was real output from the first version of this command.
+
+    A probe that fails leaves a hole, and a hole rendered where a version goes is the
+    absence-as-a-value defect this console refuses on screen. It is no better in a terminal,
+    and a terminal is where nobody is reviewing the wording.
+    """
+    stdout = _run_check().stdout
+
+    assert "null" not in stdout
+    assert "undefined" not in stdout
+

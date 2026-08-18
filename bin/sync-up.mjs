@@ -16,13 +16,22 @@
  */
 
 import { spawn, spawnSync } from "node:child_process"
-import { existsSync } from "node:fs"
+import { createHash } from "node:crypto"
+import { existsSync, readFileSync } from "node:fs"
+import { uvVerdict, environmentVerdict } from "./python-bootstrap.mjs"
+import { previousRunVerdict, cacheVerdict } from "./embedded-postgres.mjs"
 import { dirname, join } from "node:path"
 import { fileURLToPath } from "node:url"
 
 const REPO_ROOT = join(dirname(fileURLToPath(import.meta.url)), "..")
 const COMPOSE_FILE = "docker-compose.demo.yml"
 const CONSOLE_URL = "http://127.0.0.1:4173"
+// Written by the installer once it exists. Absent means no zero-prerequisite install has run
+// here, which is a different fact from one that ran and left nothing behind.
+const INSTALL_RECORD = ".sync-install.json"
+const WANTED_PYTHON = "3.12"
+const WANTED_POSTGRES = "16.4"
+const MINIMUM_UV = "0.5.0"
 
 /**
  * Whether `docker compose` is usable, and if not, which half is wrong.
@@ -56,8 +65,113 @@ export function dockerDiagnosis(cliProbe, daemonProbe) {
   return { ok: true }
 }
 
+/**
+ * What a zero-prerequisite install would do on this machine, without doing any of it.
+ *
+ * Decisions 97 and 98 decided both lifecycles and `CI-W445`/`CI-W446` built them; this is what
+ * calls them. It is also the only honest thing that can be built before the download and the
+ * process spawn exist: the decisions are real and testable now, the actions are not.
+ *
+ * **Every action is reported as something it WOULD do.** The verdict messages are written in
+ * the voice of an install that is running -- *Fetching it*, *Reusing the environment* -- so
+ * they are printed under a heading that says so rather than reworded here. Rewording would put
+ * the same sentence in two files, and the copy that drifts is always the one further from the
+ * decision.
+ *
+ * Decision 99 keeps the `docker compose` path supported while the replacement is unproven, so
+ * Docker is reported as a fact about this machine rather than as a failure.
+ */
+export function preflight({ docker, uv, environment, postgres }) {
+  const supported = docker.ok
+    ? "Docker is usable, so the supported install path works on this machine today."
+    : `Docker is not usable here: ${docker.message.split("\n")[0]}`
+
+  return {
+    supported,
+    heading: "A zero-prerequisite install would:",
+    actions: [uv.message, environment.message, postgres.message],
+    // Stated every time rather than only when something is missing. A check that lists four
+    // confident lines and omits what is unbuilt reads as a readiness report.
+    caveat:
+      "None of the above has been done: the download, the process start and the port bind are " +
+      "not written yet, and nothing here has been run on a machine that never had this " +
+      "repository. This says what the decisions are, not that the install works.",
+  }
+}
+
 function probe(args) {
   return spawnSync("docker", args, { stdio: "ignore", shell: false })
+}
+
+function installRecord() {
+  const path = join(REPO_ROOT, INSTALL_RECORD)
+  if (!existsSync(path)) return null
+  try {
+    return JSON.parse(readFileSync(path, "utf-8"))
+  } catch {
+    // A record we cannot read is not a record. Treating a corrupt one as absent is right:
+    // the install can rebuild, and pretending to know what it said would be worse.
+    return null
+  }
+}
+
+function uvProbe() {
+  const result = spawnSync("uv", ["--version"], { encoding: "utf-8", shell: false })
+  if (result.error || result.status !== 0) return null
+  const match = /([0-9]+\.[0-9]+(?:\.[0-9]+)?)/.exec(result.stdout ?? "")
+  return match ? match[1] : null
+}
+
+function environmentProbe(record) {
+  const venv = join(REPO_ROOT, ".venv")
+  const lock = join(REPO_ROOT, "uv.lock")
+  const lockDigest = existsSync(lock)
+    ? createHash("sha256").update(readFileSync(lock)).digest("hex")
+    : null
+  let pythonVersion = null
+  const cfg = join(venv, "pyvenv.cfg")
+  if (existsSync(cfg)) {
+    // `version_info = 3.12.10`, and the pin is on the minor: uv writes the patch it happened
+    // to fetch, and rebuilding an environment because a patch moved would be noise.
+    const found = /version_info\s*=\s*([0-9]+\.[0-9]+)/.exec(readFileSync(cfg, "utf-8"))
+    pythonVersion = found ? found[1] : null
+  }
+  return {
+    exists: existsSync(venv),
+    lockDigest,
+    recordedDigest: record?.lockDigest ?? null,
+    pythonVersion,
+    wantedPython: WANTED_PYTHON,
+  }
+}
+
+function runCheck() {
+  const record = installRecord()
+  const docker = dockerDiagnosis(probe(["compose", "version"]), probe(["info"]))
+  const report = preflight({
+    docker,
+    uv: uvVerdict({ foundVersion: uvProbe(), minimumVersion: MINIMUM_UV }),
+    environment: environmentVerdict(environmentProbe(record)),
+    postgres: previousRunVerdict({
+      record: record?.postgres ?? null,
+      alive: false,
+      wantedVersion: WANTED_POSTGRES,
+    }),
+  })
+
+  process.stdout.write(
+    `
+${report.supported}
+
+${report.heading}
+` +
+      report.actions.map((line) => `  - ${line}
+`).join("") +
+      `
+${report.caveat}
+
+`,
+  )
 }
 
 function main() {
@@ -73,6 +187,11 @@ function main() {
   if (!diagnosis.ok) {
     process.stderr.write(`\n${diagnosis.message}\n\n`)
     process.exit(1)
+  }
+
+  if (process.argv.includes("--check")) {
+    runCheck()
+    return
   }
 
   const down = process.argv.includes("down")

@@ -88,12 +88,34 @@ export function environmentVerdict({
       message: `Creating the Python ${wantedPython} environment and installing dependencies.`,
     }
   }
+  // An interpreter we could not read is not an interpreter we know to be wrong, and it must
+  // not be printed as one. Rendering `null` where a version goes is the absence-as-a-value
+  // defect this project refuses on screen; it is no better in a terminal.
+  if (!pythonVersion) {
+    return {
+      action: REBUILD,
+      message:
+        "There is an environment here but its Python version could not be read, so it cannot " +
+        `be shown to be the pinned ${wantedPython}. Rebuilding rather than assuming.`,
+    }
+  }
   if (pythonVersion !== wantedPython) {
     return {
       action: REBUILD,
       message:
         `The existing environment runs Python ${pythonVersion} and this needs ${wantedPython}. ` +
         "Rebuilding it rather than running against the wrong interpreter.",
+    }
+  }
+  // No record is not a changed lockfile, and saying so would be a nearly-right label: this
+  // environment was built by something other than this installer -- a developer's `uv sync`,
+  // most likely -- and what is unknown is what it was built from, not that it drifted.
+  if (!recordedDigest) {
+    return {
+      action: REBUILD,
+      message:
+        "An environment exists here but this installer did not build it, so there is no record " +
+        "of which lockfile it came from. Rebuilding, because unknown is not the same as current.",
     }
   }
   if (recordedDigest !== lockDigest) {

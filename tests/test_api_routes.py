@@ -2185,7 +2185,6 @@ _NOT_YET_FETCHED_BY_CONSOLE = {
     "/api/corpus/health",  # M12-W323: corpus health view model and route only, panel not yet scheduled
     "/api/repos/{param}/context",  # B126 Task 5: route only, the console screen is M7's line
     "/api/findings",  # Scoped codebase findings: route ready for upcoming Codebase Overview findings view
-    "/api/repositories/{param}/findings",
     "/api/repos/{param}/findings",
     "/api/repositories/{param}/settings",
     "/api/repos/{param}/settings",

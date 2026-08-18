@@ -140,3 +140,35 @@ def test_a_missing_version_component_counts_as_zero(older, newer):
     """`0.5` against `0.5.11` is the comparison a naive string compare gets backwards."""
     assert _call(f"m.isOlder({older!r}, {newer!r})") is True
     assert _call(f"m.isOlder({newer!r}, {older!r})") is False
+
+
+def test_an_environment_this_installer_did_not_build_says_so_rather_than_blaming_the_lockfile():
+    """A nearly-right label, caught by running the check rather than by reading the code.
+
+    With no record, the first version reported *the lockfile has changed since this
+    environment was built* -- which is false and misleading in the same breath. The
+    environment was built by a developer's own `uv sync`; what is unknown is what it came
+    from, not that it drifted. A reader told the lockfile changed goes looking at the
+    lockfile.
+    """
+    verdict = _env(recordedDigest="null")
+
+    assert verdict["action"] == "rebuild"
+    assert "did not build it" in verdict["message"]
+    assert "unknown is not the same as current" in verdict["message"]
+    assert "lockfile has changed" not in verdict["message"]
+
+
+def test_an_unreadable_interpreter_is_not_printed_as_a_version():
+    """`runs Python null` is the absence-as-a-value defect, in a terminal instead of on screen.
+
+    Found by running the check against this repository, where the probe was reading the wrong
+    key out of pyvenv.cfg. The probe was fixed; this pins the module against rendering the
+    hole even when a probe fails again.
+    """
+    verdict = _env(pythonVersion="null")
+
+    assert verdict["action"] == "rebuild"
+    assert "null" not in verdict["message"]
+    assert "could not be read" in verdict["message"]
+
