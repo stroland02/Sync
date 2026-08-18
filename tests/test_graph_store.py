@@ -1603,3 +1603,70 @@ def test_two_genuine_decisions_at_different_times_are_two_rows(store):
 
     assert store.dismissal_history_count(finding_id) == 2
     assert store.dismissal_state(finding_id)["dismissed"] is False
+
+
+# -- index_run: decision 41's durable half -----------------------------------------------------
+#
+# A toast may announce "Index finished, 1,204 call sites" but must never be the only place that
+# fact exists. `call_site.indexed_at` says rows exist, which cannot tell a pass that finished from
+# one that died halfway -- and that difference is exactly what a reader needs before trusting a
+# count. One row per pass, per repository.
+
+
+def test_a_repository_never_indexed_has_no_pass(store):
+    # Absence rather than a zeroed row. Never-indexed and indexed-and-found-nothing are different
+    # facts, and this is the one the console keeps apart everywhere else.
+    assert store.latest_index_run("r1") is None
+
+
+def test_a_finished_pass_reports_what_it_wrote(store):
+    store.start_index_run("r1", started_at=SEEN)
+    store.finish_index_run("r1", started_at=SEEN, finished_at=SEEN, call_sites=1204)
+
+    run = store.latest_index_run("r1")
+
+    assert run is not None
+    assert run["finished_at"] is not None
+    assert run["call_sites"] == 1204
+
+
+def test_a_pass_that_never_finished_is_distinguishable_from_one_that_did(store):
+    """The whole reason this is a table and not a timestamp on `call_site`. A pass that died
+    halfway leaves rows behind, so a count taken from those rows would read as a completed index
+    of a smaller codebase."""
+    store.start_index_run("r1", started_at=SEEN)
+
+    run = store.latest_index_run("r1")
+
+    assert run is not None
+    assert run["finished_at"] is None
+    assert run["call_sites"] is None
+
+
+def test_the_latest_pass_wins_and_the_earlier_ones_are_kept(store):
+    later = datetime(2026, 7, 21, 12, tzinfo=timezone.utc)
+    store.start_index_run("r1", started_at=SEEN)
+    store.finish_index_run("r1", started_at=SEEN, finished_at=SEEN, call_sites=10)
+    store.start_index_run("r1", started_at=later)
+    store.finish_index_run("r1", started_at=later, finished_at=later, call_sites=12)
+
+    assert store.latest_index_run("r1")["call_sites"] == 12
+    assert store.index_run_count("r1") == 2
+
+
+def test_one_pass_is_scoped_to_its_own_repository(store):
+    store.start_index_run("r1", started_at=SEEN)
+    store.finish_index_run("r1", started_at=SEEN, finished_at=SEEN, call_sites=7)
+
+    assert store.latest_index_run("r2") is None
+
+
+def test_replaying_the_same_pass_converges(store):
+    """`CLAUDE.md`: every stage is idempotent, every table gets a natural key and an explicit
+    conflict clause. Re-running INDEX over the same input converges on the same rows, so one pass
+    started at one instant is one row however many times it is recorded."""
+    store.start_index_run("r1", started_at=SEEN)
+    store.start_index_run("r1", started_at=SEEN)
+    store.finish_index_run("r1", started_at=SEEN, finished_at=SEEN, call_sites=3)
+
+    assert store.index_run_count("r1") == 1

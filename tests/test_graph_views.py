@@ -2125,3 +2125,56 @@ def test_a_payload_too_large_to_notify_degrades_to_a_signal_rather_than_failing(
     assert received["kind"] == "call_site.indexed.unsent"
     assert received["repo_id"] == "r1"
     assert "path" not in received
+
+
+def test_a_new_finding_publishes_an_event_carrying_its_severity_and_rung(store):
+    """Decision 76's second publisher, and what decision 87's new-findings banner needs.
+
+    The severity rides along because 87's banner is a triage prompt -- a reader deciding whether
+    to interrupt what they are doing needs to know whether the arrival was breaking or an
+    addition, and a banner that made them open the table to find out would be a worse interruption
+    than no banner.
+    """
+    store.upsert_call_site(_site())
+    sites = store.replace_call_sites("r1", [_site()])
+
+    with store.subscribe_events("r1") as events:
+        finding_id = store.insert_finding(_finding(sites[0], claim="c1", severity="breaking"))
+
+        received = events.next(timeout=5.0)
+
+    assert received == {
+        "kind": "finding.opened",
+        "repo_id": "r1",
+        "finding_id": finding_id,
+        "vendor_id": "stripe",
+        "severity": "breaking",
+        "binding_rung": "static",
+    }
+
+
+def test_a_finding_event_carries_the_rung_its_claim_rests_on(store):
+    """Every artifact derived from a binding carries the rung, on the wire as on the screen. A
+    banner that could not say what a finding rests on would be asking a reader to act on a claim
+    whose evidence class it had dropped in transit."""
+    store.upsert_call_site(_site())
+    sites = store.replace_call_sites("r1", [_site()])
+
+    with store.subscribe_events("r1") as events:
+        store.insert_finding(_finding(sites[0], claim="c1", binding_rung="observed"))
+
+        assert events.next(timeout=5.0)["binding_rung"] == "observed"
+
+
+def test_re_running_detect_over_the_same_finding_publishes_nothing_the_second_time(store):
+    """DETECT converges: `insert_finding` is `ON CONFLICT DO NOTHING`, so a re-run writes no row.
+    The event has to follow the write rather than the call, or a second pass would announce
+    findings nobody opened and the banner would cry wolf on every scheduled run."""
+    store.upsert_call_site(_site())
+    sites = store.replace_call_sites("r1", [_site()])
+    store.insert_finding(_finding(sites[0], claim="c1"))
+
+    with store.subscribe_events("r1") as events:
+        store.insert_finding(_finding(sites[0], claim="c1"))
+
+        assert events.next(timeout=2.0) is None
