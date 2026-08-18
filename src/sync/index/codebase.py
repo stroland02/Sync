@@ -99,8 +99,21 @@ def _resolve_repo_ref(target: RepoRef | Path | str) -> RepoRef:
 
 
 def discover_codebase_vendors(repo_path: Path) -> list[str]:
-    """Identify registered vendor IDs declared in the codebase manifests."""
-    declared, _ = read_declared_dependencies(repo_path)
+    """Identify registered vendor IDs declared in root and nested codebase manifests."""
+    declared: list[Any] = []
+    root_declared, _ = read_declared_dependencies(repo_path)
+    declared.extend(root_declared)
+
+    skip_dirs = {"node_modules", ".git", "dist", "build", ".next", ".cache", "coverage", ".turbo", ".output"}
+    for manifest_name in ("package.json", "pyproject.toml", "requirements.txt"):
+        for manifest_file in repo_path.rglob(manifest_name):
+            if manifest_file.parent == repo_path:
+                continue
+            if any(part in skip_dirs for part in manifest_file.relative_to(repo_path).parts[:-1]):
+                continue
+            sub_declared, _ = read_declared_dependencies(manifest_file.parent)
+            declared.extend(sub_declared)
+
     bindings = vendor_sdk_bindings()
     discovered: set[str] = set()
 

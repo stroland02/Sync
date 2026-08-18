@@ -398,16 +398,35 @@ class TypeScriptAdapter:
         run down at adapter selection rather than declining. `PythonAdapter` had the same hole in
         its `requirements.txt` branch and no longer does; nothing checked this file at the time.
         """
-        manifest = Path(repo.local_path) / "package.json"
-        if not manifest.exists():
-            return {}, None
-        try:
-            data = json.loads(manifest.read_text(encoding="utf-8-sig"))
-        except (json.JSONDecodeError, UnicodeDecodeError) as exc:
-            return {}, f"package.json could not be read: {exc}"
-        if not isinstance(data, dict):
-            return {}, "package.json could not be read: it does not hold an object"
-        return {**data.get("dependencies", {}), **data.get("devDependencies", {})}, None
+        root = Path(repo.local_path)
+        manifest = root / "package.json"
+        declared: dict[str, object] = {}
+        if manifest.exists():
+            try:
+                data = json.loads(manifest.read_text(encoding="utf-8-sig"))
+                if not isinstance(data, dict):
+                    return {}, "package.json could not be read: it does not hold an object"
+                declared.update(data.get("dependencies", {}) or {})
+                declared.update(data.get("devDependencies", {}) or {})
+            except (json.JSONDecodeError, UnicodeDecodeError) as exc:
+                return {}, f"package.json could not be read: {exc}"
+
+        if self._package is None or self._package not in declared:
+            skip_dirs = {"node_modules", ".git", "dist", "build", ".next", ".cache", "coverage", ".turbo", ".output"}
+            for p in root.rglob("package.json"):
+                if p == manifest:
+                    continue
+                if any(part in skip_dirs for part in p.relative_to(root).parts[:-1]):
+                    continue
+                try:
+                    data = json.loads(p.read_text(encoding="utf-8-sig"))
+                    if isinstance(data, dict):
+                        declared.update(data.get("dependencies", {}) or {})
+                        declared.update(data.get("devDependencies", {}) or {})
+                except Exception:
+                    pass
+
+        return declared, None
 
     def _declared_dependencies(self, repo: RepoRef) -> dict[str, object]:
         return self._read_manifest(repo)[0]
