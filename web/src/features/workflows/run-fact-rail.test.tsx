@@ -55,7 +55,7 @@ function state(over: Partial<WorkflowState> = {}): WorkflowState {
 function renderRail(data: WorkflowState | undefined) {
   return render(
     <MemoryRouter>
-      <RunFactRail findingId="finding-1" data={data} failure={null} />
+      <RunFactRail repoId="org/one" findingId="finding-1" data={data} failure={null} />
     </MemoryRouter>,
   )
 }

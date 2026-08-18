@@ -79,6 +79,7 @@ import { orAbsent } from "@/lib/format"
 import { useClearFilters, useFilterParam } from "@/lib/use-filter-param"
 import { useOffsetParam } from "@/lib/use-offset-param"
 
+import { bindingSurfaceHref, findingHref } from "@/lib/hrefs"
 const OFFSET_KEY = "findings_offset"
 const SEVERITY_KEY = "severity"
 const PATH_KEY = "path"
@@ -126,11 +127,6 @@ function useVendorFindingFilters() {
   ]
 
   return { severity, setSeverity, pathPrefix, setPathPrefix, order, setOrder, activeFilters, clearAll }
-}
-
-function bindingSurfaceHref(vendorId: string, operation: string, repoId: string): string {
-  const path = `/bindings/vendors/${encodeURIComponent(vendorId)}/operations/${encodeURIComponent(operation)}`
-  return `${path}?repo_id=${encodeURIComponent(repoId)}`
 }
 
 function severityOptions(page: VendorFindingsPage): FacetOption[] {
@@ -371,7 +367,7 @@ export function VendorFindingsCard({
                   </TableCell>
                   <TableCell className="font-mono">
                     <Link
-                      to={`/findings/${encodeURIComponent(row.finding_id)}`}
+                      to={findingHref(repoId, row.finding_id)}
                       className="underline underline-offset-2"
                       aria-label={`Finding ${row.finding_id} at ${row.file} line ${row.line}`}
                     >
@@ -384,7 +380,7 @@ export function VendorFindingsCard({
                   <TableCell className="font-mono">
                     {row.operation ? (
                       <Link
-                        to={bindingSurfaceHref(vendorId, row.operation, repoId)}
+                        to={bindingSurfaceHref(repoId, vendorId, row.operation)}
                         className="underline underline-offset-2"
                       >
                         {row.operation}

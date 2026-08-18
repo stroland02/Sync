@@ -43,6 +43,7 @@ import {
 } from "@/features/fleet/cardinality"
 import { FooterBar } from "@/layouts/footer-bar"
 
+import { vendorHref } from "@/lib/hrefs"
 /**
  * The vendor rows, unpaginated.
  *
@@ -83,11 +84,6 @@ export function VendorFindingsTable({
       </TableBody>
     </Table>
   )
-}
-
-function vendorHref(vendorId: string, repoId: string): string {
-  const path = `/vendors/${encodeURIComponent(vendorId)}`
-  return `${path}?repo_id=${encodeURIComponent(repoId)}`
 }
 
 function byOpenFindingCountDescending(a: VendorSummary, b: VendorSummary): number {

@@ -36,7 +36,7 @@ function state(nodes: WorkflowNode[], over: Partial<WorkflowState> = {}): Workfl
 function renderTab(data: WorkflowState) {
   return render(
     <MemoryRouter>
-      <SettledOutput findingId="finding-1" state={data} />
+      <SettledOutput repoId="org/one" findingId="finding-1" state={data} />
     </MemoryRouter>,
   )
 }

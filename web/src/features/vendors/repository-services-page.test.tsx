@@ -163,7 +163,7 @@ describe("the API services one repository calls", () => {
     renderAt("org/one")
 
     const link = screen.getByRole("link", { name: /stripe/i })
-    expect(link.getAttribute("href")).toBe("/vendors/stripe?repo_id=org%2Fone")
+    expect(link.getAttribute("href")).toBe("/repositories/org%2Fone/vendors/stripe")
   })
 
   it("refuses to render any service under a repository the overview was not computed for", () => {

@@ -40,6 +40,7 @@ import { Button } from "@/components/ui/button"
 import { formatSpan, runIdentity } from "@/features/workflows/run-identity"
 import { formatTimestamp } from "@/lib/format"
 
+import { findingHref } from "@/lib/hrefs"
 /** What each rail action would need before it could act. Named, so the gap is a work item. */
 const ACTIONS: { label: string; needs: string }[] = [
   {
@@ -63,6 +64,7 @@ function code(value: string): ReactNode {
 function railFacts(
   data: WorkflowState | undefined,
   failure: ReactNode | null,
+  repoId: string,
   findingId: string,
 ): Fact[] {
   function fact(width: string, render: (state: WorkflowState) => ReactNode): ReactNode {
@@ -78,7 +80,7 @@ function railFacts(
       label: "Finding",
       value: (
         <Link
-          to={`/findings/${encodeURIComponent(findingId)}`}
+          to={findingHref(repoId, findingId)}
           className="underline underline-offset-2"
         >
           {code(findingId)}
@@ -200,10 +202,12 @@ function railFacts(
 }
 
 export function RunFactRail({
+  repoId,
   findingId,
   data,
   failure,
 }: {
+  repoId: string
   findingId: string
   data: WorkflowState | undefined
   /** What the rail says in every value slot when the query failed. Null while it has not. */
@@ -211,7 +215,7 @@ export function RunFactRail({
 }) {
   return (
     <div className="flex min-w-0 flex-col gap-section lg:sticky lg:top-section lg:self-start">
-      <FactList facts={railFacts(data, failure, findingId)} />
+      <FactList facts={railFacts(data, failure, repoId, findingId)} />
 
       <div className="flex flex-col gap-row">
         <p className="furniture text-meta text-ink-muted">Actions</p>

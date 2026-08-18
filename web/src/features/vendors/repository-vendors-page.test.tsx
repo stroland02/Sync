@@ -76,7 +76,7 @@ describe("the vendors attached to one repository", () => {
     // The scope travels in the query string, because a vendor's detail is reachable both inside a
     // repository and fleet-wide and the payload distinguishes the two.
     const link = screen.getByRole("link", { name: /stripe/i })
-    expect(link.getAttribute("href")).toBe("/vendors/stripe?repo_id=org%2Fone")
+    expect(link.getAttribute("href")).toBe("/repositories/org%2Fone/vendors/stripe")
   })
 
   it("renders a confirmed zero as a number and never as absence", () => {

@@ -43,6 +43,7 @@ import { FooterBar } from "@/layouts/footer-bar"
 import { describeRung, orAbsent } from "@/lib/format"
 import { useOffsetParam } from "@/lib/use-offset-param"
 
+import { bindingSurfaceHref } from "@/lib/hrefs"
 export interface ChangeUnitStanding {
   label: string
   symbol: string
@@ -99,11 +100,6 @@ export function describeChangeUnitRung(rung: string): string {
   return "a rung this console does not recognise — the provenance vocabulary has changed since this view was written"
 }
 
-function bindingSurfaceHref(vendorId: string, operationId: string, repoId?: string): string {
-  const path = `/bindings/vendors/${encodeURIComponent(vendorId)}/operations/${encodeURIComponent(operationId)}`
-  return repoId === undefined ? path : `${path}?repo_id=${encodeURIComponent(repoId)}`
-}
-
 function ChangeUnitRungBadge({ rung }: { rung: string }) {
   return (
     <span
@@ -145,13 +141,11 @@ function IndexRunScopeNote({ repoId }: { repoId: string }) {
   return <IndexRunNote run={overview.data.last_index_run} />
 }
 
-function ChangeUnitEmptyState({ repoId }: { repoId?: string }) {
+function ChangeUnitEmptyState({ repoId }: { repoId: string }) {
   return (
     <>
       <span className="text-ink">
-        {repoId === undefined
-          ? "No open change units across the fleet."
-          : `No open change units for ${repoId}.`}
+        {`No open change units for ${repoId}.`}
       </span>{" "}
       The API answered with an empty page. A change unit appears here the moment a vendor change
       produces an open finding; nothing on this screen implies the underlying vendor change list is
@@ -160,7 +154,7 @@ function ChangeUnitEmptyState({ repoId }: { repoId?: string }) {
   )
 }
 
-export function ChangeUnitsTable({ repoId }: { repoId?: string }) {
+export function ChangeUnitsTable({ repoId }: { repoId: string }) {
   const [offset, setOffset] = useOffsetParam("change_units_offset")
   const query = useChangeUnits({ repoId, limit: DEFAULT_LIMIT, offset })
 
@@ -174,9 +168,7 @@ export function ChangeUnitsTable({ repoId }: { repoId?: string }) {
       label="Change units"
       metric={{
         value: page.total.toLocaleString(),
-        unit: `open change unit${page.total === 1 ? "" : "s"}${
-          repoId === undefined ? " across every repository the index has seen" : ` in ${repoId}`
-        }`,
+        unit: `open change unit${page.total === 1 ? "" : "s"} in ${repoId}`,
       }}
       caption={
         <p className="max-w-prose">
@@ -222,7 +214,7 @@ export function ChangeUnitsTable({ repoId }: { repoId?: string }) {
                       </>
                     ) : (
                       <Link
-                        to={bindingSurfaceHref(unit.vendor_id, unit.operation_id, repoId)}
+                        to={bindingSurfaceHref(repoId, unit.vendor_id, unit.operation_id)}
                         className="underline underline-offset-2"
                       >
                         {unit.vendor_id} {unit.operation_id}
