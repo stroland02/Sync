@@ -1,6 +1,6 @@
 """`copy_into_container` and `copy_out_of_container` (B97 Decision 1): the host-to-sandbox and
-sandbox-to-host halves `copy_between_containers` does not cover, because neither of its
-endpoints is ever the host.
+sandbox-to-host halves the now-deleted `copy_between_containers` never covered, because neither
+of its endpoints was ever the host.
 
 Own file rather than added to `test_patch_sandbox.py`: Lane C owns that file for B183.
 """
