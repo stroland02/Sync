@@ -693,3 +693,22 @@ messages with `--enter`, numbered `1 of N`, and put nothing load-bearing in the 
 
 This channel is the fallback for a fenced lane, so it is used at exactly the moment nothing else
 works — which is the worst moment to discover that a delivery reported `ok` and arrived headless.
+
+## A check joined with `;` cannot stop anything
+
+**Lane B, 2026-08-18, self-reported.** `check_worklog.py` found a duplicate work-item number and the
+push ran anyway, because the check and the push were chained with `;` rather than `&&`. Its own
+sentence is the rule: **a check whose result cannot stop the next command is decoration.**
+
+Join gate steps with `&&`. PowerShell 5.1 has no `&&` — use `; if ($?) { }`, which is the same
+requirement written for a shell that lacks the operator.
+
+**Why this is a charter item rather than one lane's note.** Five lanes gate against one `main`. A
+lane that can push red is not only breaking its own discipline, it is handing four other lanes a red
+tree to merge — and the lane that finds it has to prove the breakage is not its own before it can fix
+it. That happened twice on 2026-08-18, once on 24 TypeScript errors and once on a stale
+`_NOT_YET_FETCHED_BY_CONSOLE` entry, and both times the finder spent its first minutes establishing
+innocence rather than fixing anything.
+
+This is the same defect as a test that cannot fail, moved one level out: the check was real, the
+command made its result unable to matter.
