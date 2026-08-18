@@ -213,8 +213,15 @@ def budget_held(cli: str, handle: str, silent: bool = False) -> str | None:
     tail = " ".join(recent).lower()
     if not any(marker in tail for marker in BUDGET_EXHAUSTED):
         return None
+    # Only a line that ALSO carries a budget marker may supply the reset time. Measured 2026-08-18:
+    # the coordinator queued work into two held terminals with the word "resets" in it -- "start here
+    # the moment your quota resets" -- and the scan, reading newest-first, returned that sentence as
+    # the notice. `reset_seconds` then found no duration, so the hold had no deadline and could never
+    # expire. **A tail contains whatever anybody typed into it**, so a marker-free line matching one
+    # keyword is not evidence of anything.
     for line in reversed(recent):
-        if "resets" in line.lower():
+        lowered = line.lower()
+        if "resets" in lowered and any(marker in lowered for marker in BUDGET_EXHAUSTED):
             # ASCII-folded before it is ever printed. A terminal tail carries box-drawing and
             # spinner glyphs, and stdout on this machine is cp1252, so returning the raw line
             # crashes the sweep on the one path that exists for an outage -- the failure would
